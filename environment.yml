@@ -1,0 +1,17 @@
+channels:
+  - conda-forge
+  - rdkit
+dependencies:
+  - python>=3.7.0
+  - pandoc
+  - rdkit
+  - pip
+  - ipython
+  - wheel
+  - lxml
+  - numba
+  - sphinx_rtd_theme
+  - nbsphinx
+  - pip:
+    - py-mini-racer
+    - .

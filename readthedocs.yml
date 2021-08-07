@@ -1,0 +1,8 @@
+version: 2
+
+conda:
+  environment: environment.yml
+
+sphinx:
+  builder: html
+  configuration: doc/conf.py
