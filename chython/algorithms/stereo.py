@@ -720,7 +720,7 @@ class MoleculeStereo(Stereo):
             return self.__chiral_centers[3]
         return self.atoms_order
 
-    @cached_property
+    @cached_property  # todo: speedup
     def _stereo_axises(self: 'MoleculeContainer') -> Tuple[Tuple[Tuple[int, ...], ...], Tuple[Tuple[int, ...], ...]]:
         """
         Get all stereogenic axises in rings with attached cumulenes. Stereogenic axises has only stereogenic atoms.
@@ -837,7 +837,7 @@ class MoleculeStereo(Stereo):
         axises = []
         for ax, env in zip(*self._stereo_axises):
             ax_t, ax_a, ax_c = set(), set(), set()
-            checks = {}
+            checks = []
             axises.append((ax_t, ax_a, ax_c, checks))
             for n in ax:
                 if n in tetrahedrons:
@@ -854,8 +854,8 @@ class MoleculeStereo(Stereo):
                 else:
                     path = cumulenes_terminals[n]
                     ngb = tuple(m for m in bonds[n] if m not in path)
-                if len(ngb) == 2:  # only this atoms should be checked
-                    checks[n] = ngb
+                if len(ngb) == 2:  # only these atoms should be checked
+                    checks.append(ngb)
         return axises
 
     @cached_property
@@ -888,7 +888,7 @@ class MoleculeStereo(Stereo):
                 ax_t, ax_a, ax_c, check = ax
                 if not chiral_t.isdisjoint(ax_t) or not ax_a.isdisjoint(chiral_a) or not ax_c.isdisjoint(chiral_c):
                     continue  # self chiral centers can't be in axises
-                elif check and any(morgan[n] == morgan[m] for n, m in check.values()):  # need additional check
+                elif check and any(morgan[n] == morgan[m] for n, m in check):  # need additional check
                     continue  # not chiral
                 chiral_t.update(ax_t)
                 chiral_a.update(ax_a)
@@ -971,7 +971,7 @@ class MoleculeStereo(Stereo):
 
             tmp = []
             for ax in axises:
-                ax_t, ax_a, ax_c, check = ax
+                ax_t, ax_a, ax_c, _ = ax
                 # remove fully labeled axises
                 if ax_t.issubset(tetrahedrons) and ax_a.issubset(cumulenes) and ax_c.issubset(cumulenes):
                     tmp.append(ax)
