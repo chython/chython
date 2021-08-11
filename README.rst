@@ -33,7 +33,7 @@ Note: for using `clean2d` install NodeJS into system.
 
     pip install chython
 
-* Install CGRtools library DEV version for features that are not well tested::
+* Install chython library DEV version for features that are not well tested::
 
     pip install -U git+https://github.com/chython/chython.git@master#egg=chython
 
