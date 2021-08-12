@@ -17,13 +17,19 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .linear import *
-from .morgan import *
-from .pharmacophore import *
+from .acceptor import queries as acceptor_queries, banned as acceptor_banned
+from .acidic import queries as acidic_queries
+from .aromatic import queries as aromatic_queries
+from .basic import queries as basic_queries, banned as basic_banned
+from .donor import queries as donor_queries
+from .halogen import queries as halogen_queries
 
 
-class Fingerprints(LinearFingerprint, MorganFingerprint, Features):
-    __slots__ = ()
-
-
-__all__ = ['Fingerprints']
+__all__ = [
+    'acceptor_queries', 'acceptor_banned',
+    'acidic_queries',
+    'aromatic_queries',
+    'basic_queries', 'basic_banned',
+    'donor_queries',
+    'halogen_queries'
+]

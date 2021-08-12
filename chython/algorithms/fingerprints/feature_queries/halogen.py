@@ -17,13 +17,14 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .linear import *
-from .morgan import *
-from .pharmacophore import *
+from CGRtools.containers import QueryContainer
+from CGRtools.periodictable import ListElement
+
+queries = []
+
+q = QueryContainer()
+q.add_atom(ListElement(['F', 'Cl', 'Br', 'I']))
+queries.append(q)
 
 
-class Fingerprints(LinearFingerprint, MorganFingerprint, Features):
-    __slots__ = ()
-
-
-__all__ = ['Fingerprints']
+__all__ = ['queries']
