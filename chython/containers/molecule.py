@@ -569,7 +569,7 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         atoms = self._atoms
         atom = atoms[n]
         if atom.atomic_number != 1:
-            charge = self._charges[n]
+            charge: int = self._charges[n]
             is_radical = self._radicals[n]
             explicit_sum = 0
             explicit_dict = defaultdict(int)
