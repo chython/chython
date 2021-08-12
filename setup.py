@@ -49,6 +49,7 @@ if find_spec('wheel'):
                 self.distribution.data_files.append(('lib', ['INCHI/libinchi.so']))
             elif platform == 'macosx-11-x86_64':
                 self.distribution.data_files.append(('lib', ['INCHI/libinchi.dynlib']))
+
     cmd_class['bdist_wheel'] = _bdist_wheel
 
 
