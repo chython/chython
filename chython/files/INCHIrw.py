@@ -289,14 +289,22 @@ for pr in prefixes:
     sitepackages.append(pr / 'lib')
 
 platform = get_platform()
-if platform in ('linux-x86_64', 'win-amd64'):
-    if platform == 'win-amd64':
-        opt_flag = '/'
-        libname = 'libinchi.dll'
-    else:
-        opt_flag = '-'
-        libname = 'libinchi.so'
+if platform == 'win-amd64':
+    opt_flag = '/'
+    libname = 'libinchi.dll'
+elif platform == 'linux-x86_64':
+    opt_flag = '-'
+    libname = 'libinchi.so'
+elif platform == 'macosx-11-x86_64':
+    opt_flag = '-'
+    libname = 'libinchi.dynlib'
+else:
+    warn('unsupported platform for libinchi', ImportWarning)
+    libname = None
+    __all__ = []
+    del INCHIRead
 
+if libname:
     for site in sitepackages:
         lib_path = site / libname
         if lib_path.exists():
@@ -313,7 +321,3 @@ if platform in ('linux-x86_64', 'win-amd64'):
         warn('broken package installation. libinchi not found', ImportWarning)
         __all__ = []
         del INCHIRead
-else:
-    warn('unsupported platform for libinchi', ImportWarning)
-    __all__ = []
-    del INCHIRead
