@@ -48,11 +48,6 @@ class Pharmacophore:
     H acceptor | acidic prop. | aromatic | basic prop. | H donor | some halogen atom
     After the constructing, binary number will be converted to 10-based integer 
     """
-    def matched_ids(self: MoleculeContainer, query: QueryContainer):
-        """
-        Find an atom with some property using input QueryContainer
-        """
-        return {dct[1] for dct in query.get_mapping(self)}
 
     def features(self: MoleculeContainer) -> Iterator[Tuple[int, int]]:
         """
@@ -61,11 +56,11 @@ class Pharmacophore:
         id_sets = {}
         for name, qrs in queries.items():
             if len(qrs) == 1:
-                id_sets[name] = self.matched_ids(qrs[0])
+                id_sets[name] = {dct[1] for dct in qrs[0].get_mapping(self)}
                 continue
             first, others = qrs[0], qrs[1:]
-            first = self.matched_ids(first)
-            first = first.union(*(self.matched_ids(q) for q in others))
+            first = {dct[1] for dct in first.get_mapping(self)}
+            first = first.union(*({dct[1] for dct in q.get_mapping(self)} for q in others))
             id_sets[name] = first
 
         bins = [
