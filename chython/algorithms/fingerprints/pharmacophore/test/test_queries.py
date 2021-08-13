@@ -18,12 +18,10 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from CGRtools import smiles
-from ..acceptor import queries as acceptor_queries, banned as acceptor_banned
-from ..acidic import queries as acidic_queries
-from ..aromatic import queries as aromatic_queries
-from ..basic import queries as basic_queries, banned as basic_banned
-from ..donor import queries as donor_queries
-from ..halogen import queries as halogen_queries
+from .._acceptor import queries as acceptor_queries, banned as acceptor_banned
+from .._acidic import queries as acidic_queries
+from .._basic import queries as basic_queries, banned as basic_banned
+from .._donor import queries as donor_queries
 
 
 def main_atom_ids(molecule, query):
@@ -58,12 +56,6 @@ def test_acidic():
     assert main_atom_ids(mol, q) == {2, }
 
 
-def test_aromatic():
-    q = aromatic_queries[0]
-    assert main_atom_ids(mol, q) == {13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25}
-    assert main_atom_ids(frankensteins_fiend, q) == {1, 2, 5, 6, 7, 8}
-
-
 def test_basic():
     plus_n, aniline_n, sp3_n = basic_queries
     amide = basic_banned[0]
@@ -79,8 +71,3 @@ def test_donor():
     assert main_atom_ids(pyrrole, aromatic_n) == {1, }
     assert main_atom_ids(more_nitro, n_withH) == {12, 13}
     assert main_atom_ids(mol, oh_sh) == {3, }
-
-
-def test_halogen():
-    q = halogen_queries[0]
-    assert main_atom_ids(mol, q) == {23, }

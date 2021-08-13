@@ -18,25 +18,21 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from typing import Iterator, Tuple, TYPE_CHECKING
-from .acceptor import queries as acceptor_queries, banned as acceptor_banned
-from .acidic import queries as acidic_queries
-from .aromatic import queries as aromatic_queries
-from .basic import queries as basic_queries, banned as basic_banned
-from .donor import queries as donor_queries
-from .halogen import queries as halogen_queries
+from ._acceptor import queries as acceptor_queries, banned as acceptor_banned
+from ._acidic import queries as acidic_queries
+from ._basic import queries as basic_queries, banned as basic_banned
+from ._donor import queries as donor_queries
 
 if TYPE_CHECKING:
-    from ....containers import MoleculeContainer, QueryContainer
+    from ....containers import MoleculeContainer
 
 queries = {
     'acc_allow': acceptor_queries,
     'acc_ban': acceptor_banned,
     'acid_allow': acidic_queries,
-    'ar_allow': aromatic_queries,
     'base_allow': basic_queries,
     'base_ban': basic_banned,
     'donor_allow': donor_queries,
-    'hal_allow': halogen_queries,
 }
 
 
@@ -55,21 +51,19 @@ class Pharmacophore:
         """
         id_sets = {}
         for name, qrs in queries.items():
-            if len(qrs) == 1:
-                id_sets[name] = {dct[1] for dct in qrs[0].get_mapping(self)}
-                continue
             first, others = qrs[0], qrs[1:]
             first = {dct[1] for dct in first.get_mapping(self)}
             first = first.union(*({dct[1] for dct in q.get_mapping(self)} for q in others))
             id_sets[name] = first
 
+        # rules for looking for aromatic and halogen atoms used here with direct getting ids atoms from molecule's info
         bins = [
             id_sets['acc_allow'] - id_sets['acc_ban'],
             id_sets['acid_allow'],
-            id_sets['ar_allow'],
+            {idx for idx in self._atoms if self.hybridization(idx) == 4},
             id_sets['base_allow'] - id_sets['base_ban'],
             id_sets['donor_allow'],
-            id_sets['hal_allow'],
+            {idx for idx, atom in self.atoms() if atom.atomic_number in {9, 17, 35, 53} and self.neighbors(idx) < 2},
         ]
 
         for idx, _ in self.atoms():
