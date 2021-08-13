@@ -17,11 +17,12 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from typing import Iterator, Tuple, TYPE_CHECKING
-from ._acceptor import _queries as acceptor_queries, _banned as acceptor_banned
-from ._acidic import _queries as acidic_queries
-from ._basic import _queries as basic_queries, _banned as basic_banned
-from ._donor import _queries as donor_queries
+from functools import cached_property
+from typing import Dict, TYPE_CHECKING
+from ._acceptor import queries as acceptor_queries, banned as acceptor_banned
+from ._acidic import queries as acidic_queries
+from ._basic import queries as basic_queries, banned as basic_banned
+from ._donor import queries as donor_queries
 
 if TYPE_CHECKING:
     from ....containers import MoleculeContainer
@@ -45,7 +46,8 @@ class Pharmacophore:
     After the constructing, binary number will be converted to 10-based integer 
     """
 
-    def features(self: MoleculeContainer) -> Iterator[Tuple[int, int]]:
+    @cached_property
+    def features(self: MoleculeContainer) -> Dict[int, int]:
         """
         Match id of each atom of some molecule with integer number which define some features using in FCFP
         """
@@ -66,8 +68,12 @@ class Pharmacophore:
             {idx for idx, atom in self.atoms() if atom.atomic_number in {9, 17, 35, 53} and self.neighbors(idx) < 2},
         ]
 
-        for idx, _ in self.atoms():
-            yield idx, int(''.join('1' if idx in set_ else '0' for set_ in bins), base=2)
+        out = {idx: 0 for idx in self._atoms}
+        for pos, bin_ in enumerate(bins):
+            for idx in bin_:
+                out[idx] |= 1 << pos
+
+        return out
 
 
 __all__ = ['Pharmacophore']
