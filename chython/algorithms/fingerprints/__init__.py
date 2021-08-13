@@ -22,7 +22,7 @@ from .morgan import *
 from .pharmacophore import *
 
 
-class Fingerprints(LinearFingerprint, MorganFingerprint, Features):
+class Fingerprints(LinearFingerprint, MorganFingerprint, Pharmacophore):
     __slots__ = ()
 
 

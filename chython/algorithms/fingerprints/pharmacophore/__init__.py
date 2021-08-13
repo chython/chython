@@ -18,10 +18,15 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from typing import Iterator, Tuple, TYPE_CHECKING
-from .feature_queries import *
+from .acceptor import queries as acceptor_queries, banned as acceptor_banned
+from .acidic import queries as acidic_queries
+from .aromatic import queries as aromatic_queries
+from .basic import queries as basic_queries, banned as basic_banned
+from .donor import queries as donor_queries
+from .halogen import queries as halogen_queries
 
 if TYPE_CHECKING:
-    from ...containers import MoleculeContainer, QueryContainer
+    from ....containers import MoleculeContainer, QueryContainer
 
 queries = {
     'acc_allow': acceptor_queries,
@@ -35,7 +40,7 @@ queries = {
 }
 
 
-class Features:
+class Pharmacophore:
     __slots__ = ()
     """
     Matcher of atoms in an molecule to some integer number.
@@ -76,4 +81,4 @@ class Features:
             yield idx, int(''.join('1' if idx in set_ else '0' for set_ in bins), base=2)
 
 
-__all__ = ['Features']
+__all__ = ['Pharmacophore']
