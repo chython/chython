@@ -17,10 +17,11 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CGRtools.periodictable import ListElement
-from CGRtools.containers import QueryContainer
+from lazy_object_proxy import Proxy
+from ....containers import QueryContainer
+from ....periodictable import ListElement
 
-queries = []
+_queries = []
 
 q = QueryContainer()
 q.add_atom(ListElement(['C', 'S']), hybridization=2)
@@ -28,7 +29,9 @@ q.add_atom(ListElement(['O', 'S', 'P']), hybridization=2)
 q.add_atom('O', neighbors=1)
 q.add_bond(1, 2, 2)
 q.add_bond(1, 3, 1)
-queries.append(q)
+_queries.append(q)
+
+queries = Proxy(_queries)
 
 
 __all__ = ['queries']

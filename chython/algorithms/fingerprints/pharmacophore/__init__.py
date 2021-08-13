@@ -18,10 +18,10 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from typing import Iterator, Tuple, TYPE_CHECKING
-from ._acceptor import queries as acceptor_queries, banned as acceptor_banned
-from ._acidic import queries as acidic_queries
-from ._basic import queries as basic_queries, banned as basic_banned
-from ._donor import queries as donor_queries
+from ._acceptor import _queries as acceptor_queries, _banned as acceptor_banned
+from ._acidic import _queries as acidic_queries
+from ._basic import _queries as basic_queries, _banned as basic_banned
+from ._donor import _queries as donor_queries
 
 if TYPE_CHECKING:
     from ....containers import MoleculeContainer
