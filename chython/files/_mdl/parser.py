@@ -139,7 +139,7 @@ class Parser:
                     used.add(m)
         return self._create_molecule(data, remapped)
 
-    def _create_molecule(self, data, mapping):
+    def _create_molecule(self, data, mapping, *, _skip_calc_implicit=False):
         g = object.__new__(self.MoleculeContainer)
         pm = {}
         atoms = {}
@@ -173,8 +173,9 @@ class Parser:
                 {'atoms': atoms, 'bonds': bonds, 'meta': data['meta'], 'plane': plane, 'parsed_mapping': pm,
                  'charges': charges, 'radicals': radicals, 'name': data.get('title', ''), 'conformers': conformers,
                  'atoms_stereo': {}, 'allenes_stereo': {}, 'cis_trans_stereo': {}, 'hydrogens': {}})
-        for n in atoms:
-            g._calc_implicit(n)
+        if not _skip_calc_implicit:
+            for n in atoms:
+                g._calc_implicit(n)
         return g
 
 

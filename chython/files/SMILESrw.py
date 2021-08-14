@@ -146,13 +146,13 @@ class SMILESRead(Parser):
                 yield x
 
     @classmethod
-    def create_parser(cls, *args, **kwargs):
+    def create_parser(cls, header=None, ignore_stereo=False, *args, **kwargs):
         """
         Create SMILES parser function configured same as SMILESRead object.
         """
         obj = object.__new__(cls)
-        obj._SMILESRead__header = None
-        obj._SMILESRead__ignore_stereo = False
+        obj._SMILESRead__header = header
+        obj._SMILESRead__ignore_stereo = ignore_stereo
         super(SMILESRead, obj).__init__(*args, **kwargs)
         return obj.parse
 
