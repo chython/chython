@@ -216,19 +216,27 @@ class INCHIRead(Parser):
                         bonds[m] = {n: b}
                         hydrogens[m] = 0
 
-        if self.__ignore_stereo or not data['stereo_atoms'] and not data['stereo_bonds']:
+        if self.__ignore_stereo or \
+                not data['stereo_atoms'] and not data['stereo_cumulenes'] and not data['stereo_allenes']:
             return mol
 
         st = mol._stereo_tetrahedrons
         sa = mol._stereo_allenes
-        sat = mol._stereo_allenes_terminals
         ctt = mol._stereo_cis_trans_terminals
 
         stereo = []
-        for i, ngb, s in data['stereo_atoms']:
-            n = mapping[i]
+        for n, ngb, s in data['stereo_atoms']:
+            n = mapping[n]
             if n in st:
-                stereo.append((mol.add_atom_stereo, n, [mapping[i] for i in ngb], s))
+                stereo.append((mol.add_atom_stereo, n, [mapping[x] for x in ngb], s))
+        for n, nn, mn, s in data['stereo_allenes']:
+            n = mapping[n]
+            if n in sa:
+                stereo.append((mol.add_atom_stereo, n, mapping[nn], mapping[mn], s))
+        for n, m, nn, nm, s in data['stereo_cumulenes']:
+            n = mapping[n]
+            if n in ctt:
+                stereo.append((mol.add_cis_trans_stereo, n, mapping[m], mapping[nn], mapping[nm], s))
 
         while stereo:
             fail_stereo = []
@@ -281,7 +289,7 @@ class INCHIRead(Parser):
 
         stereo_atoms = []
         stereo_allenes = []
-        stere_cumulenes = []
+        stereo_cumulenes = []
         for i in range(structure.num_stereo0D):
             stereo = structure.stereo0D[i]
             sign = stereo.sign
@@ -289,13 +297,15 @@ class INCHIRead(Parser):
                 if stereo.is_tetrahedral:
                     stereo_atoms.append((stereo.central_atom, stereo.neighbors, sign))
                 elif stereo.is_allene:
-                    ...
+                    nn, *_, nm = stereo.neighbors
+                    stereo_allenes.append((stereo.central_atom, nn, nm, sign))
                 elif stereo.is_cumulene:
-                    ...
+                    nn, n, m, nm = stereo.neighbors
+                    stereo_cumulenes.append((n, m, nn, nm, sign))
 
         lib.FreeStructFromINCHI(byref(structure))
         return {'atoms': atoms, 'bonds': bonds, 'stereo_atoms': stereo_atoms, 'stereo_allenes': stereo_allenes,
-                'stere_cumulenes': stere_cumulenes}
+                'stereo_cumulenes': stereo_cumulenes}
 
 
 class InputINCHI(Structure):
@@ -347,21 +357,20 @@ class Atom(Structure):
         return self.num_iso_H[3]
 
     _fields_ = [('x', c_double), ('y', c_double), ('z', c_double),  # atom coordinates
-                ('neighbor', c_short * 20),  # adjacency list: ordering numbers of the adjacent atoms, >= 0
-                ('bond_type', c_byte * 20),  # inchi_BondType
+                ('neighbor', c_short * 20),    # adjacency list: ordering numbers of the adjacent atoms, >= 0
+                ('bond_type', c_byte * 20),    # inchi_BondType
                 ('bond_stereo', c_byte * 20),  # inchi_BondStereo2D; negative if the sharp end points to opposite atom
-                ('elname', c_char * 6),  # zero-terminated chemical element name: "H", "Si", etc.
-                ('num_bonds', c_short),  # number of neighbors, bond types and bond stereo in the adjacency list
-                ('num_iso_H', c_byte * 4),  # implicit hydrogen atoms
-                                            # [0]: number of implicit non-isotopic H (exception: num_iso_H[0]=-1 means
-                                            # INCHI adds implicit H automatically),
-                                            # [1]: number of implicit isotopic 1H (protium),
-                                            # [2]: number of implicit 2H (deuterium),
-                                            # [3]: number of implicit 3H (tritium)
-                ('isotopic_mass', c_short),  # 0 => non-isotopic; isotopic mass or 10000 + mass - average atomic mass
-                ('radical', c_byte),  # inchi_Radical,
-                ('charge', c_byte)  # positive or negative; 0 => no charge
-                ]
+                ('elname', c_char * 6),        # zero-terminated chemical element name: "H", "Si", etc.
+                ('num_bonds', c_short),        # number of neighbors, bond types and bond stereo in the adjacency list
+                ('num_iso_H', c_byte * 4),     # implicit hydrogen atoms
+                                               # [0]: number of implicit non-isotopic H
+                                               # (exception: num_iso_H[0]=-1 means INCHI adds implicit H automatically),
+                                               # [1]: number of implicit isotopic 1H (protium),
+                                               # [2]: number of implicit 2H (deuterium),
+                                               # [3]: number of implicit 3H (tritium)
+                ('isotopic_mass', c_short),    # 0 => non-isotopic; isotopic mass or 10000 + mass - average atomic mass
+                ('radical', c_byte),           # inchi_Radical,
+                ('charge', c_byte)]            # positive or negative; 0 => no charge
 
 
 class Stereo0D(Structure):
@@ -391,9 +400,7 @@ class Stereo0D(Structure):
     _fields_ = [('neighbor', c_short * 4),  # 4 atoms always
                 ('central_atom', c_short),  # central tetrahedral atom or a central atom of allene; otherwise NO_ATOM
                 ('type', c_byte),           # inchi_StereoType0D
-                ('parity', c_byte)          # inchi_StereoParity0D: may be a combination of two parities:
-                                            # ParityOfConnected | (ParityOfDisconnected << 3), see Notes
-                ]
+                ('parity', c_byte)]         # inchi_StereoParity0D
 
 
 class INCHIStructure(Structure):
@@ -404,8 +411,7 @@ class INCHIStructure(Structure):
                 ('szMessage', c_char_p),          # Error/warning ASCII message
                 ('szLog', c_char_p),              # log-file ASCII string, contains a human-readable list
                                                   # of recognized options and possibly an Error/warn message
-                ('WarningFlags', (c_long * 2) * 2)
-                ]
+                ('WarningFlags', (c_long * 2) * 2)]
 
 # copy-pasted from INCHI-API
 #  * Notes: 1. Atom ordering numbers (i, k, and atom[i].neighbor[j] below)
