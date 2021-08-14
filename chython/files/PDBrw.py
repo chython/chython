@@ -174,10 +174,6 @@ class PDBRead(XYZ):
                         self._info(f'Structure consist errors:\n{format_exc()}')
                         yield parse_error(count, pos, self._format_log(), {})
                     else:
-                        if self._store_log:
-                            log = self._format_log()
-                            if log:
-                                container.meta['ParserLog'] = log
                         yield container
                     atoms = []
                 else:

@@ -745,6 +745,16 @@ def _rules_single():
     bonds_fix = ((1, 2, 2),)
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
 
+    # Allyl radical
+    #
+    # [C*] -- [C*] -- [C*]  >>  C == C -- [C*]
+    #
+    atoms = ({'atom': 'C', 'is_radical': True}, {'atom': 'C', 'is_radical': True}, {'atom': 'C', 'is_radical': True})
+    bonds = ((1, 2, 1), (2, 3, 1))
+    atom_fix = {1: (0, False), 2: (0, False)}
+    bonds_fix = ((1, 2, 2),)
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
     # Br-ion + I-ion
     #
     #        A           A

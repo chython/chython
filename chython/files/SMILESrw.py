@@ -319,15 +319,21 @@ class SMILESRead(Parser):
                         new_molecules[x] = container.products[x - len(container)]
                     for x in reagents:
                         new_molecules[x] = container.reagents[x - lcr]
+
+                    meta = container.meta
+                    if self._store_log:
+                        log = self._format_log()
+                        if log:
+                            if 'ParserLog' in meta:
+                                meta['ParserLog'] += '\n' + log
+                            else:
+                                meta['ParserLog'] = log
                     container = ReactionContainer([x for x in new_molecules[:lcr] if x is not None],
                                                   [x for x in new_molecules[-len(container.products):]
                                                    if x is not None],
                                                   [x for x in new_molecules[lcr: -len(container.products)]
-                                                   if x is not None])
-                if self._store_log:
-                    log = self._format_log()
-                    if log:
-                        container.meta['ParserLog'] = log
+                                                   if x is not None], meta=meta)
+
                 return container
         else:
             try:
@@ -344,10 +350,6 @@ class SMILESRead(Parser):
                     self._info(f'record consist errors:\n{format_exc()}')
                     return meta
                 else:
-                    if self._store_log:
-                        log = self._format_log()
-                        if log:
-                            container.meta['ParserLog'] = log
                     return container
             for x in radicals:
                 record['atoms'][x]['is_radical'] = True
@@ -357,10 +359,6 @@ class SMILESRead(Parser):
                 self._info(f'record consist errors:\n{format_exc()}')
                 return meta
             else:
-                if self._store_log:
-                    log = self._format_log()
-                    if log:
-                        container.meta['ParserLog'] = log
                 return container
 
     def _create_molecule(self, data, mapping):
@@ -458,8 +456,7 @@ class SMILESRead(Parser):
             break
         return mol
 
-    @staticmethod
-    def _convert_cgr(data):
+    def _convert_cgr(self, data):
         atoms = data['atoms']
         bonds = defaultdict(dict)
 
@@ -498,6 +495,11 @@ class SMILESRead(Parser):
             if n in g_bonds[m]:
                 raise ValueError('atoms already bonded')
             g_bonds[n][m] = g_bonds[m][n] = b
+
+        if self._store_log:
+            log = self._format_log()
+            if log:
+                data['meta']['ParserLog'] = log
         g.__setstate__({'atoms': g_atoms, 'bonds': g_bonds, 'meta': data['meta'], 'plane': plane,
                         'charges': charges, 'radicals': radicals, 'name': '', 'p_charges': p_charges,
                         'p_radicals': p_radicals, 'conformers': []})

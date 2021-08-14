@@ -161,7 +161,6 @@ class RDFRead(MDLRead):
                         self.__already_seeked = False
                     else:
                         failed = True
-                    self._flush_log()
             elif line.startswith('$RFMT'):
                 if record:
                     record['meta'].update(self._prepare_meta(meta))
@@ -176,12 +175,7 @@ class RDFRead(MDLRead):
                         self._info(f'record consist errors:\n{format_exc()}')
                         seek = yield parse_error(count, pos, self._format_log(), record['meta'])
                     else:
-                        if self._store_log:
-                            log = self._format_log()
-                            if log:
-                                container.meta['ParserLog'] = log
                         seek = yield container
-                    self._flush_log()
 
                     record = None
                     if seek is not None:
@@ -212,12 +206,7 @@ class RDFRead(MDLRead):
                         self._info(f'record consist errors:\n{format_exc()}')
                         seek = yield parse_error(count, pos, self._format_log(), record['meta'])
                     else:
-                        if self._store_log:
-                            log = self._format_log()
-                            if log:
-                                container.meta['ParserLog'] = log
                         seek = yield container
-                    self._flush_log()
 
                     record = None
                     if seek is not None:
@@ -257,7 +246,7 @@ class RDFRead(MDLRead):
                         if 'V2000' in line:
                             parser = MOLRead(line, self._log_buffer)
                         elif 'V3000' in line:
-                            parser = EMOLRead(self._log_buffer)
+                            parser = EMOLRead(self._ignore, self._log_buffer)
                         else:
                             raise ValueError('invalid MOL entry')
                 except ValueError:
@@ -268,7 +257,6 @@ class RDFRead(MDLRead):
                         yield
                         count = seek - 1
                         self.__already_seeked = False
-                    self._flush_log()
         if record:
             record['meta'].update(self._prepare_meta(meta))
             if title:
@@ -280,15 +268,8 @@ class RDFRead(MDLRead):
                     container = self._convert_molecule(record)
             except ValueError:
                 self._info(f'record consist errors:\n{format_exc()}')
-                log = self._format_log()
-                self._flush_log()
-                yield parse_error(count, pos, log, record['meta'])
+                yield parse_error(count, pos, self._format_log(), record['meta'])
             else:
-                if self._store_log:
-                    log = self._format_log()
-                    if log:
-                        container.meta['ParserLog'] = log
-                self._flush_log()
                 yield container
 
     __already_seeked = False

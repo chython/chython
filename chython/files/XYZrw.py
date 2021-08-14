@@ -85,7 +85,9 @@ class XYZ:
         self._log_buffer.clear()
 
     def _format_log(self):
-        return '\n'.join(self._log_buffer)
+        log = '\n'.join(self._log_buffer)
+        self._log_buffer.clear()
+        return log
 
     def close(self, force=False):
         """
@@ -136,6 +138,10 @@ class XYZ:
         self._log_buffer.extend(mol.saturate(bonds, expected_charge=charge, expected_radicals_count=radical,
                                              logging=True))
         mol._conformers.append(conformer)
+        if self._store_log:
+            log = self._format_log()
+            if log:
+                mol.meta['ParserLog'] = log
         return mol
 
 
@@ -203,7 +209,6 @@ class XYZRead(XYZ):
                             failkey = True
                             self._info(f'Line [{n}] {line}: consist errors:\n{format_exc()}')
                             yield parse_error(count, pos, self._format_log(), {})
-                            self._flush_log()
                             break
                     elif x.startswith('radical='):
                         try:
@@ -212,7 +217,6 @@ class XYZRead(XYZ):
                             failkey = True
                             self._info(f'Line [{n}] {line}: consist errors:\n{format_exc()}')
                             yield parse_error(count, pos, self._format_log(), {})
-                            self._flush_log()
                             break
                 else:
                     meta = False
@@ -224,7 +228,6 @@ class XYZRead(XYZ):
                     failkey = True
                     self._info(f'Line [{n}] {line}: consist errors:\n{format_exc()}')
                     yield parse_error(count, pos, self._format_log(), {})
-                    self._flush_log()
                 else:
                     if len(xyz) == size:
                         try:
@@ -233,17 +236,11 @@ class XYZRead(XYZ):
                             self._info(f'record consist errors:\n{format_exc()}')
                             yield parse_error(count, pos, self._format_log(), {})
                         else:
-                            if self._store_log:
-                                log = self._format_log()
-                                if log:
-                                    container.meta['ParserLog'] = log
                             yield container
-                        self._flush_log()
                         failkey = True  # trigger end of XYZ
         if not failkey:  # cut XYZ
             self._info('Last structure not finished')
             yield parse_error(count, pos, self._format_log(), {})
-            self._flush_log()
 
     def parse(self, matrix: Iterable[Tuple[str, float, float, float]], charge: int = 0, radical: int = 0) -> \
             Optional[MoleculeContainer]:
@@ -252,10 +249,6 @@ class XYZRead(XYZ):
         except ValueError:
             self._flush_log()
         else:
-            if self._store_log:
-                log = self._format_log()
-                if log:
-                    container.meta['ParserLog'] = log
             return container
 
     @classmethod

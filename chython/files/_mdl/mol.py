@@ -32,17 +32,15 @@ common_isotopes = {'H': 1, 'He': 4, 'Li': 7, 'Be': 9, 'B': 11, 'C': 12, 'N': 14,
                    'Cm': 247, 'Bk': 247, 'Cf': 251, 'Es': 252, 'Fm': 257, 'Md': 258, 'No': 259, 'Lr': 260, 'Rf': 261,
                    'Db': 270, 'Sg': 269, 'Bh': 270, 'Hs': 270, 'Mt': 278, 'Ds': 281, 'Rg': 281, 'Cn': 285, 'Nh': 278,
                    'Fl': 289, 'Mc': 289, 'Lv': 293, 'Ts': 297, 'Og': 294}
-
-query_keys = {'atomhyb': 'hybridization', 'hybridization': 'hybridization', 'hyb': 'hybridization',
-              'atomneighbors': 'neighbors', 'neighbors': 'neighbors'}
+_ctf_data = {'R': 'is_radical', 'C': 'charge', 'I': 'isotope'}
+_charge_map = {'  0': 0, '  1': 3, '  2': 2, '  3': 1, '  4': 0, '  5': -1, '  6': -2, '  7': -3}
 
 
 class MOLRead:
     def __init__(self, line, log_buffer=None):
         self.__atoms_count = int(line[0:3])
         self.__bonds_count = int(line[3:6])
-        self.__cgr = {}
-        self.__query = []
+        self.__dat = {}
         self.__atoms = []
         self.__bonds = []
         self.__stereo = []
@@ -58,13 +56,8 @@ class MOLRead:
 
     def getvalue(self):
         if self.__mend:
-            mol = {'atoms': self.__atoms, 'bonds': self.__bonds, 'stereo': self.__stereo, 'meta': {},
-                   'hydrogens': self.__hydrogens}
-            if self.__cgr:
-                mol['cgr'] = self.__cgr
-            if self.__query:
-                mol['query'] = self.__query
-            return mol
+            return {'atoms': self.__atoms, 'bonds': self.__bonds, 'stereo': self.__stereo, 'meta': {},
+                    'hydrogens': self.__hydrogens}
         raise ValueError('molecule not complete')
 
     def __call__(self, line):
@@ -72,19 +65,14 @@ class MOLRead:
             raise ValueError('parser closed')
         elif len(self.__atoms) < self.__atoms_count:
             try:
-                charge = self.__charge_map[line[36:39]]
+                charge = _charge_map[line[36:39]]
             except KeyError:
                 raise ValueError('invalid charge')
             element = line[31:34].strip()
             isotope = line[34:36]
 
-            if element == 'A':
-                self.__query.append((len(self.__atoms), 'element', 'A'))
-                if isotope != ' 0':
-                    raise ValueError('isotope on query atom')
-                isotope = None
-            elif element == 'L':
-                raise ValueError('list of atoms not supported')
+            if element in 'AL':
+                raise ValueError('queries not supported')
             elif element == 'D':
                 element = 'H'
                 if isotope != ' 0':
@@ -112,41 +100,19 @@ class MOLRead:
                 self.__stereo.append((a1, a2, -1))
             elif s != '  0':
                 self.__log_buffer.append('unsupported or invalid stereo')
-            b = int(line[6:9])  # added ad-hoc for bond type 9
-            self.__bonds.append((a1, a2, b if b != 9 else 8))
+            b = int(line[6:9])
+            if b == 9:  # added ad-hoc for bond type 9
+                b = 8
+                self.__log_buffer.append('coordinate bond replaced with special')
+            self.__bonds.append((a1, a2, b))
         elif line.startswith('M  END'):
-            cgr = []
             for a in self.__atoms:
                 if a['is_radical']:
                     a['is_radical'] = True
-            for x in self.__cgr.values():
+            for x in self.__dat.values():
                 try:
                     _type = x['type']
-                    if _type in query_keys:
-                        atoms = x['atoms']
-                        value = x['value']
-                        if len(atoms) != 1 or atoms[0] == -1 or not value:
-                            raise ValueError(f'CGR Query spec invalid {x}')
-                        self.__query.append((atoms[0], query_keys[_type], [int(x) for x in value.split(',')]))
-                    elif _type == 'dynatom':
-                        atoms = x['atoms']
-                        value = x['value']
-                        if len(atoms) != 1 or atoms[0] == -1 or not value:
-                            raise ValueError(f'CGR spec invalid {x}')
-                        if value == 'r1':  # only dynatom = r1 acceptable. this means change of radical state
-                            cgr.append((atoms[0], 'radical', None))
-                        elif value[0] == 'c':
-                            cgr.append((atoms[0], 'charge', int(value[1:])))
-                        else:
-                            raise ValueError('unknown dynatom')
-                    elif _type == 'dynbond':
-                        atoms = x['atoms']
-                        value = x['value']
-                        if len(atoms) != 2 or -1 in atoms or not value:
-                            raise ValueError(f'CGR spec invalid {x}')
-                        bond, p_bond = x['value'].split('>')
-                        cgr.append((atoms, 'bond', (int(bond) or None, int(p_bond) or None)))
-                    elif _type == 'mrv_implicit_h':
+                    if _type == 'mrv_implicit_h':
                         atoms = x['atoms']
                         value = x['value']
                         if len(atoms) != 1 or atoms[0] == -1 or not value:
@@ -156,7 +122,6 @@ class MOLRead:
                         self.__log_buffer.append(f'ignored data: {x}')
                 except KeyError:
                     raise ValueError(f'CGR spec invalid {x}')
-            self.__cgr = cgr
             self.__mend = True
             return True
         else:
@@ -166,7 +131,7 @@ class MOLRead:
         if line.startswith('M  ALS'):
             raise ValueError('list of atoms not supported')
         elif line.startswith(('M  ISO', 'M  RAD', 'M  CHG')):
-            _type = self.__ctf_data[line[3]]
+            _type = _ctf_data[line[3]]
             for i in range(int(line[6:9])):
                 i8 = i * 8
                 atom = int(line[10 + i8:13 + i8])
@@ -179,22 +144,20 @@ class MOLRead:
             for i in range(int(line[6:9])):
                 i8 = i * 8
                 if 'DAT' == line[14 + i8:17 + i8]:
-                    self.__cgr[int(line[10 + i8:13 + i8])] = {}
+                    self.__dat[int(line[10 + i8:13 + i8])] = {}
         elif line.startswith('M  SAL'):
             i = int(line[7:10])
-            if i in self.__cgr:
-                self.__cgr[i]['atoms'] = tuple(int(line[14 + 4 * i:17 + 4 * i]) - 1 for i in range(int(line[10:13])))
+            if i in self.__dat:
+                self.__dat[i]['atoms'] = tuple(int(line[14 + 4 * i:17 + 4 * i]) - 1 for i in range(int(line[10:13])))
         elif line.startswith('M  SDT'):
             i = int(line[7:10])
-            if i in self.__cgr:
-                self.__cgr[i]['type'] = line.split()[-1].lower()
+            if i in self.__dat:
+                self.__dat[i]['type'] = line.split()[-1].lower()
         elif line.startswith('M  SED'):
             i = int(line[7:10])
-            if i in self.__cgr:
-                self.__cgr[i]['value'] = line[10:].strip().replace('/', '').lower()
+            if i in self.__dat:
+                self.__dat[i]['value'] = line[10:].strip().replace('/', '').lower()
 
-    __ctf_data = {'R': 'is_radical', 'C': 'charge', 'I': 'isotope'}
-    __charge_map = {'  0': 0, '  1': 3, '  2': 2, '  3': 1, '  4': 0, '  5': -1, '  6': -2, '  7': -3}
     __mend = False
 
 

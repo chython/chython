@@ -146,7 +146,6 @@ class SDFRead(MDLRead):
                         self.__already_seeked = False
                     else:
                         failkey = True
-                    self._flush_log()
             elif line.startswith("$$$$"):
                 if record:
                     record['meta'].update(self._prepare_meta(meta))
@@ -158,16 +157,11 @@ class SDFRead(MDLRead):
                         self._info(f'record consist errors:\n{format_exc()}')
                         seek = yield parse_error(count, pos, self._format_log(), record['meta'])
                     else:
-                        if self._store_log:
-                            log = self._format_log()
-                            if log:
-                                container.meta['ParserLog'] = log
                         seek = yield container
                     if seek is not None:  # seeked position
                         yield
                         count = seek - 1
                         self.__already_seeked = False
-                    self._flush_log()
                     record = None
 
                 if seekable:
@@ -198,12 +192,12 @@ class SDFRead(MDLRead):
                             parser = MOLRead(line, self._log_buffer)
                         except EmptyMolecule:
                             if self._ignore:
-                                parser = EMOLRead(self._log_buffer)
+                                parser = EMOLRead(self._ignore, self._log_buffer)
                                 self._info(f'line:\n{line}\nconsist errors:\nempty atoms list. try to parse as V3000')
                             else:
                                 raise
                     elif 'V3000' in line:
-                        parser = EMOLRead(self._log_buffer)
+                        parser = EMOLRead(self._ignore, self._log_buffer)
                     else:
                         raise ValueError('invalid MOL entry')
                 except ValueError:
@@ -219,7 +213,6 @@ class SDFRead(MDLRead):
                         self.__already_seeked = False
                     else:
                         failkey = True
-                    self._flush_log()
 
         if record:  # True for MOL file only.
             record['meta'].update(self._prepare_meta(meta))
@@ -229,15 +222,8 @@ class SDFRead(MDLRead):
                 container = self._convert_molecule(record)
             except ValueError:
                 self._info(f'record consist errors:\n{format_exc()}')
-                log = self._format_log()
-                self._flush_log()
-                yield parse_error(count, pos, log, record['meta'])
+                yield parse_error(count, pos, self._format_log(), record['meta'])
             else:
-                if self._store_log:
-                    log = self._format_log()
-                    if log:
-                        container.meta['ParserLog'] = log
-                self._flush_log()
                 yield container
 
     __already_seeked = False

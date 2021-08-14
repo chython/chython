@@ -176,10 +176,6 @@ class INCHIRead(Parser):
             self._info(f'record consist errors:\n{format_exc()}')
             return meta
         else:
-            if self._store_log:
-                log = self._format_log()
-                if log:
-                    container.meta['ParserLog'] = log
             return container
 
     def _create_molecule(self, data, mapping):
