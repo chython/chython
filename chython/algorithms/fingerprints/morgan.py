@@ -33,7 +33,7 @@ class MorganFingerprint:
 
     def morgan_fingerprint(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
                            length: int = 1024, number_active_bits: int = 2,
-                           include_hydrogens: bool = True, with_features: bool = False):
+                           include_hydrogens: bool = True, with_pharmacophores: bool = False):
         """
         Transform structures into array of binary features.
         Morgan fingerprints. Similar to RDkit implementation.
@@ -43,18 +43,18 @@ class MorganFingerprint:
         :param length: bit string's length. Should be power of 2
         :param number_active_bits: number of active bits for each hashed tuple
         :param include_hydrogens: take into account hydrogen atoms
-        :param with_features: use pharmacophoric features to identify and distinguish each atom in an molecule
+        :param with_pharmacophores: use pharmacophoric features to identify and distinguish each atom in an molecule
 
         :return: array(n_features)
         """
-        bits = self.morgan_bit_set(min_radius, max_radius, length, number_active_bits, include_hydrogens, with_features)
+        bits = self.morgan_bit_set(min_radius, max_radius, length, number_active_bits, include_hydrogens, with_pharmacophores)
         fingerprints = zeros(length, dtype=uint8)
         fingerprints[list(bits)] = 1
         return fingerprints
 
     def morgan_bit_set(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
                        length: int = 1024, number_active_bits: int = 2,
-                       include_hydrogens: bool = True, with_features: bool = False) -> Set[int]:
+                       include_hydrogens: bool = True, with_pharmacophores: bool = False) -> Set[int]:
         """
         Transform structures into set of indexes of True-valued features.
 
@@ -63,13 +63,13 @@ class MorganFingerprint:
         :param length: bit string's length. Should be power of 2
         :param number_active_bits: number of active bits for each hashed tuple
         :param include_hydrogens: take into account hydrogen atoms
-        :param with_features: use pharmacophoric features to identify and distinguish each atom in an molecule
+        :param with_pharmacophores: use pharmacophoric features to identify and distinguish each atom in an molecule
         """
         mask = length - 1
         log = int(log2(length))
 
         active_bits = set()
-        for tpl in self.morgan_hash_set(min_radius, max_radius, include_hydrogens, with_features):
+        for tpl in self.morgan_hash_set(min_radius, max_radius, include_hydrogens, with_pharmacophores):
             active_bits.add(tpl & mask)
             if number_active_bits == 2:
                 active_bits.add(tpl >> log & mask)
@@ -80,21 +80,21 @@ class MorganFingerprint:
         return active_bits
 
     def morgan_hash_set(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
-                        include_hydrogens: bool = True, with_features: bool = False) -> Set[int]:
+                        include_hydrogens: bool = True, with_pharmacophores: bool = False) -> Set[int]:
         """
         Transform structures into integer hashes of atoms with EC.
 
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         :param include_hydrogens: take into account hydrogen atoms
-        :param with_features: use pharmacophoric features to identify and distinguish each atom in an molecule
+        :param with_pharmacophores: use pharmacophoric features to identify and distinguish each atom in an molecule
         """
         if isinstance(self, molecule.MoleculeContainer) and not include_hydrogens:
-            if not with_features:
+            if not with_pharmacophores:
                 identifiers = {idx: tuple_hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                                for idx, atom in self.atoms()}
             else:
-                identifiers = {idx: x for idx, x in self.features()}
+                identifiers = {idx: x for idx, x in self.pharmacophores()}
         else:
             identifiers = {idx: int(atom) for idx, atom in self.atoms()}
 

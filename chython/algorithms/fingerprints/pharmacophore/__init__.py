@@ -47,7 +47,7 @@ class Pharmacophore:
     """
 
     @cached_property
-    def features(self: MoleculeContainer) -> Dict[int, int]:
+    def pharmacophores(self: MoleculeContainer) -> Dict[int, int]:
         """
         Match id of each atom of some molecule with integer number which define some features using in FCFP
         """
@@ -69,9 +69,9 @@ class Pharmacophore:
         ]
 
         out = {idx: 0 for idx in self._atoms}
-        for pos, bin_ in enumerate(bins):
+        for pos, bin_ in zip((1, 2, 4, 8, 16, 32), bins):
             for idx in bin_:
-                out[idx] |= 1 << pos
+                out[idx] |= pos
 
         return out
 
