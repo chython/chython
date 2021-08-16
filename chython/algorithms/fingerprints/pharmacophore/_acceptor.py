@@ -18,56 +18,68 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ....containers import QueryContainer
 from ....periodictable import ListElement
 
-_queries, _banned = [], []
 
-q = QueryContainer()
-q.add_atom('N', hybridization=4, charge=0)
-_queries.append(q)
+def _queries():
+    from ....containers import QueryContainer
+    rules = []
 
-q = QueryContainer()
-q.add_atom(ListElement(['O', 'S']), charge=0, hybridization=4)
-_queries.append(q)
+    q = QueryContainer()
+    q.add_atom('N', hybridization=4, charge=0)
+    rules.append(q)
 
-q = QueryContainer()
-q.add_atom(ListElement(['O', 'S']), hybridization=1, neighbors=(1, 2))
-_queries.append(q)
+    q = QueryContainer()
+    q.add_atom(ListElement(['O', 'S']), charge=0, hybridization=4)
+    rules.append(q)
 
-q = QueryContainer()
-q.add_atom(ListElement(['O', 'S']), neighbors=1)
-q.add_atom('A')
-q.add_atom(ListElement(['O', 'N', 'P', 'S']))
-q.add_bond(1, 2, 1)
-q.add_bond(2, 3, 2)
-_banned.append(q)
+    q = QueryContainer()
+    q.add_atom(ListElement(['O', 'S']), hybridization=1, neighbors=(1, 2))
+    rules.append(q)
 
-q = QueryContainer()
-q.add_atom('N', hybridization=1)
-_queries.append(q)
+    q = QueryContainer()
+    q.add_atom('N', hybridization=1)
+    rules.append(q)
 
-q = QueryContainer()
-q.add_atom('N', hybridization=1)
-q.add_atom('A')
-q.add_atom(ListElement(['O', 'N', 'P', 'S']))
-q.add_bond(1, 2, 1)
-q.add_bond(2, 3, 2)
-_banned.append(q)
+    return rules
 
-q = QueryContainer()
-q.add_atom(ListElement(['O', 'S']), charge=0, hybridization=4)
-q.add_atom('N')
-q.add_bond(1, 2, 4)
-_banned.append(q)
 
-q = QueryContainer()
-q.add_atom(ListElement(['O', 'S']))
-q.add_atom('C')
-q.add_atom('N')
-q.add_bond(1, 2, 4)
-q.add_bond(2, 3, 4)
-_banned.append(q)
+def _banned():
+    from ....containers import QueryContainer
+    rules = []
+
+    q = QueryContainer()
+    q.add_atom(ListElement(['O', 'S']), neighbors=1)
+    q.add_atom('A')
+    q.add_atom(ListElement(['O', 'N', 'P', 'S']))
+    q.add_bond(1, 2, 1)
+    q.add_bond(2, 3, 2)
+    rules.append(q)
+
+    q = QueryContainer()
+    q.add_atom('N', hybridization=1)
+    q.add_atom('A')
+    q.add_atom(ListElement(['O', 'N', 'P', 'S']))
+    q.add_bond(1, 2, 1)
+    q.add_bond(2, 3, 2)
+    rules.append(q)
+
+    q = QueryContainer()
+    q.add_atom(ListElement(['O', 'S']), charge=0, hybridization=4)
+    q.add_atom('N')
+    q.add_bond(1, 2, 4)
+    rules.append(q)
+
+    q = QueryContainer()
+    q.add_atom(ListElement(['O', 'S']))
+    q.add_atom('C')
+    q.add_atom('N')
+    q.add_bond(1, 2, 4)
+    q.add_bond(2, 3, 4)
+    rules.append(q)
+
+    return rules
+
 
 queries = Proxy(_queries)
 banned = Proxy(_banned)

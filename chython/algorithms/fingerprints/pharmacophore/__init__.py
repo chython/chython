@@ -28,12 +28,12 @@ if TYPE_CHECKING:
     from ....containers import MoleculeContainer
 
 queries = {
-    'acc_allow': acceptor_queries,
-    'acc_ban': acceptor_banned,
-    'acid_allow': acidic_queries,
-    'base_allow': basic_queries,
-    'base_ban': basic_banned,
-    'donor_allow': donor_queries,
+    'acc_allow': acceptor_queries(),
+    'acc_ban': acceptor_banned(),
+    'acid_allow': acidic_queries(),
+    'base_allow': basic_queries(),
+    'base_ban': basic_banned(),
+    'donor_allow': donor_queries(),
 }
 
 

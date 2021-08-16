@@ -18,33 +18,45 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ....containers import QueryContainer
 
-_queries, _banned = [], []
 
-q = QueryContainer()
-q.add_atom('N', charge=1)
-_queries.append(q)
+def _queries():
+    from ....containers import QueryContainer
+    rules = []
 
-q = QueryContainer()
-q.add_atom('N', charge=0)
-q.add_atom('A', hybridization=4)
-q.add_bond(1, 2, 1)
-_queries.append(q)
+    q = QueryContainer()
+    q.add_atom('N', charge=1)
+    rules.append(q)
 
-q = QueryContainer()
-q.add_atom('N', charge=0, hybridization=1, heteroatoms=0)
-q.add_atom('C', hybridization=(1, 2, 3))
-q.add_bond(1, 2, 1)
-_queries.append(q)
+    q = QueryContainer()
+    q.add_atom('N', charge=0)
+    q.add_atom('A', hybridization=4)
+    q.add_bond(1, 2, 1)
+    rules.append(q)
 
-q = QueryContainer()
-q.add_atom('N', charge=0)
-q.add_atom('C')
-q.add_atom('O')
-q.add_bond(1, 2, 1)
-q.add_bond(2, 3, 2)
-_banned.append(q)
+    q = QueryContainer()
+    q.add_atom('N', charge=0, hybridization=1, heteroatoms=0)
+    q.add_atom('C', hybridization=(1, 2, 3))
+    q.add_bond(1, 2, 1)
+    rules.append(q)
+
+    return rules
+
+
+def _banned():
+    from ....containers import QueryContainer
+    rules = []
+
+    q = QueryContainer()
+    q.add_atom('N', charge=0)
+    q.add_atom('C')
+    q.add_atom('O')
+    q.add_bond(1, 2, 1)
+    q.add_bond(2, 3, 2)
+    rules.append(q)
+
+    return rules
+
 
 queries = Proxy(_queries)
 banned = Proxy(_banned)

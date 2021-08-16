@@ -18,18 +18,23 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ....containers import QueryContainer
 from ....periodictable import ListElement
 
-_queries = []
 
-q = QueryContainer()
-q.add_atom(ListElement(['C', 'S']), hybridization=2)
-q.add_atom(ListElement(['O', 'S', 'P']), hybridization=2)
-q.add_atom('O', neighbors=1)
-q.add_bond(1, 2, 2)
-q.add_bond(1, 3, 1)
-_queries.append(q)
+def _queries():
+    from ....containers import QueryContainer
+    rules = []
+
+    q = QueryContainer()
+    q.add_atom(ListElement(['C', 'S']), hybridization=2)
+    q.add_atom(ListElement(['O', 'S', 'P']), hybridization=2)
+    q.add_atom('O', neighbors=1)
+    q.add_bond(1, 2, 2)
+    q.add_bond(1, 3, 1)
+    rules.append(q)
+
+    return rules
+
 
 queries = Proxy(_queries)
 
