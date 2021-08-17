@@ -90,27 +90,6 @@ class GraphComponents:
                 bonds[m].discard(n)
         return bonds
 
-    @cached_property
-    def connected_rings(self) -> Tuple[Tuple[int, ...], ...]:
-        """
-        Rings groups with common atoms. E.g. naphthalene has two connected rings. Rings not atom ordered like sssr.
-        """
-        rings = self.sssr
-        if len(rings) <= 1:
-            return rings
-
-        rings = [set(r) for r in rings]
-        out = []
-        for i in range(len(rings)):
-            r = rings[i]
-            for x in rings[i + 1:]:
-                if not r.isdisjoint(x):
-                    x.update(r)
-                    break
-            else:  # isolated ring[s] found
-                out.append(tuple(r))
-        return tuple(out)
-
     def adjacency_matrix(self, set_bonds=False):
         """
         Adjacency matrix of Graph.

@@ -42,29 +42,6 @@ class StructureComponents:
         return self._cumulenes()
 
     @cached_property
-    def connected_rings_cumulenes(self) -> Tuple[Tuple[int, ...], ...]:
-        """
-        Connected ring with attached cumulenes.
-        """
-        components = self.connected_rings
-        if not components:
-            return ()
-
-        components = [set(r) for r in components]
-        components.extend(set(c) for c in self.cumulenes)
-
-        out = []
-        for i in range(len(components)):
-            c = components[i]
-            for x in components[i + 1:]:
-                if not c.isdisjoint(x):
-                    x.update(c)
-                    break
-            else:  # isolated ring[s] found
-                out.append(tuple(c))
-        return tuple(out)
-
-    @cached_property
     def tetrahedrons(self) -> Tuple[int, ...]:
         """
         Carbon sp3 atoms numbers
