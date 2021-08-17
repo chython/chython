@@ -21,14 +21,13 @@ from chython.containers.bonds import Bond
 
 
 def unpack(bytes data):
-    cdef short isotope_shift
+    cdef int isotope_shift
     cdef unsigned char a, b, c, d
-    cdef unsigned short na, nct, i, j, n, m, shift = 3, order_shift = 0
-    cdef unsigned long nb = 0
+    cdef unsigned int na, nct, i, j, n, m, shift = 4, order_shift = 0, nb = 0
 
-    cdef unsigned short[4095] mapping, atom, isotopes, hydrogens, neighbors, orders, cis_trans_1, cis_trans_2
-    cdef unsigned short[8190] connections
-    cdef short[4095] charges
+    cdef unsigned int[4095] mapping, atom, isotopes, hydrogens, neighbors, orders, cis_trans_1, cis_trans_2
+    cdef unsigned int[8190] connections
+    cdef int[4095] charges
     cdef bint[4095] radicals, is_tet, is_all, tet_sign, all_sign, ct_sign
     cdef double[4095] x, y
     cdef bint[4096] seen
@@ -39,7 +38,7 @@ def unpack(bytes data):
     cdef list py_mapping, py_atoms, py_isotopes
 
     # lets extract data
-    a, b, c = data[:3]
+    a, b, c = data[1:4]
     na = a << 4| (b & 0xf0) >> 4
     nct = (b & 0x0f) << 8 | c
 
@@ -101,7 +100,7 @@ def unpack(bytes data):
         a, b, c, d = data[shift: shift + 4]
         cis_trans_1[i] = a << 4 | (b & 0xf0) >> 4
         cis_trans_2[i] = (b & 0x0f) << 8 | c
-        ct_sign[i] = d
+        ct_sign[i] = d & 0x01
         shift += 4
 
     # define returned data
@@ -159,7 +158,7 @@ def unpack(bytes data):
             py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo)
 
 
-cdef short[119] common_isotopes
+cdef int[119] common_isotopes
 common_isotopes[:] = [0, -15, -12, -9, -7, -5, -4, -2, 0, 3, 4, 7, 8, 11, 12, 15, 16, 19, 24, 23, 24, 29,
                       32, 35, 36, 39, 40, 43, 43, 48, 49, 54, 57, 59, 63, 64, 68, 69, 72, 73, 75, 77,
                       80, 82, 85, 87, 90, 92, 96, 99, 103, 106, 112, 111, 115, 117, 121, 123, 124, 125,
@@ -180,7 +179,6 @@ cdef double double_from2bytes(unsigned char a, unsigned char b):
     f = ((a & 0x03) << 8) | b
 
     x = f / 1024.
-
     if e:
         x += 1.
         e -= 15
@@ -188,7 +186,6 @@ cdef double double_from2bytes(unsigned char a, unsigned char b):
         e = -14
 
     x = ldexp(x, e)
-
     if sign:
         return -x
     return x
