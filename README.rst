@@ -4,7 +4,7 @@ Chython [ˈkʌɪθ(ə)n]
 Library for processing molecules and reactions in python way.
 
 Features:
-   - Read/write/convert formats: MDL .RDF (.RXN) and .SDF (.MOL), .MRV, SMILES, INCHI (Linux and Windows), .XYZ, .PDB
+   - Read/write/convert formats: MDL .RDF (.RXN) and .SDF (.MOL), .MRV, SMILES, INCHI (inchi-trust library), .XYZ, .PDB
    - Standardize molecules and reactions and valid structures checker
    - Supported python-magic
    - Tetrahedron, Allene and CIS-TRANS stereo supporting
@@ -33,7 +33,7 @@ Note: for using `clean2d` install NodeJS into system.
 
     pip install chython
 
-* Install CGRtools library DEV version for features that are not well tested::
+* Install chython library DEV version for features that are not well tested::
 
     pip install -U git+https://github.com/chython/chython.git@master#egg=chython
 
@@ -54,8 +54,11 @@ COPYRIGHT
 CONTRIBUTORS
 ============
 
-* Dinar Batyrshin batyrshin-dinar@mail.ru
-* Timur Gimadiev timur.gimadiev@gmail.com
 * Adelia Fatykhova adelik21979@gmail.com
-* Tagir Akhmetshin tagirshin@gmail.com
+* Aleksandr Sizov murkyrussian@gmail.com
+* Dinar Batyrshin batyrshin-dinar@mail.ru
+* Dmitrij Zanadvornykh zandmitrij@gmail.com
 * Ravil Mukhametgaleev sonic-mc@mail.ru
+* Tagir Akhmetshin tagirshin@gmail.com
+* Timur Gimadiev timur.gimadiev@gmail.com
+* Zarina Ibragimova

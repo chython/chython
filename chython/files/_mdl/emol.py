@@ -20,13 +20,15 @@ from ...exceptions import EmptyMolecule
 
 
 class EMOLRead:
-    def __init__(self, log_buffer=None):
+    def __init__(self, ignore=False, log_buffer=None):
         self.__atoms = []
         self.__bonds = []
         self.__atom_map = {}
         self.__stereo = []
         self.__meta = {}
         self.__hydrogens = {}
+        self.__star_points = []
+        self.__ignore = ignore
         if log_buffer is None:
             log_buffer = []
         self.__log_buffer = log_buffer
@@ -135,10 +137,36 @@ class EMOLRead:
 
     def __bond_parser(self, line):
         _, t, a1, a2, *kvs = line
-        try:
-            self.__bonds.append((self.__atom_map[a1], self.__atom_map[a2], int(t)))
-        except KeyError:
-            raise ValueError('invalid atoms numbers')
+        if a1 in self.__star_points:
+            if a2 in self.__star_points:
+                if self.__ignore:
+                    self.__log_buffer.append('invalid bond ignored: star-point to star-point')
+                    self.__bonds_count -= 1
+                    return
+                else:
+                    raise ValueError('invalid bond: star-point to star-point')
+            try:
+                star = self.__atom_map[a2]
+            except KeyError:
+                raise ValueError('invalid atoms number')
+            endpoints = None
+        elif a2 in self.__star_points:
+            try:
+                star = self.__atom_map[a1]
+            except KeyError:
+                raise ValueError('invalid atoms number')
+            endpoints = None
+        else:
+            star = None
+            try:
+                t = int(t)
+                if t == 9:  # added ad-hoc for bond type 9
+                    t = 8
+                    self.__log_buffer.append('coordinate bond replaced to special')
+                self.__bonds.append((self.__atom_map[a1], self.__atom_map[a2], t))
+            except KeyError:
+                raise ValueError('invalid atoms numbers')
+
         for kv in kvs:
             k, v = kv.split('=')
             if k == 'CFG':
@@ -148,10 +176,30 @@ class EMOLRead:
                     self.__stereo.append((self.__atom_map[a1], self.__atom_map[a2], -1))
                 else:
                     self.__log_buffer.append('invalid or unsupported stereo')
-                break
+            elif k == 'ENDPTS':
+                endpoints = v[1:-1].split()
+                if len(endpoints) != int(endpoints[0]) + 1:
+                    raise ValueError('invalid ENDPTS block')
+        if star is not None:
+            if endpoints:
+                self.__bonds_count += int(endpoints[0]) - 1
+                for m in endpoints[1:]:
+                    self.__bonds.append((star, self.__atom_map[m], 8))
+            elif self.__ignore:
+                self.__bonds_count -= 1
+                self.__log_buffer.append('Bond ignored. Star atom not allowed as endpoint')
+            else:
+                raise ValueError('Star atom not allowed')
 
     def __atom_parser(self, line):
         n, a, x, y, z, m, *kvs = line
+        if a.startswith(('[', 'NOT')):
+            raise ValueError('list of atoms not supported')
+        elif a == '*':
+            self.__star_points.append(n)
+            self.__atoms_count -= 1
+            return
+
         i = None
         c = 0
         r = False
@@ -163,16 +211,13 @@ class EMOLRead:
                 i = int(v)
             elif k == 'RAD':
                 r = True
-
-        self.__atom_map[n] = len(self.__atoms)
-        if a.startswith(('[', 'NOT')):
-            raise ValueError('list of atoms not supported')
-        elif a == 'D':
+        if a == 'D':
             if i:
                 raise ValueError('isotope on deuterium atom')
             a = 'H'
             i = 2
 
+        self.__atom_map[n] = len(self.__atoms)
         self.__atoms.append({'element': a, 'isotope': i, 'charge': c, 'is_radical': r,
                              'x': float(x), 'y': float(y), 'z': float(z), 'mapping': int(m)})
 
@@ -193,6 +238,8 @@ class EMOLRead:
                     self.__hydrogens[a[0]] = int(d[6:])
                 else:
                     self.__meta[f'SGROUP DAT {i}'] = (a, f, d)
+        elif _type.startswith('SRU'):
+            raise ValueError('Polymers not supported')
 
     def __ignored_block_parser(self, line):
         return

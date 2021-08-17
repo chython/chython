@@ -569,7 +569,7 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         atoms = self._atoms
         atom = atoms[n]
         if atom.atomic_number != 1:
-            charge = self._charges[n]
+            charge: int = self._charges[n]
             is_radical = self._radicals[n]
             explicit_sum = 0
             explicit_dict = defaultdict(int)
@@ -645,6 +645,7 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
 
         Format specification:
         Big endian bytes order
+        8 bit - empty byte for future extending
         12 bit - number of atoms
         12 bit - cis/trans stereo block size
         Atom block 9 bytes (repeated):
@@ -666,7 +667,7 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         16 bit - 5 bonds grouped (3 bit each). 1 bit unused. Zero padding used than bonds count not proportional to 5.
         Cis/trans data block (repeated):
         24 bit - atoms pair
-        7 bit - zero padding
+        7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
         1 bit - sign
         """
         bonds = self._bonds
@@ -684,13 +685,13 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         allenes_stereo = self._allenes_stereo
         cis_trans_stereo = self._cis_trans_stereo
 
-        data = bytearray(3 +  # atoms count + cis/trans bit
+        data = bytearray(4 +  # extension byte + atoms count + cis/trans bit
                          9 * self.atoms_count +  # atoms data
                          3 * self.bonds_count +  # connection table
                          2 * ceil(self.bonds_count / 5) +  # bonds order
                          4 * len(cis_trans_stereo))
-        pack_into('>HB', data, 0, (self.atoms_count << 4) | (len(cis_trans_stereo) >> 8), len(cis_trans_stereo) & 0xff)
-        shift = 3
+        pack_into('>HB', data, 1, (self.atoms_count << 4) | (len(cis_trans_stereo) >> 8), len(cis_trans_stereo) & 0xff)
+        shift = 4
 
         neighbors = []
         bonds_pack = []
@@ -805,8 +806,8 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         cis_trans_stereo = mol._cis_trans_stereo
 
         neighbors = {}
-        acs = int.from_bytes(data[:3], 'big')
-        shift = 3
+        acs = int.from_bytes(data[1:4], 'big')
+        shift = 4
         for o in range(acs >> 12):
             nn, sia, x, y, hcr = unpack_from('>2H2eB', data, shift + 9 * o)
             n = nn >> 4

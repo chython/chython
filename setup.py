@@ -28,7 +28,8 @@ from setuptools import setup, Extension, find_packages
 class _sdist(sdist):
     def finalize_options(self):
         super().finalize_options()
-        self.distribution.data_files.append(('lib', ['INCHI/libinchi.so', 'INCHI/libinchi.dll']))
+        self.distribution.data_files.append(('lib', ['INCHI/libinchi.so',
+                                                     'INCHI/libinchi.dll', 'INCHI/libinchi.dynlib']))
 
 
 cmd_class = {'sdist': _sdist}
@@ -46,6 +47,8 @@ if find_spec('wheel'):
                 self.distribution.data_files.append(('lib', ['INCHI/libinchi.dll']))
             elif platform == 'linux-x86_64':
                 self.distribution.data_files.append(('lib', ['INCHI/libinchi.so']))
+            elif platform == 'macosx-11-x86_64':
+                self.distribution.data_files.append(('lib', ['INCHI/libinchi.dynlib']))
 
     cmd_class['bdist_wheel'] = _bdist_wheel
 

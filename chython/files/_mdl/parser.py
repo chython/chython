@@ -47,7 +47,9 @@ class Parser:
         self._log_buffer.clear()
 
     def _format_log(self):
-        return '\n'.join(self._log_buffer)
+        log = '\n'.join(self._log_buffer)
+        self._log_buffer.clear()
+        return log
 
     def _convert_reaction(self, data):
         if not (data['reactants'] or data['products'] or data['reagents']):
@@ -117,6 +119,10 @@ class Parser:
                 g = self._create_molecule(j, remapped)
                 g.meta.update(j['meta'])
                 rc[i].append(g)
+        if self._store_log:
+            log = self._format_log()
+            if log:
+                data['meta']['ParserLog'] = log
         return ReactionContainer(meta=data['meta'], name=data.get('title'), **rc)
 
     def _convert_molecule(self, data):
@@ -137,9 +143,14 @@ class Parser:
                 else:
                     remapped[n] = m
                     used.add(m)
-        return self._create_molecule(data, remapped)
+        mol = self._create_molecule(data, remapped)
+        if self._store_log:
+            log = self._format_log()
+            if log:
+                mol.meta['ParserLog'] = log
+        return mol
 
-    def _create_molecule(self, data, mapping):
+    def _create_molecule(self, data, mapping, *, _skip_calc_implicit=False):
         g = object.__new__(self.MoleculeContainer)
         pm = {}
         atoms = {}
@@ -173,8 +184,9 @@ class Parser:
                 {'atoms': atoms, 'bonds': bonds, 'meta': data['meta'], 'plane': plane, 'parsed_mapping': pm,
                  'charges': charges, 'radicals': radicals, 'name': data.get('title', ''), 'conformers': conformers,
                  'atoms_stereo': {}, 'allenes_stereo': {}, 'cis_trans_stereo': {}, 'hydrogens': {}})
-        for n in atoms:
-            g._calc_implicit(n)
+        if not _skip_calc_implicit:
+            for n in atoms:
+                g._calc_implicit(n)
         return g
 
 

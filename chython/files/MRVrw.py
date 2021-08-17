@@ -155,10 +155,6 @@ class MRVRead(MDLStereo):
                         self._info(f'record consist errors:\n{format_exc()}')
                         yield parse_error(n, parsed, self._format_log(), meta)
                     else:
-                        if self._store_log:
-                            log = self._format_log()
-                            if log:
-                                container.meta['ParserLog'] = log
                         yield container
             elif 'reaction' in parsed and isinstance(parsed['reaction'], dict):
                 parsed = parsed['reaction']
@@ -180,15 +176,10 @@ class MRVRead(MDLStereo):
                         self._info(f'record consist errors:\n{format_exc()}')
                         yield parse_error(n, parsed, self._format_log(), meta)
                     else:
-                        if self._store_log:
-                            log = self._format_log()
-                            if log:
-                                container.meta['ParserLog'] = log
                         yield container
             else:
                 self._info('invalid MDocument')
                 yield parse_error(n, parsed, self._format_log(), {})
-            self._flush_log()
 
     def __parse_reaction(self, data):
         reaction = {'reactants': [], 'products': [], 'reagents': []}

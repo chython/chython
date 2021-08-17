@@ -49,14 +49,14 @@ class ERXNRead:
                 self.__empty_skip = True
                 self.__in_mol -= 1
                 if self.__in_mol:
-                    self.__parser = EMOLRead(self.__log_buffer)
+                    self.__parser = EMOLRead(self.__ignore, self.__log_buffer)
                 self.__log_buffer.append('empty molecule ignored')
             else:
                 if x:
                     x = self.__parser.getvalue()
                     self.__in_mol -= 1
                     if self.__in_mol:
-                        self.__parser = EMOLRead(self.__log_buffer)
+                        self.__parser = EMOLRead(self.__ignore, self.__log_buffer)
                     if self.__parser_group == 'REACTANT':
                         self.__reactants.append(x)
                     elif self.__parser_group == 'PRODUCT':
@@ -80,7 +80,7 @@ class ERXNRead:
                 raise ValueError('invalid RXN CTAB')
             self.__parser_group = x
             if self.__in_mol:
-                self.__parser = EMOLRead(self.__log_buffer)
+                self.__parser = EMOLRead(self.__ignore, self.__log_buffer)
         elif line.startswith('M  END'):
             self.__rend = True
             return True
