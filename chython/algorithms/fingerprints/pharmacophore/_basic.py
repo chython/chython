@@ -19,6 +19,10 @@
 #
 from lazy_object_proxy import Proxy
 
+# SMARTS:
+# [#7;+,$([N;H2&+0][$([C,a]);!$([C,a](=O))]),$([N;H1&+0]([$([C,a]);!$([C,a](=O))])[$([C,a]);
+#  !$([C,a](=O))]),$([N;H0&+0]([C;!$(C(=O))])([C;!$(C(=O))])[C;!$(C(=O))])]
+
 
 def _queries():
     from ....containers import QueryContainer

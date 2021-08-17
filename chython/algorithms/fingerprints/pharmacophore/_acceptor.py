@@ -20,6 +20,10 @@
 from lazy_object_proxy import Proxy
 from ....periodictable import ListElement
 
+# SMARTS:
+# [$([O,S;H1;v2;!$(*-*=[O,N,P,S])]),$([O,S;H0;v2]),$([O,S;-]),$([N;v3;!$(N-*=[O,N,P,S])]),n&H0&+0,
+#  $([o,s;+0;!$([o,s]:n);!$([o,s]:c:n)])]
+
 
 def _queries():
     from ....containers import QueryContainer

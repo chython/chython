@@ -43,7 +43,10 @@ class Pharmacophore:
     Matcher of atoms in an molecule to some integer number.
     Each integer represents 6 bit, each bit is enable/disable some pharmacophoric feature:
     H acceptor | acidic prop. | aromatic | basic prop. | H donor | some halogen atom
-    After the constructing, binary number will be converted to 10-based integer 
+    After the constructing, binary number will be converted to 10-based integer
+    
+    The rules is adapted from SMARTS from 
+    rdkit.org/docs/GettingStartedInPython.html#feature-definitions-used-in-the-morgan-fingerprints
     """
 
     @cached_property
@@ -59,10 +62,11 @@ class Pharmacophore:
         bins = [
             id_sets['acc_allow'] - id_sets['acc_ban'],
             id_sets['acid_allow'],
-            {idx for idx in self._atoms if self.hybridization(idx) == 4},
+            {idx for idx in self._atoms if self.hybridization(idx) == 4},  # [a]
             id_sets['base_allow'] - id_sets['base_ban'],
             id_sets['donor_allow'],
             {idx for idx, atom in self.atoms() if atom.atomic_number in {9, 17, 35, 53} and self.neighbors(idx) < 2},
+            # [F, Cl, Br, I]
         ]
 
         out = {idx: 0 for idx in self._atoms}
