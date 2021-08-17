@@ -28,12 +28,12 @@ if TYPE_CHECKING:
     from ....containers import MoleculeContainer
 
 queries = {
-    'acc_allow': acceptor_queries(),
-    'acc_ban': acceptor_banned(),
-    'acid_allow': acidic_queries(),
-    'base_allow': basic_queries(),
-    'base_ban': basic_banned(),
-    'donor_allow': donor_queries(),
+    'acc_allow': acceptor_queries,
+    'acc_ban': acceptor_banned,
+    'acid_allow': acidic_queries,
+    'base_allow': basic_queries,
+    'base_ban': basic_banned,
+    'donor_allow': donor_queries,
 }
 
 
@@ -47,16 +47,13 @@ class Pharmacophore:
     """
 
     @cached_property
-    def pharmacophores(self: MoleculeContainer) -> Dict[int, int]:
+    def pharmacophores(self: 'MoleculeContainer') -> Dict[int, int]:
         """
         Match id of each atom of some molecule with integer number which define some features using in FCFP
         """
         id_sets = {}
         for name, qrs in queries.items():
-            first, others = qrs[0], qrs[1:]
-            first = {dct[1] for dct in first.get_mapping(self)}
-            first = first.union(*({dct[1] for dct in q.get_mapping(self)} for q in others))
-            id_sets[name] = first
+            id_sets[name] = {dct[1] for q in qrs for dct in q.get_mapping(self, automorphism_filter=False)}
 
         # rules for looking for aromatic and halogen atoms used here with direct getting ids atoms from molecule's info
         bins = [
@@ -69,7 +66,7 @@ class Pharmacophore:
         ]
 
         out = {idx: 0 for idx in self._atoms}
-        for pos, bin_ in zip((1, 2, 4, 8, 16, 32), bins):
+        for pos, bin_ in zip((32, 16, 8, 4, 2, 1), bins):
             for idx in bin_:
                 out[idx] |= pos
 

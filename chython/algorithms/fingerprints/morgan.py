@@ -94,7 +94,7 @@ class MorganFingerprint:
                 identifiers = {idx: tuple_hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                                for idx, atom in self.atoms()}
             else:
-                identifiers = {idx: x for idx, x in self.pharmacophores()}
+                identifiers = {idx: x for idx, x in self.pharmacophores}
         else:
             identifiers = {idx: int(atom) for idx, atom in self.atoms()}
 
