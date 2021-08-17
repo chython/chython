@@ -149,7 +149,7 @@ class LinearFingerprint:
                 atoms = {idx: tuple_hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                          for idx, atom in self.atoms()}
             else:
-                atoms = {idx: x for idx, x in self.pharmacophores.items()}
+                atoms = self.pharmacophores
         else:
             atoms = {idx: int(atom) for idx, atom in self.atoms()}
 
