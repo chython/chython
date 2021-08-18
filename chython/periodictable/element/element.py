@@ -21,7 +21,6 @@ from CachedMethods import class_cached_property
 from collections import defaultdict
 from typing import Optional, Tuple, Dict, Set, List, Type
 from .core import Core
-from ..._functions import tuple_hash
 from ...exceptions import IsNotConnectedAtom, ValenceError
 
 
@@ -141,8 +140,7 @@ class Element(Core):
             self.implicit_hydrogens == other.implicit_hydrogens
 
     def __hash__(self):
-        return tuple_hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical,
-                           self.implicit_hydrogens or 0))
+        return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.implicit_hydrogens or 0))
 
     def __setstate__(self, state):
         if 'charge' in state:  # 3.1

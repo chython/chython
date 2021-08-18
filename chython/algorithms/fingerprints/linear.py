@@ -21,7 +21,6 @@ from collections import defaultdict, deque
 from math import log2
 from numpy import zeros, uint8
 from typing import Deque, Dict, Tuple, List, Set, Union, TYPE_CHECKING
-from ..._functions import tuple_hash
 from ...containers import molecule
 
 
@@ -105,8 +104,7 @@ class LinearFingerprint:
                activate only this number of fragments
         :param include_hydrogens: take into account hydrogen atoms
         """
-        return {tuple_hash((*tpl, cnt))
-                for tpl, count in self._fragments(min_radius, max_radius, include_hydrogens).items()
+        return {hash((*tpl, cnt)) for tpl, count in self._fragments(min_radius, max_radius, include_hydrogens).items()
                 for cnt in range(min(len(count), number_bit_pairs))}
 
     def _chains(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4) -> \
@@ -140,7 +138,7 @@ class LinearFingerprint:
     def _fragments(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1,
                    max_radius: int = 4, include_hydrogens=False) -> Dict[Tuple[int, ...], List[Tuple[int, ...]]]:
         if isinstance(self, molecule.MoleculeContainer) and not include_hydrogens:
-            atoms = {idx: tuple_hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+            atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                      for idx, atom in self.atoms()}
         else:
             atoms = {idx: int(atom) for idx, atom in self.atoms()}

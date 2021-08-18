@@ -433,50 +433,6 @@ class Stereo:
     def _stereo_allenes_paths(self) -> Dict[int, Tuple[int, ...]]:
         return {path[len(path) // 2]: path for path in self._stereo_cumulenes if len(path) % 2}
 
-    @cached_property
-    def connected_rings(self) -> Tuple[Tuple[int, ...], ...]:
-        """
-        Rings groups with common atoms. E.g. naphthalene has two connected rings. Rings not atom ordered like sssr.
-        """
-        rings = self.sssr
-        if len(rings) <= 1:
-            return rings
-
-        rings = [set(r) for r in rings]
-        out = []
-        for i in range(len(rings)):
-            r = rings[i]
-            for x in rings[i + 1:]:
-                if not r.isdisjoint(x):
-                    x.update(r)
-                    break
-            else:  # isolated ring[s] found
-                out.append(tuple(r))
-        return tuple(out)
-
-    @cached_property
-    def _stereo_rings_cumulenes(self) -> Tuple[Tuple[int, ...], ...]:
-        """
-        Isolated rings with attached cumulenes.
-        """
-        components = self.connected_rings
-        if not components:
-            return ()
-
-        components = [set(r) for r in components]
-        components.extend(set(c) for c in self.cumulenes)
-
-        out = []
-        for i in range(len(components)):
-            c = components[i]
-            for x in components[i + 1:]:
-                if not c.isdisjoint(x):
-                    x.update(c)
-                    break
-            else:  # isolated ring[s] found
-                out.append(tuple(c))
-        return tuple(out)
-
 
 class MoleculeStereo(Stereo):
     __slots__ = ()

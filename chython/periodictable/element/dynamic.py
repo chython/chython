@@ -19,7 +19,6 @@
 from typing import Type, Union
 from .core import Core
 from .element import Element
-from ..._functions import tuple_hash
 from ...exceptions import IsNotConnectedAtom
 
 
@@ -156,8 +155,8 @@ class DynamicElement(Core):
             self.p_charge == other.p_charge and self.p_is_radical == other.p_is_radical
 
     def __hash__(self):
-        return tuple_hash((self.isotope or 0, self.atomic_number, self.charge, self.p_charge,
-                           self.is_radical, self.p_is_radical))
+        return hash((self.isotope or 0, self.atomic_number, self.charge, self.p_charge,
+                     self.is_radical, self.p_is_radical))
 
     @property
     def is_dynamic(self) -> bool:

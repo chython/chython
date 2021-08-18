@@ -20,7 +20,6 @@
 from math import log2
 from numpy import zeros, uint8
 from typing import Set, Union, TYPE_CHECKING
-from ..._functions import tuple_hash
 from ...containers import molecule
 
 
@@ -85,7 +84,7 @@ class MorganFingerprint:
         :param include_hydrogens: take into account hydrogen atoms
         """
         if isinstance(self, molecule.MoleculeContainer) and not include_hydrogens:
-            identifiers = {idx: tuple_hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+            identifiers = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                            for idx, atom in self.atoms()}
         else:
             identifiers = {idx: int(atom) for idx, atom in self.atoms()}
@@ -95,9 +94,9 @@ class MorganFingerprint:
         for step in range(1, max_radius + 1):
             if step >= min_radius:
                 arr.update(identifiers.values())
-            identifiers = {idx: tuple_hash((tpl, *(x for x in
-                                                   sorted((int(b), identifiers[ngb]) for ngb, b in bonds[idx].items())
-                                                   for x in x)))
+            identifiers = {idx: hash((tpl, *(x for x in
+                                             sorted((int(b), identifiers[ngb]) for ngb, b in bonds[idx].items())
+                                             for x in x)))
                            for idx, tpl in identifiers.items()}
 
         if max_radius > 1:  # add last ring

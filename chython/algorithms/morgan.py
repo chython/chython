@@ -20,15 +20,18 @@ from CachedMethods import cached_property
 from itertools import groupby
 from logging import warning
 from operator import itemgetter
-from typing import Dict
-from .._functions import tuple_hash
+from typing import Dict, TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from chython.containers.graph import Graph
 
 
 class Morgan:
     __slots__ = ()
 
     @cached_property
-    def atoms_order(self) -> Dict[int, int]:
+    def atoms_order(self: 'Graph') -> Dict[int, int]:
         """
         Morgan like algorithm for graph nodes ordering
 
@@ -40,7 +43,7 @@ class Morgan:
         elif len(atoms) == 1:  # optimize single atom containers
             return dict.fromkeys(atoms, 1)
         ring = self.ring_atoms
-        return self._morgan({n: tuple_hash((hash(a), n in ring)) for n, a in atoms.items()},
+        return self._morgan({n: hash((hash(a), n in ring)) for n, a in atoms.items()},
                             {n: {m: int(b) for m, b in mb.items()} for n, mb in self._bonds.items()})
 
     @staticmethod
@@ -50,7 +53,7 @@ class Morgan:
         stab = old_numb = 0
 
         for _ in range(tries):
-            atoms = {n: tuple_hash((atoms[n], *(x for x in sorted((atoms[m], b) for m, b in ms.items()) for x in x)))
+            atoms = {n: hash((atoms[n], *(x for x in sorted((atoms[m], b) for m, b in ms.items()) for x in x)))
                      for n, ms in bonds.items()}
             old_numb, numb = numb, len(set(atoms.values()))
             if numb == len(atoms):  # each atom now unique

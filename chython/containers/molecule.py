@@ -27,7 +27,6 @@ from zlib import compress, decompress
 from . import cgr, query  # cyclic imports resolve
 from .bonds import Bond, DynamicBond, QueryBond
 from .graph import Graph
-from .._functions import tuple_hash
 from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
 from ..algorithms.components import StructureComponents
@@ -553,7 +552,7 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         Parameters can be modified globally in `MoleculeContainer._fingerprint_config`.
         """
         if self._fingerprint_config:
-            return {tuple_hash(k): frozenset(x for x in v for x in x) for k, v in
+            return {hash(k): frozenset(x for x in v for x in x) for k, v in
                     self._fragments(**self._fingerprint_config).items()}
         return {}
 

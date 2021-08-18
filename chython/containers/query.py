@@ -23,7 +23,6 @@ from typing import List, Tuple, Union, Dict, FrozenSet
 from . import molecule  # cyclic imports resolve
 from .bonds import Bond, QueryBond
 from .graph import Graph
-from .._functions import tuple_hash
 from ..algorithms.calculate2d import Calculate2DQuery
 from ..algorithms.components import StructureComponents
 from ..algorithms.depict import DepictQuery
@@ -337,7 +336,7 @@ class QueryContainer(Stereo, Graph, QuerySmiles, StructureComponents, DepictQuer
             if not chains:
                 continue
 
-            atoms = {idx: tuple_hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+            atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                      for idx, atom in mol.atoms()}
             bonds = mol._bonds
             out = defaultdict(list)
@@ -349,7 +348,7 @@ class QueryContainer(Stereo, Graph, QuerySmiles, StructureComponents, DepictQuer
                     var.append(atoms[y])
                 var = tuple(var)
                 rev_var = var[::-1]
-                out[tuple_hash(var if var > rev_var else rev_var)].extend(frag)
+                out[hash(var if var > rev_var else rev_var)].extend(frag)
 
             fps.append({k: frozenset(v) for k, v in out.items()})
         return tuple(fps)

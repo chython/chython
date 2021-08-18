@@ -25,7 +25,7 @@ from ..containers import molecule
 class MCS:
     __slots__ = ()
 
-    def get_mcs_mapping(self, other: 'molecule.MoleculeContainer', *, limit=10000) -> Iterator[Dict[int, int]]:
+    def get_mcs_mapping(self, other: 'molecule.MoleculeContainer', /, *, limit=10000) -> Iterator[Dict[int, int]]:
         """
         Find maximum common substructure. Based on clique searching in product graph.
 
@@ -134,7 +134,7 @@ class MCS:
                 clique_atoms.pop()
                 subgraph, candidates, roots = stack.pop()
 
-    def __get_product(self, other):
+    def __get_product(self: 'molecule.MoleculeContainer', other: 'molecule.MoleculeContainer'):
         bonds = self._bonds
         o_bonds = other._bonds
 
