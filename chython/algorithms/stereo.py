@@ -27,6 +27,31 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer, QueryContainer
     Container = Union[MoleculeContainer, QueryContainer]
 
+# 1  2
+#  \ |
+#   \|
+#    n---3
+#   /
+#  /
+# 0
+_tetrahedron_translate = {(0, 1, 2): False, (1, 2, 0): False, (2, 0, 1): False,
+                          (0, 2, 1): True, (1, 0, 2): True, (2, 1, 0): True,
+                          (0, 3, 1): False, (3, 1, 0): False, (1, 0, 3): False,
+                          (0, 1, 3): True, (1, 3, 0): True, (3, 0, 1): True,
+                          (0, 2, 3): False, (2, 3, 0): False, (3, 0, 2): False,
+                          (0, 3, 2): True, (3, 2, 0): True, (2, 0, 3): True,
+                          (1, 3, 2): False, (3, 2, 1): False, (2, 1, 3): False,
+                          (1, 2, 3): True, (2, 3, 1): True, (3, 1, 2): True}
+# 2       1
+#  \     /
+#   n---m
+#  /     \
+# 0       3
+_alkene_translate = {(0, 1): False, (1, 0): False, (0, 3): True, (3, 0): True,
+                     (2, 3): False, (3, 2): False, (2, 1): True, (1, 2): True}
+
+_organic_subset = {5, 6, 7, 8, 15, 16, 33, 34, 52}
+
 
 def _pyramid_sign(n, u, v, w):
     #
@@ -193,17 +218,17 @@ class Stereo:
         else:
             yield from super().get_mapping(other, **kwargs)
 
-    def _translate_tetrahedron_sign(self: 'Container', n, env):
+    def _translate_tetrahedron_sign(self: 'Container', n, env, s=None):
         """
         Get sign of chiral tetrahedron atom for specified neighbors order
 
         :param n: stereo atom
         :param env: neighbors order
+        :param s: if None, use existing sign else translate given to molecule
         """
-        s = self._atoms_stereo[n]
-        return self._translate_tetrahedron_sign_reversed(n, env, s)
+        if s is None:
+            s = self._atoms_stereo[n]
 
-    def _translate_tetrahedron_sign_reversed(self: 'Container', n, env, s):
         order = self._stereo_tetrahedrons[n]
         if len(order) == 3:
             if len(env) == 4:  # hydrogen atom passed to env
@@ -223,7 +248,7 @@ class Stereo:
             return not s
         return s
 
-    def _translate_cis_trans_sign(self: 'Container', n, m, nn, nm):
+    def _translate_cis_trans_sign(self: 'Container', n, m, nn, nm, s=None):
         """
         Get sign for specified opposite neighbors
 
@@ -231,16 +256,16 @@ class Stereo:
         :param m: last double bonded atom
         :param nn: neighbor of first atom
         :param nm: neighbor of last atom
+        :param s: if None, use existing sign else translate given to molecule
         """
-        try:
-            s = self._cis_trans_stereo[(n, m)]
-        except KeyError:
-            s = self._cis_trans_stereo[(m, n)]
-            n, m = m, n  # in alkenes sign not order depended
-            nn, nm = nm, nn
-        return self._translate_cis_trans_sign_reversed(n, m, nn, nm, s)
+        if s is None:
+            try:
+                s = self._cis_trans_stereo[(n, m)]
+            except KeyError:
+                s = self._cis_trans_stereo[(m, n)]
+                n, m = m, n  # in alkenes sign not order depended
+                nn, nm = nm, nn
 
-    def _translate_cis_trans_sign_reversed(self: 'Container', n, m, nn, nm, s):
         atoms = self._atoms
         n0, n1, n2, n3 = self._stereo_cis_trans[(n, m)]
         if nn == n0:  # same start
@@ -282,20 +307,19 @@ class Stereo:
             return not s
         return s
 
-    def _translate_allene_sign(self: 'Container', c, nn, nm):
+    def _translate_allene_sign(self: 'Container', c, nn, nm, s=None):
         """
         get sign for specified opposite neighbors
 
         :param c: central double bonded atom
         :param nn: neighbor of first double bonded atom
         :param nm: neighbor of last double bonded atom
+        :param s: if None, use existing sign else translate given to molecule
         """
-        s = self._allenes_stereo[c]
-        return self._translate_allene_sign_reversed(c, nn, nm, s)
+        if s is None:
+            s = self._allenes_stereo[c]
 
-    def _translate_allene_sign_reversed(self: 'Container', c, nn, nm, s):
         atoms = self._atoms
-
         n0, n1, n2, n3 = self._stereo_allenes[c]
         if nn == n0:  # same start
             t0 = 0
@@ -543,11 +567,11 @@ class MoleculeStereo(Stereo):
             raise TypeError('stereo mark should be bool')
 
         if n in self._chiral_tetrahedrons:
-            self._atoms_stereo[n] = self._translate_tetrahedron_sign_reversed(n, env, mark)
+            self._atoms_stereo[n] = self._translate_tetrahedron_sign(n, env, mark)
             if clean_cache:
                 self.flush_cache()
         elif n in self._chiral_allenes:
-            self._allenes_stereo[n] = self._translate_allene_sign_reversed(n, *env, mark)
+            self._allenes_stereo[n] = self._translate_allene_sign(n, *env, mark)
             if clean_cache:
                 self.flush_cache()
         else:  # only tetrahedrons supported
@@ -577,11 +601,11 @@ class MoleculeStereo(Stereo):
             raise IsChiral
 
         if (n, m) in self._chiral_cis_trans:
-            self._cis_trans_stereo[(n, m)] = self._translate_cis_trans_sign_reversed(n, m, n1, n2, mark)
+            self._cis_trans_stereo[(n, m)] = self._translate_cis_trans_sign(n, m, n1, n2, mark)
             if clean_cache:
                 self.flush_cache()
         elif (m, n) in self._chiral_cis_trans:
-            self._cis_trans_stereo[(m, n)] = self._translate_cis_trans_sign_reversed(m, n, n2, n1, mark)
+            self._cis_trans_stereo[(m, n)] = self._translate_cis_trans_sign(m, n, n2, n1, mark)
             if clean_cache:
                 self.flush_cache()
         else:
@@ -982,30 +1006,6 @@ class MoleculeStereo(Stereo):
                 morgan_update = {}
             else:
                 return chiral_t, {(n, m) for n, *_, m in chiral_c}, {path[len(path) // 2] for path in chiral_a}, morgan
-
-
-# 1  2
-#  \ |
-#   \|
-#    n---3
-#   /
-#  /
-# 0
-_tetrahedron_translate = {(0, 1, 2): False, (1, 2, 0): False, (2, 0, 1): False,
-                          (0, 2, 1): True, (1, 0, 2): True, (2, 1, 0): True,
-                          (0, 3, 1): False, (3, 1, 0): False, (1, 0, 3): False,
-                          (0, 1, 3): True, (1, 3, 0): True, (3, 0, 1): True,
-                          (0, 2, 3): False, (2, 3, 0): False, (3, 0, 2): False,
-                          (0, 3, 2): True, (3, 2, 0): True, (2, 0, 3): True,
-                          (1, 3, 2): False, (3, 2, 1): False, (2, 1, 3): False,
-                          (1, 2, 3): True, (2, 3, 1): True, (3, 1, 2): True}
-# 2       1
-#  \     /
-#   n---m
-#  /     \
-# 0       3
-_alkene_translate = {(0, 1): False, (1, 0): False, (0, 3): True, (3, 0): True,
-                     (2, 3): False, (3, 2): False, (2, 1): True, (1, 2): True}
 
 
 __all__ = ['MoleculeStereo', 'Stereo']
