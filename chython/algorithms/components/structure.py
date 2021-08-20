@@ -22,6 +22,9 @@ from collections import defaultdict
 from typing import Tuple
 
 
+_heteroatoms = {5, 6, 7, 8, 14, 15, 16, 17, 33, 34, 35, 52, 53}
+
+
 class StructureComponents:
     __slots__ = ()
 
@@ -67,12 +70,11 @@ class StructureComponents:
 
         adj = defaultdict(set)  # double bonds adjacency matrix
         if heteroatoms:
-            atoms_numbers = {5, 6, 7, 8, 14, 15, 16, 33, 34, 52}
             for n, atom in atoms.items():
-                if atom.atomic_number in atoms_numbers:
+                if atom.atomic_number in _heteroatoms:
                     adj_n = adj[n].add
                     for m, bond in bonds[n].items():
-                        if bond == 2 and atoms[m].atomic_number in atoms_numbers:
+                        if bond == 2 and atoms[m].atomic_number in _heteroatoms:
                             adj_n(m)
         else:
             for n, atom in atoms.items():

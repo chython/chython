@@ -50,7 +50,8 @@ _tetrahedron_translate = {(0, 1, 2): False, (1, 2, 0): False, (2, 0, 1): False,
 _alkene_translate = {(0, 1): False, (1, 0): False, (0, 3): True, (3, 0): True,
                      (2, 3): False, (3, 2): False, (2, 1): True, (1, 2): True}
 
-_organic_subset = {5, 6, 7, 8, 15, 16, 33, 34, 52}
+# allowed atoms. these atoms have stable covalent bonds.
+_organic_subset = {1, 5, 6, 7, 8, 9, 14, 15, 16, 17, 33, 34, 35, 52, 53}
 
 
 def _pyramid_sign(n, u, v, w):
@@ -377,9 +378,10 @@ class Stereo:
             nf = bonds[path[0]]
             nl = bonds[path[-1]]
             n1, m1 = path[1], path[-2]
-            if any(b not in (1, 4) for m, b in nf.items() if m != n1) or \
-                    any(b not in (1, 4) for m, b in nl.items() if m != m1):
-                continue
+            if any(b not in (1, 4) and atoms[m].atomic_number not in _organic_subset for m, b in nf.items() if m != n1)\
+                    or any(b not in (1, 4) and atoms[m].atomic_number not in _organic_subset
+                           for m, b in nl.items() if m != m1):
+                continue  # skip X=C=C structures and metal-carbon complexes
             nn = [x for x in nf if x != n1 and atoms[x].atomic_number != 1]
             mn = [x for x in nl if x != m1 and atoms[x].atomic_number != 1]
             if nn and mn:
@@ -402,6 +404,8 @@ class Stereo:
         bonds = self._bonds
         tetrahedrons = {}
         for n in self.tetrahedrons:
+            if any(atoms[x].atomic_number not in _organic_subset for x in bonds[n]):
+                continue  # skip metal-carbon complexes
             env = tuple(x for x in bonds[n] if atoms[x].atomic_number != 1)
             if len(env) in (3, 4):
                 tetrahedrons[n] = env
@@ -743,6 +747,67 @@ class MoleculeStereo(Stereo):
         if self._atoms_stereo or self._allenes_stereo or self._cis_trans_stereo:
             return self.__chiral_centers[3]
         return self.atoms_order
+
+    @cached_property
+    def _stereo_rings_cumulenes(self: 'MoleculeContainer') -> Tuple[Tuple[int, ...], ...]:
+        """
+        Isolated rings with attached cumulenes.
+        """
+        if not self.sssr:
+            return ()
+        atoms = self._atoms
+        hybridization = self.hybridization
+        atoms_rings = {n: set(r) for n, r in self.atoms_rings.items()}
+        potential = []
+        for r in self.sssr:
+            if len(r) % 2:  # skip odd rings.
+                # bicycles like bis-cyclopentan or bis-cyclopenten (common double bond) potentially chiral, but ignored.
+                # real examples not found.
+                continue
+            # skip rings which contains non-organic subset of atoms.
+            if any(atoms[n].atomic_number not in _organic_subset for n in r):
+                continue
+            # skip rings which contains odd number of sp3 atoms or not contains last ones.
+            # bicycles with common allene chord ignored. real examples not found.
+            if (sh := sum(hybridization(n) == 1 for n in r)) % 2 or not sh:
+                continue
+            # skip polycycles with common single bonds with sp3 atoms.
+            # polycycles with common double/aromatic bonds allowed. for example 9,10-reduced anthracene.
+            n, m = r[0], r[-1]
+            if hybridization(n) == 1 and hybridization(m) == 1 and len(atoms_rings[n] & atoms_rings[m]) != 1:
+                continue
+            for n, m in zip(r, r[1:]):
+                if hybridization(n) == 1 and hybridization(m) == 1 and len(atoms_rings[n] & atoms_rings[m]) != 1:
+                    break
+            else:
+                potential.append(r)
+
+        if not potential:
+            return ()
+
+        stereo_tetrahedrons = self._stereo_tetrahedrons
+        stereo_cumulenes = {}
+        for path in self._stereo_cumulenes:
+            n, m = path[0], path[-1]
+            stereo_cumulenes[n] = m
+            stereo_cumulenes[m] = n
+
+        rings = []
+        tet_points = {}
+        cum_points = {}
+        for r in potential:
+            tet_entry = [n for n in r if n in stereo_tetrahedrons]
+            cum_entry = [n for n in r if n in stereo_cumulenes and stereo_cumulenes[n] not in r]
+            if len(tet_entry) + len(cum_entry) < 2:  # at least 2 atoms required for axes
+                continue
+            # collect entries
+            for n in tet_entry:
+
+                tet_points[n] = r
+            for n in cum_entry:
+                cum_points[n] = r
+
+        return potential
 
     @cached_property
     def _stereo_axises(self: 'MoleculeContainer') -> Tuple[Tuple[Tuple[int, ...], ...], Tuple[Tuple[int, ...], ...]]:
