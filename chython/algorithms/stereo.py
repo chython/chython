@@ -785,6 +785,7 @@ class MoleculeStereo(Stereo):
         if not potential:
             return ()
 
+        morgan = self.atoms_order
         stereo_tetrahedrons = self._stereo_tetrahedrons
         stereo_cumulenes = {}
         for path in self._stereo_cumulenes:
@@ -792,20 +793,53 @@ class MoleculeStereo(Stereo):
             stereo_cumulenes[n] = m
             stereo_cumulenes[m] = n
 
-        rings = []
-        tet_points = {}
-        cum_points = {}
+        # build graph
+        adj = defaultdict(list)
+        chiral = set()  # potential axis atoms
         for r in potential:
-            tet_entry = [n for n in r if n in stereo_tetrahedrons]
-            cum_entry = [n for n in r if n in stereo_cumulenes and stereo_cumulenes[n] not in r]
-            if len(tet_entry) + len(cum_entry) < 2:  # at least 2 atoms required for axes
-                continue
-            # collect entries
-            for n in tet_entry:
+            flag = False
+            lr = 1 - len(r)
+            for i, n in enumerate(r):
+                # ring should contain stereogenic tetrahedron or exocyclic cumulene with equal neighboring atoms in ring
+                if (n in stereo_tetrahedrons or n in stereo_cumulenes and stereo_cumulenes[n] not in r) and \
+                        morgan[r[i - 1]] == morgan[r[i + lr]]:
 
-                tet_points[n] = r
-            for n in cum_entry:
-                cum_points[n] = r
+                    chiral.add(n)
+                    flag = True
+            if flag:
+                n, m = r[0], r[-1]
+                adj[n].append(m)
+                adj[m].append(n)
+                for n, m in zip(r, r[1:]):
+                    adj[n].append(m)
+                    adj[m].append(n)
+
+        # remove tetrahedron link points. connect rings to biggest one.
+        for n in [n for n, m in adj.items() if len(m) == 4]:
+            n1, m1, n2, m2 = adj.pop(n)  # neighbors are rings grouped
+            adj[n1].remove(n)
+            adj[m1].remove(n)
+            adj[n2].remove(n)
+            adj[m2].remove(n)
+            adj[n1].append(n2)
+            adj[n2].append(n1)
+            adj[m1].append(m2)
+            adj[m2].append(m1)
+
+        # connect rings linked by cumulenes. skip cumulenes atoms.
+        for path in self._stereo_cumulenes:
+            n, m = path[0], path[-1]
+            if n in adj and m in adj:
+                n1, m1 = adj.pop(n)
+                n2, m2 = adj.pop(m)
+                adj[n1].remove(n)
+                adj[m1].remove(n)
+                adj[n2].remove(m)
+                adj[m2].remove(m)
+                adj[n1].append(n2)
+                adj[n2].append(n1)
+                adj[m1].append(m2)
+                adj[m2].append(m1)
 
         return potential
 
