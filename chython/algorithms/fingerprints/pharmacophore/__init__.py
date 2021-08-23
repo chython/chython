@@ -19,34 +19,22 @@
 #
 from functools import cached_property
 from typing import Dict, TYPE_CHECKING
-from ._acceptor import queries as acceptor_queries, banned as acceptor_banned
-from ._acidic import queries as acidic_queries
-from ._basic import queries as basic_queries, banned as basic_banned
-from ._donor import queries as donor_queries
+from ...tautomers._acid import rules as acidic_rules
+from ...tautomers._base import rules as basic_rules
+
 
 if TYPE_CHECKING:
     from ....containers import MoleculeContainer
-
-queries = {
-    'acc_allow': acceptor_queries,
-    'acc_ban': acceptor_banned,
-    'acid_allow': acidic_queries,
-    'base_allow': basic_queries,
-    'base_ban': basic_banned,
-    'donor_allow': donor_queries,
-}
 
 
 class Pharmacophore:
     __slots__ = ()
     """
     Matcher of atoms in an molecule to some integer number.
-    Each integer represents 6 bit, each bit is enable/disable some pharmacophoric feature:
-    H acceptor | acidic prop. | aromatic | basic prop. | H donor | some halogen atom
+    Each integer represents 10 bit, each bit is enable/disable some pharmacophoric feature:
+    | H acceptor | H donor | acidic | basic | positive charged | negative charged | ->
+    -> | fluorine | any halogen atom | hydrophobic | aromatic |
     After the constructing, binary number will be converted to 10-based integer
-    
-    The rules is adapted from SMARTS from 
-    rdkit.org/docs/GettingStartedInPython.html#feature-definitions-used-in-the-morgan-fingerprints
     """
 
     @cached_property
@@ -54,23 +42,43 @@ class Pharmacophore:
         """
         Match id of each atom of some molecule with integer number which define some features using in FCFP
         """
-        id_sets = {}
-        for name, qrs in queries.items():
-            id_sets[name] = {dct[1] for q in qrs for dct in q.get_mapping(self, automorphism_filter=False)}
+        acid = acidic_rules[:-1]  # discard a rule with halogen acids
+        base = basic_rules[:3] + basic_rules[4:]  # there is no need a rule with halogen ions
 
-        # rules for looking for aromatic and halogen atoms used here with direct getting ids atoms from molecule's info
+        hydrogens = self._hydrogens
+        atoms = self._atoms
+        bonds = self._bonds
+        charges = self._charges
+
+        acceptors_donors = {n for n, a in atoms.items() if a.atomic_number in {7, 8, 16}}
+        halogens = {idx: num for idx, atom in atoms.items() if (num := atom.atomic_number) in {9, 17, 35, 53}}
+        charged = {n: charge for n, a in atoms.items() if (charge := charges[n])}
+
         bins = [
-            id_sets['acc_allow'] - id_sets['acc_ban'],
-            id_sets['acid_allow'],
-            {idx for idx in self._atoms if self.hybridization(idx) == 4},  # [a]
-            id_sets['base_allow'] - id_sets['base_ban'],
-            id_sets['donor_allow'],
-            {idx for idx, atom in self.atoms() if atom.atomic_number in {9, 17, 35, 53} and self.neighbors(idx) < 2},
-            # [F, Cl, Br, I]
+            (acceptors := {n for n in acceptors_donors if not hydrogens[n]}),  # H acceptors
+            acceptors_donors - acceptors,  # H donors
+
+            {n for q in acid for dct in q.get_mapping(self, automorphism_filter=False) for n in dct.values()
+             if hydrogens[n]},  # acidic
+
+            {n for q in base for dct in q.get_mapping(self, automorphism_filter=False) for n in dct.values()
+             if not hydrogens[n]},  # basic
+
+            (positive := {n for n, c in charged.items() if c > 0}),  # positive charged
+            charged.keys() - positive,  # negative charged
+
+            (fluorine := {n for n, a in halogens.items() if a == 9}),  # fluorine
+            halogens.keys() - fluorine,  # halogens except fluorine
+
+            {n for n, a in atoms.items()
+             if a.atomic_number == 6 and
+             set(atoms[x].atomic_number for x in bonds[n]).issubset({1, 5, 6, 9, 14})},  # hydrophobic
+
+            {n for n in atoms if self.hybridization(n) == 4},  # aromatic
         ]
 
         out = {idx: 0 for idx in self._atoms}
-        for pos, bin_ in zip((32, 16, 8, 4, 2, 1), bins):
+        for pos, bin_ in zip((1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1), bins):
             for idx in bin_:
                 out[idx] |= pos
 
