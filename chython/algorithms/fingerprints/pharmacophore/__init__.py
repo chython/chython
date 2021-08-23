@@ -78,7 +78,7 @@ class Pharmacophore:
         ]
 
         out = {idx: 0 for idx in self._atoms}
-        for pos, bin_ in zip((1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1), bins):
+        for pos, bin_ in zip((512, 256, 128, 64, 32, 16, 8, 4, 2, 1), bins):
             for idx in bin_:
                 out[idx] |= pos
 
