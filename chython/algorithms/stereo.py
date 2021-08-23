@@ -18,6 +18,7 @@
 #
 from CachedMethods import cached_property
 from collections import defaultdict, deque
+from itertools import combinations
 from logging import info
 from typing import Dict, Optional, Set, Tuple, Union, TYPE_CHECKING
 from ..exceptions import AtomNotFound, IsChiral, NotChiral
@@ -749,7 +750,41 @@ class MoleculeStereo(Stereo):
         return self.atoms_order
 
     @cached_property
-    def _stereo_rings_cumulenes(self: 'MoleculeContainer') -> Tuple[Tuple[int, ...], ...]:
+    def _connected_rings_points(self: 'MoleculeContainer') -> Set[int]:
+        """
+        Rings with single common atoms.
+
+        :return: common atoms
+        """
+        return {n for n, r in self.atoms_rings.items()
+                if any(len(set(nr).intersection(mr)) == 1 for nr, mr in combinations(r, 2))}
+
+    @cached_property
+    def _connected_rings_cumulenes(self: 'MoleculeContainer') -> Set[Tuple[int, ...]]:
+        """
+        Rings with cumulene linkers.
+
+        :return: cumulenes paths
+        """
+        ar = self.atoms_rings
+        links = set()
+        for p in self._stereo_cumulenes:
+            n, m = p[0], p[-1]
+            if n in ar and m in ar and (snr := set(ar[n])).difference((smr := set(ar[m]))) and smr.difference(snr):
+                links.add(p)
+        return links
+
+    def _rings_with_cumulenes(self: 'MoleculeContainer') -> Set[Tuple[int, ...]]:
+        ar = self.atoms_rings
+        rings = set()
+        for p in self._stereo_cumulenes:
+            n, m = p[0], p[-1]
+            if n in ar and m in ar and (cr := set(ar[n]).intersection(ar[m])):
+                rings.update(cr)
+        return rings
+
+    @cached_property
+    def _stereo_axes(self: 'MoleculeContainer') -> Tuple[Tuple[int, ...], ...]:
         """
         Isolated rings with attached cumulenes.
         """
@@ -758,33 +793,6 @@ class MoleculeStereo(Stereo):
         atoms = self._atoms
         hybridization = self.hybridization
         atoms_rings = {n: set(r) for n, r in self.atoms_rings.items()}
-        potential = []
-        for r in self.sssr:
-            if len(r) % 2:  # skip odd rings.
-                # bicycles like bis-cyclopentan or bis-cyclopenten (common double bond) potentially chiral, but ignored.
-                # real examples not found.
-                continue
-            # skip rings which contains non-organic subset of atoms.
-            if any(atoms[n].atomic_number not in _organic_subset for n in r):
-                continue
-            # skip rings which contains odd number of sp3 atoms or not contains last ones.
-            # bicycles with common allene chord ignored. real examples not found.
-            if (sh := sum(hybridization(n) == 1 for n in r)) % 2 or not sh:
-                continue
-            # skip polycycles with common single bonds with sp3 atoms.
-            # polycycles with common double/aromatic bonds allowed. for example 9,10-reduced anthracene.
-            n, m = r[0], r[-1]
-            if hybridization(n) == 1 and hybridization(m) == 1 and len(atoms_rings[n] & atoms_rings[m]) != 1:
-                continue
-            for n, m in zip(r, r[1:]):
-                if hybridization(n) == 1 and hybridization(m) == 1 and len(atoms_rings[n] & atoms_rings[m]) != 1:
-                    break
-            else:
-                potential.append(r)
-
-        if not potential:
-            return ()
-
         morgan = self.atoms_order
         stereo_tetrahedrons = self._stereo_tetrahedrons
         stereo_cumulenes = {}
@@ -793,19 +801,96 @@ class MoleculeStereo(Stereo):
             stereo_cumulenes[n] = m
             stereo_cumulenes[m] = n
 
+        chiral_t = set()
+        chiral_c = set()
+        potential = []
+        for r in self.sssr:
+            # skip rings which contains non-organic subset of atoms.
+            if any(atoms[n].atomic_number not in _organic_subset for n in r):
+                continue
+            elif (ura := len({morgan[n] for n in r})) == len(r):  # all atoms unique. chirality obvious.
+                continue
+            elif ura == 1:  # Cn symmetry with axe in ring center.
+                if (n := r[0]) in stereo_tetrahedrons:
+                    chiral_t.update(r)
+                elif n in stereo_cumulenes:  # second end of cumulene define stereo.
+                    chiral_c.update(r)
+                continue
+            # axe ring center symmetry except C2 symmetry. e.g. 1,3,5-trimethylcyclohexane.
+            for e in (3, 5, 7, 11, 13, 17, 19, 23, 29):
+                if e < len(r) and not len(r) % e and ura == (c := len(r) // e + 1) // 2 + c % 2:
+                    for n in r:
+                        if n in stereo_tetrahedrons:
+                            chiral_t.add(n)
+                        elif n in stereo_cumulenes:
+                            chiral_c.add(n)
+                    break
+            else:  # not found
+                if len(r) % 2:
+                    na = 1 - len(r)
+                    fo = len(r) // 2
+                    for i, n in enumerate(r):
+                        if morgan[r[i - 1]] == morgan[r[i + na]]:
+                            # found C2 symmetry
+                            if len(cr := (atoms_rings[r[i - fo]] & atoms_rings[r[i - fo - 1]])) == 2:  # bicycle found.
+                                r1, r2 = cr
+                                cc = set(r1).intersection(r2)
+                                # search first common atom
+                                # r + r = 2 loops of ring
+                                if hybridization(next(x for x in (r + r)[i:] if x in cc)) != 1:
+                                    if n in stereo_tetrahedrons or n in stereo_cumulenes:
+                                        # e.g. bis-cyclopenten. single cyclopenten not chiral.
+                                        potential.append(r)
+                                else:  # e.g. bis-cyclopentan chiral.
+                                    # side-affect - next compound treat as chiral.
+                                    # C -- X ---- C
+                                    # |    |     /
+                                    # C    n-R  /
+                                    #  \  /    /
+                                    #   X --- C
+                                    for x in r:
+                                        if x in stereo_tetrahedrons:
+                                            chiral_t.add(x)
+                                        elif x in stereo_cumulenes:
+                                            chiral_c.add(x)
+                                break
+                            # if len(cr) == 1: n can be chiral when opposite site has stereogenic atoms.
+                            # treat it as common stereo atoms.
+                            # if len(cr) == 3: tri-cycles?
+                else:  # even rings!
+                    ...
+                    # skip polycycles with common single bonds with sp3 atoms.
+                    # polycycles with common double/aromatic bonds allowed. for example 9,10-reduced anthracene.
+                    n, m = r[0], r[-1]
+                    if hybridization(n) == 1 and hybridization(m) == 1 and len(atoms_rings[n] & atoms_rings[m]) != 1:
+                        continue
+                    for n, m in zip(r, r[1:]):
+                        if hybridization(n) == 1 and hybridization(m) == 1 and len(atoms_rings[n] & atoms_rings[m]) != 1:
+                            break
+                    else:
+                        potential.append(r)
+
+        if not potential:
+            return chiral_t, chiral_c
+
         # build graph
         adj = defaultdict(list)
         chiral = set()  # potential axis atoms
         for r in potential:
             flag = False
-            lr = 1 - len(r)
-            for i, n in enumerate(r):
+            lr = len(r) // 2
+            for i, n in enumerate(r[:lr]):
                 # ring should contain stereogenic tetrahedron or exocyclic cumulene with equal neighboring atoms in ring
                 if (n in stereo_tetrahedrons or n in stereo_cumulenes and stereo_cumulenes[n] not in r) and \
-                        morgan[r[i - 1]] == morgan[r[i + lr]]:
-
-                    chiral.add(n)
-                    flag = True
+                        morgan[r[i - 1]] == morgan[r[i + 1]]:
+                    # ring should contain opposite to 'n' stereogenic atom for C2 symmetry.
+                    if (m := r[i + lr]) in stereo_tetrahedrons or m in stereo_cumulenes:
+                        chiral.add(n)
+                        chiral.add(m)
+                        flag = True
+                    # e.g 1,3,5-trimethyl-cyclohexane
+                    elif not lr % 3:
+                        ...
             if flag:
                 n, m = r[0], r[-1]
                 adj[n].append(m)
@@ -983,6 +1068,16 @@ class MoleculeStereo(Stereo):
 
     @cached_property
     def __chiral_centers(self: Union['MoleculeContainer', 'MoleculeStereo']):
+        """
+        Cumulenes in rings chiral.
+        Tetrahedrons chiral:
+            in rings with cumulenes.
+            in rings with stereogenic tetrahedrons.
+        Double-bond connected to ring chiral when ring contain at least one stereogenic tetrahedron or bond.
+        Point-connected rings have chiral tetrahedrons when at least one stereogenic tetrahedron or
+        double-bond exists in both rings.
+        Double-bond-connected rings have chiral bonds in same conditions.
+        """
         atoms_stereo = self._atoms_stereo
         cis_trans_stereo = self._cis_trans_stereo
         allenes_stereo = self._allenes_stereo
