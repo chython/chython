@@ -116,20 +116,20 @@ class PDBRead(XYZ):
                     try:
                         charge = int(charge)
                     except ValueError:
-                        self._info(f'Line [{n}] {line}: consist errors:\n{format_exc()}')
+                        self._info(f'Line [{n}]: consist errors in charge')
                         failkey = True
                         atoms = []
-                        yield parse_error(count, pos, self._format_log(), {})
+                        yield parse_error(count, pos, self._format_log(), line)
                         self._flush_log()
                 else:
                     charge = None
                 try:
                     x, y, z = float(line[30:38]), float(line[38:46]), float(line[46:54])
                 except ValueError:
-                    self._info(f'Line [{n}] {line}: consist errors:\n{format_exc()}')
+                    self._info(f'Line [{n}]: consist errors in coordinates definition')
                     failkey = True
                     atoms = []
-                    yield parse_error(count, pos, self._format_log(), {})
+                    yield parse_error(count, pos, self._format_log(), line)
                     self._flush_log()
                     continue
 
@@ -162,7 +162,7 @@ class PDBRead(XYZ):
                     if not ignore:
                         failkey = True
                         atoms = []
-                        yield parse_error(count, pos, self._format_log(), {})
+                        yield parse_error(count, pos, self._format_log(), line)
                         self._flush_log()
                         continue
                 atoms.append((atom_name, charge, x, y, z, residue))
@@ -172,13 +172,13 @@ class PDBRead(XYZ):
                         container = self._convert_molecule(atoms)
                     except ValueError:
                         self._info(f'Structure consist errors:\n{format_exc()}')
-                        yield parse_error(count, pos, self._format_log(), {})
+                        yield parse_error(count, pos, self._format_log(), None)
                     else:
                         yield container
                     atoms = []
                 else:
-                    self._info(f'Line [{n}] {line}: END or ENDMDL before ATOM or HETATM')
-                    yield parse_error(count, pos, self._format_log(), {})
+                    self._info(f'Line [{n}]: END or ENDMDL before ATOM or HETATM')
+                    yield parse_error(count, pos, self._format_log(), line)
                 count += 1
                 if seekable:
                     pos = file.tell()

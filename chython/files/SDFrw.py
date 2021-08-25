@@ -23,7 +23,7 @@ from re import match, compile
 from subprocess import check_output
 from traceback import format_exc
 from typing import Optional
-from ._mdl import parse_error, MDLRead, MDLWrite, MOLRead, EMOLRead, EMDLWrite
+from ._mdl import parse_error, MDLRead, MDLWrite, MOLRead, EMOLRead, EMDLWrite, MDLStereo
 from ..containers import MoleculeContainer
 from ..exceptions import EmptyMolecule
 
@@ -270,4 +270,36 @@ class ESDFWrite(EMDLWrite):
         self._file.write('$$$$\n')
 
 
-__all__ = ['SDFRead', 'SDFWrite', 'ESDFWrite']
+def mdl_mol(data: str, /, calc_cis_trans=False, ignore_stereo=False, remap=False, ignore=False, store_log=False):
+    """
+    Parse string with mol file.
+    """
+    data = data.splitlines()
+    title = data[1]
+    converter = MDLStereo(calc_cis_trans=calc_cis_trans, ignore_stereo=ignore_stereo, remap=remap, ignore=ignore,
+                          store_log=store_log)
+    line = data[3]
+    if 'V2000' in line:
+        try:
+            parser = MOLRead(line, converter._log_buffer)
+        except EmptyMolecule:
+            if ignore:
+                parser = EMOLRead(ignore, converter._log_buffer)
+            else:
+                raise
+    elif 'V3000' in line:
+        parser = EMOLRead(ignore, converter._log_buffer)
+    else:
+        raise ValueError('invalid CTAB')
+
+    for line in data[4:]:
+        if parser(line):
+            break
+    else:
+        raise ValueError('invalid CTAB')
+    record = parser.getvalue()
+    record['title'] = title
+    return converter._convert_molecule(record)
+
+
+__all__ = ['SDFRead', 'SDFWrite', 'ESDFWrite', 'mdl_mol']

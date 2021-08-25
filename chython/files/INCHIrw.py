@@ -25,8 +25,7 @@ from os import name
 from pathlib import Path
 from re import split
 from sys import prefix, exec_prefix
-from traceback import format_exc
-from typing import List, Dict, Union, Iterator
+from typing import List, Iterator
 from warnings import warn
 from ._mdl import Parser, common_isotopes, parse_error
 from ..containers import MoleculeContainer
@@ -94,13 +93,14 @@ class INCHIRead(Parser):
             seekable = False
         pos = file.tell() if seekable else None
         for n, line in enumerate(self.__file):
-            x = parse(line)
-            if isinstance(x, dict):
-                yield parse_error(n, pos, self._format_log(), x)
-                if seekable:
-                    pos = file.tell()
+            try:
+                x = parse(line)
+            except ValueError:
+                yield parse_error(n, pos, self._format_log(), line)
             else:
                 yield x
+            if seekable:
+                pos = file.tell()
 
     @classmethod
     def create_parser(cls, header=None, ignore_stereo=False, *args, **kwargs):
@@ -142,17 +142,17 @@ class INCHIRead(Parser):
     def __next__(self) -> MoleculeContainer:
         return next(iter(self))
 
-    def parse(self, inchi: str) -> Union[MoleculeContainer, Dict[str, str]]:
+    def parse(self, inchi: str) -> MoleculeContainer:
         """
         convert INCHI string into MoleculeContainer object. string should be start with INCHI and
         optionally continues with space/tab separated list of key:value [or key=value] data.
         """
-        self._flush_log()
-        inchi, *data = inchi.split()
         if not inchi:
-            self._info('empty inchi string')
-            return {}
-        elif self.__header is None:
+            raise ValueError('Empty string')
+        self._flush_log()
+
+        inchi, *data = inchi.split()
+        if self.__header is None:
             meta = {}
             for x in data:
                 try:
@@ -163,20 +163,9 @@ class INCHIRead(Parser):
         else:
             meta = dict(zip(self.__header, data))
 
-        try:
-            record = self.__parse_inchi(inchi)
-        except ValueError:
-            self._info(f'string: {inchi}\nconsist errors:\n{format_exc()}')
-            return meta
-
+        record = self.__parse_inchi(inchi)
         record['meta'] = meta
-        try:
-            container = self._convert_molecule(record)
-        except ValueError:
-            self._info(f'record consist errors:\n{format_exc()}')
-            return meta
-        else:
-            return container
+        return self._convert_molecule(record)
 
     def _create_molecule(self, data, mapping):
         mol = super()._create_molecule(data, mapping, _skip_calc_implicit=True)
