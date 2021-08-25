@@ -20,7 +20,6 @@
 from abc import ABC, abstractmethod
 from math import sqrt
 from pkg_resources import resource_string
-from py_mini_racer.py_mini_racer import MiniRacer, JSEvalException
 from random import random
 from typing import TYPE_CHECKING, Union
 from ...containers import molecule
@@ -33,9 +32,14 @@ if TYPE_CHECKING:
     from chython import ReactionContainer, MoleculeContainer, CGRContainer, QueryContainer
     from chython.containers.graph import Graph
 
-ctx = MiniRacer()
-ctx.eval('const self = this')
-ctx.eval(resource_string(__name__, 'clean2d.js'))
+try:
+    from py_mini_racer.py_mini_racer import MiniRacer, JSEvalException
+
+    ctx = MiniRacer()
+    ctx.eval('const self = this')
+    ctx.eval(resource_string(__name__, 'clean2d.js'))
+except RuntimeError:
+    ctx = None
 
 
 class Calculate2D(ABC):
@@ -45,6 +49,8 @@ class Calculate2D(ABC):
         """
         Calculate 2d layout of graph. https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation used.
         """
+        if ctx is None:
+            raise ImportError('py_mini_racer not installed or broken')
         plane = {}
         for _ in range(5):
             smiles, order = self._clean2d_prepare()
