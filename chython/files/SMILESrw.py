@@ -25,8 +25,7 @@ from io import StringIO, TextIOWrapper
 from operator import or_
 from pathlib import Path
 from re import split, compile, fullmatch, findall, search
-from traceback import format_exc
-from typing import Union, List, Dict
+from typing import Union, List
 from ._mdl import Parser, parse_error
 from ..containers import MoleculeContainer, CGRContainer, ReactionContainer
 from ..containers.bonds import DynamicBond
@@ -137,13 +136,14 @@ class SMILESRead(Parser):
             seekable = False
         pos = file.tell() if seekable else None
         for n, line in enumerate(self.__file):
-            x = parse(line)
-            if isinstance(x, dict):
-                yield parse_error(n, pos, self._format_log(), x)
-                if seekable:
-                    pos = file.tell()
+            try:
+                x = parse(line)
+            except ValueError:
+                yield parse_error(n, pos, self._format_log(), line)
             else:
                 yield x
+            if seekable:
+                pos = file.tell()
 
     @classmethod
     def create_parser(cls, header=None, ignore_stereo=False, *args, **kwargs):
@@ -185,14 +185,14 @@ class SMILESRead(Parser):
     def __next__(self):
         return next(iter(self))
 
-    def parse(self, smiles: str) -> Union[MoleculeContainer, CGRContainer, ReactionContainer, Dict[str, str]]:
+    def parse(self, smiles: str) -> Union[MoleculeContainer, CGRContainer, ReactionContainer]:
         """SMILES string parser."""
+        if not smiles:
+            raise ValueError('Empty string')
         self._flush_log()
+
         smi, *data = smiles.split()
-        if not smi:
-            self._info('empty smiles')
-            return {}
-        elif data and data[0].startswith('|') and data[0].endswith('|'):
+        if data and data[0].startswith('|') and data[0].endswith('|'):
             fr = search(cx_fragments, data[0])
             if fr is not None:
                 contract = [sorted(int(x) for x in x.split('.')) for x in fr.group()[2:].split(',')]
@@ -241,44 +241,19 @@ class SMILESRead(Parser):
             record = {'reactants': [], 'reagents': [], 'products': [], 'meta': meta, 'title': ''}
             try:
                 reactants, reagents, products = smi.split('>')
-            except ValueError:
-                self._info('invalid SMIRKS')
-                return meta
+            except ValueError as e:
+                raise ValueError('invalid reaction smiles') from e
 
-            try:
-                if reactants:
-                    for x in reactants.split('.'):
+            for k, d in zip(('reactants', 'products', 'reagents'), (reactants, products, reagents)):
+                if d:
+                    for x in d.split('.'):
                         if not x:
                             if self._ignore:
                                 self._info('two dots in line ignored')
                             else:
-                                self._info('two dots in line')
-                                return meta
+                                raise ValueError('invalid reaction smiles. two dots in line')
                         else:
-                            record['reactants'].append(self.__parse_tokens(x))
-                if products:
-                    for x in products.split('.'):
-                        if not x:
-                            if self._ignore:
-                                self._info('two dots in line ignored')
-                            else:
-                                self._info('two dots in line')
-                                return meta
-                        else:
-                            record['products'].append(self.__parse_tokens(x))
-                if reagents:
-                    for x in reagents.split('.'):
-                        if not x:
-                            if self._ignore:
-                                self._info('two dots in line ignored')
-                            else:
-                                self._info('two dots in line')
-                                return meta
-                        else:
-                            record['reagents'].append(self.__parse_tokens(x))
-            except ValueError:
-                self._info(f'record consist errors:\n{format_exc()}')
-                return meta
+                            record[k].append(self.__parse_tokens(x))
 
             if radicals:
                 atom_map = dict(enumerate(a for m in chain(record['reactants'], record['reagents'], record['products'])
@@ -286,80 +261,56 @@ class SMILESRead(Parser):
                 for x in radicals:
                     atom_map[x]['is_radical'] = True
 
-            try:
-                container = self._convert_reaction(record)
-            except ValueError:
-                self._info(f'record consist errors:\n{format_exc()}')
-                return meta
-            else:
-                if contract:
-                    if max(x for x in contract for x in x) >= len(container):
-                        self._info(f'skipped invalid contract data: {contract}')
-                    lcr = len(container.reactants)
-                    reactants = set(range(lcr))
-                    reagents = set(range(lcr, lcr + len(container.reagents)))
-                    products = set(range(lcr + len(container.reagents),
-                                         lcr + len(container.reagents) + len(container.products)))
-                    new_molecules = [None] * len(container)
-                    for c in contract:
-                        if reactants.issuperset(c):
-                            new_molecules[c[0]] = reduce(or_, (container.reactants[x] for x in c))
-                            reactants.difference_update(c)
-                        elif products.issuperset(c):
-                            new_molecules[c[0]] = reduce(or_, (container.products[x - len(container)] for x in c))
-                            products.difference_update(c)
-                        elif reagents.issuperset(c):
-                            new_molecules[c[0]] = reduce(or_, (container.reagents[x - lcr] for x in c))
-                            reagents.difference_update(c)
+            container = self._convert_reaction(record)
+            if contract:
+                if max(x for x in contract for x in x) >= len(container):
+                    self._info(f'skipped invalid contract data: {contract}')
+                lr = len(container.reactants)
+                reactants = set(range(lr))
+                reagents = set(range(lr, lr + len(container.reagents)))
+                products = set(range(lr + len(container.reagents),
+                                     lr + len(container.reagents) + len(container.products)))
+                new_molecules = [None] * len(container)
+                for c in contract:
+                    if reactants.issuperset(c):
+                        new_molecules[c[0]] = reduce(or_, (container.reactants[x] for x in c))
+                        reactants.difference_update(c)
+                    elif products.issuperset(c):
+                        new_molecules[c[0]] = reduce(or_, (container.products[x - len(container)] for x in c))
+                        products.difference_update(c)
+                    elif reagents.issuperset(c):
+                        new_molecules[c[0]] = reduce(or_, (container.reagents[x - lr] for x in c))
+                        reagents.difference_update(c)
+                    else:
+                        self._info(f'impossible to contract different parts of reaction: {contract}')
+                for x in reactants:
+                    new_molecules[x] = container.reactants[x]
+                for x in products:
+                    new_molecules[x] = container.products[x - len(container)]
+                for x in reagents:
+                    new_molecules[x] = container.reagents[x - lr]
+
+                meta = container.meta
+                if self._store_log:
+                    log = self._format_log()
+                    if log:
+                        if 'ParserLog' in meta:
+                            meta['ParserLog'] += '\n' + log
                         else:
-                            self._info(f'impossible to contract different parts of reaction: {contract}')
-                    for x in reactants:
-                        new_molecules[x] = container.reactants[x]
-                    for x in products:
-                        new_molecules[x] = container.products[x - len(container)]
-                    for x in reagents:
-                        new_molecules[x] = container.reagents[x - lcr]
-
-                    meta = container.meta
-                    if self._store_log:
-                        log = self._format_log()
-                        if log:
-                            if 'ParserLog' in meta:
-                                meta['ParserLog'] += '\n' + log
-                            else:
-                                meta['ParserLog'] = log
-                    container = ReactionContainer([x for x in new_molecules[:lcr] if x is not None],
-                                                  [x for x in new_molecules[-len(container.products):]
-                                                   if x is not None],
-                                                  [x for x in new_molecules[lcr: -len(container.products)]
-                                                   if x is not None], meta=meta)
-
-                return container
+                            meta['ParserLog'] = log
+                return ReactionContainer([x for x in new_molecules[:lr] if x is not None],
+                                         [x for x in new_molecules[-len(container.products):] if x is not None],
+                                         [x for x in new_molecules[lr: -len(container.products)] if x is not None],
+                                         meta=meta)
+            return container
         else:
-            try:
-                record = self.__parse_tokens(smi)
-            except ValueError:
-                self._info(f'line: {smi}\nconsist errors:\n{format_exc()}')
-                return meta
-
+            record = self.__parse_tokens(smi)
             record['meta'].update(meta)
             if 'cgr' in record:  # CGR smiles parser
-                try:
-                    container = self._convert_cgr(record)
-                except ValueError:
-                    self._info(f'record consist errors:\n{format_exc()}')
-                    return meta
-                else:
-                    return container
+                return self._convert_cgr(record)
             for x in radicals:
                 record['atoms'][x]['is_radical'] = True
-            try:
-                container = self._convert_molecule(record)
-            except ValueError:
-                self._info(f'record consist errors:\n{format_exc()}')
-                return meta
-            else:
-                return container
+            return self._convert_molecule(record)
 
     def _create_molecule(self, data, mapping):
         mol = super()._create_molecule(data, mapping)

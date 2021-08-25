@@ -28,7 +28,7 @@ smiles = SMILESRead.create_parser(ignore=True, remap=False)
 xyz = XYZRead.create_parser()
 
 
-__all__ = ['smiles', 'xyz']
+__all__ = ['smiles', 'xyz', 'mdl_mol']
 
 if 'INCHIRead' in locals():
     inchi = INCHIRead.create_parser()

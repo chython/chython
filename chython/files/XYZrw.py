@@ -207,16 +207,16 @@ class XYZRead(XYZ):
                             charge = int(line[7:])
                         except ValueError:
                             failkey = True
-                            self._info(f'Line [{n}] {line}: consist errors:\n{format_exc()}')
-                            yield parse_error(count, pos, self._format_log(), {})
+                            self._info(f'Line [{n}]: consist errors in charge definition')
+                            yield parse_error(count, pos, self._format_log(), line)
                             break
                     elif x.startswith('radical='):
                         try:
                             radical = int(line[8:])
                         except ValueError:
                             failkey = True
-                            self._info(f'Line [{n}] {line}: consist errors:\n{format_exc()}')
-                            yield parse_error(count, pos, self._format_log(), {})
+                            self._info(f'Line [{n}]: consist errors in radical atoms count definition')
+                            yield parse_error(count, pos, self._format_log(), line)
                             break
                 else:
                     meta = False
@@ -226,15 +226,15 @@ class XYZRead(XYZ):
                     xyz.append((symbol, None, float(x), float(y), float(z)))
                 except ValueError:
                     failkey = True
-                    self._info(f'Line [{n}] {line}: consist errors:\n{format_exc()}')
-                    yield parse_error(count, pos, self._format_log(), {})
+                    self._info(f'Line [{n}]: consist errors in xyz atom coordinates definition')
+                    yield parse_error(count, pos, self._format_log(), line)
                 else:
                     if len(xyz) == size:
                         try:
                             container = self._convert_molecule(xyz, charge, radical)
                         except ValueError:
                             self._info(f'record consist errors:\n{format_exc()}')
-                            yield parse_error(count, pos, self._format_log(), {})
+                            yield parse_error(count, pos, self._format_log(), None)
                         else:
                             yield container
                         failkey = True  # trigger end of XYZ

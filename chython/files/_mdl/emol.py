@@ -160,7 +160,7 @@ class EMOLRead:
             star = None
             try:
                 t = int(t)
-                if t == 9:  # added ad-hoc for bond type 9
+                if t in (9, 10):  # added ad-hoc for bond type 9
                     t = 8
                     self.__log_buffer.append('coordinate bond replaced to special')
                 self.__bonds.append((self.__atom_map[a1], self.__atom_map[a2], t))

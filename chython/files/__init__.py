@@ -26,3 +26,4 @@ from .XYZrw import *
 
 
 __all__ = [x for x in locals() if x.endswith(('Read', 'Write'))]
+__all__.append('mdl_mol')
