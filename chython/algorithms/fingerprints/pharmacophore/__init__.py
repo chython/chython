@@ -50,9 +50,10 @@ class Pharmacophore:
         bonds = self._bonds
         charges = self._charges
 
-        acceptors_donors = {n for n, a in atoms.items() if a.atomic_number in {7, 8, 16}}
-        halogens = {idx: num for idx, atom in atoms.items() if (num := atom.atomic_number) in {9, 17, 35, 53}}
-        charged = {n: charge for n, a in atoms.items() if (charge := charges[n])}
+        acceptors_donors = {n for n, a in atoms.items() if a.atomic_number in {7, 8, 16} and a.neighbors <= 3}
+        halogens = {idx: num for idx, atom in atoms.items()
+                    if (num := atom.atomic_number) in {17, 35, 53} and self.neighbors(idx) < 2}
+        charged = {n: c for n, c in atoms.items() if c}
 
         bins = [
             (acceptors := {n for n in acceptors_donors if not hydrogens[n]}),  # H acceptors
@@ -67,12 +68,11 @@ class Pharmacophore:
             (positive := {n for n, c in charged.items() if c > 0}),  # positive charged
             charged.keys() - positive,  # negative charged
 
-            (fluorine := {n for n, a in halogens.items() if a == 9}),  # fluorine
-            halogens.keys() - fluorine,  # halogens except fluorine
+            {n for n, a in atoms.items() if a.atomic_number == 9},  # fluorine
+            halogens,  # halogens except fluorine
 
-            {n for n, a in atoms.items()
-             if a.atomic_number == 6 and
-             set(atoms[x].atomic_number for x in bonds[n]).issubset({1, 5, 6, 9, 14})},  # hydrophobic
+            {n for n, a in atoms.items() if a.atomic_number == 6 and
+             all(atoms[x].atomic_number in {1, 5, 6, 9, 14} for x in bonds[n])},  # hydrophobic
 
             {n for n in atoms if self.hybridization(n) == 4},  # aromatic
         ]
