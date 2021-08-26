@@ -119,7 +119,7 @@ class GraphComponents:
         """
         Atoms in rings
         """
-        bonds = self._skin_graph(self.not_special_connectivity.copy())
+        bonds = self._skin_graph(self.not_special_connectivity)
         if not bonds:
             return frozenset()
 
