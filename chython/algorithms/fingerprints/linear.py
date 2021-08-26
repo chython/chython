@@ -109,8 +109,8 @@ class LinearFingerprint:
         :param include_hydrogens: take into account hydrogen atoms
         :param with_pharmacophores: use pharmacophoric features to identify and distinguish each atom in an molecule
         """
-        return {tuple_hash((*tpl, cnt))
-                for tpl, count in self._fragments(min_radius, max_radius, include_hydrogens, with_pharmacophores).items()
+        return {tuple_hash((*tpl, cnt)) for tpl, count in
+                self._fragments(min_radius, max_radius, include_hydrogens, with_pharmacophores).items()
                 for cnt in range(min(len(count), number_bit_pairs))}
 
     def _chains(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4) -> \

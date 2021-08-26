@@ -45,25 +45,24 @@ class Pharmacophore:
         acid = acidic_rules[:-1]  # discard a rule with halogen acids
         base = basic_rules[:3] + basic_rules[4:]  # there is no need a rule with halogen ions
 
-        hydrogens = self._hydrogens
         atoms = self._atoms
         bonds = self._bonds
-        charges = self._charges
+        hydrogens = self._hydrogens
+        neighbors = self.neighbors
+        hybridization = self.hybridization
 
-        acceptors_donors = {n for n, a in atoms.items() if a.atomic_number in {7, 8, 16} and a.neighbors <= 3}
-        halogens = {idx: num for idx, atom in atoms.items()
-                    if (num := atom.atomic_number) in {17, 35, 53} and self.neighbors(idx) < 2}
-        charged = {n: c for n, c in atoms.items() if c}
+        acceptors_donors = {n for n, a in atoms.items()
+                            if (num := a.atomic_number) in (7, 8) or  # any N,O
+                            num == 16 and hybridization(n) == 1 and neighbors(n) <= 2}  # or S-sp3
+        halogens = {n for n, atom in atoms.items() if atom.atomic_number in (17, 35, 53) and neighbors(n) < 2}
+        charged = {n: c for n, c in self._charges.items() if c}
 
-        bins = [
-            (acceptors := {n for n in acceptors_donors if not hydrogens[n]}),  # H acceptors
-            acceptors_donors - acceptors,  # H donors
+        bins = (
+            acceptors_donors,  # H acceptors
+            {n for n in acceptors_donors if hydrogens[n]},  # H donors
 
-            {n for q in acid for dct in q.get_mapping(self, automorphism_filter=False) for n in dct.values()
-             if hydrogens[n]},  # acidic
-
-            {n for q in base for dct in q.get_mapping(self, automorphism_filter=False) for n in dct.values()
-             if not hydrogens[n]},  # basic
+            {dct[1] for q in acid for dct in q.get_mapping(self, automorphism_filter=False)},  # acidic
+            {dct[1] for q in base for dct in q.get_mapping(self, automorphism_filter=False)},  # basic
 
             (positive := {n for n, c in charged.items() if c > 0}),  # positive charged
             charged.keys() - positive,  # negative charged
@@ -72,16 +71,15 @@ class Pharmacophore:
             halogens,  # halogens except fluorine
 
             {n for n, a in atoms.items() if a.atomic_number == 6 and
-             all(atoms[x].atomic_number in {1, 5, 6, 9, 14} for x in bonds[n])},  # hydrophobic
+             all(atoms[x].atomic_number in (1, 5, 6, 9, 14) for x in bonds[n])},  # hydrophobic
 
-            {n for n in atoms if self.hybridization(n) == 4},  # aromatic
-        ]
+            {n for n in atoms if hybridization(n) == 4}  # aromatic
+        )
 
-        out = {idx: 0 for idx in self._atoms}
+        out = {idx: 0 for idx in atoms}
         for pos, bin_ in zip((512, 256, 128, 64, 32, 16, 8, 4, 2, 1), bins):
             for idx in bin_:
                 out[idx] |= pos
-
         return out
 
 

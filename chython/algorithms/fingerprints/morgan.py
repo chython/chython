@@ -47,7 +47,8 @@ class MorganFingerprint:
 
         :return: array(n_features)
         """
-        bits = self.morgan_bit_set(min_radius, max_radius, length, number_active_bits, include_hydrogens, with_pharmacophores)
+        bits = self.morgan_bit_set(min_radius, max_radius, length, number_active_bits, include_hydrogens,
+                                   with_pharmacophores)
         fingerprints = zeros(length, dtype=uint8)
         fingerprints[list(bits)] = 1
         return fingerprints
