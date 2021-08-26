@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_property
+from functools import cached_property
 from numpy import zeros
 from numpy.linalg import eig
 from typing import TYPE_CHECKING

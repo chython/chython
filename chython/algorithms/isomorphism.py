@@ -17,8 +17,8 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import abstractmethod
-from CachedMethods import cached_property
 from collections import defaultdict, deque
+from functools import cached_property
 from itertools import permutations
 from typing import Dict, Iterator, Any, Set
 from .._functions import lazy_product

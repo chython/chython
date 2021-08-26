@@ -18,8 +18,8 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_property
 from collections import ChainMap
+from functools import cached_property
 from itertools import chain, product
 from typing import Tuple, Iterator, Union, TYPE_CHECKING
 from ...containers import molecule  # cyclic imports resolve

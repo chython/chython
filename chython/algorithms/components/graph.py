@@ -17,18 +17,22 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_property, FrozenDict
 from collections import defaultdict, deque
+from functools import cached_property
 from numpy import uint, zeros
-from typing import List, Tuple, Dict, Set, Any, Union, FrozenSet
+from typing import List, Tuple, Dict, Set, Any, Union, Iterable, TYPE_CHECKING
 from ...containers.bonds import Bond, QueryBond, DynamicBond
+
+
+if TYPE_CHECKING:
+    from chython.containers.graph import Graph
 
 
 class GraphComponents:
     __slots__ = ()
 
     @cached_property
-    def connected_components(self) -> Tuple[Tuple[int, ...], ...]:
+    def connected_components(self: 'Graph') -> Tuple[Tuple[int, ...], ...]:
         """
         Isolated components of single graph. E.g. salts as ion pair.
         """
@@ -62,18 +66,18 @@ class GraphComponents:
         return len(self.connected_components)
 
     @cached_property
-    def skin_atoms(self) -> Tuple[int, ...]:
+    def skin_atoms(self: 'Graph') -> Tuple[int, ...]:
         """
         Atoms of skin graph.
         """
         return tuple(self._skin_graph(self._bonds))
 
     @cached_property
-    def skin_graph(self):
+    def skin_graph(self: 'Graph') -> Dict[int, Set[int]]:
         """
         Graph without terminal atoms. Only rings and linkers
         """
-        return FrozenDict((n, frozenset(ms)) for n, ms in self._skin_graph(self._bonds).items())
+        return self._skin_graph(self._bonds)
 
     @staticmethod
     def _skin_graph(bonds: Dict[int, Union[Set[int], Dict[int, Any]]]) -> Dict[int, Set[int]]:
@@ -90,7 +94,7 @@ class GraphComponents:
                 bonds[m].discard(n)
         return bonds
 
-    def adjacency_matrix(self, set_bonds=False):
+    def adjacency_matrix(self: Graph, set_bonds=False):
         """
         Adjacency matrix of Graph.
 
@@ -147,43 +151,41 @@ class GraphComponents:
         return in_rings
 
     @cached_property
-    def rings_count(self):
+    def rings_count(self) -> int:
         """
         SSSR rings count. Ignored rings with special bonds.
         """
-        bonds = self.not_special_connectivity.copy()
+        bonds = self.not_special_connectivity
         return sum(len(x) for x in bonds.values()) // 2 - len(bonds) + len(self._connected_components(bonds))
 
     @cached_property
-    def not_special_bonds(self) -> Dict[int, Dict[int, Union[Bond, QueryBond, DynamicBond]]]:
+    def not_special_bonds(self: 'Graph') -> Dict[int, Dict[int, Union[Bond, QueryBond, DynamicBond]]]:
         """
         Bonds without special.
         """
         bonds = {}
         for n, ms in self._bonds.items():
-            ngb = {}
+            bonds[n] = ngb = {}
             for m, b in ms.items():
                 if b != 8:
                     ngb[m] = b
-            bonds[n] = FrozenDict(ngb)
         return bonds
 
     @cached_property
-    def not_special_connectivity(self) -> Dict[int, FrozenSet[int]]:
+    def not_special_connectivity(self: 'Graph') -> Dict[int, Set[int]]:
         """
         Graph connectivity without special bonds.
         """
         bonds = {}
         for n, ms in self._bonds.items():
-            ngb = set()
+            bonds[n] = ngb = set()
             for m, b in ms.items():
                 if b != 8:
                     ngb.add(m)
-            bonds[n] = frozenset(ngb)
         return bonds
 
     @cached_property
-    def atoms_rings(self) -> Dict[int, Tuple[Tuple[int, ...]]]:
+    def atoms_rings(self: 'Graph') -> Dict[int, Tuple[Tuple[int, ...]]]:
         """
         Dict of atoms rings which contains it.
         """
@@ -200,7 +202,7 @@ class GraphComponents:
         """
         return {n: tuple(len(r) for r in rs) for n, rs in self.atoms_rings.items()}
 
-    def _augmented_substructure(self, atoms, deep):
+    def _augmented_substructure(self: 'Graph', atoms: Iterable[int], deep: int):
         atoms = set(atoms)
         bonds = self._bonds
         if atoms - self._atoms.keys():

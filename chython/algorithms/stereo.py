@@ -16,8 +16,8 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_property
 from collections import defaultdict, deque
+from functools import cached_property
 from itertools import combinations
 from logging import info
 from typing import Dict, Optional, Set, Tuple, Union, TYPE_CHECKING
