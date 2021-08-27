@@ -21,7 +21,7 @@
 from collections import ChainMap
 from functools import cached_property
 from itertools import chain, product
-from typing import Tuple, Iterator, Union, TYPE_CHECKING
+from typing import Tuple, Iterator, TYPE_CHECKING
 from ...containers import molecule  # cyclic imports resolve
 from ...exceptions import MappingError
 
@@ -59,7 +59,7 @@ class ReactionComponents:
         return tuple(tuple(x) for x in centers_list)
 
     @cached_property
-    def extended_centers_list(self: Union['ReactionContainer', 'ReactionComponents']) -> Tuple[Tuple[int, ...], ...]:
+    def extended_centers_list(self: 'ReactionContainer') -> Tuple[Tuple[int, ...], ...]:
         """
         Additionally to `centers_list` include:
         * First environment of dynamic atoms.

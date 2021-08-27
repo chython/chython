@@ -200,7 +200,7 @@ class ReactionContainer(StandardizeReaction, ReactionComponents, Calculate2DReac
         c.meta.update(self.__meta)
         return c
 
-    def __invert__(self):
+    def __invert__(self) -> CGRContainer:
         """
         Get CGR of reaction
         """

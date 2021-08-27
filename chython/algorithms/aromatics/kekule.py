@@ -83,7 +83,7 @@ class Kekule:
             return False
         return True
 
-    def __fix_rings(self: Union['MoleculeContainer', 'Kekule']):
+    def __fix_rings(self: 'MoleculeContainer'):
         bonds = self._bonds
         seen = set()
         for q, af, bf in rules:

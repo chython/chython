@@ -193,7 +193,7 @@ class Calculate2DCGR(Calculate2D):
 class Calculate2DReaction:
     __slots__ = ()
 
-    def clean2d(self: Union['ReactionContainer', 'Calculate2DReaction']):
+    def clean2d(self: 'ReactionContainer'):
         """
         Recalculate 2d coordinates
         """

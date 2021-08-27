@@ -83,7 +83,7 @@ class StandardizeMolecule:
             return log
         return neutralized or bool(log)
 
-    def standardize_charges(self: Union['MoleculeContainer', 'StandardizeMolecule'], *, fix_stereo=True,
+    def standardize_charges(self: 'MoleculeContainer', *, fix_stereo=True,
                             logging=False, prepare_molecule=True) -> Union[bool, List[int]]:
         """
         Set canonical positions of charges in heterocycles and some nitrogen compounds.
@@ -363,7 +363,7 @@ class StandardizeMolecule:
             return True
         return False
 
-    def __standardize(self: Union['MoleculeContainer', 'StandardizeMolecule'], rules):
+    def __standardize(self: 'MoleculeContainer', rules):
         bonds = self._bonds
         charges = self._charges
         radicals = self._radicals

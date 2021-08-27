@@ -838,290 +838,7 @@ class MoleculeStereo(Stereo):
         return out
 
     @cached_property
-    def _stereo_axes(self: 'MoleculeContainer') -> Tuple[Tuple[int, ...], ...]:
-        """
-        Isolated rings with attached cumulenes.
-        """
-        if not self.sssr:
-            return ()
-        atoms = self._atoms
-        hybridization = self.hybridization
-        atoms_rings = {n: set(r) for n, r in self.atoms_rings.items()}
-        morgan = self.atoms_order
-        stereo_tetrahedrons = self._stereo_tetrahedrons
-        stereo_cumulenes = {}
-        for path in self._stereo_cumulenes:
-            n, m = path[0], path[-1]
-            stereo_cumulenes[n] = m
-            stereo_cumulenes[m] = n
-
-        chiral_t = set()
-        chiral_c = set()
-        potential = []
-        for r in self.sssr:
-            # skip rings which contains non-organic subset of atoms.
-            if any(atoms[n].atomic_number not in _organic_subset for n in r):
-                continue
-            elif (ura := len({morgan[n] for n in r})) == len(r):  # all atoms unique. chirality obvious.
-                continue
-            elif ura == 1:  # Cn symmetry with axe in ring center.
-                if (n := r[0]) in stereo_tetrahedrons:
-                    chiral_t.update(r)
-                elif n in stereo_cumulenes:  # second end of cumulene define stereo.
-                    chiral_c.update(r)
-                continue
-            # axe ring center symmetry except C2 symmetry. e.g. 1,3,5-trimethylcyclohexane.
-            for e in (3, 5, 7, 11, 13, 17, 19, 23, 29):
-                if e < len(r) and not len(r) % e and ura == (c := len(r) // e + 1) // 2 + c % 2:
-                    for n in r:
-                        if n in stereo_tetrahedrons:
-                            chiral_t.add(n)
-                        elif n in stereo_cumulenes:
-                            chiral_c.add(n)
-                    break
-            else:  # not found
-                if len(r) % 2:
-                    na = 1 - len(r)
-                    fo = len(r) // 2
-                    for i, n in enumerate(r):
-                        if morgan[r[i - 1]] == morgan[r[i + na]]:
-                            # found C2 symmetry
-                            if len(cr := (atoms_rings[r[i - fo]] & atoms_rings[r[i - fo - 1]])) == 2:  # bicycle found.
-                                r1, r2 = cr
-                                cc = set(r1).intersection(r2)
-                                # search first common atom
-                                # r + r = 2 loops of ring
-                                if hybridization(next(x for x in (r + r)[i:] if x in cc)) != 1:
-                                    if n in stereo_tetrahedrons or n in stereo_cumulenes:
-                                        # e.g. bis-cyclopenten. single cyclopenten not chiral.
-                                        potential.append(r)
-                                else:  # e.g. bis-cyclopentan chiral.
-                                    # side-affect - next compound treat as chiral.
-                                    # C -- X ---- C
-                                    # |    |     /
-                                    # C    n-R  /
-                                    #  \  /    /
-                                    #   X --- C
-                                    for x in r:
-                                        if x in stereo_tetrahedrons:
-                                            chiral_t.add(x)
-                                        elif x in stereo_cumulenes:
-                                            chiral_c.add(x)
-                                break
-                            # if len(cr) == 1: n can be chiral when opposite site has stereogenic atoms.
-                            # treat it as common stereo atoms.
-                            # if len(cr) == 3: tri-cycles?
-                else:  # even rings!
-                    ...
-                    # skip polycycles with common single bonds with sp3 atoms.
-                    # polycycles with common double/aromatic bonds allowed. for example 9,10-reduced anthracene.
-                    n, m = r[0], r[-1]
-                    if hybridization(n) == 1 and hybridization(m) == 1 and len(atoms_rings[n] & atoms_rings[m]) != 1:
-                        continue
-                    for n, m in zip(r, r[1:]):
-                        if hybridization(n) == 1 and hybridization(m) == 1 and len(atoms_rings[n] & atoms_rings[m]) != 1:
-                            break
-                    else:
-                        potential.append(r)
-
-        if not potential:
-            return chiral_t, chiral_c
-
-        # build graph
-        adj = defaultdict(list)
-        chiral = set()  # potential axis atoms
-        for r in potential:
-            flag = False
-            lr = len(r) // 2
-            for i, n in enumerate(r[:lr]):
-                # ring should contain stereogenic tetrahedron or exocyclic cumulene with equal neighboring atoms in ring
-                if (n in stereo_tetrahedrons or n in stereo_cumulenes and stereo_cumulenes[n] not in r) and \
-                        morgan[r[i - 1]] == morgan[r[i + 1]]:
-                    # ring should contain opposite to 'n' stereogenic atom for C2 symmetry.
-                    if (m := r[i + lr]) in stereo_tetrahedrons or m in stereo_cumulenes:
-                        chiral.add(n)
-                        chiral.add(m)
-                        flag = True
-                    # e.g 1,3,5-trimethyl-cyclohexane
-                    elif not lr % 3:
-                        ...
-            if flag:
-                n, m = r[0], r[-1]
-                adj[n].append(m)
-                adj[m].append(n)
-                for n, m in zip(r, r[1:]):
-                    adj[n].append(m)
-                    adj[m].append(n)
-
-        # remove tetrahedron link points. connect rings to biggest one.
-        for n in [n for n, m in adj.items() if len(m) == 4]:
-            n1, m1, n2, m2 = adj.pop(n)  # neighbors are rings grouped
-            adj[n1].remove(n)
-            adj[m1].remove(n)
-            adj[n2].remove(n)
-            adj[m2].remove(n)
-            adj[n1].append(n2)
-            adj[n2].append(n1)
-            adj[m1].append(m2)
-            adj[m2].append(m1)
-
-        # connect rings linked by cumulenes. skip cumulenes atoms.
-        for path in self._stereo_cumulenes:
-            n, m = path[0], path[-1]
-            if n in adj and m in adj:
-                n1, m1 = adj.pop(n)
-                n2, m2 = adj.pop(m)
-                adj[n1].remove(n)
-                adj[m1].remove(n)
-                adj[n2].remove(m)
-                adj[m2].remove(m)
-                adj[n1].append(n2)
-                adj[n2].append(n1)
-                adj[m1].append(m2)
-                adj[m2].append(m1)
-
-        return potential
-
-    @cached_property
-    def _stereo_axises(self: 'MoleculeContainer') -> Tuple[Tuple[Tuple[int, ...], ...], Tuple[Tuple[int, ...], ...]]:
-        """
-        Get all stereogenic axises in rings with attached cumulenes. Stereogenic axises has only stereogenic atoms.
-        """
-        morgan = self.atoms_order
-        bonds = self._bonds
-        stereo_tetrahedrons = self._stereo_tetrahedrons
-        cumulenes_terminals = {}
-        for n, *_, m in self._stereo_cumulenes:
-            cumulenes_terminals[n] = m
-            cumulenes_terminals[m] = n
-
-        out = []
-        env = []
-        axises = set()
-        for c in self.connected_rings_cumulenes:
-            out_c = []
-            env_c = []
-            adj = {n: {m: 1 for m, b in bonds[n].items() if m in c} for n in c}
-            w_atoms = {n: morgan[n] for n in c}
-            for mapping in self._get_automorphism_mapping(w_atoms, adj, w_atoms):
-                sym = {k for k, v in mapping.items() if k != v}
-                if not sym:
-                    continue
-                # get self-matched atoms connected with automorphic atoms
-                ax = {k for k in mapping.keys() - sym if not sym.isdisjoint(bonds[k])}
-                # add terminal stereogenic cumulenes
-                c = 0
-                tmp = set()
-                for n in ax:
-                    if n in stereo_tetrahedrons:
-                        c += 1
-                        tmp.add(n)
-                    elif n in cumulenes_terminals:
-                        tmp.add(n)
-                        m = cumulenes_terminals[n]
-                        if m not in ax:
-                            tmp.add(m)
-                            c += 1
-                if c < 2:
-                    continue
-                ax = frozenset(tmp)
-                if ax in axises:
-                    continue
-                axises.add(ax)
-                if len(ax) > 2:  # get order of atoms
-                    start = next(iter(ax))
-                    # prepare distances
-                    dist = {start: 0}
-                    queue = deque([(start, 1)])
-                    while queue:
-                        n, d = queue.popleft()
-                        d1 = d + 1
-                        for m in adj[n].keys() - dist.keys():
-                            queue.append((m, d1))
-                            dist[m] = d
-                    # get paths
-                    seen = {start}
-                    path = None
-                    cut = {start}
-                    stack = deque()
-                    for n in adj[start]:
-                        if mapping[n] not in cut:
-                            stack.append((n, 0))
-                            cut.add(n)
-                    full_path = None
-                    while stack:
-                        n, d = stack.pop()
-                        if not d:  # lets start
-                            if path:
-                                full_path = path[::-1]
-                            path = [start]
-                            d = 1
-                        elif dist[n] != d:
-                            continue
-                        elif len(path) > d:
-                            path = path[:d]
-                        path.append(n)
-                        if n in ax:
-                            seen.add(n)
-                            if seen == ax:
-                                break
-                        d += 1
-                        for m in adj[n]:
-                            if m in cut:
-                                if m not in path:
-                                    stack.append((m, d))
-                            elif mapping[m] not in cut:
-                                cut.add(m)
-                                if m not in path:
-                                    stack.append((m, d))
-
-                    if full_path:
-                        path = full_path + path[1:]
-                    ax = tuple(n for n in path if n in ax)
-                else:
-                    ax = tuple(ax)
-                out_c.append(ax)
-                env_c.append(tuple(n for n in sym if n in bonds[ax[0]] or n in bonds[ax[-1]]))
-            for ax, e in sorted(zip(out_c, env_c), key=lambda x: len(x[0]), reverse=True):
-                out.append(ax)
-                env.append(e)
-        return tuple(out), tuple(env)
-
-    @cached_property
-    def __stereo_axises(self: 'MoleculeContainer'):
-        bonds = self._bonds
-        tetrahedrons = self._stereo_tetrahedrons
-        cumulenes = self._stereo_cumulenes
-
-        cumulenes_terminals = {}
-        for path in cumulenes:
-            cumulenes_terminals[path[0]] = cumulenes_terminals[path[-1]] = path
-        axises = []
-        for ax, env in zip(*self._stereo_axises):
-            ax_t, ax_a, ax_c = set(), set(), set()
-            checks = []
-            axises.append((ax_t, ax_a, ax_c, checks))
-            for n in ax:
-                if n in tetrahedrons:
-                    ax_t.add(n)
-                else:
-                    path = cumulenes_terminals[n]
-                    if len(path) % 2:
-                        ax_a.add(path)
-                    else:
-                        ax_c.add(path)
-            for n in (ax[0], ax[-1]):
-                if n in tetrahedrons:
-                    ngb = tuple(m for m in tetrahedrons[n] if m not in env)
-                else:
-                    path = cumulenes_terminals[n]
-                    ngb = tuple(m for m in bonds[n] if m not in path)
-                if len(ngb) == 2:  # only these atoms should be checked
-                    checks.append(ngb)
-        return axises
-
-    @cached_property
-    def __chiral_centers(self: Union['MoleculeContainer', 'MoleculeStereo']):
+    def __chiral_centers(self: 'MoleculeContainer'):
         """
         Cumulenes in rings chiral.
         Tetrahedrons chiral:
@@ -1140,12 +857,25 @@ class MoleculeStereo(Stereo):
         morgan = self.atoms_order
         tetrahedrons = self._stereo_tetrahedrons.copy()
         cumulenes = self._stereo_cumulenes.copy()
-        axises = self.__stereo_axises
+        rings_tetrahedrons = self._rings_tetrahedrons
+        rings_tetrahedrons_linkers = self._rings_tetrahedrons_linkers
+        rings_cumulenes = self._rings_cumulenes_attached
+        rings_cumulenes_linkers = self._rings_cumulenes_linkers
+        rings_cumulenes_attached = self._rings_cumulenes_attached
+
+        cis_trans_terminals = self._stereo_cis_trans_terminals
+        cis_trans_paths = self._stereo_cis_trans_paths
+        allenes_paths = self._stereo_allenes_paths
+        allenes_terminals = self._stereo_allenes_terminals
 
         morgan_update = {}
         while True:
             # tetrahedron is chiral if all its neighbors are unique.
             chiral_t = {n for n, env in tetrahedrons.items() if len({morgan[x] for x in env}) == len(env)}
+            # tetrahedrons-linkers is chiral if in each rings neighbors are unique.
+            chiral_t.update(n for n, (n1, n2, m1, m2) in rings_tetrahedrons_linkers.items()
+                            if morgan[n1] != morgan[n2] and morgan[m1] != morgan[m2])
+
             # double bond is chiral if neighbors of each terminal atom is unique.
             chiral_c = set()
             chiral_a = set()
