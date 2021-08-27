@@ -94,7 +94,7 @@ class GraphComponents:
                 bonds[m].discard(n)
         return bonds
 
-    def adjacency_matrix(self: Graph, set_bonds=False):
+    def adjacency_matrix(self: 'Graph', set_bonds=False):
         """
         Adjacency matrix of Graph.
 

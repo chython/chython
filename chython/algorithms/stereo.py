@@ -750,38 +750,92 @@ class MoleculeStereo(Stereo):
         return self.atoms_order
 
     @cached_property
-    def _connected_rings_points(self: 'MoleculeContainer') -> Set[int]:
+    def _rings_tetrahedrons_linkers(self: 'MoleculeContainer') -> Dict[int, Tuple[int, int, int, int]]:
         """
-        Rings with single common atoms.
+        Ring-linkers tetrahedrons.
 
-        :return: common atoms
+        Values are neighbors in first and second rings.
         """
-        return {n for n, r in self.atoms_rings.items()
-                if any(len(set(nr).intersection(mr)) == 1 for nr, mr in combinations(r, 2))}
+        out = {}
+        tetrahedrons = self._stereo_tetrahedrons
+        for n, r in self.atoms_rings.items():
+            if n in tetrahedrons:
+                for nr, mr in combinations(r, 2):
+                    if len(set(nr).intersection(mr)) == 1:
+                        ni = nr.index(n)
+                        mi = mr.index(n)
+                        out[n] = (nr[ni - 1], nr[ni - len(nr) + 1], mr[mi - 1], mr[mi - len(mr) + 1])
+                        break
+        return out
 
     @cached_property
-    def _connected_rings_cumulenes(self: 'MoleculeContainer') -> Set[Tuple[int, ...]]:
+    def _rings_tetrahedrons(self: 'MoleculeContainer') -> Dict[int, Union[Tuple[int, int], Tuple[int], Tuple]]:
         """
-        Rings with cumulene linkers.
+        Tetrahedrons in rings, except ring-linkers.
 
-        :return: cumulenes paths
+        Values are out of ring atoms.
+        """
+        out = {}
+        atoms_rings = self.atoms_rings
+        tetrahedrons = self._stereo_tetrahedrons
+        points = self._rings_tetrahedrons_linkers
+        environment = self.not_special_connectivity
+        for n, r in atoms_rings.items():
+            if n in tetrahedrons and n not in points:
+                out[n] = tuple(environment[n].difference(atoms_rings))
+        return out
+
+    @cached_property
+    def _rings_cumulenes_linkers(self: 'MoleculeContainer') -> Dict[Tuple[int, int], Tuple[int, int, int, int]]:
+        """
+        Ring-linkers cumulenes except chords.
+
+        Values are neighbors in first and second rings.
+        """
+        out = {}
+        ar = self.atoms_rings
+        chord = self._rings_cumulenes
+        for (n, *_, m), (n1, m1, n2, m2) in self._stereo_cumulenes.items():
+            if n in ar and m in ar and (n, m) not in chord:
+                out[(n, m)] = (n1, n2, m1, m2)
+        return out
+
+    @cached_property
+    def _rings_cumulenes(self: 'MoleculeContainer') -> Set[Tuple[int, int]]:
+        """
+        Cumulenes in rings always chiral.
+        """
+        out = set()
+        ar = self.atoms_rings
+        for n, *_, m in self._stereo_cumulenes:
+            if n in ar and m in ar and not set(ar[n]).isdisjoint(ar[m]):
+                out.add((n, m))
+        return out
+
+    @cached_property
+    def _rings_cumulenes_attached(self: 'MoleculeContainer') -> Dict[Tuple[int, int],
+                                                                     Union[Tuple[int, int], Tuple[int]]]:
+        """
+        Cumulenes attached to rings.
+
+        Values are out of ring atoms.
         """
         ar = self.atoms_rings
-        links = set()
-        for p in self._stereo_cumulenes:
-            n, m = p[0], p[-1]
-            if n in ar and m in ar and (snr := set(ar[n])).difference((smr := set(ar[m]))) and smr.difference(snr):
-                links.add(p)
-        return links
-
-    def _rings_with_cumulenes(self: 'MoleculeContainer') -> Set[Tuple[int, ...]]:
-        ar = self.atoms_rings
-        rings = set()
-        for p in self._stereo_cumulenes:
-            n, m = p[0], p[-1]
-            if n in ar and m in ar and (cr := set(ar[n]).intersection(ar[m])):
-                rings.update(cr)
-        return rings
+        out = {}
+        for (n, *_, m), (n1, m1, n2, m2) in self._stereo_cumulenes.items():
+            if n in ar:
+                if m in ar:
+                    continue
+                if m2:
+                    out[(n, m)] = (m1, m2)
+                else:
+                    out[(n, m)] = (m1,)
+            elif m in ar:
+                if n2:
+                    out[(n, m)] = (n1, n2)
+                else:
+                    out[(n, m)] = (n1,)
+        return out
 
     @cached_property
     def _stereo_axes(self: 'MoleculeContainer') -> Tuple[Tuple[int, ...], ...]:
