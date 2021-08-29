@@ -202,6 +202,13 @@ class GraphComponents:
         """
         return {n: tuple(len(r) for r in rs) for n, rs in self.atoms_rings.items()}
 
+    @cached_property
+    def int_adjacency(self: 'Graph') -> Dict[int, Dict[int, int]]:
+        """
+        Adjacency with integer-coded bonds.
+        """
+        return {n: {m: int(b) for m, b in mb.items()} for n, mb in self._bonds.items()}
+
     def _augmented_substructure(self: 'Graph', atoms: Iterable[int], deep: int):
         atoms = set(atoms)
         bonds = self._bonds

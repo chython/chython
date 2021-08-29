@@ -838,116 +838,48 @@ class MoleculeStereo(Stereo):
         return out
 
     @cached_property
-    def __chiral_centers(self: 'MoleculeContainer'):
+    def __chiral_centers(self: Union['MoleculeStereo', 'MoleculeContainer']):
+        bonds = self.int_adjacency
+        morgan = self.atoms_order
+        atoms_stereo = set(self._atoms_stereo)
+        cis_trans_stereo = set(self._cis_trans_stereo)
+        allenes_stereo = set(self._allenes_stereo)
+        while True:
+            # try iteratively differentiate stereo atoms.
+            morgan, atoms_stereo, cis_trans_stereo, allenes_stereo, atoms_groups, cis_trans_groups, allenes_groups = \
+                self.__chiral_groups_sifter(morgan, atoms_stereo, cis_trans_stereo, allenes_stereo)
+            if not atoms_groups and not cis_trans_groups and not allenes_groups:
+                break
+            # for some rings differentiation by morgan impossible. try randomly set new weights.
+            # sometimes this will lead to pseudo chiral centers ;).
+            for group in atoms_groups:
+                for n in group[:len(group) // 2]:  # set new weight in half of group randomly.
+                    morgan[n] = -morgan[n]
+            for group in cis_trans_groups:
+                for n, _ in group[:len(group) // 2]:  # set new weight in half of group randomly.
+                    morgan[n] = -morgan[n]
+            for group in allenes_groups:
+                for n in group[:len(group) // 2]:  # set new weight in half of group randomly.
+                    morgan[n] = -morgan[n]
+            morgan = self._morgan(morgan, bonds)
+
         atoms_stereo = self._atoms_stereo
         cis_trans_stereo = self._cis_trans_stereo
         allenes_stereo = self._allenes_stereo
 
         tetrahedrons = self._stereo_tetrahedrons
         cis_trans = self._stereo_cis_trans
-        allenes = self._stereo_allenes
         allenes_centers = self._stereo_allenes_centers
-        allenes_terminals = self._stereo_allenes_terminals
 
-        rings_tetrahedrons = self._rings_tetrahedrons
         rings_tetrahedrons_linkers = self._rings_tetrahedrons_linkers
         rings_cumulenes = self._rings_cumulenes
-        rings_cumulenes_linkers = self._rings_cumulenes_linkers
-        rings_cumulenes_attached = self._rings_cumulenes_attached
-
-        translate_tetrahedron = self._translate_tetrahedron_sign
-        translate_cis_trans = self._translate_cis_trans_sign
-        translate_allene = self._translate_allene_sign
-
-        morgan = self.atoms_order
-        morgan_update = {}
-        # recalculate morgan weights with taking into account existing stereo marks.
-        if atoms_stereo:
-            grouped_stereo = defaultdict(list)
-            for n in atoms_stereo:
-                grouped_stereo[morgan[n]].append(n)  # collect equal stereo atoms
-            for group in grouped_stereo.values():
-                if not len(group) % 2:  # only even number of equal stereo atoms give new stereo center
-                    if len(env := tetrahedrons[(n := group[0])]) == len({morgan[x] for x in env}):
-                        s = [n for n in group if translate_tetrahedron(n, sorted(tetrahedrons[n], key=morgan.get))]
-                        if 0 < len(s) < len(group):  # RS pair required
-                            for m in s:
-                                morgan_update[m] = -morgan[m]
-                    # ring linkers can lead to pseudo chiral atoms.
-                    elif n in rings_tetrahedrons or n in rings_tetrahedrons_linkers:
-                        for m in group[:len(group) // 2]:  # set new weight in half of group.
-                            morgan_update[m] = -morgan[m]
-
-        if cis_trans_stereo:
-            grouped_stereo = defaultdict(list)
-            for nm in cis_trans_stereo:
-                n, m = nm
-                if (mn := morgan[n]) <= (mm := morgan[m]):
-                    grouped_stereo[mn].append((n, nm, cis_trans[nm]))
-                else:
-                    grouped_stereo[mm].append((m, nm, cis_trans[nm]))
-            for group in grouped_stereo.values():
-                if not len(group) % 2:  # only even number of equal stereo bonds give new stereo center
-                    n1, m1, n2, m2 = group[0][2]
-                    if morgan[n1] != morgan.get(n2, 0) and morgan[m1] != morgan.get(m2, 0):
-                        s = []
-                        for x, (n, m), (n1, m1, n2, m2) in group:
-                            if n2 is None:
-                                a = n1
-                            else:
-                                a = min(n1, n2, key=morgan.get)
-                            if m2 is None:
-                                b = m1
-                            else:
-                                b = min(m1, m2, key=morgan.get)
-                            if translate_cis_trans(n, m, a, b):
-                                s.append(x)
-                        if 0 < len(s) < len(group):  # RS pair required
-                            for n in s:
-                                morgan_update[n] = -morgan[n]
-                    # can lead to pseudo stereo atoms.
-                    elif (nm := group[0][1]) in rings_cumulenes or nm in rings_cumulenes_linkers or \
-                            nm in rings_cumulenes_attached:
-                        for n, *_ in group[:len(group) // 2]:  # set new weight in half of group.
-                            morgan_update[n] = -morgan[n]
-
-        if allenes_stereo:
-            grouped_stereo = defaultdict(list)
-            for c in allenes_stereo:
-                grouped_stereo[morgan[c]].append((c, allenes[c]))
-            for group in grouped_stereo.values():
-                if not len(group) % 2:  # only even number of equal stereo bonds give new stereo center
-                    n1, m1, n2, m2 = group[0][1]
-                    if morgan[n1] != morgan.get(n2, 0) and morgan[m1] != morgan.get(m2, 0):
-                        s = []
-                        for c, (n1, m1, n2, m2) in group:
-                            if n2 is None:
-                                a = n1
-                            else:
-                                a = min(n1, n2, key=morgan.get)
-                            if m2 is None:
-                                b = m1
-                            else:
-                                b = min(m1, m2, key=morgan.get)
-                            if translate_allene(c, a, b):
-                                s.append(c)
-                        if 0 < len(s) < len(group):  # RS pair required
-                            for c in s:
-                                morgan_update[c] = -morgan[c]
-                    elif (nm := allenes_terminals[group[0][0]]) in rings_cumulenes or nm in rings_cumulenes_linkers or \
-                            nm in rings_cumulenes_attached:
-                        for n, _ in group[:len(group) // 2]:  # set new weight in half of group.
-                            morgan_update[n] = -morgan[n]
-
-        if morgan_update:
-            morgan = self._morgan({**morgan, **morgan_update},
-                                  {n: {m: int(b) for m, b in mb.items()} for n, mb in self._bonds.items()})
 
         # tetrahedron is chiral if all its neighbors are unique.
-        chiral_t = {n for n, env in tetrahedrons.items() if len({morgan[x] for x in env}) == len(env)}
+        chiral_t = {n for n, env in tetrahedrons.items()
+                    if n not in atoms_stereo and len({morgan[x] for x in env}) == len(env)}
         # tetrahedrons-linkers is chiral if in each rings neighbors are unique.
-        chiral_t.update(n for n, (n1, n2, m1, m2) in rings_tetrahedrons_linkers.items() if
-                        morgan[n1] != morgan[n2] and morgan[m1] != morgan[m2])
+        chiral_t.update(n for n, (n1, n2, m1, m2) in rings_tetrahedrons_linkers.items()
+                        if n not in atoms_stereo and morgan[n1] != morgan[n2] and morgan[m1] != morgan[m2])
 
         # double bond is chiral if neighbors of each terminal atom is unique.
         # ring-linkers and rings-attached also takes into account.
@@ -965,13 +897,115 @@ class MoleculeStereo(Stereo):
                 chiral_c.add(nm)
             else:
                 chiral_a.add(allenes_centers[nm[0]])
-
-        # todo: find chiral axes
-
-        chiral_t.difference_update(atoms_stereo)
         chiral_a.difference_update(allenes_stereo)
         chiral_c.difference_update(cis_trans_stereo)
+
+        # todo: find chiral axes
+        rings_tetrahedrons = self._rings_tetrahedrons
+        rings_cumulenes_linkers = self._rings_cumulenes_linkers
+        rings_cumulenes_attached = self._rings_cumulenes_attached
         return chiral_t, chiral_c, chiral_a, morgan
+
+    def __chiral_groups_sifter(self: Union['MoleculeStereo', 'MoleculeContainer'], morgan,
+                               atoms_stereo, cis_trans_stereo, allenes_stereo):
+        bonds = self.int_adjacency
+
+        tetrahedrons = self._stereo_tetrahedrons
+        cis_trans = self._stereo_cis_trans
+        allenes = self._stereo_allenes
+
+        translate_tetrahedron = self._translate_tetrahedron_sign
+        translate_cis_trans = self._translate_cis_trans_sign
+        translate_allene = self._translate_allene_sign
+
+        while True:
+            morgan_update = {}
+            atoms_groups = []
+            cis_trans_groups = []
+            allenes_groups = []
+            # recalculate morgan weights with taking into account existing stereo marks.
+            if atoms_stereo:
+                grouped_stereo = defaultdict(list)
+                for n in atoms_stereo:
+                    grouped_stereo[morgan[n]].append(n)  # collect equal stereo atoms
+                for group in grouped_stereo.values():
+                    if not len(group) % 2:  # only even number of equal stereo atoms give new stereo center
+                        if len(env := tetrahedrons[group[0]]) == len({morgan[x] for x in env}):
+                            s = [n for n in group if translate_tetrahedron(n, sorted(tetrahedrons[n], key=morgan.get))]
+                            if 0 < len(s) < len(group):  # RS pair required
+                                for m in s:
+                                    morgan_update[m] = -morgan[m]
+                            for n in group:
+                                atoms_stereo.discard(n)
+                        else:  # stereo group in rings
+                            atoms_groups.append(group)
+
+            if cis_trans_stereo:
+                grouped_stereo = defaultdict(list)
+                for nm in cis_trans_stereo:
+                    n, m = nm
+                    if (mn := morgan[n]) <= (mm := morgan[m]):
+                        grouped_stereo[mn].append((n, nm))
+                    else:
+                        grouped_stereo[mm].append((m, nm))
+                for group in grouped_stereo.values():
+                    if not len(group) % 2:  # only even number of equal stereo bonds give new stereo center
+                        n1, m1, n2, m2 = cis_trans[group[0][1]]
+                        if morgan[n1] != morgan.get(n2, 0) and morgan[m1] != morgan.get(m2, 0):
+                            s = []
+                            for x, nm in group:
+                                n, m = nm
+                                n1, m1, n2, m2 = cis_trans[nm]
+                                if n2 is None:
+                                    a = n1
+                                else:
+                                    a = min(n1, n2, key=morgan.get)
+                                if m2 is None:
+                                    b = m1
+                                else:
+                                    b = min(m1, m2, key=morgan.get)
+                                if translate_cis_trans(n, m, a, b):
+                                    s.append(x)
+                            if 0 < len(s) < len(group):  # RS pair required
+                                for n in s:
+                                    morgan_update[n] = -morgan[n]
+                                for _, nm in group:
+                                    cis_trans_stereo.discard(nm)
+                        else:
+                            cis_trans_groups.append(group)
+
+            if allenes_stereo:
+                grouped_stereo = defaultdict(list)
+                for c in allenes_stereo:
+                    grouped_stereo[morgan[c]].append(c)
+                for group in grouped_stereo.values():
+                    if not len(group) % 2:  # only even number of equal stereo bonds give new stereo center
+                        n1, m1, n2, m2 = allenes[group[0]]
+                        if morgan[n1] != morgan.get(n2, 0) and morgan[m1] != morgan.get(m2, 0):
+                            s = []
+                            for c in group:
+                                n1, m1, n2, m2 = allenes[c]
+                                if n2 is None:
+                                    a = n1
+                                else:
+                                    a = min(n1, n2, key=morgan.get)
+                                if m2 is None:
+                                    b = m1
+                                else:
+                                    b = min(m1, m2, key=morgan.get)
+                                if translate_allene(c, a, b):
+                                    s.append(c)
+                            if 0 < len(s) < len(group):  # RS pair required
+                                for c in s:
+                                    morgan_update[c] = -morgan[c]
+                                for c in group:
+                                    allenes_stereo.discard(c)
+                        else:
+                            allenes_groups.append(group)
+            if not morgan_update:
+                break
+            morgan = self._morgan({**morgan, **morgan_update}, bonds)
+        return morgan, atoms_stereo, cis_trans_stereo, allenes_stereo, atoms_groups, cis_trans_groups, allenes_groups
 
 
 __all__ = ['MoleculeStereo', 'Stereo']
