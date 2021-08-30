@@ -21,6 +21,7 @@ from collections import defaultdict, deque
 from math import log2
 from numpy import zeros, uint8
 from typing import Deque, Dict, Tuple, List, Set, Union, TYPE_CHECKING
+from ..._functions import tuple_hash
 from ...containers import molecule
 
 
@@ -41,7 +42,7 @@ class LinearFingerprint:
     """
     def linear_fingerprint(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
                            length: int = 1024, number_active_bits: int = 2, number_bit_pairs: int = 4,
-                           include_hydrogens: bool = False):
+                           include_hydrogens: bool = False, with_pharmacophores: bool = False):
         """
         Transform structures into array of binary features.
 
@@ -53,18 +54,19 @@ class LinearFingerprint:
                fingerprint (if number of fragment in molecule greater or equal this number, we will be
                activate only this number of fragments
         :param include_hydrogens: take into account hydrogen atoms
+        :param with_pharmacophores: use pharmacophoric features to identify and distinguish each atom in an molecule
 
         :return: array(n_features)
         """
         bits = self.linear_bit_set(min_radius, max_radius, length, number_active_bits, number_bit_pairs,
-                                   include_hydrogens)
+                                   include_hydrogens, with_pharmacophores)
         fingerprints = zeros(length, dtype=uint8)
         fingerprints[list(bits)] = 1
         return fingerprints
 
     def linear_bit_set(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
                        length: int = 1024, number_active_bits: int = 2, number_bit_pairs: int = 4,
-                       include_hydrogens: bool = False) -> Set[int]:
+                       include_hydrogens: bool = False, with_pharmacophores: bool = False) -> Set[int]:
         """
         Transform structure into set of indexes of True-valued features.
 
@@ -76,11 +78,12 @@ class LinearFingerprint:
                fingerprint (if number of fragment in molecule greater or equal this number, we will be
                activate only this number of fragments
         :param include_hydrogens: take into account hydrogen atoms
+        :param with_pharmacophores: use pharmacophoric features to identify and distinguish each atom in an molecule
         """
         mask = length - 1
         log = int(log2(length))
 
-        hashes = self.linear_hash_set(min_radius, max_radius, number_bit_pairs, include_hydrogens)
+        hashes = self.linear_hash_set(min_radius, max_radius, number_bit_pairs, include_hydrogens, with_pharmacophores)
         active_bits = set()
         for tpl in hashes:
             active_bits.add(tpl & mask)
@@ -93,7 +96,8 @@ class LinearFingerprint:
         return active_bits
 
     def linear_hash_set(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
-                        number_bit_pairs: int = 4, include_hydrogens: bool = False) -> Set[int]:
+                        number_bit_pairs: int = 4, include_hydrogens: bool = False,
+                        with_pharmacophores: bool = False) -> Set[int]:
         """
         Transform structure into set of integer hashes of fragments with count information.
 
@@ -103,8 +107,10 @@ class LinearFingerprint:
                fingerprint (if number of fragment in molecule greater or equal this number, we will be
                activate only this number of fragments
         :param include_hydrogens: take into account hydrogen atoms
+        :param with_pharmacophores: use pharmacophoric features to identify and distinguish each atom in an molecule
         """
-        return {hash((*tpl, cnt)) for tpl, count in self._fragments(min_radius, max_radius, include_hydrogens).items()
+        return {tuple_hash((*tpl, cnt)) for tpl, count in
+                self._fragments(min_radius, max_radius, include_hydrogens, with_pharmacophores).items()
                 for cnt in range(min(len(count), number_bit_pairs))}
 
     def _chains(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4) -> \
@@ -136,10 +142,14 @@ class LinearFingerprint:
         return arr
 
     def _fragments(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1,
-                   max_radius: int = 4, include_hydrogens=False) -> Dict[Tuple[int, ...], List[Tuple[int, ...]]]:
+                   max_radius: int = 4, include_hydrogens=False,
+                   with_pharmacophores: bool = False) -> Dict[Tuple[int, ...], List[Tuple[int, ...]]]:
         if isinstance(self, molecule.MoleculeContainer) and not include_hydrogens:
-            atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
-                     for idx, atom in self.atoms()}
+            if not with_pharmacophores:
+                atoms = {idx: tuple_hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+                         for idx, atom in self.atoms()}
+            else:
+                atoms = self.pharmacophores
         else:
             atoms = {idx: int(atom) for idx, atom in self.atoms()}
 
