@@ -17,16 +17,23 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_property
 from collections import defaultdict
-from typing import Tuple
+from functools import cached_property
+from typing import Tuple, TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from chython.containers.graph import Graph
+
+
+_heteroatoms = {5, 6, 7, 8, 14, 15, 16, 17, 33, 34, 35, 52, 53}
 
 
 class StructureComponents:
     __slots__ = ()
 
     @cached_property
-    def aromatic_rings(self) -> Tuple[Tuple[int, ...], ...]:
+    def aromatic_rings(self: 'Graph') -> Tuple[Tuple[int, ...], ...]:
         """
         Aromatic rings atoms numbers
         """
@@ -39,7 +46,7 @@ class StructureComponents:
         """
         Alkenes, allenes and cumulenes atoms numbers
         """
-        return self._cumulenes()
+        return tuple(self._cumulenes())
 
     @cached_property
     def connected_rings_cumulenes(self) -> Tuple[Tuple[int, ...], ...]:
@@ -65,7 +72,7 @@ class StructureComponents:
         return tuple(out)
 
     @cached_property
-    def tetrahedrons(self) -> Tuple[int, ...]:
+    def tetrahedrons(self: 'Graph') -> Tuple[int, ...]:
         """
         Carbon sp3 atoms numbers
         """
@@ -82,20 +89,19 @@ class StructureComponents:
                     if sum(int(x) for x in env.values()) > 4:
                         continue
                     tetra.append(n)
-        return tetra
+        return tuple(tetra)
 
-    def _cumulenes(self, heteroatoms=False):
+    def _cumulenes(self: 'Graph', heteroatoms=False):
         atoms = self._atoms
         bonds = self._bonds
 
         adj = defaultdict(set)  # double bonds adjacency matrix
         if heteroatoms:
-            atoms_numbers = {5, 6, 7, 8, 14, 15, 16, 33, 34, 52}
             for n, atom in atoms.items():
-                if atom.atomic_number in atoms_numbers:
+                if atom.atomic_number in _heteroatoms:
                     adj_n = adj[n].add
                     for m, bond in bonds[n].items():
-                        if bond == 2 and atoms[m].atomic_number in atoms_numbers:
+                        if bond == 2 and atoms[m].atomic_number in _heteroatoms:
                             adj_n(m)
         else:
             for n, atom in atoms.items():

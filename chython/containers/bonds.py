@@ -17,7 +17,6 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from typing import Optional, Tuple
-from .._functions import tuple_hash
 
 
 class Bond:
@@ -94,7 +93,7 @@ class DynamicBond:
         return hash(self)
 
     def __hash__(self):
-        return tuple_hash((self.__order or 0, self.__p_order or 0))
+        return hash((self.__order or 0, self.__p_order or 0))
 
     @property
     def is_dynamic(self) -> bool:
@@ -164,10 +163,10 @@ class QueryBond:
     def __int__(self):
         if len(self.__order) == 1:
             return self.__order[0]
-        return tuple_hash(self.__order)
+        return hash(self.__order)
 
     def __hash__(self):
-        return tuple_hash(self.__order)
+        return hash(self.__order)
 
     @property
     def order(self) -> Tuple[int, ...]:

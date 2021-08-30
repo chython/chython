@@ -17,8 +17,8 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_property
 from collections import deque, defaultdict
+from functools import cached_property
 from itertools import product, chain, repeat, combinations
 from lazy_object_proxy import Proxy
 from typing import TYPE_CHECKING, Iterator, Union, List

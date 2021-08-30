@@ -16,18 +16,18 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_args_method, cached_property
+from CachedMethods import cached_args_method
 from collections import defaultdict, Counter
+from functools import cached_property
 from itertools import zip_longest
 from math import ceil
 from struct import pack_into, unpack_from
-from typing import List, Union, Tuple, Optional, Dict, FrozenSet
+from typing import List, Union, Tuple, Optional, Dict, Set
 from weakref import ref
 from zlib import compress, decompress
 from . import cgr, query  # cyclic imports resolve
 from .bonds import Bond, DynamicBond, QueryBond
 from .graph import Graph
-from .._functions import tuple_hash
 from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
 from ..algorithms.components import StructureComponents
@@ -534,7 +534,7 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         return self.molecular_charge
 
     @cached_property
-    def molecular_mass(self):
+    def molecular_mass(self) -> float:
         return sum(x.atomic_mass for x in self._atoms.values())
 
     def __float__(self):
@@ -546,15 +546,14 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         return Counter(x.atomic_symbol for x in self._atoms.values())
 
     @cached_property
-    def _screen_fingerprint(self) -> Dict[int, FrozenSet[int]]:
+    def _screen_fingerprint(self) -> Dict[int, Set[int]]:
         """
         Fingerprint of available linear fragments with set of mapped atoms.
         Required for isomorphism tests filtering speedup.
         Parameters can be modified globally in `MoleculeContainer._fingerprint_config`.
         """
         if self._fingerprint_config:
-            return {tuple_hash(k): frozenset(x for x in v for x in x) for k, v in
-                    self._fragments(**self._fingerprint_config).items()}
+            return {hash(k): {x for x in v for x in x} for k, v in self._fragments(**self._fingerprint_config).items()}
         return {}
 
     @cached_args_method

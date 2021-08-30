@@ -25,7 +25,7 @@ Chython is fork of `CGRtools <https://github.com/stsouko/CGRtools>`_.
 INSTALL
 =======
 
-Highly recommended to use python 3.8+. Python 3.6 and 3.7 deprecated.
+Only python 3.8+.
 
 Note: for using `clean2d` install NodeJS into system.
 

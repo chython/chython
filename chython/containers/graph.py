@@ -17,7 +17,8 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import ABC, abstractmethod
-from CachedMethods import cached_property, cached_args_method
+from CachedMethods import cached_args_method
+from functools import cached_property
 from typing import Dict, Optional, Tuple, Iterable, Iterator, Union, List, Type
 from .bonds import Bond, DynamicBond, QueryBond
 from ..algorithms.components import GraphComponents

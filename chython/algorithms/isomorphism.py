@@ -17,8 +17,8 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import abstractmethod
-from CachedMethods import cached_property
 from collections import defaultdict, deque
+from functools import cached_property
 from itertools import permutations
 from typing import Dict, Iterator, Any, Set
 from .._functions import lazy_product
@@ -59,7 +59,7 @@ class Isomorphism:
     def __ge__(self, other):
         return other.is_substructure(self)
 
-    def is_substructure(self, other, *, optimize: bool = True) -> bool:
+    def is_substructure(self, other, /, *, optimize: bool = True) -> bool:
         """
         Test self is substructure of other
 
@@ -71,7 +71,7 @@ class Isomorphism:
             return False
         return True
 
-    def is_equal(self, other, *, optimize: bool = True) -> bool:
+    def is_equal(self, other, /, *, optimize: bool = True) -> bool:
         """
         Test self is same structure as other
 
@@ -86,7 +86,7 @@ class Isomorphism:
         return True
 
     @abstractmethod
-    def get_mapping(self, other, *, automorphism_filter: bool = True,
+    def get_mapping(self, other, /, *, automorphism_filter: bool = True,
                     optimize: bool = True, fallback: bool = False) -> Iterator[Dict[int, int]]:
         """
         Get self to other substructure mapping generator.

@@ -71,7 +71,7 @@ setup(
     license='LGPLv3',
     author='Dr. Ramil Nugmanov',
     author_email='nougmanoff@protonmail.com',
-    python_requires='>=3.6.1',
+    python_requires='>=3.8',
     cmdclass=cmd_class,
     ext_modules=[Extension('chython.containers._unpack', ['chython/containers/_unpack.pyx'],
                            extra_compile_args=['-O3'])],

@@ -17,16 +17,20 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_property
 from collections import defaultdict
-from typing import Tuple
+from functools import cached_property
+from typing import Tuple, TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from chython import CGRContainer
 
 
 class CGRComponents:
     __slots__ = ()
 
     @cached_property
-    def centers_list(self) -> Tuple[Tuple[int, ...], ...]:
+    def centers_list(self: 'CGRContainer') -> Tuple[Tuple[int, ...], ...]:
         """ Get a list of lists of atoms of reaction centers
         """
         radicals = self._radicals
@@ -87,7 +91,7 @@ class CGRComponents:
         return tuple(out)
 
     @cached_property
-    def center_atoms(self) -> Tuple[int, ...]:
+    def center_atoms(self: 'CGRContainer') -> Tuple[int, ...]:
         """ Get list of atoms of reaction center (atoms with dynamic: bonds, charges, radicals).
         """
         radicals = self._radicals
@@ -106,13 +110,13 @@ class CGRComponents:
         return tuple(center)
 
     @cached_property
-    def center_bonds(self) -> Tuple[Tuple[int, int], ...]:
+    def center_bonds(self: 'CGRContainer') -> Tuple[Tuple[int, int], ...]:
         """ Get list of bonds of reaction center (bonds with dynamic orders).
         """
         return tuple((n, m) for n, m, bond in self.bonds() if bond.order != bond.p_order)
 
     @cached_property
-    def aromatic_rings(self) -> Tuple[Tuple[int, ...], ...]:
+    def aromatic_rings(self: 'CGRContainer') -> Tuple[Tuple[int, ...], ...]:
         """
         existed or formed aromatic rings atoms numbers
         """

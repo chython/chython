@@ -20,7 +20,6 @@
 from typing import Tuple, Dict, Type, List, Union
 from .core import Core
 from .element import Element
-from ..._functions import tuple_hash
 from ...exceptions import IsNotConnectedAtom
 
 
@@ -241,8 +240,8 @@ class QueryElement(Query):
         return False
 
     def __hash__(self):
-        return tuple_hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.neighbors,
-                           self.hybridization, self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
+        return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.neighbors,
+                     self.hybridization, self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
 
 
 class AnyElement(Query):
@@ -318,8 +317,8 @@ class AnyElement(Query):
         return False
 
     def __hash__(self):
-        return tuple_hash((self.charge, self.is_radical, self.neighbors, self.hybridization, self.ring_sizes,
-                           self.implicit_hydrogens, self.heteroatoms))
+        return hash((self.charge, self.is_radical, self.neighbors, self.hybridization, self.ring_sizes,
+                     self.implicit_hydrogens, self.heteroatoms))
 
 
 class AnyMetal(AnyElement):
@@ -347,7 +346,7 @@ class AnyMetal(AnyElement):
         return False
 
     def __hash__(self):
-        return tuple_hash((self.neighbors, self.hybridization))
+        return hash((self.neighbors, self.hybridization))
 
 
 class ListElement(AnyElement):
@@ -410,8 +409,8 @@ class ListElement(AnyElement):
         return copy
 
     def __hash__(self):
-        return tuple_hash((self._numbers, self.charge, self.is_radical, self.neighbors, self.hybridization,
-                           self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
+        return hash((self._numbers, self.charge, self.is_radical, self.neighbors, self.hybridization,
+                     self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
 
     def __getstate__(self):
         state = super().__getstate__()

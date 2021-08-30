@@ -16,14 +16,14 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_property, cached_args_method
+from CachedMethods import cached_args_method
 from collections import defaultdict
+from functools import cached_property
 from itertools import chain, product
-from typing import List, Tuple, Union, Dict, FrozenSet
+from typing import List, Tuple, Union, Dict, Set
 from . import molecule  # cyclic imports resolve
 from .bonds import Bond, QueryBond
 from .graph import Graph
-from .._functions import tuple_hash
 from ..algorithms.calculate2d import Calculate2DQuery
 from ..algorithms.components import StructureComponents
 from ..algorithms.depict import DepictQuery
@@ -310,7 +310,7 @@ class QueryContainer(Stereo, Graph, QuerySmiles, StructureComponents, DepictQuer
                 yield copy
 
     @cached_property
-    def _screen_fingerprints(self) -> Tuple[Dict[int, FrozenSet[int]], ...]:
+    def _screen_fingerprints(self) -> Tuple[Dict[int, Set[int]], ...]:
         """
         Fingerprints of all possible simple queries. Used for isomorphism tests filtering.
         """
@@ -337,7 +337,7 @@ class QueryContainer(Stereo, Graph, QuerySmiles, StructureComponents, DepictQuer
             if not chains:
                 continue
 
-            atoms = {idx: tuple_hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+            atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                      for idx, atom in mol.atoms()}
             bonds = mol._bonds
             out = defaultdict(list)
@@ -349,9 +349,9 @@ class QueryContainer(Stereo, Graph, QuerySmiles, StructureComponents, DepictQuer
                     var.append(atoms[y])
                 var = tuple(var)
                 rev_var = var[::-1]
-                out[tuple_hash(var if var > rev_var else rev_var)].extend(frag)
+                out[hash(var if var > rev_var else rev_var)].extend(frag)
 
-            fps.append({k: frozenset(v) for k, v in out.items()})
+            fps.append({k: set(v) for k, v in out.items()})
         return tuple(fps)
 
     @cached_args_method

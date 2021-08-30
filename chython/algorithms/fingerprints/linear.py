@@ -21,7 +21,6 @@ from collections import defaultdict, deque
 from math import log2
 from numpy import zeros, uint8
 from typing import Deque, Dict, Tuple, List, Set, Union, TYPE_CHECKING
-from ..._functions import tuple_hash
 from ...containers import molecule
 
 
@@ -109,7 +108,7 @@ class LinearFingerprint:
         :param include_hydrogens: take into account hydrogen atoms
         :param with_pharmacophores: use pharmacophoric features to identify and distinguish each atom in an molecule
         """
-        return {tuple_hash((*tpl, cnt)) for tpl, count in
+        return {hash((*tpl, cnt)) for tpl, count in
                 self._fragments(min_radius, max_radius, include_hydrogens, with_pharmacophores).items()
                 for cnt in range(min(len(count), number_bit_pairs))}
 
@@ -146,7 +145,7 @@ class LinearFingerprint:
                    with_pharmacophores: bool = False) -> Dict[Tuple[int, ...], List[Tuple[int, ...]]]:
         if isinstance(self, molecule.MoleculeContainer) and not include_hydrogens:
             if not with_pharmacophores:
-                atoms = {idx: tuple_hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+                atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                          for idx, atom in self.atoms()}
             else:
                 atoms = self.pharmacophores

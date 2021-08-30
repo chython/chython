@@ -18,8 +18,9 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import ABC, abstractmethod
-from CachedMethods import cached_method, cached_property
+from CachedMethods import cached_method
 from collections import defaultdict
+from functools import cached_property
 from hashlib import sha512
 from itertools import count, product
 from random import random

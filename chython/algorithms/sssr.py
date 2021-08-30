@@ -16,8 +16,8 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_property
 from collections import defaultdict
+from functools import cached_property
 from itertools import combinations
 from operator import itemgetter
 from typing import Any, Dict, Set, Tuple, Union, TYPE_CHECKING, Type, List, Optional, FrozenSet
@@ -33,7 +33,7 @@ class SSSR:
         Lee, C. J., Kang, Y.-M., Cho, K.-H., & No, K. T. (2009).
         A robust method for searching the smallest set of smallest rings with a path-included distance matrix.
         Proceedings of the National Academy of Sciences of the United States of America, 106(41), 17355–17358.
-        http://doi.org/10.1073/pnas.0813040106
+        https://doi.org/10.1073/pnas.0813040106
     """
     __slots__ = ()
 
@@ -45,7 +45,7 @@ class SSSR:
         :return rings atoms numbers
         """
         if self.rings_count:
-            return self._sssr(self.not_special_connectivity.copy(), self.rings_count)
+            return self._sssr(self.not_special_connectivity, self.rings_count)
         return ()
 
     @classmethod
@@ -225,15 +225,15 @@ def _canonic_ring(ring: Tuple[int, ...]) -> Tuple[int, ...]:
     ndx = ring.index(n)
     if ndx == 0:
         if ring[-1] < ring[1]:
-            return (n, *ring[:0:-1])
+            return n, *ring[:0:-1]
         return ring
     elif ndx == len(ring) - 1:
         if ring[0] > ring[-2]:
             return ring[::-1]
-        return (n, *ring[:-1])
+        return n, *ring[:-1]
     if ring[ndx + 1] > ring[ndx - 1]:
-        return (*ring[ndx::-1], *ring[:ndx:-1])
-    return (*ring[ndx:], *ring[:ndx])
+        return *ring[ndx::-1], *ring[:ndx:-1]
+    return *ring[ndx:], *ring[:ndx]
 
 
 def _ring_scissors(ring: Tuple[int, ...], n: int, m: int) -> Tuple[int, ...]:
@@ -241,15 +241,15 @@ def _ring_scissors(ring: Tuple[int, ...], n: int, m: int) -> Tuple[int, ...]:
     mdx = ring.index(m)
     if ndx == 0:
         if mdx == 1:
-            return (n, *ring[:0:-1])
+            return n, *ring[:0:-1]
         return ring
     elif ndx == len(ring) - 1:
         if mdx == 0:
             return ring[::-1]
-        return (n, *ring[:-1])
+        return n, *ring[:-1]
     if ndx < mdx:
-        return (*ring[ndx::-1], *ring[:ndx:-1])
-    return (*ring[ndx:], *ring[:ndx])
+        return *ring[ndx::-1], *ring[:ndx:-1]
+    return *ring[ndx:], *ring[:ndx]
 
 
 def _ring_adjacency(ring: Tuple[int, ...]) -> Dict[int, List[int]]:
@@ -322,11 +322,11 @@ def _get_unique_chord(ring: Tuple[int, ...], common: Set[int]) -> Optional[Tuple
             return ()
     else:
         if common == set(ring[:lc]):
-            return (*ring[lc - 1:], ring[0])
+            return *ring[lc - 1:], ring[0]
         for _ in range(len(ring) - 1):
             ring = (*ring[1:], ring[0])
             if common == set(ring[:lc]):
-                return (*ring[lc - 1:], ring[0])
+                return *ring[lc - 1:], ring[0]
 
 
 def _connected_rings(rings, seen_rings):
