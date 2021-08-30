@@ -16,43 +16,18 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from collections import defaultdict, deque
+from collections import defaultdict
 from functools import cached_property
 from itertools import combinations
 from logging import info
-from typing import Dict, Optional, Set, Tuple, Union, TYPE_CHECKING
-from ..exceptions import AtomNotFound, IsChiral, NotChiral
+from typing import Dict, Set, Tuple, Union, TYPE_CHECKING
+from .graph import Stereo
+from ...exceptions import AtomNotFound, IsChiral, NotChiral
 
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer, QueryContainer
     Container = Union[MoleculeContainer, QueryContainer]
-
-# 1  2
-#  \ |
-#   \|
-#    n---3
-#   /
-#  /
-# 0
-_tetrahedron_translate = {(0, 1, 2): False, (1, 2, 0): False, (2, 0, 1): False,
-                          (0, 2, 1): True, (1, 0, 2): True, (2, 1, 0): True,
-                          (0, 3, 1): False, (3, 1, 0): False, (1, 0, 3): False,
-                          (0, 1, 3): True, (1, 3, 0): True, (3, 0, 1): True,
-                          (0, 2, 3): False, (2, 3, 0): False, (3, 0, 2): False,
-                          (0, 3, 2): True, (3, 2, 0): True, (2, 0, 3): True,
-                          (1, 3, 2): False, (3, 2, 1): False, (2, 1, 3): False,
-                          (1, 2, 3): True, (2, 3, 1): True, (3, 1, 2): True}
-# 2       1
-#  \     /
-#   n---m
-#  /     \
-# 0       3
-_alkene_translate = {(0, 1): False, (1, 0): False, (0, 3): True, (3, 0): True,
-                     (2, 3): False, (3, 2): False, (2, 1): True, (1, 2): True}
-
-# allowed atoms. these atoms have stable covalent bonds.
-_organic_subset = {1, 5, 6, 7, 8, 9, 14, 15, 16, 17, 33, 34, 35, 52, 53}
 
 
 def _pyramid_sign(n, u, v, w):
@@ -153,314 +128,6 @@ def _allene_sign(n, u, v, w):
     elif dot < 0:
         return -1
     return 0
-
-
-class Stereo:
-    __slots__ = ()
-
-    def clean_stereo(self: 'Container'):
-        """
-        Remove stereo data
-        """
-        self._atoms_stereo.clear()
-        self._allenes_stereo.clear()
-        self._cis_trans_stereo.clear()
-        self.flush_cache()
-
-    def get_mapping(self: 'Container', other: 'Container', **kwargs):
-        atoms_stereo = self._atoms_stereo
-        allenes_stereo = self._allenes_stereo
-        cis_trans_stereo = self._cis_trans_stereo
-        if atoms_stereo or allenes_stereo or cis_trans_stereo:
-            other_atoms_stereo = other._atoms_stereo
-            other_allenes_stereo = other._allenes_stereo
-            other_cis_trans_stereo = other._cis_trans_stereo
-            other_translate_tetrahedron_sign = other._translate_tetrahedron_sign
-            other_translate_allene_sign = other._translate_allene_sign
-            other_translate_cis_trans_sign = other._translate_cis_trans_sign
-
-            tetrahedrons = self._stereo_tetrahedrons
-            cis_trans = self._stereo_cis_trans
-            allenes = self._stereo_allenes
-
-            for mapping in super().get_mapping(other, **kwargs):
-                for n, s in atoms_stereo.items():
-                    m = mapping[n]
-                    if m not in other_atoms_stereo:  # self stereo atom not stereo in other
-                        break
-                    # translate stereo mark in other in order of self tetrahedron
-                    if other_translate_tetrahedron_sign(m, [mapping[x] for x in tetrahedrons[n]]) != s:
-                        break
-                else:
-                    for n, s in allenes_stereo.items():
-                        m = mapping[n]
-                        if m not in other_allenes_stereo:  # self stereo allene not stereo in other
-                            break
-                        # translate stereo mark in other in order of self allene
-                        nn, nm, *_ = allenes[n]
-                        if other_translate_allene_sign(m, mapping[nn], mapping[nm]) != s:
-                            break
-                    else:
-                        for nm, s in cis_trans_stereo.items():
-                            n, m = nm
-                            on, om = mapping[n], mapping[m]
-                            if (on, om) not in other_cis_trans_stereo:
-                                if (om, on) not in other_cis_trans_stereo:
-                                    break  # self stereo cis_trans not stereo in other
-                                else:
-                                    nn, nm, *_ = cis_trans[nm]
-                                    if other_translate_cis_trans_sign(om, on, mapping[nm], mapping[nn]) != s:
-                                        break
-                            else:
-                                nn, nm, *_ = cis_trans[nm]
-                                if other_translate_cis_trans_sign(on, om, mapping[nn], mapping[nm]) != s:
-                                    break
-                        else:
-                            yield mapping
-        else:
-            yield from super().get_mapping(other, **kwargs)
-
-    def _translate_tetrahedron_sign(self: 'Container', n, env, s=None):
-        """
-        Get sign of chiral tetrahedron atom for specified neighbors order
-
-        :param n: stereo atom
-        :param env: neighbors order
-        :param s: if None, use existing sign else translate given to molecule
-        """
-        if s is None:
-            s = self._atoms_stereo[n]
-
-        order = self._stereo_tetrahedrons[n]
-        if len(order) == 3:
-            if len(env) == 4:  # hydrogen atom passed to env
-                atoms = self._atoms
-                # hydrogen always last in order
-                try:
-                    order = (*order, next(x for x in env if atoms[x].atomic_number == 1))  # see translate scheme
-                except StopIteration:
-                    raise KeyError
-            elif len(env) != 3:  # pyramid or tetrahedron expected
-                raise ValueError('invalid atoms list')
-        elif len(env) not in (3, 4):  # pyramid or tetrahedron expected
-            raise ValueError('invalid atoms list')
-
-        translate = tuple(order.index(x) for x in env[:3])
-        if _tetrahedron_translate[translate]:
-            return not s
-        return s
-
-    def _translate_cis_trans_sign(self: 'Container', n, m, nn, nm, s=None):
-        """
-        Get sign for specified opposite neighbors
-
-        :param n: first double bonded atom
-        :param m: last double bonded atom
-        :param nn: neighbor of first atom
-        :param nm: neighbor of last atom
-        :param s: if None, use existing sign else translate given to molecule
-        """
-        if s is None:
-            try:
-                s = self._cis_trans_stereo[(n, m)]
-            except KeyError:
-                s = self._cis_trans_stereo[(m, n)]
-                n, m = m, n  # in alkenes sign not order depended
-                nn, nm = nm, nn
-
-        atoms = self._atoms
-        n0, n1, n2, n3 = self._stereo_cis_trans[(n, m)]
-        if nn == n0:  # same start
-            t0 = 0
-            if nm == n1:
-                t1 = 1
-            elif nm == n3 or n3 is None and atoms[nm].atomic_number == 1:
-                t1 = 3
-            else:
-                raise KeyError
-        elif nn == n1:
-            t0 = 1
-            if nm == n0:
-                t1 = 0
-            elif nm == n2 or n2 is None and atoms[nm].atomic_number == 1:
-                t1 = 2
-            else:
-                raise KeyError
-        elif nn == n2 or n2 is None and atoms[nn].atomic_number == 1:
-            t0 = 2
-            if nm == n1:
-                t1 = 1
-            elif nm == n3 or n3 is None and atoms[nm].atomic_number == 1:
-                t1 = 3
-            else:
-                raise KeyError
-        elif nn == n3 or n3 is None and atoms[nn].atomic_number == 1:
-            t0 = 3
-            if nm == n0:
-                t1 = 0
-            elif nm == n2 or n2 is None and atoms[nm].atomic_number == 1:
-                t1 = 2
-            else:
-                raise KeyError
-        else:
-            raise KeyError
-
-        if _alkene_translate[(t0, t1)]:
-            return not s
-        return s
-
-    def _translate_allene_sign(self: 'Container', c, nn, nm, s=None):
-        """
-        get sign for specified opposite neighbors
-
-        :param c: central double bonded atom
-        :param nn: neighbor of first double bonded atom
-        :param nm: neighbor of last double bonded atom
-        :param s: if None, use existing sign else translate given to molecule
-        """
-        if s is None:
-            s = self._allenes_stereo[c]
-
-        atoms = self._atoms
-        n0, n1, n2, n3 = self._stereo_allenes[c]
-        if nn == n0:  # same start
-            t0 = 0
-            if nm == n1:
-                t1 = 1
-            elif nm == n3 or n3 is None and atoms[nm].atomic_number == 1:
-                t1 = 3
-            else:
-                raise KeyError
-        elif nn == n1:
-            t0 = 1
-            if nm == n0:
-                t1 = 0
-            elif nm == n2 or n2 is None and atoms[nm].atomic_number == 1:
-                t1 = 2
-            else:
-                raise KeyError
-        elif nn == n2 or n2 is None and atoms[nn].atomic_number == 1:
-            t0 = 2
-            if nm == n1:
-                t1 = 1
-            elif nm == n3 or n3 is None and atoms[nm].atomic_number == 1:
-                t1 = 3
-            else:
-                raise KeyError
-        elif nn == n3 or n3 is None and atoms[nn].atomic_number == 1:
-            t0 = 3
-            if nm == n0:
-                t1 = 0
-            elif nm == n2 or n2 is None and atoms[nm].atomic_number == 1:
-                t1 = 2
-            else:
-                raise KeyError
-        else:
-            raise KeyError
-
-        if _alkene_translate[(t0, t1)]:
-            return not s
-        return s
-
-    @cached_property
-    def _stereo_cumulenes(self: 'Container') -> Dict[Tuple[int, ...], Tuple[int, int, Optional[int], Optional[int]]]:
-        """
-        Cumulenes which contains at least one non-hydrogen neighbor on both ends
-        """
-        # 5       4
-        #  \     /
-        #   2---3
-        #  /     \
-        # 1       6
-        bonds = self._bonds
-        atoms = self._atoms
-        cumulenes = {}
-        for path in self.cumulenes:
-            nf = bonds[path[0]]
-            nl = bonds[path[-1]]
-            n1, m1 = path[1], path[-2]
-            if any(b not in (1, 4) and atoms[m].atomic_number not in _organic_subset for m, b in nf.items() if m != n1)\
-                    or any(b not in (1, 4) and atoms[m].atomic_number not in _organic_subset
-                           for m, b in nl.items() if m != m1):
-                continue  # skip X=C=C structures and metal-carbon complexes
-            nn = [x for x in nf if x != n1 and atoms[x].atomic_number != 1]
-            mn = [x for x in nl if x != m1 and atoms[x].atomic_number != 1]
-            if nn and mn:
-                sn = nn[1] if len(nn) == 2 else None
-                sm = mn[1] if len(mn) == 2 else None
-                cumulenes[path] = (nn[0], mn[0], sn, sm)
-        return cumulenes
-
-    @cached_property
-    def _stereo_tetrahedrons(self: 'Container') -> Dict[int, Union[Tuple[int, int, int], Tuple[int, int, int, int]]]:
-        """
-        Tetrahedrons which contains at least 3 non-hydrogen neighbors
-        """
-        #    2
-        #    |
-        # 1--K--3
-        #    |
-        #    4?
-        atoms = self._atoms
-        bonds = self._bonds
-        tetrahedrons = {}
-        for n in self.tetrahedrons:
-            if any(atoms[x].atomic_number not in _organic_subset for x in bonds[n]):
-                continue  # skip metal-carbon complexes
-            env = tuple(x for x in bonds[n] if atoms[x].atomic_number != 1)
-            if len(env) in (3, 4):
-                tetrahedrons[n] = env
-        return tetrahedrons
-
-    @cached_property
-    def _stereo_cis_trans(self) -> Dict[Tuple[int, int], Tuple[int, int, Optional[int], Optional[int]]]:
-        """
-        Cis-trans bonds which contains at least one non-hydrogen neighbor on both ends
-        """
-        return {(n, m): env for (n, *mid, m), env in self._stereo_cumulenes.items() if not len(mid) % 2}
-
-    @cached_property
-    def _stereo_cis_trans_paths(self) -> Dict[Tuple[int, int], Tuple[int, ...]]:
-        return {(path[0], path[-1]): path for path in self._stereo_cumulenes if not len(path) % 2}
-
-    @cached_property
-    def _stereo_cis_trans_terminals(self) -> Dict[int, Tuple[int, int]]:
-        """
-        Cis-Trans terminal atoms to cis-trans key mapping
-        """
-        terminals = {}
-        for nm in self._stereo_cis_trans_paths:
-            n, m = nm
-            terminals[n] = terminals[m] = nm
-        return terminals
-
-    @cached_property
-    def _stereo_allenes(self) -> Dict[int, Tuple[int, int, Optional[int], Optional[int]]]:
-        """
-        Allenes which contains at least one non-hydrogen neighbor on both ends
-        """
-        return {path[len(path) // 2]: env for path, env in self._stereo_cumulenes.items() if len(path) % 2}
-
-    @cached_property
-    def _stereo_allenes_centers(self) -> Dict[int, int]:
-        """
-        Allene terminal atom to center mapping
-        """
-        terminals = {}
-        for c, (n, m) in self._stereo_allenes_terminals.items():
-            terminals[n] = terminals[m] = c
-        return terminals
-
-    @cached_property
-    def _stereo_allenes_terminals(self) -> Dict[int, Tuple[int, int]]:
-        """
-        Allene center atom to terminals mapping
-        """
-        return {c: (path[0], path[-1]) for c, path in self._stereo_allenes_paths.items()}
-
-    @cached_property
-    def _stereo_allenes_paths(self) -> Dict[int, Tuple[int, ...]]:
-        return {path[len(path) // 2]: path for path in self._stereo_cumulenes if len(path) % 2}
 
 
 class MoleculeStereo(Stereo):
@@ -839,6 +506,7 @@ class MoleculeStereo(Stereo):
 
     @cached_property
     def __chiral_centers(self: Union['MoleculeStereo', 'MoleculeContainer']):
+        # get morgan weights with stereo information.
         bonds = self.int_adjacency
         morgan = self.atoms_order
         atoms_stereo = set(self._atoms_stereo)
@@ -851,7 +519,7 @@ class MoleculeStereo(Stereo):
             if not atoms_groups and not cis_trans_groups and not allenes_groups:
                 break
             # for some rings differentiation by morgan impossible. try randomly set new weights.
-            # sometimes this will lead to pseudo chiral centers ;).
+            # sometimes this will lead to pseudo chiral centers and non-unique morgan.
             for group in atoms_groups:
                 for n in group[:len(group) // 2]:  # set new weight in half of group randomly.
                     morgan[n] = -morgan[n]
@@ -863,6 +531,7 @@ class MoleculeStereo(Stereo):
                     morgan[n] = -morgan[n]
             morgan = self._morgan(morgan, bonds)
 
+        # find new chiral atoms and bonds.
         atoms_stereo = self._atoms_stereo
         cis_trans_stereo = self._cis_trans_stereo
         allenes_stereo = self._allenes_stereo
@@ -870,7 +539,6 @@ class MoleculeStereo(Stereo):
         tetrahedrons = self._stereo_tetrahedrons
         cis_trans = self._stereo_cis_trans
         allenes_centers = self._stereo_allenes_centers
-
         rings_tetrahedrons_linkers = self._rings_tetrahedrons_linkers
         rings_cumulenes = self._rings_cumulenes
 
@@ -891,7 +559,7 @@ class MoleculeStereo(Stereo):
                     chiral_a.add(path[len(path) // 2])
                 else:
                     chiral_c.add((path[0], path[-1]))
-        # ring cumulenes always chiral
+        # ring cumulenes always chiral.
         for nm in rings_cumulenes:
             if nm in cis_trans:
                 chiral_c.add(nm)
@@ -900,10 +568,28 @@ class MoleculeStereo(Stereo):
         chiral_a.difference_update(allenes_stereo)
         chiral_c.difference_update(cis_trans_stereo)
 
-        # todo: find chiral axes
-        rings_tetrahedrons = self._rings_tetrahedrons
-        rings_cumulenes_linkers = self._rings_cumulenes_linkers
-        rings_cumulenes_attached = self._rings_cumulenes_attached
+        # find chiral axes. build graph of stereogenic atoms in rings.
+        # atoms connected then located in same ring or cumulene.
+        graph = {}
+        for n, env in self._rings_tetrahedrons.items():
+            if len(env) == 2:  # one or zero non-ring neighbors stereogenic.
+                n1, n2 = env
+                if morgan[n1] == morgan[n2]:  # only unique non-ring members required.
+                    continue
+            graph[n] = set()
+        for n in self._rings_tetrahedrons_linkers:
+            graph[n] = set()
+        for n, m in self._rings_cumulenes_linkers:
+            graph[n] = {m}
+            graph[m] = {n}
+        for (n, m), env in self._rings_cumulenes_attached.items():
+            if len(env) == 2:
+                n1, n2 = env
+                if morgan[n1] == morgan[n2]:  # only unique non-ring members required.
+                    continue
+            graph[n] = {m}
+            graph[m] = {n}
+
         return chiral_t, chiral_c, chiral_a, morgan
 
     def __chiral_groups_sifter(self: Union['MoleculeStereo', 'MoleculeContainer'], morgan,
@@ -927,17 +613,18 @@ class MoleculeStereo(Stereo):
             if atoms_stereo:
                 grouped_stereo = defaultdict(list)
                 for n in atoms_stereo:
-                    grouped_stereo[morgan[n]].append(n)  # collect equal stereo atoms
+                    grouped_stereo[morgan[n]].append(n)  # collect equal stereo atoms.
                 for group in grouped_stereo.values():
-                    if not len(group) % 2:  # only even number of equal stereo atoms give new stereo center
+                    if not len(group) % 2:  # only even number of equal stereo atoms give new stereo center.
+                        # process only truly stereogenic.
                         if len(env := tetrahedrons[group[0]]) == len({morgan[x] for x in env}):
                             s = [n for n in group if translate_tetrahedron(n, sorted(tetrahedrons[n], key=morgan.get))]
-                            if 0 < len(s) < len(group):  # RS pair required
+                            if 0 < len(s) < len(group):  # RS pair required.
                                 for m in s:
                                     morgan_update[m] = -morgan[m]
-                            for n in group:
+                            for n in group:  # prevent checks repeating.
                                 atoms_stereo.discard(n)
-                        else:  # stereo group in rings
+                        else:  # stereo group in rings. unambiguous environment order impossible.
                             atoms_groups.append(group)
 
             if cis_trans_stereo:
@@ -949,7 +636,7 @@ class MoleculeStereo(Stereo):
                     else:
                         grouped_stereo[mm].append((m, nm))
                 for group in grouped_stereo.values():
-                    if not len(group) % 2:  # only even number of equal stereo bonds give new stereo center
+                    if not len(group) % 2:  # only even number of equal stereo bonds give new stereo center.
                         n1, m1, n2, m2 = cis_trans[group[0][1]]
                         if morgan[n1] != morgan.get(n2, 0) and morgan[m1] != morgan.get(m2, 0):
                             s = []
@@ -966,7 +653,7 @@ class MoleculeStereo(Stereo):
                                     b = min(m1, m2, key=morgan.get)
                                 if translate_cis_trans(n, m, a, b):
                                     s.append(x)
-                            if 0 < len(s) < len(group):  # RS pair required
+                            if 0 < len(s) < len(group):  # RS pair required.
                                 for n in s:
                                     morgan_update[n] = -morgan[n]
                                 for _, nm in group:
@@ -979,7 +666,7 @@ class MoleculeStereo(Stereo):
                 for c in allenes_stereo:
                     grouped_stereo[morgan[c]].append(c)
                 for group in grouped_stereo.values():
-                    if not len(group) % 2:  # only even number of equal stereo bonds give new stereo center
+                    if not len(group) % 2:  # only even number of equal stereo bonds give new stereo center.
                         n1, m1, n2, m2 = allenes[group[0]]
                         if morgan[n1] != morgan.get(n2, 0) and morgan[m1] != morgan.get(m2, 0):
                             s = []
@@ -995,7 +682,7 @@ class MoleculeStereo(Stereo):
                                     b = min(m1, m2, key=morgan.get)
                                 if translate_allene(c, a, b):
                                     s.append(c)
-                            if 0 < len(s) < len(group):  # RS pair required
+                            if 0 < len(s) < len(group):  # RS pair required.
                                 for c in s:
                                     morgan_update[c] = -morgan[c]
                                 for c in group:
@@ -1008,4 +695,4 @@ class MoleculeStereo(Stereo):
         return morgan, atoms_stereo, cis_trans_stereo, allenes_stereo, atoms_groups, cis_trans_groups, allenes_groups
 
 
-__all__ = ['MoleculeStereo', 'Stereo']
+__all__ = ['MoleculeStereo']
