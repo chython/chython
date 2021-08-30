@@ -91,7 +91,7 @@ class MorganFingerprint:
         """
         if isinstance(self, molecule.MoleculeContainer) and not include_hydrogens:
             if not with_pharmacophores:
-                identifiers = {idx: tuple_hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+                identifiers = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                                for idx, atom in self.atoms()}
             else:
                 identifiers = self.pharmacophores
