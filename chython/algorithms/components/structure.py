@@ -33,20 +33,25 @@ class StructureComponents:
     __slots__ = ()
 
     @cached_property
-    def aromatic_rings(self: 'Graph') -> Tuple[Tuple[int, ...], ...]:
+    def connected_rings(self) -> Tuple[Tuple[int, ...], ...]:
         """
-        Aromatic rings atoms numbers
+        Rings groups with common atoms. E.g. naphthalene has two connected rings. Rings not atom ordered like sssr.
         """
-        bonds = self._bonds
-        return tuple(ring for ring in self.sssr if bonds[ring[0]][ring[-1]] == 4
-                     and all(bonds[n][m] == 4 for n, m in zip(ring, ring[1:])))
+        rings = self.sssr
+        if len(rings) <= 1:
+            return rings
 
-    @cached_property
-    def cumulenes(self) -> Tuple[Tuple[int, ...], ...]:
-        """
-        Alkenes, allenes and cumulenes atoms numbers
-        """
-        return tuple(self._cumulenes())
+        rings = [set(r) for r in rings]
+        out = []
+        for i in range(len(rings)):
+            r = rings[i]
+            for x in rings[i + 1:]:
+                if not r.isdisjoint(x):
+                    x.update(r)
+                    break
+            else:  # isolated ring[s] found
+                out.append(tuple(r))
+        return tuple(out)
 
     @cached_property
     def connected_rings_cumulenes(self) -> Tuple[Tuple[int, ...], ...]:
@@ -70,6 +75,13 @@ class StructureComponents:
             else:  # isolated ring[s] found
                 out.append(tuple(c))
         return tuple(out)
+
+    @cached_property
+    def cumulenes(self) -> Tuple[Tuple[int, ...], ...]:
+        """
+        Alkenes, allenes and cumulenes atoms numbers
+        """
+        return tuple(self._cumulenes())
 
     @cached_property
     def tetrahedrons(self: 'Graph') -> Tuple[int, ...]:

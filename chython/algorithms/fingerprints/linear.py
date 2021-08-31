@@ -19,27 +19,26 @@
 #
 from collections import defaultdict, deque
 from math import log2
-from numpy import zeros, uint8
-from typing import Deque, Dict, Tuple, List, Set, Union, TYPE_CHECKING
-from ...containers import molecule
+from numpy import uint8, zeros
+from typing import Deque, Dict, List, Set, Tuple, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from chython import MoleculeContainer, CGRContainer
+    from chython import MoleculeContainer
 
 
 class LinearFingerprint:
     __slots__ = ()
     """
     Linear fragments fingerprints.
-    Transform molecule or CGR structures into fingerprints based on linear fragments descriptors.
+    Transform structures into fingerprints based on linear fragments descriptors.
     Also count of fragments takes into account by activating multiple bits, but less or equal to `number_bit_pairs`.
 
     For example `CC` fragment found 4 times and `number_bit_pairs` is set to 3.
     In this case will be activated 3 bits: for count 1, for count 2 and for count 3.
     This gives intersection in bits with another structure with only 2 `CC` fragments.
     """
-    def linear_fingerprint(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
+    def linear_fingerprint(self, min_radius: int = 1, max_radius: int = 4,
                            length: int = 1024, number_active_bits: int = 2, number_bit_pairs: int = 4,
                            include_hydrogens: bool = False, with_pharmacophores: bool = False):
         """
@@ -63,7 +62,7 @@ class LinearFingerprint:
         fingerprints[list(bits)] = 1
         return fingerprints
 
-    def linear_bit_set(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
+    def linear_bit_set(self, min_radius: int = 1, max_radius: int = 4,
                        length: int = 1024, number_active_bits: int = 2, number_bit_pairs: int = 4,
                        include_hydrogens: bool = False, with_pharmacophores: bool = False) -> Set[int]:
         """
@@ -94,7 +93,7 @@ class LinearFingerprint:
                     active_bits.add(tpl & mask)
         return active_bits
 
-    def linear_hash_set(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
+    def linear_hash_set(self, min_radius: int = 1, max_radius: int = 4,
                         number_bit_pairs: int = 4, include_hydrogens: bool = False,
                         with_pharmacophores: bool = False) -> Set[int]:
         """
@@ -112,8 +111,7 @@ class LinearFingerprint:
                 self._fragments(min_radius, max_radius, include_hydrogens, with_pharmacophores).items()
                 for cnt in range(min(len(count), number_bit_pairs))}
 
-    def _chains(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4) -> \
-            Set[Tuple[int, ...]]:
+    def _chains(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[Tuple[int, ...]]:
         queue: Deque[Tuple[int, ...]]  # typing
         atoms = self._atoms
         bonds = self._bonds
@@ -140,17 +138,15 @@ class LinearFingerprint:
                         arr.add(frag if frag > rev else rev)
         return arr
 
-    def _fragments(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1,
-                   max_radius: int = 4, include_hydrogens=False,
+    def _fragments(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4, include_hydrogens=False,
                    with_pharmacophores: bool = False) -> Dict[Tuple[int, ...], List[Tuple[int, ...]]]:
-        if isinstance(self, molecule.MoleculeContainer) and not include_hydrogens:
-            if not with_pharmacophores:
-                atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
-                         for idx, atom in self.atoms()}
-            else:
-                atoms = self.pharmacophores
-        else:
+        if with_pharmacophores:
+            atoms = self.pharmacophores
+        elif include_hydrogens:
             atoms = {idx: int(atom) for idx, atom in self.atoms()}
+        else:
+            atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+                     for idx, atom in self.atoms()}
 
         bonds = self._bonds
         out = defaultdict(list)

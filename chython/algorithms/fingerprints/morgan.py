@@ -19,18 +19,17 @@
 #
 from math import log2
 from numpy import zeros, uint8
-from typing import Set, Union, TYPE_CHECKING
-from ...containers import molecule
+from typing import Set, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from chython import MoleculeContainer, CGRContainer
+    from chython import MoleculeContainer
 
 
 class MorganFingerprint:
     __slots__ = ()
 
-    def morgan_fingerprint(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
+    def morgan_fingerprint(self, min_radius: int = 1, max_radius: int = 4,
                            length: int = 1024, number_active_bits: int = 2,
                            include_hydrogens: bool = True, with_pharmacophores: bool = False):
         """
@@ -52,7 +51,7 @@ class MorganFingerprint:
         fingerprints[list(bits)] = 1
         return fingerprints
 
-    def morgan_bit_set(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
+    def morgan_bit_set(self, min_radius: int = 1, max_radius: int = 4,
                        length: int = 1024, number_active_bits: int = 2,
                        include_hydrogens: bool = True, with_pharmacophores: bool = False) -> Set[int]:
         """
@@ -79,7 +78,7 @@ class MorganFingerprint:
                     active_bits.add(tpl & mask)
         return active_bits
 
-    def morgan_hash_set(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1, max_radius: int = 4,
+    def morgan_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4,
                         include_hydrogens: bool = True, with_pharmacophores: bool = False) -> Set[int]:
         """
         Transform structures into integer hashes of atoms with EC.
@@ -89,14 +88,13 @@ class MorganFingerprint:
         :param include_hydrogens: take into account hydrogen atoms
         :param with_pharmacophores: use pharmacophoric features to identify and distinguish each atom in an molecule
         """
-        if isinstance(self, molecule.MoleculeContainer) and not include_hydrogens:
-            if not with_pharmacophores:
-                identifiers = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
-                               for idx, atom in self.atoms()}
-            else:
-                identifiers = self.pharmacophores
-        else:
+        if with_pharmacophores:
+            identifiers = self.pharmacophores
+        elif include_hydrogens:
             identifiers = {idx: int(atom) for idx, atom in self.atoms()}
+        else:
+            identifiers = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+                           for idx, atom in self.atoms()}
 
         bonds = self._bonds
         arr = set()

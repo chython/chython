@@ -17,12 +17,13 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from CachedMethods import cached_args_method
-from collections import defaultdict, Counter
+from collections import Counter, defaultdict
 from functools import cached_property
 from itertools import zip_longest
 from math import ceil
+from numpy import uint, zeros
 from struct import pack_into, unpack_from
-from typing import List, Union, Tuple, Optional, Dict, Set
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 from weakref import ref
 from zlib import compress, decompress
 from . import cgr, query  # cyclic imports resolve
@@ -36,30 +37,178 @@ from ..algorithms.fingerprints import Fingerprints
 from ..algorithms.huckel import Huckel
 from ..algorithms.mcs import MCS
 from ..algorithms.smiles import MoleculeSmiles
-from ..algorithms.standardize import StandardizeMolecule, Saturation
+from ..algorithms.standardize import Saturation, StandardizeMolecule
 from ..algorithms.stereo import MoleculeStereo
 from ..algorithms.tautomers import Tautomers
 from ..algorithms.x3dom import X3domMolecule
-from ..exceptions import ValenceError, MappingError
-from ..periodictable import Element, QueryElement
+from ..exceptions import MappingError, ValenceError
+from ..periodictable import DynamicElement, Element, QueryElement
 
 
-class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, MoleculeSmiles, StructureComponents,
-                        DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS, Huckel, Saturation,
-                        X3domMolecule):
+class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, StandardizeMolecule, MoleculeSmiles,
+                        StructureComponents, DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS, Huckel,
+                        Saturation, X3domMolecule):
     __slots__ = ('_conformers', '_atoms_stereo', '_hydrogens', '_cis_trans_stereo', '_allenes_stereo',
-                 '_parsed_mapping', '_backup')
+                 '_parsed_mapping', '_backup', '__meta', '__name')
 
     def __init__(self):
         super().__init__()
-        self._atoms: Dict[int, Element] = {}
-        self._bonds: Dict[int, Dict[int, Bond]] = {}
         self._conformers: List[Dict[int, Tuple[float, float, float]]] = []
         self._hydrogens: Dict[int, Optional[int]] = {}
         self._atoms_stereo: Dict[int, bool] = {}
         self._allenes_stereo: Dict[int, bool] = {}
         self._cis_trans_stereo: Dict[Tuple[int, int], bool] = {}
         self._parsed_mapping: Dict[int, int] = {}
+        self.__meta = None
+        self.__name = None
+
+    @property
+    def meta(self) -> Dict:
+        if self.__meta is None:
+            self.__meta = {}  # lazy
+        return self.__meta
+
+    @property
+    def name(self) -> str:
+        return self.__name or ''
+
+    @name.setter
+    def name(self, name):
+        if not isinstance(name, str):
+            raise TypeError('name should be string up to 80 symbols')
+        self.__name = name
+
+    @cached_args_method
+    def environment(self, atom: int, include_bond: bool = True, include_atom: bool = True) -> \
+            Tuple[Union[Tuple[int, Bond, Element],
+                        Tuple[int, Element],
+                        Tuple[int, Bond],
+                        int], ...]:
+        """
+        groups of (atom_number, bond, atom) connected to atom or
+        groups of (atom_number, bond) connected to atom or
+        groups of (atom_number, atom) connected to atom or
+        neighbors atoms connected to atom
+
+        :param atom: number
+        :param include_atom: include atom object
+        :param include_bond: include bond object
+        """
+        if include_atom:
+            atoms = self._atoms
+            if include_bond:
+                return tuple((n, bond, atoms[n]) for n, bond in self._bonds[atom].items())
+            return tuple((n, atoms[n]) for n in self._bonds[atom])
+        elif include_bond:
+            return tuple(self._bonds[atom].items())
+        return tuple(self._bonds[atom])
+
+    @cached_args_method
+    def neighbors(self, n: int) -> int:
+        """number of neighbors atoms excluding any-bonded"""
+        return sum(b.order != 8 for b in self._bonds[n].values())
+
+    @cached_args_method
+    def hybridization(self, n: int) -> int:
+        """
+        Atom hybridization.
+
+        1 - if atom has zero or only single bonded neighbors, 2 - if has only one double bonded neighbor and any amount
+        of single bonded, 3 - if has one triple bonded and any amount of double and single bonded neighbors or
+        two and more double bonded and any amount of single bonded neighbors, 4 - if atom in aromatic ring.
+        """
+        hybridization = 1
+        for bond in self._bonds[n].values():
+            order = bond.order
+            if order == 4:
+                return 4
+            elif order == 3:
+                if hybridization != 3:
+                    hybridization = 3
+            elif order == 2:
+                if hybridization == 1:
+                    hybridization = 2
+                elif hybridization == 2:
+                    hybridization = 3
+        return hybridization
+
+    @cached_args_method
+    def heteroatoms(self, n: int) -> int:
+        """
+        Number of neighbored heteroatoms (not carbon or hydrogen)
+        """
+        atoms = self._atoms
+        return sum(atoms[m].atomic_number not in (1, 6) for m in self._bonds[n])
+
+    def implicit_hydrogens(self, n: int) -> Optional[int]:
+        """
+        Number of implicit hydrogen atoms connected to atom.
+
+        Returns None if count are ambiguous.
+        """
+        return self._hydrogens[n]
+
+    @cached_args_method
+    def explicit_hydrogens(self, n: int) -> int:
+        """
+        Number of explicit hydrogen atoms connected to atom.
+
+        Take into account any type of bonds with hydrogen atoms.
+        """
+        atoms = self._atoms
+        return sum(atoms[m].atomic_number == 1 for m in self._bonds[n])
+
+    @cached_args_method
+    def total_hydrogens(self, n: int) -> int:
+        """
+        Number of hydrogen atoms connected to atom.
+
+        Take into account any type of bonds with hydrogen atoms.
+        """
+        return self._hydrogens[n] + self.explicit_hydrogens(n)
+
+    def adjacency_matrix(self, set_bonds=False):
+        """
+        Adjacency matrix of Graph.
+
+        :param set_bonds: if True set bond orders instead of 1.
+        """
+        adj = zeros((len(self), len(self)), dtype=uint)
+        mapping = {n: x for x, n in enumerate(self._atoms)}
+        if set_bonds:
+            for n, ms in self._bonds.items():
+                n = mapping[n]
+                for m, b in ms.items():
+                    adj[n, mapping[m]] = int(b)
+        else:
+            for n, ms in self._bonds.items():
+                n = mapping[n]
+                for m, b in ms.items():
+                    adj[n, mapping[m]] = 1
+        return adj
+
+    @cached_property
+    def molecular_charge(self) -> int:
+        """
+        Total charge of molecule
+        """
+        return sum(self._charges.values())
+
+    @cached_property
+    def is_radical(self) -> bool:
+        """
+        True if at least one atom is radical
+        """
+        return any(self._radicals.values())
+
+    @cached_property
+    def molecular_mass(self) -> float:
+        return sum(x.atomic_mass for x in self._atoms.values())
+
+    @cached_property
+    def brutto(self) -> Dict[str, int]:
+        """Counted atoms dict"""
+        return Counter(x.atomic_symbol for x in self._atoms.values())
 
     def add_atom(self, atom: Union[Element, int, str], *args, charge=0, is_radical=False, **kwargs):
         """
@@ -150,92 +299,78 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         if self._atoms[n].atomic_number != 1 and self._atoms[m].atomic_number != 1:
             self._fix_stereo()
 
-    @cached_args_method
-    def neighbors(self, n: int) -> int:
-        """number of neighbors atoms excluding any-bonded"""
-        return sum(b.order != 8 for b in self._bonds[n].values())
+    def remap(self, mapping: Dict[int, int], *, copy: bool = False) -> 'MoleculeContainer':
+        if len(mapping) != len(set(mapping.values())) or \
+                not (self._atoms.keys() - mapping.keys()).isdisjoint(mapping.values()):
+            raise ValueError('mapping overlap')
 
-    @cached_args_method
-    def hybridization(self, n: int) -> int:
-        """
-        Atom hybridization.
-
-        1 - if atom has zero or only single bonded neighbors, 2 - if has only one double bonded neighbor and any amount
-        of single bonded, 3 - if has one triple bonded and any amount of double and single bonded neighbors or
-        two and more double bonded and any amount of single bonded neighbors, 4 - if atom in aromatic ring.
-        """
-        hybridization = 1
-        for bond in self._bonds[n].values():
-            order = bond.order
-            if order == 4:
-                return 4
-            elif order == 3:
-                if hybridization != 3:
-                    hybridization = 3
-            elif order == 2:
-                if hybridization == 1:
-                    hybridization = 2
-                elif hybridization == 2:
-                    hybridization = 3
-        return hybridization
-
-    @cached_args_method
-    def heteroatoms(self, n: int) -> int:
-        """
-        Number of neighbored heteroatoms (not carbon or hydrogen)
-        """
-        atoms = self._atoms
-        return sum(atoms[m].atomic_number not in (1, 6) for m in self._bonds[n])
-
-    def implicit_hydrogens(self, n: int) -> Optional[int]:
-        """
-        Number of implicit hydrogen atoms connected to atom.
-
-        Returns None if count are ambiguous.
-        """
-        return self._hydrogens[n]
-
-    @cached_args_method
-    def explicit_hydrogens(self, n: int) -> int:
-        """
-        Number of explicit hydrogen atoms connected to atom.
-
-        Take into account any type of bonds with hydrogen atoms.
-        """
-        atoms = self._atoms
-        return sum(atoms[m].atomic_number == 1 for m in self._bonds[n])
-
-    @cached_args_method
-    def total_hydrogens(self, n: int) -> int:
-        """
-        Number of hydrogen atoms connected to atom.
-
-        Take into account any type of bonds with hydrogen atoms.
-        """
-        return self._hydrogens[n] + self.explicit_hydrogens(n)
-
-    def remap(self, mapping, *, copy=False) -> 'MoleculeContainer':
-        h = super().remap(mapping, copy=copy)
         mg = mapping.get
+        sp = self._plane
+        sc = self._charges
+        sr = self._radicals
+        shg = self._hydrogens
 
         if copy:
+            h = self.__class__()
+            h._MoleculeContainer__name = self.__name
+            if self.__meta is not None:
+                h._MoleculeContainer__meta = self.__meta.copy()
+            hb = h._bonds
+            ha = h._atoms
+            hc = h._charges
+            hr = h._radicals
+            hp = h._plane
             hhg = h._hydrogens
-            hc = h._conformers
+            hcf = h._conformers
             has = h._atoms_stereo
             hal = h._allenes_stereo
             hcs = h._cis_trans_stereo
             hm = h._parsed_mapping
+
+            for n, atom in self._atoms.items():
+                m = mg(n, n)
+                atom = atom.copy()
+                ha[m] = atom
+                atom._attach_to_graph(h, m)
+
+            # deep copy of bonds
+            for n, m_bond in self._bonds.items():
+                n = mg(n, n)
+                hb[n] = hbn = {}
+                for m, bond in m_bond.items():
+                    m = mg(m, m)
+                    if m in hb:  # bond partially exists. need back-connection.
+                        hbn[m] = hb[m][n]
+                    else:
+                        hbn[m] = bond.copy()
         else:
+            hb = {}
+            ha = {}
+            hc = {}
+            hr = {}
+            hp = {}
             hhg = {}
-            hc = []
+            hcf = []
             has = {}
             hal = {}
             hcs = {}
             hm = {}
+            for n, atom in self._atoms.items():
+                m = mg(n, n)
+                ha[m] = atom
+                atom._change_map(m)  # change mapping number
 
-        hc.extend({mg(n, n): x for n, x in c.items()} for c in self._conformers)
-        for n, hg in self._hydrogens.items():
-            hhg[mg(n, n)] = hg
+            for n, m_bond in self._bonds.items():
+                hb[mg(n, n)] = {mg(m, m): b for m, b in m_bond.items()}
+
+        for n in self._atoms:
+            m = mg(n, n)
+            hc[m] = sc[n]
+            hr[m] = sr[n]
+            hp[m] = sp[n]
+            hhg[m] = shg[n]
+
+        hcf.extend({mg(n, n): x for n, x in c.items()} for c in self._conformers)
         for n, m in self._parsed_mapping.items():
             hm[mg(n, n)] = m
         for n, stereo in self._atoms_stereo.items():
@@ -248,16 +383,27 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         if copy:
             return h
 
+        self._atoms = ha
+        self._bonds = hb
+        self._charges = hc
+        self._radicals = hr
+        self._plane = hp
         self._hydrogens = hhg
-        self._conformers = hc
+        self._conformers = hcf
         self._atoms_stereo = has
         self._allenes_stereo = hal
         self._cis_trans_stereo = hcs
         self._parsed_mapping = hm
+        self.flush_cache()
         return self
 
-    def copy(self, **kwargs) -> 'MoleculeContainer':
-        copy = super().copy(**kwargs)
+    def copy(self) -> 'MoleculeContainer':
+        copy = super().copy()
+        copy._MoleculeContainer__name = self.__name
+        if self.__meta is None:
+            copy._MoleculeContainer__meta = None
+        else:
+            copy._MoleculeContainer__meta = self.__meta.copy()
         copy._hydrogens = self._hydrogens.copy()
         copy._parsed_mapping = self._parsed_mapping.copy()
         copy._conformers = [c.copy() for c in self._conformers]
@@ -266,9 +412,29 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         copy._cis_trans_stereo = self._cis_trans_stereo.copy()
         return copy
 
-    def substructure(self, atoms, *, as_query: bool = False, recalculate_hydrogens=True, skip_neighbors_marks=False,
-                     skip_hybridizations_marks=False, skip_hydrogens_marks=False, skip_rings_sizes_marks=False,
-                     **kwargs) -> Union['MoleculeContainer', 'query.QueryContainer']:
+    def union(self, other: 'MoleculeContainer', *, remap=False) -> 'MoleculeContainer':
+        """
+        :param remap: if atoms has collisions then remap other graph atoms else raise exception.
+        """
+        if not isinstance(other, MoleculeContainer):
+            raise TypeError('MoleculeContainer expected')
+        elif self._atoms.keys() & other._atoms.keys():
+            if remap:
+                other = other.remap({n: i for i, n in enumerate(other, start=max(self._atoms) + 1)}, copy=True)
+            else:
+                raise MappingError('mapping of graphs is not disjoint')
+        u = super().union(other)
+        u._conformers.clear()
+        u._hydrogens.update(other._hydrogens)
+        u._parsed_mapping.update(other._parsed_mapping)
+        u._atoms_stereo.update(other._atoms_stereo)
+        u._allenes_stereo.update(other._allenes_stereo)
+        u._cis_trans_stereo.update(other._cis_trans_stereo)
+        return u
+
+    def substructure(self, atoms: Iterable[int], *, as_query: bool = False, recalculate_hydrogens=True,
+                     skip_neighbors_marks=False, skip_hybridizations_marks=False, skip_hydrogens_marks=False,
+                     skip_rings_sizes_marks=False,) -> Union['MoleculeContainer', 'query.QueryContainer']:
         """
         Create substructure containing atoms from atoms list.
 
@@ -277,20 +443,52 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         Call `kekule()` and `thiele()` in sequence to fix marks.
 
         :param atoms: list of atoms numbers of substructure
-        :param meta: if True metadata will be copied to substructure
         :param as_query: return Query object based on graph substructure
+        :param recalculate_hydrogens: calculate implicit H count in substructure
         :param skip_neighbors_marks: Don't set neighbors count marks on substructured queries
         :param skip_hybridizations_marks: Don't set hybridizations marks on substructured queries
         :param skip_hydrogens_marks: Don't set hydrogens count marks on substructured queries
         :param skip_rings_sizes_marks: Don't set rings_sizes marks on substructured queries
         """
-        sub, atoms = super().substructure(atoms, graph_type=query.QueryContainer if as_query else self.__class__,
-                                          atom_type=QueryElement if as_query else Element,
-                                          bond_type=QueryBond if as_query else Bond, **kwargs)
+        if not atoms:
+            raise ValueError('empty atoms list not allowed')
+        if set(atoms) - self._atoms.keys():
+            raise ValueError('invalid atom numbers')
+        atoms = tuple(n for n in self._atoms if n in atoms)  # save original order
         if as_query:
-            sa = self._atoms
-            sb = self._bonds
+            atom_type = QueryElement
+            bond_type = QueryBond
+            sub = object.__new__(query.QueryContainer)
+        else:
+            atom_type = Element
+            bond_type = Bond
+            sub = object.__new__(self.__class__)
 
+        sa = self._atoms
+        sb = self._bonds
+        sc = self._charges
+        sr = self._radicals
+        sp = self._plane
+
+        sub._charges = {n: sc[n] for n in atoms}
+        sub._radicals = {n: sr[n] for n in atoms}
+        sub._plane = {n: sp[n] for n in atoms}
+
+        sub._atoms = ca = {}
+        for n in atoms:
+            ca[n] = atom = atom_type.from_atom(sa[n])
+            atom._attach_to_graph(sub, n)
+
+        sub._bonds = cb = {}
+        for n in atoms:
+            cb[n] = cbn = {}
+            for m, bond in sb[n].items():
+                if m in cb:  # bond partially exists. need back-connection.
+                    cbn[m] = cb[m][n]
+                elif m in atoms:
+                    cbn[m] = bond_type.from_bond(bond)
+
+        if as_query:
             lost = {n for n, a in sa.items() if a.atomic_number != 1} - set(atoms)  # atoms not in substructure
             not_skin = {n for n in atoms if lost.isdisjoint(sb[n])}
             sub._atoms_stereo = {n: s for n, s in self._atoms_stereo.items() if n in not_skin}
@@ -343,34 +541,38 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
             sub._fix_stereo()
         return sub
 
-    def union(self, other, **kwargs):
-        if isinstance(other, MoleculeContainer):
-            u, other = super().union(other, atom_type=Element, bond_type=Bond, **kwargs)
-            u._conformers.clear()
-            u._hydrogens.update(other._hydrogens)
-            u._parsed_mapping.update(other._parsed_mapping)
-            u._atoms_stereo.update(other._atoms_stereo)
-            u._allenes_stereo.update(other._allenes_stereo)
-            u._cis_trans_stereo.update(other._cis_trans_stereo)
-            return u
-        elif isinstance(other, Graph):
-            return other.union(self, **kwargs)
-        else:
-            raise TypeError('MoleculeContainer expected')
+    def augmented_substructure(self, atoms: Iterable[int], deep: int = 1, **kwargs) -> 'MoleculeContainer':
+        """
+        Create substructure containing atoms and their neighbors
 
-    def split(self, meta: bool = False) -> List['MoleculeContainer']:
+        :param atoms: list of core atoms in graph
+        :param deep: number of bonds between atoms and neighbors
+        """
+        return self.substructure(self._augmented_substructure(atoms, deep)[-1], **kwargs)
+
+    def augmented_substructures(self, atoms: Iterable[int], deep: int = 1, **kwargs) -> List['MoleculeContainer']:
+        """
+        Create list of substructures containing atoms and their neighbors
+
+        :param atoms: list of core atoms in graph
+        :param deep: number of bonds between atoms and neighbors
+        :return: list of graphs containing atoms, atoms + first circle, atoms + 1st + 2nd,
+            etc up to deep or while new nodes available
+        """
+        return [self.substructure(a, **kwargs) for a in self._augmented_substructure(atoms, deep)]
+
+    def split(self) -> List['MoleculeContainer']:
         """
         Split disconnected structure to connected substructures
-
-        :param meta: copy metadata to each substructure
-        :return: list of substructures
         """
-        return [self.substructure(c, meta=meta, recalculate_hydrogens=False) for c in self.connected_components]
+        return [self.substructure(c, recalculate_hydrogens=False) for c in self.connected_components]
 
-    def compose(self, other: Union['MoleculeContainer', 'cgr.CGRContainer']) -> 'cgr.CGRContainer':
+    def compose(self, other: 'MoleculeContainer') -> 'cgr.CGRContainer':
         """
         Compose 2 graphs to CGR.
         """
+        if not isinstance(other, MoleculeContainer):
+            raise TypeError('MoleculeContainer expected')
         sa = self._atoms
         sc = self._charges
         sr = self._radicals
@@ -380,117 +582,82 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         bonds = []
         adj = defaultdict(lambda: defaultdict(lambda: [None, None]))
 
-        if isinstance(other, MoleculeContainer):
-            oa = other._atoms
-            oc = other._charges
-            or_ = other._radicals
-            op = other._plane
-            ob = other._bonds
-            common = sa.keys() & other
-            h = cgr.CGRContainer()
-            atoms = h._atoms
+        oa = other._atoms
+        oc = other._charges
+        or_ = other._radicals
+        op = other._plane
+        ob = other._bonds
 
-            for n in sa.keys() - common:  # cleavage atoms
-                h.add_atom(sa[n], n, charge=sc[n], is_radical=sr[n], xy=sp[n], p_charge=sc[n], p_is_radical=sr[n])
-                for m, bond in sb[n].items():
-                    if m not in atoms:
-                        if m in common:  # bond to common atoms is broken bond
-                            order = bond.order
-                            bond = object.__new__(DynamicBond)
-                            bond._DynamicBond__order, bond._DynamicBond__p_order = order, None
-                        bonds.append((n, m, bond))
-            for n in other._atoms.keys() - common:  # coupling atoms
-                h.add_atom(oa[n], n, charge=oc[n], is_radical=or_[n], xy=op[n], p_charge=oc[n], p_is_radical=or_[n])
-                for m, bond in ob[n].items():
-                    if m not in atoms:
-                        if m in common:  # bond to common atoms is formed bond
-                            order = bond.order
-                            bond = object.__new__(DynamicBond)
-                            bond._DynamicBond__order, bond._DynamicBond__p_order = None, order
-                        bonds.append((n, m, bond))
-            for n in common:
-                an = adj[n]
-                for m, bond in sb[n].items():
-                    if m in common:
-                        an[m][0] = bond.order
-                for m, bond in ob[n].items():
-                    if m in common:
-                        an[m][1] = bond.order
-            for n in common:
-                san = sa[n]
-                if san.atomic_number != oa[n].atomic_number or san.isotope != oa[n].isotope:
-                    raise MappingError(f'atoms with number {{{n}}} not equal')
-                h.add_atom(san, n, charge=sc[n], is_radical=sr[n], xy=sp[n], p_charge=oc[n], p_is_radical=or_[n])
-                for m, (o1, o2) in adj[n].items():
-                    if m not in atoms:
-                        bond = object.__new__(DynamicBond)
-                        bond._DynamicBond__order, bond._DynamicBond__p_order = o1, o2
-                        bonds.append((n, m, bond))
-        elif isinstance(other, cgr.CGRContainer):
-            oa = other._atoms
-            oc = other._charges
-            or_ = other._radicals
-            opc = other._p_charges
-            opr = other._p_radicals
-            op = other._plane
-            ob = other._bonds
-            common = sa.keys() & other
-            h = other.__class__()  # subclasses support
-            atoms = h._atoms
+        common = sa.keys() & oa.keys()
 
-            for n in sa.keys() - common:  # cleavage atoms
-                h.add_atom(sa[n], n, charge=sc[n], is_radical=sr[n], xy=sp[n], p_charge=sc[n], p_is_radical=sr[n])
-                for m, bond in sb[n].items():
-                    if m not in atoms:
-                        if m in common:  # bond to common atoms is broken bond
-                            order = bond.order
-                            bond = object.__new__(DynamicBond)
-                            bond._DynamicBond__order, bond._DynamicBond__p_order = order, None
-                        bonds.append((n, m, bond))
-            for n in other._atoms.keys() - common:  # coupling atoms
-                h.add_atom(oa[n].copy(), n, charge=oc[n], is_radical=or_[n], xy=op[n], p_charge=opc[n],
-                           p_is_radical=opr[n])
-                for m, bond in ob[n].items():
-                    if m not in atoms:
-                        if m in common:  # bond to common atoms is formed bond
-                            order = bond.p_order
-                            if order:  # skip broken bond. X>None => None>None
-                                bond = object.__new__(DynamicBond)
-                                bond._DynamicBond__order, bond._DynamicBond__p_order = None, order
-                                bonds.append((n, m, bond))
-                        else:
-                            bonds.append((n, m, bond))
-            for n in common:
-                an = adj[n]
-                for m, bond in sb[n].items():
-                    if m in common:
-                        an[m][0] = bond.order
-                for m, bond in ob[n].items():
-                    if m in an or m in common and bond.p_order:
-                        # self has nm bond or other bond not broken
-                        an[m][1] = bond.p_order
-            for n in common:
-                san = sa[n]
-                if san.atomic_number != oa[n].atomic_number or san.isotope != oa[n].isotope:
-                    raise MappingError(f'atoms with number {{{n}}} not equal')
-                h.add_atom(san, n, charge=sc[n], is_radical=sr[n], xy=sp[n], p_charge=opc[n], p_is_radical=opr[n])
-                for m, (o1, o2) in adj[n].items():
-                    if m not in atoms:
-                        bond = object.__new__(DynamicBond)
-                        bond._DynamicBond__order, bond._DynamicBond__p_order = o1, o2
-                        bonds.append((n, m, bond))
-        else:
-            raise TypeError('MoleculeContainer or CGRContainer expected')
+        h = cgr.CGRContainer()
+        ha = h._atoms
+        hb = h._bonds
+        hc = h._charges
+        hpc = h._p_charges
+        hr = h._radicals
+        hpr = h._p_radicals
+        hp = h._plane
+
+        for n in sa.keys() - common:  # cleavage atoms
+            hc[n] = hpc[n] = sc[n]
+            hr[n] = hpr[n] = sr[n]
+            hp[n] = sp[n]
+            hb[n] = {}
+            ha[n] = a = DynamicElement.from_atom(sa[n])
+            a._attach_to_graph(h, n)
+
+            for m, bond in sb[n].items():
+                if m not in ha:
+                    if m in common:  # bond to common atoms is broken bond
+                        bond = DynamicBond(bond.order, None)
+                    else:
+                        bond = DynamicBond(bond.order, bond.order)
+                    bonds.append((n, m, bond))
+        for n in oa.keys() - common:  # coupling atoms
+            hc[n] = hpc[n] = oc[n]
+            hr[n] = hpr[n] = or_[n]
+            hp[n] = op[n]
+            hb[n] = {}
+            ha[n] = a = DynamicElement.from_atom(oa[n])
+            a._attach_to_graph(h, n)
+
+            for m, bond in ob[n].items():
+                if m not in ha:
+                    if m in common:  # bond to common atoms is formed bond
+                        bond = DynamicBond(None, bond.order)
+                    else:
+                        bond = DynamicBond(bond.order, bond.order)
+                    bonds.append((n, m, bond))
+        for n in common:
+            an = adj[n]
+            for m, bond in sb[n].items():
+                if m in common:
+                    an[m][0] = bond.order
+            for m, bond in ob[n].items():
+                if m in common:
+                    an[m][1] = bond.order
+        for n in common:
+            san = sa[n]
+            if san.atomic_number != oa[n].atomic_number or san.isotope != oa[n].isotope:
+                raise MappingError(f'atoms with number {{{n}}} not equal')
+
+            hc[n] = sc[n]
+            hpc[n] = oc[n]
+            hr[n] = sr[n]
+            hpr[n] = or_[n]
+            hp[n] = sp[n]
+            hb[n] = {}
+            ha[n] = a = DynamicElement.from_atom(san)
+            a._attach_to_graph(h, n)
+
+            for m, (o1, o2) in adj[n].items():
+                if m not in ha:
+                    bonds.append((n, m, DynamicBond(o1, o2)))
 
         for n, m, bond in bonds:
-            h.add_bond(n, m, bond)
+            hb[n][m] = hb[m][n] = bond
         return h
-
-    def __xor__(self, other):
-        """
-        G ^ H is CGR generation
-        """
-        return self.compose(other)
 
     def get_fast_mapping(self, other: 'MoleculeContainer') -> Optional[Dict[int, int]]:
         """
@@ -512,126 +679,6 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         if isinstance(other, MoleculeContainer):
             return super().get_mapping(other, **kwargs)
         raise TypeError('MoleculeContainer expected')
-
-    @cached_property
-    def molecular_charge(self) -> int:
-        """
-        Total charge of molecule
-        """
-        return sum(self._charges.values())
-
-    @cached_property
-    def is_radical(self) -> bool:
-        """
-        True if at least one atom is radical
-        """
-        return any(self._radicals.values())
-
-    def __int__(self):
-        """
-        Total charge of molecule
-        """
-        return self.molecular_charge
-
-    @cached_property
-    def molecular_mass(self) -> float:
-        return sum(x.atomic_mass for x in self._atoms.values())
-
-    def __float__(self):
-        return self.molecular_mass
-
-    @cached_property
-    def brutto(self) -> Dict[str, int]:
-        """Counted atoms dict"""
-        return Counter(x.atomic_symbol for x in self._atoms.values())
-
-    @cached_property
-    def _screen_fingerprint(self) -> Dict[int, Set[int]]:
-        """
-        Fingerprint of available linear fragments with set of mapped atoms.
-        Required for isomorphism tests filtering speedup.
-        Parameters can be modified globally in `MoleculeContainer._fingerprint_config`.
-        """
-        if self._fingerprint_config:
-            return {hash(k): {x for x in v for x in x} for k, v in self._fragments(**self._fingerprint_config).items()}
-        return {}
-
-    @cached_args_method
-    def _component_fingerprint(self, component):
-        """
-        Fingerprint of specific component.
-        """
-        scope = set(self.connected_components[component])
-        return {k: v & scope for k, v in self._screen_fingerprint.items() if not v.isdisjoint(scope)}
-
-    def _calc_implicit(self, n: int):
-        atoms = self._atoms
-        atom = atoms[n]
-        if atom.atomic_number != 1:
-            charge: int = self._charges[n]
-            is_radical = self._radicals[n]
-            explicit_sum = 0
-            explicit_dict = defaultdict(int)
-            for m, bond in self._bonds[n].items():
-                order = bond.order
-                if order == 4:  # aromatic rings not supported
-                    self._hydrogens[n] = None
-                    return
-                elif order != 8:  # any bond used for complexes
-                    explicit_sum += order
-                    explicit_dict[(order, atoms[m].atomic_number)] += 1
-            try:
-                rules = atom.valence_rules(charge, is_radical, explicit_sum)
-            except ValenceError:
-                self._hydrogens[n] = None
-                return
-            for s, d, h in rules:
-                if s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()):
-                    self._hydrogens[n] = h
-                    return
-        self._hydrogens[n] = 0
-
-    def __enter__(self):
-        """
-        Transaction of changes. Keep current state for restoring on errors.
-        """
-        atoms = {}
-        for n, atom in self._atoms.items():
-            atom = atom.copy()
-            atoms[n] = atom
-            atom._attach_to_graph(self, n)
-
-        bonds = {}
-        for n, m_bond in self._bonds.items():
-            bonds[n] = cbn = {}
-            for m, bond in m_bond.items():
-                if m in bonds:  # bond partially exists. need back-connection.
-                    cbn[m] = bonds[m][n]
-                else:
-                    cbn[m] = bond.copy()
-        self._backup = {'atoms': atoms, 'bonds': bonds, 'parsed_mapping': self._parsed_mapping.copy(),
-                        'plane': self._plane.copy(), 'charges': self._charges.copy(), 'radicals': self._radicals.copy(),
-                        'hydrogens': self._hydrogens.copy(), 'conformers': [x.copy() for x in self._conformers],
-                        'atoms_stereo': self._atoms_stereo.copy(), 'allenes_stereo': self._allenes_stereo.copy(),
-                        'cis_trans_stereo': self._cis_trans_stereo.copy()}
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type:  # restore state
-            backup = self._backup
-            self._atoms = backup['atoms']
-            self._bonds = backup['bonds']
-            self._parsed_mapping = backup['parsed_mapping']
-            self._plane = backup['plane']
-            self._charges = backup['charges']
-            self._radicals = backup['radicals']
-            self._hydrogens = backup['hydrogens']
-            self._conformers = backup['conformers']
-            self._atoms_stereo = backup['atoms_stereo']
-            self._allenes_stereo = backup['allenes_stereo']
-            self._cis_trans_stereo = backup['cis_trans_stereo']
-            self.flush_cache()
-        del self._backup
 
     def pack(self) -> bytes:
         """
@@ -774,8 +821,8 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
 
         mol._conformers = []
         mol._parsed_mapping = {}
-        mol._Graph__meta = {}
-        mol._Graph__name = ''
+        mol._MoleculeContainer__meta = None
+        mol._MoleculeContainer__name = None
         mol._atoms = atoms = {}
 
         for n, a, i in zip(mapping, atom_numbers, isotopes):
@@ -870,10 +917,145 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
             cis_trans_stereo[(ct >> 20, (ct >> 8) & 0x0fff)] = ct & 0x01
         return mol
 
+    def _augmented_substructure(self, atoms: Iterable[int], deep: int):
+        atoms = set(atoms)
+        bonds = self._bonds
+        if atoms - self._atoms.keys():
+            raise ValueError('invalid atom numbers')
+        nodes = [atoms]
+        for _ in range(deep):
+            n = {y for x in nodes[-1] for y in bonds[x]} | nodes[-1]
+            if n in nodes:
+                break
+            nodes.append(n)
+        return nodes
+
+    @cached_property
+    def _screen_fingerprint(self) -> Dict[int, Set[int]]:
+        """
+        Fingerprint of available linear fragments with set of mapped atoms.
+        Required for isomorphism tests filtering speedup.
+        Parameters can be modified globally in `MoleculeContainer._fingerprint_config`.
+        """
+        if self._fingerprint_config:
+            return {hash(k): {x for x in v for x in x} for k, v in self._fragments(**self._fingerprint_config).items()}
+        return {}
+
+    @cached_args_method
+    def _component_fingerprint(self, component):
+        """
+        Fingerprint of specific component.
+        """
+        scope = set(self.connected_components[component])
+        return {k: v & scope for k, v in self._screen_fingerprint.items() if not v.isdisjoint(scope)}
+
+    def _calc_implicit(self, n: int):
+        atoms = self._atoms
+        atom = atoms[n]
+        if atom.atomic_number != 1:
+            charge: int = self._charges[n]
+            is_radical = self._radicals[n]
+            explicit_sum = 0
+            explicit_dict = defaultdict(int)
+            for m, bond in self._bonds[n].items():
+                order = bond.order
+                if order == 4:  # aromatic rings not supported
+                    self._hydrogens[n] = None
+                    return
+                elif order != 8:  # any bond used for complexes
+                    explicit_sum += order
+                    explicit_dict[(order, atoms[m].atomic_number)] += 1
+            try:
+                rules = atom.valence_rules(charge, is_radical, explicit_sum)
+            except ValenceError:
+                self._hydrogens[n] = None
+                return
+            for s, d, h in rules:
+                if s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()):
+                    self._hydrogens[n] = h
+                    return
+        self._hydrogens[n] = 0
+
+    def __int__(self):
+        """
+        Total charge of molecule
+        """
+        return self.molecular_charge
+
+    def __float__(self):
+        return self.molecular_mass
+
+    def __xor__(self, other):
+        """
+        G ^ H is CGR generation
+        """
+        return self.compose(other)
+
+    def __and__(self, other: Iterable[int]):
+        """
+        Substructure of graph with given nodes.
+        """
+        return self.substructure(other)
+
+    def __sub__(self, other: Iterable[int]):
+        """
+        Given nodes excluded substructure of graph.
+        """
+        atoms = set(other)
+        if atoms - self._atoms.keys():
+            raise ValueError('invalid atom numbers')
+        atoms = self._atoms.keys() - atoms
+        if atoms:
+            return self.substructure(atoms)
+        raise ValueError('full substitution not allowed')
+
+    def __enter__(self):
+        """
+        Transaction of changes. Keep current state for restoring on errors.
+        """
+        atoms = {}
+        for n, atom in self._atoms.items():
+            atom = atom.copy()
+            atoms[n] = atom
+            atom._attach_to_graph(self, n)
+
+        bonds = {}
+        for n, m_bond in self._bonds.items():
+            bonds[n] = cbn = {}
+            for m, bond in m_bond.items():
+                if m in bonds:  # bond partially exists. need back-connection.
+                    cbn[m] = bonds[m][n]
+                else:
+                    cbn[m] = bond.copy()
+        self._backup = {'atoms': atoms, 'bonds': bonds, 'parsed_mapping': self._parsed_mapping.copy(),
+                        'plane': self._plane.copy(), 'charges': self._charges.copy(), 'radicals': self._radicals.copy(),
+                        'hydrogens': self._hydrogens.copy(), 'conformers': [x.copy() for x in self._conformers],
+                        'atoms_stereo': self._atoms_stereo.copy(), 'allenes_stereo': self._allenes_stereo.copy(),
+                        'cis_trans_stereo': self._cis_trans_stereo.copy()}
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:  # restore state
+            backup = self._backup
+            self._atoms = backup['atoms']
+            self._bonds = backup['bonds']
+            self._parsed_mapping = backup['parsed_mapping']
+            self._plane = backup['plane']
+            self._charges = backup['charges']
+            self._radicals = backup['radicals']
+            self._hydrogens = backup['hydrogens']
+            self._conformers = backup['conformers']
+            self._atoms_stereo = backup['atoms_stereo']
+            self._allenes_stereo = backup['allenes_stereo']
+            self._cis_trans_stereo = backup['cis_trans_stereo']
+            self.flush_cache()
+        del self._backup
+
     def __getstate__(self):
         return {'conformers': self._conformers, 'hydrogens': self._hydrogens, 'atoms_stereo': self._atoms_stereo,
                 'allenes_stereo': self._allenes_stereo, 'cis_trans_stereo': self._cis_trans_stereo,
-                'parsed_mapping': self._parsed_mapping, **super().__getstate__()}
+                'parsed_mapping': self._parsed_mapping, 'meta': self.__meta, 'name': self.__name,
+                **super().__getstate__()}
 
     def __setstate__(self, state):
         super().__setstate__(state)
@@ -883,6 +1065,8 @@ class MoleculeContainer(MoleculeStereo, Graph, Aromatize, StandardizeMolecule, M
         self._cis_trans_stereo = state['cis_trans_stereo']
         self._hydrogens = state['hydrogens']
         self._parsed_mapping = state['parsed_mapping']
+        self.__meta = state['meta']
+        self.__name = state['name']
 
     _fingerprint_config = {'min_radius': 2, 'max_radius': 4}  # set empty for disable screening
 

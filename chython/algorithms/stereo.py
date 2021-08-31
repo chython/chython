@@ -20,6 +20,7 @@ from CachedMethods import cached_property
 from collections import defaultdict, deque
 from logging import info
 from typing import Dict, Optional, Set, Tuple, Union, TYPE_CHECKING
+from .morgan import _morgan
 from ..exceptions import AtomNotFound, IsChiral, NotChiral
 
 
@@ -978,7 +979,7 @@ class MoleculeStereo(Stereo):
             axises = tmp
 
             if morgan_update:
-                morgan = self._morgan({**morgan, **morgan_update}, bonds)
+                morgan = _morgan({**morgan, **morgan_update}, bonds)
                 morgan_update = {}
             else:
                 return chiral_t, {(n, m) for n, *_, m in chiral_c}, {path[len(path) // 2] for path in chiral_a}, morgan

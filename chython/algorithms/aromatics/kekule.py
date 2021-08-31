@@ -332,145 +332,145 @@ class Kekule:
             components.append(component)
             atoms.difference_update(component)
 
-        for keks in lazy_product(*(self._kekule_component(c, double_bonded & c.keys(), pyroles & c.keys())
+        for keks in lazy_product(*(_kekule_component(c, double_bonded & c.keys(), pyroles & c.keys())
                                    for c in components)):
             yield [x for x in keks for x in x]
 
-    @staticmethod
-    def _kekule_component(rings, double_bonded, pyroles):
-        # (current atom, previous atom, bond between cp atoms, path deep for cutting [None if cut impossible])
-        stack: List[List[Tuple[int, int, int, Optional[int]]]]
-        if double_bonded:  # start from double bonded if exists
-            start = next(iter(double_bonded))
-            stack = [[(next(iter(rings[start])), start, 1, 0)]]
-        else:  # select not pyrole not condensed atom
+
+def _kekule_component(rings, double_bonded, pyroles):
+    # (current atom, previous atom, bond between cp atoms, path deep for cutting [None if cut impossible])
+    stack: List[List[Tuple[int, int, int, Optional[int]]]]
+    if double_bonded:  # start from double bonded if exists
+        start = next(iter(double_bonded))
+        stack = [[(next(iter(rings[start])), start, 1, 0)]]
+    else:  # select not pyrole not condensed atom
+        try:
+            start = next(n for n, ms in rings.items() if len(ms) == 2 and n not in pyroles)
+        except StopIteration:  # all pyroles. select not condensed atom.
             try:
-                start = next(n for n, ms in rings.items() if len(ms) == 2 and n not in pyroles)
-            except StopIteration:  # all pyroles. select not condensed atom.
-                try:
-                    start = next(n for n, ms in rings.items() if len(ms) == 2)
-                except StopIteration:  # fullerene?
-                    start = next(iter(rings))
-                    double_bonded.add(start)
-                    stack = [[(next_atom, start, 2, 0)] for next_atom in rings[start]]
-                else:
-                    stack = [[(next_atom, start, 1, 0)] for next_atom in rings[start]]
+                start = next(n for n, ms in rings.items() if len(ms) == 2)
+            except StopIteration:  # fullerene?
+                start = next(iter(rings))
+                double_bonded.add(start)
+                stack = [[(next_atom, start, 2, 0)] for next_atom in rings[start]]
             else:
                 stack = [[(next_atom, start, 1, 0)] for next_atom in rings[start]]
+        else:
+            stack = [[(next_atom, start, 1, 0)] for next_atom in rings[start]]
 
-        size = sum(len(x) for x in rings.values()) // 2
-        path = []
-        hashed_path = set()
-        nether_yielded = True
+    size = sum(len(x) for x in rings.values()) // 2
+    path = []
+    hashed_path = set()
+    nether_yielded = True
 
-        while stack:
-            atom, prev_atom, bond, _ = stack[-1].pop()
-            path.append((atom, prev_atom, bond))
-            hashed_path.add(atom)
+    while stack:
+        atom, prev_atom, bond, _ = stack[-1].pop()
+        path.append((atom, prev_atom, bond))
+        hashed_path.add(atom)
 
-            if len(path) == size:
-                yield path
-                if nether_yielded:
-                    nether_yielded = False
+        if len(path) == size:
+            yield path
+            if nether_yielded:
+                nether_yielded = False
+            del stack[-1]
+            if stack:
+                path = path[:stack[-1][-1][-1]]
+                hashed_path = {x for x, *_ in path}
+        elif atom != start:
+            for_stack = []
+            closures = []
+            loop = 0
+            for next_atom in rings[atom]:
+                if next_atom == prev_atom:  # only forward. behind us is the homeland
+                    continue
+                elif next_atom == start:
+                    loop = next_atom
+                elif next_atom in hashed_path:  # closure found
+                    closures.append(next_atom)
+                else:
+                    for_stack.append(next_atom)
+
+            if loop:  # we found starting point.
+                if bond == 2:  # finish should be single bonded
+                    if double_bonded:  # ok
+                        stack[-1].insert(0, (loop, atom, 1, None))
+                    else:
+                        del stack[-1]
+                        if stack:
+                            path = path[:stack[-1][-1][-1]]
+                            hashed_path = {x for x, *_ in path}
+                        continue
+                elif double_bonded:  # we in quinone ring. finish should be single bonded
+                    # side-path for storing double bond or atom is quinone or pyrole
+                    if for_stack or atom in double_bonded or atom in pyroles:
+                        stack[-1].insert(0, (loop, atom, 1, None))
+                    else:
+                        del stack[-1]
+                        if stack:
+                            path = path[:stack[-1][-1][-1]]
+                            hashed_path = {x for x, *_ in path}
+                        continue
+                else:  # finish should be double bonded
+                    stack[-1].insert(0, (loop, atom, 2, None))
+                    bond = 2  # grow should be single bonded
+
+            if bond == 2 or atom in double_bonded:  # double in - single out. quinone has two single bonds
+                for next_atom in closures:
+                    path.append((next_atom, atom, 1))  # closures always single-bonded
+                    stack[-1].remove((atom, next_atom, 1, None))  # remove fork from stack
+                for next_atom in for_stack:
+                    stack[-1].append((next_atom, atom, 1, None))
+            elif len(for_stack) == 1:  # easy path grow. next bond double or include single for pyroles
+                next_atom = for_stack[0]
+                if next_atom in double_bonded:  # need double bond, but next atom quinone
+                    if atom in pyroles:
+                        stack[-1].append((next_atom, atom, 1, None))
+                    else:
+                        del stack[-1]
+                        if stack:
+                            path = path[:stack[-1][-1][-1]]
+                            hashed_path = {x for x, *_ in path}
+                else:
+                    if atom in pyroles:  # try pyrole and pyridine
+                        opposite = stack[-1].copy()
+                        opposite.append((next_atom, atom, 2, None))
+                        stack[-1].append((next_atom, atom, 1, len(path)))
+                        stack.append(opposite)
+                    else:
+                        stack[-1].append((next_atom, atom, 2, None))
+                        if closures:
+                            next_atom = closures[0]
+                            path.append((next_atom, atom, 1))  # closures always single-bonded
+                            stack[-1].remove((atom, next_atom, 1, None))  # remove fork from stack
+            elif for_stack:  # fork
+                next_atom1, next_atom2 = for_stack
+                if next_atom1 in double_bonded:  # quinone next from fork
+                    if next_atom2 in double_bonded:  # bad path
+                        del stack[-1]
+                        if stack:
+                            path = path[:stack[-1][-1][-1]]
+                            hashed_path = {x for x, *_ in path}
+                    else:
+                        stack[-1].append((next_atom1, atom, 1, None))
+                        stack[-1].append((next_atom2, atom, 2, None))
+                elif next_atom2 in double_bonded:  # quinone next from fork
+                    stack[-1].append((next_atom2, atom, 1, None))
+                    stack[-1].append((next_atom1, atom, 2, None))
+                else:  # new path
+                    opposite = stack[-1].copy()
+                    stack[-1].append((next_atom1, atom, 1, None))
+                    stack[-1].append((next_atom2, atom, 2, len(path)))
+                    opposite.append((next_atom2, atom, 1, None))
+                    opposite.append((next_atom1, atom, 2, None))
+                    stack.append(opposite)
+            elif closures and atom not in pyroles:  # need double bond, but closure should be single bonded
                 del stack[-1]
                 if stack:
                     path = path[:stack[-1][-1][-1]]
                     hashed_path = {x for x, *_ in path}
-            elif atom != start:
-                for_stack = []
-                closures = []
-                loop = 0
-                for next_atom in rings[atom]:
-                    if next_atom == prev_atom:  # only forward. behind us is the homeland
-                        continue
-                    elif next_atom == start:
-                        loop = next_atom
-                    elif next_atom in hashed_path:  # closure found
-                        closures.append(next_atom)
-                    else:
-                        for_stack.append(next_atom)
 
-                if loop:  # we found starting point.
-                    if bond == 2:  # finish should be single bonded
-                        if double_bonded:  # ok
-                            stack[-1].insert(0, (loop, atom, 1, None))
-                        else:
-                            del stack[-1]
-                            if stack:
-                                path = path[:stack[-1][-1][-1]]
-                                hashed_path = {x for x, *_ in path}
-                            continue
-                    elif double_bonded:  # we in quinone ring. finish should be single bonded
-                        # side-path for storing double bond or atom is quinone or pyrole
-                        if for_stack or atom in double_bonded or atom in pyroles:
-                            stack[-1].insert(0, (loop, atom, 1, None))
-                        else:
-                            del stack[-1]
-                            if stack:
-                                path = path[:stack[-1][-1][-1]]
-                                hashed_path = {x for x, *_ in path}
-                            continue
-                    else:  # finish should be double bonded
-                        stack[-1].insert(0, (loop, atom, 2, None))
-                        bond = 2  # grow should be single bonded
-
-                if bond == 2 or atom in double_bonded:  # double in - single out. quinone has two single bonds
-                    for next_atom in closures:
-                        path.append((next_atom, atom, 1))  # closures always single-bonded
-                        stack[-1].remove((atom, next_atom, 1, None))  # remove fork from stack
-                    for next_atom in for_stack:
-                        stack[-1].append((next_atom, atom, 1, None))
-                elif len(for_stack) == 1:  # easy path grow. next bond double or include single for pyroles
-                    next_atom = for_stack[0]
-                    if next_atom in double_bonded:  # need double bond, but next atom quinone
-                        if atom in pyroles:
-                            stack[-1].append((next_atom, atom, 1, None))
-                        else:
-                            del stack[-1]
-                            if stack:
-                                path = path[:stack[-1][-1][-1]]
-                                hashed_path = {x for x, *_ in path}
-                    else:
-                        if atom in pyroles:  # try pyrole and pyridine
-                            opposite = stack[-1].copy()
-                            opposite.append((next_atom, atom, 2, None))
-                            stack[-1].append((next_atom, atom, 1, len(path)))
-                            stack.append(opposite)
-                        else:
-                            stack[-1].append((next_atom, atom, 2, None))
-                            if closures:
-                                next_atom = closures[0]
-                                path.append((next_atom, atom, 1))  # closures always single-bonded
-                                stack[-1].remove((atom, next_atom, 1, None))  # remove fork from stack
-                elif for_stack:  # fork
-                    next_atom1, next_atom2 = for_stack
-                    if next_atom1 in double_bonded:  # quinone next from fork
-                        if next_atom2 in double_bonded:  # bad path
-                            del stack[-1]
-                            if stack:
-                                path = path[:stack[-1][-1][-1]]
-                                hashed_path = {x for x, *_ in path}
-                        else:
-                            stack[-1].append((next_atom1, atom, 1, None))
-                            stack[-1].append((next_atom2, atom, 2, None))
-                    elif next_atom2 in double_bonded:  # quinone next from fork
-                        stack[-1].append((next_atom2, atom, 1, None))
-                        stack[-1].append((next_atom1, atom, 2, None))
-                    else:  # new path
-                        opposite = stack[-1].copy()
-                        stack[-1].append((next_atom1, atom, 1, None))
-                        stack[-1].append((next_atom2, atom, 2, len(path)))
-                        opposite.append((next_atom2, atom, 1, None))
-                        opposite.append((next_atom1, atom, 2, None))
-                        stack.append(opposite)
-                elif closures and atom not in pyroles:  # need double bond, but closure should be single bonded
-                    del stack[-1]
-                    if stack:
-                        path = path[:stack[-1][-1][-1]]
-                        hashed_path = {x for x, *_ in path}
-
-        if nether_yielded:
-            raise InvalidAromaticRing(f'kekule form not found for: {list(rings)}')
+    if nether_yielded:
+        raise InvalidAromaticRing(f'kekule form not found for: {list(rings)}')
 
 
 __all__ = ['Kekule']

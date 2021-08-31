@@ -16,13 +16,14 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from abc import ABC
 from typing import Type, Union
 from .core import Core
 from .element import Element
 from ...exceptions import IsNotConnectedAtom
 
 
-class DynamicElement(Core):
+class DynamicElement(Core, ABC):
     __slots__ = ('__p_charge', '__p_is_radical')
 
     @property
@@ -73,76 +74,6 @@ class DynamicElement(Core):
     def p_is_radical(self) -> bool:
         try:
             return self._graph()._p_radicals[self._map]
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @Core.charge.setter
-    def charge(self, charge):
-        try:
-            g = self._graph()
-            g._charges[self._map] = g._validate_charge(charge)
-            g.flush_cache()
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @p_charge.setter
-    def p_charge(self, charge):
-        try:
-            g = self._graph()
-            g._p_charges[self._map] = g._validate_charge(charge)
-            g.flush_cache()
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @Core.is_radical.setter
-    def is_radical(self, is_radical):
-        try:
-            g = self._graph()
-            g._radicals[self._map] = g._validate_radical(is_radical)
-            g.flush_cache()
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @p_is_radical.setter
-    def p_is_radical(self, is_radical):
-        try:
-            g = self._graph()
-            g._p_radicals[self._map] = g._validate_radical(is_radical)
-            g.flush_cache()
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @property
-    def hybridization(self):
-        """
-        Hybridization of atom
-        """
-        try:
-            return self._graph()._hybridizations[self._map]
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @property
-    def p_hybridization(self):
-        """
-        Product state hybridization of atom
-        """
-        try:
-            return self._graph()._p_hybridizations[self._map]
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @property
-    def neighbors(self):
-        try:
-            return self._graph().neighbors(self._map)[0]
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @property
-    def p_neighbors(self):
-        try:
-            return self._graph().neighbors(self._map)[1]
         except AttributeError:
             raise IsNotConnectedAtom
 

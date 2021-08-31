@@ -42,7 +42,7 @@ class MCS:
         hits = []
         max_atoms = 0
         max_bonds = 0
-        for mapping in islice(self.__clique(full_product), limit):
+        for mapping in islice(_clique(full_product), limit):
             if len(mapping) < max_atoms:
                 continue
             # search bonds count
@@ -91,48 +91,6 @@ class MCS:
             elif component == max_component:
                 hits2.append(mapping)
         yield from (dict(x) for x in hits2)
-
-    @staticmethod
-    def __clique(graph) -> Iterator[Set[Tuple[int, int]]]:
-        """
-        clique search
-
-        adopted from networkx algorithms.clique.find_cliques
-        """
-        subgraph = {x for x, y in graph.items() if y}  # skip isolated nodes
-        if not subgraph:
-            return  # empty or fully disconnected
-        elif len(subgraph) == 2:  # dimer
-            yield set(subgraph)
-            return
-
-        stack = []
-        clique_atoms = [None]
-        candidates = subgraph.copy()
-        roots = candidates - graph[max(subgraph, key=lambda x: len(graph[x]))]
-
-        while True:
-            if roots:
-                root = roots.pop()
-                candidates.remove(root)
-                clique_atoms[-1] = root
-                neighbors = graph[root]
-                neighbors_subgraph = subgraph & neighbors
-                if not neighbors_subgraph:
-                    yield set(clique_atoms)
-                else:
-                    neighbors_candidates = candidates & neighbors
-                    if neighbors_candidates:
-                        stack.append((subgraph, candidates, roots))
-                        clique_atoms.append(None)
-                        subgraph = neighbors_subgraph
-                        candidates = neighbors_candidates
-                        roots = candidates - graph[max(subgraph, key=lambda x: len(candidates & graph[x]))]
-            elif not stack:
-                return
-            else:
-                clique_atoms.pop()
-                subgraph, candidates, roots = stack.pop()
 
     def __get_product(self: 'molecule.MoleculeContainer', other: 'molecule.MoleculeContainer'):
         bonds = self._bonds
@@ -197,6 +155,48 @@ class MCS:
             atoms = new_atoms
 
         return core_product, full_product
+
+
+def _clique(graph) -> Iterator[Set[Tuple[int, int]]]:
+    """
+    clique search
+
+    adopted from networkx algorithms.clique.find_cliques
+    """
+    subgraph = {x for x, y in graph.items() if y}  # skip isolated nodes
+    if not subgraph:
+        return  # empty or fully disconnected
+    elif len(subgraph) == 2:  # dimer
+        yield set(subgraph)
+        return
+
+    stack = []
+    clique_atoms = [None]
+    candidates = subgraph.copy()
+    roots = candidates - graph[max(subgraph, key=lambda x: len(graph[x]))]
+
+    while True:
+        if roots:
+            root = roots.pop()
+            candidates.remove(root)
+            clique_atoms[-1] = root
+            neighbors = graph[root]
+            neighbors_subgraph = subgraph & neighbors
+            if not neighbors_subgraph:
+                yield set(clique_atoms)
+            else:
+                neighbors_candidates = candidates & neighbors
+                if neighbors_candidates:
+                    stack.append((subgraph, candidates, roots))
+                    clique_atoms.append(None)
+                    subgraph = neighbors_subgraph
+                    candidates = neighbors_candidates
+                    roots = candidates - graph[max(subgraph, key=lambda x: len(candidates & graph[x]))]
+        elif not stack:
+            return
+        else:
+            clique_atoms.pop()
+            subgraph, candidates, roots = stack.pop()
 
 
 __all__ = ['MCS']

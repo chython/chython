@@ -20,8 +20,13 @@ from abc import abstractmethod
 from collections import defaultdict, deque
 from functools import cached_property
 from itertools import permutations
-from typing import Dict, Iterator, Any, Set
+from typing import Any, Dict, Iterator, Set, TYPE_CHECKING, Union
 from .._functions import lazy_product
+from ..periodictable.element import Element, Query
+
+
+if TYPE_CHECKING:
+    from chython.containers.graph import Graph
 
 
 frequency = {1: 10,  # H
@@ -58,6 +63,14 @@ class Isomorphism:
 
     def __ge__(self, other):
         return other.is_substructure(self)
+
+    def __contains__(self: 'Graph', other: Union[Element, Query, str]):
+        """
+        Atom in Structure test.
+        """
+        if isinstance(other, str):
+            return any(other == x.atomic_symbol for x in self._atoms.values())
+        return any(other == x for x in self._atoms.values())
 
     def is_substructure(self, other, /, *, optimize: bool = True) -> bool:
         """
@@ -117,7 +130,7 @@ class Isomorphism:
                 candidate = self._isomorphism_candidates(other, 0, other_component)
                 if not candidate:
                     continue
-                for mapping in self._get_mapping(components[0], closures, o_atoms, o_bonds, candidate, o_order):
+                for mapping in _get_mapping(components[0], closures, o_atoms, o_bonds, candidate, o_order):
                     if automorphism_filter:
                         atoms = frozenset(mapping.values())
                         if atoms in seen:
@@ -131,7 +144,7 @@ class Isomorphism:
                     candidate = self._isomorphism_candidates(other, self_component, other_component)
                     if not candidate:
                         break
-                    mappers.append(self._get_mapping(component, closures, o_atoms, o_bonds, candidate, o_order))
+                    mappers.append(_get_mapping(component, closures, o_atoms, o_bonds, candidate, o_order))
                 else:
                     for match in lazy_product(*mappers):
                         mapping = match[0].copy()
@@ -151,87 +164,13 @@ class Isomorphism:
         """
         return set(other.connected_components[other_component])
 
-    @staticmethod
-    def _get_mapping(linear_query, query_closures, o_atoms, o_bonds, scope, groups):
-        size = len(linear_query) - 1
-        order_depth = {v[0]: k for k, v in enumerate(linear_query)}
-
-        stack = deque()
-        path = []
-        mapping = {}
-        reversed_mapping = {}
-
-        s_n, _, s_atom, _ = linear_query[0]
-        for n, o_atom in o_atoms.items():
-            if n in scope and s_atom == o_atom:
-                stack.append((n, 0))
-
-        while stack:
-            n, depth = stack.pop()
-            current = linear_query[depth][0]
-            if depth == size:
-                yield {current: n, **mapping}
-            else:
-                if len(path) != depth:
-                    for x in path[depth:]:
-                        del mapping[reversed_mapping.pop(x)]
-                    path = path[:depth]
-
-                path.append(n)
-                mapping[current] = n
-                reversed_mapping[n] = current
-
-                depth += 1
-                s_n, back, s_atom, s_bond = linear_query[depth]
-                if back != current:
-                    n = path[order_depth[back]]
-
-                uniq = set()
-                for o_n, o_bond in o_bonds[n].items():
-                    if o_n in scope and o_n not in reversed_mapping and s_bond == o_bond and groups[o_n] not in uniq:
-                        uniq.add(groups[o_n])
-                        if s_atom == o_atoms[o_n]:
-                            # check closures equality
-                            o_closures = o_bonds[o_n].keys() & reversed_mapping.keys()
-                            o_closures.discard(n)
-                            if o_closures == {mapping[m] for m, _ in query_closures[s_n]}:
-                                obon = o_bonds[o_n]
-                                if all(bond == obon[mapping[m]] for m, bond in query_closures[s_n]):
-                                    stack.append((o_n, depth))
-
     @cached_property
-    def _compiled_query(self):
-        components, closures = self.__compile_query(self._atoms, self._bonds,
-                                                    {n: atom_frequency(a) for n, a in self._atoms.items()})
+    def _compiled_query(self: 'Graph'):
+        components, closures = _compile_query(self._atoms, self._bonds,
+                                              {n: atom_frequency(a) for n, a in self._atoms.items()})
         if self.connected_components_count > 1:
             order = {x: n for n, c in enumerate(self.connected_components) for x in c}
             components.sort(key=lambda x: order[x[0][0]])
-        return components, closures
-
-    @staticmethod
-    def __compile_query(atoms, bonds, atoms_frequencies):
-        closures = defaultdict(list)
-        components = []
-        seen = set()
-        while len(seen) < len(atoms):
-            start = min(atoms.keys() - seen, key=lambda x: atoms_frequencies[x])
-            seen.add(start)
-            stack = [(n, start, atoms[n], bond) for n, bond in sorted(bonds[start].items(), reverse=True,
-                                                                      key=lambda x: atoms_frequencies[x[0]])]
-            order = [(start, None, atoms[start], None)]
-            components.append(order)
-
-            while stack:
-                front, back, *_ = atom = stack.pop()
-                if front not in seen:
-                    order.append(atom)
-                    for n, bond in sorted(bonds[front].items(), reverse=True, key=lambda x: atoms_frequencies[x[0]]):
-                        if n != back:
-                            if n not in seen:
-                                stack.append((n, front, atoms[n], bond))
-                            else:
-                                closures[front].append((n, bond))
-                    seen.add(front)
         return components, closures
 
     def is_automorphic(self):
@@ -244,33 +183,107 @@ class Isomorphism:
             return False
         return True
 
-    def get_automorphism_mapping(self) -> Iterator[Dict[int, int]]:
+    def get_automorphism_mapping(self: 'Graph') -> Iterator[Dict[int, int]]:
         """
         Iterator of all possible automorphism mappings.
         """
-        return self._get_automorphism_mapping(self.atoms_order, self._bonds,
-                                              {n: atom_frequency(a) for n, a in self._atoms.items()})
+        return _get_automorphism_mapping(self.atoms_order, self._bonds,
+                                         {n: atom_frequency(a) for n, a in self._atoms.items()})
 
-    @classmethod
-    def _get_automorphism_mapping(cls, atoms: Dict[int, int], bonds: Dict[int, Dict[int, Any]],
-                                  atoms_frequencies: Dict[int, int]) -> Iterator[Dict[int, int]]:
-        if len(atoms) == len(set(atoms.values())):
-            return  # all atoms unique
 
-        components, closures = cls.__compile_query(atoms, bonds, atoms_frequencies)
-        groups = {x: n for n, x in enumerate(atoms)}
-        mappers = [cls._get_mapping(order, closures, atoms, bonds, {x for x, *_ in order}, groups)
-                   for order in components]
-        if len(mappers) == 1:
-            for mapping in mappers[0]:
-                if any(k != v for k, v in mapping.items()):
-                    yield mapping
-        for match in lazy_product(*mappers):
-            mapping = match[0].copy()
-            for m in match[1:]:
-                mapping.update(m)
+def _get_automorphism_mapping(atoms: Dict[int, int], bonds: Dict[int, Dict[int, Any]],
+                              atoms_frequencies: Dict[int, int]) -> Iterator[Dict[int, int]]:
+    if len(atoms) == len(set(atoms.values())):
+        return  # all atoms unique
+
+    components, closures = _compile_query(atoms, bonds, atoms_frequencies)
+    groups = {x: n for n, x in enumerate(atoms)}
+    mappers = [_get_mapping(order, closures, atoms, bonds, {x for x, *_ in order}, groups)
+               for order in components]
+    if len(mappers) == 1:
+        for mapping in mappers[0]:
             if any(k != v for k, v in mapping.items()):
                 yield mapping
+    for match in lazy_product(*mappers):
+        mapping = match[0].copy()
+        for m in match[1:]:
+            mapping.update(m)
+        if any(k != v for k, v in mapping.items()):
+            yield mapping
+
+
+def _get_mapping(linear_query, query_closures, o_atoms, o_bonds, scope, groups):
+    size = len(linear_query) - 1
+    order_depth = {v[0]: k for k, v in enumerate(linear_query)}
+
+    stack = deque()
+    path = []
+    mapping = {}
+    reversed_mapping = {}
+
+    s_n, _, s_atom, _ = linear_query[0]
+    for n, o_atom in o_atoms.items():
+        if n in scope and s_atom == o_atom:
+            stack.append((n, 0))
+
+    while stack:
+        n, depth = stack.pop()
+        current = linear_query[depth][0]
+        if depth == size:
+            yield {current: n, **mapping}
+        else:
+            if len(path) != depth:
+                for x in path[depth:]:
+                    del mapping[reversed_mapping.pop(x)]
+                path = path[:depth]
+
+            path.append(n)
+            mapping[current] = n
+            reversed_mapping[n] = current
+
+            depth += 1
+            s_n, back, s_atom, s_bond = linear_query[depth]
+            if back != current:
+                n = path[order_depth[back]]
+
+            uniq = set()
+            for o_n, o_bond in o_bonds[n].items():
+                if o_n in scope and o_n not in reversed_mapping and s_bond == o_bond and groups[o_n] not in uniq:
+                    uniq.add(groups[o_n])
+                    if s_atom == o_atoms[o_n]:
+                        # check closures equality
+                        o_closures = o_bonds[o_n].keys() & reversed_mapping.keys()
+                        o_closures.discard(n)
+                        if o_closures == {mapping[m] for m, _ in query_closures[s_n]}:
+                            obon = o_bonds[o_n]
+                            if all(bond == obon[mapping[m]] for m, bond in query_closures[s_n]):
+                                stack.append((o_n, depth))
+
+
+def _compile_query(atoms, bonds, atoms_frequencies):
+    closures = defaultdict(list)
+    components = []
+    seen = set()
+    while len(seen) < len(atoms):
+        start = min(atoms.keys() - seen, key=lambda x: atoms_frequencies[x])
+        seen.add(start)
+        stack = [(n, start, atoms[n], bond) for n, bond in sorted(bonds[start].items(), reverse=True,
+                                                                  key=lambda x: atoms_frequencies[x[0]])]
+        order = [(start, None, atoms[start], None)]
+        components.append(order)
+
+        while stack:
+            front, back, *_ = atom = stack.pop()
+            if front not in seen:
+                order.append(atom)
+                for n, bond in sorted(bonds[front].items(), reverse=True, key=lambda x: atoms_frequencies[x[0]]):
+                    if n != back:
+                        if n not in seen:
+                            stack.append((n, front, atoms[n], bond))
+                        else:
+                            closures[front].append((n, bond))
+                seen.add(front)
+    return components, closures
 
 
 __all__ = ['Isomorphism']

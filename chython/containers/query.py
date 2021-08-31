@@ -20,7 +20,7 @@ from CachedMethods import cached_args_method
 from collections import defaultdict
 from functools import cached_property
 from itertools import chain, product
-from typing import List, Tuple, Union, Dict, Set
+from typing import Dict, List, Set, Tuple, Union
 from . import molecule  # cyclic imports resolve
 from .bonds import Bond, QueryBond
 from .graph import Graph
@@ -29,27 +29,35 @@ from ..algorithms.components import StructureComponents
 from ..algorithms.depict import DepictQuery
 from ..algorithms.smiles import QuerySmiles
 from ..algorithms.stereo import Stereo
-from ..periodictable import Element, QueryElement, AnyElement, ListElement
+from ..periodictable import AnyElement, AnyMetal, Element, ListElement, QueryElement
+from ..periodictable.element import Query
 
 
-class QueryContainer(Stereo, Graph, QuerySmiles, StructureComponents, DepictQuery, Calculate2DQuery):
+class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, StructureComponents, DepictQuery, Calculate2DQuery):
     __slots__ = ('_neighbors', '_hybridizations', '_atoms_stereo', '_cis_trans_stereo', '_allenes_stereo',
                  '_hydrogens', '_rings_sizes', '_heteroatoms')
 
+    _neighbors: Dict[int, Tuple[int, ...]]
+    _hybridizations: Dict[int, Tuple[int, ...]]
+    _atoms_stereo: Dict[int, bool]
+    _allenes_stereo: Dict[int, bool]
+    _cis_trans_stereo: Dict[Tuple[int, int], bool]
+    _hydrogens: Dict[int, Tuple[int, ...]]
+    _rings_sizes: Dict[int, Tuple[int, ...]]
+    _heteroatoms: Dict[int, Tuple[int, ...]]
+
     def __init__(self):
         super().__init__()
-        self._atoms: Dict[int, Union[QueryElement, AnyElement]] = {}
-        self._bonds: Dict[int, Dict[int, QueryBond]] = {}
-        self._neighbors: Dict[int, Tuple[int, ...]] = {}
-        self._hybridizations: Dict[int, Tuple[int, ...]] = {}
-        self._atoms_stereo: Dict[int, bool] = {}
-        self._allenes_stereo: Dict[int, bool] = {}
-        self._cis_trans_stereo: Dict[Tuple[int, int], bool] = {}
-        self._hydrogens: Dict[int, Tuple[int, ...]] = {}
-        self._rings_sizes: Dict[int, Tuple[int, ...]] = {}
-        self._heteroatoms: Dict[int, Tuple[int, ...]] = {}
+        self._neighbors = {}
+        self._hybridizations = {}
+        self._atoms_stereo = {}
+        self._allenes_stereo = {}
+        self._cis_trans_stereo = {}
+        self._hydrogens = {}
+        self._rings_sizes = {}
+        self._heteroatoms = {}
 
-    def add_atom(self, atom: Union[QueryElement, AnyElement, Element, int, str], *args,
+    def add_atom(self, atom: Union[Query, Element, int, str], *args,
                  neighbors: Union[int, List[int], Tuple[int, ...], None] = None,
                  hybridization: Union[int, List[int], Tuple[int, ...], None] = None,
                  hydrogens: Union[int, List[int], Tuple[int, ...], None] = None,
@@ -62,7 +70,7 @@ class QueryContainer(Stereo, Graph, QuerySmiles, StructureComponents, DepictQuer
         rings_sizes = self._validate_rings(rings_sizes)
         heteroatoms = self._validate_neighbors(heteroatoms)
 
-        if not isinstance(atom, (QueryElement, AnyElement)):
+        if not isinstance(atom, Query):
             if isinstance(atom, Element):
                 atom = QueryElement.from_atomic_number(atom.atomic_number)(atom.isotope)
             elif isinstance(atom, str):
@@ -151,63 +159,8 @@ class QueryContainer(Stereo, Graph, QuerySmiles, StructureComponents, DepictQuer
                 if (n in path or m in path) and c in self._allenes_stereo:
                     del self._allenes_stereo[c]
 
-    def remap(self, mapping, *, copy=False) -> 'QueryContainer':
-        h = super().remap(mapping, copy=copy)
-        mg = mapping.get
-        sn = self._neighbors
-        shg = self._hydrogens
-        srs = self._rings_sizes
-        sha = self._heteroatoms
-
-        if copy:
-            hn = h._neighbors
-            hh = h._hybridizations
-            has = h._atoms_stereo
-            hal = h._allenes_stereo
-            hcs = h._cis_trans_stereo
-            hhg = h._hydrogens
-            hrs = h._rings_sizes
-            hha = h._heteroatoms
-        else:
-            hn = {}
-            hh = {}
-            has = {}
-            hal = {}
-            hcs = {}
-            hhg = {}
-            hrs = {}
-            hha = {}
-
-        for n, hyb in self._hybridizations.items():
-            m = mg(n, n)
-            hn[m] = sn[n]
-            hh[m] = hyb
-            hhg[m] = shg[n]
-            hrs[m] = srs[n]
-            hha[m] = sha[n]
-
-        for n, stereo in self._atoms_stereo.items():
-            has[mg(n, n)] = stereo
-        for n, stereo in self._allenes_stereo.items():
-            hal[mg(n, n)] = stereo
-        for (n, m), stereo in self._cis_trans_stereo.items():
-            hcs[(mg(n, n), mg(m, m))] = stereo
-
-        if copy:
-            return h
-
-        self._neighbors = hn
-        self._hybridizations = hh
-        self._hydrogens = hhg
-        self._rings_sizes = hrs
-        self._heteroatoms = hha
-        self._atoms_stereo = has
-        self._allenes_stereo = hal
-        self._cis_trans_stereo = hcs
-        return self
-
-    def copy(self, **kwargs) -> 'QueryContainer':
-        copy = super().copy(**kwargs)
+    def copy(self) -> 'QueryContainer':
+        copy = super().copy()
         copy._neighbors = self._neighbors.copy()
         copy._hybridizations = self._hybridizations.copy()
         copy._hydrogens = self._hydrogens.copy()
@@ -218,54 +171,19 @@ class QueryContainer(Stereo, Graph, QuerySmiles, StructureComponents, DepictQuer
         copy._cis_trans_stereo = self._cis_trans_stereo.copy()
         return copy
 
-    def substructure(self, atoms, **kwargs) -> 'QueryContainer':
-        """
-        create substructure containing atoms from atoms list
-
-        :param atoms: list of atoms numbers of substructure
-        :param meta: if True metadata will be copied to substructure
-        """
-        sub, atoms = super().substructure(atoms, graph_type=self.__class__, atom_type=QueryElement,
-                                          bond_type=QueryBond, **kwargs)
-        sa = self._atoms
-        sb = self._bonds
-        sn = self._neighbors
-        sh = self._hybridizations
-        shg = self._hydrogens
-        srs = self._rings_sizes
-        sha = self._heteroatoms
-
-        sub._neighbors = {n: sn[n] for n in atoms}
-        sub._hybridizations = {n: sh[n] for n in atoms}
-        sub._hydrogens = {n: shg[n] for n in atoms}
-        sub._rings_sizes = {n: srs[n] for n in atoms}
-        sub._heteroatoms = {n: sha[n] for n in atoms}
-
-        lost = sa.keys() - set(atoms)  # atoms not in substructure
-        not_skin = {n for n in atoms if lost.isdisjoint(sb[n])}
-        sub._atoms_stereo = {n: s for n, s in self._atoms_stereo.items() if n in not_skin}
-        sub._allenes_stereo = {n: s for n, s in self._allenes_stereo.items() if
-                               not_skin.issuperset(self._stereo_allenes_paths[n]) and not_skin.issuperset(
-                                       x for x in self._stereo_allenes[n] if x)}
-        sub._cis_trans_stereo = {nm: s for nm, s in self._cis_trans_stereo.items() if
-                                 not_skin.issuperset(self._stereo_cis_trans_paths[nm]) and not_skin.issuperset(
-                                         x for x in self._stereo_cis_trans[nm] if x)}
-        return sub
-
-    def union(self, other, **kwargs) -> 'QueryContainer':
-        if isinstance(other, QueryContainer):
-            u, other = super().union(other, atom_type=QueryElement, bond_type=QueryBond, **kwargs)
-            u._neighbors.update(other._neighbors)
-            u._hybridizations.update(other._hybridizations)
-            u._hydrogens.update(other._hydrogens)
-            u._rings_sizes.update(other._rings_sizes)
-            u._atoms_stereo.update(other._atoms_stereo)
-            u._allenes_stereo.update(other._allenes_stereo)
-            u._cis_trans_stereo.update(other._cis_trans_stereo)
-            u._heteroatoms.update(other._heteroatoms)
-            return u
-        else:
+    def union(self, other: 'QueryContainer') -> 'QueryContainer':
+        if not isinstance(other, QueryContainer):
             raise TypeError('QueryContainer expected')
+        u = super().union(other)
+        u._neighbors.update(other._neighbors)
+        u._hybridizations.update(other._hybridizations)
+        u._hydrogens.update(other._hydrogens)
+        u._rings_sizes.update(other._rings_sizes)
+        u._atoms_stereo.update(other._atoms_stereo)
+        u._allenes_stereo.update(other._allenes_stereo)
+        u._cis_trans_stereo.update(other._cis_trans_stereo)
+        u._heteroatoms.update(other._heteroatoms)
+        return u
 
     def get_mapping(self, other: Union['QueryContainer', 'molecule.MoleculeContainer'], **kwargs):
         if isinstance(other, (QueryContainer, molecule.MoleculeContainer)):
@@ -315,7 +233,7 @@ class QueryContainer(Stereo, Graph, QuerySmiles, StructureComponents, DepictQuer
         Fingerprints of all possible simple queries. Used for isomorphism tests filtering.
         """
         params = molecule.MoleculeContainer._fingerprint_config
-        if not params or any(isinstance(a, AnyElement) and not isinstance(a, ListElement) for _, a in self.atoms()):
+        if not params or any(isinstance(a, (AnyElement, AnyMetal)) for _, a in self.atoms()):
             return ()  # skip queries with Any element
 
         fps = []

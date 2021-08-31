@@ -102,7 +102,7 @@ class MDLRead(MDLStereo, metaclass=MDLReadMeta):
 
     @property
     def __cache_path(self):
-        return abspath(join(gettempdir(), 'cgrtools_' + urlsafe_b64encode(abspath(self._file.name).encode()).decode()))
+        return abspath(join(gettempdir(), 'chython_' + urlsafe_b64encode(abspath(self._file.name).encode()).decode()))
 
     def read(self) -> List[Union[ReactionContainer, MoleculeContainer]]:
         """

@@ -19,6 +19,7 @@
 from collections import defaultdict
 from lazy_object_proxy import Proxy
 from typing import TYPE_CHECKING
+from ..rings import _sssr, _connected_components
 
 
 if TYPE_CHECKING:
@@ -183,10 +184,10 @@ class Thiele:
         if not rings:
             return False
 
-        n_sssr = sum(len(x) for x in rings.values()) // 2 - len(rings) + len(self._connected_components(rings))
+        n_sssr = sum(len(x) for x in rings.values()) // 2 - len(rings) + len(_connected_components(rings))
         if not n_sssr:
             return False
-        rings = self._sssr(rings, n_sssr)  # search rings again
+        rings = _sssr(rings, n_sssr)  # search rings again
 
         seen = set()
         for ring in rings:

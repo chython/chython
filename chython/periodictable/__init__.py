@@ -42,7 +42,7 @@ from .groupXVIII import *
 modules = {v.__name__: v for k, v in globals().items() if k.startswith('group') and k != 'groups'}
 elements = {k: v for k, v in globals().items() if isinstance(v, ABCMeta) and k != 'Element' and issubclass(v, Element)}
 
-__all__ = ['Element', 'DynamicElement', 'QueryElement', 'AnyElement', 'ListElement', 'AnyAtom', 'AnyMetal']
+__all__ = ['Element', 'DynamicElement', 'QueryElement', 'AnyElement', 'ListElement', 'AnyMetal']
 __all__.extend(k for k in globals() if k.startswith('Group'))
 __all__.extend(k for k in globals() if k.startswith('Period'))
 __all__.extend(elements)
@@ -53,8 +53,7 @@ for _class in (DynamicElement, QueryElement):
         name = f'{_class.__name__[:-7]}{k}'
         globals()[name] = cls = type(name, (_class, *v.__mro__[-3:-1]),
                                      {'__module__': v.__module__, '__slots__': (), 'atomic_number': v.atomic_number,
-                                      'isotopes_distribution': v.isotopes_distribution,
-                                      'isotopes_masses': v.isotopes_masses, 'atomic_radius': v.atomic_radius})
+                                      'atomic_radius': v.atomic_radius})
         setattr(modules[v.__module__], name, cls)
         modules[v.__module__].__all__.append(name)
         __all__.append(name)

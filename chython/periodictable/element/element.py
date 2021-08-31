@@ -16,43 +16,92 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from CachedMethods import class_cached_property
 from collections import defaultdict
-from typing import Optional, Tuple, Dict, Set, List, Type
+from typing import Dict, List, Optional, Set, Tuple, Type
 from .core import Core
 from ...exceptions import IsNotConnectedAtom, ValenceError
 
 
-class Element(Core):
+class Element(Core, ABC):
     __slots__ = ()
     __class_cache__ = {}
+
+    def __init__(self, isotope: Optional[int] = None):
+        """
+        Element object with specified isotope
+
+        :param isotope: Isotope number of element
+        """
+        if isinstance(isotope, int):
+            if isotope not in self.isotopes_distribution:
+                raise ValueError(f'isotope number {isotope} impossible or not stable for {self.atomic_symbol}')
+        elif isotope is not None:
+            raise TypeError('integer isotope number required')
+        super().__init__(isotope)
 
     @property
     def atomic_symbol(self) -> str:
         return self.__class__.__name__
 
+    @property
+    def atomic_mass(self) -> float:
+        mass = self.isotopes_masses
+        if self.__isotope is None:
+            return sum(x * mass[i] for i, x in self.isotopes_distribution.items())
+        return mass[self.__isotope]
+
+    @property
+    @abstractmethod
+    def isotopes_distribution(self) -> Dict[int, float]:
+        """
+        Isotopes distribution in earth
+        """
+
+    @property
+    @abstractmethod
+    def isotopes_masses(self) -> Dict[int, float]:
+        """
+        Isotopes masses
+        """
+
+    @property
+    @abstractmethod
+    def atomic_radius(self) -> float:
+        """
+        Valence radius of atom
+        """
+
     @Core.charge.setter
     def charge(self, charge: int):
+        if not isinstance(charge, int):
+            raise TypeError('formal charge should be int in range [-4, 4]')
+        elif charge > 4 or charge < -4:
+            raise ValueError('formal charge should be in range [-4, 4]')
         try:
             g = self._graph()
-            g._charges[self._map] = g._validate_charge(charge)
+            g._charges[self._map] = charge
+        except AttributeError:
+            raise IsNotConnectedAtom
+        else:
             g._calc_implicit(self._map)
             g.flush_cache()
             g._fix_stereo()
-        except AttributeError:
-            raise IsNotConnectedAtom
 
     @Core.is_radical.setter
     def is_radical(self, is_radical: bool):
+        if not isinstance(is_radical, bool):
+            raise TypeError('bool expected')
         try:
             g = self._graph()
-            g._radicals[self._map] = g._validate_radical(is_radical)
+            g._radicals[self._map] = is_radical
+        except AttributeError:
+            raise IsNotConnectedAtom
+        else:
             g._calc_implicit(self._map)
             g.flush_cache()
             g._fix_stereo()
-        except AttributeError:
-            raise IsNotConnectedAtom
 
     @property
     def implicit_hydrogens(self) -> Optional[int]:
@@ -84,6 +133,9 @@ class Element(Core):
 
     @property
     def neighbors(self) -> int:
+        """
+        Neighbors count of atom
+        """
         try:
             return self._graph().neighbors(self._map)
         except AttributeError:
@@ -91,8 +143,35 @@ class Element(Core):
 
     @property
     def hybridization(self):
+        """
+        1 - if atom has zero or only single bonded neighbors, 2 - if has only one double bonded neighbor and any amount
+        of single bonded, 3 - if has one triple bonded and any amount of double and single bonded neighbors or
+        two double bonded and any amount of single bonded neighbors, 4 - if atom in aromatic ring.
+        """
         try:
             return self._graph().hybridization(self._map)
+        except AttributeError:
+            raise IsNotConnectedAtom
+
+    @property
+    def ring_sizes(self) -> Tuple[int, ...]:
+        """
+        Atom rings sizes.
+        """
+        try:
+            return self._graph().atoms_rings_sizes[self._map]
+        except AttributeError:
+            raise IsNotConnectedAtom
+        except KeyError:
+            return ()
+
+    @property
+    def in_ring(self) -> bool:
+        """
+        Atom in any ring.
+        """
+        try:
+            return self._map in self._graph().ring_atoms
         except AttributeError:
             raise IsNotConnectedAtom
 
@@ -141,13 +220,6 @@ class Element(Core):
 
     def __hash__(self):
         return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.implicit_hydrogens or 0))
-
-    def __setstate__(self, state):
-        if 'charge' in state:  # 3.1
-            self._backward = (state['charge'], state['multiplicity'])
-            if isotopes[self.atomic_number - 1] == state['isotope']:
-                state['isotope'] = None
-        super().__setstate__(state)
 
     def valence_rules(self, charge: int, is_radical: bool, valence: int) -> \
             List[Tuple[Set[Tuple[int, 'Element']], Dict[Tuple[int, 'Element'], int], int]]:
