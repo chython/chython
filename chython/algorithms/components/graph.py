@@ -115,13 +115,13 @@ class GraphComponents:
         return adj
 
     @cached_property
-    def ring_atoms(self):
+    def ring_atoms(self) -> Set[int]:
         """
         Atoms in rings
         """
         bonds = self._skin_graph(self.not_special_connectivity)
         if not bonds:
-            return frozenset()
+            return set()
 
         in_rings = set()
         atoms = set(bonds)

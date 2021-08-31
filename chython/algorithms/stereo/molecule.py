@@ -506,8 +506,10 @@ class MoleculeStereo(Stereo):
 
     @cached_property
     def __chiral_centers(self: Union['MoleculeStereo', 'MoleculeContainer']):
+        atoms_rings = self.atoms_rings
+        cis_trans = self._stereo_cis_trans
+
         # get morgan weights with stereo information.
-        bonds = self.int_adjacency
         morgan = self.atoms_order
         atoms_stereo = set(self._atoms_stereo)
         cis_trans_stereo = set(self._cis_trans_stereo)
@@ -529,25 +531,23 @@ class MoleculeStereo(Stereo):
             for group in allenes_groups:
                 for n in group[:len(group) // 2]:  # set new weight in half of group randomly.
                     morgan[n] = -morgan[n]
-            morgan = self._morgan(morgan, bonds)
-
-        # find new chiral atoms and bonds.
+            morgan = self._morgan(morgan, self.int_adjacency)
+        # restore
         atoms_stereo = self._atoms_stereo
         cis_trans_stereo = self._cis_trans_stereo
         allenes_stereo = self._allenes_stereo
 
-        tetrahedrons = self._stereo_tetrahedrons
-        cis_trans = self._stereo_cis_trans
-        allenes_centers = self._stereo_allenes_centers
-        rings_tetrahedrons_linkers = self._rings_tetrahedrons_linkers
-        rings_cumulenes = self._rings_cumulenes
-
+        # find new chiral atoms and bonds.
         # tetrahedron is chiral if all its neighbors are unique.
-        chiral_t = {n for n, env in tetrahedrons.items()
+        chiral_t = {n for n, env in self._stereo_tetrahedrons.items()
                     if n not in atoms_stereo and len({morgan[x] for x in env}) == len(env)}
         # tetrahedrons-linkers is chiral if in each rings neighbors are unique.
-        chiral_t.update(n for n, (n1, n2, m1, m2) in rings_tetrahedrons_linkers.items()
+        chiral_t.update(n for n, (n1, n2, m1, m2) in self._rings_tetrahedrons_linkers.items()
                         if n not in atoms_stereo and morgan[n1] != morgan[n2] and morgan[m1] != morgan[m2])
+
+        # required for axes detection.
+        graph = {}
+        stereogenic = chiral_t.copy()
 
         # double bond is chiral if neighbors of each terminal atom is unique.
         # ring-linkers and rings-attached also takes into account.
@@ -555,41 +555,55 @@ class MoleculeStereo(Stereo):
         chiral_a = set()
         for path, (n1, m1, n2, m2) in self._stereo_cumulenes.items():
             if morgan[n1] != morgan.get(n2, 0) and morgan[m1] != morgan.get(m2, 0):
+                n, m = path[0], path[-1]
                 if len(path) % 2:
                     chiral_a.add(path[len(path) // 2])
                 else:
-                    chiral_c.add((path[0], path[-1]))
-        # ring cumulenes always chiral.
-        for nm in rings_cumulenes:
+                    chiral_c.add((n, m))
+                stereogenic.add(n)
+                stereogenic.add(m)
+        # ring cumulenes always chiral. can be already added.
+        for nm in self._rings_cumulenes:
+            n, m = nm
             if nm in cis_trans:
                 chiral_c.add(nm)
             else:
-                chiral_a.add(allenes_centers[nm[0]])
+                chiral_a.add(self._stereo_allenes_centers[n])
+            graph[n] = {m}
+            graph[m] = {n}
+            stereogenic.update(nm)
+        # skip already marked.
         chiral_a.difference_update(allenes_stereo)
         chiral_c.difference_update(cis_trans_stereo)
 
         # find chiral axes. build graph of stereogenic atoms in rings.
         # atoms connected then located in same ring or cumulene.
-        graph = {}
         for n, env in self._rings_tetrahedrons.items():
             if len(env) == 2:  # one or zero non-ring neighbors stereogenic.
                 n1, n2 = env
                 if morgan[n1] == morgan[n2]:  # only unique non-ring members required.
                     continue
             graph[n] = set()
+            stereogenic.add(n)  # non-linker tetrahedrons in rings - stereogenic.
         for n in self._rings_tetrahedrons_linkers:
             graph[n] = set()
+            # stereogenic atoms already found.
         for n, m in self._rings_cumulenes_linkers:
             graph[n] = {m}
             graph[m] = {n}
+            # stereogenic atoms already found.
         for (n, m), env in self._rings_cumulenes_attached.items():
             if len(env) == 2:
                 n1, n2 = env
                 if morgan[n1] == morgan[n2]:  # only unique non-ring members required.
                     continue
-            graph[n] = {m}
-            graph[m] = {n}
-
+            if n in atoms_rings:
+                graph[n] = set()  # non ring endpoints not required.
+                stereogenic.add(n)  # mark as stereogenic
+            else:
+                graph[m] = set()
+                stereogenic.add(m)
+        # add bonds
         return chiral_t, chiral_c, chiral_a, morgan
 
     def __chiral_groups_sifter(self: Union['MoleculeStereo', 'MoleculeContainer'], morgan,
