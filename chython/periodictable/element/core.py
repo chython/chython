@@ -17,25 +17,18 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, TypeVar
 from weakref import ref
 from ...exceptions import IsConnectedAtom, IsNotConnectedAtom
 
 
+T = TypeVar('T')
+
+
 class Core(ABC):
-    __slots__ = ('__isotope', '_graph', '_map', '_backward')
+    __slots__ = ('__isotope', '_graph', '_map')
 
     def __init__(self, isotope: Optional[int] = None):
-        """
-        Element object with specified isotope
-
-        :param isotope: Isotope number of element
-        """
-        if isinstance(isotope, int):
-            if isotope not in self.isotopes_distribution:
-                raise ValueError(f'isotope number {isotope} impossible or not stable for {self.__class__.__name__}')
-        elif isotope is not None:
-            raise TypeError('integer isotope number required')
         self.__isotope = isotope
 
     def __repr__(self):
@@ -57,6 +50,13 @@ class Core(ABC):
 
     @property
     @abstractmethod
+    def atomic_symbol(self) -> str:
+        """
+        Element symbol
+        """
+
+    @property
+    @abstractmethod
     def atomic_number(self) -> int:
         """
         Element number
@@ -68,34 +68,6 @@ class Core(ABC):
         Isotope number
         """
         return self.__isotope
-
-    @property
-    def atomic_mass(self) -> float:
-        mass = self.isotopes_masses
-        if self.__isotope is None:
-            return sum(x * mass[i] for i, x in self.isotopes_distribution.items())
-        return mass[self.__isotope]
-
-    @property
-    @abstractmethod
-    def isotopes_distribution(self) -> Dict[int, float]:
-        """
-        Isotopes distribution in earth
-        """
-
-    @property
-    @abstractmethod
-    def isotopes_masses(self) -> Dict[int, float]:
-        """
-        Isotopes masses
-        """
-
-    @property
-    @abstractmethod
-    def atomic_radius(self) -> float:
-        """
-        Valence radius of atom
-        """
 
     @property
     def charge(self) -> int:
@@ -147,45 +119,7 @@ class Core(ABC):
         except AttributeError:
             raise IsNotConnectedAtom
 
-    @property
-    @abstractmethod
-    def neighbors(self):
-        """
-        Neighbors count of atom
-        """
-
-    @property
-    @abstractmethod
-    def hybridization(self):
-        """
-        1 - if atom has zero or only single bonded neighbors, 2 - if has only one double bonded neighbor and any amount
-        of single bonded, 3 - if has one triple bonded and any amount of double and single bonded neighbors or
-        two double bonded and any amount of single bonded neighbors, 4 - if atom in aromatic ring.
-        """
-
-    @property
-    def in_ring(self) -> bool:
-        """
-        Atom in any ring.
-        """
-        try:
-            return self._map in self._graph().ring_atoms
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @property
-    def ring_sizes(self) -> Tuple[int, ...]:
-        """
-        Atom rings sizes.
-        """
-        try:
-            return self._graph().atoms_rings_sizes[self._map]
-        except AttributeError:
-            raise IsNotConnectedAtom
-        except KeyError:
-            return ()
-
-    def copy(self) -> 'Core':
+    def copy(self: T) -> T:
         """
         Detached from graph copy of element
         """

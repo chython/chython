@@ -21,16 +21,15 @@ from functools import reduce
 from hashlib import sha512
 from itertools import chain
 from operator import or_
-from typing import Dict, Iterable as TIterable, Iterator, Optional, Tuple
+from typing import Dict, Iterable, Iterator, Optional, Tuple
 from .cgr import CGRContainer
 from .molecule import MoleculeContainer
 from ..algorithms.calculate2d import Calculate2DReaction
-from ..algorithms.components import ReactionComponents
 from ..algorithms.depict import DepictReaction
 from ..algorithms.standardize import StandardizeReaction
 
 
-class ReactionContainer(StandardizeReaction, ReactionComponents, Calculate2DReaction, DepictReaction):
+class ReactionContainer(StandardizeReaction, Calculate2DReaction, DepictReaction):
     """
     Reaction storage. Contains reactants, products and reagents lists.
 
@@ -39,8 +38,8 @@ class ReactionContainer(StandardizeReaction, ReactionComponents, Calculate2DReac
     __slots__ = ('__reactants', '__products', '__reagents', '__meta', '__name', '_arrow', '_signs', '__dict__')
     __class_cache__ = {}
 
-    def __init__(self, reactants: TIterable[MoleculeContainer] = (), products: TIterable[MoleculeContainer] = (),
-                 reagents: TIterable[MoleculeContainer] = (), meta: Optional[Dict] = None, name: Optional[str] = None):
+    def __init__(self, reactants: Iterable[MoleculeContainer] = (), products: Iterable[MoleculeContainer] = (),
+                 reagents: Iterable[MoleculeContainer] = (), meta: Optional[Dict] = None, name: Optional[str] = None):
         """
         New reaction object creation
 
@@ -62,72 +61,15 @@ class ReactionContainer(StandardizeReaction, ReactionComponents, Calculate2DReac
         self.__products = products
         self.__reagents = reagents
         if meta is None:
-            self.__meta = {}
+            self.__meta = None
         else:
             self.__meta = dict(meta)
         if name is None:
-            self.__name = ''
+            self.__name = None
         else:
             self.name = name
         self._arrow = None
         self._signs = None
-
-    @classmethod
-    def from_cgr(cls, cgr: CGRContainer) -> 'ReactionContainer':
-        """
-        Decompose CGR into reaction
-        """
-        if not isinstance(cgr, CGRContainer):
-            raise TypeError('CGR expected')
-        r, p = ~cgr
-        reaction = object.__new__(cls)
-        reaction._ReactionContainer__reactants = tuple(r.split())
-        reaction._ReactionContainer__products = tuple(p.split())
-        reaction._ReactionContainer__reagents = ()
-        reaction._ReactionContainer__meta = cgr.meta.copy()
-        reaction._ReactionContainer__name = cgr.name
-        reaction._arrow = None
-        reaction._signs = None
-        return reaction
-
-    def __getitem__(self, item):
-        if item in ('reactants', 0):
-            return self.__reactants
-        elif item in ('products', 1):
-            return self.__products
-        elif item in ('reagents', 2):
-            return self.__reagents
-        elif item == 'meta':
-            return self.__meta
-        elif item == 'name':
-            return self.__name
-        raise KeyError('invalid attribute')
-
-    def __getstate__(self):
-        state = {'reactants': self.__reactants, 'products': self.__products, 'reagents': self.__reagents,
-                 'meta': self.__meta, 'name': self.__name, 'arrow': self._arrow, 'signs': self._signs}
-
-        if MoleculeContainer.__class_cache__.get('save_cache', False):
-            state['cache'] = self.__dict__
-        return state
-
-    def __setstate__(self, state):
-        self.__reactants = state['reactants']
-        self.__products = state['products']
-        self.__reagents = state['reagents']
-        self.__meta = state['meta']
-        self.__name = state['name']
-        self._arrow = state['arrow']
-        self._signs = state['signs']
-        if 'cache' in state:
-            self.__dict__.update(state['cache'])
-
-    @classmethod
-    def pickle_save_cache(cls, arg: bool):
-        """
-        Store cache of reaction into pickle for speedup loading
-        """
-        MoleculeContainer.__class_cache__['save_cache'] = arg
 
     @property
     def reactants(self) -> Tuple[MoleculeContainer, ...]:
@@ -153,11 +95,13 @@ class ReactionContainer(StandardizeReaction, ReactionComponents, Calculate2DReac
         Dictionary of metadata.
         Like DTYPE-DATUM in RDF
         """
+        if self.__meta is None:
+            self.__meta = {}  # lazy
         return self.__meta
 
     @property
     def name(self) -> str:
-        return self.__name
+        return self.__name or ''
 
     @name.setter
     def name(self, name: str):
@@ -196,9 +140,22 @@ class ReactionContainer(StandardizeReaction, ReactionComponents, Calculate2DReac
             p = reduce(or_, self.__products)
         else:
             p = MoleculeContainer()
-        c = r ^ p
-        c.meta.update(self.__meta)
-        return c
+        return r ^ p
+
+    @classmethod
+    def from_cgr(cls, cgr: CGRContainer) -> 'ReactionContainer':
+        """
+        Decompose CGR into reaction
+        """
+        if not isinstance(cgr, CGRContainer):
+            raise TypeError('CGR expected')
+        r, p = ~cgr
+        return ReactionContainer(r, p)
+
+    def flush_cache(self):
+        self.__dict__.clear()
+        for m in self.molecules():
+            m.flush_cache()
 
     def __invert__(self) -> CGRContainer:
         """
@@ -257,10 +214,24 @@ class ReactionContainer(StandardizeReaction, ReactionComponents, Calculate2DReac
     def __len__(self):
         return len(self.__reactants) + len(self.__products) + len(self.__reagents)
 
-    def flush_cache(self):
-        self.__dict__.clear()
-        for m in self.molecules():
-            m.flush_cache()
+    def __getstate__(self):
+        state = {'reactants': self.__reactants, 'products': self.__products, 'reagents': self.__reagents,
+                 'meta': self.__meta, 'name': self.__name, 'arrow': self._arrow, 'signs': self._signs}
+        import chython
+        if chython.pickle_cache:
+            state['cache'] = self.__dict__
+        return state
+
+    def __setstate__(self, state):
+        self.__reactants = state['reactants']
+        self.__products = state['products']
+        self.__reagents = state['reagents']
+        self.__meta = state['meta']
+        self.__name = state['name']
+        self._arrow = state['arrow']
+        self._signs = state['signs']
+        if 'cache' in state:
+            self.__dict__.update(state['cache'])
 
 
 __all__ = ['ReactionContainer']

@@ -121,7 +121,7 @@ class MOLRead:
                     else:
                         self.__log_buffer.append(f'ignored data: {x}')
                 except KeyError:
-                    raise ValueError(f'CGR spec invalid {x}')
+                    raise ValueError(f'Invalid SGROUP {x}')
             self.__mend = True
             return True
         else:

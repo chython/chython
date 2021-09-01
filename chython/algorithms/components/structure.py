@@ -33,15 +33,6 @@ class StructureComponents:
     __slots__ = ()
 
     @cached_property
-    def aromatic_rings(self: 'Graph') -> Tuple[Tuple[int, ...], ...]:
-        """
-        Aromatic rings atoms numbers
-        """
-        bonds = self._bonds
-        return tuple(ring for ring in self.sssr if bonds[ring[0]][ring[-1]] == 4
-                     and all(bonds[n][m] == 4 for n, m in zip(ring, ring[1:])))
-
-    @cached_property
     def cumulenes(self) -> Tuple[Tuple[int, ...], ...]:
         """
         Alkenes, allenes and cumulenes atoms numbers

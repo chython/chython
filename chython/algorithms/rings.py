@@ -16,11 +16,11 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
+from collections import defaultdict, deque
 from functools import cached_property
 from itertools import combinations
 from operator import itemgetter
-from typing import Any, Dict, Set, Tuple, Union, TYPE_CHECKING, Type, List, Optional, FrozenSet
+from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING, Union
 from ..exceptions import ImplementationError
 
 
@@ -28,37 +28,176 @@ if TYPE_CHECKING:
     from chython.containers.graph import Graph
 
 
-class SSSR:
-    """ SSSR calculation. based on idea of PID matrices from:
+class Rings:
+    __slots__ = ()
+
+    @cached_property
+    def sssr(self) -> Tuple[Tuple[int, ...], ...]:
+        """
+        Smallest Set of Smallest Rings. Special bonds ignored.
+
+        Based on idea of PID matrices from:
         Lee, C. J., Kang, Y.-M., Cho, K.-H., & No, K. T. (2009).
         A robust method for searching the smallest set of smallest rings with a path-included distance matrix.
         Proceedings of the National Academy of Sciences of the United States of America, 106(41), 17355–17358.
         https://doi.org/10.1073/pnas.0813040106
-    """
-    __slots__ = ()
-
-    @cached_property
-    def sssr(self: 'Graph') -> Tuple[Tuple[int, ...], ...]:
-        """
-        Smallest Set of Smallest Rings. Special bonds ignored.
 
         :return rings atoms numbers
         """
         if self.rings_count:
-            return self._sssr(self.not_special_connectivity, self.rings_count)
+            return _sssr(self.not_special_connectivity, self.rings_count)
         return ()
 
-    @classmethod
-    def _sssr(cls: Type[Union['Graph', 'SSSR']], bonds: Dict[int, Union[Set[int], FrozenSet[int], Dict[int, Any]]],
-              n_sssr: int) -> Tuple[Tuple[int, ...], ...]:
+    @cached_property
+    def aromatic_rings(self: 'Graph') -> Tuple[Tuple[int, ...], ...]:
         """
-        Smallest Set of Smallest Rings of any adjacency matrix.
-        Number of rings required.
+        Aromatic rings atoms numbers
         """
-        bonds = cls._skin_graph(bonds)
-        paths = _bfs(bonds)
-        pid1, pid2, dist = _make_pid(paths)
-        return _rings_filter(_c_set(pid1, pid2, dist), n_sssr)
+        bonds = self._bonds
+        return tuple(ring for ring in self.sssr if bonds[ring[0]][ring[-1]] == 4
+                     and all(bonds[n][m] == 4 for n, m in zip(ring, ring[1:])))
+
+    @cached_property
+    def atoms_rings(self) -> Dict[int, Tuple[Tuple[int, ...]]]:
+        """
+        Dict of atoms rings which contains it.
+        """
+        rings = defaultdict(list)
+        for r in self.sssr:
+            for n in r:
+                rings[n].append(r)
+        return {n: tuple(rs) for n, rs in rings.items()}
+
+    @cached_property
+    def atoms_rings_sizes(self) -> Dict[int, Tuple[int, ...]]:
+        """
+        Sizes of rings containing atom.
+        """
+        return {n: tuple(len(r) for r in rs) for n, rs in self.atoms_rings.items()}
+
+    @cached_property
+    def ring_atoms(self):
+        """
+        Atoms in rings. Not SSSR based fast algorithm.
+        """
+        bonds = _skin_graph(self.not_special_connectivity)
+        if not bonds:
+            return set()
+
+        in_rings = set()
+        atoms = set(bonds)
+        while atoms:
+            stack = deque([(atoms.pop(), 0, 0)])
+            path = []
+            seen = set()
+            while stack:
+                c, p, d = stack.pop()
+                if len(path) > d:
+                    path = path[:d]
+                if c in in_rings:
+                    continue
+                path.append(c)
+                seen.add(c)
+
+                d += 1
+                for n in bonds[c]:
+                    if n == p:
+                        continue
+                    elif n in seen:
+                        in_rings.update(path[path.index(n):])
+                    else:
+                        stack.append((n, c, d))
+
+            atoms.difference_update(seen)
+        return in_rings
+
+    @cached_property
+    def rings_count(self) -> int:
+        """
+        SSSR rings count. Ignored rings with special bonds.
+        """
+        bonds = self.not_special_connectivity
+        return sum(len(x) for x in bonds.values()) // 2 - len(bonds) + len(_connected_components(bonds))
+
+    @cached_property
+    def not_special_connectivity(self: 'Graph') -> Dict[int, Set[int]]:
+        """
+        Graph connectivity without special bonds.
+        """
+        bonds = {}
+        for n, ms in self._bonds.items():
+            bonds[n] = ngb = set()
+            for m, b in ms.items():
+                if b != 8:
+                    ngb.add(m)
+        return bonds
+
+    @cached_property
+    def connected_components(self: 'Graph') -> Tuple[Tuple[int, ...], ...]:
+        """
+        Isolated components of single graph. E.g. salts as ion pair.
+        """
+        if not self._atoms:
+            return ()
+        return tuple(tuple(x) for x in _connected_components(self._bonds))
+
+    @property
+    def connected_components_count(self) -> int:
+        """
+        Number of components in graph
+        """
+        return len(self.connected_components)
+
+    @cached_property
+    def skin_graph(self: 'Graph') -> Dict[int, Set[int]]:
+        """
+        Graph without terminal atoms. Only rings and linkers
+        """
+        return _skin_graph(self._bonds)
+
+
+def _sssr(bonds: Dict[int, Union[Set[int], Dict[int, Any]]], n_sssr: int) -> Tuple[Tuple[int, ...], ...]:
+    """
+    Smallest Set of Smallest Rings of any adjacency matrix.
+    Number of rings required.
+    """
+    bonds = _skin_graph(bonds)
+    paths = _bfs(bonds)
+    pid1, pid2, dist = _make_pid(paths)
+    return _rings_filter(_c_set(pid1, pid2, dist), n_sssr)
+
+
+def _connected_components(bonds: Dict[int, Union[Set[int], Dict[int, Any]]]) -> List[Set[int]]:
+    atoms = set(bonds)
+    components = []
+    while atoms:
+        start = atoms.pop()
+        seen = {start}
+        queue = deque([start])
+        while queue:
+            current = queue.popleft()
+            for i in bonds[current]:
+                if i not in seen:
+                    queue.append(i)
+                    seen.add(i)
+        components.append(seen)
+        atoms.difference_update(seen)
+    return components
+
+
+def _skin_graph(bonds: Dict[int, Union[Set[int], Dict[int, Any]]]) -> Dict[int, Set[int]]:
+    """
+    Graph without terminal nodes. Only rings and linkers
+    """
+    bonds = {n: set(ms) for n, ms in bonds.items() if ms}
+    while True:  # skip not-cycle chains
+        try:
+            n = next(n for n, ms in bonds.items() if len(ms) <= 1)
+        except StopIteration:
+            break
+        for m in bonds.pop(n):
+            bonds[m].discard(n)
+    return bonds
 
 
 def _bfs(bonds):
@@ -417,4 +556,4 @@ def _rings_filter(rings, n_sssr):
     raise ImplementationError('SSSR count not reached')
 
 
-__all__ = ['SSSR']
+__all__ = ['Rings']

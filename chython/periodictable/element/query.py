@@ -17,14 +17,45 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from typing import Tuple, Dict, Type, List, Union
+from abc import ABC
+from typing import Tuple, Type, List, Union
 from .core import Core
 from .element import Element
 from ...exceptions import IsNotConnectedAtom
 
 
-class Query(Core):
+_inorganic = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'F', 'Cl', 'Br', 'I', 'C', 'N', 'O',
+              'H', 'Si', 'P', 'S', 'Se', 'Ge', 'As', 'Sb', 'Te'}
+
+
+class Query(Core, ABC):
     __slots__ = ()
+
+    @Core.charge.setter
+    def charge(self, charge):
+        if not isinstance(charge, int):
+            raise TypeError('formal charge should be int in range [-4, 4]')
+        elif charge > 4 or charge < -4:
+            raise ValueError('formal charge should be in range [-4, 4]')
+        try:
+            g = self._graph()
+            g._charges[self._map] = charge
+        except AttributeError:
+            raise IsNotConnectedAtom
+        else:
+            g.flush_cache()
+
+    @Core.is_radical.setter
+    def is_radical(self, is_radical):
+        if not isinstance(is_radical, bool):
+            raise TypeError('bool expected')
+        try:
+            g = self._graph()
+            g._radicals[self._map] = is_radical
+        except AttributeError:
+            raise IsNotConnectedAtom
+        else:
+            g.flush_cache()
 
     @property
     def neighbors(self) -> Tuple[int, ...]:
@@ -45,18 +76,20 @@ class Query(Core):
         try:
             g = self._graph()
             g._neighbors[self._map] = g._validate_neighbors(neighbors)
-            g.flush_cache()
         except AttributeError:
             raise IsNotConnectedAtom
+        else:
+            g.flush_cache()
 
     @hybridization.setter
     def hybridization(self, hybridization):
         try:
             g = self._graph()
             g._hybridizations[self._map] = g._validate_hybridization(hybridization)
-            g.flush_cache()
         except AttributeError:
             raise IsNotConnectedAtom
+        else:
+            g.flush_cache()
 
     @property
     def heteroatoms(self) -> Tuple[int, ...]:
@@ -70,19 +103,10 @@ class Query(Core):
         try:
             g = self._graph()
             g._heteroatoms[self._map] = g._validate_neighbors(heteroatoms)
+        except AttributeError:
+            raise IsNotConnectedAtom
+        else:
             g.flush_cache()
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @property
-    def in_ring(self) -> bool:
-        """
-        Atom in any ring.
-        """
-        try:
-            return bool(self._graph()._rings_sizes[self._map]) or self._map in self._graph().ring_atoms
-        except AttributeError:
-            raise IsNotConnectedAtom
 
     @property
     def ring_sizes(self) -> Tuple[int, ...]:
@@ -101,9 +125,10 @@ class Query(Core):
         try:
             g = self._graph()
             g._rings_sizes[self._map] = g._validate_rings(ring_sizes)
-            g.flush_cache()
         except AttributeError:
             raise IsNotConnectedAtom
+        else:
+            g.flush_cache()
 
     @property
     def implicit_hydrogens(self) -> Tuple[int, ...]:
@@ -117,12 +142,13 @@ class Query(Core):
         try:
             g = self._graph()
             g._hydrogens[self._map] = g._validate_neighbors(implicit_hydrogens)
-            g.flush_cache()
         except AttributeError:
             raise IsNotConnectedAtom
+        else:
+            g.flush_cache()
 
 
-class QueryElement(Query):
+class QueryElement(Query, ABC):
     __slots__ = ()
 
     @property
@@ -130,12 +156,14 @@ class QueryElement(Query):
         return self.__class__.__name__[5:]
 
     @classmethod
-    def from_symbol(cls, symbol: str) -> Type[Union['QueryElement', 'AnyElement']]:
+    def from_symbol(cls, symbol: str) -> Type[Union['QueryElement', 'AnyElement', 'AnyMetal']]:
         """
         get Element class by its symbol
         """
         if symbol == 'A':
             return AnyElement
+        elif symbol == 'M':
+            return AnyMetal
         try:
             element = next(x for x in QueryElement.__subclasses__() if x.__name__ == f'Query{symbol}')
         except StopIteration:
@@ -143,12 +171,10 @@ class QueryElement(Query):
         return element
 
     @classmethod
-    def from_atomic_number(cls, number: int) -> Type[Union['QueryElement', 'AnyElement']]:
+    def from_atomic_number(cls, number: int) -> Type['QueryElement']:
         """
         get Element class by its number
         """
-        if number == 0:
-            return AnyElement
         try:
             element = next(x for x in QueryElement.__subclasses__() if x.atomic_number.fget(None) == number)
         except StopIteration:
@@ -156,55 +182,15 @@ class QueryElement(Query):
         return element
 
     @classmethod
-    def from_atom(cls, atom: Union['Element', 'QueryElement', 'AnyElement']) -> Union['QueryElement', 'AnyElement']:
+    def from_atom(cls, atom: Union['Element', 'Query']) -> 'Query':
         """
         get QueryElement or AnyElement object from Element object or copy of QueryElement or AnyElement
         """
         if isinstance(atom, Element):
             return cls.from_atomic_number(atom.atomic_number)(atom.isotope)
-        elif not isinstance(atom, (QueryElement, AnyElement)):
-            raise TypeError('Element, QueryElement or AnyElement expected')
+        elif not isinstance(atom, Query):
+            raise TypeError('Element or Query expected')
         return atom.copy()
-
-    @Core.charge.setter
-    def charge(self, charge):
-        try:
-            g = self._graph()
-            # remove stereo data
-            if self._map in g._atoms_stereo:
-                del g._atoms_stereo[self._map]
-            if g._cis_trans_stereo:
-                for nm, path in g._stereo_cis_trans_paths.items():
-                    if self._map in path and nm in g._cis_trans_stereo:
-                        del g._cis_trans_stereo[nm]
-            if g._allenes_stereo:
-                for c, path in g._stereo_allenes_paths.items():
-                    if self._map in path and c in g._allenes_stereo:
-                        del g._allenes_stereo[c]
-            g._charges[self._map] = g._validate_charge(charge)
-            g.flush_cache()
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @Core.is_radical.setter
-    def is_radical(self, is_radical):
-        try:
-            g = self._graph()
-            # remove stereo data
-            if self._map in g._atoms_stereo:
-                del g._atoms_stereo[self._map]
-            if g._cis_trans_stereo:
-                for nm, path in g._stereo_cis_trans_paths.items():
-                    if self._map in path and nm in g._cis_trans_stereo:
-                        del g._cis_trans_stereo[nm]
-            if g._allenes_stereo:
-                for c, path in g._stereo_allenes_paths.items():
-                    if self._map in path and c in g._allenes_stereo:
-                        del g._allenes_stereo[c]
-            g._radicals[self._map] = g._validate_radical(is_radical)
-            g.flush_cache()
-        except AttributeError:
-            raise IsNotConnectedAtom
 
     def __eq__(self, other):
         """
@@ -258,36 +244,6 @@ class AnyElement(Query):
     def atomic_number(self) -> int:
         return 0
 
-    @property
-    def isotopes_distribution(self) -> Dict[int, float]:
-        return {}
-
-    @property
-    def isotopes_masses(self) -> Dict[int, float]:
-        return {}
-
-    @property
-    def atomic_radius(self):
-        return 0.5
-
-    @Core.charge.setter
-    def charge(self, charge):
-        try:
-            g = self._graph()
-            g._charges[self._map] = g._validate_charge(charge)
-            g.flush_cache()
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @Core.is_radical.setter
-    def is_radical(self, is_radical):
-        try:
-            g = self._graph()
-            g._radicals[self._map] = g._validate_radical(is_radical)
-            g.flush_cache()
-        except AttributeError:
-            raise IsNotConnectedAtom
-
     def __eq__(self, other):
         """
         Compare attached to molecules elements and query elements
@@ -309,6 +265,8 @@ class AnyElement(Query):
                 if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
                     return False
                 return True
+        elif isinstance(other, AnyMetal):
+            return False
         elif isinstance(other, Query) and self.charge == other.charge and self.is_radical == other.is_radical \
                 and self.neighbors == other.neighbors and self.hybridization == other.hybridization \
                 and self.ring_sizes == other.ring_sizes and self.implicit_hydrogens == other.implicit_hydrogens \
@@ -321,20 +279,26 @@ class AnyElement(Query):
                      self.implicit_hydrogens, self.heteroatoms))
 
 
-class AnyMetal(AnyElement):
+class AnyMetal(Query):
     """
     Charge and radical ignored any metal. Rings, hydrogens and heteroatoms count also ignored.
 
     Class designed for d-elements matching in standardization.
     """
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
     @property
     def atomic_symbol(self) -> str:
         return 'M'
 
+    @property
+    def atomic_number(self) -> int:
+        return 0
+
     def __eq__(self, other):
         if isinstance(other, Element):
-            if other.atomic_symbol not in {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'F', 'Cl', 'Br', 'I', 'C', 'N', 'O', 'H', 'Si',
-                                           'P', 'S', 'Se', 'Ge', 'As', 'Sb', 'Te'}:
+            if other.atomic_symbol not in _inorganic:
                 if self.neighbors and other.neighbors not in self.neighbors:
                     return False
                 if self.hybridization and other.hybridization not in self.hybridization:
@@ -349,7 +313,7 @@ class AnyMetal(AnyElement):
         return hash((self.neighbors, self.hybridization))
 
 
-class ListElement(AnyElement):
+class ListElement(Query):
     __slots__ = ('_elements', '_numbers')
 
     def __init__(self, elements: List[str], *args, **kwargs):
@@ -363,6 +327,16 @@ class ListElement(AnyElement):
     @property
     def atomic_symbol(self) -> str:
         return ','.join(self._elements)
+
+    @property
+    def atomic_number(self) -> int:
+        return 0
+
+    def copy(self):
+        copy = super().copy()
+        copy._elements = self._elements
+        copy._numbers = self._numbers
+        return copy
 
     def __eq__(self, other):
         """
@@ -387,26 +361,16 @@ class ListElement(AnyElement):
                 if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
                     return False
                 return True
+        elif isinstance(other, (AnyElement, AnyMetal)):
+            return False
         elif isinstance(other, Query) and self.charge == other.charge and self.is_radical == other.is_radical \
                 and self.neighbors == other.neighbors and self.hybridization == other.hybridization \
                 and self.ring_sizes == other.ring_sizes and self.implicit_hydrogens == other.implicit_hydrogens \
                 and self.heteroatoms == other.heteroatoms:
             if isinstance(other, ListElement):
                 return self._numbers == other._numbers
-            if isinstance(other, AnyElement):
-                return True
             return other.atomic_number in self._numbers
         return False
-
-    def copy(self) -> 'ListElement':
-        """
-        Detached from graph copy of element
-        """
-        copy = object.__new__(self.__class__)
-        copy._Core__isotope = self._Core__isotope
-        copy._elements = self._elements
-        copy._numbers = self._numbers
-        return copy
 
     def __hash__(self):
         return hash((self._numbers, self.charge, self.is_radical, self.neighbors, self.hybridization,
@@ -427,4 +391,4 @@ class ListElement(AnyElement):
         return f'{self.__class__.__name__}([{",".join(self._elements)}])'
 
 
-__all__ = ['QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']
+__all__ = ['Query', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']

@@ -128,7 +128,7 @@ class Reactor(BaseReactor):
             new = self._patcher(united_chosen, mapping)
             collision = set(new).intersection(ignored)
             if collision:
-                new.remap(dict(zip(collision, count(max(max_ignored_number, max(new.atoms_numbers)) + 1))))
+                new.remap(dict(zip(collision, count(max(max_ignored_number, max(new)) + 1))))
 
             if split:
                 yield [new.substructure(c) for c in new._connected_components(new._bonds)]
@@ -142,7 +142,7 @@ class Reactor(BaseReactor):
         for structure in structures:
             intersection = set(structure).intersection(checked_atoms)
             if intersection:
-                mapping = dict(zip(intersection, count(max(max(checked_atoms), max(structure.atoms_numbers)) + 1)))
+                mapping = dict(zip(intersection, count(max(max(checked_atoms), max(structure)) + 1)))
                 structure = structure.remap(mapping, copy=True)
                 info('some atoms in input structures had the same numbers.\n'
                      f'atoms {list(mapping)} were remapped to {list(mapping.values())}')

@@ -446,14 +446,8 @@ class SMILESRead(Parser):
             if n in g_bonds[m]:
                 raise ValueError('atoms already bonded')
             g_bonds[n][m] = g_bonds[m][n] = b
-
-        if self._store_log:
-            log = self._format_log()
-            if log:
-                data['meta']['ParserLog'] = log
-        g.__setstate__({'atoms': g_atoms, 'bonds': g_bonds, 'meta': data['meta'], 'plane': plane,
-                        'charges': charges, 'radicals': radicals, 'name': '', 'p_charges': p_charges,
-                        'p_radicals': p_radicals, 'conformers': []})
+        g.__setstate__({'atoms': g_atoms, 'bonds': g_bonds, 'plane': plane, 'charges': charges, 'radicals': radicals,
+                        'p_charges': p_charges, 'p_radicals': p_radicals, 'conformers': []})
         return g
 
     @staticmethod

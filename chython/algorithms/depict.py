@@ -1010,9 +1010,6 @@ class DepictQuery(Depict):
         stroke_width_m = mapping_size * .1
         level_step = other_size * .8
 
-        # for cumulenes
-        cumulenes = {y for x in self._cumulenes(heteroatoms=True) if len(x) > 2 for y in x[1:-1]}
-
         svg = []
         maps = []
         symbols = []
@@ -1026,82 +1023,76 @@ class DepictQuery(Depict):
             x, y = plane[n]
             y = -y
             symbol = atom.atomic_symbol
-            if not bonds[n] or symbol != 'C' or carbon or charges[n] or radicals[n] or neighbors[n] \
-                    or hybridizations[n] or rings_sizes[n] or heteroatoms[n] or hydrogens[n] or n in cumulenes \
-                    or atom.isotope:
-                if charges[n]:
-                    others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_ci:.2f}" dy="-{dy_ci:.2f}">'
-                                  f'{_render_charge[charges[n]]}{"↑" if radicals[n] else ""}</text>')
-                elif radicals[n]:
-                    others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_ci:.2f}" dy="-{dy_ci:.2f}">↑</text>')
-                if atom.isotope:
-                    others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="-{dx_ci:.2f}" dy="-{dy_ci:.2f}" '
-                                  f'text-anchor="end">{atom.isotope}</text>')
+            if charges[n]:
+                others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_ci:.2f}" dy="-{dy_ci:.2f}">'
+                              f'{_render_charge[charges[n]]}{"↑" if radicals[n] else ""}</text>')
+            elif radicals[n]:
+                others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_ci:.2f}" dy="-{dy_ci:.2f}">↑</text>')
+            if atom.isotope:
+                others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="-{dx_ci:.2f}" dy="-{dy_ci:.2f}" '
+                              f'text-anchor="end">{atom.isotope}</text>')
 
-                if len(symbol) > 1:
-                    dx = font7
-                    dx_mm = dx_m + font5
-                    dx_nhh = dx_nh + font5
-                    if symbol[-1] in ('l', 'i', 'r', 't'):
-                        rx = font6
-                        ax = font25
-                    else:
-                        rx = font7
-                        ax = font15
-                    fill_zone.append(f'          <ellipse cx="{x - ax:.2f}" cy="{y:.2f}" rx="{rx}" ry="{font4}"/>')
+            if len(symbol) > 1:
+                dx = font7
+                dx_mm = dx_m + font5
+                dx_nhh = dx_nh + font5
+                if symbol[-1] in ('l', 'i', 'r', 't'):
+                    rx = font6
+                    ax = font25
                 else:
-                    if symbol == 'I':
-                        dx = font15
-                        dx_mm = dx_m
-                        dx_nhh = dx_nh
-                    else:
-                        dx = font4
-                        dx_mm = dx_m + font2
-                        dx_nhh = dx_nh + font2
-                    fill_zone.append(f'          <circle cx="{x:.2f}" cy="{y:.2f}" r="{font4:.2f}"/>')
-
-                h = hydrogens[n]
-                if h:
-                    dx_nhh += font_size + font3 * len(h)
-                    h = ''.join(str(x) for x in h)
-                    h = f'H<tspan  dy="{span_dy:.2f}" font-size="{span_size:.2f}">{h}</tspan>'
+                    rx = font7
+                    ax = font15
+                fill_zone.append(f'          <ellipse cx="{x - ax:.2f}" cy="{y:.2f}" rx="{rx}" ry="{font4}"/>')
+            else:
+                if symbol == 'I':
+                    dx = font15
+                    dx_mm = dx_m
+                    dx_nhh = dx_nh
                 else:
-                    h = ''
-                symbols.append(f'        <text id="{uid}-{n}" x="{x:.2f}" y="{y:.2f}" dx="-{dx:.2f}" dy="{font4:.2f}">'
-                               f'{symbol}{h}</text>')
+                    dx = font4
+                    dx_mm = dx_m + font2
+                    dx_nhh = dx_nh + font2
+                fill_zone.append(f'          <circle cx="{x:.2f}" cy="{y:.2f}" r="{font4:.2f}"/>')
 
-                svg.append(f'      <use xlink:href="#{uid}-{n}" fill="{atoms_colors[atom.atomic_number - 1]}"/>')
+            h = hydrogens[n]
+            if h:
+                dx_nhh += font_size + font3 * len(h)
+                h = ''.join(str(x) for x in h)
+                h = f'H<tspan  dy="{span_dy:.2f}" font-size="{span_size:.2f}">{h}</tspan>'
+            else:
+                h = ''
+            symbols.append(f'        <text id="{uid}-{n}" x="{x:.2f}" y="{y:.2f}" dx="-{dx:.2f}" dy="{font4:.2f}">'
+                           f'{symbol}{h}</text>')
 
-                if mapping:
-                    maps.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="-{dx_mm:.2f}" '
-                                f'dy="{dy_m + font3:.2f}">{n}</text>')
+            svg.append(f'      <use xlink:href="#{uid}-{n}" fill="{atoms_colors[atom.atomic_number - 1]}"/>')
 
-                if neighbors[n]:
-                    nn = ''.join(str(x) for x in neighbors[n])
-                    queries.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_nhh:.2f}" dy="0.0">{nn}</text>')
-                    level = level_step
-                else:
-                    level = 0.
+            if mapping:
+                maps.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="-{dx_mm:.2f}" '
+                            f'dy="{dy_m + font3:.2f}">{n}</text>')
 
-                if hybridizations[n]:
-                    hh = ''.join(_render_hybridization[x] for x in hybridizations[n])
-                    queries.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_nhh:.2f}" '
-                                   f'dy="{level:.2f}">{hh}</text>')
-                    level += level_step
+            if neighbors[n]:
+                nn = ''.join(str(x) for x in neighbors[n])
+                queries.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_nhh:.2f}" dy="0.0">{nn}</text>')
+                level = level_step
+            else:
+                level = 0.
 
-                if rings_sizes[n]:
-                    rs = ';'.join(str(x) for x in rings_sizes[n])
-                    queries.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_nhh:.2f}" '
-                                   f'dy="{level:.2f}">r{rs}</text>')
-                    level += level_step
+            if hybridizations[n]:
+                hh = ''.join(_render_hybridization[x] for x in hybridizations[n])
+                queries.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_nhh:.2f}" '
+                               f'dy="{level:.2f}">{hh}</text>')
+                level += level_step
 
-                if heteroatoms[n]:
-                    ha = ''.join(str(x) for x in heteroatoms[n])
-                    queries.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_nhh:.2f}" '
-                                   f'dy="{level:.2f}">h{ha}</text>')
+            if rings_sizes[n]:
+                rs = ';'.join(str(x) for x in rings_sizes[n])
+                queries.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_nhh:.2f}" '
+                               f'dy="{level:.2f}">r{rs}</text>')
+                level += level_step
 
-            elif mapping:
-                maps.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="-{dx_m:.2f}" dy="{dy_m:.2f}">{n}</text>')
+            if heteroatoms[n]:
+                ha = ''.join(str(x) for x in heteroatoms[n])
+                queries.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_nhh:.2f}" '
+                               f'dy="{level:.2f}">h{ha}</text>')
 
         if svg:  # group atoms symbols
             if fill_zone:

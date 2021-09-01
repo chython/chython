@@ -43,32 +43,32 @@ class Morgan:
         elif len(atoms) == 1:  # optimize single atom containers
             return dict.fromkeys(atoms, 1)
         ring = self.ring_atoms
-        return self._morgan({n: hash((hash(a), n in ring)) for n, a in atoms.items()}, self.int_adjacency)
+        return _morgan({n: hash((hash(a), n in ring)) for n, a in atoms.items()}, self.int_adjacency)
 
-    @staticmethod
-    def _morgan(atoms: Dict[int, int], bonds: Dict[int, Dict[int, int]]) -> Dict[int, int]:
-        tries = len(atoms) - 1
-        numb = len(set(atoms.values()))
-        stab = old_numb = 0
 
-        for _ in range(tries):
-            atoms = {n: hash((atoms[n], *(x for x in sorted((atoms[m], b) for m, b in ms.items()) for x in x)))
-                     for n, ms in bonds.items()}
-            old_numb, numb = numb, len(set(atoms.values()))
-            if numb == len(atoms):  # each atom now unique
+def _morgan(atoms: Dict[int, int], bonds: Dict[int, Dict[int, int]]) -> Dict[int, int]:
+    tries = len(atoms) - 1
+    numb = len(set(atoms.values()))
+    stab = old_numb = 0
+
+    for _ in range(tries):
+        atoms = {n: hash((atoms[n], *(x for x in sorted((atoms[m], b) for m, b in ms.items()) for x in x)))
+                 for n, ms in bonds.items()}
+        old_numb, numb = numb, len(set(atoms.values()))
+        if numb == len(atoms):  # each atom now unique
+            break
+        elif numb == old_numb:  # not changed. molecules like benzene
+            if stab == 3:
                 break
-            elif numb == old_numb:  # not changed. molecules like benzene
-                if stab == 3:
-                    break
-                stab += 1
-            elif stab:  # changed unique atoms number. reset stability check.
-                stab = 0
-        else:
-            if numb < old_numb:
-                warning('morgan. number of attempts exceeded. uniqueness has decreased.')
+            stab += 1
+        elif stab:  # changed unique atoms number. reset stability check.
+            stab = 0
+    else:
+        if numb < old_numb:
+            warning('morgan. number of attempts exceeded. uniqueness has decreased.')
 
-        return {n: i for i, (_, g) in enumerate(groupby(sorted(atoms.items(), key=itemgetter(1)), key=itemgetter(1)),
-                                                start=1) for n, _ in g}
+    return {n: i for i, (_, g) in enumerate(groupby(sorted(atoms.items(), key=itemgetter(1)), key=itemgetter(1)),
+                                            start=1) for n, _ in g}
 
 
 __all__ = ['Morgan']

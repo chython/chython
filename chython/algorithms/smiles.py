@@ -63,11 +63,6 @@ class Smiles(ABC):
         :param format_spec: String with keys:
             a - Generate asymmetric closures.
             !s - Disable stereo marks.
-            !h - Disable hybridization marks in queries. Returns non-unique signature.
-            !n - Disable neighbors marks in queries. Returns non-unique signature.
-            !H - Disable hydrogens marks in queries. Returns non-unique signature.
-            !R - Disable rings marks in queries. Returns non-unique signature.
-            !t - Disable heteroatoms marks in queries. Returns non-unique signature.
             A - Use aromatic bonds instead aromatic atoms.
             m - Set atom mapping.
             r - Generate random-ordered smiles.
@@ -81,20 +76,10 @@ class Smiles(ABC):
                 kwargs['asymmetric_closures'] = True
             if '!s' in format_spec:
                 kwargs['stereo'] = False
-            if '!h' in format_spec:
-                kwargs['hybridization'] = False
-            if '!n' in format_spec:
-                kwargs['neighbors'] = False
             if 'A' in format_spec:
                 kwargs['aromatic'] = False
             if 'm' in format_spec:
                 kwargs['mapping'] = True
-            if '!H' in format_spec:
-                kwargs['hydrogens'] = False
-            if '!R' in format_spec:
-                kwargs['rings'] = False
-            if '!t' in format_spec:
-                kwargs['heteroatoms'] = False
             if 'r' in format_spec:
                 kwargs['random'] = True
 
@@ -423,13 +408,9 @@ class CGRSmiles(Smiles):
         p_charge = self._p_charges[n]
         p_is_radical = self._p_radicals[n]
         if atom.isotope:
-            smi = [str(atom.isotope)]
+            smi = [str(atom.isotope), atom.atomic_symbol]
         else:
-            smi = []
-        if kwargs.get('aromatic', True) and (self._hybridizations[n] == 4 or self._p_hybridizations[n] == 4):
-            smi.append(atom.atomic_symbol.lower())
-        else:
-            smi.append(atom.atomic_symbol)
+            smi = [atom.atomic_symbol]
 
         if charge or p_charge:
             smi.append(dyn_charge_str[(charge, p_charge)])
@@ -443,14 +424,7 @@ class CGRSmiles(Smiles):
 
     def _format_bond(self: 'CGRContainer', n, m, **kwargs):
         bond = self._bonds[n][m]
-        order, p_order = bond.order, bond.p_order
-        if kwargs.get('aromatic', True):
-            if order == p_order == 4:
-                return ''
-            elif order == p_order == 1 and (self._hybridizations[n] == 4 or self._p_hybridizations[n] == 4) and \
-                    (self._hybridizations[m] == 4 or self._p_hybridizations[m] == 4):
-                return '-'
-        return dyn_order_str[(order, p_order)]
+        return dyn_order_str[(bond.order, bond.p_order)]
 
 
 class QuerySmiles(Smiles):
@@ -474,26 +448,26 @@ class QuerySmiles(Smiles):
         else:
             smi = ['[', atom.atomic_symbol]
 
-        if kwargs.get('stereo', True) and n in self._atoms_stereo:  # carbon only
+        if n in self._atoms_stereo:  # carbon only
             smi.append('@' if self._translate_tetrahedron_sign(n, kwargs['adjacency'][n]) else '@@')
 
-        if kwargs.get('neighbors', True) and neighbors:
+        if neighbors:
             smi.append(';D')
             smi.append(''.join(str(x) for x in neighbors))
 
-        if kwargs.get('hydrogens', True) and hydrogens:
+        if hydrogens:
             smi.append(';H')
             smi.append(''.join(str(x) for x in hydrogens))
 
-        if kwargs.get('rings', True) and rings:
+        if rings:
             smi.append(';r')
             smi.append(''.join(str(x) for x in rings))
 
-        if kwargs.get('hybridization', True) and hybridization:
+        if hybridization:
             smi.append(';Z')
             smi.append(''.join(hybridization_str[x] for x in hybridization))
 
-        if kwargs.get('heteroatoms', True) and heteroatoms:
+        if heteroatoms:
             smi.append(';W')
             smi.append(''.join(str(x) for x in heteroatoms))
 

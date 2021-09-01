@@ -18,14 +18,10 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from typing import Union
 from .core import *
 from .element import *
 from .query import *
 from .dynamic import *
 
 
-AnyAtom = Union[Element, DynamicElement, QueryElement, AnyElement, AnyMetal, ListElement]
-
-
-__all__ = ['Core', 'Element', 'DynamicElement', 'QueryElement', 'AnyElement', 'AnyMetal', 'AnyAtom', 'ListElement']
+__all__ = ['Core', 'Element', 'DynamicElement', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']

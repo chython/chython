@@ -162,8 +162,9 @@ class Parser:
             n = mapping[n]
             atoms[n] = Element.from_symbol(atom['element'])(atom['isotope'])
             bonds[n] = {}
-
-            charges[n] = g._validate_charge(atom['charge'])
+            if (charge := atom['charge']) > 4 or charge < -4:
+                raise ValueError('formal charge should be in range [-4, 4]')
+            charges[n] = charge
             radicals[n] = atom['is_radical']
             plane[n] = (atom['x'], atom['y'])
             pm[n] = atom['mapping']

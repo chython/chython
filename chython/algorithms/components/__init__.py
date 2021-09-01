@@ -16,10 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .cgr import *
-from .graph import *
-from .reaction import *
 from .structure import *
 
 
-__all__ = ['GraphComponents', 'StructureComponents', 'CGRComponents', 'ReactionComponents']
+__all__ = ['StructureComponents']

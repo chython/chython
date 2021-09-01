@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2018-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,8 +20,9 @@
 from CachedMethods import class_cached_property
 from collections import defaultdict
 from itertools import count
-from typing import List, TYPE_CHECKING, Union, Tuple, Type
+from typing import List, Tuple, Type, TYPE_CHECKING, Union
 from ._mapping import rules as mapping_rules
+from ...exceptions import MappingError
 
 
 if TYPE_CHECKING:
@@ -278,10 +280,11 @@ class StandardizeReaction:
                 raise ValueError('bad and good reaction should be equal')
 
             cgr_good, cgr_bad = ~good, ~bad
-            gc = cgr_good.augmented_substructure(cgr_good.center_atoms, deep=1)
-            bc = cgr_bad.augmented_substructure(cgr_bad.center_atoms, deep=1)
-
-            atoms = set(bc.atoms_numbers + gc.atoms_numbers)
+            gc = cgr_good.substructure({y for x in cgr_good.center_atoms for y in cgr_good._bonds[x]} |
+                                       set(cgr_good.center_atoms))
+            bc = cgr_bad.substructure({y for x in cgr_bad.center_atoms for y in cgr_bad._bonds[x]} |
+                                      set(cgr_bad.center_atoms))
+            atoms = set(bc) | set(gc)
 
             pr_g, pr_b, re_g, re_b = set(), set(), set(), set()
             for pr in good.products:
@@ -373,6 +376,149 @@ class StandardizeReaction:
         if total:
             self.flush_cache()
         return total
+
+    def remove_reagents(self: 'ReactionContainer', *, keep_reagents: bool = False) -> bool:
+        """
+        Preprocess reaction according to mapping, using the following idea: molecules(each separated graph) will be
+        placed to reagents if it is not changed in the reaction (no bonds, charges reorders)
+
+        Return True if any reagent found.
+        """
+        cgr = ~self
+        if cgr.center_atoms:
+            active = set(cgr.center_atoms)
+            reactants = []
+            products = []
+            reagents = set(self.reagents)
+            for i in self.reactants:
+                if not active.isdisjoint(i):
+                    reactants.append(i)
+                else:
+                    reagents.add(i)
+            for i in self.products:
+                if not active.isdisjoint(i):
+                    products.append(i)
+                else:
+                    reagents.add(i)
+            if keep_reagents:
+                tmp = []
+                for m in self.reagents:
+                    if m in reagents:
+                        tmp.append(m)
+                        reagents.discard(m)
+                tmp.extend(reagents)
+                reagents = tuple(tmp)
+            else:
+                reagents = ()
+
+            if len(reactants) != len(self.reactants) or len(products) != len(self.products) or \
+                    len(reagents) != len(self.reagents):
+                self._ReactionContainer__reactants = tuple(reactants)
+                self._ReactionContainer__products = tuple(products)
+                self._ReactionContainer__reagents = reagents
+                self.flush_cache()
+                self.fix_positions()
+                return True
+            return False
+        raise MappingError("Reaction center is absent according to mapping")
+
+    def contract_ions(self: 'ReactionContainer') -> bool:
+        """
+        Contract ions into salts (Molecules with disconnected components).
+        Note: works only for unambiguous cases. e.g. equal anions/cations and different or equal cations/anions.
+
+        Return True if any ions contracted.
+        """
+        neutral, cations, anions, total = _sift_ions(self.reagents)
+        salts = _contract_ions(anions, cations, total)
+        if salts:
+            neutral.extend(salts)
+            self._ReactionContainer__reagents = tuple(neutral)
+            changed = True
+        else:
+            changed = False
+
+        neutral, cations, anions, total = _sift_ions(self.reactants)
+        salts = _contract_ions(anions, cations, total)
+        if salts:
+            anions_order = {frozenset(m): n for n, m in enumerate(anions)}
+            cations_order = {frozenset(m): n for n, m in enumerate(cations)}
+            neutral.extend(salts)
+            self._ReactionContainer__reactants = tuple(neutral)
+            changed = True
+        else:
+            anions_order = cations_order = {}
+
+        neutral, cations, anions, total = _sift_ions(self.products)
+        if cations and anions:
+            anions.sort(key=lambda x: anions_order.get(frozenset(x), -1))
+            cations.sort(key=lambda x: cations_order.get(frozenset(x), -1))
+        salts = _contract_ions(anions, cations, total)
+        if salts:
+            neutral.extend(salts)
+            self._ReactionContainer__products = tuple(neutral)
+            changed = True
+
+        if changed:
+            self.flush_cache()
+            self.fix_positions()
+            return True
+        return False
+
+
+def _sift_ions(mols):
+    anions = []
+    cations = []
+    neutral = []
+    total = 0
+    for m in mols:
+        c = int(m)
+        total += c
+        if c > 0:
+            cations.append(m)
+        elif c < 0:
+            anions.append(m)
+        else:
+            neutral.append(m)
+    return neutral, cations, anions, total
+
+
+def _contract_ions(anions, cations, total):
+    salts = []
+    if not anions or not cations:  # nothing to contract
+        return
+    # check ambiguous cases
+    if total > 0:
+        if len(cations) > 1:  # deficit of anions
+            return
+    elif total < 0:
+        if len(anions) > 1:  # deficit of cations
+            return
+    elif len(set(anions)) > 1 and len(set(cations)) > 1:  # different anions and cations
+        return
+
+    anions = anions.copy()
+    cations = cations.copy()
+    while anions:
+        ct = cations.pop()
+        an = anions.pop()
+        shift_x = ct._fix_plane_mean(0) + 1
+        shift_x = an._fix_plane_mean(shift_x)
+        salt = ct | an
+        while True:
+            c = int(salt)
+            if c > 0:
+                an = anions.pop()
+                shift_x = an._fix_plane_mean(shift_x) + 1
+                salt = salt | an
+            elif c < 0:
+                ct = cations.pop()
+                shift_x = ct._fix_plane_mean(shift_x) + 1
+                salt = salt | ct
+            else:
+                break
+        salts.append(salt)
+    return salts
 
 
 __all__ = ['StandardizeReaction']
