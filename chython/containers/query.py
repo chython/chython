@@ -25,7 +25,6 @@ from . import molecule  # cyclic imports resolve
 from .bonds import Bond, QueryBond
 from .graph import Graph
 from ..algorithms.calculate2d import Calculate2DQuery
-from ..algorithms.components import StructureComponents
 from ..algorithms.depict import DepictQuery
 from ..algorithms.smiles import QuerySmiles
 from ..algorithms.stereo import Stereo
@@ -33,7 +32,7 @@ from ..periodictable import AnyElement, AnyMetal, Element, ListElement, QueryEle
 from ..periodictable.element import Query
 
 
-class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, StructureComponents, DepictQuery, Calculate2DQuery):
+class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, Calculate2DQuery):
     __slots__ = ('_neighbors', '_hybridizations', '_atoms_stereo', '_cis_trans_stereo', '_allenes_stereo',
                  '_hydrogens', '_rings_sizes', '_heteroatoms')
 
