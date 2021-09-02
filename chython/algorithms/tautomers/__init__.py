@@ -68,7 +68,7 @@ class Tautomers:
         self._hydrogens.update(mol._hydrogens)
         self.flush_cache()
         if fix_stereo:
-            self._fix_stereo()
+            self.fix_stereo()
         if logging:
             return changed
         return True
@@ -166,7 +166,7 @@ class Tautomers:
             out._atoms_stereo.update(atoms_stereo)
             out._allenes_stereo.update(allenes_stereo)
             out._cis_trans_stereo.update(cis_trans_stereo)
-            out._fix_stereo()
+            out.fix_stereo()
             yield out  # no cache
         else:
             yield thiele
@@ -199,7 +199,7 @@ class Tautomers:
                 out._atoms_stereo.update(atoms_stereo)
                 out._allenes_stereo.update(allenes_stereo)
                 out._cis_trans_stereo.update(cis_trans_stereo)
-                out._fix_stereo()
+                out.fix_stereo()
                 yield out
             else:
                 yield thiele
@@ -249,7 +249,7 @@ class Tautomers:
                             thiele._atoms_stereo.update(atoms_stereo)
                             thiele._allenes_stereo.update(allenes_stereo)
                             thiele._cis_trans_stereo.update(cis_trans_stereo)
-                            thiele._fix_stereo()
+                            thiele.fix_stereo()
                         yield thiele
                         break
                     elif current is not copy and ket:  # prevent carbonyl migration in sugars. skip entry point.
@@ -265,7 +265,7 @@ class Tautomers:
                         thiele._atoms_stereo.update(atoms_stereo)
                         thiele._allenes_stereo.update(allenes_stereo)
                         thiele._cis_trans_stereo.update(cis_trans_stereo)
-                        thiele._fix_stereo()
+                        thiele.fix_stereo()
                     yield thiele
                     counter += 1
                     if counter == limit:
@@ -290,7 +290,7 @@ class Tautomers:
                         mol._atoms_stereo.update(atoms_stereo)
                         mol._allenes_stereo.update(allenes_stereo)
                         mol._cis_trans_stereo.update(cis_trans_stereo)
-                        mol._fix_stereo()
+                        mol.fix_stereo()
                     yield mol
                     counter += 1
                     if counter == limit:
@@ -317,7 +317,7 @@ class Tautomers:
                         mol._atoms_stereo.update(atoms_stereo)
                         mol._allenes_stereo.update(allenes_stereo)
                         mol._cis_trans_stereo.update(cis_trans_stereo)
-                        mol._fix_stereo()
+                        mol.fix_stereo()
                     yield mol
                     counter += 1
                     if counter == limit:

@@ -61,14 +61,14 @@ class Stereo:
     @cached_property
     def cumulenes(self) -> Tuple[Tuple[int, ...], ...]:
         """
-        Alkenes, allenes and cumulenes atoms numbers
+        Alkenes, allenes and cumulenes atoms numbers.
         """
         return tuple(self._cumulenes())
 
     @cached_property
     def tetrahedrons(self: 'Container') -> Tuple[int, ...]:
         """
-        Carbon sp3 atoms numbers
+        Carbon sp3 atoms numbers.
         """
         atoms = self._atoms
         bonds = self._bonds
@@ -87,7 +87,7 @@ class Stereo:
 
     def clean_stereo(self: 'Container'):
         """
-        Remove stereo data
+        Remove stereo data.
         """
         self._atoms_stereo.clear()
         self._allenes_stereo.clear()

@@ -179,7 +179,7 @@ class BaseReactor:
                     continue
                 new._cis_trans_stereo[nm] = structure._translate_cis_trans_sign(n, m, t1, t2, s)
 
-            new._fix_stereo()
+            new.fix_stereo()
         return new
 
     def __getstate__(self):

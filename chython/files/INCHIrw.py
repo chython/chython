@@ -241,7 +241,7 @@ class INCHIRead(Parser):
                 stereo = fail_stereo
                 if len(stereo) == old_stereo:
                     break
-                del mol.__dict__['_MoleculeStereo__chiral_centers']
+                mol.flush_stereo_cache()
                 continue
             break
         return mol

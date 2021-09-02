@@ -215,7 +215,7 @@ class MoleculeStereo(Stereo):
             if stereo:
                 cis_trans_stereo.update(stereo)
                 flag = True
-                del self.__dict__['_MoleculeStereo__chiral_centers']
+                self.flush_stereo_cache()
             else:
                 break
         if flag and clean_cache:
@@ -283,7 +283,17 @@ class MoleculeStereo(Stereo):
         else:
             raise NotChiral
 
-    def _fix_stereo(self: 'MoleculeContainer'):
+    def flush_stereo_cache(self):
+        """
+        Flush chiral morgan and chiral centers cache.
+        """
+        self.__dict__.pop('_chiral_morgan', None)
+        self.__dict__.pop('_MoleculeStereo__chiral_centers', None)
+
+    def fix_stereo(self: 'MoleculeContainer'):
+        """
+        Reset stereo marks.
+        """
         if self._atoms_stereo:  # filter tetrahedrons
             stereo_tetrahedrons = self._stereo_tetrahedrons
             atoms_stereo = {k: v for k, v in self._atoms_stereo.items() if k in stereo_tetrahedrons}
@@ -339,8 +349,7 @@ class MoleculeStereo(Stereo):
             if fail_stereo == old_stereo:
                 break
             old_stereo = fail_stereo
-            # flush cache
-            del self.__dict__['_MoleculeStereo__chiral_centers']
+            self.flush_stereo_cache()
 
     @cached_property
     def _wedge_map(self: 'MoleculeContainer'):
@@ -410,11 +419,33 @@ class MoleculeStereo(Stereo):
     def _chiral_allenes(self) -> Set[int]:
         return self.__chiral_centers[2]
 
-    @property
+    @cached_property
     def _chiral_morgan(self: Union['MoleculeContainer', 'MoleculeStereo']) -> Dict[int, int]:
-        if self._atoms_stereo or self._allenes_stereo or self._cis_trans_stereo:
-            return self.__chiral_centers[3]
-        return self.atoms_order
+        if not self._atoms_stereo and not self._allenes_stereo and not self._cis_trans_stereo:
+            return self.atoms_order
+        morgan = self.atoms_order
+        atoms_stereo = set(self._atoms_stereo)
+        cis_trans_stereo = set(self._cis_trans_stereo)
+        allenes_stereo = set(self._allenes_stereo)
+        while True:
+            # try iteratively differentiate stereo atoms.
+            morgan, atoms_stereo, cis_trans_stereo, allenes_stereo, atoms_groups, cis_trans_groups, allenes_groups = \
+                self.__differentiation(morgan, atoms_stereo, cis_trans_stereo, allenes_stereo)
+            if not atoms_groups and not cis_trans_groups and not allenes_groups:
+                break
+            # for some rings differentiation by morgan impossible. try randomly set new weights.
+            # sometimes this will lead to pseudo chiral centers and non-unique morgan.
+            for group in atoms_groups:
+                for n in group[:len(group) // 2]:  # set new weight in half of group randomly.
+                    morgan[n] = -morgan[n]
+            for group in cis_trans_groups:
+                for n, _ in group[:len(group) // 2]:  # set new weight in half of group randomly.
+                    morgan[n] = -morgan[n]
+            for group in allenes_groups:
+                for n in group[:len(group) // 2]:  # set new weight in half of group randomly.
+                    morgan[n] = -morgan[n]
+            morgan = _morgan(morgan, self.int_adjacency)
+        return morgan
 
     @cached_property
     def _rings_tetrahedrons_linkers(self: 'MoleculeContainer') -> Dict[int, Tuple[int, int, int, int]]:
@@ -508,31 +539,8 @@ class MoleculeStereo(Stereo):
     def __chiral_centers(self: Union['MoleculeStereo', 'MoleculeContainer']):
         atoms_rings = self.atoms_rings
         cis_trans = self._stereo_cis_trans
+        morgan = self._chiral_morgan
 
-        # get morgan weights with stereo information.
-        morgan = self.atoms_order
-        atoms_stereo = set(self._atoms_stereo)
-        cis_trans_stereo = set(self._cis_trans_stereo)
-        allenes_stereo = set(self._allenes_stereo)
-        while True:
-            # try iteratively differentiate stereo atoms.
-            morgan, atoms_stereo, cis_trans_stereo, allenes_stereo, atoms_groups, cis_trans_groups, allenes_groups = \
-                self.__chiral_groups_sifter(morgan, atoms_stereo, cis_trans_stereo, allenes_stereo)
-            if not atoms_groups and not cis_trans_groups and not allenes_groups:
-                break
-            # for some rings differentiation by morgan impossible. try randomly set new weights.
-            # sometimes this will lead to pseudo chiral centers and non-unique morgan.
-            for group in atoms_groups:
-                for n in group[:len(group) // 2]:  # set new weight in half of group randomly.
-                    morgan[n] = -morgan[n]
-            for group in cis_trans_groups:
-                for n, _ in group[:len(group) // 2]:  # set new weight in half of group randomly.
-                    morgan[n] = -morgan[n]
-            for group in allenes_groups:
-                for n in group[:len(group) // 2]:  # set new weight in half of group randomly.
-                    morgan[n] = -morgan[n]
-            morgan = _morgan(morgan, self.int_adjacency)
-        # restore
         atoms_stereo = self._atoms_stereo
         cis_trans_stereo = self._cis_trans_stereo
         allenes_stereo = self._allenes_stereo
@@ -606,8 +614,8 @@ class MoleculeStereo(Stereo):
         # add bonds
         return chiral_t, chiral_c, chiral_a, morgan
 
-    def __chiral_groups_sifter(self: Union['MoleculeStereo', 'MoleculeContainer'], morgan,
-                               atoms_stereo, cis_trans_stereo, allenes_stereo):
+    def __differentiation(self: Union['MoleculeStereo', 'MoleculeContainer'], morgan,
+                          atoms_stereo, cis_trans_stereo, allenes_stereo):
         bonds = self.int_adjacency
 
         tetrahedrons = self._stereo_tetrahedrons

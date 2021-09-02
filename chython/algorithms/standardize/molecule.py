@@ -76,7 +76,7 @@ class StandardizeMolecule:
         if log:
             self.flush_cache()
         if fix_stereo:
-            self._fix_stereo()
+            self.fix_stereo()
         if logging:
             if neutralized:
                 log.append((tuple(neutralized), -1, 'resonance'))
@@ -177,7 +177,7 @@ class StandardizeMolecule:
         if changed:
             self.flush_cache()  # clear cache
             if fix_stereo:
-                self._fix_stereo()
+                self.fix_stereo()
             if logging:
                 return changed
             return True
@@ -218,7 +218,7 @@ class StandardizeMolecule:
         if c:
             self.flush_cache()
             if fix_stereo:
-                self._fix_stereo()
+                self.fix_stereo()
         return c
 
     def implicify_hydrogens(self: 'MoleculeContainer', *, fix_stereo=True) -> int:
@@ -270,7 +270,7 @@ class StandardizeMolecule:
         for n in to_remove:
             self.delete_atom(n)
         if to_remove and fix_stereo:
-            self._fix_stereo()
+            self.fix_stereo()
         return len(to_remove)
 
     def explicify_hydrogens(self: 'MoleculeContainer', *, fix_stereo=True, start_map=None, return_maps=False) -> \
@@ -302,7 +302,7 @@ class StandardizeMolecule:
                 m += 1
 
             if fix_stereo:
-                self._fix_stereo()
+                self.fix_stereo()
             if return_maps:
                 return log
             return len(to_add)
@@ -359,7 +359,7 @@ class StandardizeMolecule:
             for i in isotopes:
                 i._Core__isotope = None
             self.flush_cache()
-            self._fix_stereo()
+            self.fix_stereo()
             return True
         return False
 
