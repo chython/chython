@@ -22,12 +22,12 @@ from itertools import combinations
 from logging import info
 from typing import Dict, Set, Tuple, Union, TYPE_CHECKING
 from .graph import Stereo
+from ..morgan import _morgan
 from ...exceptions import AtomNotFound, IsChiral, NotChiral
 
 
 if TYPE_CHECKING:
-    from chython import MoleculeContainer, QueryContainer
-    Container = Union[MoleculeContainer, QueryContainer]
+    from chython import MoleculeContainer
 
 
 def _pyramid_sign(n, u, v, w):
@@ -343,7 +343,7 @@ class MoleculeStereo(Stereo):
             del self.__dict__['_MoleculeStereo__chiral_centers']
 
     @cached_property
-    def _wedge_map(self: 'Container'):
+    def _wedge_map(self: 'MoleculeContainer'):
         plane = self._plane
         atoms_stereo = self._atoms_stereo
         allenes_centers = self._stereo_allenes_centers
@@ -531,7 +531,7 @@ class MoleculeStereo(Stereo):
             for group in allenes_groups:
                 for n in group[:len(group) // 2]:  # set new weight in half of group randomly.
                     morgan[n] = -morgan[n]
-            morgan = self._morgan(morgan, self.int_adjacency)
+            morgan = _morgan(morgan, self.int_adjacency)
         # restore
         atoms_stereo = self._atoms_stereo
         cis_trans_stereo = self._cis_trans_stereo
@@ -705,7 +705,7 @@ class MoleculeStereo(Stereo):
                             allenes_groups.append(group)
             if not morgan_update:
                 break
-            morgan = self._morgan({**morgan, **morgan_update}, bonds)
+            morgan = _morgan({**morgan, **morgan_update}, bonds)
         return morgan, atoms_stereo, cis_trans_stereo, allenes_stereo, atoms_groups, cis_trans_groups, allenes_groups
 
 
