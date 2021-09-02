@@ -537,13 +537,12 @@ class MoleculeStereo(Stereo):
 
     @cached_property
     def __chiral_centers(self: Union['MoleculeStereo', 'MoleculeContainer']):
-        atoms_rings = self.atoms_rings
-        cis_trans = self._stereo_cis_trans
-        morgan = self._chiral_morgan
-
         atoms_stereo = self._atoms_stereo
         cis_trans_stereo = self._cis_trans_stereo
         allenes_stereo = self._allenes_stereo
+        atoms_rings = self.atoms_rings
+        cis_trans = self._stereo_cis_trans
+        morgan = self._chiral_morgan
 
         # find new chiral atoms and bonds.
         # tetrahedron is chiral if all its neighbors are unique.
@@ -612,7 +611,7 @@ class MoleculeStereo(Stereo):
                 graph[m] = set()
                 stereogenic.add(m)
         # add bonds
-        return chiral_t, chiral_c, chiral_a, morgan
+        return chiral_t, chiral_c, chiral_a
 
     def __differentiation(self: Union['MoleculeStereo', 'MoleculeContainer'], morgan,
                           atoms_stereo, cis_trans_stereo, allenes_stereo):
