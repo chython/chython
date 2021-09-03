@@ -541,12 +541,15 @@ class MoleculeStereo(Stereo):
         cis_trans_stereo = self._cis_trans_stereo
         allenes_stereo = self._allenes_stereo
         atoms_rings = self.atoms_rings
+        tetrahedrons = self._stereo_tetrahedrons
         cis_trans = self._stereo_cis_trans
+        allenes_centers = self._stereo_allenes_centers
+        cis_trans_terminals = self._stereo_cis_trans_terminals
         morgan = self._chiral_morgan
 
         # find new chiral atoms and bonds.
         # tetrahedron is chiral if all its neighbors are unique.
-        chiral_t = {n for n, env in self._stereo_tetrahedrons.items()
+        chiral_t = {n for n, env in tetrahedrons.items()
                     if n not in atoms_stereo and len({morgan[x] for x in env}) == len(env)}
         # tetrahedrons-linkers is chiral if in each rings neighbors are unique.
         chiral_t.update(n for n, (n1, n2, m1, m2) in self._rings_tetrahedrons_linkers.items()
@@ -554,7 +557,7 @@ class MoleculeStereo(Stereo):
 
         # required for axes detection.
         graph = {}
-        stereogenic = chiral_t.copy()
+        stereogenic = set()
 
         # double bond is chiral if neighbors of each terminal atom is unique.
         # ring-linkers and rings-attached also takes into account.
@@ -575,7 +578,7 @@ class MoleculeStereo(Stereo):
             if nm in cis_trans:
                 chiral_c.add(nm)
             else:
-                chiral_a.add(self._stereo_allenes_centers[n])
+                chiral_a.add(allenes_centers[n])
             graph[n] = {m}
             graph[m] = {n}
             stereogenic.update(nm)
@@ -592,9 +595,10 @@ class MoleculeStereo(Stereo):
                     continue
             graph[n] = set()
             stereogenic.add(n)  # non-linker tetrahedrons in rings - stereogenic.
-        for n in self._rings_tetrahedrons_linkers:
+        for n, (n1, n2, m1, m2) in self._rings_tetrahedrons_linkers.items():
             graph[n] = set()
-            # stereogenic atoms already found.
+            if morgan[n1] != morgan[n2] or morgan[m1] != morgan[m2]:
+                stereogenic.add(n)  # linkers with at least one unsymmetric ring.
         for n, m in self._rings_cumulenes_linkers:
             graph[n] = {m}
             graph[m] = {n}
@@ -610,7 +614,29 @@ class MoleculeStereo(Stereo):
             else:
                 graph[m] = set()
                 stereogenic.add(m)
-        # add bonds
+
+        if len(graph) > 1:  # add bonds to graph. bonds connects atoms in same rings and terminal atoms of cumulenes.
+            for n, ms in graph.items():
+                for r in atoms_rings[n]:
+                    for m in r:
+                        if n != m and m in graph:
+                            ms.add(m)
+            # remove not stereogenic terminals.
+            while True:
+                try:
+                    n = next(n for n, ms in graph.items() if not ms or len(ms) == 1 and n not in stereogenic)
+                except StopIteration:
+                    break
+                for m in graph.pop(n):
+                    graph[m].discard(n)
+            # update chiral atoms.
+            for n in graph:
+                if n in tetrahedrons:
+                    chiral_t.add(n)
+                elif n in allenes_centers:
+                    chiral_a.add(allenes_centers[n])
+                else:
+                    chiral_c.add(cis_trans_terminals[n])
         return chiral_t, chiral_c, chiral_a
 
     def __differentiation(self: Union['MoleculeStereo', 'MoleculeContainer'], morgan,
