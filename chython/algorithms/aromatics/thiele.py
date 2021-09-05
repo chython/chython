@@ -221,7 +221,7 @@ class Thiele:
                     break
         if freaks:
             self.flush_cache()  # flush again
-        self._fix_stereo()  # check if any stereo centers vanished.
+        self.fix_stereo()  # check if any stereo centers vanished.
         return True
 
 

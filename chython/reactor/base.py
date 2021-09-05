@@ -122,24 +122,18 @@ class BaseReactor:
         # check needs of stereo calculations
         if structure._atoms_stereo or structure._allenes_stereo or structure._cis_trans_stereo or \
                 products._atoms_stereo or products._allenes_stereo or products._cis_trans_stereo:
-            reversed_mapping = {m: n for n, m in mapping.items()}
+            r_mapping = {m: n for n, m in mapping.items()}
 
             # set patch atoms stereo
             for n, s in products._atoms_stereo.items():
                 m = mapping[n]
-                new._atoms_stereo[m] = products._translate_tetrahedron_sign_reversed(n,
-                                                                                     [reversed_mapping[x]
-                                                                                      for x in
-                                                                                      new._stereo_tetrahedrons[m]],
-                                                                                     s)
+                new._atoms_stereo[m] = products._translate_tetrahedron_sign(n, [r_mapping[x] for x in
+                                                                                new._stereo_tetrahedrons[m]], s)
 
             for n, s in products._allenes_stereo.items():
                 m = mapping[n]
                 t1, t2, *_ = new._stereo_allenes[m]
-                new._allenes_stereo[m] = products._translate_allene_sign_reversed(n,
-                                                                                  reversed_mapping[t1],
-                                                                                  reversed_mapping[t2],
-                                                                                  s)
+                new._allenes_stereo[m] = products._translate_allene_sign(n, r_mapping[t1], r_mapping[t2], s)
 
             for (n, m), s in products._cis_trans_stereo.items():
                 nm = (mapping[n], mapping[m])
@@ -148,17 +142,14 @@ class BaseReactor:
                 except KeyError:
                     nm = nm[::-1]
                     t2, t1, *_ = new._stereo_cis_trans[nm]
-                new._cis_trans_stereo[nm] = products._translate_cis_trans_sign_reversed(n, m,
-                                                                                        reversed_mapping[t1],
-                                                                                        reversed_mapping[t2],
-                                                                                        s)
+                new._cis_trans_stereo[nm] = products._translate_cis_trans_sign(n, m, r_mapping[t1], r_mapping[t2], s)
 
             # set unmatched part stereo
             for n, s in structure._atoms_stereo.items():
                 if n in patch_atoms or n not in new or new._bonds[n].keys() != structure._bonds[n].keys():
                     # skip atoms with changed neighbors
                     continue
-                new._atoms_stereo[n] = structure._translate_tetrahedron_sign_reversed(n, new._stereo_tetrahedrons[n], s)
+                new._atoms_stereo[n] = structure._translate_tetrahedron_sign(n, new._stereo_tetrahedrons[n], s)
 
             for n, s in structure._allenes_stereo.items():
                 if n in patch_atoms or n not in new._stereo_allenes or \
@@ -166,7 +157,7 @@ class BaseReactor:
                     # skip changed allenes
                     continue
                 t1, t2, *_ = new._stereo_allenes[n]
-                new._allenes_stereo[n] = structure._translate_allene_sign_reversed(n, t1, t2, s)
+                new._allenes_stereo[n] = structure._translate_allene_sign(n, t1, t2, s)
 
             for nm, s in structure._cis_trans_stereo.items():
                 n, m = nm
@@ -186,9 +177,9 @@ class BaseReactor:
                     t1, t2, *_ = new_env
                 if set(env) != set(new_env):
                     continue
-                new._cis_trans_stereo[nm] = structure._translate_cis_trans_sign_reversed(n, m, t1, t2, s)
+                new._cis_trans_stereo[nm] = structure._translate_cis_trans_sign(n, m, t1, t2, s)
 
-            new._fix_stereo()
+            new.fix_stereo()
         return new
 
     def __getstate__(self):

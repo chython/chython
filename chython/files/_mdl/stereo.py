@@ -68,7 +68,7 @@ class MDLStereo(Parser):
                 stereo = fail_stereo
                 if len(stereo) == old_stereo:
                     break
-                del mol.__dict__['_MoleculeStereo__chiral_centers']
+                mol.flush_stereo_cache()
                 if self.__calc_cis_trans:
                     mol.calculate_cis_trans_from_2d(clean_cache=False)
                 continue

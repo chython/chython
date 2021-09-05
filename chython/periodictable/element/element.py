@@ -87,7 +87,7 @@ class Element(Core, ABC):
         else:
             g._calc_implicit(self._map)
             g.flush_cache()
-            g._fix_stereo()
+            g.fix_stereo()
 
     @Core.is_radical.setter
     def is_radical(self, is_radical: bool):
@@ -101,7 +101,7 @@ class Element(Core, ABC):
         else:
             g._calc_implicit(self._map)
             g.flush_cache()
-            g._fix_stereo()
+            g.fix_stereo()
 
     @property
     def implicit_hydrogens(self) -> Optional[int]:

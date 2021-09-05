@@ -31,7 +31,6 @@ from .bonds import Bond, DynamicBond, QueryBond
 from .graph import Graph
 from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
-from ..algorithms.components import StructureComponents
 from ..algorithms.depict import DepictMolecule
 from ..algorithms.fingerprints import Fingerprints
 from ..algorithms.huckel import Huckel
@@ -46,7 +45,7 @@ from ..periodictable import DynamicElement, Element, QueryElement
 
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, StandardizeMolecule, MoleculeSmiles,
-                        StructureComponents, DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS, Huckel,
+                        DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS, Huckel,
                         Saturation, X3domMolecule):
     __slots__ = ('_conformers', '_atoms_stereo', '_hydrogens', '_cis_trans_stereo', '_allenes_stereo',
                  '_parsed_mapping', '_backup', '__meta', '__name')
@@ -255,7 +254,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
         if self._atoms[n].atomic_number != 1 and self._atoms[m].atomic_number != 1:  # not hydrogen
             # fix stereo if formed not to hydrogen bond
-            self._fix_stereo()
+            self.fix_stereo()
 
     def delete_atom(self, n):
         """
@@ -280,7 +279,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             self._calc_implicit(m)
 
         if isnt_hydrogen:  # hydrogen atom not used for stereo coding
-            self._fix_stereo()
+            self.fix_stereo()
 
     def delete_bond(self, n, m):
         """
@@ -297,7 +296,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         self._calc_implicit(m)
 
         if self._atoms[n].atomic_number != 1 and self._atoms[m].atomic_number != 1:
-            self._fix_stereo()
+            self.fix_stereo()
 
     def remap(self, mapping: Dict[int, int], *, copy: bool = False) -> 'MoleculeContainer':
         if len(mapping) != len(set(mapping.values())) or \
@@ -538,7 +537,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             sub._atoms_stereo = self._atoms_stereo.copy()
             sub._allenes_stereo = self._allenes_stereo.copy()
             sub._cis_trans_stereo = self._cis_trans_stereo.copy()
-            sub._fix_stereo()
+            sub.fix_stereo()
         return sub
 
     def augmented_substructure(self, atoms: Iterable[int], deep: int = 1, **kwargs) -> 'MoleculeContainer':

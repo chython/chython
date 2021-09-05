@@ -43,8 +43,14 @@ class Morgan:
         elif len(atoms) == 1:  # optimize single atom containers
             return dict.fromkeys(atoms, 1)
         ring = self.ring_atoms
-        return _morgan({n: hash((hash(a), n in ring)) for n, a in atoms.items()},
-                       {n: {m: int(b) for m, b in mb.items()} for n, mb in self._bonds.items()})
+        return _morgan({n: hash((hash(a), n in ring)) for n, a in atoms.items()}, self.int_adjacency)
+
+    @cached_property
+    def int_adjacency(self: 'Graph') -> Dict[int, Dict[int, int]]:
+        """
+        Adjacency with integer-coded bonds.
+        """
+        return {n: {m: int(b) for m, b in mb.items()} for n, mb in self._bonds.items()}
 
 
 def _morgan(atoms: Dict[int, int], bonds: Dict[int, Dict[int, int]]) -> Dict[int, int]:
