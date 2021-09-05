@@ -558,6 +558,7 @@ class MoleculeStereo(Stereo):
         # required for axes detection.
         graph = {}
         stereogenic = set()
+        pseudo = {}
 
         # double bond is chiral if neighbors of each terminal atom is unique.
         # ring-linkers and rings-attached also takes into account.
@@ -575,13 +576,15 @@ class MoleculeStereo(Stereo):
         # ring cumulenes always chiral. can be already added.
         for nm in self._rings_cumulenes:
             n, m = nm
+            if any(len(x) < 8 for x in atoms_rings[n]):  # skip small rings.
+                continue
             if nm in cis_trans:
                 chiral_c.add(nm)
             else:
                 chiral_a.add(allenes_centers[n])
-            graph[n] = {m}
-            graph[m] = {n}
-            stereogenic.update(nm)
+            pseudo[m] = n
+            graph[n] = set()
+            stereogenic.add(n)
         # skip already marked.
         chiral_a.difference_update(allenes_stereo)
         chiral_c.difference_update(cis_trans_stereo)
@@ -619,7 +622,11 @@ class MoleculeStereo(Stereo):
             for n, ms in graph.items():
                 for r in atoms_rings[n]:
                     for m in r:
-                        if n != m and m in graph:
+                        if n == m:
+                            continue
+                        elif m in graph:
+                            ms.add(m)
+                        elif m in pseudo and (m := pseudo[m]) != n:
                             ms.add(m)
             # remove not stereogenic terminals.
             while True:
