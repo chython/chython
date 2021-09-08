@@ -368,7 +368,7 @@ class MoleculeSmiles(Smiles):
                             n2 = ts[1] if ts[0] == n else ts[0]
                             m2 = next(x for x in adjacency[n2] if x in env)
                             return '\\' if self._translate_cis_trans_sign(n2, n, m2, m) else '/'
-            elif m in ctt:
+            elif m in ctt and self._atoms[n].atomic_number != 1:  # Hn-Cm= case ignored!
                 ts = ctt[m]
                 if ts in self._cis_trans_stereo:
                     if m == next(x for x in adjacency if x in ts):  # Rn-Cm(X)=C case
