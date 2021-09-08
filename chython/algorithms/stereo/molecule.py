@@ -537,9 +537,6 @@ class MoleculeStereo(Stereo):
 
     @cached_property
     def __chiral_centers(self: Union['MoleculeStereo', 'MoleculeContainer']):
-        atoms_stereo = self._atoms_stereo
-        cis_trans_stereo = self._cis_trans_stereo
-        allenes_stereo = self._allenes_stereo
         atoms_rings = self.atoms_rings
         tetrahedrons = self._stereo_tetrahedrons
         cis_trans = self._stereo_cis_trans
@@ -549,11 +546,10 @@ class MoleculeStereo(Stereo):
 
         # find new chiral atoms and bonds.
         # tetrahedron is chiral if all its neighbors are unique.
-        chiral_t = {n for n, env in tetrahedrons.items()
-                    if n not in atoms_stereo and len({morgan[x] for x in env}) == len(env)}
+        chiral_t = {n for n, env in tetrahedrons.items() if len({morgan[x] for x in env}) == len(env)}
         # tetrahedrons-linkers is chiral if in each rings neighbors are unique.
         chiral_t.update(n for n, (n1, n2, m1, m2) in self._rings_tetrahedrons_linkers.items()
-                        if n not in atoms_stereo and morgan[n1] != morgan[n2] and morgan[m1] != morgan[m2])
+                        if morgan[n1] != morgan[n2] and morgan[m1] != morgan[m2])
 
         # required for axes detection.
         graph = {}
@@ -577,17 +573,18 @@ class MoleculeStereo(Stereo):
         for nm in self._rings_cumulenes:
             n, m = nm
             if any(len(x) < 8 for x in atoms_rings[n]):  # skip small rings.
+                if nm in chiral_c:  # remove already added small rings cumulenes.
+                    chiral_c.discard(nm)
+                elif (c := allenes_centers[n]) in chiral_a:
+                    chiral_a.discard(c)
                 continue
-            if nm in cis_trans:
+            elif nm in cis_trans:
                 chiral_c.add(nm)
             else:
                 chiral_a.add(allenes_centers[n])
             pseudo[m] = n
             graph[n] = set()
             stereogenic.add(n)
-        # skip already marked.
-        chiral_a.difference_update(allenes_stereo)
-        chiral_c.difference_update(cis_trans_stereo)
 
         # find chiral axes. build graph of stereogenic atoms in rings.
         # atoms connected then located in same ring or cumulene.
@@ -644,6 +641,11 @@ class MoleculeStereo(Stereo):
                     chiral_a.add(allenes_centers[n])
                 else:
                     chiral_c.add(cis_trans_terminals[n])
+
+        # skip already marked.
+        chiral_t.difference_update(self._atoms_stereo)
+        chiral_a.difference_update(self._allenes_stereo)
+        chiral_c.difference_update(self._cis_trans_stereo)
         return chiral_t, chiral_c, chiral_a
 
     def __differentiation(self: Union['MoleculeStereo', 'MoleculeContainer'], morgan,
