@@ -423,6 +423,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             else:
                 raise MappingError('mapping of graphs is not disjoint')
         u = super().union(other)
+        u._MoleculeContainer__name = u._MoleculeContainer__meta = None
         u._conformers.clear()
         u._hydrogens.update(other._hydrogens)
         u._parsed_mapping.update(other._parsed_mapping)
@@ -462,6 +463,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             atom_type = Element
             bond_type = Bond
             sub = object.__new__(self.__class__)
+            sub._MoleculeContainer__name = sub._MoleculeContainer__meta = None
 
         sa = self._atoms
         sb = self._bonds
