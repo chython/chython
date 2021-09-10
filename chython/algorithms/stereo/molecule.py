@@ -423,7 +423,7 @@ class MoleculeStereo(Stereo):
     def _chiral_morgan(self: Union['MoleculeContainer', 'MoleculeStereo']) -> Dict[int, int]:
         if not self._atoms_stereo and not self._allenes_stereo and not self._cis_trans_stereo:
             return self.atoms_order
-        morgan = self.atoms_order
+        morgan = self.atoms_order.copy()
         atoms_stereo = set(self._atoms_stereo)
         cis_trans_stereo = set(self._cis_trans_stereo)
         allenes_stereo = set(self._allenes_stereo)
