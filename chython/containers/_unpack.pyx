@@ -20,7 +20,7 @@ from libc.math cimport ldexp
 from chython.containers.bonds import Bond
 
 
-def unpack(bytes data):
+def unpack(bytes data not None):
     cdef int isotope_shift
     cdef unsigned char a, b, c, d
     cdef unsigned int na, nct, i, j, n, m, shift = 4, order_shift = 0, nb = 0
