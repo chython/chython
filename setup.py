@@ -34,7 +34,6 @@ class _sdist(sdist):
 
 cmd_class = {'sdist': _sdist}
 
-
 if find_spec('wheel'):
     from wheel.bdist_wheel import bdist_wheel
 
@@ -52,7 +51,6 @@ if find_spec('wheel'):
 
     cmd_class['bdist_wheel'] = _bdist_wheel
 
-
 if find_spec('cython'):
     class _build(build):
         def finalize_options(self):
@@ -61,7 +59,6 @@ if find_spec('cython'):
             self.distribution.ext_modules = cythonize(self.distribution.ext_modules, language_level=3)
 
     cmd_class['build'] = _build
-
 
 setup(
     name='chython',
@@ -73,13 +70,18 @@ setup(
     author_email='nougmanoff@protonmail.com',
     python_requires='>=3.6.1',
     cmdclass=cmd_class,
-    ext_modules=[Extension('chython.containers._unpack', ['chython/containers/_unpack.pyx'],
-                           extra_compile_args=['-O3'])],
+    ext_modules=[
+        Extension('chython.containers._unpack', ['chython/containers/_unpack.pyx'],
+                  extra_compile_args=['-O3']),
+        Extension('chython.algorithms._isomorphism', ['chython/algorithms/_isomorphism.pyx'],
+                  extra_compile_args=['-O3']),
+    ],
     setup_requires=['wheel', 'cython'],
     install_requires=['CachedMethods>=0.1.4,<0.2', 'lazy_object_proxy>=1.6', 'lxml>=4.1', 'py-mini-racer>=0.4.0',
                       'numpy>=1.18', 'numba>=0.50'],
     extras_require={'pytest': ['pytest']},
-    package_data={'chython.algorithms.calculate2d': ['clean2d.js'], 'chython.containers': ['_unpack.pyx']},
+    package_data={'chython.algorithms.calculate2d': ['clean2d.js'], 'chython.containers': ['_unpack.pyx'],
+                  'chython.algorithms': ['_isomorphism.pyx']},
     data_files=[],
     zip_safe=False,
     long_description=(Path(__file__).parent / 'README.rst').read_text(),
@@ -98,6 +100,6 @@ setup(
                  'Topic :: Software Development :: Libraries',
                  'Topic :: Software Development :: Libraries :: Python Modules'],
     command_options={'build_sphinx': {'source_dir': ('setup.py', 'doc'),
-                                      'build_dir':  ('setup.py', 'build/doc'),
+                                      'build_dir': ('setup.py', 'build/doc'),
                                       'all_files': ('setup.py', True)}}
 )

@@ -21,11 +21,15 @@ from CachedMethods import cached_property, cached_args_method
 from typing import Dict, Optional, Tuple, Iterable, Iterator, Union, List, Type
 from .bonds import Bond, DynamicBond, QueryBond
 from ..algorithms.components import GraphComponents
-from ..algorithms.isomorphism import Isomorphism
 from ..algorithms.morgan import Morgan
 from ..algorithms.sssr import SSSR
 from ..exceptions import AtomNotFound
 from ..periodictable import AnyAtom
+
+try:  # windows? ;)
+    from ..algorithms._isomorphism import Isomorphism
+except ImportError:
+    from ..algorithms.isomorphism import Isomorphism
 
 
 class Graph(GraphComponents, Morgan, SSSR, Isomorphism, ABC):
