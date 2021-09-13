@@ -121,23 +121,30 @@ class XYZ:
     def _convert_molecule(self, matrix: Iterable[Tuple[str, Optional[int], float, float, float]], charge=0, radical=0):
         mol = self.MoleculeContainer()
         conformer = {}
+        mol._conformers.append(conformer)
 
         atoms = mol._atoms
+        bonds = mol._bonds
         plane = mol._plane
-        charges = {}
+        hydrogens = mol._hydrogens
+        radicals = mol._radicals
+        charges = mol._charges
         for n, (a, c, x, y, z) in enumerate(matrix, 1):
             atoms[n] = atom = Element.from_symbol(a)()
             atom._attach_to_graph(mol, n)
+            bonds[n] = {}
             plane[n] = (x, y)
             conformer[n] = (x, y, z)
             charges[n] = c
+            hydrogens[n] = 0  # implicit hydrogens not supported.
+            radicals[n] = False  # set default value
         if all(x is not None for x in charges.values()):
             charge = sum(charges.values())
-        bonds = get_possible_bonds(atoms, conformer, self.__radius)
+        else:
+            mol._charges = {n: 0 for n in atoms}  # reset charges
 
-        self._log_buffer.extend(mol.saturate(bonds, expected_charge=charge, expected_radicals_count=radical,
-                                             logging=True))
-        mol._conformers.append(conformer)
+        self._log_buffer.extend(mol.saturate(get_possible_bonds(atoms, conformer, self.__radius),
+                                             expected_charge=charge, expected_radicals_count=radical, logging=True))
         if self._store_log:
             if log := self._format_log():
                 mol.meta['ParserLog'] = log
