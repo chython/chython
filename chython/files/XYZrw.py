@@ -139,9 +139,10 @@ class XYZ:
                                              logging=True))
         mol._conformers.append(conformer)
         if self._store_log:
-            log = self._format_log()
-            if log:
+            if log := self._format_log():
                 mol.meta['ParserLog'] = log
+        else:
+            self._flush_log()
         return mol
 
 
