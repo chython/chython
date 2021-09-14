@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from array import array
 from CachedMethods import cached_args_method
 from collections import defaultdict
 from functools import cached_property
@@ -288,6 +289,93 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
                     scope.update(x for k in fp for x in other_fingerprint[k])
             return scope
         return super()._isomorphism_candidates(other, self_component, other_component)
+
+    @cached_property
+    def _fast_compiled_query(self):
+        from ..files._mdl.mol import common_isotopes
+
+        _components, closures = self._compiled_query
+        components = []
+        for c in _components:
+            q_numbers = array('L', [x for x, *_ in c])
+            q_elements = array('I', [x.atomic_number for *_, x, _ in c])
+
+            mapping = {x: i for i, (x, *_) in enumerate(c)}
+            q_back = array('I', [0] + [mapping[x] for _, x, *_ in c[1:]])
+
+            masks = []
+            # isotope: isotope - common_isotope -8 - +8 = 17 bit
+            # is_radical: 2 bit
+            # charge: -4 - +4: 9 bit
+            # implicit_hydrogens: 0-5 = 6 bit
+            # neighbors: 0-14 = 15 bit
+            # heteroatoms: 0-14 = 15 bit
+            for *_, x, _ in c:
+                if isinstance(x, AnyMetal):  # isotope, radical, charge and hydrogens states ignored
+                    v = 0xffffffffc0007fff
+                else:
+                    if x.isotope:
+                        v = 1 << (x.isotope - common_isotopes[x.atomic_symbol] + 55)
+                    else:
+                        v = 0xffff800000000000  # any
+                    v |= 1 << (x.charge + 40)
+
+                    if x.is_radical:
+                        v |= 0x400000000000
+                    else:
+                        v |= 0x200000000000
+
+                    if not x.implicit_hydrogens:
+                        v |= 0xfc0000000
+                    else:
+                        for h in x.implicit_hydrogens:
+                            v |= 1 << (h + 30)
+                    if not x.heteroatoms:
+                        v |= 0x7fff
+                    else:
+                        for n in x.heteroatoms:
+                            v |= 1 << n
+                if not x.neighbors:
+                    v |= 0x3fff8000
+                else:
+                    for n in x.neighbors:
+                        v |= 1 << (n + 15)
+                masks.append(v)
+            q_masks1 = array('Q', masks)
+
+            # hybridizations: 1-4 = 4 bit
+            # bond = 5 bit
+            # elements from H to Cs = 55 bit
+            masks = []
+            for *_, x, b in c:
+                if not x.hybridization:
+                    v = 0xf000000000000000
+                else:
+                    v = 0
+                    for h in x.hybridization:
+                        v |= 1 << h + 59
+
+                if b is not None:
+                    for o in b.order:
+                        if o == 1:
+                            v |= 0x80000000000000
+                        elif o == 4:
+                            v |= 0x400000000000000
+                        elif o == 2:
+                            v |= 0x100000000000000
+                        elif o == 3:
+                            v |= 0x200000000000000
+                        else:
+                            v |= 0x800000000000000
+                else:
+                    v |= 0xf80000000000000
+                masks.append(v)
+            q_masks2 = array('Q', masks)
+
+            # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 56 atom ring = 55 bit
+        # unsigned long long[:] q_masks, unsigned long long[:] q_rings
+            components.append((q_numbers, q_elements, q_masks1, q_masks2, q_back))
+        return components
 
     @staticmethod
     def _validate_neighbors(neighbors):

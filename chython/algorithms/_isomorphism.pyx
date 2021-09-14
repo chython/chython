@@ -18,95 +18,117 @@
 #
 cimport cpython.array
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
-
+from libc.string cimport memset
 
 # bond:
 # single, double, triple, aromatic, special = 5 bit
 # o_bond & q_bond == o_bond
 
 # atom:
-# masked match
-# neighbors: 0-14
-# implicit_hydrogens: 0-14
-# heteroatoms: 0-14
-# hybridizations: 1-4
+# isotope: isotope - common_isotope -8 - +8 = 17 bit
 # is_radical: 2 bit
 # charge: -4 - +4: 9 bit
-# ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 63+ atom ring
+# implicit_hydrogens: 0-5 = 6 bit
+# neighbors: 0-14 = 15 bit
+# heteroatoms: 0-14 = 15 bit
+
+# hybridizations: 1-4 = 4 bit
+# ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 60 atom ring
 # exact match
 # element: 7 bit
-# isotope: 9 bit (0 - not specified)
 
 
 def get_mapping(unsigned long[:] q_numbers not None, unsigned int[:] q_elements not None,
-                unsigned long long[:] q_masks not None, unsigned long long[:] q_rings not None,
-                unsigned int[:] q_bonds not None,
-                unsigned long[:] q_back not None,  # ?
+                unsigned int[:] q_isotopes not None, unsigned long long[:] q_masks not None,
+                unsigned long long[:] q_rings not None, unsigned int[:] q_bonds not None,
+                unsigned int[:] q_back not None,
                 #query_closures,
                 unsigned long[:] o_numbers not None, unsigned int[:] o_elements not None,
-                unsigned long long[:] o_masks not None, unsigned long long[:] o_rings not None,
-                # o_bonds,
-                bint[:] scope, int[:] groups):
+                unsigned int[:] o_isotopes not None, unsigned long long[:] o_masks not None,
+                unsigned long long[:] o_rings not None,
+                unsigned int[:] o_shifts not None, unsigned int[:] o_neighbors not None,
+                unsigned int[:] o_indices not None, unsigned int[:] o_bonds not None,
+                bint[:] scope not None, int[:] groups not None):
     # expected less than 2^16 atoms in structure.
-    cdef unsigned int stack = 0, path_size = 0, q_size, i, depth, front, back, q_element, q_bond
+    cdef unsigned int stack = 0, path_size = 0, q_size, i, j, depth, front, back, q_element, q_bond, o_bond, q_isotope
     cdef unsigned long q_number, o_number
     cdef unsigned long long q_mask, q_ring
     cdef dict mapping
 
-    q_size = len(q_numbers) - 1
+    q_size = len(q_elements) - 1
     cdef int *path = <int *> PyMem_Malloc(q_size * sizeof(int))
-    cdef int *stack_index = <int *> PyMem_Malloc(2 * len(o_numbers) * sizeof(int))
-    cdef int *stack_depth = <int *> PyMem_Malloc(2 * len(o_numbers) * sizeof(int))
-    if not path or not stack_index or not stack_depth:
+    cdef int *stack_index = <int *> PyMem_Malloc(2 * len(o_elements) * sizeof(int))
+    cdef int *stack_depth = <int *> PyMem_Malloc(2 * len(o_elements) * sizeof(int))
+    cdef bint *matched = <bint *> PyMem_Malloc(len(o_elements) * sizeof(bint))
+    if not path or not stack_index or not stack_depth or not matched:
         raise MemoryError()
+    memset(&matched[0], 0, len(o_elements) * sizeof(bint))
 
     q_element = q_elements[0]
+    q_isotope = q_isotopes[0]
     q_mask = q_masks[0]
     q_ring = q_rings[0]
-    for i in range(len(o_numbers)):
+    for i in range(len(o_elements)):
         if scope[i] and q_element == o_elements[i] and q_mask & o_masks[i] == o_masks[i] and \
                 q_ring & o_rings[i] == o_rings[i]:
+            if q_isotope:
+                if q_isotope != o_isotopes[i]:
+                    continue
             stack_index[stack] = i
             stack_depth[stack] = 0
             stack += 1
 
-    while stack:
-        stack -= 1
-        depth = stack_depth[stack]
-
-        if depth == q_size:
-            mapping = {q_numbers[depth]: o_numbers[stack_index[stack]]}
-            for i in range(q_size):
-                mapping[q_numbers[i]] = o_numbers[path[i]]
-            yield mapping
-        else:
+    try:
+        while stack:
+            stack -= 1
+            depth = stack_depth[stack]
             i = stack_index[stack]
-            if path_size != depth:  # dead end reached
-                path_size = depth  # reset to
 
-            path[path_size] = i
-            path_size += 1
+            if depth == q_size:
+                mapping = {q_numbers[depth]: o_numbers[i]}
+                for i in range(q_size):
+                    mapping[q_numbers[i]] = o_numbers[path[i]]
+                yield mapping
+            else:
+                if path_size != depth:  # dead end reached
+                    for j in range(depth, path_size):
+                        matched[path[j]] = False  # mark unmatched
+                    path_size = depth
 
-            #s_n, back, s_atom, s_bond = linear_query[depth]
+                matched[i] = True
+                path[path_size] = i
+                path_size += 1
 
-            front = depth + 1
-            back = q_back[front]
-            if back != depth:  # branch
-                i = path[back]
+                front = depth + 1
+                back = q_back[front]
+                if back != depth:  # branch
+                    i = path[back]
 
-            uniq = set()
-            for o_n, o_bond in o_bonds[n].items():
-                if o_n in scope and o_n not in reversed_mapping and s_bond == o_bond and groups[o_n] not in uniq:
-                    uniq.add(groups[o_n])
-                    if s_atom == o_atoms[o_n]:
-                        # check closures equality
-                        o_closures = o_bonds[o_n].keys() & reversed_mapping.keys()
-                        o_closures.discard(n)
-                        if o_closures == {mapping[m] for m, _ in query_closures[s_n]}:
-                            obon = o_bonds[o_n]
-                            if all(bond == obon[mapping[m]] for m, bond in query_closures[s_n]):
-                                stack.append((o_n, front))
+                # load next query atom
+                q_element = q_elements[front]
+                q_mask = q_masks[front]
+                q_ring = q_rings[front]
+                q_bond = q_bonds[front]
 
-    PyMem_Free(path)
-    PyMem_Free(stack_index)
-    PyMem_Free(stack_depth)
+                for j in range(o_shifts[i], o_shifts[i] + o_neighbors[i]):
+                    o_bond = o_bonds[j]
+                    j = o_indices[j]  # now j is atom index
+                    if scope[j] and not matched[j] and q_bond & o_bond == o_bond:  # and groups[j] not in uniq:
+                        # uniq.add(groups[o_n])
+
+                        if q_element == o_elements[j] and q_mask & o_masks[j] == o_masks[j] and \
+                            q_ring & o_rings[j] == o_rings[j]:
+                            # check closures equality
+                            # o_closures = o_bonds[o_n].keys() & reversed_mapping.keys()
+                            # o_closures.discard(n)
+                            #if o_closures == {mapping[m] for m, _ in query_closures[s_n]}:
+                            #    obon = o_bonds[o_n]
+                            #    if all(bond == obon[mapping[m]] for m, bond in query_closures[s_n]):
+                            stack_index[stack] = j
+                            stack_depth[stack] = front
+                            stack += 1
+    finally:
+        PyMem_Free(path)
+        PyMem_Free(matched)
+        PyMem_Free(stack_index)
+        PyMem_Free(stack_depth)
