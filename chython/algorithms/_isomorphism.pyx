@@ -20,11 +20,17 @@ cimport cpython.array
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.string cimport memset
 
-# bond:
-# single, double, triple, aromatic, special = 5 bit
-# o_bond & q_bond == o_bond
 
-# atom:
+# long I:
+# bond: single, double, triple, aromatic, special = 5 bit
+# atom: H-Ce: 58 bit
+# transfer bit
+
+# long II:
+# atom Pr-Og: 60 bit
+# hybridizations: 1-4 = 4 bit
+
+# long III:
 # isotope: isotope - common_isotope -8 - +8 = 17 bit
 # is_radical: 2 bit
 # charge: -4 - +4: 9 bit
@@ -32,48 +38,46 @@ from libc.string cimport memset
 # neighbors: 0-14 = 15 bit
 # heteroatoms: 0-14 = 15 bit
 
-# hybridizations: 1-4 = 4 bit
-# ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 60 atom ring
-# exact match
-# element: 7 bit
+# long IV:
+# ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
 
 
-def get_mapping(unsigned long[:] q_numbers not None, unsigned int[:] q_elements not None,
-                unsigned int[:] q_isotopes not None, unsigned long long[:] q_masks not None,
-                unsigned long long[:] q_rings not None, unsigned int[:] q_bonds not None,
-                unsigned int[:] q_back not None,
+def get_mapping(unsigned long[:] q_numbers not None, unsigned int[:] q_back not None,
+                unsigned long long[:] q_masks1 not None, unsigned long long[:] q_masks2 not None,
+                unsigned long long[:] q_masks3 not None, unsigned long long[:] q_masks4 not None,
                 #query_closures,
-                unsigned long[:] o_numbers not None, unsigned int[:] o_elements not None,
-                unsigned int[:] o_isotopes not None, unsigned long long[:] o_masks not None,
-                unsigned long long[:] o_rings not None,
-                unsigned int[:] o_shifts not None, unsigned int[:] o_neighbors not None,
-                unsigned int[:] o_indices not None, unsigned int[:] o_bonds not None,
-                bint[:] scope not None, int[:] groups not None):
+                unsigned long[:] o_numbers not None,
+                unsigned long long[:] o_bits1 not None, unsigned long long[:] o_bits2 not None,
+                unsigned long long[:] o_bits3 not None, unsigned long long[:] o_bits4 not None,
+                unsigned long long[:] o_bonds not None,
+                unsigned int[:] o_from not None, unsigned int[:] o_to not None,
+                unsigned int[:] o_indices not None,
+                bint[:] scope not None):
     # expected less than 2^16 atoms in structure.
-    cdef unsigned int stack = 0, path_size = 0, q_size, i, j, depth, front, back, q_element, q_bond, o_bond, q_isotope
+    cdef unsigned int stack = 0, path_size = 0, q_size, i, j, depth, front, back
     cdef unsigned long q_number, o_number
-    cdef unsigned long long q_mask, q_ring
+    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond
     cdef dict mapping
 
-    q_size = len(q_elements) - 1
+    q_size = len(q_numbers) - 1
     cdef int *path = <int *> PyMem_Malloc(q_size * sizeof(int))
-    cdef int *stack_index = <int *> PyMem_Malloc(2 * len(o_elements) * sizeof(int))
-    cdef int *stack_depth = <int *> PyMem_Malloc(2 * len(o_elements) * sizeof(int))
-    cdef bint *matched = <bint *> PyMem_Malloc(len(o_elements) * sizeof(bint))
+    cdef int *stack_index = <int *> PyMem_Malloc(2 * len(q_numbers) * sizeof(int))
+    cdef int *stack_depth = <int *> PyMem_Malloc(2 * len(q_numbers) * sizeof(int))
+    cdef bint *matched = <bint *> PyMem_Malloc(len(q_numbers) * sizeof(bint))
     if not path or not stack_index or not stack_depth or not matched:
         raise MemoryError()
-    memset(&matched[0], 0, len(o_elements) * sizeof(bint))
+    memset(&matched[0], 0, len(q_numbers) * sizeof(bint))
 
-    q_element = q_elements[0]
-    q_isotope = q_isotopes[0]
-    q_mask = q_masks[0]
-    q_ring = q_rings[0]
-    for i in range(len(o_elements)):
-        if scope[i] and q_element == o_elements[i] and q_mask & o_masks[i] == o_masks[i] and \
-                q_ring & o_rings[i] == o_rings[i]:
-            if q_isotope:
-                if q_isotope != o_isotopes[i]:
-                    continue
+    q_mask1 = q_masks1[0]
+    q_mask2 = q_masks2[0]
+    q_mask3 = q_masks3[0]
+    q_mask4 = q_masks4[0]
+    for i in range(len(o_numbers)):
+        if scope[i] and \
+                q_mask1 & o_bits1[i] and \
+                q_mask2 & o_bits2[i] == o_bits2[i] and \
+                q_mask3 & o_bits3[i] == o_bits3[i] and \
+                q_mask4 & o_bits4[i]:
             stack_index[stack] = i
             stack_depth[stack] = 0
             stack += 1

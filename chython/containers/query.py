@@ -291,90 +291,137 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
         return super()._isomorphism_candidates(other, self_component, other_component)
 
     @cached_property
-    def _fast_compiled_query(self):
+    def _cython_compiled_query(self):
         from ..files._mdl.mol import common_isotopes
 
         _components, closures = self._compiled_query
         components = []
         for c in _components:
-            q_numbers = array('L', [x for x, *_ in c])
-            q_elements = array('I', [x.atomic_number for *_, x, _ in c])
-
-            mapping = {x: i for i, (x, *_) in enumerate(c)}
+            q_numbers = array('L', [n for n, *_ in c])
+            mapping = {n: i for i, (n, *_) in enumerate(c)}
             q_back = array('I', [0] + [mapping[x] for _, x, *_ in c[1:]])
 
-            masks = []
+            # long I:
+            # bond: single, double, triple, aromatic, special = 5 bit
+            # atom: H-Ce: 58 bit
+            # transfer bit
+
+            # long II:
+            # atom Pr-Og: 60 bit
+            # hybridizations: 1-4 = 4 bit
+
+            # long III:
             # isotope: isotope - common_isotope -8 - +8 = 17 bit
             # is_radical: 2 bit
             # charge: -4 - +4: 9 bit
             # implicit_hydrogens: 0-5 = 6 bit
             # neighbors: 0-14 = 15 bit
             # heteroatoms: 0-14 = 15 bit
-            for *_, x, _ in c:
-                if isinstance(x, AnyMetal):  # isotope, radical, charge and hydrogens states ignored
-                    v = 0xffffffffc0007fff
-                else:
-                    if x.isotope:
-                        v = 1 << (x.isotope - common_isotopes[x.atomic_symbol] + 55)
-                    else:
-                        v = 0xffff800000000000  # any
-                    v |= 1 << (x.charge + 40)
 
-                    if x.is_radical:
-                        v |= 0x400000000000
-                    else:
-                        v |= 0x200000000000
-
-                    if not x.implicit_hydrogens:
-                        v |= 0xfc0000000
-                    else:
-                        for h in x.implicit_hydrogens:
-                            v |= 1 << (h + 30)
-                    if not x.heteroatoms:
-                        v |= 0x7fff
-                    else:
-                        for n in x.heteroatoms:
-                            v |= 1 << n
-                if not x.neighbors:
-                    v |= 0x3fff8000
+            # long IV:
+            # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
+            masks1 = []
+            masks2 = []
+            masks3 = []
+            masks4 = []
+            for *_, a, b in c:
+                if isinstance(a, AnyMetal):  # isotope, radical, charge, hydrogens and heteroatoms states ignored
+                    # elements except 1, 2, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 32, 33, 34, 35, 36, 51, 52, 53, 54
+                    v1 = 0x01c1c1fff07ffe1f
+                    v2 = 0xfffffffffffffff0
+                    v3 = 0xffffffffc0007fff
+                    v4 = 0xffffffffffffffff
                 else:
-                    for n in x.neighbors:
-                        v |= 1 << (n + 15)
-                masks.append(v)
-            q_masks1 = array('Q', masks)
+                    if isinstance(a, AnyElement):
+                        v1 = 0x07ffffffffffffff
+                        v2 = 0xfffffffffffffff0
+                    else:
+                        if isinstance(a, ListElement):
+                            v1 = v2 = 0
+                            for n in a._numbers:
+                                if n > 58:
+                                    v1 |= 1  # set transfer bit
+                                    v2 |= 1 << (122 - n)
+                                else:
+                                    v1 |= 1 << (59 - n)
+                        elif (n := a.atomic_number) > 58:
+                            v1 = 1  # transfer bit
+                            v2 = 1 << (122 - n)
+                        else:
+                            v1 = 1 << (59 - n)
+                            v2 = 0
+                    if a.isotope:
+                        v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 55)
+                        if a.is_radical:
+                            v3 |= 0x400000000000
+                        else:
+                            v3 |= 0x200000000000
+                    else:  # any isotope
+                        if a.is_radical:
+                            v3 = 0xffffc00000000000
+                        else:
+                            v3 = 0xffffa00000000000
 
-            # hybridizations: 1-4 = 4 bit
-            # bond = 5 bit
-            # elements from H to Cs = 55 bit
-            masks = []
-            for *_, x, b in c:
-                if not x.hybridization:
-                    v = 0xf000000000000000
+                    v3 |= 1 << (a.charge + 40)
+
+                    if not a.implicit_hydrogens:
+                        v3 |= 0xfc0000000
+                    else:
+                        for h in a.implicit_hydrogens:
+                            v3 |= 1 << (h + 30)
+
+                    if not a.heteroatoms:
+                        v3 |= 0x7fff
+                    else:
+                        for n in a.heteroatoms:
+                            v3 |= 1 << n
+
+                    if a.ring_sizes:
+                        if a.ring_sizes[0]:
+                            v4 = 0
+                            for r in a.ring_sizes:
+                                if r > 65:  # big rings not supported
+                                    continue
+                                v4 |= 1 << (65 - r)
+                        else:  # not in rings
+                            v4 = 0x8000000000000000
+                    else:  # any rings
+                        v4 = 0xffffffffffffffff
+
+                if not a.neighbors:
+                    v3 |= 0x3fff8000
                 else:
-                    v = 0
-                    for h in x.hybridization:
-                        v |= 1 << h + 59
+                    for n in a.neighbors:
+                        v3 |= 1 << (n + 15)
+
+                if not a.hybridization:
+                    v2 |= 0x1e
+                else:
+                    for n in a.hybridization:
+                        v2 |= 1 << n
 
                 if b is not None:
                     for o in b.order:
                         if o == 1:
-                            v |= 0x80000000000000
+                            v1 |= 0x0800000000000000
                         elif o == 4:
-                            v |= 0x400000000000000
+                            v1 |= 0x4000000000000000
                         elif o == 2:
-                            v |= 0x100000000000000
+                            v1 |= 0x1000000000000000
                         elif o == 3:
-                            v |= 0x200000000000000
+                            v1 |= 0x2000000000000000
                         else:
-                            v |= 0x800000000000000
-                else:
-                    v |= 0xf80000000000000
-                masks.append(v)
-            q_masks2 = array('Q', masks)
+                            v1 |= 0x8000000000000000
 
-            # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 56 atom ring = 55 bit
-        # unsigned long long[:] q_masks, unsigned long long[:] q_rings
-            components.append((q_numbers, q_elements, q_masks1, q_masks2, q_back))
+                masks1.append(v1)
+                masks2.append(v2)
+                masks3.append(v3)
+                masks4.append(v4)
+            q_masks1 = array('Q', masks1)
+            q_masks2 = array('Q', masks2)
+            q_masks3 = array('Q', masks3)
+            q_masks4 = array('Q', masks4)
+            components.append((q_numbers, q_back, q_masks1, q_masks2, q_masks3, q_masks4))
         return components
 
     @staticmethod
