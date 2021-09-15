@@ -16,11 +16,13 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+cimport cython
 from libc.math cimport ldexp
 from chython.containers.bonds import Bond
 
 
-def unpack(bytes data):
+@cython.boundscheck(False)
+def unpack(bytes data not None):
     cdef int isotope_shift
     cdef unsigned char a, b, c, d
     cdef unsigned int na, nct, i, j, n, m, shift = 4, order_shift = 0, nb = 0
@@ -37,19 +39,21 @@ def unpack(bytes data):
     cdef dict py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo
     cdef list py_mapping, py_atoms, py_isotopes
 
+    #cdef const unsigned char[:] data = py_data
+
     # lets extract data
-    a, b, c = data[1:4]
+    a, b, c = data[1], data[2], data[3]
     na = a << 4| (b & 0xf0) >> 4
     nct = (b & 0x0f) << 8 | c
 
     for i in range(na):
-        a, b = data[shift: shift + 2]
+        a, b = data[shift], data[shift + 1]
         mapping[i] = n = a << 4 | (b & 0xf0) >> 4
         seen[n] = False
         neighbors[i] = b & 0x0f
         nb += b & 0x0f
 
-        a, b = data[shift + 2: shift + 4]
+        a, b = data[shift + 2], data[shift + 3]
         if a & 0x80:
             is_tet[i] = True
             tet_sign[i] = a & 0x40
@@ -68,9 +72,9 @@ def unpack(bytes data):
         else:
             isotopes[i] = 0
 
-        a, b = data[shift + 4: shift + 6]
+        a, b = data[shift + 4], data[shift + 5]
         x[i] = double_from2bytes(a, b)
-        a, b = data[shift + 6: shift + 8]
+        a, b = data[shift + 6], data[shift + 7]
         y[i] = double_from2bytes(a, b)
 
         a = data[shift + 8]
@@ -82,13 +86,13 @@ def unpack(bytes data):
 
     nb //= 2
     for i in range(nb):
-        a, b, c = data[shift: shift + 3]
+        a, b, c = data[shift], data[shift + 1], data[shift + 2]
         connections[i * 2] = a << 4| (b & 0xf0) >> 4
         connections[i * 2 + 1] = (b & 0x0f) << 8 | c
         shift += 3
 
     for i in range((nb // 5 + 1) if nb % 5 else (nb // 5)):
-        a, b = data[shift: shift + 2]
+        a, b = data[shift], data[shift + 1]
         orders[i * 5] = (a >> 4) + 1
         orders[i * 5 + 1] = ((a >> 1) & 0x07) + 1
         orders[i * 5 + 2] = ((a & 0x01) << 2 | b >> 6) + 1
@@ -97,7 +101,7 @@ def unpack(bytes data):
         shift += 2
 
     for i in range(nct):
-        a, b, c, d = data[shift: shift + 4]
+        a, b, c, d = data[shift], data[shift + 1], data[shift + 2], data[shift + 3]
         cis_trans_1[i] = a << 4 | (b & 0xf0) >> 4
         cis_trans_2[i] = (b & 0x0f) << 8 | c
         ct_sign[i] = d & 0x01
