@@ -120,7 +120,6 @@ class PDBRead(XYZ):
                         failkey = True
                         atoms = []
                         yield parse_error(count, pos, self._format_log(), line)
-                        self._flush_log()
                 else:
                     charge = None
                 try:
@@ -130,7 +129,6 @@ class PDBRead(XYZ):
                     failkey = True
                     atoms = []
                     yield parse_error(count, pos, self._format_log(), line)
-                    self._flush_log()
                     continue
 
                 element = line[76:78].strip()
@@ -163,7 +161,6 @@ class PDBRead(XYZ):
                         failkey = True
                         atoms = []
                         yield parse_error(count, pos, self._format_log(), line)
-                        self._flush_log()
                         continue
                 atoms.append((atom_name, charge, x, y, z, residue))
             elif line.startswith('END'):  # EOF or end of complex
@@ -182,11 +179,9 @@ class PDBRead(XYZ):
                 count += 1
                 if seekable:
                     pos = file.tell()
-                self._flush_log()
         if atoms:  # ENDMDL or END not found
             self._info('PDB not finished')
             yield parse_error(count, pos, self._format_log(), {})
-            self._flush_log()
 
     def _convert_molecule(self, matrix: Collection[Tuple[str, Optional[int], float, float, float, str]]):
         if self.__parsed_first is None:

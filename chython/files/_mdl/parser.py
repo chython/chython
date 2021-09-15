@@ -120,9 +120,10 @@ class Parser:
                 g.meta.update(j['meta'])
                 rc[i].append(g)
         if self._store_log:
-            log = self._format_log()
-            if log:
+            if log := self._format_log():
                 data['meta']['ParserLog'] = log
+        else:
+            self._flush_log()
         return ReactionContainer(meta=data['meta'], name=data.get('title'), **rc)
 
     def _convert_molecule(self, data):
@@ -145,9 +146,10 @@ class Parser:
                     used.add(m)
         mol = self._create_molecule(data, remapped)
         if self._store_log:
-            log = self._format_log()
-            if log:
+            if log := self._format_log():
                 mol.meta['ParserLog'] = log
+        else:
+            self._flush_log()
         return mol
 
     def _create_molecule(self, data, mapping, *, _skip_calc_implicit=False):

@@ -63,7 +63,7 @@ class Saturation:
                                                  neighbors_distances is not None)
         charges = {}  # new charge states
         radicals = {}  # new radical states
-        bonds = defaultdict(dict)  # new bonds
+        bonds = {n: {} for n in atoms}  # new bonds
 
         seen = set()
         unsaturated = {}
@@ -160,10 +160,10 @@ class Saturation:
             return False
 
         # reset molecule
-        self._bonds = dict(bonds)
+        self._bonds = bonds
         self._radicals = radicals
         self._charges = charges
-        self._hydrogens = {x: 0 for x in atoms}
+        self._hydrogens = {x: 0 for x in atoms}  # reset invalid hydrogens counts.
         self.flush_cache()
         if logging:
             log.append('saturated successfully')

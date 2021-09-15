@@ -149,7 +149,6 @@ class INCHIRead(Parser):
         """
         if not inchi:
             raise ValueError('Empty string')
-        self._flush_log()
 
         inchi, *data = inchi.split()
         if self.__header is None:

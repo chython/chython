@@ -189,7 +189,6 @@ class SMILESRead(Parser):
         """SMILES string parser."""
         if not smiles:
             raise ValueError('Empty string')
-        self._flush_log()
 
         smi, *data = smiles.split()
         if data and data[0].startswith('|') and data[0].endswith('|'):
@@ -292,12 +291,13 @@ class SMILESRead(Parser):
 
                 meta = container.meta
                 if self._store_log:
-                    log = self._format_log()
-                    if log:
+                    if log := self._format_log():
                         if 'ParserLog' in meta:
                             meta['ParserLog'] += '\n' + log
                         else:
                             meta['ParserLog'] = log
+                else:
+                    self._flush_log()
                 return ReactionContainer([x for x in new_molecules[:lr] if x is not None],
                                          [x for x in new_molecules[-len(container.products):] if x is not None],
                                          [x for x in new_molecules[lr: -len(container.products)] if x is not None],
