@@ -292,6 +292,25 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
 
     @cached_property
     def _cython_compiled_query(self):
+        # long I:
+        # bond: single, double, triple, aromatic, special = 5 bit
+        # atom: H-Ce: 58 bit
+        # transfer bit
+
+        # long II:
+        # atom Pr-Og: 60 bit
+        # hybridizations: 1-4 = 4 bit
+
+        # long III:
+        # isotope: not specified, isotope - common_isotope = -8 - +8 = 18 bit
+        # is_radical: 2 bit
+        # charge: -4 - +4: 9 bit
+        # implicit_hydrogens: 0-4 = 5 bit
+        # neighbors: 0-14 = 15 bit
+        # heteroatoms: 0-14 = 15 bit
+
+        # long IV:
+        # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
         from ..files._mdl.mol import common_isotopes
 
         _components, closures = self._compiled_query
@@ -301,25 +320,6 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
             mapping = {n: i for i, (n, *_) in enumerate(c)}
             q_back = array('I', [0] + [mapping[x] for _, x, *_ in c[1:]])
 
-            # long I:
-            # bond: single, double, triple, aromatic, special = 5 bit
-            # atom: H-Ce: 58 bit
-            # transfer bit
-
-            # long II:
-            # atom Pr-Og: 60 bit
-            # hybridizations: 1-4 = 4 bit
-
-            # long III:
-            # isotope: isotope - common_isotope -8 - +8 = 17 bit
-            # is_radical: 2 bit
-            # charge: -4 - +4: 9 bit
-            # implicit_hydrogens: 0-5 = 6 bit
-            # neighbors: 0-14 = 15 bit
-            # heteroatoms: 0-14 = 15 bit
-
-            # long IV:
-            # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
             masks1 = []
             masks2 = []
             masks3 = []
@@ -351,21 +351,20 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
                             v1 = 1 << (59 - n)
                             v2 = 0
                     if a.isotope:
-                        v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 55)
+                        v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 54)
                         if a.is_radical:
-                            v3 |= 0x400000000000
-                        else:
                             v3 |= 0x200000000000
-                    else:  # any isotope
-                        if a.is_radical:
-                            v3 = 0xffffc00000000000
                         else:
-                            v3 = 0xffffa00000000000
+                            v3 |= 0x100000000000
+                    elif a.is_radical:  # any isotope
+                        v3 = 0xffffe00000000000
+                    else:
+                        v3 = 0xffffd00000000000
 
-                    v3 |= 1 << (a.charge + 40)
+                    v3 |= 1 << (a.charge + 39)
 
                     if not a.implicit_hydrogens:
-                        v3 |= 0xfc0000000
+                        v3 |= 0x7c0000000
                     else:
                         for h in a.implicit_hydrogens:
                             v3 |= 1 << (h + 30)
@@ -383,6 +382,8 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
                                 if r > 65:  # big rings not supported
                                     continue
                                 v4 |= 1 << (65 - r)
+                            if not v4:  # only 65+ rings. set as rings-free.
+                                v4 = 0x8000000000000000
                         else:  # not in rings
                             v4 = 0x8000000000000000
                     else:  # any rings
@@ -395,10 +396,10 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
                         v3 |= 1 << (n + 15)
 
                 if not a.hybridization:
-                    v2 |= 0x1e
+                    v2 |= 0xf
                 else:
                     for n in a.hybridization:
-                        v2 |= 1 << n
+                        v2 |= 1 << (n - 1)
 
                 if b is not None:
                     for o in b.order:
