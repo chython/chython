@@ -52,7 +52,7 @@ def get_mapping(unsigned long[:] q_numbers not None, unsigned int[:] q_back not 
                 unsigned long long[:] o_bonds not None,
                 unsigned int[:] o_from not None, unsigned int[:] o_to not None,
                 unsigned int[:] o_indices not None,
-                bint[:] scope not None):
+                unsigned int[:] scope not None):
     # expected less than 2^16 atoms in structure.
     cdef unsigned int stack = 0, path_size = 0, q_size, i, j, depth, front, back
     cdef unsigned long q_number, o_number
@@ -63,10 +63,10 @@ def get_mapping(unsigned long[:] q_numbers not None, unsigned int[:] q_back not 
     cdef int *path = <int *> PyMem_Malloc(q_size * sizeof(int))
     cdef int *stack_index = <int *> PyMem_Malloc(2 * len(q_numbers) * sizeof(int))
     cdef int *stack_depth = <int *> PyMem_Malloc(2 * len(q_numbers) * sizeof(int))
-    cdef bint *matched = <bint *> PyMem_Malloc(len(q_numbers) * sizeof(bint))
+    cdef bint *matched = <bint *> PyMem_Malloc(len(o_numbers) * sizeof(bint))
     if not path or not stack_index or not stack_depth or not matched:
         raise MemoryError()
-    memset(&matched[0], 0, len(q_numbers) * sizeof(bint))
+    memset(&matched[0], 0, len(o_numbers) * sizeof(bint))
 
     q_mask1 = q_masks1[0]
     q_mask2 = q_masks2[0]
@@ -109,19 +109,19 @@ def get_mapping(unsigned long[:] q_numbers not None, unsigned int[:] q_back not 
                     i = path[back]
 
                 # load next query atom
-                q_element = q_elements[front]
-                q_mask = q_masks[front]
-                q_ring = q_rings[front]
-                q_bond = q_bonds[front]
+                q_mask1 = q_masks1[front]
+                q_mask2 = q_masks2[front]
+                q_mask3 = q_masks3[front]
+                q_mask4 = q_masks4[front]
 
-                for j in range(o_shifts[i], o_shifts[i] + o_neighbors[i]):
+                for j in range(o_from[i], o_to[i]):
                     o_bond = o_bonds[j]
                     j = o_indices[j]  # now j is atom index
-                    if scope[j] and not matched[j] and q_bond & o_bond == o_bond:  # and groups[j] not in uniq:
+                    if scope[j] and not matched[j] and q_mask1 & o_bond == o_bond:
+                        # and groups[j] not in uniq:
                         # uniq.add(groups[o_n])
-
-                        if q_element == o_elements[j] and q_mask & o_masks[j] == o_masks[j] and \
-                            q_ring & o_rings[j] == o_rings[j]:
+                        if q_mask2 & o_bits2[j] == o_bits2[j] and q_mask3 & o_bits3[j] == o_bits3[j] and \
+                            q_mask4 & o_bits4[j]:
                             # check closures equality
                             # o_closures = o_bonds[o_n].keys() & reversed_mapping.keys()
                             # o_closures.discard(n)
