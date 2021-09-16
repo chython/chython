@@ -974,7 +974,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
         from ..files._mdl.mol import common_isotopes
 
-        atoms = self._atoms
         charges = self._charges
         radicals = self._radicals
         hydrogens = self._hydrogens
@@ -983,20 +982,21 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         rings_sizes = self.atoms_rings_sizes
         hybridization = self.hybridization
 
+        mapping = {}
         numbers = []
         bits1 = []
         bits2 = []
         bits3 = []
         bits4 = []
-        for n, ms in self._bonds.items():
+        for i, (n, a) in enumerate(self._atoms.items()):
+            mapping[n] = i
             numbers.append(n)
-            a = atoms[n]
             v2 = 1 << (hybridization(n) - 1)
-            if (n := a.atomic_number) > 58:
+            if (an := a.atomic_number) > 58:
                 v1 = 1  # transfer bit
-                v2 |= 1 << (122 - n)
+                v2 |= 1 << (122 - an)
             else:
-                v1 = 1 << (59 - n)
+                v1 = 1 << (59 - an)
 
             if a.isotope:
                 v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 54)
@@ -1012,7 +1012,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             v3 |= 1 << (charges[n] + 39)
             v3 |= 1 << (hydrogens[n] + 30)
             v3 |= 1 << (neighbors(n) + 15)
-            v3 |= 1 << heteroatoms[n]
+            v3 |= 1 << heteroatoms(n)
 
             if n in rings_sizes:
                 v4 = 0
@@ -1030,11 +1030,34 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             bits3.append(v3)
             bits4.append(v4)
 
-            #                 unsigned long long[:] o_bonds not None,
-            #                 unsigned int[:] o_from not None, unsigned int[:] o_to not None,
-            #                 unsigned int[:] o_indices not None,
+        o_from = [None] * len(mapping)
+        o_to = [None] * len(mapping)
+        indices = [None] * self.bonds_count * 2
+        bonds = [None] * self.bonds_count * 2
+        start = 0
+        for n, ms in self._bonds.items():
+            i = mapping[n]
+            o_from[i] = start
+            for j, (m, b) in enumerate(ms.items(), start):
+                indices[j] = x = mapping[m]
+                v = bits1[x]
+                o = b.order
+                if o == 1:
+                    v |= 0x0800000000000000
+                elif o == 4:
+                    v |= 0x4000000000000000
+                elif o == 2:
+                    v |= 0x1000000000000000
+                elif o == 3:
+                    v |= 0x2000000000000000
+                else:
+                    v |= 0x8000000000000000
+                bonds[j] = v
+            start += len(ms)
+            o_to[i] = start
 
-        return array('L', numbers), array('Q', bits1), array('Q', bits2), array('Q', bits3), array('Q', bits4)
+        return (array('L', numbers), array('Q', bits1), array('Q', bits2), array('Q', bits3), array('Q', bits4),
+                array('Q', bonds), array('I', o_from), array('I', o_to), array('I', indices))
 
     def _calc_implicit(self, n: int):
         atoms = self._atoms
