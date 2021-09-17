@@ -49,7 +49,7 @@ cdef extern from "Python.h":
 def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back not None,
                 unsigned long long[::1] q_masks1 not None, unsigned long long[::1] q_masks2 not None,
                 unsigned long long[::1] q_masks3 not None, unsigned long long[::1] q_masks4 not None,
-                unsigned int[::1] q_closures not None,
+                unsigned int[::1] q_closures not None, unsigned int[::1] q_indices not None,
                 unsigned int[::1] q_from not None, unsigned int[::1] q_to not None,
 
                 unsigned long[::1] o_numbers not None,
