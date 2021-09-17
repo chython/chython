@@ -313,13 +313,10 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
         # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
         from ..files._mdl.mol import common_isotopes
 
-        _components, closures = self._compiled_query
+        _components, _closures = self._compiled_query
         components = []
         for c in _components:
-            q_numbers = array('L', [n for n, *_ in c])
             mapping = {n: i for i, (n, *_) in enumerate(c)}
-            q_back = array('I', [0] + [mapping[x] for _, x, *_ in c[1:]])
-
             masks1 = []
             masks2 = []
             masks3 = []
@@ -418,11 +415,23 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
                 masks2.append(v2)
                 masks3.append(v3)
                 masks4.append(v4)
-            q_masks1 = array('Q', masks1)
-            q_masks2 = array('Q', masks2)
-            q_masks3 = array('Q', masks3)
-            q_masks4 = array('Q', masks4)
-            components.append((q_numbers, q_back, q_masks1, q_masks2, q_masks3, q_masks4))
+
+            closures = [0] * len(c)  # has closures flag
+            q_from = [0] * len(c)
+            q_to = [0] * len(c)
+            indices = [0] * sum(len(ms) for n, ms in _closures.items() if n in mapping)
+
+            start = 0
+            for n, ms in _closures.items():
+                if (n := mapping.get(n)) is not None:
+                    closures[n] = 1
+                    q_from[n] = start
+                    ...
+                    start += len(ms)
+                    q_to[n] = start
+            components.append((array('L', [n for n, *_ in c]), array('I', [0] + [mapping[x] for _, x, *_ in c[1:]]),
+                               array('Q', masks1), array('Q', masks2), array('Q', masks3), array('Q', masks4),
+                               array('I', closures), array('I', q_from), array('I', q_to)))
         return components
 
     @staticmethod

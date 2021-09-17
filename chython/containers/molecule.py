@@ -1030,10 +1030,10 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             bits3.append(v3)
             bits4.append(v4)
 
-        o_from = [None] * len(mapping)
-        o_to = [None] * len(mapping)
-        indices = [None] * self.bonds_count * 2
-        bonds = [None] * self.bonds_count * 2
+        o_from = [0] * len(mapping)
+        o_to = [0] * len(mapping)
+        indices = [0] * self.bonds_count * 2
+        bonds = [0] * self.bonds_count * 2
         start = 0
         for n, ms in self._bonds.items():
             i = mapping[n]
