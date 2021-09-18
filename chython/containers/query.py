@@ -426,7 +426,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
                 if (n := mapping.get(n)) is not None:
                     closures[n] = 1
                     q_from[n], q_to[n] = start, (stop := start + len(ms))
-                    indices[start:stop] = [ms[0] for n, ms in _closures.items() if n in mapping]
+                    indices[start:stop] = [m[0] for m in ms]
 
             components.append((array('L', [n for n, *_ in c]), array('I', [0] + [mapping[x] for _, x, *_ in c[1:]]),
                                array('Q', masks1), array('Q', masks2), array('Q', masks3), array('Q', masks4),
