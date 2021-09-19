@@ -420,6 +420,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
             q_from = [0] * len(c)
             q_to = [0] * len(c)
             indices = [0] * sum(len(ms) for n, ms in _closures.items() if n in mapping)
+            bonds = [0] * len(indices)
 
             start = 0
             for n, ms in _closures.items():
@@ -427,10 +428,13 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
                     closures[n] = 1
                     q_from[n], q_to[n] = start, (stop := start + len(ms))
                     indices[start:stop] = [m[0] for m in ms]
+                    bonds[start:stop] = [m[1] for m in ms]
+                    start = stop
 
             components.append((array('L', [n for n, *_ in c]), array('I', [0] + [mapping[x] for _, x, *_ in c[1:]]),
                                array('Q', masks1), array('Q', masks2), array('Q', masks3), array('Q', masks4),
-                               array('I', closures), array('I', indices), array('I', q_from), array('I', q_to)))
+                               array('I', q_from), array('I', q_to), array('I', indices), array('I', closures),
+                               array('I', bonds)))
         return components
 
     @staticmethod
