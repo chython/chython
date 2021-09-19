@@ -62,17 +62,17 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                 unsigned int[::1] o_indices not None,
                 unsigned int[::1] scope not None):
     # expected less than 2^16 atoms in structure.
-    cdef unsigned int stack = 0, path_size = 0, q_size, o_size, n, o_n, o_m, i, j, depth, front, back, has_closures
+    cdef unsigned int stack = 0, path_size = 0, q_size, qds, o_size, n, o_n, o_m, i, j, depth, front, back, has_closures
     cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond
     cdef dict mapping
 
     q_size = len(q_numbers)
+    qds = q_size - 1
     o_size = len(o_numbers)
-    cdef int *stack_index = <int *> PyMem_Malloc(2 * q_size * sizeof(int))
-    cdef int *stack_depth = <int *> PyMem_Malloc(2 * q_size * sizeof(int))
+    cdef int *path = <int *> PyMem_Malloc(qds * sizeof(int))
+    cdef int *stack_index = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
+    cdef int *stack_depth = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef bint *matched = <bint *> PyMem_Malloc(o_size * sizeof(bint))
-    q_size -= 1
-    cdef int *path = <int *> PyMem_Malloc(q_size * sizeof(int))
     if not path or not stack_index or not stack_depth or not matched:
         raise MemoryError()
     memset(&matched[0], 0, o_size * sizeof(bint))
@@ -99,10 +99,10 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
             depth = stack_depth[stack]
             n = stack_index[stack]
 
-            if depth == q_size:
-                mapping = _PyDict_NewPresized(q_size + 1)
+            if depth == qds:
+                mapping = _PyDict_NewPresized(q_size)
                 mapping[q_numbers[depth]] = o_numbers[n]
-                for i in range(q_size):
+                for i in range(qds):
                     mapping[q_numbers[i]] = o_numbers[path[i]]
                 yield mapping
             else:
