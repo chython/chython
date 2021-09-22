@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -72,13 +73,13 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
     cdef int *stack_index = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef int *stack_depth = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef bint *matched = <bint *> PyMem_Malloc(o_size * sizeof(bint))
-
     cdef unsigned long long *o_closures = <unsigned long long *> PyMem_Malloc(o_size * sizeof(unsigned long long))
 
     if not path or not stack_index or not stack_depth or not matched or not o_closures:
         raise MemoryError()
 
     memset(&matched[0], 0, o_size * sizeof(bint))
+    memset(o_closures, 0, o_size * sizeof(unsigned long long))
 
     # find entry-points.
     q_mask1 = q_masks1[0]
@@ -162,7 +163,9 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                                     stack_depth[stack] = front
                                     stack += 1
 
-                            memset(o_closures, 0, (o_size + 1) * sizeof(unsigned long long))
+                            # fill an array with nulls
+                            for j in range(o_from[o_n], o_to[o_n]):
+                                o_closures[o_indices[j]] = 0
                         else:  # candidate atom should not have closures.
                             for j in range(o_from[o_n], o_to[o_n]):
                                o_m = o_indices[j]
