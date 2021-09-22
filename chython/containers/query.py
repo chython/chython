@@ -416,7 +416,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
                 masks3.append(v3)
                 masks4.append(v4)
 
-            closures = [0] * len(c)  # has closures flag
+            closures = [0] * len(c)  # closures amount
             q_from = [0] * len(c)
             q_to = [0] * len(c)
             indices = [0] * sum(len(ms) for n, ms in _closures.items() if n in mapping)
@@ -425,7 +425,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
             start = 0
             for n, ms in _closures.items():
                 if (i := mapping.get(n)) is not None:
-                    closures[i] = 1
+                    closures[i] = len(ms)
                     q_from[i] = start
                     for j, (m, b) in enumerate(ms, start):
                         v = 0

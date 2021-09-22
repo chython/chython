@@ -24,46 +24,24 @@ from libc.string cimport memset
 cdef extern from "Python.h":
     dict _PyDict_NewPresized(Py_ssize_t minused)
 
-# long I:
-# bond: single, double, triple, aromatic, special = 5 bit
-# atom: H-Ce: 58 bit
-# transfer bit
-
-# long II:
-# atom Pr-Og: 60 bit
-# hybridizations: 1-4 = 4 bit
-
-# long III:
-# isotope: isotope - common_isotope -8 - +8 = 17 bit
-# is_radical: 2 bit
-# charge: -4 - +4: 9 bit
-# implicit_hydrogens: 0-5 = 6 bit
-# neighbors: 0-14 = 15 bit
-# heteroatoms: 0-14 = 15 bit
-
-# long IV:
-# ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
-
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back not None,
                 unsigned long long[::1] q_masks1 not None, unsigned long long[::1] q_masks2 not None,
                 unsigned long long[::1] q_masks3 not None, unsigned long long[::1] q_masks4 not None,
-                unsigned int[::1] q_closures not None,
-                unsigned int[::1] q_from not None, unsigned int[::1] q_to not None,
-                unsigned int[::1] q_indices not None, unsigned long long[::1] q_bonds not None,
-                unsigned long[::1] o_numbers not None,
+                unsigned int[::1] q_closures not None, unsigned int[::1] q_from not None,
+                unsigned int[::1] q_to not None, unsigned int[::1] q_indices not None,
+                unsigned long long[::1] q_bonds not None, unsigned long[::1] o_numbers not None,
                 unsigned long long[::1] o_bits1 not None, unsigned long long[::1] o_bits2 not None,
                 unsigned long long[::1] o_bits3 not None, unsigned long long[::1] o_bits4 not None,
-                unsigned long long[::1] o_bonds not None,
-                unsigned int[::1] o_from not None, unsigned int[::1] o_to not None,
-                unsigned int[::1] o_indices not None,
+                unsigned long long[::1] o_bonds not None, unsigned int[::1] o_from not None,
+                unsigned int[::1] o_to not None, unsigned int[::1] o_indices not None,
                 unsigned int[::1] scope not None):
     # expected less than 2^16 atoms in structure.
-    cdef unsigned int stack = 0, path_size = 0, q_size, q_size_dec, o_size, depth, front, back, has_closures
-    cdef unsigned int n, o_n, o_m, q_m, i, j, closures_counter
-    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond, q_bond
+    cdef unsigned int stack = 0, path_size = 0, q_size, q_size_dec, o_size, depth, front, back, closures_num
+    cdef unsigned int n, m, o, i, j, closures_counter
+    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond
     cdef dict mapping
 
     q_size = len(q_numbers)
@@ -129,50 +107,46 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                 q_mask2 = q_masks2[front]
                 q_mask3 = q_masks3[front]
                 q_mask4 = q_masks4[front]
-                has_closures = q_closures[front]
+                closures_num = q_closures[front]
 
                 for i in range(o_from[n], o_to[n]):
                     o_bond = o_bonds[i]
-                    o_n = o_indices[i]
-                    if (scope[o_n] and not matched[o_n] and
+                    m = o_indices[i]
+                    if (scope[m] and not matched[m] and
                         q_mask1 & o_bond == o_bond and
-                        q_mask2 & o_bits2[o_n] == o_bits2[o_n] and
-                        q_mask3 & o_bits3[o_n] == o_bits3[o_n] and
-                        q_mask4 & o_bits4[o_n]):
+                        q_mask2 & o_bits2[m] == o_bits2[m] and
+                        q_mask3 & o_bits3[m] == o_bits3[m] and
+                        q_mask4 & o_bits4[m]):
 
-                        if has_closures:  # candidate atom should have same closures.
+                        if closures_num:  # candidate atom should have same closures.
                             closures_counter = 0
                             # make a map of closures for o_n atom
                             # an index is an neighbor atom and an value is an bond between o_n and the neighbor
-                            for j in range(o_from[o_n], o_to[o_n]):
-                                o_m = o_indices[j]
-                                if o_m != n and matched[o_m]:
-                                    o_closures[o_m] = o_bonds[j]
+                            for j in range(o_from[m], o_to[m]):
+                                o = o_indices[j]
+                                if o != n and matched[o]:
+                                    o_closures[o] = o_bonds[j]
                                     closures_counter += 1
 
-                            if closures_counter == q_to[front] - q_from[front]:
+                            if closures_counter == closures_num:
                                 for j in range(q_from[front], q_to[front]):
-                                    q_m = q_indices[j]
-                                    o_m = path[q_m]
-                                    q_bond = q_bonds[j]
-                                    o_bond = o_closures[o_m]
-                                    if not q_bond & o_bond:  # if true then enough
+                                    if not q_bonds[j] & o_closures[path[q_indices[j]]]:  # if true then enough
                                         break
                                 else:
-                                    stack_index[stack] = o_n
+                                    stack_index[stack] = m
                                     stack_depth[stack] = front
                                     stack += 1
 
                             # fill an array with nulls
-                            for j in range(o_from[o_n], o_to[o_n]):
+                            for j in range(o_from[m], o_to[m]):
                                 o_closures[o_indices[j]] = 0
                         else:  # candidate atom should not have closures.
-                            for j in range(o_from[o_n], o_to[o_n]):
-                               o_m = o_indices[j]
-                               if o_m != n and matched[o_m]:
+                            for j in range(o_from[m], o_to[m]):
+                               o = o_indices[j]
+                               if o != n and matched[o]:
                                    break  # found closure
                             else:
-                                stack_index[stack] = o_n
+                                stack_index[stack] = m
                                 stack_depth[stack] = front
                                 stack += 1
     finally:
