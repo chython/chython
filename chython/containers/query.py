@@ -420,18 +420,34 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
             q_from = [0] * len(c)
             q_to = [0] * len(c)
             indices = [0] * sum(len(ms) for n, ms in _closures.items() if n in mapping)
+            bonds = indices.copy()
 
             start = 0
             for n, ms in _closures.items():
-                if (n := mapping.get(n)) is not None:
-                    closures[n] = 1
-                    q_from[n] = start
-                    ...
+                if (i := mapping.get(n)) is not None:
+                    closures[i] = 1
+                    q_from[i] = start
+                    for j, (m, b) in enumerate(ms, start):
+                        v = 0
+                        for o in b.order:
+                            if o == 1:
+                                v |= 0x0800000000000000
+                            elif o == 4:
+                                v |= 0x4000000000000000
+                            elif o == 2:
+                                v |= 0x1000000000000000
+                            elif o == 3:
+                                v |= 0x2000000000000000
+                            else:
+                                v |= 0x8000000000000000
+                        bonds[j] = v
+                        indices[j] = mapping[m]
                     start += len(ms)
-                    q_to[n] = start
+                    q_to[i] = start
             components.append((array('L', [n for n, *_ in c]), array('I', [0] + [mapping[x] for _, x, *_ in c[1:]]),
                                array('Q', masks1), array('Q', masks2), array('Q', masks3), array('Q', masks4),
-                               array('I', closures), array('I', q_from), array('I', q_to)))
+                               array('I', closures), array('I', q_from), array('I', q_to),
+                               array('I', indices), array('Q', bonds)))
         return components
 
     @staticmethod
