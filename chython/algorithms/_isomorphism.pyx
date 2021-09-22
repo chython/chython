@@ -78,7 +78,7 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
     if not path or not stack_index or not stack_depth or not matched or not o_closures:
         raise MemoryError()
 
-    memset(&matched[0], 0, o_size * sizeof(bint))
+    memset(matched, 0, o_size * sizeof(bint))
     memset(o_closures, 0, o_size * sizeof(unsigned long long))
 
     # find entry-points.
@@ -150,7 +150,7 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                                     o_closures[o_m] = o_bonds[j]
                                     closures_counter += 1
 
-                            if closures_counter == q_from[front] - q_to[front]:
+                            if closures_counter == q_to[front] - q_from[front]:
                                 for j in range(q_from[front], q_to[front]):
                                     q_m = q_indices[j]
                                     o_m = path[q_m]
