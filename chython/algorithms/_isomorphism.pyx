@@ -61,7 +61,7 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                 unsigned int[::1] scope not None):
     # expected less than 2^16 atoms in structure.
     cdef unsigned int stack = 0, path_size = 0, q_size, q_size_dec, o_size, depth, front, back, has_closures
-    cdef unsigned int n, o_n, o_m, q_m, i, j
+    cdef unsigned int n, o_n, o_m, q_m, i, j, closures_counter
     cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond, q_bond
     cdef dict mapping
 
@@ -73,12 +73,9 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
     cdef int *stack_depth = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef bint *matched = <bint *> PyMem_Malloc(o_size * sizeof(bint))
 
-    cdef unsigned long long *q_closures_bonds = <unsigned long long *> PyMem_Malloc((q_size + 1) * sizeof(unsigned long long))
-    cdef unsigned long long *o_closures_bonds = <unsigned long long *> PyMem_Malloc((o_size + 1) * sizeof(unsigned long long))
-    cdef unsigned int *premapped = <unsigned int *> PyMem_Malloc((q_size + 1) * sizeof(unsigned int))
+    cdef unsigned long long *o_closures = <unsigned long long *> PyMem_Malloc(o_size * sizeof(unsigned long long))
 
-    if not path or not stack_index or not stack_depth or not matched or not premapped \
-        or not q_closures_bonds or not o_closures_bonds:
+    if not path or not stack_index or not stack_depth or not matched or not o_closures:
         raise MemoryError()
 
     memset(&matched[0], 0, o_size * sizeof(bint))
@@ -115,7 +112,6 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                 if path_size != depth:  # dead end reached
                     for i in range(depth, path_size):
                         matched[path[i]] = False  # mark unmatched
-                        premapped[q_numbers[i]] = 0
                     path_size = depth
 
                 matched[n] = True
@@ -144,34 +140,35 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                         q_mask4 & o_bits4[o_n]):
 
                         if has_closures:  # candidate atom should have same closures.
+                            closures_counter = 0
+                            # make a map of closures for o_n atom
+                            # an index is an neighbor atom and an value is an bond between o_n and the neighbor
                             for j in range(o_from[o_n], o_to[o_n]):
                                 o_m = o_indices[j]
                                 if o_m != n and matched[o_m]:
-                                    o_closures_bonds[o_m] = o_bonds[j]
+                                    o_closures[o_m] = o_bonds[j]
+                                    closures_counter += 1
 
-                            for j in range(q_from[front], q_to[front]):
-                                q_closures_bonds[q_indices[j]] = q_bonds[j]
+                            if closures_counter == q_from[front] - q_to[front]:
+                                for j in range(q_from[front], q_to[front]):
+                                    q_m = q_indices[j]
+                                    o_m = path[q_m]
+                                    q_bond = q_bonds[j]
+                                    o_bond = o_closures[o_m]
+                                    if not q_bond & o_bond:  # if true then enough
+                                        break
+                                else:
+                                    stack_index[stack] = o_n
+                                    stack_depth[stack] = front
+                                    stack += 1
 
-                            for j in range(q_from[front], q_to[front]):
-                                q_m = q_indices[j]
-                                o_m = premapped[q_m]
-                                if not o_m or q_closures_bonds[q_m] & o_closures_bonds[o_m] != o_closures_bonds[o_m]:
-                                    break
-                            else:
-                                premapped[front] = o_n
-                                stack_index[stack] = o_n
-                                stack_depth[stack] = front
-                                stack += 1
-
-                            memset(o_closures_bonds, 0, (o_size + 1) * sizeof(unsigned long long))
-                            memset(q_closures_bonds, 0, (q_size + 1) * sizeof(unsigned long long))
+                            memset(o_closures, 0, (o_size + 1) * sizeof(unsigned long long))
                         else:  # candidate atom should not have closures.
                             for j in range(o_from[o_n], o_to[o_n]):
                                o_m = o_indices[j]
                                if o_m != n and matched[o_m]:
                                    break  # found closure
                             else:
-                                premapped[front] = o_n
                                 stack_index[stack] = o_n
                                 stack_depth[stack] = front
                                 stack += 1
@@ -180,6 +177,4 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
         PyMem_Free(matched)
         PyMem_Free(stack_index)
         PyMem_Free(stack_depth)
-        PyMem_Free(o_closures_bonds)
-        PyMem_Free(q_closures_bonds)
-        PyMem_Free(premapped)
+        PyMem_Free(o_closures)
