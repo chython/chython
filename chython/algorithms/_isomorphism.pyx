@@ -62,7 +62,7 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
     # expected less than 2^16 atoms in structure.
     cdef unsigned int stack = 0, path_size = 0, q_size, q_size_dec, o_size, depth, front, back, has_closures
     cdef unsigned int n, o_n, o_m, q_m, i, j
-    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond
+    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond, q_bond
     cdef dict mapping
 
     q_size = len(q_numbers)
@@ -73,9 +73,9 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
     cdef int *stack_depth = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef bint *matched = <bint *> PyMem_Malloc(o_size * sizeof(bint))
 
-    cdef int *q_closures_bonds = <int *> PyMem_Malloc((q_size + 1) * sizeof(int))
-    cdef int *o_closures_bonds = <int *> PyMem_Malloc((o_size + 1) * sizeof(int))
-    cdef int *premapped = <int *> PyMem_Malloc((q_size + 1) * sizeof(int))
+    cdef unsigned long long *q_closures_bonds = <unsigned long long *> PyMem_Malloc((q_size + 1) * sizeof(unsigned long long))
+    cdef unsigned long long *o_closures_bonds = <unsigned long long *> PyMem_Malloc((o_size + 1) * sizeof(unsigned long long))
+    cdef unsigned int *premapped = <unsigned int *> PyMem_Malloc((q_size + 1) * sizeof(unsigned int))
 
     if not path or not stack_index or not stack_depth or not matched or not premapped \
         or not q_closures_bonds or not o_closures_bonds:
@@ -115,6 +115,7 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                 if path_size != depth:  # dead end reached
                     for i in range(depth, path_size):
                         matched[path[i]] = False  # mark unmatched
+                        premapped[q_numbers[i]] = 0
                     path_size = depth
 
                 matched[n] = True
@@ -162,8 +163,8 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                                 stack_depth[stack] = front
                                 stack += 1
 
-                            memset(o_closures_bonds, 0, (o_size + 1) * sizeof(int))
-                            memset(q_closures_bonds, 0, (q_size + 1) * sizeof(int))
+                            memset(o_closures_bonds, 0, (o_size + 1) * sizeof(unsigned long long))
+                            memset(q_closures_bonds, 0, (q_size + 1) * sizeof(unsigned long long))
                         else:  # candidate atom should not have closures.
                             for j in range(o_from[o_n], o_to[o_n]):
                                o_m = o_indices[j]
