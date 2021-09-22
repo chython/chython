@@ -49,11 +49,9 @@ cdef extern from "Python.h":
 def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back not None,
                 unsigned long long[::1] q_masks1 not None, unsigned long long[::1] q_masks2 not None,
                 unsigned long long[::1] q_masks3 not None, unsigned long long[::1] q_masks4 not None,
+                unsigned int[::1] q_closures not None,
                 unsigned int[::1] q_from not None, unsigned int[::1] q_to not None,
-                unsigned int[::1] q_indices not None, unsigned int[::1] q_closures not None,
-                unsigned int[::1] q_bonds not None,
-
-
+                unsigned int[::1] q_indices not None, unsigned long long[::1] q_bonds not None,
                 unsigned long[::1] o_numbers not None,
                 unsigned long long[::1] o_bits1 not None, unsigned long long[::1] o_bits2 not None,
                 unsigned long long[::1] o_bits3 not None, unsigned long long[::1] o_bits4 not None,
@@ -62,15 +60,15 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                 unsigned int[::1] o_indices not None,
                 unsigned int[::1] scope not None):
     # expected less than 2^16 atoms in structure.
-    cdef unsigned int stack = 0, path_size = 0, q_size, qds, o_size, n, o_n, o_m, q_m, i, j, depth, front, back, \
-        has_closures
+    cdef unsigned int stack = 0, path_size = 0, q_size, q_size_dec, o_size, depth, front, back, has_closures
+    cdef unsigned int n, o_n, o_m, q_m, i, j
     cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond
     cdef dict mapping
 
     q_size = len(q_numbers)
-    qds = q_size - 1
+    q_size_dec = q_size - 1
     o_size = len(o_numbers)
-    cdef int *path = <int *> PyMem_Malloc(qds * sizeof(int))
+    cdef int *path = <int *> PyMem_Malloc(q_size_dec * sizeof(int))
     cdef int *stack_index = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef int *stack_depth = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef bint *matched = <bint *> PyMem_Malloc(o_size * sizeof(bint))
@@ -107,11 +105,11 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
             depth = stack_depth[stack]
             n = stack_index[stack]
 
-            if depth == qds:
+            if depth == q_size_dec:
                 mapping = _PyDict_NewPresized(q_size)
-                mapping[q_numbers[depth]] = o_numbers[n]
-                for i in range(qds):
+                for i in range(depth):
                     mapping[q_numbers[i]] = o_numbers[path[i]]
+                mapping[q_numbers[depth]] = o_numbers[n]
                 yield mapping
             else:
                 if path_size != depth:  # dead end reached
@@ -166,14 +164,6 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
 
                             memset(o_closures_bonds, 0, (o_size + 1) * sizeof(int))
                             memset(q_closures_bonds, 0, (q_size + 1) * sizeof(int))
-
-                            #for j in range(q_from[o_n], q_to[o_n]):
-                            #    ...
-                            # o_closures = o_bonds[o_n].keys() & reversed_mapping.keys()
-                            # o_closures.discard(n)
-                            #if o_closures == {mapping[m] for m, _ in query_closures[s_n]}:
-                            #    obon = o_bonds[o_n]
-                            #    if all(bond == obon[mapping[m]] for m, bond in query_closures[s_n]):
                         else:  # candidate atom should not have closures.
                             for j in range(o_from[o_n], o_to[o_n]):
                                o_m = o_indices[j]
