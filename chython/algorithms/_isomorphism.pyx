@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -61,8 +62,8 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                 unsigned int[::1] scope not None):
     # expected less than 2^16 atoms in structure.
     cdef unsigned int stack = 0, path_size = 0, q_size, q_size_dec, o_size, depth, front, back, has_closures
-    cdef unsigned int n, o_n, o_m, i, j
-    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond
+    cdef unsigned int n, o_n, o_m, q_m, i, j, closures_counter
+    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond, q_bond
     cdef dict mapping
 
     q_size = len(q_numbers)
@@ -72,9 +73,13 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
     cdef int *stack_index = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef int *stack_depth = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef bint *matched = <bint *> PyMem_Malloc(o_size * sizeof(bint))
-    if not path or not stack_index or not stack_depth or not matched:
+    cdef unsigned long long *o_closures = <unsigned long long *> PyMem_Malloc(o_size * sizeof(unsigned long long))
+
+    if not path or not stack_index or not stack_depth or not matched or not o_closures:
         raise MemoryError()
-    memset(&matched[0], 0, o_size * sizeof(bint))
+
+    memset(matched, 0, o_size * sizeof(bint))
+    memset(o_closures, 0, o_size * sizeof(unsigned long long))
 
     # find entry-points.
     q_mask1 = q_masks1[0]
@@ -136,16 +141,31 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                         q_mask4 & o_bits4[o_n]):
 
                         if has_closures:  # candidate atom should have same closures.
-                            #for j in range(q_from[o_n], q_to[o_n]):
-                            #    ...
-                            # o_closures = o_bonds[o_n].keys() & reversed_mapping.keys()
-                            # o_closures.discard(n)
-                            #if o_closures == {mapping[m] for m, _ in query_closures[s_n]}:
-                            #    obon = o_bonds[o_n]
-                            #    if all(bond == obon[mapping[m]] for m, bond in query_closures[s_n]):
-                            stack_index[stack] = o_n
-                            stack_depth[stack] = front
-                            stack += 1
+                            closures_counter = 0
+                            # make a map of closures for o_n atom
+                            # an index is an neighbor atom and an value is an bond between o_n and the neighbor
+                            for j in range(o_from[o_n], o_to[o_n]):
+                                o_m = o_indices[j]
+                                if o_m != n and matched[o_m]:
+                                    o_closures[o_m] = o_bonds[j]
+                                    closures_counter += 1
+
+                            if closures_counter == q_to[front] - q_from[front]:
+                                for j in range(q_from[front], q_to[front]):
+                                    q_m = q_indices[j]
+                                    o_m = path[q_m]
+                                    q_bond = q_bonds[j]
+                                    o_bond = o_closures[o_m]
+                                    if not q_bond & o_bond:  # if true then enough
+                                        break
+                                else:
+                                    stack_index[stack] = o_n
+                                    stack_depth[stack] = front
+                                    stack += 1
+
+                            # fill an array with nulls
+                            for j in range(o_from[o_n], o_to[o_n]):
+                                o_closures[o_indices[j]] = 0
                         else:  # candidate atom should not have closures.
                             for j in range(o_from[o_n], o_to[o_n]):
                                o_m = o_indices[j]
@@ -160,3 +180,4 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
         PyMem_Free(matched)
         PyMem_Free(stack_index)
         PyMem_Free(stack_depth)
+        PyMem_Free(o_closures)
