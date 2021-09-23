@@ -17,8 +17,9 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import abstractmethod
+from array import array
 from collections import defaultdict, deque
-from functools import cached_property
+from functools import cached_property, partial
 from itertools import permutations
 from typing import Any, Dict, Iterator, Set, TYPE_CHECKING, Union
 from .._functions import lazy_product
@@ -79,7 +80,7 @@ class Isomorphism:
         :param optimize: Morgan weights based automorphism preventing.
         """
         try:
-            next(self.get_mapping(other, optimize=optimize, automorphism_filter=False))
+            next(self.get_mapping(other, automorphism_filter=False))
         except StopIteration:
             return False
         return True
@@ -93,36 +94,33 @@ class Isomorphism:
         if len(self) != len(other):
             return False
         try:
-            next(self.get_mapping(other, optimize=optimize, automorphism_filter=False))
+            next(self.get_mapping(other, automorphism_filter=False))
         except StopIteration:
             return False
         return True
 
     @abstractmethod
-    def get_mapping(self, other, /, *, automorphism_filter: bool = True,
-                    optimize: bool = True, fallback: bool = False) -> Iterator[Dict[int, int]]:
+    def get_mapping(self, other, /, *, automorphism_filter: bool = True, _cython=False) -> Iterator[Dict[int, int]]:
         """
         Get self to other substructure mapping generator.
 
         :param automorphism_filter: Skip matches to same atoms.
-        :param optimize: Morgan weights based automorphism preventing.
-        :param fallback: Try without optimization then nothing matched.
         """
-        if optimize:
-            g = self.__components_mapping(other, other.atoms_order, automorphism_filter)
-            m = next(g, None)
-            if m is not None:
-                yield m
-                yield from g
-                return
-            elif not fallback:
-                return
-        yield from self.__components_mapping(other, {n: i for i, n in enumerate(other)}, automorphism_filter)
+        if _cython:  # ad-hoc for QueryContainer
+            try:  # windows? ;)
+                from ._isomorphism import get_mapping as _cython_get_mapping
+            except ImportError:
+                components, closures = self._compiled_query
+                get_mapping = partial(_get_mapping, query_closures=closures, o_atoms=other._atoms, o_bonds=other._bonds)
+            else:
+                components = self._cython_compiled_query  # override to cython data
 
-    def __components_mapping(self, other, o_order, automorphism_filter):
-        components, closures = self._compiled_query
-        o_atoms = other._atoms
-        o_bonds = other._bonds
+                def get_mapping(query, scope):
+                    return _cython_get_mapping(*query, *other._cython_compiled_structure,
+                                               array('I', [n in scope for n in other]))
+        else:
+            components, closures = self._compiled_query
+            get_mapping = partial(_get_mapping, query_closures=closures, o_atoms=other._atoms, o_bonds=other._bonds)
 
         seen = set()
         if len(components) == 1:
@@ -130,7 +128,7 @@ class Isomorphism:
                 candidate = self._isomorphism_candidates(other, 0, other_component)
                 if not candidate:
                     continue
-                for mapping in _get_mapping(components[0], closures, o_atoms, o_bonds, candidate, o_order):
+                for mapping in get_mapping(components[0], scope=candidate):
                     if automorphism_filter:
                         atoms = frozenset(mapping.values())
                         if atoms in seen:
@@ -144,7 +142,7 @@ class Isomorphism:
                     candidate = self._isomorphism_candidates(other, self_component, other_component)
                     if not candidate:
                         break
-                    mappers.append(_get_mapping(component, closures, o_atoms, o_bonds, candidate, o_order))
+                    mappers.append(get_mapping(component, scope=candidate))
                 else:
                     for match in lazy_product(*mappers):
                         mapping = match[0].copy()
@@ -197,8 +195,7 @@ def _get_automorphism_mapping(atoms: Dict[int, int], bonds: Dict[int, Dict[int, 
         return  # all atoms unique
 
     components, closures = _compile_query(atoms, bonds, atoms_frequencies)
-    groups = {x: n for n, x in enumerate(atoms)}
-    mappers = [_get_mapping(order, closures, atoms, bonds, {x for x, *_ in order}, groups)
+    mappers = [_get_mapping(order, closures, atoms, bonds, {x for x, *_ in order})
                for order in components]
     if len(mappers) == 1:
         for mapping in mappers[0]:
@@ -212,7 +209,7 @@ def _get_automorphism_mapping(atoms: Dict[int, int], bonds: Dict[int, Dict[int, 
             yield mapping
 
 
-def _get_mapping(linear_query, query_closures, o_atoms, o_bonds, scope, groups):
+def _get_mapping(linear_query, query_closures, o_atoms, o_bonds, scope):
     size = len(linear_query) - 1
     order_depth = {v[0]: k for k, v in enumerate(linear_query)}
 
@@ -230,7 +227,7 @@ def _get_mapping(linear_query, query_closures, o_atoms, o_bonds, scope, groups):
         n, depth = stack.pop()
         current = linear_query[depth][0]
         if depth == size:
-            yield {current: n, **mapping}
+            yield {**mapping, current: n}
         else:
             if len(path) != depth:
                 for x in path[depth:]:
@@ -246,10 +243,8 @@ def _get_mapping(linear_query, query_closures, o_atoms, o_bonds, scope, groups):
             if back != current:
                 n = path[order_depth[back]]
 
-            uniq = set()
             for o_n, o_bond in o_bonds[n].items():
-                if o_n in scope and o_n not in reversed_mapping and s_bond == o_bond and groups[o_n] not in uniq:
-                    uniq.add(groups[o_n])
+                if o_n in scope and o_n not in reversed_mapping and s_bond == o_bond:
                     if s_atom == o_atoms[o_n]:
                         # check closures equality
                         o_closures = o_bonds[o_n].keys() & reversed_mapping.keys()

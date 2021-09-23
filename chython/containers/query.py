@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from array import array
 from CachedMethods import cached_args_method
 from collections import defaultdict
 from functools import cached_property
@@ -184,9 +185,13 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
         u._heteroatoms.update(other._heteroatoms)
         return u
 
-    def get_mapping(self, other: Union['QueryContainer', 'molecule.MoleculeContainer'], **kwargs):
-        if isinstance(other, (QueryContainer, molecule.MoleculeContainer)):
+    def get_mapping(self, other: Union['QueryContainer', 'molecule.MoleculeContainer'], /, *, _cython=True, **kwargs):
+        # _cython - by default cython implementation enabled.
+        # disable it by overriding method if Query Atoms or Containers logic changed.
+        if isinstance(other, QueryContainer):
             return super().get_mapping(other, **kwargs)
+        elif isinstance(other, molecule.MoleculeContainer):
+            return super().get_mapping(other, _cython=_cython, **kwargs)
         raise TypeError('MoleculeContainer or QueryContainer expected')
 
     def enumerate_queries(self, *, enumerate_marks: bool = False):
@@ -288,6 +293,166 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
                     scope.update(x for k in fp for x in other_fingerprint[k])
             return scope
         return super()._isomorphism_candidates(other, self_component, other_component)
+
+    @cached_property
+    def _cython_compiled_query(self):
+        # long I:
+        # bond: single, double, triple, aromatic, special = 5 bit
+        # atom: H-Ce: 58 bit
+        # transfer bit
+
+        # long II:
+        # atom Pr-Og: 60 bit
+        # hybridizations: 1-4 = 4 bit
+
+        # long III:
+        # isotope: not specified, isotope - common_isotope = -8 - +8 = 18 bit
+        # is_radical: 2 bit
+        # charge: -4 - +4: 9 bit
+        # implicit_hydrogens: 0-4 = 5 bit
+        # neighbors: 0-14 = 15 bit
+        # heteroatoms: 0-14 = 15 bit
+
+        # long IV:
+        # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
+        from ..files._mdl.mol import common_isotopes
+
+        _components, _closures = self._compiled_query
+        components = []
+        for c in _components:
+            mapping = {n: i for i, (n, *_) in enumerate(c)}
+            masks1 = []
+            masks2 = []
+            masks3 = []
+            masks4 = []
+            for *_, a, b in c:
+                if isinstance(a, AnyMetal):  # isotope, radical, charge, hydrogens and heteroatoms states ignored
+                    # elements except 1, 2, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 32, 33, 34, 35, 36, 51, 52, 53, 54
+                    v1 = 0x01c1c1fff07ffe1f
+                    v2 = 0xfffffffffffffff0
+                    v3 = 0xffffffffc0007fff
+                    v4 = 0xffffffffffffffff
+                else:
+                    if isinstance(a, AnyElement):
+                        v1 = 0x07ffffffffffffff
+                        v2 = 0xfffffffffffffff0
+                    else:
+                        if isinstance(a, ListElement):
+                            v1 = v2 = 0
+                            for n in a._numbers:
+                                if n > 58:
+                                    v1 |= 1  # set transfer bit
+                                    v2 |= 1 << (122 - n)
+                                else:
+                                    v1 |= 1 << (59 - n)
+                        elif (n := a.atomic_number) > 58:
+                            v1 = 1  # transfer bit
+                            v2 = 1 << (122 - n)
+                        else:
+                            v1 = 1 << (59 - n)
+                            v2 = 0
+                    if a.isotope:
+                        v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 54)
+                        if a.is_radical:
+                            v3 |= 0x200000000000
+                        else:
+                            v3 |= 0x100000000000
+                    elif a.is_radical:  # any isotope
+                        v3 = 0xffffe00000000000
+                    else:
+                        v3 = 0xffffd00000000000
+
+                    v3 |= 1 << (a.charge + 39)
+
+                    if not a.implicit_hydrogens:
+                        v3 |= 0x7c0000000
+                    else:
+                        for h in a.implicit_hydrogens:
+                            v3 |= 1 << (h + 30)
+
+                    if not a.heteroatoms:
+                        v3 |= 0x7fff
+                    else:
+                        for n in a.heteroatoms:
+                            v3 |= 1 << n
+
+                    if a.ring_sizes:
+                        if a.ring_sizes[0]:
+                            v4 = 0
+                            for r in a.ring_sizes:
+                                if r > 65:  # big rings not supported
+                                    continue
+                                v4 |= 1 << (65 - r)
+                            if not v4:  # only 65+ rings. set as rings-free.
+                                v4 = 0x8000000000000000
+                        else:  # not in rings
+                            v4 = 0x8000000000000000
+                    else:  # any rings
+                        v4 = 0xffffffffffffffff
+
+                if not a.neighbors:
+                    v3 |= 0x3fff8000
+                else:
+                    for n in a.neighbors:
+                        v3 |= 1 << (n + 15)
+
+                if not a.hybridization:
+                    v2 |= 0xf
+                else:
+                    for n in a.hybridization:
+                        v2 |= 1 << (n - 1)
+
+                if b is not None:
+                    for o in b.order:
+                        if o == 1:
+                            v1 |= 0x0800000000000000
+                        elif o == 4:
+                            v1 |= 0x4000000000000000
+                        elif o == 2:
+                            v1 |= 0x1000000000000000
+                        elif o == 3:
+                            v1 |= 0x2000000000000000
+                        else:
+                            v1 |= 0x8000000000000000
+
+                masks1.append(v1)
+                masks2.append(v2)
+                masks3.append(v3)
+                masks4.append(v4)
+
+            closures = [0] * len(c)  # closures amount
+            q_from = [0] * len(c)
+            q_to = [0] * len(c)
+            indices = [0] * sum(len(ms) for n, ms in _closures.items() if n in mapping)
+            bonds = indices.copy()
+
+            start = 0
+            for n, ms in _closures.items():
+                if (i := mapping.get(n)) is not None:
+                    closures[i] = len(ms)
+                    q_from[i] = start
+                    for j, (m, b) in enumerate(ms, start):
+                        v = 0
+                        for o in b.order:
+                            if o == 1:
+                                v |= 0x0800000000000000
+                            elif o == 4:
+                                v |= 0x4000000000000000
+                            elif o == 2:
+                                v |= 0x1000000000000000
+                            elif o == 3:
+                                v |= 0x2000000000000000
+                            else:
+                                v |= 0x8000000000000000
+                        bonds[j] = v
+                        indices[j] = mapping[m]
+                    start += len(ms)
+                    q_to[i] = start
+            components.append((array('L', [n for n, *_ in c]), array('I', [0] + [mapping[x] for _, x, *_ in c[1:]]),
+                               array('Q', masks1), array('Q', masks2), array('Q', masks3), array('Q', masks4),
+                               array('I', closures), array('I', q_from), array('I', q_to),
+                               array('I', indices), array('Q', bonds)))
+        return components
 
     @staticmethod
     def _validate_neighbors(neighbors):

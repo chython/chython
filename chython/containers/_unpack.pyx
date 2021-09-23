@@ -39,8 +39,6 @@ def unpack(bytes data not None):
     cdef dict py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo
     cdef list py_mapping, py_atoms, py_isotopes
 
-    #cdef const unsigned char[:] data = py_data
-
     # lets extract data
     a, b, c = data[1], data[2], data[3]
     na = a << 4| (b & 0xf0) >> 4
