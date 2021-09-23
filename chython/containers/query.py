@@ -185,9 +185,13 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
         u._heteroatoms.update(other._heteroatoms)
         return u
 
-    def get_mapping(self, other: Union['QueryContainer', 'molecule.MoleculeContainer'], **kwargs):
-        if isinstance(other, (QueryContainer, molecule.MoleculeContainer)):
+    def get_mapping(self, other: Union['QueryContainer', 'molecule.MoleculeContainer'], /, *, _cython=True, **kwargs):
+        # _cython - by default cython implementation enabled.
+        # disable it by overriding method if Query Atoms or Containers logic changed.
+        if isinstance(other, QueryContainer):
             return super().get_mapping(other, **kwargs)
+        elif isinstance(other, molecule.MoleculeContainer):
+            return super().get_mapping(other, _cython=_cython, **kwargs)
         raise TypeError('MoleculeContainer or QueryContainer expected')
 
     def enumerate_queries(self, *, enumerate_marks: bool = False):

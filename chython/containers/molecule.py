@@ -677,7 +677,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             return dict(zip(so, oo))
         raise TypeError('MoleculeContainer expected')
 
-    def get_mapping(self, other: 'MoleculeContainer', **kwargs):
+    def get_mapping(self, other: 'MoleculeContainer', /, **kwargs):
         if isinstance(other, MoleculeContainer):
             return super().get_mapping(other, **kwargs)
         raise TypeError('MoleculeContainer expected')

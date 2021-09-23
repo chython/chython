@@ -159,7 +159,7 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2D
                 products.add_bond(n, m, bond.p_order)
         return reactants, products
 
-    def get_mapping(self, other: 'CGRContainer', **kwargs):
+    def get_mapping(self, other: 'CGRContainer', /, **kwargs):
         if isinstance(other, CGRContainer):
             return super().get_mapping(other, **kwargs)
         raise TypeError('CGRContainer expected')

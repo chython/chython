@@ -192,7 +192,7 @@ class StandardizeReaction:
         for r_pattern, p_pattern, fix in mapping_rules:
             found = []
             for m in self.reactants:
-                for mapping in r_pattern.get_mapping(m, optimize=False, automorphism_filter=False):
+                for mapping in r_pattern.get_mapping(m, automorphism_filter=False):
                     if mapping[1] not in seen:
                         found.append(({fix.get(k, k): v for k, v in mapping.items()},
                                       {mapping[k]: mapping[v] for k, v in fix.items()}))
@@ -200,7 +200,7 @@ class StandardizeReaction:
             if not found:
                 continue
             for m in self.products:
-                for mapping in p_pattern.get_mapping(m, optimize=False, automorphism_filter=False):
+                for mapping in p_pattern.get_mapping(m, automorphism_filter=False):
                     atom = mapping[1]
                     if atom in seen:
                         continue
@@ -230,7 +230,7 @@ class StandardizeReaction:
             del self.__dict__['__cached_method_compose']
 
             flag_m = False
-            for mapping in bad_query.get_mapping(cgr, optimize=False, automorphism_filter=False):
+            for mapping in bad_query.get_mapping(cgr, automorphism_filter=False):
                 if not seen.isdisjoint(mapping.values()):  # prevent matching same RC
                     continue
                 mapping = {mapping[n]: next(free_number) if m is None else mapping[m] for n, m in fix.items()}
