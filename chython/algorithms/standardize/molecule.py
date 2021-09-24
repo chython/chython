@@ -411,26 +411,29 @@ class StandardizeMolecule:
                             if b != 8:
                                 flush = True
                     log.append((tuple(match), r, str(pattern)))
+
+            if not hs:  # not matched
+                continue
             # flush cache only for changed atoms.
             if flush:  # neighbors count changed
-                if '__cached_args_method_neighbors' in self.__dict__:
-                    ngb = self.__dict__['__cached_args_method_neighbors']
-                    for n in hs:
-                        try:
-                            del ngb[(n,)]
-                        except KeyError:
-                            pass
-                flush = False
-            # need hybridization recalculation
-            if '__cached_args_method_hybridization' in self.__dict__:
-                hyb = self.__dict__['__cached_args_method_hybridization']
+                ngb = self.__dict__['__cached_args_method_neighbors']
                 for n in hs:
                     try:
-                        del hyb[(n,)]
-                    except KeyError:  # already flushed before
+                        del ngb[(n,)]
+                    except KeyError:
                         pass
+                del self.__dict__['bonds_count']
+                flush = False
+            # need hybridization recalculation
+            hyb = self.__dict__['__cached_args_method_hybridization']
+            for n in hs:
+                try:
+                    del hyb[(n,)]
+                except KeyError:  # already flushed before
+                    pass
             for n in hs:  # hydrogens count recalculation
                 self._calc_implicit(n)
+            del self.__dict__['_cython_compiled_structure']
         return log
 
     def __fix_resonance(self: Union['MoleculeContainer', 'StandardizeMolecule'], *, logging=False) -> \

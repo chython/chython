@@ -1010,7 +1010,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 v3 = 0x8000100000000000
 
             v3 |= 1 << (charges[n] + 39)
-            v3 |= 1 << (hydrogens[n] + 30)
+            v3 |= 1 << ((hydrogens[n] or 0) + 30)
             v3 |= 1 << (neighbors(n) + 15)
             v3 |= 1 << heteroatoms(n)
 
