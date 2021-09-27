@@ -78,6 +78,12 @@ class IncorrectSmiles(ValueError):
     """
 
 
+class IncorrectSmarts(ValueError):
+    """
+    Invalid SMARTS query
+    """
+
+
 class ImplementationError(Exception):
     """
     Algorithm has errors. Please send example of structure to author for analyze.

@@ -29,7 +29,7 @@ from typing import Union, List
 from ._mdl import Parser, parse_error
 from ..containers import MoleculeContainer, CGRContainer, ReactionContainer
 from ..containers.bonds import DynamicBond
-from ..exceptions import IncorrectSmiles, IsChiral, NotChiral, ValenceError
+from ..exceptions import IncorrectSmiles, IncorrectSmarts, IsChiral, NotChiral, ValenceError
 from ..periodictable import DynamicElement
 
 
@@ -69,6 +69,8 @@ dyn_radical_dict = {'*': (True, True), '*>^': (True, False), '^>*': (False, True
 atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,4})?')
 dyn_atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)([+-0][1-4+-]?(>[+-0][1-4+-]?)?)?'
                       r'([*^](>[*^])?)?')
+smarts_add_re = compile(r'(D[0-1][0-9]?)?(h[1-4]?)?(R[0-4][0-9]?)?(r[0-6][0-9]?)?(v[0-1][0-9]?)?(X[0-1][0-9]?)?'
+                        r'(x[0-6][0-9]?)?(#[1-9][0-9]{0,2}?)?')
 delimiter = compile(r'[=:]')
 cx_fragments = compile(r'f:(?:[0-9]+(?:\.[0-9]+)+)(?:,(?:[0-9]+(?:\.[0-9]+)+))*')
 cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
@@ -811,7 +813,6 @@ def _dynatom_parse(token):
 
 def _smarts_atom_parse(token):
     ...
-    # todo: implement
 
 
 def _convert_cgr(data):
