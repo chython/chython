@@ -20,17 +20,22 @@
 from collections import defaultdict
 from fileinput import FileInput
 from functools import reduce
-from itertools import permutations, chain
 from io import StringIO, TextIOWrapper
+from itertools import chain, permutations
 from operator import or_
 from pathlib import Path
-from re import split, compile, fullmatch, findall, search
-from typing import Union, List
-from ._mdl import Parser, parse_error
-from ..containers import MoleculeContainer, CGRContainer, ReactionContainer
-from ..containers.bonds import DynamicBond
+from re import compile, findall, fullmatch, search, split
+from typing import List, Union
+from ._mdl import parse_error, Parser
+from ..containers import CGRContainer, QueryContainer, MoleculeContainer, ReactionContainer
+from ..containers.bonds import DynamicBond, QueryBond
 from ..exceptions import IncorrectSmiles, IncorrectSmarts, IsChiral, NotChiral, ValenceError
 from ..periodictable import DynamicElement
+
+
+# -,= OR bonds supported
+# @ bond not supported
+# @;!: and any other complicated combinations not supported
 
 
 # tokens structure:
@@ -50,6 +55,8 @@ from ..periodictable import DynamicElement
 # 11: dynamic atom
 # 12: dynamic aromatic atom
 # 13: query bond
+# 14: query atom
+
 
 replace_dict = {'-': 1, '=': 2, '#': 3, ':': 4, '~': 8}
 charge_dict = {'+': 1, '+1': 1, '++': 2, '+2': 2, '+3': 3, '+++': 3, '+4': 4, '++++': 4,
@@ -311,6 +318,8 @@ class SMILESRead(Parser):
             record['meta'].update(meta)
             if 'cgr' in record:  # CGR smiles parser
                 return _convert_cgr(record)
+            elif 'query' in record:
+                return _convert_query(record)
             for x in radicals:
                 record['atoms'][x]['is_radical'] = True
             return self._convert_molecule(record)
@@ -429,6 +438,7 @@ class SMILESRead(Parser):
         cycles = {}
         used_cycles = set()
         cgr = []
+        query = []
         stereo_bonds = defaultdict(dict)
         stereo_atoms = {}
         hydrogens = {}
@@ -448,7 +458,7 @@ class SMILESRead(Parser):
                     last_num = stack.pop()
                 except IndexError:
                     raise IncorrectSmiles('close chain more than open')
-            elif token_type in (1, 4, 9, 10):  # bonds. only keeping for atoms connecting
+            elif token_type in (1, 4, 9, 10, 13):  # bonds. only keeping for atoms connecting
                 if previous:
                     raise IncorrectSmiles('2 bonds in a row')
                 elif not atoms:
@@ -506,8 +516,11 @@ class SMILESRead(Parser):
 
                     if bt == 1:
                         bonds.append((last_num, a, b))
+                    elif bt == 13:
+                        bonds.append((last_num, a, None))
+                        query.append((last_num, a, b))
                     else:  # bt == 10
-                        bonds.append((last_num, a, 8))
+                        bonds.append((last_num, a, None))
                         cgr.append((last_num, a, b))
                     order[a][ind] = last_num
                     order[last_num].append(a)
@@ -532,8 +545,11 @@ class SMILESRead(Parser):
                                       4 if token_type in (8, 12) and atoms_types[last_num] in (8, 12) else 1))
                         stereo_bonds[last_num][atom_num] = b
                         stereo_bonds[atom_num][last_num] = not b
+                    elif bt == 13:
+                        bonds.append((atom_num, last_num, None))
+                        query.append((atom_num, last_num, b))
                     elif bt == 10:
-                        bonds.append((atom_num, last_num, 8))
+                        bonds.append((atom_num, last_num, None))
                         cgr.append((atom_num, last_num, b))
 
                 if token_type not in (11, 12):
@@ -563,6 +579,8 @@ class SMILESRead(Parser):
                'stereo_bonds': stereo_bonds, 'stereo_atoms': stereo_atoms, 'hydrogens': hydrogens, 'meta': {}}
         if cgr or any(x in (11, 12) for x in atoms_types):
             mol['cgr'] = cgr
+        elif query or any(x == 14 for x in atoms_types):
+            mol['query'] = query
         return mol
 
 
@@ -844,8 +862,6 @@ def _convert_cgr(data):
         plane[n] = (0., 0.)
     for n, m, b in data['bonds']:
         if m in bonds[n]:
-            if b != 8:
-                raise ValueError('CGR spec invalid')
             b = bonds[n][m]
         else:
             b = DynamicBond(b, b)
@@ -856,6 +872,52 @@ def _convert_cgr(data):
         g_bonds[n][m] = g_bonds[m][n] = b
     g.__setstate__({'atoms': g_atoms, 'bonds': g_bonds, 'plane': plane, 'charges': charges, 'radicals': radicals,
                     'p_charges': p_charges, 'p_radicals': p_radicals, 'conformers': []})
+    return g
+
+
+def _convert_query(data):
+    atoms = data['atoms']
+    bonds = defaultdict(dict)
+
+    for n, m, value in data['query']:
+        bonds[n][m] = bonds[m][n] = QueryBond(value)
+
+    g = object.__new__(QueryContainer)
+    g_atoms = {}
+    g_bonds = {}
+    plane = {}
+    charges = {}
+    radicals = {}
+    atoms_stereo = {}
+    allenes_stereo = {}
+    cis_trans_stereo = {}
+    neighbors = {}
+    hybridizations = {}
+    hydrogens = {}
+    rings_sizes = {}
+    heteroatoms = {}
+
+    for n, atom in enumerate(atoms, 1):
+        g_atoms[n] = ...
+        g_bonds[n] = {}
+        charges[n] = atom['charge']
+        radicals[n] = ...
+        plane[n] = (0., 0.)
+    for n, m, b in data['bonds']:
+        if m in bonds[n]:
+            b = bonds[n][m]
+        else:
+            b = QueryBond(b)
+        n += 1
+        m += 1
+        if n in g_bonds[m]:
+            raise ValueError('atoms already bonded')
+        g_bonds[n][m] = g_bonds[m][n] = b
+
+    g.__setstate__({'atoms': g_atoms, 'bonds': g_bonds, 'plane': plane, 'charges': charges, 'radicals': radicals,
+                    'neighbors': neighbors, 'hybridizations': hybridizations, 'hydrogens': hydrogens,
+                    'rings_sizes': rings_sizes, 'heteroatoms': heteroatoms, 'atoms_stereo': atoms_stereo,
+                    'allenes_stereo': allenes_stereo, 'cis_trans_stereo': cis_trans_stereo})
     return g
 
 
