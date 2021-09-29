@@ -30,7 +30,7 @@ from ._mdl import parse_error, Parser
 from ..containers import CGRContainer, QueryContainer, MoleculeContainer, ReactionContainer
 from ..containers.bonds import DynamicBond, QueryBond
 from ..exceptions import IncorrectSmiles, IncorrectSmarts, IsChiral, NotChiral, ValenceError
-from ..periodictable import DynamicElement
+from ..periodictable import DynamicElement, QueryElement
 
 
 # -,= OR bonds supported
@@ -76,8 +76,8 @@ dyn_radical_dict = {'*': (True, True), '*>^': (True, False), '^>*': (False, True
 atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,4})?')
 dyn_atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)([+-0][1-4+-]?(>[+-0][1-4+-]?)?)?'
                       r'([*^](>[*^])?)?')
-smarts_add_re = compile(r'(D[0-1][0-9]?)?(h[1-4]?)?(R[0-4][0-9]?)?(r[0-6][0-9]?)?(v[0-1][0-9]?)?(X[0-1][0-9]?)?'
-                        r'(x[0-6][0-9]?)?(#[1-9][0-9]{0,2}?)?')
+smarts_add_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)(@@|@)?(H[1-4]?)?(h[1-4]?)?'
+                        r'(D[0-1][0-9]?)?(R[0-4][0-9]?)?([+-][1-4+-]?)?')
 delimiter = compile(r'[=:]')
 cx_fragments = compile(r'f:(?:[0-9]+(?:\.[0-9]+)+)(?:,(?:[0-9]+(?:\.[0-9]+)+))*')
 cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
@@ -830,7 +830,66 @@ def _dynatom_parse(token):
 
 
 def _smarts_atom_parse(token):
-    ...
+    # [isotope]Element[element][@[@]][H[n]][h[n]][D[n]][R[n]][+-charge]
+    match = fullmatch(smarts_add_re, token)
+    if match is None:
+        raise IncorrectSmarts(f'Smarts token {{{token}}} is invalid')
+    isotope, element, stereo, hydrogen, implicit_h, neighbor, rings, charge = match.groups()
+
+    if isotope:
+        isotope = int(isotope)
+
+    if stereo:
+        stereo = stereo == '@'
+
+    if hydrogen:
+        if len(hydrogen) > 1:
+            raise IncorrectSmarts('Setting on count of exactly attached hydrogens is not available')
+        else:
+            hydrogen = 1
+    elif implicit_h:
+        if len(implicit_h) > 1:
+            hydrogen = int(implicit_h[1:])
+        else:
+            hydrogen = 1
+    else:
+        hydrogen = 0
+
+    neighbors = []
+    if neighbor and len(neighbor) > 1 and ',' in neighbor:
+        for n in neighbor.split(','):
+            neighbors.append(int(n))
+    elif neighbor and len(neighbor) > 1:
+        neighbors.append(int(neighbors[1:]))
+    elif neighbor:
+        raise IncorrectSmarts(f'Tokes {token} is not valid')
+
+    rings_sizes = []
+    if rings and len(rings) > 1 and ',' in rings:
+        for r in rings.split(','):
+            rings_sizes.append(int(r))
+    elif rings and len(rings) > 1:
+        rings_sizes.append(int(rings[1:]))
+    elif rings:
+        raise IncorrectSmarts(f'Token {token} is not valid')
+
+    if charge:
+        try:
+            charge = charge_dict[charge]
+        except KeyError:
+            raise IncorrectSmarts('charge token invalid')
+    else:
+        charge = 0
+
+    if element.islower():
+        hybridizations = (4, )
+        element = element.capitalize()
+    else:
+        hybridizations = (1, 2, 3)
+
+    return 14, {'element': element, 'charge': charge, 'isotope': isotope, 'neighbors': tuple(neighbors),
+                'hybridization': hybridizations, 'rings_sizes': tuple(rings_sizes),
+                'x': 0., 'y': 0., 'z': 0., 'hydrogen': hydrogen, 'stereo': stereo}
 
 
 def _convert_cgr(data):
