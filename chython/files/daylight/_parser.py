@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2018-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  Copyright 2019 Artem Mukanov <nostro32@mail.ru>
 #  This file is part of chython.
 #
@@ -19,15 +20,11 @@
 #
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from fileinput import FileInput
-from itertools import permutations, chain
-from io import StringIO, TextIOWrapper
-from pathlib import Path
 from re import split, compile, fullmatch, findall, search
 from typing import Union, List
 from .._mdl import Parser, parse_error
 from ...containers import MoleculeContainer, CGRContainer, QueryContainer, ReactionContainer
-from ...exceptions import IncorrectSmiles, IsChiral, NotChiral, ValenceError
+from ...exceptions import IncorrectSmiles
 
 
 # -,= OR bonds supported
@@ -57,69 +54,13 @@ from ...exceptions import IncorrectSmiles, IsChiral, NotChiral, ValenceError
 replace_dict = {'-': 1, '=': 2, '#': 3, ':': 4, '~': 8, '.': None, '(': 2, ')': 3}
 charge_dict = {'+': 1, '+1': 1, '++': 2, '+2': 2, '+3': 3, '+++': 3, '+4': 4, '++++': 4,
                '-': -1, '-1': -1, '--': -2, '-2': -2, '-3': -3, '---': -3, '-4': -4, '----': -4}
-dynamic_bonds = {'.>-': (None, 1), '.>=': (None, 2), '.>#': (None, 3), '.>:': (None, 4), '.>~': (None, 8),
-                 '->.': (1, None), '->=': (1, 2), '->#': (1, 3), '->:': (1, 4), '->~': (1, 8),
-                 '=>.': (2, None), '=>-': (2, 1), '=>#': (2, 3), '=>:': (2, 4), '=>~': (2, 8),
-                 '#>.': (3, None), '#>-': (3, 1), '#>=': (3, 2), '#>:': (3, 4), '#>~': (3, 8),
-                 ':>.': (4, None), ':>-': (4, 1), ':>=': (4, 2), ':>#': (4, 3), ':>~': (4, 8),
-                 '~>.': (8, None), '~>-': (8, 1), '~>=': (8, 2), '~>#': (8, 3), '~>:': (8, 4)}
 
 atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,4})?')
 
 
 class DaylightParser(Parser, ABC):
-    """SMILES separated per lines files reader. Works similar to opened file object. Support `with` context manager.
-    On initialization accept opened in text mode file, string path to file,
-    pathlib.Path object or another buffered reader object.
-
-    Line should be start with SMILES string and optionally continues with space/tab separated list of
-    `key:value` [or `key=value`] data if `header=None`. For example::
-
-        C=C>>CC id:123 key=value
-
-    if `header=True` then first line of file should be space/tab separated list of keys including smiles column key.
-    For example::
-
-        ignored_smi_key key1 key2
-        CCN 1 2
-
-    Also possible to pass list of keys (without smiles_pseudo_key) for mapping space/tab separated list
-    of SMILES and values: `header=['key1', 'key2'] # order depended`.
-
-    For reactions . [dot] in bonds should be used only for molecules separation.
-    """
-    def __init__(self, file, header=None, ignore_stereo=False, **kwargs):
-        """
-        :param ignore: Skip some checks of data or try to fix some errors.
-        :param remap: Remap atom numbers started from one.
-        :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
-        :param ignore_stereo: Ignore stereo data.
-        """
-        if isinstance(file, str):
-            self._file = open(file)
-            self.__is_buffer = False
-        elif isinstance(file, Path):
-            self._file = file.open()
-            self.__is_buffer = False
-        elif isinstance(file, (TextIOWrapper, StringIO, FileInput)):
-            self._file = file
-            self.__is_buffer = True
-        else:
-            raise TypeError('invalid file. TextIOWrapper, StringIO subclasses possible')
-        super().__init__(**kwargs)
-        self.__file = iter(self._file.readline, '')
-
-        if header is True:
-            self.__header = next(self.__file).split()[1:]
-        elif header:
-            if not isinstance(header, (list, tuple)) or not all(isinstance(x, str) for x in header):
-                raise TypeError('expected list (tuple) of strings')
-            self.__header = header
-        else:
-            self.__header = None
-
-        self.__ignore_stereo = ignore_stereo
-        self._data = self.__data()
+    def __init__(self):
+        super().__init__()
 
     def __data(self):
         file = self._file
@@ -182,101 +123,6 @@ class DaylightParser(Parser, ABC):
     @abstractmethod
     def parse(self, string: str) -> Union[MoleculeContainer, CGRContainer, QueryContainer, ReactionContainer]:
         ...
-
-    def _create_molecule(self, data, mapping):
-        mol = super()._create_molecule(data, mapping)
-        hydrogens = mol._hydrogens
-        radicals = mol._radicals
-        calc_implicit = mol._calc_implicit
-        for n, h in data['hydrogens'].items():
-            n = mapping[n]
-            hc = hydrogens[n]
-            if hc is None:  # aromatic rings or valence errors. just store given H count.
-                hydrogens[n] = h
-            elif hc != h:  # H count mismatch. try radical state of atom.
-                if radicals[n]:
-                    if self._ignore:
-                        hydrogens[n] = h  # set parsed hydrogens count
-                        self._info(f'implicit hydrogen count ({h}) mismatch with '
-                                   f'calculated ({hc}) on atom {n}. calculated count replaced.')
-                    else:
-                        raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
-                                         f'calculated ({hc}) on atom {n}.')
-                else:
-                    radicals[n] = True
-                    calc_implicit(n)
-                    if hydrogens[n] != h:  # radical state also has errors.
-                        if self._ignore:
-                            radicals[n] = False  # reset radical state
-                            hydrogens[n] = h  # set parsed hydrogens count
-                            self._info(f'implicit hydrogen count ({h}) mismatch with '
-                                       f'calculated ({hc}) on atom {n}. calculated count replaced.')
-                        else:
-                            raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
-                                             f'calculated ({hc}) on atom {n}.')
-
-        if self.__ignore_stereo or not data['stereo_atoms'] and not data['stereo_bonds']:
-            return mol
-
-        st = mol._stereo_tetrahedrons
-        sa = mol._stereo_allenes
-        sat = mol._stereo_allenes_terminals
-        ctt = mol._stereo_cis_trans_terminals
-
-        order = {mapping[n]: [mapping[m] for m in ms] for n, ms in data['order'].items()}
-
-        stereo = []
-        for i, s in data['stereo_atoms'].items():
-            n = mapping[i]
-            if not i and hydrogens[n]:  # first atom in smiles has reversed chiral mark
-                s = not s
-
-            if n in st:
-                stereo.append((mol.add_atom_stereo, n, order[n], s))
-            elif n in sa:
-                t1, t2 = sat[n]
-                env = sa[n]
-                n1 = next(x for x in order[t1] if x in env)
-                n2 = next(x for x in order[t2] if x in env)
-                stereo.append((mol.add_atom_stereo, n, (n1, n2), s))
-
-        stereo_bonds = {mapping[n]: {mapping[m]: s for m, s in ms.items()}
-                        for n, ms in data['stereo_bonds'].items()}
-        seen = set()
-        for n, ns in stereo_bonds.items():
-            if n in seen:
-                continue
-            if n in ctt:
-                nm = ctt[n]
-                m = nm[1] if nm[0] == n else nm[0]
-                if m in stereo_bonds:
-                    seen.add(m)
-                    n2, s2 = stereo_bonds[m].popitem()
-                    n1, s1 = ns.popitem()
-                    stereo.append((mol.add_cis_trans_stereo, n, m, n1, n2, s1 == s2))
-
-        while stereo:
-            fail_stereo = []
-            old_stereo = len(stereo)
-            for f, *args in stereo:
-                try:
-                    f(*args, clean_cache=False)
-                except NotChiral:
-                    fail_stereo.append((f, *args))
-                except IsChiral:
-                    pass
-                except ValenceError:
-                    self._info('structure has errors, stereo data skipped')
-                    mol.flush_cache()
-                    break
-            else:
-                stereo = fail_stereo
-                if len(stereo) == old_stereo:
-                    break
-                mol.flush_stereo_cache()
-                continue
-            break
-        return mol
 
     def _parse_tokens(self, tokens):
         strong_cycle = not self._ignore
@@ -441,33 +287,6 @@ class DaylightParser(Parser, ABC):
         elif query or any(x == 14 for x in atoms_types):
             mol['query'] = query
         return mol
-
-
-def _process_tokens(tokens):
-    out = []
-    for token_type, token in tokens:
-        if token_type in (0, 8):  # simple atom
-            out.append((token_type, {'element': token, 'charge': 0, 'isotope': None, 'is_radical': False,
-                                     'mapping': 0, 'x': 0., 'y': 0., 'z': 0., 'hydrogen': None, 'stereo': None}))
-        elif token_type == 5:
-            if '>' in token:  # dynamic bond or atom
-                if len(token) == 3:  # bond only possible
-                    try:
-                        out.append((10, dynamic_bonds[token]))
-                    except KeyError:
-                        raise IncorrectSmiles(f'invalid dynamic bond token {{{token}}}')
-                else:  # dynamic atom token
-                    out.append(_dynatom_parse(token))
-            elif '*' in token:  # CGR atom radical mark
-                out.append(_dynatom_parse(token))
-            # todo: smarts detection
-            else:  # atom token
-                out.append(_atom_parse(token))
-        else:  # as is types: 1, 2, 3, 4, 6, 9, 13
-            if token_type == 13 and len(token) != 2:
-                raise IncorrectSmiles('invalid SMARTS query bond')
-            out.append((token_type, token))
-    return out
 
 
 def _raw_tokenize(smiles):
@@ -652,55 +471,3 @@ def _atom_parse(token):
     return _type, {'element': element, 'charge': charge, 'isotope': isotope, 'is_radical': False,
                    'mapping': mapping, 'x': 0., 'y': 0., 'z': 0., 'hydrogen': hydrogen, 'stereo': stereo}
 
-    def __parse_tokens(self, smiles):
-        tokens = self._raw_tokenize(smiles)
-        tokens = self._fix_tokens(tokens)
-        return self._parse_tokens(tokens)
-
-            raise IncorrectSmiles('not atom started')
-
-
-def _convert_query(data):
-    atoms = data['atoms']
-    bonds = defaultdict(dict)
-
-    for n, m, value in data['query']:
-        bonds[n][m] = bonds[m][n] = QueryBond(value)
-
-    g = object.__new__(QueryContainer)
-    g_atoms = {}
-    g_bonds = {}
-    plane = {}
-    charges = {}
-    radicals = {}
-    atoms_stereo = {}
-    allenes_stereo = {}
-    cis_trans_stereo = {}
-    neighbors = {}
-    hybridizations = {}
-    hydrogens = {}
-    rings_sizes = {}
-    heteroatoms = {}
-
-    for n, atom in enumerate(atoms, 1):
-        g_atoms[n] = ...
-        g_bonds[n] = {}
-        charges[n] = atom['charge']
-        radicals[n] = ...
-        plane[n] = (0., 0.)
-    for n, m, b in data['bonds']:
-        if m in bonds[n]:
-            b = bonds[n][m]
-        else:
-            b = QueryBond(b)
-        n += 1
-        m += 1
-        if n in g_bonds[m]:
-            raise ValueError('atoms already bonded')
-        g_bonds[n][m] = g_bonds[m][n] = b
-
-    g.__setstate__({'atoms': g_atoms, 'bonds': g_bonds, 'plane': plane, 'charges': charges, 'radicals': radicals,
-                    'neighbors': neighbors, 'hybridizations': hybridizations, 'hydrogens': hydrogens,
-                    'rings_sizes': rings_sizes, 'heteroatoms': heteroatoms, 'atoms_stereo': atoms_stereo,
-                    'allenes_stereo': allenes_stereo, 'cis_trans_stereo': cis_trans_stereo})
-    return g

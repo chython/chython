@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from chython import DaylightParser, smiles, MoleculeContainer, CGRContainer
+from chython import CGRRead, SMARTSRead, SMILESRead, SMIRKSRead, smiles, MoleculeContainer, CGRContainer
 from chython.files._mdl import parse_error
 from itertools import zip_longest
 from io import StringIO
@@ -27,14 +27,14 @@ def test_bad_smiles_detection():
             '[C:1-] [C+5>0] [1+>-] [=*] [C+>-5] (=C) 1CC1 C#(C) C(C#) C=-C C.1C1 C1CC1C1CC1 C=1CC1 C#1CC-1 C1CC-1'
             'C(C)C( C1C CC= [->=]').replace(' ', '\n')
 
-    with StringIO(data) as f, DaylightParser(f, ignore=False, store_log=True) as r:
+    with StringIO(data) as f, SMILESRead(f, ignore=False, store_log=True) as r:
         for s in r._data:
             assert isinstance(s, parse_error)
 
 
 def test_invalid_ring_closure_ignoring():
     data = 'C1CC1C1CC1\nC=1CC1'
-    with StringIO(data) as f, DaylightParser(f, ignore=True, store_log=True) as r:
+    with StringIO(data) as f, SMILESRead(f, ignore=True, store_log=True) as r:
         for t, v in zip_longest(r, ('C1CC1C2CC2', 'C1=CC1')):
             assert t == smiles(v)
 
