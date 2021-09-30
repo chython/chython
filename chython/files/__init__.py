@@ -16,12 +16,12 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from .daylight import *
 from .INCHIrw import *
 from .MRVrw import *
 from .PDBrw import *
 from .RDFrw import *
 from .SDFrw import *
-from .SMILESrw import *
 from .XYZrw import *
 
 

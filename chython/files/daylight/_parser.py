@@ -17,20 +17,17 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from fileinput import FileInput
-from functools import reduce
 from itertools import permutations, chain
 from io import StringIO, TextIOWrapper
-from operator import or_
 from pathlib import Path
 from re import split, compile, fullmatch, findall, search
 from typing import Union, List
-from ._mdl import Parser, parse_error
-from ..containers import MoleculeContainer, CGRContainer, ReactionContainer
-from ..containers.bonds import DynamicBond
-from ..exceptions import IncorrectSmiles, IsChiral, NotChiral, ValenceError
-from ..periodictable import DynamicElement
+from .._mdl import Parser, parse_error
+from ...containers import MoleculeContainer, CGRContainer, QueryContainer, ReactionContainer
+from ...exceptions import IncorrectSmiles, IsChiral, NotChiral, ValenceError
 
 
 # tokens structure:
@@ -59,21 +56,11 @@ dynamic_bonds = {'.>-': (None, 1), '.>=': (None, 2), '.>#': (None, 3), '.>:': (N
                  '#>.': (3, None), '#>-': (3, 1), '#>=': (3, 2), '#>:': (3, 4), '#>~': (3, 8),
                  ':>.': (4, None), ':>-': (4, 1), ':>=': (4, 2), ':>#': (4, 3), ':>~': (4, 8),
                  '~>.': (8, None), '~>-': (8, 1), '~>=': (8, 2), '~>#': (8, 3), '~>:': (8, 4)}
-dyn_charge_dict = {'-4': -4, '-3': -3, '-2': -2, '--': -2, '-': -1, '0': 0, '+': 1, '++': 2, '+2': 2, '+3': 3, '+4': 4}
-tmp = {f'{i}>{j}': (x, y) for (i, x), (j, y) in permutations(dyn_charge_dict.items(), 2) if x != y}
-dyn_charge_dict = {k: (v, v) for k, v in dyn_charge_dict.items()}
-dyn_charge_dict.update(tmp)
-dyn_radical_dict = {'*': (True, True), '*>^': (True, False), '^>*': (False, True)}
 
 atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,4})?')
-dyn_atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)([+-0][1-4+-]?(>[+-0][1-4+-]?)?)?'
-                      r'([*^](>[*^])?)?')
-delimiter = compile(r'[=:]')
-cx_fragments = compile(r'f:(?:[0-9]+(?:\.[0-9]+)+)(?:,(?:[0-9]+(?:\.[0-9]+)+))*')
-cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
 
 
-class SMILESRead(Parser):
+class DaylightParser(Parser, ABC):
     """SMILES separated per lines files reader. Works similar to opened file object. Support `with` context manager.
     On initialization accept opened in text mode file, string path to file,
     pathlib.Path object or another buffered reader object.
@@ -153,7 +140,7 @@ class SMILESRead(Parser):
         obj = object.__new__(cls)
         obj._SMILESRead__header = header
         obj._SMILESRead__ignore_stereo = ignore_stereo
-        super(SMILESRead, obj).__init__(*args, **kwargs)
+        super(DaylightParser, obj).__init__(*args, **kwargs)
         return obj.parse
 
     def close(self, force=False):
@@ -185,132 +172,9 @@ class SMILESRead(Parser):
     def __next__(self):
         return next(iter(self))
 
-    def parse(self, smiles: str) -> Union[MoleculeContainer, CGRContainer, ReactionContainer]:
-        """SMILES string parser."""
-        if not smiles:
-            raise ValueError('Empty string')
-
-        smi, *data = smiles.split()
-        if data and data[0].startswith('|') and data[0].endswith('|'):
-            fr = search(cx_fragments, data[0])
-            if fr is not None:
-                contract = [sorted(int(x) for x in x.split('.')) for x in fr.group()[2:].split(',')]
-                if len({x for x in contract for x in x}) < len([x for x in contract for x in x]):
-                    self._info(f'collisions in cxsmiles fragments description: {data[0]}')
-                    contract = None
-                elif any(x[0] < 0 for x in contract):
-                    self._info(f'invalid cxsmiles fragments description: {data[0]}')
-                    contract = None
-
-                radicals = [int(x) for x in findall(cx_radicals, data[0]) for x in x[3:].split(',')]
-                if any(x < 0 for x in radicals):
-                    self._info(f'invalid cxsmiles radicals description: {data[0]}')
-                    radicals = []
-                if len(set(radicals)) != len(radicals):
-                    self._info(f'collisions in cxsmiles radicals description: {data[0]}')
-                    radicals = []
-                data = data[1:]
-            else:
-                radicals = [int(x) for x in findall(cx_radicals, data[0]) for x in x[3:].split(',')]
-                if radicals:
-                    if any(x < 0 for x in radicals):
-                        self._info(f'invalid cxsmiles radicals description: {data[0]}')
-                        radicals = []
-                    if len(set(radicals)) != len(radicals):
-                        self._info(f'collisions in cxsmiles radicals description: {data[0]}')
-                        radicals = []
-                    data = data[1:]
-                contract = None
-        else:
-            radicals = []
-            contract = None
-
-        if self.__header is None:
-            meta = {}
-            for x in data:
-                try:
-                    k, v = split(delimiter, x, 1)
-                    meta[k] = v
-                except ValueError:
-                    self._info(f'invalid metadata entry: {x}')
-        else:
-            meta = dict(zip(self.__header, data))
-
-        if '>' in smi and (smi[smi.index('>') + 1] in '>([' or smi[smi.index('>') + 1].isalpha()):
-            record = {'reactants': [], 'reagents': [], 'products': [], 'meta': meta, 'title': ''}
-            try:
-                reactants, reagents, products = smi.split('>')
-            except ValueError as e:
-                raise ValueError('invalid reaction smiles') from e
-
-            for k, d in zip(('reactants', 'products', 'reagents'), (reactants, products, reagents)):
-                if d:
-                    for x in d.split('.'):
-                        if not x:
-                            if self._ignore:
-                                self._info('two dots in line ignored')
-                            else:
-                                raise ValueError('invalid reaction smiles. two dots in line')
-                        else:
-                            record[k].append(self.__parse_tokens(x))
-
-            if radicals:
-                atom_map = dict(enumerate(a for m in chain(record['reactants'], record['reagents'], record['products'])
-                                          for a in m['atoms']))
-                for x in radicals:
-                    atom_map[x]['is_radical'] = True
-
-            container = self._convert_reaction(record)
-            if contract:
-                if max(x for x in contract for x in x) >= len(container):
-                    self._info(f'skipped invalid contract data: {contract}')
-                lr = len(container.reactants)
-                reactants = set(range(lr))
-                reagents = set(range(lr, lr + len(container.reagents)))
-                products = set(range(lr + len(container.reagents),
-                                     lr + len(container.reagents) + len(container.products)))
-                new_molecules = [None] * len(container)
-                for c in contract:
-                    if reactants.issuperset(c):
-                        new_molecules[c[0]] = reduce(or_, (container.reactants[x] for x in c))
-                        reactants.difference_update(c)
-                    elif products.issuperset(c):
-                        new_molecules[c[0]] = reduce(or_, (container.products[x - len(container)] for x in c))
-                        products.difference_update(c)
-                    elif reagents.issuperset(c):
-                        new_molecules[c[0]] = reduce(or_, (container.reagents[x - lr] for x in c))
-                        reagents.difference_update(c)
-                    else:
-                        self._info(f'impossible to contract different parts of reaction: {contract}')
-                for x in reactants:
-                    new_molecules[x] = container.reactants[x]
-                for x in products:
-                    new_molecules[x] = container.products[x - len(container)]
-                for x in reagents:
-                    new_molecules[x] = container.reagents[x - lr]
-
-                meta = container.meta
-                if self._store_log:
-                    if log := self._format_log():
-                        if 'ParserLog' in meta:
-                            meta['ParserLog'] += '\n' + log
-                        else:
-                            meta['ParserLog'] = log
-                else:
-                    self._flush_log()
-                return ReactionContainer([x for x in new_molecules[:lr] if x is not None],
-                                         [x for x in new_molecules[-len(container.products):] if x is not None],
-                                         [x for x in new_molecules[lr: -len(container.products)] if x is not None],
-                                         meta=meta)
-            return container
-        else:
-            record = self.__parse_tokens(smi)
-            record['meta'].update(meta)
-            if 'cgr' in record:  # CGR smiles parser
-                return self._convert_cgr(record)
-            for x in radicals:
-                record['atoms'][x]['is_radical'] = True
-            return self._convert_molecule(record)
+    @abstractmethod
+    def parse(self, string: str) -> Union[MoleculeContainer, CGRContainer, QueryContainer, ReactionContainer]:
+        ...
 
     def _create_molecule(self, data, mapping):
         mol = super()._create_molecule(data, mapping)
@@ -406,49 +270,6 @@ class SMILESRead(Parser):
                 continue
             break
         return mol
-
-    def _convert_cgr(self, data):
-        atoms = data['atoms']
-        bonds = defaultdict(dict)
-
-        for n, m, value in data['cgr']:
-            bonds[n][m] = bonds[m][n] = DynamicBond(*value)
-
-        g = object.__new__(CGRContainer)
-        g_atoms = {}
-        g_bonds = {}
-        plane = {}
-        charges = {}
-        radicals = {}
-        p_charges = {}
-        p_radicals = {}
-        for n, atom in enumerate(atoms, 1):
-            g_atoms[n] = DynamicElement.from_symbol(atom['element'])(atom['isotope'])
-            g_bonds[n] = {}
-            charges[n] = atom['charge']
-            radicals[n] = atom['is_radical']
-            if 'p_charge' in atom:
-                p_charges[n] = atom['p_charge']
-                p_radicals[n] = atom['p_is_radical']
-            else:
-                p_charges[n] = atom['charge']
-                p_radicals[n] = atom['is_radical']
-            plane[n] = (0., 0.)
-        for n, m, b in data['bonds']:
-            if m in bonds[n]:
-                if b != 8:
-                    raise ValueError('CGR spec invalid')
-                b = bonds[n][m]
-            else:
-                b = DynamicBond(b, b)
-            n += 1
-            m += 1
-            if n in g_bonds[m]:
-                raise ValueError('atoms already bonded')
-            g_bonds[n][m] = g_bonds[m][n] = b
-        g.__setstate__({'atoms': g_atoms, 'bonds': g_bonds, 'plane': plane, 'charges': charges, 'radicals': radicals,
-                        'p_charges': p_charges, 'p_radicals': p_radicals, 'conformers': []})
-        return g
 
     @staticmethod
     def _raw_tokenize(smiles):
@@ -639,41 +460,6 @@ class SMILESRead(Parser):
         return _type, {'element': element, 'charge': charge, 'isotope': isotope, 'is_radical': False,
                        'mapping': mapping, 'x': 0., 'y': 0., 'z': 0., 'hydrogen': hydrogen, 'stereo': stereo}
 
-    @staticmethod
-    def __dynatom_parse(token):
-        # [isotope]Element[element][+-charge[>+-charge]][*^[>*^]]
-        match = fullmatch(dyn_atom_re, token)
-        if match is None:
-            raise IncorrectSmiles(f'atom token invalid {{{token}}}')
-        isotope, element, charge, _, is_radical, _ = match.groups()
-
-        if isotope:
-            isotope = int(isotope)
-
-        if charge:
-            try:
-                charge, p_charge = dyn_charge_dict[charge]
-            except KeyError:
-                raise IncorrectSmiles('charge token invalid')
-        else:
-            charge = p_charge = 0
-
-        if is_radical:
-            try:
-                is_radical, p_is_radical = dyn_radical_dict[is_radical]
-            except KeyError:
-                raise IncorrectSmiles('invalid dynamic radical token')
-        else:
-            is_radical = p_is_radical = False
-
-        if element in ('c', 'n', 'o', 'p', 's', 'as', 'se', 'b', 'te'):
-            _type = 12
-            element = element.capitalize()
-        else:
-            _type = 11
-        return _type, {'element': element, 'charge': charge, 'isotope': isotope, 'is_radical': is_radical,
-                       'p_charge': p_charge, 'p_is_radical': p_is_radical}
-
     def __parse_tokens(self, smiles):
         tokens = self._raw_tokenize(smiles)
         tokens = self._fix_tokens(tokens)
@@ -833,6 +619,3 @@ class SMILESRead(Parser):
         if cgr or any(x in (11, 12) for x in atoms_types):
             mol['cgr'] = cgr
         return mol
-
-
-__all__ = ['SMILESRead']
