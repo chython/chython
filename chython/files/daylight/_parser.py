@@ -30,6 +30,11 @@ from ...containers import MoleculeContainer, CGRContainer, QueryContainer, React
 from ...exceptions import IncorrectSmiles, IsChiral, NotChiral, ValenceError
 
 
+# -,= OR bonds supported
+# @ bond not supported
+# @;!: and any other complicated combinations not supported
+
+
 # tokens structure:
 # (type: int, value)
 # types:
@@ -46,6 +51,8 @@ from ...exceptions import IncorrectSmiles, IsChiral, NotChiral, ValenceError
 # 10: dynamic bond
 # 11: dynamic atom
 # 12: dynamic aromatic atom
+# 13: query bond
+# 14: query atom
 
 replace_dict = {'-': 1, '=': 2, '#': 3, ':': 4, '~': 8, '.': None, '(': 2, ')': 3}
 charge_dict = {'+': 1, '+1': 1, '++': 2, '+2': 2, '+3': 3, '+++': 3, '+4': 4, '++++': 4,
@@ -271,200 +278,6 @@ class DaylightParser(Parser, ABC):
             break
         return mol
 
-    @staticmethod
-    def _raw_tokenize(smiles):
-        token_type = token = None
-        tokens = []
-        for s in smiles:
-            if s == '[':  # open complex token
-                if token_type == 5:  # two opened [
-                    raise IncorrectSmiles('[...[')
-                elif token:
-                    tokens.append((token_type, token))
-                elif token_type == 7:  # empty closure
-                    raise IncorrectSmiles('invalid closure')
-                token = []
-                token_type = 5
-            elif s == ']':  # close complex token
-                if token_type != 5:
-                    raise IncorrectSmiles(']..]')
-                elif not token:
-                    raise IncorrectSmiles('empty [] brackets')
-                tokens.append((5, ''.join(token)))
-                token_type = token = None
-            elif s in '()':
-                if token_type == 5:
-                    raise IncorrectSmiles('brackets in atom/bond token')
-                elif token:
-                    tokens.append((token_type, token))
-                    token = None
-                elif token_type == 7:  # empty closure
-                    raise IncorrectSmiles('invalid closure')
-                elif token_type == 2:  # barely opened
-                    raise IncorrectSmiles('(( or ()')
-                token_type = replace_dict[s]
-                tokens.append((token_type, None))
-            elif token_type == 5:  # grow token with brackets. skip validation
-                token.append(s)
-            elif s.isnumeric():  # closures
-                if token_type == 7:  # % already found. collect number
-                    if not token and s == '0':
-                        raise IncorrectSmiles('number starts with 0')
-                    token.append(s)
-                    if len(token) == 2:
-                        tokens.append((token_type, token))
-                        token_type = token = None
-                else:
-                    if s == '0':
-                        raise IncorrectSmiles('number starts with 0')
-                    elif token:
-                        tokens.append((token_type, token))
-                        token = None
-                    token_type = 6
-                    tokens.append((6, int(s)))
-            elif s == '%':
-                if token:
-                    tokens.append((token_type, token))
-                elif token_type == 7:
-                    raise IncorrectSmiles('%%')
-                token_type = 7
-                token = []
-            elif s in '=#:-~':  # bonds found
-                if token:
-                    tokens.append((token_type, token))
-                    token = None
-                token_type = 1
-                tokens.append((1, replace_dict[s]))
-            elif s in r'\/':
-                if token:
-                    tokens.append((token_type, token))
-                    token = None
-                token_type = 9
-                tokens.append((9, s == '/'))  # Up is true
-            elif s == '.':
-                if token:
-                    tokens.append((token_type, token))
-                    token = None
-                token_type = 4
-                tokens.append((4, None))
-            elif s in 'NOPSFI':  # organic atoms
-                if token:
-                    tokens.append((token_type, token))
-                    token = None
-                token_type = 0
-                tokens.append((0, s))
-            elif s in 'cnopsb':  # aromatic ring atom
-                if token:
-                    tokens.append((token_type, token))
-                    token = None
-                token_type = 8
-                tokens.append((8, s.upper()))
-            elif s in 'CB':  # flag possible Cl or Br
-                if token:
-                    tokens.append((token_type, token))
-                token_type = 0
-                token = s
-            elif token_type == 0:
-                if s == 'l':
-                    if token == 'C':
-                        tokens.append((0, 'Cl'))
-                        token = None
-                    else:
-                        raise IncorrectSmiles('invalid element Bl')
-                elif s == 'r':
-                    if token == 'B':
-                        tokens.append((0, 'Br'))
-                        token = None
-                    else:
-                        raise IncorrectSmiles('invalid smiles for Cr')
-                else:
-                    raise IncorrectSmiles('invalid smiles')
-            else:
-                raise IncorrectSmiles('invalid smiles')
-
-        if token_type == 5:
-            raise IncorrectSmiles('atom description has not finished')
-        elif token_type == 2:
-            raise IncorrectSmiles('not closed')
-        elif token:
-            tokens.append((token_type, token))  # %closure or C or B
-        return [(6, int(''.join(x[1]))) if x[0] == 7 else x for x in tokens]  # composite closures folding
-
-    @classmethod
-    def _fix_tokens(cls, tokens):
-        out = []
-        for token_type, token in tokens:
-            if token_type in (0, 8):  # simple atom
-                out.append((token_type, {'element': token, 'charge': 0, 'isotope': None, 'is_radical': False,
-                                         'mapping': 0, 'x': 0., 'y': 0., 'z': 0., 'hydrogen': None, 'stereo': None}))
-            elif token_type == 5:
-                if '>' in token:  # dynamic bond or atom
-                    if len(token) == 3:  # bond only possible
-                        try:
-                            out.append((10, dynamic_bonds[token]))
-                        except KeyError:
-                            raise IncorrectSmiles(f'invalid dynamic bond token {{{token}}}')
-                    else:  # dynamic atom token
-                        out.append(cls.__dynatom_parse(token))
-                elif '*' in token:  # CGR atom radical mark
-                    out.append(cls.__dynatom_parse(token))
-                else:  # atom token
-                    out.append(cls.__atom_parse(token))
-            else:  # as is types: 1, 2, 3, 4, 6, 9
-                out.append((token_type, token))
-        return out
-
-    @staticmethod
-    def __atom_parse(token):
-        # [isotope]Element[element][@[@]][H[n]][+-charge][:mapping]
-        match = fullmatch(atom_re, token)
-        if match is None:
-            raise IncorrectSmiles(f'atom token invalid {{{token}}}')
-        isotope, element, stereo, hydrogen, charge, mapping = match.groups()
-
-        if isotope:
-            isotope = int(isotope)
-
-        if stereo:
-            stereo = stereo == '@'
-
-        if hydrogen:
-            if len(hydrogen) > 1:
-                hydrogen = int(hydrogen[1:])
-            else:
-                hydrogen = 1
-        else:
-            hydrogen = 0
-
-        if charge:
-            try:
-                charge = charge_dict[charge]
-            except KeyError:
-                raise IncorrectSmiles('charge token invalid')
-        else:
-            charge = 0
-
-        if mapping:
-            try:
-                mapping = int(mapping[1:])
-            except ValueError:
-                raise IncorrectSmiles('invalid mapping token')
-        else:
-            mapping = 0
-
-        if element in ('c', 'n', 'o', 'p', 's', 'as', 'se', 'b', 'te'):
-            _type = 8
-            element = element.capitalize()
-        else:
-            _type = 0
-        return _type, {'element': element, 'charge': charge, 'isotope': isotope, 'is_radical': False,
-                       'mapping': mapping, 'x': 0., 'y': 0., 'z': 0., 'hydrogen': hydrogen, 'stereo': stereo}
-
-    def __parse_tokens(self, smiles):
-        tokens = self._raw_tokenize(smiles)
-        tokens = self._fix_tokens(tokens)
-        return self._parse_tokens(tokens)
-
     def _parse_tokens(self, tokens):
         strong_cycle = not self._ignore
         t1 = tokens[0][0]
@@ -484,6 +297,7 @@ class DaylightParser(Parser, ABC):
         cycles = {}
         used_cycles = set()
         cgr = []
+        query = []
         stereo_bonds = defaultdict(dict)
         stereo_atoms = {}
         hydrogens = {}
@@ -503,7 +317,7 @@ class DaylightParser(Parser, ABC):
                     last_num = stack.pop()
                 except IndexError:
                     raise IncorrectSmiles('close chain more than open')
-            elif token_type in (1, 4, 9, 10):  # bonds. only keeping for atoms connecting
+            elif token_type in (1, 4, 9, 10, 13):  # bonds. only keeping for atoms connecting
                 if previous:
                     raise IncorrectSmiles('2 bonds in a row')
                 elif not atoms:
@@ -561,8 +375,11 @@ class DaylightParser(Parser, ABC):
 
                     if bt == 1:
                         bonds.append((last_num, a, b))
+                    elif bt == 13:
+                        bonds.append((last_num, a, None))
+                        query.append((last_num, a, b))
                     else:  # bt == 10
-                        bonds.append((last_num, a, 8))
+                        bonds.append((last_num, a, None))
                         cgr.append((last_num, a, b))
                     order[a][ind] = last_num
                     order[last_num].append(a)
@@ -587,8 +404,11 @@ class DaylightParser(Parser, ABC):
                                       4 if token_type in (8, 12) and atoms_types[last_num] in (8, 12) else 1))
                         stereo_bonds[last_num][atom_num] = b
                         stereo_bonds[atom_num][last_num] = not b
+                    elif bt == 13:
+                        bonds.append((atom_num, last_num, None))
+                        query.append((atom_num, last_num, b))
                     elif bt == 10:
-                        bonds.append((atom_num, last_num, 8))
+                        bonds.append((atom_num, last_num, None))
                         cgr.append((atom_num, last_num, b))
 
                 if token_type not in (11, 12):
@@ -618,4 +438,269 @@ class DaylightParser(Parser, ABC):
                'stereo_bonds': stereo_bonds, 'stereo_atoms': stereo_atoms, 'hydrogens': hydrogens, 'meta': {}}
         if cgr or any(x in (11, 12) for x in atoms_types):
             mol['cgr'] = cgr
+        elif query or any(x == 14 for x in atoms_types):
+            mol['query'] = query
         return mol
+
+
+def _process_tokens(tokens):
+    out = []
+    for token_type, token in tokens:
+        if token_type in (0, 8):  # simple atom
+            out.append((token_type, {'element': token, 'charge': 0, 'isotope': None, 'is_radical': False,
+                                     'mapping': 0, 'x': 0., 'y': 0., 'z': 0., 'hydrogen': None, 'stereo': None}))
+        elif token_type == 5:
+            if '>' in token:  # dynamic bond or atom
+                if len(token) == 3:  # bond only possible
+                    try:
+                        out.append((10, dynamic_bonds[token]))
+                    except KeyError:
+                        raise IncorrectSmiles(f'invalid dynamic bond token {{{token}}}')
+                else:  # dynamic atom token
+                    out.append(_dynatom_parse(token))
+            elif '*' in token:  # CGR atom radical mark
+                out.append(_dynatom_parse(token))
+            # todo: smarts detection
+            else:  # atom token
+                out.append(_atom_parse(token))
+        else:  # as is types: 1, 2, 3, 4, 6, 9, 13
+            if token_type == 13 and len(token) != 2:
+                raise IncorrectSmiles('invalid SMARTS query bond')
+            out.append((token_type, token))
+    return out
+
+
+def _raw_tokenize(smiles):
+    token_type = token = None
+    tokens = []
+    for s in smiles:
+        if s == '[':  # open complex token
+            if token_type == 5:  # two opened [
+                raise IncorrectSmiles('[..[')
+            elif token:
+                tokens.append((token_type, token))
+            elif token_type == 7:  # empty closure
+                raise IncorrectSmiles('invalid closure')
+            token = []
+            token_type = 5
+        elif s == ']':  # close complex token
+            if token_type != 5:
+                raise IncorrectSmiles(']..]')
+            elif not token:
+                raise IncorrectSmiles('empty [] brackets')
+            tokens.append((5, ''.join(token)))
+            token_type = token = None
+        elif token_type == 5:  # grow token with brackets. skip validation
+            token.append(s)
+        elif s == '(':
+            if token:
+                tokens.append((token_type, token))
+                token = None
+            elif token_type == 7:  # empty closure
+                raise IncorrectSmiles('invalid closure')
+            elif token_type == 2:  # barely opened
+                raise IncorrectSmiles('((')
+            token_type = 2
+            tokens.append((2, None))
+        elif s == ')':
+            if token:
+                tokens.append((token_type, token))
+                token = None
+            elif token_type == 7:  # empty closure
+                raise IncorrectSmiles('invalid closure')
+            elif token_type == 2:  # barely opened
+                raise IncorrectSmiles('()')
+            token_type = 3
+            tokens.append((3, None))
+        elif s.isnumeric():  # closures
+            if token_type == 7:  # % already found. collect number
+                if not token and s == '0':
+                    raise IncorrectSmiles('number starts with 0')
+                token.append(s)
+                if len(token) == 2:
+                    tokens.append((token_type, token))
+                    token_type = token = None
+            else:
+                if s == '0':
+                    raise IncorrectSmiles('number starts with 0')
+                elif token:
+                    tokens.append((token_type, token))
+                    token = None
+                token_type = 6
+                tokens.append((6, int(s)))
+        elif s == '%':
+            if token:
+                tokens.append((token_type, token))
+            elif token_type == 7:
+                raise IncorrectSmiles('%%')
+            token_type = 7
+            token = []
+        elif s in '=#:-~':  # bonds found
+            if token_type == 13:
+                token.append(replace_dict[s])
+                tokens.append((13, token))
+                token = None
+            elif token:
+                tokens.append((token_type, token))
+                token = None
+            else:
+                token_type = 1
+                tokens.append((1, replace_dict[s]))
+        elif s in r'\/':
+            if token:
+                tokens.append((token_type, token))
+                token = None
+            token_type = 9
+            tokens.append((9, s == '/'))  # Up is true
+        elif s == '.':
+            if token:
+                tokens.append((token_type, token))
+                token = None
+            token_type = 4
+            tokens.append((4, None))
+        elif s in 'NOPSFI':  # organic atoms
+            if token:
+                tokens.append((token_type, token))
+                token = None
+            token_type = 0
+            tokens.append((0, s))
+        elif s in 'cnopsb':  # aromatic ring atom
+            if token:
+                tokens.append((token_type, token))
+                token = None
+            token_type = 8
+            tokens.append((8, s.upper()))
+        elif s in 'CB':  # flag possible Cl or Br
+            if token:
+                tokens.append((token_type, token))
+            token_type = 0
+            token = s
+        elif s == ',':  # query bond separator
+            if token_type != 1:
+                raise IncorrectSmiles('SMARTS query bond invalid')
+            token_type = 13
+            token = [tokens.pop(-1)[1]]
+        elif token_type == 0:
+            if s == 'l':
+                if token == 'C':
+                    tokens.append((0, 'Cl'))
+                    token = None
+                else:
+                    raise IncorrectSmiles('invalid element Bl')
+            elif s == 'r':
+                if token == 'B':
+                    tokens.append((0, 'Br'))
+                    token = None
+                else:
+                    raise IncorrectSmiles('invalid smiles for Cr')
+            else:
+                raise IncorrectSmiles('invalid smiles')
+        else:
+            raise IncorrectSmiles('invalid smiles')
+
+    if token_type == 5:
+        raise IncorrectSmiles('atom description has not finished')
+    elif token_type == 2:
+        raise IncorrectSmiles('not closed')
+    elif token:
+        tokens.append((token_type, token))  # %closure or C or B
+    return [(6, int(''.join(y))) if x == 7 else (x, y) for x, y in tokens]  # composite closures folding
+
+
+def _atom_parse(token):
+    # [isotope]Element[element][@[@]][H[n]][+-charge][:mapping]
+    match = fullmatch(atom_re, token)
+    if match is None:
+        raise IncorrectSmiles(f'atom token invalid {{{token}}}')
+    isotope, element, stereo, hydrogen, charge, mapping = match.groups()
+
+    if isotope:
+        isotope = int(isotope)
+
+    if stereo:
+        stereo = stereo == '@'
+
+    if hydrogen:
+        if len(hydrogen) > 1:
+            hydrogen = int(hydrogen[1:])
+        else:
+            hydrogen = 1
+    else:
+        hydrogen = 0
+
+    if charge:
+        try:
+            charge = charge_dict[charge]
+        except KeyError:
+            raise IncorrectSmiles('charge token invalid')
+    else:
+        charge = 0
+
+    if mapping:
+        try:
+            mapping = int(mapping[1:])
+        except ValueError:
+            raise IncorrectSmiles('invalid mapping token')
+    else:
+        mapping = 0
+
+    if element in ('c', 'n', 'o', 'p', 's', 'as', 'se', 'b', 'te'):
+        _type = 8
+        element = element.capitalize()
+    else:
+        _type = 0
+    return _type, {'element': element, 'charge': charge, 'isotope': isotope, 'is_radical': False,
+                   'mapping': mapping, 'x': 0., 'y': 0., 'z': 0., 'hydrogen': hydrogen, 'stereo': stereo}
+
+    def __parse_tokens(self, smiles):
+        tokens = self._raw_tokenize(smiles)
+        tokens = self._fix_tokens(tokens)
+        return self._parse_tokens(tokens)
+
+            raise IncorrectSmiles('not atom started')
+
+
+def _convert_query(data):
+    atoms = data['atoms']
+    bonds = defaultdict(dict)
+
+    for n, m, value in data['query']:
+        bonds[n][m] = bonds[m][n] = QueryBond(value)
+
+    g = object.__new__(QueryContainer)
+    g_atoms = {}
+    g_bonds = {}
+    plane = {}
+    charges = {}
+    radicals = {}
+    atoms_stereo = {}
+    allenes_stereo = {}
+    cis_trans_stereo = {}
+    neighbors = {}
+    hybridizations = {}
+    hydrogens = {}
+    rings_sizes = {}
+    heteroatoms = {}
+
+    for n, atom in enumerate(atoms, 1):
+        g_atoms[n] = ...
+        g_bonds[n] = {}
+        charges[n] = atom['charge']
+        radicals[n] = ...
+        plane[n] = (0., 0.)
+    for n, m, b in data['bonds']:
+        if m in bonds[n]:
+            b = bonds[n][m]
+        else:
+            b = QueryBond(b)
+        n += 1
+        m += 1
+        if n in g_bonds[m]:
+            raise ValueError('atoms already bonded')
+        g_bonds[n][m] = g_bonds[m][n] = b
+
+    g.__setstate__({'atoms': g_atoms, 'bonds': g_bonds, 'plane': plane, 'charges': charges, 'radicals': radicals,
+                    'neighbors': neighbors, 'hybridizations': hybridizations, 'hydrogens': hydrogens,
+                    'rings_sizes': rings_sizes, 'heteroatoms': heteroatoms, 'atoms_stereo': atoms_stereo,
+                    'allenes_stereo': allenes_stereo, 'cis_trans_stereo': cis_trans_stereo})
+    return g
