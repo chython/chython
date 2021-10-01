@@ -56,22 +56,13 @@ class CGRRead(DaylightParser):
                 out.append((token_type, {'element': token, 'charge': 0, 'isotope': None, 'is_radical': False,
                                          'mapping': 0, 'x': 0., 'y': 0., 'z': 0., 'hydrogen': None, 'stereo': None}))
             elif token_type == 5:
-                if '>' in token:  # dynamic bond or atom
-                    if len(token) == 3:  # bond only possible
-                        try:
-                            out.append((10, dynamic_bonds[token]))
-                        except KeyError:
-                            raise IncorrectSmiles(f'invalid dynamic bond token {{{token}}}')
-                    else:  # dynamic atom token
-                        out.append(_dynatom_parse(token))
-                elif '*' in token:  # CGR atom radical mark
+                if '>' in token and len(token) == 3:  # bond only possible
+                    try:
+                        out.append((10, dynamic_bonds[token]))
+                    except KeyError:
+                        raise IncorrectSmiles(f'invalid dynamic bond token {{{token}}}')
+                elif any(x in token for x in ['>', '*']):  # CGR atom radical mark or not only bonds possible
                     out.append(_dynatom_parse(token))
-                # todo: smarts detection
-                else:  # atom token
-                    out.append(_atom_parse(token))
-            else:  # as is types: 1, 2, 3, 4, 6, 9, 13
-                if token_type == 13 and len(token) != 2:
-                    raise IncorrectSmiles('invalid SMARTS query bond')
                 out.append((token_type, token))
         return out
 
