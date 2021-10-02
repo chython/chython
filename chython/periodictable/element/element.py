@@ -215,8 +215,7 @@ class Element(Core, ABC):
         compare attached to molecules elements
         """
         return isinstance(other, Element) and self.atomic_number == other.atomic_number and \
-            self.isotope == other.isotope and self.charge == other.charge and self.is_radical == other.is_radical and \
-            self.implicit_hydrogens == other.implicit_hydrogens
+            self.isotope == other.isotope and self.charge == other.charge and self.is_radical == other.is_radical
 
     def __hash__(self):
         return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.implicit_hydrogens or 0))
