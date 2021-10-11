@@ -288,8 +288,7 @@ class StandardizeMolecule:
             except TypeError:
                 raise ValenceError(f'atom {{{n}}} has valence error')
 
-        if return_maps:
-            log = []
+        log = []
         if to_add:
             bonds = self._bonds
             m = start_map
@@ -297,8 +296,7 @@ class StandardizeMolecule:
                 m = self.add_atom(H(), _map=m)
                 bonds[n][m] = bonds[m][n] = Bond(1)
                 hydrogens[n] = 0
-                if return_maps:
-                    log.append((n, m))
+                log.append((n, m))
                 m += 1
 
             if fix_stereo:

@@ -211,7 +211,7 @@ class Thiele:
         for ring in freaks:  # aromatize rule based
             rs = set(ring)
             for q in freak_rules:
-                if any(True for match in q.get_mapping(self) if rs == set(match)):
+                if any(True for match in q.get_mapping(self) if rs == set(match.values())):
                     n, *_, m = ring
                     bonds[n][m]._Bond__order = 4
                     for n, m in zip(ring, ring[1:]):

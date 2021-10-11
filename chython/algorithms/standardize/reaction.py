@@ -183,8 +183,7 @@ class StandardizeReaction:
         """
         Fix atom-to-atom mapping of some functional groups. Return True if found AAM errors.
         """
-        if logging:
-            log = []
+        log = []
         seen = set()
         if not self:
             return False
@@ -213,8 +212,7 @@ class StandardizeReaction:
                     del found[n]
                     m.remap(v)
                     seen.add(atom)
-                    if logging:
-                        log.append(('group remap', list(v)))
+                    log.append(('group remap', list(v)))
         if seen:
             self.flush_cache()
             flag = True
@@ -246,8 +244,7 @@ class StandardizeReaction:
                 for m in good_query.get_mapping(check, automorphism_filter=False):
                     if valid.issubset(m) and delta.issubset(m.values()):
                         seen.update(mapping)
-                        if logging:
-                            log.append((rule_num, str(bad_query), str(good_query), tuple(mapping.values())))
+                        log.append((rule_num, str(bad_query), str(good_query), tuple(mapping.values())))
                         flag = True
                         break
                 else:
@@ -259,7 +256,7 @@ class StandardizeReaction:
                     continue
                 break
             else:
-                if logging and flag_m:
+                if flag_m:
                     log.append((rule_num, str(bad_query), str(good_query), ()))
         if seen:
             self.flush_cache()
