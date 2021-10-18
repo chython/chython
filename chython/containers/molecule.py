@@ -687,7 +687,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         Pack into compressed bytes.
         Note:
             * Less than 4096 atoms supported. Atoms mapping should be in range 1-4095.
-            * Implicit hydrogens count should be in range 0-7
+            * Implicit hydrogens count should be in range 0-6 or unspecified.
             * Isotope shift should be in range -15 - 15 relatively mdl.common_isotopes
             * Atoms neighbors should be in range 0-15
 
@@ -704,7 +704,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         5 bit - isotope (00000 - not specified, over = isotope - common_isotope + 16)
         7 bit - atomic number (<=118)
         32 bit - XY float16 coordinates
-        3 bit - hydrogens (0-7)
+        3 bit - hydrogens (0-7). Note: 7 == None
         4 bit - charge (charge + 4. possible range -4 - 4)
         1 bit - radical state
         Connection table: flatten list of neighbors. neighbors count stored in atom block.
@@ -757,7 +757,10 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             hcr = (charges[n] + 4) << 1
             if radicals[n]:
                 hcr |= 1
-            hcr |= hydrogens[n] << 5
+            if (h := hydrogens[n]) is None:
+                hcr |= 224
+            else:
+                hcr |= h << 5
 
             # 2 bit tetrahedron sign | 2 bit - allene sign | 5 bit - isotope | 7 bit - atomic number (<=118)
             sia = a.atomic_number
@@ -880,7 +883,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
             charges[n] = ((hcr >> 1) & 0x0f) - 4
             radicals[n] = bool(hcr & 0x01)
-            hydrogens[n] = hcr >> 5
+            hydrogens[n] = None if (h := hcr >> 5) == 7 else h
             plane[n] = (x, y)
 
         bc = sum(neighbors.values()) // 2

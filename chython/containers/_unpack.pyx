@@ -129,7 +129,10 @@ def unpack(bytes data not None):
 
         py_charges[n] = charges[i]
         py_radicals[n] = radicals[i]
-        py_hydrogens[n] = hydrogens[i]
+        if hydrogens[i] == 7:
+            py_hydrogens[n] = None
+        else:
+            py_hydrogens[n] = hydrogens[i]
         py_plane[n] = (x[i], y[i])
 
         if is_tet[i]:

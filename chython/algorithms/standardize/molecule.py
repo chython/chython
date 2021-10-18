@@ -66,9 +66,7 @@ class StandardizeMolecule:
 
         :param logging: return list of fixed atoms with matched rules.
         """
-        neutralized = self.__fix_resonance(logging=logging)
-        if neutralized:
-            self.flush_cache()
+        neutralized = self.fix_resonance(logging=logging)
         log = self.__standardize(double_rules)
         log.extend(self.__standardize(double_rules))  # double shot rules for overlapped groups
         log.extend(self.__standardize(single_rules))
@@ -361,6 +359,65 @@ class StandardizeMolecule:
             return True
         return False
 
+    def fix_resonance(self: Union['MoleculeContainer', 'StandardizeMolecule'], *, logging=False) ->\
+            Union[bool, List[int]]:
+        """
+        Transform biradical or dipole resonance structures into neutral form. Return True if structure form changed.
+
+        :param logging: return list of changed atoms.
+        """
+        atoms = self._atoms
+        charges = self._charges
+        radicals = self._radicals
+        bonds = self._bonds
+        entries, exits, rads, constrains = self.__entries()
+        hs = set()
+        while len(rads) > 1:
+            n = rads.pop()
+            for path in self.__find_delocalize_path(n, rads, constrains):
+                l, m, b = path[-1]
+                if b == 1:  # required pi-bond
+                    continue
+                try:
+                    atoms[m].valence_rules(charges[m], False, sum(int(y) for x, y in bonds[m].items() if x != l) + b)
+                except ValenceError:
+                    continue
+                radicals[n] = radicals[m] = False
+                rads.discard(m)
+                hs.add(n)
+                hs.update(x for _, x, _ in path)
+                for n, m, b in path:
+                    bonds[n][m]._Bond__order = b
+                break  # path found
+            # path not found. atom n keep as is
+        while entries and exits:
+            n = entries.pop()
+            for path in self.__find_delocalize_path(n, exits, constrains):
+                l, m, b = path[-1]
+                try:
+                    atoms[m].valence_rules(charges[m] - 1, radicals[m],
+                                           sum(int(y) for x, y in bonds[m].items() if x != l) + b)
+                except ValenceError:
+                    continue
+                charges[n] = charges[m] = 0
+                exits.discard(m)
+                hs.add(n)
+                hs.update(x for _, x, _ in path)
+                for n, m, b in path:
+                    bonds[n][m]._Bond__order = b
+                break  # path from negative atom to positive atom found.
+            # path not found. keep negative atom n as is
+        if hs:
+            for n in hs:
+                self._calc_implicit(n)
+            self.flush_cache()
+            if logging:
+                return list(hs)
+            return True
+        if logging:
+            return []
+        return False
+
     def __standardize(self: 'MoleculeContainer', rules):
         bonds = self._bonds
         charges = self._charges
@@ -368,13 +425,9 @@ class StandardizeMolecule:
 
         log = []
         flush = False
-        for r, (pattern, atom_fix, bonds_fix) in enumerate(rules):
+        for r, (pattern, atom_fix, bonds_fix, any_atoms) in enumerate(rules):
             hs = set()
             seen = set()
-            # collect constrain Any-atoms
-            any_atoms = [n for n, a in pattern.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
-            # AnyMetal can match multiple times
-            any_atoms.extend(n for n, a in pattern.atoms() if a.atomic_symbol == 'M')
             for mapping in pattern.get_mapping(self, automorphism_filter=False):
                 match = set(mapping.values())
                 if not match.isdisjoint(seen):  # skip intersected groups
@@ -433,64 +486,6 @@ class StandardizeMolecule:
                 self._calc_implicit(n)
             del self.__dict__['_cython_compiled_structure']
         return log
-
-    def __fix_resonance(self: Union['MoleculeContainer', 'StandardizeMolecule'], *, logging=False) -> \
-            Union[bool, List[int]]:
-        """
-        Transform biradical or dipole resonance structures into neutral form. Return True if structure form changed.
-
-        :param logging: return list of changed atoms.
-        """
-        atoms = self._atoms
-        charges = self._charges
-        radicals = self._radicals
-        bonds = self._bonds
-        entries, exits, rads, constrains = self.__entries()
-        hs = set()
-        while len(rads) > 1:
-            n = rads.pop()
-            for path in self.__find_delocalize_path(n, rads, constrains):
-                l, m, b = path[-1]
-                if b == 1:  # required pi-bond
-                    continue
-                try:
-                    atoms[m].valence_rules(charges[m], False, sum(int(y) for x, y in bonds[m].items() if x != l) + b)
-                except ValenceError:
-                    continue
-                radicals[n] = radicals[m] = False
-                rads.discard(m)
-                hs.add(n)
-                hs.update(x for _, x, _ in path)
-                for n, m, b in path:
-                    bonds[n][m]._Bond__order = b
-                break  # path found
-            # path not found. atom n keep as is
-        while entries and exits:
-            n = entries.pop()
-            for path in self.__find_delocalize_path(n, exits, constrains):
-                l, m, b = path[-1]
-                try:
-                    atoms[m].valence_rules(charges[m] - 1, radicals[m],
-                                           sum(int(y) for x, y in bonds[m].items() if x != l) + b)
-                except ValenceError:
-                    continue
-                charges[n] = charges[m] = 0
-                exits.discard(m)
-                hs.add(n)
-                hs.update(x for _, x, _ in path)
-                for n, m, b in path:
-                    bonds[n][m]._Bond__order = b
-                break  # path from negative atom to positive atom found.
-            # path not found. keep negative atom n as is
-        if hs:
-            for n in hs:
-                self._calc_implicit(n)
-            if logging:
-                return list(hs)
-            return True
-        if logging:
-            return []
-        return False
 
     def __find_delocalize_path(self: 'MoleculeContainer', start, finish, constrains):
         bonds = self._bonds

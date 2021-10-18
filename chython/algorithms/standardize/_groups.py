@@ -777,7 +777,9 @@ def _rules_single():
             q.add_atom(**a)
         for n, m, b in bonds:
             q.add_bond(n, m, b)
-        compiled_rules.append((q, atom_fix, bonds_fix))
+
+        any_atoms = [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
+        compiled_rules.append((q, atom_fix, bonds_fix, any_atoms))
     return compiled_rules
 
 
@@ -807,7 +809,9 @@ def _rules_double():
             q.add_atom(**a)
         for n, m, b in bonds:
             q.add_bond(n, m, b)
-        compiled_rules.append((q, atom_fix, bonds_fix))
+
+        any_atoms = [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
+        compiled_rules.append((q, atom_fix, bonds_fix, any_atoms))
     return compiled_rules
 
 

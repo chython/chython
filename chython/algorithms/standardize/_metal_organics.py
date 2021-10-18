@@ -224,7 +224,13 @@ def _rules():
     atom_fix = {1: (1, None), 4: (-1, False)}
     bonds_fix = ()
     rules.append((q, atom_fix, bonds_fix))
-    return rules
+
+    compiled_rules = []
+    for q, atom_fix, bonds_fix in rules:
+        any_atoms = [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
+        any_atoms.extend(n for n, a in q.atoms() if a.atomic_symbol == 'M')
+        compiled_rules.append((q, atom_fix, bonds_fix, any_atoms))
+    return compiled_rules
 
 
 rules = Proxy(_rules)
