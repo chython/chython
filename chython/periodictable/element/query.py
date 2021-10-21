@@ -24,7 +24,7 @@ from .element import Element
 from ...exceptions import IsNotConnectedAtom
 
 
-_inorganic = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'F', 'Cl', 'Br', 'I', 'C', 'N', 'O',
+_inorganic = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'F', 'Cl', 'Br', 'I', 'B', 'C', 'N', 'O',
               'H', 'Si', 'P', 'S', 'Se', 'Ge', 'As', 'Sb', 'Te'}
 
 

@@ -129,7 +129,8 @@ class Sb(Element, PeriodV, GroupXV):
 
     @property
     def _valences_exceptions(self):
-        return (1, False, 4, ()),
+        return ((1, False, 4, ()),
+                (-1, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))))
 
     @property
     def atomic_radius(self):
@@ -157,7 +158,8 @@ class Bi(Element, PeriodVI, GroupXV):
 
     @property
     def _valences_exceptions(self):
-        return ((0, False, 0, ((1, 'Cl'),)),
+        return ((3, False, 0, ()),
+                (0, False, 0, ((1, 'Cl'),)),
                 (0, False, 0, ((1, 'Br'),)),
 
                 (0, False, 0, ((1, 'Cl'), (1, 'Cl'))),

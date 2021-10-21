@@ -60,6 +60,7 @@ def _rules():
     q.add_bond(1, 3, 1)
 
     # NOTE: first fixed atom is metal. required for preventing errors in charge.
+    # based on ordered dict nature.
     atom_fix = {3: (1, None), 1: (-1, None)}
     bonds_fix = ((1, 3, 8),)
     rules.append((q, atom_fix, bonds_fix))

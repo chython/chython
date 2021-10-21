@@ -177,11 +177,11 @@ class Ra(Element, PeriodVII, GroupII):
 
     @property
     def isotopes_distribution(self):
-        return {223: 0., 226: 1.0, 228: 0.}
+        return {223: 0., 226: 1.0, 228: 0., 233: 0.}
 
     @property
     def isotopes_masses(self):
-        return {223: 223.018502, 226: 226.025410, 228: 228.031070}
+        return {223: 223.018502, 226: 226.025410, 228: 228.031070, 233: 233.048065}
 
     @property
     def _common_valences(self):

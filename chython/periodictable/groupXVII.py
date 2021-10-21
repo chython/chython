@@ -32,11 +32,11 @@ class F(Element, PeriodII, GroupXVII):
 
     @property
     def isotopes_distribution(self):
-        return {18: 0., 19: 1.0}
+        return {17: 0., 18: 0., 19: 1.0}
 
     @property
     def isotopes_masses(self):
-        return {18: 18.000938, 19: 18.998403}
+        return {17: 17.002095, 18: 18.000938, 19: 18.998403}
 
     @property
     def _common_valences(self):
@@ -161,9 +161,12 @@ class I(Element, PeriodV, GroupXVII):
         return ((-1, False, 0, ()),
                 (-1, False, 0, ((1, 'I'), (1, 'I'))),  # [I-I-I]-
                 (-1, False, 0, ((1, 'I'), (1, 'Br'))),  # [I-I-Br]-
+                (1, False, 0, ((1, 'C'), (1, 'C'))),
 
                 (0, False, 0, ((1, 'O'), (2, 'O'))),  # HIO2
                 (0, False, 0, ((1, 'C'), (2, 'O'))),
+                (0, False, 0, ((1, 'C'), (2, 'C'))),
+                (0, False, 0, ((1, 'C'), (2, 'N'))),
                 (0, False, 0, ((1, 'O'), (2, 'O'), (2, 'O'))),  # HIO3
                 (0, False, 0, ((1, 'O'), (2, 'O'), (2, 'O'), (2, 'O'))),  # HIO4
                 (0, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (2, 'O'), (2, 'O'))),  # H3IO5
@@ -177,10 +180,14 @@ class I(Element, PeriodV, GroupXVII):
                 (0, False, 0, ((1, 'C'), (1, 'O'), (1, 'C'))),
                 (0, False, 0, ((1, 'C'), (1, 'O'), (1, 'O'))),
                 (0, False, 0, ((1, 'C'), (1, 'F'), (1, 'F'))),
+                (0, False, 0, ((1, 'C'), (1, 'Cl'), (1, 'Cl'))),
+                (0, False, 0, ((1, 'C'), (1, 'C'), (1, 'Cl'))),
+                (0, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'))),
 
                 (0, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),  # IF5
                 (0, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (2, 'O'))),  # IOF3
                 (0, False, 0, ((1, 'F'), (2, 'O'), (2, 'O'))),  # IO2F
+                (0, False, 0, ((1, 'C'), (2, 'O'), (2, 'O'))),
                 (0, False, 0, ((1, 'C'), (1, 'O'), (1, 'O'), (2, 'O'))),
                 (0, False, 0, ((1, 'C'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),
 
