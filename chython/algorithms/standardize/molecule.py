@@ -500,10 +500,8 @@ class StandardizeMolecule:
 
             path.append((last, current, order))
 
-            if current in finish:
-                if depth:  # one bonded ignored. we search double bond transfer! A=A-A >> A-A=A.
-                    yield path
-                continue  # stop grow
+            if current in finish and depth:  # one bonded ignored. we search double bond transfer! A=A-A >> A-A=A.
+                yield path
 
             depth += 1
             seen.add(current)
