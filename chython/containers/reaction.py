@@ -20,8 +20,10 @@ from CachedMethods import cached_method
 from functools import reduce
 from hashlib import sha512
 from itertools import chain
+from math import ceil
 from operator import or_
 from typing import Dict, Iterable, Iterator, Optional, Tuple
+from zlib import compress, decompress
 from .cgr import CGRContainer
 from .molecule import MoleculeContainer
 from ..algorithms.calculate2d import Calculate2DReaction
@@ -156,6 +158,56 @@ class ReactionContainer(StandardizeReaction, Calculate2DReaction, DepictReaction
         self.__dict__.clear()
         for m in self.molecules():
             m.flush_cache()
+
+    def pack(self, *, compressed=True):
+        """
+        Pack into compressed bytes.
+
+        Note:
+            * Same restrictions as in molecules pack.
+            * reactants, reagents nad products should contain less than 257 molecules.
+
+        Format specification:
+        Big endian bytes order
+        8 bit - header byte = 0x01. Extending possible
+        8 bit - reactants count
+        8 bit - reagents count
+        8 bit - products count
+        x bit - concatenated molecules packs
+
+        :param compressed: return zlib-compressed pack.
+        """
+        data = b''.join((bytearray((1, len(self.__reactants), len(self.__reagents), len(self.__products))),
+                         *(m.pack(compressed=False) for m in self.molecules())))
+        if compressed:
+            return compress(data, 9)
+        return data
+
+    @classmethod
+    def unpack(cls, data: bytes, /, *, compressed=True) -> 'ReactionContainer':
+        """
+        Unpack from compressed bytes.
+
+        :param compressed: decompress data before processing.
+        """
+        if compressed:
+            data = decompress(data)
+        data = memoryview(data)
+        if data[0] != 1:
+            raise ValueError('invalid pack header')
+
+        reactants, reagents, products = data[1], data[2], data[3]
+        molecules = []
+        shift = 4
+        for i in range(reactants + reagents + products):
+            m = MoleculeContainer.unpack(data[shift:], compressed=False)
+            molecules.append(m)
+            shift += (4 +  # extension byte + atoms count + cis/trans bit
+                      9 * m.atoms_count +  # atoms data
+                      3 * m.bonds_count +  # connection table
+                      2 * ceil(m.bonds_count / 5) +  # bonds order
+                      4 * len(m._cis_trans_stereo))
+        return cls(molecules[:reactants], molecules[-products:], molecules[reactants: -products])
 
     def __invert__(self) -> CGRContainer:
         """

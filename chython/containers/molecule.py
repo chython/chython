@@ -682,7 +682,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             return super().get_mapping(other, **kwargs)
         raise TypeError('MoleculeContainer expected')
 
-    def pack(self) -> bytes:
+    def pack(self, *, compressed=True) -> bytes:
         """
         Pack into compressed bytes.
         Note:
@@ -717,6 +717,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         24 bit - atoms pair
         7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
         1 bit - sign
+
+        :param compressed: return zlib-compressed pack.
         """
         bonds = self._bonds
         if max(bonds) > 4095:
@@ -800,19 +802,28 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         for o, ((n, m), s) in enumerate(cis_trans_stereo.items()):
             pack_into('>I', data, shift + 4 * o, (n << 20) | (m << 8) | s)
 
-        return compress(bytes(data), 9)
+        if compressed:
+            return compress(bytes(data), 9)
+        return bytes(data)
 
     @classmethod
-    def unpack(cls, data: bytes) -> 'MoleculeContainer':
+    def unpack(cls, data: bytes, /, *, compressed=True) -> 'MoleculeContainer':
         """
         Unpack from compressed bytes.
+
+        :param compressed: decompress data before processing.
         """
         try:  # windows? ;)
             from ._unpack import unpack
         except ImportError:
-            return cls.pure_unpack(data)
+            return cls.pure_unpack(data, compressed=compressed)
+        if compressed:
+            data = decompress(data)
+        if data[0] != 0:
+            raise ValueError('invalid pack header')
+
         (mapping, atom_numbers, isotopes, charges, radicals, hydrogens, plane, bonds,
-         atoms_stereo, allenes_stereo, cis_trans_stereo) = unpack(decompress(data))
+         atoms_stereo, allenes_stereo, cis_trans_stereo) = unpack(data)
 
         mol = object.__new__(cls)
         mol._bonds = bonds
@@ -838,13 +849,18 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         return mol
 
     @classmethod
-    def pure_unpack(cls, data: bytes) -> 'MoleculeContainer':
+    def pure_unpack(cls, data: bytes, /, *, compressed=True) -> 'MoleculeContainer':
         """
         Unpack from compressed bytes. Python implementation.
         """
         from ..files._mdl.mol import common_isotopes
+        if compressed:
+            data = memoryview(decompress(data))
+        elif not isinstance(data, memoryview):
+            data = memoryview(data)
+        if data[0] != 0:
+            raise ValueError('invalid pack header')
 
-        data = memoryview(decompress(data))
         mol = cls()
         atoms = mol._atoms
         bonds = mol._bonds
