@@ -499,23 +499,15 @@ def _rules_single():
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
 
     #
-    #  [C+] - N(R2)  >> C = [N+](R2)
+    #     [O+]R         [O]R
+    #     //            /
+    # N - C  >> [N+] = C
     #
-    atoms = ({'atom': 'N', 'neighbors': 3, 'hybridization': 1},
-             {'atom': 'C', 'charge': 1, 'hybridization': 1, 'neighbors': (1, 2, 3), 'heteroatoms': 1})
-    bonds = ((1, 2, 1),)
-    atom_fix = {1: (1, None), 2: (-1, None)}
-    bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
-
-    #
-    #  [C+] = N(R)  >>  C # [N+](R)
-    #
-    atoms = ({'atom': 'N', 'neighbors': (1, 2), 'hybridization': 2},
-             {'atom': 'C', 'charge': 1, 'neighbors': (1, 2), 'hybridization': 2, 'heteroatoms': 1})
-    bonds = ((1, 2, 2),)
-    atom_fix = {1: (1, None), 2: (-1, None)}
-    bonds_fix = ((1, 2, 3),)
+    atoms = ({'atom': 'C', 'hybridization': 2}, {'atom': 'O', 'neighbors': 2, 'hybridization': 2, 'charge': 1},
+             {'atom': 'N', 'hybridization': 1})
+    bonds = ((1, 2, 2), (1, 3, 1))
+    atom_fix = {2: (-1, None), 3: (1, None)}
+    bonds_fix = ((1, 2, 1), (1, 3, 2))
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
 
     #
@@ -814,6 +806,36 @@ def _rules_single():
     bonds = ((1, 2, 1), (2, 3, 1))
     atom_fix = {1: (0, False), 2: (0, False)}
     bonds_fix = ((1, 2, 2),)
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
+    # only after [A-] - [C+] rules!
+    #  [C+] - N(R2)  >> C = [N+](R2)
+    #
+    atoms = ({'atom': 'N', 'neighbors': 3, 'hybridization': 1, 'heteroatoms': 0},
+             {'atom': 'C', 'charge': 1, 'hybridization': 1, 'neighbors': (1, 2, 3)})
+    bonds = ((1, 2, 1),)
+    atom_fix = {1: (1, None), 2: (-1, None)}
+    bonds_fix = ((1, 2, 2),)
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
+    # low priority for hetero-N
+    #  [C+] - N(X2)  >> C = [N+](R2)
+    #
+    atoms = ({'atom': 'N', 'neighbors': 3, 'hybridization': 1},
+             {'atom': 'C', 'charge': 1, 'hybridization': 1, 'neighbors': (1, 2, 3)})
+    bonds = ((1, 2, 1),)
+    atom_fix = {1: (1, None), 2: (-1, None)}
+    bonds_fix = ((1, 2, 2),)
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
+    #
+    #  [C+] = N(R)  >>  C # [N+](R)
+    #
+    atoms = ({'atom': 'N', 'neighbors': (1, 2), 'hybridization': 2},
+             {'atom': 'C', 'charge': 1, 'neighbors': (1, 2), 'hybridization': 2, 'heteroatoms': 1})
+    bonds = ((1, 2, 2),)
+    atom_fix = {1: (1, None), 2: (-1, None)}
+    bonds_fix = ((1, 2, 3),)
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
 
     # Br-ion + I-ion
