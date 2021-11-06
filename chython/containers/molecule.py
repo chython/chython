@@ -807,7 +807,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         return bytes(data)
 
     @classmethod
-    def unpack(cls, data: bytes, /, *, compressed=True) -> 'MoleculeContainer':
+    def unpack(cls, data: bytes, /, *, compressed=True, _return_pack_length=False) -> 'MoleculeContainer':
         """
         Unpack from compressed bytes.
 
@@ -816,14 +816,14 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         try:  # windows? ;)
             from ._unpack import unpack
         except ImportError:
-            return cls.pure_unpack(data, compressed=compressed)
+            return cls.pure_unpack(data, compressed=compressed, _return_pack_length=_return_pack_length)
         if compressed:
             data = decompress(data)
         if data[0] != 0:
             raise ValueError('invalid pack header')
 
         (mapping, atom_numbers, isotopes, charges, radicals, hydrogens, plane, bonds,
-         atoms_stereo, allenes_stereo, cis_trans_stereo) = unpack(data)
+         atoms_stereo, allenes_stereo, cis_trans_stereo, pack_length) = unpack(data)
 
         mol = object.__new__(cls)
         mol._bonds = bonds
@@ -846,10 +846,12 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             a._Core__isotope = i
             a._graph = ref(mol)
             a._map = n
+        if _return_pack_length:
+            return mol, pack_length
         return mol
 
     @classmethod
-    def pure_unpack(cls, data: bytes, /, *, compressed=True) -> 'MoleculeContainer':
+    def pure_unpack(cls, data: bytes, /, *, compressed=True, _return_pack_length=False) -> 'MoleculeContainer':
         """
         Unpack from compressed bytes. Python implementation.
         """
@@ -936,6 +938,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         for o in range(acs & 0x0fff):  # cis/trans
             ct = unpack_from('>I', data, shift + 4 * o)[0]
             cis_trans_stereo[(ct >> 20, (ct >> 8) & 0x0fff)] = ct & 0x01
+        if _return_pack_length:
+            return mol, shift + (acs & 0x0fff) * 4
         return mol
 
     def _augmented_substructure(self, atoms: Iterable[int], deep: int):

@@ -200,13 +200,9 @@ class ReactionContainer(StandardizeReaction, Calculate2DReaction, DepictReaction
         molecules = []
         shift = 4
         for i in range(reactants + reagents + products):
-            m = MoleculeContainer.unpack(data[shift:], compressed=False)
+            m, pl = MoleculeContainer.unpack(data[shift:], compressed=False, _return_pack_length=True)
             molecules.append(m)
-            shift += (4 +  # extension byte + atoms count + cis/trans bit
-                      9 * m.atoms_count +  # atoms data
-                      3 * m.bonds_count +  # connection table
-                      2 * ceil(m.bonds_count / 5) +  # bonds order
-                      4 * len(m._cis_trans_stereo))
+            shift += pl
         return cls(molecules[:reactants], molecules[-products:], molecules[reactants: -products])
 
     def __invert__(self) -> CGRContainer:
