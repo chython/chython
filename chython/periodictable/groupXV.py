@@ -44,7 +44,8 @@ class N(Element, PeriodII, GroupXV):
 
     @property
     def _valences_exceptions(self):
-        return (-1, False, 2, ()), (1, False, 4, ()), (0, True, 0, ((2, 'O'),))  # *NO
+        return ((-1, False, 2, ()), (1, False, 4, ()),
+                (0, True, 2, ()))  # *NO, etc
 
     @property
     def atomic_radius(self):
@@ -72,7 +73,7 @@ class P(Element, PeriodIII, GroupXV):
 
     @property
     def _valences_exceptions(self):
-        return ((-1, False, 2, ()), (1, False, 4, (),),
+        return ((-1, False, 2, ()), (1, False, 4, ()),
                 (-1, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))))
 
     @property

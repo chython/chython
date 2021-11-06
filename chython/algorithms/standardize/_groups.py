@@ -798,16 +798,6 @@ def _rules_single():
     bonds_fix = ((1, 2, 2),)
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
 
-    # Allyl radical
-    #
-    # [C*] -- [C*] -- [C*]  >>  C == C -- [C*]
-    #
-    atoms = ({'atom': 'C', 'is_radical': True}, {'atom': 'C', 'is_radical': True}, {'atom': 'C', 'is_radical': True})
-    bonds = ((1, 2, 1), (2, 3, 1))
-    atom_fix = {1: (0, False), 2: (0, False)}
-    bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
-
     # only after [A-] - [C+] rules!
     #  [C+] - N(R2)  >> C = [N+](R2)
     #
@@ -860,6 +850,18 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (-1, None), 2: (1, None)}
     bonds_fix = ((1, 2, 2),)
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
+    #
+    #  [A*] - [A*] >> A = A or [A*] = [A*] >> A # A
+    #
+    atoms = ({'atom': 'A', 'is_radical': True}, {'atom': 'A', 'is_radical': True})
+    bonds = ((1, 2, 1),)
+    atom_fix = {1: (0, False), 2: (0, False)}
+    bonds_fix = ((1, 2, 2),)
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    bonds = ((1, 2, 2),)
+    bonds_fix = ((1, 2, 3),)
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
 
     compiled_rules = []
