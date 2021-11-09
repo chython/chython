@@ -28,9 +28,27 @@ from ...exceptions import ValenceError
 if TYPE_CHECKING:
     from chython import MoleculeContainer
 
-charge_priority = {(7, 0): -3, (7, 1): -2, (7, -1): -1,
-                   (8, 0): -3, (8, -1): -2, (8, 1): -1}
-common_charge_priority = {0: 0, -1: 1, 1: 2, 2: 3, 3: 4, -2: 5, 4: 6, -3: 7, -4: 8}
+# atom, charge, unsaturation
+tuned_priority = {(7, 0, 0): -3,  # amine
+                  (7, 0, 1): -3,  # X=N-X
+                  (7, 0, 2): -3,  # X#N
+                  (7, 1, 1): -2,  # X=[N+](-X)-X
+                  (7, 1, 2): -2,  # X=[N+]=X
+                  (7, -1, 0): -1,  # X-[N-]-X
+                  (7, -1, 1): -1,  # X=[N-]
+                  (8, 0, 0): -2,  # X-O-X
+                  (8, 0, 1): -2,  # X=O
+                  (8, -1, 0): -1,  # X-[O-]
+                  (8, 1, 1): -1,  # X=[O+]-X
+                  (16, 0, 0): -3,  # X-S-X
+                  (16, 0, 2): -2,  # X-S(-X)(=X)=X
+                  (16, 0, 1): -2,  # X-S(-X)(=X)
+                  (16, 0, 2): -2,  # X=S=X
+                  (16, 0, 0): -1,  # X-S(-X)(-X)-X
+                  (16, 0, 1): -1,  # X-[S+](-X)(-X)
+                  (16, 1, 1): -1,  # X=[S+]-X
+                  }
+charge_priority = {0: 0, -1: 1, 1: 2, 2: 3, 3: 4, -2: 5, 4: 6, -3: 7, -4: 8}
 
 
 class Saturation:
@@ -82,83 +100,57 @@ class Saturation:
                     unsaturated[n] = [(c, r, h)]
             else:
                 # radicals have the lowest priority
-                # multiple bonds have the highest priority
-                # charges have special priority for some atoms and common otherwise: 0>-1>1>2>3>-2>4>-3>-4
-                unsaturated[n] = sorted(s, key=lambda x: (x[1], -x[2],
-                                                          charge_priority.get((atoms[n].atomic_number, x[0])) or
-                                                          common_charge_priority[x[0]]))
-
-        # create graph of unsaturated atoms
-        bonds_graph = {n: {m for m in env if m in unsaturated} for n, env in adjacency.items() if n in unsaturated}
-        ua, sb, sa = _saturate(bonds_graph, unsaturated)
-        for n, m, b in sb:
-            bonds[n][m] = bonds[m][n] = Bond(b)
-        for n, c, r in sa:
-            charges[n] = c
-            radicals[n] = r
-
-        combo_ua = []  # possible single atoms electron states
-        for n, s in ua.items():
-            if len(s) == 1:
-                c, r = s[0]
-                charges[n] = c
-                radicals[n] = r
-            elif s:
-                combo_ua.append([(n, c, r) for c, r in s])
+                # tuned priority
+                # multiple bonds have higher priority
+                # charges priority: 0>-1>1>2>3>-2>4>-3>-4
+                unsaturated[n] = sorted(s, key=lambda x: (x[1],
+                                                          tuned_priority.get((atoms[n].atomic_number, x[0], x[2]), 0),
+                                                          -x[2], charge_priority[x[0]]))
 
         log = []
-        # try randomly set charges and radicals.
-        # first pick required radical states.
-        # second try to minimize charge delta.
-        if combo_ua:
-            need_radical = expected_radicals_count - sum(radicals.values())
-            for attempt in range(1, len(combo_ua) + 1):
-                shuffle(combo_ua)
-                rad = []
-                chg = []
-                for atom in combo_ua:
-                    if len(rad) < need_radical:  # pick radicals
-                        r = next((x for x in atom if x[2]), None)
-                        if r:  # pick random radical states
-                            rad.append(r)
-                        else:  # not radical
-                            chg.append(atom)
-                    else:  # pick not radical states
-                        c = [x for x in atom if not x[2]]
-                        if len(c) > 1:
-                            chg.append(c)
-                        elif c:
-                            n, c, r = c[0]
-                            charges[n] = c
-                            radicals[n] = r
-                        elif attempt == len(combo_ua):  # all states has radical. balancing impossible
-                            chg.append(atom)  # fuck it horse. we in last attempt
-                            log.append('Radical state not balanced.')
-                        else:  # do next attempt
-                            break
+        if (need_radicals := expected_radicals_count - sum(radicals.values())) < 0:
+            log.append('Radical state not balanced')
+            if not allow_errors:
+                if logging:
+                    return log
+                return False
+            need_radicals = 0  # reset to zero
+
+        if unsaturated:
+            # create graph of unsaturated atoms
+            bonds_graph = {n: {m for m in adjacency[n] if m in unsaturated} for n in unsaturated}
+            order = list(unsaturated)
+            # try to saturate with different random states
+            for _ in range(len(unsaturated)):
+                shuffle(order)
+                sb, sa, log_ = _saturate({n: bonds_graph[n].copy() for n in order}, unsaturated, need_radicals,
+                                         expected_charge - sum(charges.values()))
+                if not log_:  # success
+                    break
+            else:  # failed
+                if log_ == 1:
+                    log.append('Charge state not balanced')
+                elif log_ == 2:
+                    log.append('Radical state not balanced')
                 else:
-                    for n, c, r in rad:
-                        charges[n] = c
-                        radicals[n] = r
+                    log.append('Charge state not balanced')
+                    log.append('Radical state not balanced')
+                if not allow_errors:  # all attempts failed
+                    if logging:
+                        return log
+                    return False
 
-                    current_charge = sum(charges.values())
-                    for x in chg:
-                        n, c, r = min(x, key=lambda x: abs(current_charge + x[1]))
-                        charges[n] = c
-                        radicals[n] = r
-                        current_charge += c
-                    if sum(charges.values()) == expected_charge:
-                        break
-            else:
-                log.append('Charge state not balanced.')
-        elif sum(radicals.values()) != expected_radicals_count or sum(charges.values()) != expected_charge:
-            log.append('Charge or radical state not balanced.')
-
-        if not allow_errors and log:
-            if logging:
-                return log
-            return False
-
+            for n, m, b in sb:
+                bonds[n][m] = bonds[m][n] = Bond(b)
+            for n, c, r in sa:
+                charges[n] = c
+                radicals[n] = r
+        elif expected_charge != sum(charges.values()):  # check charge for saturated case
+            log.append('Charge state not balanced')
+            if not allow_errors:
+                if logging:
+                    return log
+                return False
         # reset molecule
         self._bonds = bonds
         self._radicals = radicals
@@ -166,7 +158,10 @@ class Saturation:
         self._hydrogens = {x: 0 for x in atoms}  # reset invalid hydrogens counts.
         self.flush_cache()
         if logging:
-            log.append('saturated successfully')
+            if not log:  # check for errors
+                log.append('Saturated successfully')
+            else:
+                log.append('Saturated with errors')
             return log
         return True
 
@@ -179,35 +174,32 @@ def _find_possible_valences(atoms, neighbors_distances, charges, radicals, allow
     while True:
         saturation = defaultdict(set)
         for n, env in possible_bonds.items():
+            env_atoms = None
             el = len(env)
             dc = charges[n]
             dr = radicals[n]
-            for (charge, is_radical, valence), rules in atoms[n]._compiled_valence_rules.items():
+            for charge, is_radical, valence, implicit, explicit_dict in atoms[n]._compiled_saturation_rules:
                 if valence < el or dc is not None and dc != charge or dr is not None and dr != is_radical:
                     continue  # skip impossible rules
-                for _, explicit_dict, h in rules:
-                    if explicit_dict:
+                if explicit_dict:
+                    if env_atoms is None:  # lazy caching
                         env_atoms = defaultdict(int)
                         for m in env:
                             env_atoms[atoms[m].atomic_number] += 1
-                        bonds = 0
-                        for (b, a), c in explicit_dict.items():  # stage 1. find explicit valence
-                            if env_atoms[a] < c:  # `c` always > 0
-                                break  # rule not matched
-                            env_atoms[a] -= c
-                            bonds += b * c
-                        else:  # stage 2. find possible valence
-                            unmatched = sum(env_atoms.values())  # atoms outside rule
-                            implicit = valence - bonds + h  # implicit H in rule
-                            if unmatched:
-                                if implicit >= unmatched:
-                                    # number of implicit H should be greater or equal to number of neighbors
-                                    # excess of implicit H saved as unsaturated atom
-                                    saturation[n].add((charge, is_radical, implicit - unmatched))
-                            else:  # pattern fully matched. save implicit H count as unsaturated atom.
-                                saturation[n].add((charge, is_radical, implicit))
-                    elif el == valence:   # unspecific rule. found possible valence
-                        saturation[n].add((charge, is_radical, h))
+                    env_atoms_copy = env_atoms.copy()
+                    for (b, a), c in explicit_dict.items():  # stage 1. find explicit valence
+                        if env_atoms_copy[a] < c:  # `c` always > 0
+                            break  # rule not matched
+                        env_atoms_copy[a] -= c
+                    else:  # stage 2. find possible valence
+                        if unmatched := sum(env_atoms_copy.values()):  # number of atoms outside rule
+                            if implicit >= unmatched:
+                                # number of implicit H should be greater or equal to number of neighbors
+                                saturation[n].add((charge, is_radical, valence - el))
+                        else:  # pattern fully matched. difference bw valence and connectivity is unsaturation.
+                            saturation[n].add((charge, is_radical, valence - el))
+                else:   # unspecific rule. found possible valence
+                    saturation[n].add((charge, is_radical, valence - el))
             if n not in saturation:  # valence not found
                 break
         else:  # all atoms passed
@@ -221,16 +213,23 @@ def _find_possible_valences(atoms, neighbors_distances, charges, radicals, allow
     return saturation, possible_bonds
 
 
-def _saturate(bonds, atoms):
-    dots = {}
+def _saturate(bonds, atoms, expected_radicals_count, expected_charge):
+    atoms = {k: v.copy() for k, v in atoms.items()}
+    dots = []
     saturation = []
     electrons = []
     while True:
         # get isolated atoms. atoms should be charged or radical
-        new_dots = {n: [(c, r) for c, r, h in atoms[n] if not h] for n, env in bonds.items() if not env}
-        for n in new_dots:
+        to_del = []
+        for n, env in bonds.items():
+            if not env:
+                es = [(n, c, r) for c, r, h in atoms[n] if not h]
+                if not es:
+                    return  # saturation impossible
+                to_del.append(n)
+                dots.append(es)
+        for n in to_del:
             del bonds[n]
-        dots.update(new_dots)
         if not bonds:
             break
 
@@ -298,7 +297,73 @@ def _saturate(bonds, atoms):
                 saturation.append((n, m, 1))
                 if not bonds[m]:
                     del bonds[m]
-    return dots, saturation, electrons
+
+    combo_ua = []  # possible single atoms electron states
+    for s in dots:
+        if len(s) == 1:
+            electrons.extend(s)
+        elif s:
+            combo_ua.append(s)
+
+    # if < 0 - we already in bad situation
+    # if > 0 - we need more radicals
+    need_radical = expected_radicals_count - sum(x for _, _, x in electrons)
+    need_charge = expected_charge - sum(x for _, x, _ in electrons)
+    if combo_ua:
+        # try randomly set charges and radicals.
+        # first pick required radical states.
+        # second try to minimize charge delta.
+        for attempt in range(1, len(combo_ua) + 1):
+            shuffle(combo_ua)
+            charges_radicals = []
+            rad = []
+            chg = []
+            for atom in combo_ua:
+                if len(rad) < need_radical:  # pick radicals
+                    r = next((x for x in atom if x[2]), None)
+                    if r:  # pick random radical states
+                        rad.append(r)
+                    else:  # not radical
+                        chg.append(atom)
+                else:  # pick not radical states
+                    c = [x for x in atom if not x[2]]
+                    if len(c) > 1:
+                        chg.append(c)
+                    elif c:
+                        charges_radicals.extend(c)
+                    elif attempt == len(combo_ua):  # all states has radical. balancing impossible
+                        chg.append(atom)  # fuck it horse. we in last attempt
+                    else:  # do next attempt
+                        break
+            else:
+                charges_radicals.extend(rad)
+                current_charge = need_charge - sum(x for _, x, _ in charges_radicals)
+                current_radical = need_radical - len(rad)
+                for x in chg:
+                    n, c, r = min(x, key=lambda x: abs(current_charge - x[1]))
+                    charges_radicals.append((n, c, r))
+                    current_charge -= c
+                    current_radical -= r
+
+                if current_radical:  # radical unbalanced
+                    if current_charge:
+                        log = 3
+                    else:
+                        log = 2
+                elif current_charge:
+                    log = 1
+                else:  # balanced!
+                    log = 0
+                    break
+
+        electrons.extend(charges_radicals)
+    elif need_radical:
+        log = 3 if need_charge else 2
+    elif need_charge:
+        log = 1
+    else:
+        log = 0
+    return saturation, electrons, log
 
 
 __all__ = ['Saturation']

@@ -306,5 +306,29 @@ class Element(Core, ABC):
                 rules[(charge, is_radical, explicit)].append((explicit_set, explicit_dict, 0))
         return dict(rules)
 
+    @class_cached_property
+    def _compiled_saturation_rules(self) -> List[Tuple[int, bool, int, int, Optional[Dict[Tuple[int, int], int]]]]:
+        """
+        dictionary with key = (charge, is_radical, sum_of_bonds) and
+        value = list of possible neighbors
+        """
+        elements_classes = {x.__name__: x.atomic_number.fget(None) for x in Element.__subclasses__()}
+
+        rules = []
+        for valence in self._common_valences:
+            rules.append((0, False, valence, 0, None))  # any atoms and bonds possible
+
+        for charge, is_radical, implicit, environment in self._valences_exceptions:
+            if not environment:
+                rules.append((charge, is_radical, implicit, 0, None))
+            else:
+                explicit_dict = defaultdict(int)
+                explicit = 0
+                for b, e in environment:
+                    explicit_dict[(b, elements_classes[e])] += 1
+                    explicit += b
+                rules.append((charge, is_radical, implicit + explicit, implicit, dict(explicit_dict)))
+        return rules
+
 
 __all__ = ['Element']

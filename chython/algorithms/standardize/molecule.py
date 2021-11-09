@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
-class StandardizeMolecule:
+class Standardize:
     __slots__ = ()
 
     def canonicalize(self: 'MoleculeContainer', *, logging=False) -> \
@@ -359,65 +359,6 @@ class StandardizeMolecule:
             return True
         return False
 
-    def fix_resonance(self: Union['MoleculeContainer', 'StandardizeMolecule'], *, logging=False) ->\
-            Union[bool, List[int]]:
-        """
-        Transform biradical or dipole resonance structures into neutral form. Return True if structure form changed.
-
-        :param logging: return list of changed atoms.
-        """
-        atoms = self._atoms
-        charges = self._charges
-        radicals = self._radicals
-        bonds = self._bonds
-        entries, exits, rads, constrains = self.__entries()
-        hs = set()
-        while len(rads) > 1:
-            n = rads.pop()
-            for path in self.__find_delocalize_path(n, rads, constrains):
-                l, m, b = path[-1]
-                if b == 1:  # required pi-bond
-                    continue
-                try:
-                    atoms[m].valence_rules(charges[m], False, sum(int(y) for x, y in bonds[m].items() if x != l) + b)
-                except ValenceError:
-                    continue
-                radicals[n] = radicals[m] = False
-                rads.discard(m)
-                hs.add(n)
-                hs.update(x for _, x, _ in path)
-                for n, m, b in path:
-                    bonds[n][m]._Bond__order = b
-                break  # path found
-            # path not found. atom n keep as is
-        while entries and exits:
-            n = entries.pop()
-            for path in self.__find_delocalize_path(n, exits, constrains):
-                l, m, b = path[-1]
-                try:
-                    atoms[m].valence_rules(charges[m] - 1, radicals[m],
-                                           sum(int(y) for x, y in bonds[m].items() if x != l) + b)
-                except ValenceError:
-                    continue
-                charges[n] = charges[m] = 0
-                exits.discard(m)
-                hs.add(n)
-                hs.update(x for _, x, _ in path)
-                for n, m, b in path:
-                    bonds[n][m]._Bond__order = b
-                break  # path from negative atom to positive atom found.
-            # path not found. keep negative atom n as is
-        if hs:
-            for n in hs:
-                self._calc_implicit(n)
-            self.flush_cache()
-            if logging:
-                return list(hs)
-            return True
-        if logging:
-            return []
-        return False
-
     def __standardize(self: 'MoleculeContainer', rules):
         bonds = self._bonds
         charges = self._charges
@@ -487,54 +428,5 @@ class StandardizeMolecule:
             del self.__dict__['_cython_compiled_structure']
         return log
 
-    def __find_delocalize_path(self: 'MoleculeContainer', start, finish, constrains):
-        bonds = self._bonds
-        stack = [(start, n, 0, b.order + 1) for n, b in bonds[start].items() if n in constrains and b.order < 3]
-        path = []
-        seen = {start}
-        while stack:
-            last, current, depth, order = stack.pop()
-            if len(path) > depth:
-                seen.difference_update(x for _, x, _ in path[depth:])
-                path = path[:depth]
 
-            path.append((last, current, order))
-
-            if current in finish and depth:  # one bonded ignored. we search double bond transfer! A=A-A >> A-A=A.
-                yield path
-
-            depth += 1
-            seen.add(current)
-            diff = -1 if depth % 2 else 1
-            stack.extend((current, n, depth, bo) for n, b in bonds[current].items()
-                         if n not in seen and n in constrains and 1 <= (bo := b.order + diff) <= 3)
-
-    def __entries(self: 'MoleculeContainer'):
-        charges = self._charges
-        radicals = self._radicals
-        atoms = self._atoms
-        bonds = self._bonds
-
-        transfer = set()
-        entries = set()
-        exits = set()
-        rads = set()
-        for n, a in atoms.items():
-            if a.atomic_number not in {5, 6, 7, 8, 14, 15, 16, 33, 34, 52}:
-                # filter non-organic set, halogens and aromatics
-                continue
-            if charges[n] == -1:
-                if len(bonds[n]) == 4 and a.atomic_number == 5:  # skip boron
-                    continue
-                entries.add(n)
-            elif charges[n] == 1:
-                if len(bonds[n]) == 4 and a.atomic_number == 7:  # skip ammonia
-                    continue
-                exits.add(n)
-            elif radicals[n]:
-                rads.add(n)
-            transfer.add(n)
-        return entries, exits, rads, transfer
-
-
-__all__ = ['StandardizeMolecule']
+__all__ = ['Standardize']

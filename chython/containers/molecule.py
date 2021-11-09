@@ -37,7 +37,7 @@ from ..algorithms.fingerprints import Fingerprints
 from ..algorithms.huckel import Huckel
 from ..algorithms.mcs import MCS
 from ..algorithms.smiles import MoleculeSmiles
-from ..algorithms.standardize import Saturation, StandardizeMolecule
+from ..algorithms.standardize import StandardizeMolecule
 from ..algorithms.stereo import MoleculeStereo
 from ..algorithms.tautomers import Tautomers
 from ..algorithms.x3dom import X3domMolecule
@@ -46,8 +46,7 @@ from ..periodictable import DynamicElement, Element, QueryElement
 
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, StandardizeMolecule, MoleculeSmiles,
-                        DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS, Huckel,
-                        Saturation, X3domMolecule):
+                        DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS, Huckel, X3domMolecule):
     __slots__ = ('_conformers', '_atoms_stereo', '_hydrogens', '_cis_trans_stereo', '_allenes_stereo',
                  '_parsed_mapping', '_backup', '__meta', '__name')
 

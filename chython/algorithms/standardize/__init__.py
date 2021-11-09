@@ -18,7 +18,12 @@
 #
 from .molecule import *
 from .reaction import *
+from .resonance import *
 from .saturation import *
 
 
-__all__ = ['StandardizeMolecule', 'StandardizeReaction', 'Saturation']
+class StandardizeMolecule(Standardize, Resonance, Saturation):
+    __slots__ = ()
+
+
+__all__ = ['StandardizeMolecule', 'StandardizeReaction']
