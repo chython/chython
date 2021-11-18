@@ -24,7 +24,7 @@ from ..periodictable import Element
 
 class BaseReactor:
     def __init__(self, reactants, products, delete_atoms):
-        self.__to_delete = set(reactants).difference(products) if delete_atoms else set()
+        self.__to_delete = reactants.difference(products) if delete_atoms else set()
 
         # prepare atoms patch
         self.__elements = elements = {}
