@@ -146,7 +146,8 @@ class BaseReactor:
 
             # set unmatched part stereo
             for n, s in structure._atoms_stereo.items():
-                if n in patch_atoms or n not in new or new._bonds[n].keys() != structure._bonds[n].keys():
+                if n in patch_atoms or n not in new._stereo_tetrahedrons or \
+                        new._bonds[n].keys() != structure._bonds[n].keys():
                     # skip atoms with changed neighbors
                     continue
                 new._atoms_stereo[n] = structure._translate_tetrahedron_sign(n, new._stereo_tetrahedrons[n], s)
