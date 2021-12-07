@@ -70,7 +70,7 @@ class Tautomers:
         if fix_stereo:
             self.fix_stereo()
         if logging:
-            return changed
+            return list(changed)
         return True
 
     def tautomerize(self: 'MoleculeContainer', *, prepare_molecules=True, limit: int = 1000) -> bool:
@@ -324,14 +324,14 @@ class Tautomers:
                         return
 
     def _neutralize(self: 'MoleculeContainer'):
-        donors = []
-        acceptors = []
+        donors = set()
+        acceptors = set()
         for q in stripped_acid_rules:
             for mapping in q.get_mapping(self, automorphism_filter=False):
-                donors.append(mapping[1])
+                donors.add(mapping[1])
         for q in stripped_base_rules:
             for mapping in q.get_mapping(self, automorphism_filter=False):
-                acceptors.append(mapping[1])
+                acceptors.add(mapping[1])
 
         if not donors or not acceptors:
             return
@@ -345,7 +345,7 @@ class Tautomers:
                 for d in c:
                     mol._hydrogens[d] -= 1
                     mol._charges[d] -= 1
-                yield mol, acceptors + list(c)
+                yield mol, acceptors | set(c)
         elif len(donors) < len(acceptors):
             copy = self.copy()
             for d in donors:
@@ -356,7 +356,7 @@ class Tautomers:
                 for a in c:
                     mol._hydrogens[a] += 1
                     mol._charges[a] += 1
-                yield mol, donors + list(c)
+                yield mol, donors | set(c)
         else:
             mol = self.copy()
             for d in donors:
@@ -365,7 +365,7 @@ class Tautomers:
             for a in acceptors:
                 mol._hydrogens[a] += 1
                 mol._charges[a] += 1
-            yield mol, donors + acceptors
+            yield mol, donors | acceptors
 
     def _enumerate_keto_enol_tautomers(self: Union['MoleculeContainer', 'Tautomers']):
         for fix, ket in self.__enumerate_bonds():
