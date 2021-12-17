@@ -620,6 +620,61 @@ def _rules_single():
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
 
     #
+    #     O           [O-]
+    #     \\            \
+    # A -  P - A  >> A - P - A
+    #     /             //
+    #   [S-]            S
+    #
+    atoms = ({'atom': 'P', 'neighbors': 4, 'hybridization': 2}, {'atom': 'O'},
+             {'atom': 'S', 'charge': -1, 'neighbors': 1})
+    bonds = ((1, 2, 2), (1, 3, 1))
+    atom_fix = {2: (-1, None), 3: (1, None)}
+    bonds_fix = ((1, 2, 1), (1, 3, 2))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
+    #
+    #     O           [OH]
+    #     \\            \
+    # A -  P - A  >> A - P - A
+    #     /             //
+    #   [SH]            S
+    #
+    atoms = ({'atom': 'P', 'neighbors': 4, 'hybridization': 2}, {'atom': 'O'},
+             {'atom': 'S', 'neighbors': 1})
+    bonds = ((1, 2, 2), (1, 3, 1))
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (1, 3, 2))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
+    #
+    #     A                A
+    #     \\               \
+    # A -  S - [S-]  >> A - S - [O-]
+    #     //               //
+    #     O                S
+    #
+    atoms = ({'atom': 'S', 'neighbors': 4}, {'atom': 'O'}, {'atom': 'S', 'charge': -1, 'neighbors': 1},
+             {'atom': 'A'}, {'atom': 'A'})
+    bonds = ((1, 2, 2), (1, 3, 1), (1, 4, 2), (1, 5, 1))
+    atom_fix = {2: (-1, None), 3: (1, None)}
+    bonds_fix = ((1, 2, 1), (1, 3, 2))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
+    #
+    #     A                A
+    #     \\               \
+    # A -  S - [SH]  >> A - S - [OH]
+    #     //               //
+    #     O                S
+    #
+    atoms = ({'atom': 'S', 'neighbors': 4}, {'atom': 'O'}, {'atom': 'S', 'neighbors': 1}, {'atom': 'A'}, {'atom': 'A'})
+    bonds = ((1, 2, 2), (1, 3, 1), (1, 4, 2), (1, 5, 1))
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (1, 3, 2))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
+    #
     #           A                   A
     #          /                   /
     # [O-] - [S,Si,Se+]  >>  O = [S,Si,Se]
