@@ -575,7 +575,7 @@ class MoleculeStereo(Stereo):
             if any(len(x) < 8 for x in atoms_rings[n]):  # skip small rings.
                 if nm in chiral_c:  # remove already added small rings cumulenes.
                     chiral_c.discard(nm)
-                elif (c := allenes_centers[n]) in chiral_a:
+                elif n in allenes_centers and (c := allenes_centers[n]) in chiral_a:
                     chiral_a.discard(c)
                 continue
             elif nm in cis_trans:
