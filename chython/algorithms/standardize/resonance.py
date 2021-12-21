@@ -27,8 +27,7 @@ if TYPE_CHECKING:
 class Resonance:
     __slots__ = ()
 
-    def fix_resonance(self: Union['MoleculeContainer', 'Resonance'], *, logging=False) ->\
-            Union[bool, List[int]]:
+    def fix_resonance(self: Union['MoleculeContainer', 'Resonance'], *, logging=False) -> Union[bool, List[int]]:
         """
         Transform biradical or dipole resonance structures into neutral form. Return True if structure form changed.
 
@@ -38,6 +37,7 @@ class Resonance:
         charges = self._charges
         radicals = self._radicals
         bonds = self._bonds
+        calc_implicit = self._calc_implicit
         entries, exits, rads, constrains, nitrogen_cat, nitrogen_ani, sulfur_cat = self.__entries()
         hs = set()
         while len(rads) > 1:
@@ -83,12 +83,12 @@ class Resonance:
             # path not found. keep negative atom n as is
         if hs:
             for n in hs:
-                self._calc_implicit(n)
+                calc_implicit(n)
             self.flush_cache()
             if logging:
                 return list(hs)
             return True
-        if logging:
+        elif logging:
             return []
         return False
 
@@ -126,7 +126,7 @@ class Resonance:
         charges = self._charges
         radicals = self._radicals
         bonds = self._bonds
-        errors = set(self.check_valence())
+        errors = {n for n, h in self._hydrogens.items() if h is None}
 
         transfer = set()
         entries = set()

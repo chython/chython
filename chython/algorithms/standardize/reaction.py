@@ -315,9 +315,9 @@ class StandardizeReaction:
 
     def implicify_hydrogens(self: 'ReactionContainer') -> int:
         """
-        Remove explicit hydrogens if possible
+        Remove explicit hydrogens if possible.
 
-        :return: number of removed hydrogens
+        :return: number of removed hydrogens.
         """
         total = 0
         for m in self.molecules():
@@ -341,7 +341,7 @@ class StandardizeReaction:
 
         mapping = defaultdict(list)
         for m in self.reactants:
-            maps = m.explicify_hydrogens(return_maps=True, start_map=start_map + 1)
+            maps = m.explicify_hydrogens(_return_map=True, start_map=start_map + 1)
             if maps:
                 for n, h in maps:
                     mapping[n].append(h)
@@ -349,13 +349,13 @@ class StandardizeReaction:
                 total += len(maps)
 
         for m in self.reagents:
-            maps = m.explicify_hydrogens(return_maps=True, start_map=start_map + 1)
+            maps = m.explicify_hydrogens(_return_map=True, start_map=start_map + 1)
             if maps:
                 start_map = maps[-1][1]
                 total += len(maps)
 
         for m in self.products:
-            maps = m.explicify_hydrogens(return_maps=True, start_map=start_map + 1)
+            maps = m.explicify_hydrogens(_return_map=True, start_map=start_map + 1)
             if maps:
                 total += len(maps)
                 remap = {}

@@ -68,21 +68,6 @@ class Kekule:
                 copy._calc_implicit(n)
             yield copy
 
-    def check_thiele(self, fast=True) -> bool:
-        """
-        Check basic aromaticity errors of molecule.
-
-        :param fast: don't try to solve kekule form
-        """
-        try:
-            if fast:
-                self.__prepare_rings()
-            else:
-                next(self.__kekule_full(), None)
-        except InvalidAromaticRing:
-            return False
-        return True
-
     def __fix_rings(self: 'MoleculeContainer'):
         bonds = self._bonds
         seen = set()
