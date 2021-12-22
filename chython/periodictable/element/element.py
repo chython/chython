@@ -48,9 +48,9 @@ class Element(Core, ABC):
     @property
     def atomic_mass(self) -> float:
         mass = self.isotopes_masses
-        if self.__isotope is None:
+        if self.isotope is None:
             return sum(x * mass[i] for i, x in self.isotopes_distribution.items())
-        return mass[self.__isotope]
+        return mass[self.isotope]
 
     @property
     @abstractmethod
