@@ -43,7 +43,7 @@ class Pharmacophore:
         Match id of each atom of some molecule with integer number which define some features using in FCFP
         """
         acid = acidic_rules[:-1]  # discard a rule with halogen acids
-        base = basic_rules[:3] + basic_rules[4:]  # there is no need a rule with halogen ions
+        base = basic_rules[:4] + basic_rules[5:]  # there is no need a rule with halogen ions
 
         atoms = self._atoms
         bonds = self._bonds

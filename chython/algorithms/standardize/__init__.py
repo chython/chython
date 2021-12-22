@@ -19,10 +19,11 @@
 from .molecule import *
 from .reaction import *
 from .resonance import *
+from .salts import *
 from .saturation import *
 
 
-class StandardizeMolecule(Standardize, Resonance, Saturation):
+class StandardizeMolecule(Standardize, Resonance, Saturation, Salts):
     __slots__ = ()
 
 

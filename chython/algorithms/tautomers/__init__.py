@@ -49,6 +49,9 @@ sugar_group = Proxy(_sugar_group)
 
 
 class Tautomers:
+    """
+    Oxides and sulphides ignored.
+    """
     __slots__ = ()
 
     def neutralize(self: 'MoleculeContainer', *, logging=False, _fix_stereo=True) -> Union[bool, List[int]]:
