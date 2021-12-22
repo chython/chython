@@ -24,7 +24,7 @@ from ._charged import fixed_rules, morgan_rules
 from ._groups import *
 from ._metal_organics import rules as metal_rules
 from ...containers.bonds import Bond
-from ...exceptions import ValenceError
+from ...exceptions import ValenceError, ImplementationError
 from ...periodictable import H
 
 
@@ -35,16 +35,17 @@ if TYPE_CHECKING:
 class Standardize:
     __slots__ = ()
 
-    def canonicalize(self: 'MoleculeContainer', *, logging=False) -> \
+    def canonicalize(self: 'MoleculeContainer', *, logging=False, ignore=True) -> \
             Union[bool, List[Tuple[Tuple[int, ...], int, str]]]:
         """
         Convert molecule to canonical forms of functional groups and aromatic rings without explicit hydrogens.
 
         :param logging: return log.
+        :param ignore: ignore standardization bugs.
         """
         k = self.kekule()
-        s = self.standardize(fix_stereo=False, logging=True)
-        h, changed = self.implicify_hydrogens(fix_stereo=False, logging=True)
+        s = self.standardize(_fix_stereo=False, logging=True, ignore=ignore)
+        h, changed = self.implicify_hydrogens(_fix_stereo=False, logging=True)
         t = self.thiele()
         c = self.standardize_charges(prepare_molecule=False, logging=True)
         if logging:
@@ -59,15 +60,24 @@ class Standardize:
             return s
         return bool(k or s or h or t or c)
 
-    def standardize(self: Union['MoleculeContainer', 'StandardizeMolecule'], *, fix_stereo=True, logging=False) -> \
-            Union[bool, List[Tuple[Tuple[int, ...], int, str]]]:
+    def standardize(self: Union['MoleculeContainer', 'Standardize'], *, logging=False, ignore=True,
+                    _fix_stereo=True) -> Union[bool, List[Tuple[Tuple[int, ...], int, str]]]:
         """
         Standardize functional groups. Return True if any non-canonical group found.
 
         :param logging: return list of fixed atoms with matched rules.
+        :param ignore: ignore standardization bugs.
         """
-        neutralized = self.fix_resonance(logging=True)
-        log, fixed = self.__standardize(double_rules)
+        r = self.fix_resonance(logging=True, _fix_stereo=False)
+        if r:
+            log = [(tuple(r), -1, 'resonance fixed')]
+            fixed = set(r)
+        else:
+            log, fixed = [], set()
+
+        l, f = self.__standardize(double_rules)
+        log.extend(l)
+        fixed.update(f)
         l, f = self.__standardize(double_rules)  # double shot rules for overlapped groups
         log.extend(l)
         fixed.update(f)
@@ -77,23 +87,26 @@ class Standardize:
         l, f = self.__standardize(metal_rules)  # metal-organics fix
         log.extend(l)
         fixed.update(f)
-        if log:
-            self.flush_cache()
-        if fix_stereo:
-            self.fix_stereo()
-        if logging:
-            if neutralized:
-                log.append((tuple(neutralized), -1, 'resonance'))
-                fixed.update(neutralized)
-            if log:
-                log.append((tuple(fixed), -1, 'standardized atoms'))
-            if b := fixed.intersection(n for n, h in self._hydrogens.items() if h is None):
-                log.append((tuple(b), -1, 'standardization failed'))
-            return log
-        return neutralized or bool(log)
 
-    def standardize_charges(self: 'MoleculeContainer', *, fix_stereo=True,
-                            logging=False, prepare_molecule=True) -> Union[bool, List[int]]:
+        if b := fixed.intersection(n for n, h in self._hydrogens.items() if h is None):
+            if ignore:
+                log.append((tuple(b), -1, 'standardization failed'))
+            else:
+                raise ImplementationError(f'standardization leads to invalid valences: {b}')
+
+        if fixed:
+            self.flush_cache()
+            if _fix_stereo:
+                self.fix_stereo()
+
+        if logging:
+            if fixed:
+                log.append((tuple(fixed), -1, 'standardized atoms'))
+            return log
+        return bool(fixed)
+
+    def standardize_charges(self: 'MoleculeContainer', *, logging=False, prepare_molecule=True,
+                            _fix_stereo=True) -> Union[bool, List[int]]:
         """
         Set canonical positions of charges in heterocycles and some nitrogen compounds.
 
@@ -185,7 +198,7 @@ class Standardize:
             del self.__dict__['atoms_order']  # remove invalid morgan
         if changed:
             self.flush_cache()  # clear cache
-            if fix_stereo:
+            if _fix_stereo:
                 self.fix_stereo()
             if logging:
                 return changed
@@ -194,7 +207,7 @@ class Standardize:
             return []
         return False
 
-    def remove_hydrogen_bonds(self: 'MoleculeContainer', *, keep_to_terminal=True, fix_stereo=True) -> int:
+    def remove_hydrogen_bonds(self: 'MoleculeContainer', *, keep_to_terminal=True, _fix_stereo=True) -> int:
         """Remove hydrogen bonds marked with 8 (any) bond
 
         :param keep_to_terminal: Keep any bonds to terminal hydrogens
@@ -226,11 +239,11 @@ class Standardize:
                 del bonds[n][m], bonds[m][n]
         if c:
             self.flush_cache()
-            if fix_stereo:
+            if _fix_stereo:
                 self.fix_stereo()
         return c
 
-    def implicify_hydrogens(self: 'MoleculeContainer', *, fix_stereo=True, logging=False) -> \
+    def implicify_hydrogens(self: 'MoleculeContainer', *, logging=False, _fix_stereo=True) -> \
             Union[int, Tuple[int, List[int]]]:
         """
         Remove explicit hydrogen if possible. Return number of removed hydrogens.
@@ -304,14 +317,14 @@ class Standardize:
         if to_remove:
             self.flush_cache()
             self._conformers.clear()
-            if fix_stereo:
+            if _fix_stereo:
                 self.fix_stereo()
 
         if logging:
             return len(to_remove), fixed
         return len(to_remove)
 
-    def explicify_hydrogens(self: 'MoleculeContainer', *, fix_stereo=True, start_map=None, _return_map=False) -> \
+    def explicify_hydrogens(self: 'MoleculeContainer', *, start_map=None, _return_map=False, _fix_stereo=True) -> \
             Union[int, List[Tuple[int, int]]]:
         """
         Add explicit hydrogens to atoms.
@@ -326,8 +339,8 @@ class Standardize:
             except TypeError:
                 raise ValenceError(f'atom {{{n}}} has valence error')
 
-        log = []
         if to_add:
+            log = []
             bonds = self._bonds
             m = start_map
             for n in to_add:
@@ -337,13 +350,13 @@ class Standardize:
                 log.append((n, m))
                 m += 1
 
-            if fix_stereo:
+            if _fix_stereo:
                 self.fix_stereo()
             if _return_map:
                 return log
             return len(to_add)
-        if _return_map:
-            return log
+        elif _return_map:
+            return []
         return 0
 
     def check_valence(self: 'MoleculeContainer') -> List[int]:

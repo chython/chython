@@ -51,7 +51,7 @@ sugar_group = Proxy(_sugar_group)
 class Tautomers:
     __slots__ = ()
 
-    def neutralize(self: 'MoleculeContainer', *, fix_stereo=True, logging=False) -> Union[bool, List[int]]:
+    def neutralize(self: 'MoleculeContainer', *, logging=False, _fix_stereo=True) -> Union[bool, List[int]]:
         """
         Convert organic salts to neutral form if possible. Only one possible form used for charge unbalanced structures.
 
@@ -67,7 +67,7 @@ class Tautomers:
         self._charges.update(mol._charges)
         self._hydrogens.update(mol._hydrogens)
         self.flush_cache()
-        if fix_stereo:
+        if _fix_stereo:
             self.fix_stereo()
         if logging:
             return list(changed)
@@ -141,7 +141,7 @@ class Tautomers:
         copy.__dict__['__cached_args_method_heteroatoms'] = heteroatoms  # isomorphism
         if prepare_molecules:
             k = copy.kekule()
-            i = copy.implicify_hydrogens(fix_stereo=False)
+            i = copy.implicify_hydrogens(_fix_stereo=False)
             if k or i:  # reset after flush
                 copy.__dict__['sssr'] = self.sssr
                 copy.__dict__['ring_atoms'] = self.ring_atoms
@@ -174,7 +174,7 @@ class Tautomers:
         seen = {thiele: None}  # value is parent molecule - required for preventing migrations in sugars.
 
         # first of all try to neutralize
-        if copy.neutralize(fix_stereo=False):
+        if copy.neutralize(_fix_stereo=False):
             thiele = copy.copy()
 
             copy.__dict__['sssr'] = self.sssr

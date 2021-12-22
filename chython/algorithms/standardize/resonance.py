@@ -27,7 +27,8 @@ if TYPE_CHECKING:
 class Resonance:
     __slots__ = ()
 
-    def fix_resonance(self: Union['MoleculeContainer', 'Resonance'], *, logging=False) -> Union[bool, List[int]]:
+    def fix_resonance(self: Union['MoleculeContainer', 'Resonance'], *, logging=False,
+                      _fix_stereo=True) -> Union[bool, List[int]]:
         """
         Transform biradical or dipole resonance structures into neutral form. Return True if structure form changed.
 
@@ -85,6 +86,8 @@ class Resonance:
             for n in hs:
                 calc_implicit(n)
             self.flush_cache()
+            if _fix_stereo:
+                self.fix_stereo()
             if logging:
                 return list(hs)
             return True
