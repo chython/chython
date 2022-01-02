@@ -29,6 +29,7 @@ from .XYZrw import XYZ
 one_symbol_names = {'ALA', 'CYS', 'ASP', 'GLU', 'PHE', 'GLY', 'HIS', 'ILE', 'LYS', 'LEU', 'MET', 'ASN', 'PRO', 'GLN',
                     'ARG', 'SER', 'THR', 'VAL', 'TRP', 'TYR',  # Amino acids
                     'ASH',  # H-asparagine
+                    'HID', 'HIE', 'HIP',  # H-histidines
                     'DA', 'DC', 'DG', 'DT', 'DI',  # Deoxyribonucleotides
                     'A', 'C', 'G', 'U', 'I',  # Ribonucleotides
                     'IOD', 'K'}  # Elements
@@ -145,7 +146,7 @@ class PDBRead(XYZ):
 
                 element = line[76:78].strip()
                 residue = line[17:20].strip()
-                atom_name = line[12:16].strip(' 0123456789')
+                atom_name = line[12:16].strip(' 0123456789-')
                 if residue in one_symbol_names:  # bio-polymers and I
                     atom_name = atom_name[0]
                 elif residue in two_symbol_names:

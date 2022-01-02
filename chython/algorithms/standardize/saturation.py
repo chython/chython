@@ -225,7 +225,8 @@ def _saturate(bonds, atoms, expected_radicals_count, expected_charge):
             if not env:
                 es = [(n, c, r) for c, r, h in atoms[n] if not h]
                 if not es:
-                    return  # saturation impossible
+                    raise ValenceError('Saturation impossible. '
+                                       f"Isolated atom ({n}) doesn't have appropriate charge-radical state")
                 to_del.append(n)
                 dots.append(es)
         for n in to_del:
