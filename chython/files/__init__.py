@@ -21,7 +21,7 @@ from .MRVrw import *
 from .PDBrw import *
 from .RDFrw import *
 from .SDFrw import *
-from .DayLight import *
+from .daylight import *
 from .XYZrw import *
 from ._mdl import parse_error
 
