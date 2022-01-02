@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,55 +20,55 @@
 
 class EmptyMolecule(ValueError):
     """
-    bad files parsing
+    Molecule without atoms
     """
 
 
 class MappingError(ValueError):
     """
-    bad files parsing
+    Atom-to-Atom mapping invalid
     """
 
 
 class AtomNotFound(KeyError):
     """
-    bad atom number
+    Bad atom number
     """
 
 
 class NotChiral(KeyError):
     """
-    bad atom number
+    Atom not chiral
     """
 
 
 class IsChiral(KeyError):
     """
-    bad atom number
+    Atom already chiral
     """
 
 
 class InvalidAromaticRing(ValueError):
     """
-    aromatic ring has impossible kekule structure
+    Aromatic ring has impossible Kekule structure
     """
 
 
 class IsConnectedAtom(Exception):
     """
-    atom already attached to graph
+    Atom is already attached to graph
     """
 
 
 class IsNotConnectedAtom(Exception):
     """
-    atom already attached to graph
+    Atom is not attached to graph
     """
 
 
 class ValenceError(Exception):
     """
-    atom has error in valence
+    Atom has valence error
     """
 
 
@@ -82,3 +82,17 @@ class ImplementationError(Exception):
     """
     Algorithm has errors. Please send example of structure to author for analyze.
     """
+
+
+class ParseError(ValueError):
+    """
+    File parsing error
+    """
+    __slots__ = ('number', 'position', 'log', 'meta')
+
+    def __init__(self, number, position, log, meta):
+        super().__init__()
+        self.number = number
+        self.position = position
+        self.log = log
+        self.meta = meta

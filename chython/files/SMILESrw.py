@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Artem Mukanov <nostro32@mail.ru>
 #  This file is part of chython.
 #
@@ -26,10 +26,10 @@ from operator import or_
 from pathlib import Path
 from re import compile, findall, fullmatch, search, split
 from typing import List, Union
-from ._mdl import parse_error, Parser
+from ._mdl import Parser
 from ..containers import CGRContainer, QueryContainer, MoleculeContainer, ReactionContainer
 from ..containers.bonds import DynamicBond, QueryBond
-from ..exceptions import IncorrectSmiles, IsChiral, NotChiral, ValenceError
+from ..exceptions import IncorrectSmiles, IsChiral, NotChiral, ValenceError, ParseError
 from ..periodictable import DynamicElement
 
 
@@ -146,8 +146,8 @@ class SMILESRead(Parser):
         for n, line in enumerate(self.__file):
             try:
                 x = parse(line)
-            except ValueError:
-                yield parse_error(n, pos, self._format_log(), line)
+            except ValueError:  # yield exception, not raise
+                yield ParseError(n, pos, self._format_log(), line)
             else:
                 yield x
             if seekable:
@@ -188,7 +188,7 @@ class SMILESRead(Parser):
         return list(iter(self))
 
     def __iter__(self):
-        return (x for x in self._data if not isinstance(x, parse_error))
+        return (x for x in self._data if not isinstance(x, ParseError))
 
     def __next__(self):
         return next(iter(self))
