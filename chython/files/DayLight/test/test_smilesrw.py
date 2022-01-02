@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from chython import SMILESRead, smiles, MoleculeContainer, CGRContainer
-from chython.files._mdl import parse_error
+from chython.exceptions import ParseError
 from itertools import zip_longest
 from io import StringIO
 
@@ -29,7 +29,7 @@ def test_bad_smiles_detection():
 
     with StringIO(data) as f, SMILESRead(f, ignore=False, store_log=True) as r:
         for s in r._data:
-            assert isinstance(s, parse_error)
+            assert isinstance(s, ParseError)
 
 
 def test_invalid_ring_closure_ignoring():
