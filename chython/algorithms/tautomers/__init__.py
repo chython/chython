@@ -49,9 +49,12 @@ sugar_group = Proxy(_sugar_group)
 
 
 class Tautomers:
+    """
+    Oxides and sulphides ignored.
+    """
     __slots__ = ()
 
-    def neutralize(self: 'MoleculeContainer', *, fix_stereo=True, logging=False) -> Union[bool, List[int]]:
+    def neutralize(self: 'MoleculeContainer', *, logging=False, _fix_stereo=True) -> Union[bool, List[int]]:
         """
         Convert organic salts to neutral form if possible. Only one possible form used for charge unbalanced structures.
 
@@ -67,10 +70,10 @@ class Tautomers:
         self._charges.update(mol._charges)
         self._hydrogens.update(mol._hydrogens)
         self.flush_cache()
-        if fix_stereo:
+        if _fix_stereo:
             self.fix_stereo()
         if logging:
-            return changed
+            return list(changed)
         return True
 
     def tautomerize(self: 'MoleculeContainer', *, prepare_molecules=True, limit: int = 1000) -> bool:
@@ -141,7 +144,7 @@ class Tautomers:
         copy.__dict__['__cached_args_method_heteroatoms'] = heteroatoms  # isomorphism
         if prepare_molecules:
             k = copy.kekule()
-            i = copy.implicify_hydrogens(fix_stereo=False)
+            i = copy.implicify_hydrogens(_fix_stereo=False)
             if k or i:  # reset after flush
                 copy.__dict__['sssr'] = self.sssr
                 copy.__dict__['ring_atoms'] = self.ring_atoms
@@ -174,7 +177,7 @@ class Tautomers:
         seen = {thiele: None}  # value is parent molecule - required for preventing migrations in sugars.
 
         # first of all try to neutralize
-        if copy.neutralize(fix_stereo=False):
+        if copy.neutralize(_fix_stereo=False):
             thiele = copy.copy()
 
             copy.__dict__['sssr'] = self.sssr
@@ -324,14 +327,14 @@ class Tautomers:
                         return
 
     def _neutralize(self: 'MoleculeContainer'):
-        donors = []
-        acceptors = []
+        donors = set()
+        acceptors = set()
         for q in stripped_acid_rules:
             for mapping in q.get_mapping(self, automorphism_filter=False):
-                donors.append(mapping[1])
+                donors.add(mapping[1])
         for q in stripped_base_rules:
             for mapping in q.get_mapping(self, automorphism_filter=False):
-                acceptors.append(mapping[1])
+                acceptors.add(mapping[1])
 
         if not donors or not acceptors:
             return
@@ -345,7 +348,7 @@ class Tautomers:
                 for d in c:
                     mol._hydrogens[d] -= 1
                     mol._charges[d] -= 1
-                yield mol, acceptors + list(c)
+                yield mol, acceptors | set(c)
         elif len(donors) < len(acceptors):
             copy = self.copy()
             for d in donors:
@@ -356,7 +359,7 @@ class Tautomers:
                 for a in c:
                     mol._hydrogens[a] += 1
                     mol._charges[a] += 1
-                yield mol, donors + list(c)
+                yield mol, donors | set(c)
         else:
             mol = self.copy()
             for d in donors:
@@ -365,7 +368,7 @@ class Tautomers:
             for a in acceptors:
                 mol._hydrogens[a] += 1
                 mol._charges[a] += 1
-            yield mol, donors + acceptors
+            yield mol, donors | acceptors
 
     def _enumerate_keto_enol_tautomers(self: Union['MoleculeContainer', 'Tautomers']):
         for fix, ket in self.__enumerate_bonds():

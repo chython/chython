@@ -62,7 +62,7 @@ def _rules():
     q.add_bond(2, 4, 2)
     rules.append(q)
 
-    # Halogen acids
+    # Halogen acids. Note: this rule ignored in pharmacophores. keep in mind then editing list.
     q = QueryContainer()
     q.add_atom(ListElement(['F', 'Cl', 'Br', 'I']), neighbors=0)
     rules.append(q)

@@ -43,7 +43,6 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2D
     _conformers: List[Dict[int, Tuple[float, float, float]]]
 
     def __init__(self):
-        super().__init__()
         self._atoms = {}
         self._bonds = {}
         self._charges = {}
@@ -163,6 +162,9 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2D
         if isinstance(other, CGRContainer):
             return super().get_mapping(other, **kwargs)
         raise TypeError('CGRContainer expected')
+
+    def __iter__(self):
+        return iter(self._atoms)
 
     def __invert__(self):
         """

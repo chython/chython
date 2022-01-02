@@ -37,7 +37,7 @@ from ..algorithms.fingerprints import Fingerprints
 from ..algorithms.huckel import Huckel
 from ..algorithms.mcs import MCS
 from ..algorithms.smiles import MoleculeSmiles
-from ..algorithms.standardize import Saturation, StandardizeMolecule
+from ..algorithms.standardize import StandardizeMolecule
 from ..algorithms.stereo import MoleculeStereo
 from ..algorithms.tautomers import Tautomers
 from ..algorithms.x3dom import X3domMolecule
@@ -46,8 +46,7 @@ from ..periodictable import DynamicElement, Element, QueryElement
 
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, StandardizeMolecule, MoleculeSmiles,
-                        DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS, Huckel,
-                        Saturation, X3domMolecule):
+                        DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS, Huckel, X3domMolecule):
     __slots__ = ('_conformers', '_atoms_stereo', '_hydrogens', '_cis_trans_stereo', '_allenes_stereo',
                  '_parsed_mapping', '_backup', '__meta', '__name')
 
@@ -682,12 +681,12 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             return super().get_mapping(other, **kwargs)
         raise TypeError('MoleculeContainer expected')
 
-    def pack(self) -> bytes:
+    def pack(self, *, compressed=True) -> bytes:
         """
         Pack into compressed bytes.
         Note:
             * Less than 4096 atoms supported. Atoms mapping should be in range 1-4095.
-            * Implicit hydrogens count should be in range 0-7
+            * Implicit hydrogens count should be in range 0-6 or unspecified.
             * Isotope shift should be in range -15 - 15 relatively mdl.common_isotopes
             * Atoms neighbors should be in range 0-15
 
@@ -704,7 +703,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         5 bit - isotope (00000 - not specified, over = isotope - common_isotope + 16)
         7 bit - atomic number (<=118)
         32 bit - XY float16 coordinates
-        3 bit - hydrogens (0-7)
+        3 bit - hydrogens (0-7). Note: 7 == None
         4 bit - charge (charge + 4. possible range -4 - 4)
         1 bit - radical state
         Connection table: flatten list of neighbors. neighbors count stored in atom block.
@@ -717,6 +716,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         24 bit - atoms pair
         7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
         1 bit - sign
+
+        :param compressed: return zlib-compressed pack.
         """
         bonds = self._bonds
         if max(bonds) > 4095:
@@ -757,7 +758,10 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             hcr = (charges[n] + 4) << 1
             if radicals[n]:
                 hcr |= 1
-            hcr |= hydrogens[n] << 5
+            if (h := hydrogens[n]) is None:
+                hcr |= 224
+            else:
+                hcr |= h << 5
 
             # 2 bit tetrahedron sign | 2 bit - allene sign | 5 bit - isotope | 7 bit - atomic number (<=118)
             sia = a.atomic_number
@@ -797,19 +801,28 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         for o, ((n, m), s) in enumerate(cis_trans_stereo.items()):
             pack_into('>I', data, shift + 4 * o, (n << 20) | (m << 8) | s)
 
-        return compress(bytes(data), 9)
+        if compressed:
+            return compress(bytes(data), 9)
+        return bytes(data)
 
     @classmethod
-    def unpack(cls, data: bytes) -> 'MoleculeContainer':
+    def unpack(cls, data: bytes, /, *, compressed=True, _return_pack_length=False) -> 'MoleculeContainer':
         """
         Unpack from compressed bytes.
+
+        :param compressed: decompress data before processing.
         """
         try:  # windows? ;)
             from ._unpack import unpack
         except ImportError:
-            return cls.pure_unpack(data)
+            return cls.pure_unpack(data, compressed=compressed, _return_pack_length=_return_pack_length)
+        if compressed:
+            data = decompress(data)
+        if data[0] != 0:
+            raise ValueError('invalid pack header')
+
         (mapping, atom_numbers, isotopes, charges, radicals, hydrogens, plane, bonds,
-         atoms_stereo, allenes_stereo, cis_trans_stereo) = unpack(decompress(data))
+         atoms_stereo, allenes_stereo, cis_trans_stereo, pack_length) = unpack(data)
 
         mol = object.__new__(cls)
         mol._bonds = bonds
@@ -832,16 +845,23 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             a._Core__isotope = i
             a._graph = ref(mol)
             a._map = n
+        if _return_pack_length:
+            return mol, pack_length
         return mol
 
     @classmethod
-    def pure_unpack(cls, data: bytes) -> 'MoleculeContainer':
+    def pure_unpack(cls, data: bytes, /, *, compressed=True, _return_pack_length=False) -> 'MoleculeContainer':
         """
         Unpack from compressed bytes. Python implementation.
         """
         from ..files._mdl.mol import common_isotopes
+        if compressed:
+            data = memoryview(decompress(data))
+        elif not isinstance(data, memoryview):
+            data = memoryview(data)
+        if data[0] != 0:
+            raise ValueError('invalid pack header')
 
-        data = memoryview(decompress(data))
         mol = cls()
         atoms = mol._atoms
         bonds = mol._bonds
@@ -880,7 +900,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
             charges[n] = ((hcr >> 1) & 0x0f) - 4
             radicals[n] = bool(hcr & 0x01)
-            hydrogens[n] = hcr >> 5
+            hydrogens[n] = None if (h := hcr >> 5) == 7 else h
             plane[n] = (x, y)
 
         bc = sum(neighbors.values()) // 2
@@ -917,6 +937,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         for o in range(acs & 0x0fff):  # cis/trans
             ct = unpack_from('>I', data, shift + 4 * o)[0]
             cis_trans_stereo[(ct >> 20, (ct >> 8) & 0x0fff)] = ct & 0x01
+        if _return_pack_length:
+            return mol, shift + (acs & 0x0fff) * 4
         return mol
 
     def _augmented_substructure(self, atoms: Iterable[int], deep: int):

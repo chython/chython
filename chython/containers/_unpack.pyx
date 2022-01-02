@@ -22,10 +22,10 @@ from chython.containers.bonds import Bond
 
 
 @cython.boundscheck(False)
-def unpack(bytes data not None):
+def unpack(const unsigned char[::1] data not None):
     cdef int isotope_shift
     cdef unsigned char a, b, c, d
-    cdef unsigned int na, nct, i, j, n, m, shift = 4, order_shift = 0, nb = 0
+    cdef unsigned int na, nct, i, j, n, m, pack_length, shift = 4, order_shift = 0, nb = 0
 
     cdef unsigned int[4095] mapping, atom, isotopes, hydrogens, neighbors, orders, cis_trans_1, cis_trans_2
     cdef unsigned int[8190] connections
@@ -104,6 +104,7 @@ def unpack(bytes data not None):
         cis_trans_2[i] = (b & 0x0f) << 8 | c
         ct_sign[i] = d & 0x01
         shift += 4
+    pack_length = shift
 
     # define returned data
     py_mapping = []
@@ -129,7 +130,10 @@ def unpack(bytes data not None):
 
         py_charges[n] = charges[i]
         py_radicals[n] = radicals[i]
-        py_hydrogens[n] = hydrogens[i]
+        if hydrogens[i] == 7:
+            py_hydrogens[n] = None
+        else:
+            py_hydrogens[n] = hydrogens[i]
         py_plane[n] = (x[i], y[i])
 
         if is_tet[i]:
@@ -157,7 +161,7 @@ def unpack(bytes data not None):
 
     return (py_mapping, py_atoms, py_isotopes,
             py_charges, py_radicals, py_hydrogens, py_plane, py_bonds,
-            py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo)
+            py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo, pack_length)
 
 
 cdef int[119] common_isotopes

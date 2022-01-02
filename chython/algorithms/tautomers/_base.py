@@ -24,11 +24,20 @@ def _stripped_rules():
     from ...containers import QueryContainer
     rules = []
 
-    # Oxo-acid salts. [O,S,Se-]-[P,S,Cl,Se,Br,I]=O
+    # Oxo-acid salts. [O,S,Se-]-[P,S,Cl,Se,Br,I,Si]=O
     q = QueryContainer()
     q.add_atom(ListElement(['O', 'S', 'Se']), charge=-1)
-    q.add_atom(ListElement(['P', 'S', 'Cl', 'Se', 'Br', 'I']))
+    q.add_atom(ListElement(['P', 'S', 'Cl', 'Se', 'Br', 'I', 'Si']))
     q.add_atom('O')
+    q.add_bond(1, 2, 1)
+    q.add_bond(2, 3, 2)
+    rules.append(q)
+
+    # Thiophosphate salts.
+    q = QueryContainer()
+    q.add_atom(ListElement(['O', 'S', 'Se']), charge=-1)
+    q.add_atom('P')
+    q.add_atom(ListElement(['S', 'Se']))
     q.add_bond(1, 2, 1)
     q.add_bond(2, 3, 2)
     rules.append(q)
@@ -51,9 +60,9 @@ def _stripped_rules():
     q.add_bond(2, 4, 2)
     rules.append(q)
 
-    # ions
+    # ions. Note: this rule ignored in pharmacophores and neutralize_metal_salts. keep in mind then editing list.
     q = QueryContainer()
-    q.add_atom(ListElement(['O', 'F', 'Cl', 'Br', 'I']), charge=-1, neighbors=0)
+    q.add_atom(ListElement(['O', 'F', 'Cl', 'Br', 'I', 'S']), charge=-1, neighbors=0)
     rules.append(q)
     return rules
 

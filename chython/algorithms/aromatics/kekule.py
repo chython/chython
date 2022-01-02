@@ -68,21 +68,6 @@ class Kekule:
                 copy._calc_implicit(n)
             yield copy
 
-    def check_thiele(self, fast=True) -> bool:
-        """
-        Check basic aromaticity errors of molecule.
-
-        :param fast: don't try to solve kekule form
-        """
-        try:
-            if fast:
-                self.__prepare_rings()
-            else:
-                next(self.__kekule_full(), None)
-        except InvalidAromaticRing:
-            return False
-        return True
-
     def __fix_rings(self: 'MoleculeContainer'):
         bonds = self._bonds
         seen = set()
@@ -157,10 +142,6 @@ class Kekule:
                         copy_rings[n].remove(m)
                         copy_rings[m].remove(n)
 
-        if any(len(ms) not in (2, 3) for ms in rings.values()):
-            raise InvalidAromaticRing('not in ring aromatic bond or hypercondensed rings: '
-                                      f'{{{", ".join(str(n) for n, ms in rings.items() if len(ms) not in (2, 3))}}}')
-
         # fix invalid smiles: c1ccccc1c2ccccc2 instead of c1ccccc1-c2ccccc2
         seen = set()
         for n, ms in copy_rings.items():
@@ -171,6 +152,10 @@ class Kekule:
                         rings[n].remove(m)
                         rings[m].remove(n)
                         bonds[n][m]._Bond__order = 1
+
+        if any(len(ms) not in (2, 3) for ms in rings.values()):
+            raise InvalidAromaticRing('not in ring aromatic bond or hypercondensed rings: '
+                                      f'{{{", ".join(str(n) for n, ms in rings.items() if len(ms) not in (2, 3))}}}')
 
         # get double bonded ring atoms
         double_bonded = {n for n, ms in double_bonded.items() if ms and n in rings}

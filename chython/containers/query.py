@@ -327,8 +327,8 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, 
             masks4 = []
             for *_, a, b in c:
                 if isinstance(a, AnyMetal):  # isotope, radical, charge, hydrogens and heteroatoms states ignored
-                    # elements except 1, 2, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 32, 33, 34, 35, 36, 51, 52, 53, 54
-                    v1 = 0x01c1c1fff07ffe1f
+                    # elements except 1, 2, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 32, 33, 34, 35, 36, 51, 52, 53, 54
+                    v1 = 0x0181c1fff07ffe1f
                     v2 = 0xfffffffffffffff0
                     v3 = 0xffffffffc0007fff
                     v4 = 0xffffffffffffffff

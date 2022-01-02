@@ -80,6 +80,10 @@ class Calculate2D(ABC):
         for n, (x, y) in plane.items():
             self_plane[n] = (x / bond_reduce, y / bond_reduce)
 
+        if self.connected_components_count > 1:
+            shift_x = 0.
+            for c in self.connected_components:
+                shift_x = self._fix_plane_mean(shift_x, component=c) + .9
         self.__dict__.pop('__cached_method__repr_svg_', None)
 
     def _fix_plane_mean(self: 'Graph', shift_x: float, shift_y=0., component=None) -> float:

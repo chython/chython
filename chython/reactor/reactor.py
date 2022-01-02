@@ -63,7 +63,7 @@ class Reactor(BaseReactor):
         self.__polymerise_limit = polymerise_limit
         self.__products_atoms = tuple(set(m) for m in products)
         self.__automorphism_filter = automorphism_filter
-        super().__init__(reduce(or_, patterns), products_, delete_atoms)
+        super().__init__({x for x in patterns for x in x}, products_, delete_atoms)
 
     def __call__(self, structures: Iterable[MoleculeContainer]):
         if any(not isinstance(structure, MoleculeContainer) for structure in structures):
@@ -122,7 +122,7 @@ class Reactor(BaseReactor):
         split = len(self.__products_atoms) > 1
         for match in lazy_product(*(x.get_mapping(y, automorphism_filter=self.__automorphism_filter) for x, y in
                                     zip(self.__patterns, chosen))):
-            mapping = match[0]
+            mapping = match[0].copy()
             for m in match[1:]:
                 mapping.update(m)
             new = self._patcher(united_chosen, mapping)
@@ -131,7 +131,7 @@ class Reactor(BaseReactor):
                 new.remap(dict(zip(collision, count(max(max_ignored_number, max(new)) + 1))))
 
             if split:
-                yield [new.substructure(c) for c in new._connected_components(new._bonds)]
+                yield new.split()
             else:
                 yield [new]
 
@@ -156,8 +156,6 @@ class Reactor(BaseReactor):
                 'automorphism_filter': self.__automorphism_filter, **super().__getstate__()}
 
     def __setstate__(self, state):
-        if 'split' in state:
-            raise ValueError('Reactor pickled with incompatible version.')
         self.__patterns = state['patterns']
         self.__one_shot = state['one_shot']
         self.__polymerise_limit = state['polymerise_limit']

@@ -65,7 +65,7 @@ if find_spec('cython'):
 
 setup(
     name='chython',
-    version='1.2',
+    version='1.11',
     packages=find_packages(),
     url='https://github.com/chython/chython',
     license='LGPLv3',
@@ -85,7 +85,7 @@ setup(
                   'chython.containers': ['_unpack.pyx']},
     data_files=[],
     zip_safe=False,
-    long_description=(Path(__file__).parent / 'README.rst').read_text(),
+    long_description=(Path(__file__).parent / 'README.rst').read_text('utf8'),
     classifiers=['Environment :: Plugins',
                  'Intended Audience :: Science/Research',
                  'License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)',

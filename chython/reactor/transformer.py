@@ -39,7 +39,7 @@ class Transformer(BaseReactor):
             raise TypeError('invalid params')
 
         self.__pattern = pattern
-        super().__init__(pattern, replacement, delete_atoms)
+        super().__init__(set(pattern), replacement, delete_atoms)
 
     def __call__(self, structure: MoleculeContainer, automorphism_filter: bool = True):
         if not isinstance(structure, MoleculeContainer):

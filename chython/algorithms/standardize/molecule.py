@@ -24,7 +24,7 @@ from ._charged import fixed_rules, morgan_rules
 from ._groups import *
 from ._metal_organics import rules as metal_rules
 from ...containers.bonds import Bond
-from ...exceptions import ValenceError
+from ...exceptions import ValenceError, ImplementationError
 from ...periodictable import H
 
 
@@ -32,59 +32,81 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
-class StandardizeMolecule:
+class Standardize:
     __slots__ = ()
 
-    def canonicalize(self: 'MoleculeContainer', *, logging=False) -> \
+    def canonicalize(self: 'MoleculeContainer', *, logging=False, ignore=True) -> \
             Union[bool, List[Tuple[Tuple[int, ...], int, str]]]:
         """
         Convert molecule to canonical forms of functional groups and aromatic rings without explicit hydrogens.
 
         :param logging: return log.
+        :param ignore: ignore standardization bugs.
         """
         k = self.kekule()
-        s = self.standardize(fix_stereo=False, logging=logging)
-        h = self.implicify_hydrogens(fix_stereo=False)
+        s = self.standardize(_fix_stereo=False, logging=True, ignore=ignore)
+        h, changed = self.implicify_hydrogens(_fix_stereo=False, logging=True)
         t = self.thiele()
-        c = self.standardize_charges(prepare_molecule=False, logging=logging)
+        c = self.standardize_charges(prepare_molecule=False, logging=True)
         if logging:
             if k:
                 s.insert(0, ((), -1, 'kekulized'))
             if h:
-                s.append(((), -1, 'implicified'))
+                s.append((tuple(changed), -1, 'implicified'))
             if t:
                 s.append(((), -1, 'aromatized'))
             if c:
                 s.append((tuple(c), -1, 'recharged'))
             return s
-        return k or s or h or t or c
+        return bool(k or s or h or t or c)
 
-    def standardize(self: Union['MoleculeContainer', 'StandardizeMolecule'], *, fix_stereo=True, logging=False) -> \
-            Union[bool, List[Tuple[Tuple[int, ...], int, str]]]:
+    def standardize(self: Union['MoleculeContainer', 'Standardize'], *, logging=False, ignore=True,
+                    _fix_stereo=True) -> Union[bool, List[Tuple[Tuple[int, ...], int, str]]]:
         """
         Standardize functional groups. Return True if any non-canonical group found.
 
         :param logging: return list of fixed atoms with matched rules.
+        :param ignore: ignore standardization bugs.
         """
-        neutralized = self.__fix_resonance(logging=logging)
-        if neutralized:
-            self.flush_cache()
-        log = self.__standardize(double_rules)
-        log.extend(self.__standardize(double_rules))  # double shot rules for overlapped groups
-        log.extend(self.__standardize(single_rules))
-        log.extend(self.__standardize(metal_rules))  # metal-organics fix
-        if log:
-            self.flush_cache()
-        if fix_stereo:
-            self.fix_stereo()
-        if logging:
-            if neutralized:
-                log.append((tuple(neutralized), -1, 'resonance'))
-            return log
-        return neutralized or bool(log)
+        r = self.fix_resonance(logging=True, _fix_stereo=False)
+        if r:
+            log = [(tuple(r), -1, 'resonance fixed')]
+            fixed = set(r)
+        else:
+            log, fixed = [], set()
 
-    def standardize_charges(self: 'MoleculeContainer', *, fix_stereo=True,
-                            logging=False, prepare_molecule=True) -> Union[bool, List[int]]:
+        l, f = self.__standardize(double_rules)
+        log.extend(l)
+        fixed.update(f)
+        l, f = self.__standardize(double_rules)  # double shot rules for overlapped groups
+        log.extend(l)
+        fixed.update(f)
+        l, f = self.__standardize(single_rules)
+        log.extend(l)
+        fixed.update(f)
+        l, f = self.__standardize(metal_rules)  # metal-organics fix
+        log.extend(l)
+        fixed.update(f)
+
+        if b := fixed.intersection(n for n, h in self._hydrogens.items() if h is None):
+            if ignore:
+                log.append((tuple(b), -1, 'standardization failed'))
+            else:
+                raise ImplementationError(f'standardization leads to invalid valences: {b}')
+
+        if fixed:
+            self.flush_cache()
+            if _fix_stereo:
+                self.fix_stereo()
+
+        if logging:
+            if fixed:
+                log.append((tuple(fixed), -1, 'standardized atoms'))
+            return log
+        return bool(fixed)
+
+    def standardize_charges(self: 'MoleculeContainer', *, logging=False, prepare_molecule=True,
+                            _fix_stereo=True) -> Union[bool, List[int]]:
         """
         Set canonical positions of charges in heterocycles and some nitrogen compounds.
 
@@ -176,7 +198,7 @@ class StandardizeMolecule:
             del self.__dict__['atoms_order']  # remove invalid morgan
         if changed:
             self.flush_cache()  # clear cache
-            if fix_stereo:
+            if _fix_stereo:
                 self.fix_stereo()
             if logging:
                 return changed
@@ -185,7 +207,7 @@ class StandardizeMolecule:
             return []
         return False
 
-    def remove_hydrogen_bonds(self: 'MoleculeContainer', *, keep_to_terminal=True, fix_stereo=True) -> int:
+    def remove_hydrogen_bonds(self: 'MoleculeContainer', *, keep_to_terminal=True, _fix_stereo=True) -> int:
         """Remove hydrogen bonds marked with 8 (any) bond
 
         :param keep_to_terminal: Keep any bonds to terminal hydrogens
@@ -217,22 +239,28 @@ class StandardizeMolecule:
                 del bonds[n][m], bonds[m][n]
         if c:
             self.flush_cache()
-            if fix_stereo:
+            if _fix_stereo:
                 self.fix_stereo()
         return c
 
-    def implicify_hydrogens(self: 'MoleculeContainer', *, fix_stereo=True) -> int:
+    def implicify_hydrogens(self: 'MoleculeContainer', *, logging=False, _fix_stereo=True) -> \
+            Union[int, Tuple[int, List[int]]]:
         """
-        Remove explicit hydrogen if possible.
+        Remove explicit hydrogen if possible. Return number of removed hydrogens.
         Works only with Kekule forms of aromatic structures.
         Keeps isotopes of hydrogen.
 
-        :return: number of removed hydrogens
+        :param logging: return list of changed atoms.
         """
         atoms = self._atoms
         charges = self._charges
         radicals = self._radicals
         bonds = self._bonds
+        plane = self._plane
+        hydrogens = self._hydrogens
+        parsed_mapping = self._parsed_mapping
+        calc_implicit = self._calc_implicit
+
         explicit = defaultdict(list)
         for n, atom in atoms.items():
             if atom.atomic_number == 1 and (atom.isotope is None or atom.isotope == 1):
@@ -246,6 +274,7 @@ class StandardizeMolecule:
                         raise ValenceError(f'Hydrogen atom {{{n}}} has invalid valence {{{b.order}}}.')
 
         to_remove = set()
+        fixed = []
         for n, hs in explicit.items():
             atom = atoms[n]
             charge = charges[n]
@@ -266,14 +295,36 @@ class StandardizeMolecule:
                 if any(s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()) and h >= i
                        for s, d, h in rules):
                     to_remove.update(hi)
+                    fixed.append(n)
                     break
+
         for n in to_remove:
-            self.delete_atom(n)
-        if to_remove and fix_stereo:
-            self.fix_stereo()
+            del atoms[n]
+            del charges[n]
+            del radicals[n]
+            del plane[n]
+            del hydrogens[n]
+            for m in bonds.pop(n):
+                del bonds[m][n]
+            try:
+                del parsed_mapping[n]
+            except KeyError:
+                pass
+
+        for n in fixed:
+            calc_implicit(n)
+
+        if to_remove:
+            self.flush_cache()
+            self._conformers.clear()
+            if _fix_stereo:
+                self.fix_stereo()
+
+        if logging:
+            return len(to_remove), fixed
         return len(to_remove)
 
-    def explicify_hydrogens(self: 'MoleculeContainer', *, fix_stereo=True, start_map=None, return_maps=False) -> \
+    def explicify_hydrogens(self: 'MoleculeContainer', *, start_map=None, _return_map=False, _fix_stereo=True) -> \
             Union[int, List[Tuple[int, int]]]:
         """
         Add explicit hydrogens to atoms.
@@ -288,65 +339,33 @@ class StandardizeMolecule:
             except TypeError:
                 raise ValenceError(f'atom {{{n}}} has valence error')
 
-        if return_maps:
-            log = []
         if to_add:
+            log = []
             bonds = self._bonds
             m = start_map
             for n in to_add:
                 m = self.add_atom(H(), _map=m)
                 bonds[n][m] = bonds[m][n] = Bond(1)
                 hydrogens[n] = 0
-                if return_maps:
-                    log.append((n, m))
+                log.append((n, m))
                 m += 1
 
-            if fix_stereo:
+            if _fix_stereo:
                 self.fix_stereo()
-            if return_maps:
+            if _return_map:
                 return log
             return len(to_add)
-        if return_maps:
-            return log
+        elif _return_map:
+            return []
         return 0
 
     def check_valence(self: 'MoleculeContainer') -> List[int]:
         """
         Check valences of all atoms.
 
-        Works only on molecules with aromatic rings in Kekule form.
         :return: list of invalid atoms
         """
-        atoms = self._atoms
-        charges = self._charges
-        radicals = self._radicals
-        bonds = self._bonds
-        hydrogens = self._hydrogens
-        errors = set(atoms)
-        for n, atom in atoms.items():
-            charge = charges[n]
-            is_radical = radicals[n]
-            explicit_sum = 0
-            explicit_dict = defaultdict(int)
-            for m, bond in bonds[n].items():
-                order = bond.order
-                if order == 4:  # aromatic rings not supported
-                    break
-                elif order != 8:  # any bond used for complexes
-                    explicit_sum += order
-                    explicit_dict[(order, atoms[m].atomic_number)] += 1
-            else:
-                try:
-                    rules = atom.valence_rules(charge, is_radical, explicit_sum)
-                except ValenceError:
-                    pass
-                else:
-                    hs = hydrogens[n]
-                    for s, d, h in rules:
-                        if h == hs and s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()):
-                            errors.discard(n)
-                            break
-        return list(errors)
+        return [n for n, h in self._hydrogens.items() if h is None]  # only invalid atoms have None hydrogens.
 
     def clean_isotopes(self: 'MoleculeContainer') -> bool:
         """
@@ -367,16 +386,14 @@ class StandardizeMolecule:
         bonds = self._bonds
         charges = self._charges
         radicals = self._radicals
+        calc_implicit = self._calc_implicit
 
         log = []
+        fixed = set()
         flush = False
-        for r, (pattern, atom_fix, bonds_fix) in enumerate(rules):
+        for r, (pattern, atom_fix, bonds_fix, any_atoms) in enumerate(rules):
             hs = set()
             seen = set()
-            # collect constrain Any-atoms
-            any_atoms = [n for n, a in pattern.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
-            # AnyMetal can match multiple times
-            any_atoms.extend(n for n, a in pattern.atoms() if a.atomic_symbol == 'M')
             for mapping in pattern.get_mapping(self, automorphism_filter=False):
                 match = set(mapping.values())
                 if not match.isdisjoint(seen):  # skip intersected groups
@@ -432,118 +449,10 @@ class StandardizeMolecule:
                 except KeyError:  # already flushed before
                     pass
             for n in hs:  # hydrogens count recalculation
-                self._calc_implicit(n)
+                calc_implicit(n)
             del self.__dict__['_cython_compiled_structure']
-        return log
-
-    def __fix_resonance(self: Union['MoleculeContainer', 'StandardizeMolecule'], *, logging=False) -> \
-            Union[bool, List[int]]:
-        """
-        Transform biradical or dipole resonance structures into neutral form. Return True if structure form changed.
-
-        :param logging: return list of changed atoms.
-        """
-        atoms = self._atoms
-        charges = self._charges
-        radicals = self._radicals
-        bonds = self._bonds
-        entries, exits, rads, constrains = self.__entries()
-        hs = set()
-        while len(rads) > 1:
-            n = rads.pop()
-            for path in self.__find_delocalize_path(n, rads, constrains):
-                l, m, b = path[-1]
-                if b == 1:  # required pi-bond
-                    continue
-                try:
-                    atoms[m].valence_rules(charges[m], False, sum(int(y) for x, y in bonds[m].items() if x != l) + b)
-                except ValenceError:
-                    continue
-                radicals[n] = radicals[m] = False
-                rads.discard(m)
-                hs.add(n)
-                hs.update(x for _, x, _ in path)
-                for n, m, b in path:
-                    bonds[n][m]._Bond__order = b
-                break  # path found
-            # path not found. atom n keep as is
-        while entries and exits:
-            n = entries.pop()
-            for path in self.__find_delocalize_path(n, exits, constrains):
-                l, m, b = path[-1]
-                try:
-                    atoms[m].valence_rules(charges[m] - 1, radicals[m],
-                                           sum(int(y) for x, y in bonds[m].items() if x != l) + b)
-                except ValenceError:
-                    continue
-                charges[n] = charges[m] = 0
-                exits.discard(m)
-                hs.add(n)
-                hs.update(x for _, x, _ in path)
-                for n, m, b in path:
-                    bonds[n][m]._Bond__order = b
-                break  # path from negative atom to positive atom found.
-            # path not found. keep negative atom n as is
-        if hs:
-            for n in hs:
-                self._calc_implicit(n)
-            if logging:
-                return list(hs)
-            return True
-        if logging:
-            return []
-        return False
-
-    def __find_delocalize_path(self: 'MoleculeContainer', start, finish, constrains):
-        bonds = self._bonds
-        stack = [(start, n, 0, b.order + 1) for n, b in bonds[start].items() if n in constrains and b.order < 3]
-        path = []
-        seen = {start}
-        while stack:
-            last, current, depth, order = stack.pop()
-            if len(path) > depth:
-                seen.difference_update(x for _, x, _ in path[depth:])
-                path = path[:depth]
-
-            path.append((last, current, order))
-
-            if current in finish:
-                if depth:  # one bonded ignored. we search double bond transfer! A=A-A >> A-A=A.
-                    yield path
-                continue  # stop grow
-
-            depth += 1
-            seen.add(current)
-            diff = -1 if depth % 2 else 1
-            stack.extend((current, n, depth, bo) for n, b in bonds[current].items()
-                         if n not in seen and n in constrains and 1 <= (bo := b.order + diff) <= 3)
-
-    def __entries(self: 'MoleculeContainer'):
-        charges = self._charges
-        radicals = self._radicals
-        atoms = self._atoms
-        bonds = self._bonds
-
-        transfer = set()
-        entries = set()
-        exits = set()
-        rads = set()
-        for n, a in atoms.items():
-            if a.atomic_number not in {5, 6, 7, 8, 14, 15, 16, 33, 34, 52}:
-                # filter non-organic set, halogens and aromatics
-                continue
-            if charges[n] == -1:
-                if len(bonds[n]) == 4 and a.atomic_number == 5:  # skip boron
-                    continue
-                entries.add(n)
-            elif charges[n] == 1:
-                if len(bonds[n]) == 4 and a.atomic_number == 7:  # skip ammonia
-                    continue
-                exits.add(n)
-            elif radicals[n]:
-                rads.add(n)
-            transfer.add(n)
-        return entries, exits, rads, transfer
+            fixed.update(hs)
+        return log, fixed
 
 
-__all__ = ['StandardizeMolecule']
+__all__ = ['Standardize']

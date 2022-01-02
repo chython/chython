@@ -327,29 +327,27 @@ class SMILESRead(Parser):
         hydrogens = mol._hydrogens
         radicals = mol._radicals
         calc_implicit = mol._calc_implicit
+        hyb = mol.hybridization
+
         for n, h in data['hydrogens'].items():
             n = mapping[n]
             hc = hydrogens[n]
-            if hc is None:  # aromatic rings or valence errors. just store given H count.
-                hydrogens[n] = h
+            if hc is None:  # aromatic rings. just store given H count.
+                if hyb(n) == 4:
+                    hydrogens[n] = h
             elif hc != h:  # H count mismatch. try radical state of atom.
-                if radicals[n]:
+                if radicals[n]:  # non-radical form non found. it's probably a bad valence.
                     if self._ignore:
-                        hydrogens[n] = h  # set parsed hydrogens count
-                        self._info(f'implicit hydrogen count ({h}) mismatch with '
-                                   f'calculated ({hc}) on atom {n}. calculated count replaced.')
+                        self._info(f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
                     else:
-                        raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
-                                         f'calculated ({hc}) on atom {n}.')
-                else:
+                        raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
+                else:  # smiles don't code radicals. so, let's try to guess.
                     radicals[n] = True
                     calc_implicit(n)
                     if hydrogens[n] != h:  # radical state also has errors.
                         if self._ignore:
                             radicals[n] = False  # reset radical state
-                            hydrogens[n] = h  # set parsed hydrogens count
-                            self._info(f'implicit hydrogen count ({h}) mismatch with '
-                                       f'calculated ({hc}) on atom {n}. calculated count replaced.')
+                            self._info(f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
                         else:
                             raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
                                              f'calculated ({hc}) on atom {n}.')

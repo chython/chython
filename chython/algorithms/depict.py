@@ -115,7 +115,7 @@ class Depict(ABC):
                     svg.append(f'      <line x1="{viewbox_x:.2f}" y1="{viewbox_y:.2f}" '
                                f'x2="{viewbox_x + width:.2f}" y2="{viewbox_y:.2f}" stroke="none"/>')
             else:
-                svg.append(f'    <g fill="none" stroke="{config["bond_color"]}" '
+                svg.append(f'    </defs>\n    <g fill="none" stroke="{config["bond_color"]}" '
                            f'stroke-width="{config["bond_width"]:.2f}">')
             svg.extend(bonds)
             svg.append('    </g>')

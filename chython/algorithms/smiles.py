@@ -24,7 +24,7 @@ from functools import cached_property
 from hashlib import sha512
 from itertools import count, product
 from random import random
-from typing import Tuple, TYPE_CHECKING, Union
+from typing import Callable, Tuple, TYPE_CHECKING, Union
 
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ class Smiles(ABC):
 
     @cached_method
     def __str__(self):
-        return ''.join(self._smiles(self._smiles_order))
+        return ''.join(self._smiles(self._smiles_order()))
 
     def __format__(self: Union['Graph', 'Smiles'], format_spec):
         """
@@ -66,7 +66,8 @@ class Smiles(ABC):
             A - Use aromatic bonds instead aromatic atoms.
             m - Set atom mapping.
             r - Generate random-ordered smiles.
-            o - Old canonic ordering algorithm.
+            h - Show implicit hydrogens.
+            !b - Disable bonds tokens.
 
             Combining possible. Order independent. Another keys ignored.
         """
@@ -80,16 +81,17 @@ class Smiles(ABC):
                 kwargs['aromatic'] = False
             if 'm' in format_spec:
                 kwargs['mapping'] = True
+            if 'h' in format_spec:
+                kwargs['hydrogens'] = True
+            if '!b' in format_spec:
+                kwargs['bonds'] = False
             if 'r' in format_spec:
                 kwargs['random'] = True
 
                 def w(_):
                     return random()
-            elif 'o' in format_spec:
-                kwargs['old_order'] = True
-                w = self.atoms_order.get
             else:
-                w = self._smiles_order
+                w = self._smiles_order('!s' not in format_spec)
             return ''.join(self._smiles(w, **kwargs))
         return str(self)
 
@@ -109,7 +111,7 @@ class Smiles(ABC):
         """
         Atoms order in canonic SMILES.
         """
-        smiles, order = self._smiles(self._smiles_order, _return_order=True)
+        smiles, order = self._smiles(self._smiles_order(), _return_order=True)
         self.__dict__['__cached_method___str__'] = ''.join(smiles)  # cache smiles also
         return tuple(order)
 
@@ -124,8 +126,7 @@ class Smiles(ABC):
         casted_cycles = {}
         string = []
         order = []
-        if asymmetric_closures:
-            visited_bond = set()
+        visited_bond = set()
 
         groups = defaultdict(int)
         for n in atoms_set:
@@ -133,24 +134,6 @@ class Smiles(ABC):
 
         if kwargs.get('random', False):
             mod_weights_start = mod_weights = weights
-        elif kwargs.get('old_order', False):
-            def mod_weights_start(x):
-                lb = len(bonds[x])
-                if lb:
-                    return (-groups[weights(x)],  # rare groups
-                            -lb,  # more neighbors
-                            lb / len({weights(x) for x in bonds[x]}),  # more unique neighbors
-                            weights(x))  # smallest weight
-                else:
-                    return -groups[weights(x)], weights(x)  # rare groups > smallest weight
-
-            def mod_weights(x):
-                lb = len(bonds[x])
-                return (-groups[weights(x)],  # rare groups
-                        -lb,  # more neighbors
-                        lb / len({weights(x) for x in bonds[x]}),  # more unique neighbors
-                        weights(x),  # smallest weight
-                        seen[x])  # BFS nearest to starting
         else:
             def mod_weights_start(x):
                 return (groups[weights(x)],  # common groups
@@ -244,23 +227,23 @@ class Smiles(ABC):
 
             for token in smiles:
                 if isinstance(token, int):  # atoms
-                    string.append(self._format_atom(token, adjacency=visited, **kwargs))
+                    string.append(self._format_atom(token, visited, **kwargs))
                     order.append(token)
                     if token in tokens:
                         for m, c in tokens[token]:
                             if asymmetric_closures:
                                 if (token, m) not in visited_bond:
-                                    string.append(self._format_bond(token, m, adjacency=visited, **kwargs))
+                                    string.append(self._format_bond(token, m, visited, **kwargs))
                                     visited_bond.add((m, token))
                             else:
-                                string.append(self._format_bond(token, m, adjacency=visited, **kwargs))
+                                string.append(self._format_bond(token, m, visited, **kwargs))
                             string.append(self._format_closure(casted_cycles[c]))
                 elif token == '(':
                     string.append(open_parenthesis)
                 elif token == ')':
                     string.append(close_parenthesis)
                 else:  # bonds
-                    string.append(self._format_bond(*token, adjacency=visited, **kwargs))
+                    string.append(self._format_bond(*token, visited, **kwargs))
 
             atoms_set.difference_update(visited)
             if atoms_set:
@@ -283,18 +266,18 @@ class Smiles(ABC):
     def _format_bond(self, n, m, adjacency, **kwargs):
         ...
 
-    @property
-    @abstractmethod
-    def _smiles_order(self):
-        ...
+    def _smiles_order(self: 'Graph', stereo=True) -> Callable:
+        return self.atoms_order.__getitem__
 
 
 class MoleculeSmiles(Smiles):
     __slots__ = ()
 
-    @property
-    def _smiles_order(self: 'MoleculeContainer'):
-        return self._chiral_morgan.__getitem__
+    def _smiles_order(self: 'MoleculeContainer', stereo=True) -> Callable:
+        if stereo:
+            return self._chiral_morgan.__getitem__
+        else:
+            return self.atoms_order.__getitem__
 
     def _format_atom(self: 'MoleculeContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
@@ -328,7 +311,7 @@ class MoleculeSmiles(Smiles):
         elif charge:
             smi[5] = charge_str[charge]
 
-        if any(smi) or atom.atomic_symbol not in organic_set or self._radicals[n]:
+        if any(smi) or atom.atomic_symbol not in organic_set or self._radicals[n] or kwargs.get('hydrogens', False):
             smi[0] = '['
             smi[-1] = ']'
             if ih == 1:
@@ -350,6 +333,8 @@ class MoleculeSmiles(Smiles):
         return ''.join(smi)
 
     def _format_bond(self: 'MoleculeContainer', n, m, adjacency, **kwargs):
+        if not kwargs.get('bonds', True):
+            return ''
         order = self._bonds[n][m].order
         if order == 4:
             if kwargs.get('aromatic', True):
@@ -397,11 +382,7 @@ class MoleculeSmiles(Smiles):
 class CGRSmiles(Smiles):
     __slots__ = ()
 
-    @property
-    def _smiles_order(self: 'CGRContainer'):
-        return self.atoms_order.__getitem__
-
-    def _format_atom(self: 'CGRContainer', n, **kwargs):
+    def _format_atom(self: 'CGRContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
         charge = self._charges[n]
         is_radical = self._radicals[n]
@@ -422,7 +403,7 @@ class CGRSmiles(Smiles):
             smi.append(']')
         return ''.join(smi)
 
-    def _format_bond(self: 'CGRContainer', n, m, **kwargs):
+    def _format_bond(self: 'CGRContainer', n, m, adjacency, **kwargs):
         bond = self._bonds[n][m]
         return dyn_order_str[(bond.order, bond.p_order)]
 
@@ -430,11 +411,7 @@ class CGRSmiles(Smiles):
 class QuerySmiles(Smiles):
     __slots__ = ()
 
-    @property
-    def _smiles_order(self: 'QueryContainer'):
-        return self.atoms_order.__getitem__
-
-    def _format_atom(self: 'QueryContainer', n, **kwargs):
+    def _format_atom(self: 'QueryContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
         charge = self._charges[n]
         hybridization = self._hybridizations[n]
@@ -449,7 +426,7 @@ class QuerySmiles(Smiles):
             smi = ['[', atom.atomic_symbol]
 
         if n in self._atoms_stereo:  # carbon only
-            smi.append('@' if self._translate_tetrahedron_sign(n, kwargs['adjacency'][n]) else '@@')
+            smi.append('@' if self._translate_tetrahedron_sign(n, adjacency[n]) else '@@')
 
         if neighbors:
             smi.append(';D')
@@ -480,7 +457,7 @@ class QuerySmiles(Smiles):
         smi.append(']')
         return ''.join(smi)
 
-    def _format_bond(self: 'QueryContainer', n, m, **kwargs):
+    def _format_bond(self: 'QueryContainer', n, m, adjacency, **kwargs):
         return ','.join(order_str[x] for x in self._bonds[n][m].order)
 
 

@@ -106,13 +106,9 @@ class Au(Element, PeriodVI, GroupXI):
 
     @property
     def _valences_exceptions(self):
-        return ((0, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'))),
-                (-1, False, 0, ((1, 'Cl'), (1, 'Cl'))),  # AuCl2^1-
-                (-1, False, 0, ((1, 'S'), (1, 'S'))),  # AuS2^1-
-                (-1, False, 0, ((1, 'C'), (1, 'C'))),  # Au(CN)^1-
-                (-1, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # Au(OH)4^1-
-                (-1, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'))),  # Au(CN)4^1-
-                (-1, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'))))  # AuCl4^1-
+        return ((1, False, 0, ()), (3, False, 0, ()),
+                (0, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'))),
+                (-1, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'))))
 
     @property
     def atomic_radius(self):

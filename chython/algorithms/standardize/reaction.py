@@ -183,8 +183,7 @@ class StandardizeReaction:
         """
         Fix atom-to-atom mapping of some functional groups. Return True if found AAM errors.
         """
-        if logging:
-            log = []
+        log = []
         seen = set()
         if not self:
             return False
@@ -213,8 +212,7 @@ class StandardizeReaction:
                     del found[n]
                     m.remap(v)
                     seen.add(atom)
-                    if logging:
-                        log.append(('group remap', list(v)))
+                    log.append(('group remap', list(v)))
         if seen:
             self.flush_cache()
             flag = True
@@ -246,8 +244,7 @@ class StandardizeReaction:
                 for m in good_query.get_mapping(check, automorphism_filter=False):
                     if valid.issubset(m) and delta.issubset(m.values()):
                         seen.update(mapping)
-                        if logging:
-                            log.append((rule_num, str(bad_query), str(good_query), tuple(mapping.values())))
+                        log.append((rule_num, str(bad_query), str(good_query), tuple(mapping.values())))
                         flag = True
                         break
                 else:
@@ -259,7 +256,7 @@ class StandardizeReaction:
                     continue
                 break
             else:
-                if logging and flag_m:
+                if flag_m:
                     log.append((rule_num, str(bad_query), str(good_query), ()))
         if seen:
             self.flush_cache()
@@ -318,9 +315,9 @@ class StandardizeReaction:
 
     def implicify_hydrogens(self: 'ReactionContainer') -> int:
         """
-        Remove explicit hydrogens if possible
+        Remove explicit hydrogens if possible.
 
-        :return: number of removed hydrogens
+        :return: number of removed hydrogens.
         """
         total = 0
         for m in self.molecules():
@@ -344,7 +341,7 @@ class StandardizeReaction:
 
         mapping = defaultdict(list)
         for m in self.reactants:
-            maps = m.explicify_hydrogens(return_maps=True, start_map=start_map + 1)
+            maps = m.explicify_hydrogens(_return_map=True, start_map=start_map + 1)
             if maps:
                 for n, h in maps:
                     mapping[n].append(h)
@@ -352,13 +349,13 @@ class StandardizeReaction:
                 total += len(maps)
 
         for m in self.reagents:
-            maps = m.explicify_hydrogens(return_maps=True, start_map=start_map + 1)
+            maps = m.explicify_hydrogens(_return_map=True, start_map=start_map + 1)
             if maps:
                 start_map = maps[-1][1]
                 total += len(maps)
 
         for m in self.products:
-            maps = m.explicify_hydrogens(return_maps=True, start_map=start_map + 1)
+            maps = m.explicify_hydrogens(_return_map=True, start_map=start_map + 1)
             if maps:
                 total += len(maps)
                 remap = {}

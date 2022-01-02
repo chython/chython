@@ -73,11 +73,9 @@ class Isomorphism:
             return any(other == x.atomic_symbol for x in self._atoms.values())
         return any(other == x for x in self._atoms.values())
 
-    def is_substructure(self, other, /, *, optimize: bool = True) -> bool:
+    def is_substructure(self, other, /) -> bool:
         """
         Test self is substructure of other
-
-        :param optimize: Morgan weights based automorphism preventing.
         """
         try:
             next(self.get_mapping(other, automorphism_filter=False))
@@ -85,11 +83,9 @@ class Isomorphism:
             return False
         return True
 
-    def is_equal(self, other, /, *, optimize: bool = True) -> bool:
+    def is_equal(self, other, /) -> bool:
         """
         Test self is same structure as other
-
-        :param optimize: Morgan weights based automorphism preventing.
         """
         if len(self) != len(other):
             return False

@@ -48,9 +48,9 @@ class Element(Core, ABC):
     @property
     def atomic_mass(self) -> float:
         mass = self.isotopes_masses
-        if self.__isotope is None:
+        if self.isotope is None:
             return sum(x * mass[i] for i, x in self.isotopes_distribution.items())
-        return mass[self.__isotope]
+        return mass[self.isotope]
 
     @property
     @abstractmethod
@@ -215,8 +215,7 @@ class Element(Core, ABC):
         compare attached to molecules elements
         """
         return isinstance(other, Element) and self.atomic_number == other.atomic_number and \
-            self.isotope == other.isotope and self.charge == other.charge and self.is_radical == other.is_radical and \
-            self.implicit_hydrogens == other.implicit_hydrogens
+            self.isotope == other.isotope and self.charge == other.charge and self.is_radical == other.is_radical
 
     def __hash__(self):
         return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.implicit_hydrogens or 0))
@@ -306,6 +305,30 @@ class Element(Core, ABC):
             else:
                 rules[(charge, is_radical, explicit)].append((explicit_set, explicit_dict, 0))
         return dict(rules)
+
+    @class_cached_property
+    def _compiled_saturation_rules(self) -> List[Tuple[int, bool, int, int, Optional[Dict[Tuple[int, int], int]]]]:
+        """
+        dictionary with key = (charge, is_radical, sum_of_bonds) and
+        value = list of possible neighbors
+        """
+        elements_classes = {x.__name__: x.atomic_number.fget(None) for x in Element.__subclasses__()}
+
+        rules = []
+        for valence in self._common_valences:
+            rules.append((0, False, valence, 0, None))  # any atoms and bonds possible
+
+        for charge, is_radical, implicit, environment in self._valences_exceptions:
+            if not environment:
+                rules.append((charge, is_radical, implicit, 0, None))
+            else:
+                explicit_dict = defaultdict(int)
+                explicit = 0
+                for b, e in environment:
+                    explicit_dict[(b, elements_classes[e])] += 1
+                    explicit += b
+                rules.append((charge, is_radical, implicit + explicit, implicit, dict(explicit_dict)))
+        return rules
 
 
 __all__ = ['Element']
