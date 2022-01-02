@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -65,7 +65,7 @@ if find_spec('cython'):
 
 setup(
     name='chython',
-    version='1.11',
+    version='1.12',
     packages=find_packages(),
     url='https://github.com/chython/chython',
     license='LGPLv3',
