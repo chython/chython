@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,12 +16,12 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from .daylight import *
 from .INCHIrw import *
 from .MRVrw import *
 from .PDBrw import *
 from .RDFrw import *
 from .SDFrw import *
-from .daylight import *
 from .XYZrw import *
 from ._mdl import parse_error
 
