@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -225,7 +225,8 @@ def _saturate(bonds, atoms, expected_radicals_count, expected_charge):
             if not env:
                 es = [(n, c, r) for c, r, h in atoms[n] if not h]
                 if not es:
-                    return  # saturation impossible
+                    raise ValenceError('Saturation impossible. '
+                                       f"Isolated atom ({n}) doesn't have appropriate charge-radical state")
                 to_del.append(n)
                 dots.append(es)
         for n in to_del:
