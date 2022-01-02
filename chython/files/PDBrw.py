@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,9 +18,10 @@
 #
 from fileinput import FileInput
 from io import StringIO, TextIOWrapper
+from itertools import repeat
 from pathlib import Path
 from traceback import format_exc
-from typing import Collection, Tuple, Optional
+from typing import Optional, Iterable
 from ._mdl import parse_error
 from .XYZrw import XYZ
 
@@ -43,14 +44,16 @@ class PDBRead(XYZ):
     END or ENDMDL required in the end.
     """
     def __init__(self, file, ignore=False, element_name_priority=False, parse_as_single=False, atom_name_map=None,
-                 **kwargs):
+                 charge_map: Optional[Iterable[int]] = None, radical_map: Optional[Iterable[int]] = None, **kwargs):
         """
         :param ignore: Skip some checks of data or try to fix some errors.
         :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
         :param element_name_priority: For ligands use element symbol column value and ignore atom name column.
-        :param parse_as_single: Usable if all models in file is the same structure. 2d graph will be restored from first
-            model. Other models will be returned as conformers.
+        :param parse_as_single: Usable if all models in file is the same structure.
+            2d graph will be restored only from first model.
         :param atom_name_map: dictionary with atom names replacements. e.g.: {'Ow': 'O'}. Keys should be capitalized.
+        :param charge_map: iterable with total charges of each model in file.
+        :param radical_map: iterable with total radicals count of each model in file.
         """
         if isinstance(file, str):
             self._file = open(file)
@@ -70,6 +73,8 @@ class PDBRead(XYZ):
         self.__parse_as_single = parse_as_single
         self.__parsed_first = None
         self.__atom_name_map = atom_name_map or {}
+        self.__charge_map = charge_map
+        self.__radical_map = radical_map
         self._data = self.__reader()
 
     def __reader(self):
@@ -82,6 +87,8 @@ class PDBRead(XYZ):
             seekable = False
         ignore = self.__ignore
         failkey = False
+        charges = repeat(0) if self.__charge_map is None else iter(self.__charge_map)
+        radicals = repeat(0) if self.__radical_map is None else iter(self.__radical_map)
         atoms = []
 
         pos = 0 if seekable else None
@@ -89,6 +96,11 @@ class PDBRead(XYZ):
         for n, line in enumerate(self.__file):
             if failkey:
                 if line.startswith('END'):
+                    try:  # drop unused charges/radicals
+                        next(charges)
+                        next(radicals)
+                    except StopIteration:
+                        raise ValueError('charge_map or radical_map invalid')
                     failkey = False
                     if seekable:
                         pos = file.tell()
@@ -166,14 +178,21 @@ class PDBRead(XYZ):
             elif line.startswith('END'):  # EOF or end of complex
                 if atoms:  # convert collected atoms
                     try:
-                        container = self._convert_molecule(atoms)
+                        container = self._convert_molecule(atoms, next(charges), next(radicals))
                     except ValueError:
                         self._info(f'Structure consist errors:\n{format_exc()}')
                         yield parse_error(count, pos, self._format_log(), None)
+                    except StopIteration:
+                        raise ValueError('charge_map or radical_map invalid')
                     else:
                         yield container
                     atoms = []
                 else:
+                    try:  # drop unused charges/radicals
+                        next(charges)
+                        next(radicals)
+                    except StopIteration:
+                        raise ValueError('charge_map or radical_map invalid')
                     self._info(f'Line [{n}]: END or ENDMDL before ATOM or HETATM')
                     yield parse_error(count, pos, self._format_log(), line)
                 count += 1
@@ -183,22 +202,24 @@ class PDBRead(XYZ):
             self._info('PDB not finished')
             yield parse_error(count, pos, self._format_log(), {})
 
-    def _convert_molecule(self, matrix: Collection[Tuple[str, Optional[int], float, float, float, str]]):
+    def _convert_molecule(self, matrix, charge=0, radical=0):
         if self.__parsed_first is None:
             mol = super()._convert_molecule([(e, c, x, y, z) for e, c, x, y, z, _ in matrix])
             mol.meta['RESIDUE'] = {n: x[-1] for n, x in zip(mol, matrix)}
             if self.__parse_as_single:
-                self.__parsed_first = [(n, a.atomic_symbol) for n, a in mol.atoms()]
+                self.__parsed_first = mol.copy()
             return mol
         else:
             if len(self.__parsed_first) != len(matrix):
                 raise ValueError('models not equal')
             c = {}
-            for (n, a), (e, _, x, y, z, _) in zip(self.__parsed_first, matrix):
-                if a != e:
+            for (n, a), (e, _, x, y, z, _) in zip(self.__parsed_first.atoms(), matrix):
+                if a.atomic_symbol != e:
                     raise ValueError('models or atom order not equal')
                 c[n] = (x, y, z)
-            return c
+            mol = self.__parsed_first.copy()
+            mol._conformers[0] = c
+            return mol
 
 
 __all__ = ['PDBRead']
