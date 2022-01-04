@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,30 +17,23 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from functools import cached_property
-from typing import Dict, Iterator, List, Tuple
-from . import molecule  # cyclic imports resolve
+from typing import Dict, Iterator, Tuple
 from .bonds import DynamicBond
-from ..algorithms.calculate2d import Calculate2DCGR
-from ..algorithms.depict import DepictCGR
 from ..algorithms.isomorphism import Isomorphism
 from ..algorithms.morgan import Morgan
 from ..algorithms.rings import Rings
 from ..algorithms.smiles import CGRSmiles
-from ..algorithms.x3dom import X3domCGR
-from ..periodictable import DynamicElement, Element
+from ..periodictable import DynamicElement
 
 
-class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2DCGR, X3domCGR):
-    __slots__ = ('_atoms', '_bonds', '_charges', '_radicals', '_p_charges', '_p_radicals', '_plane', '_conformers',
-                 '__dict__', '__weakref__')
+class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism):
+    __slots__ = ('_atoms', '_bonds', '_charges', '_radicals', '_p_charges', '_p_radicals', '__dict__', '__weakref__')
     _atoms: Dict[int, DynamicElement]
     _bonds: Dict[int, Dict[int, DynamicBond]]
     _charges: Dict[int, int]
     _radicals: Dict[int, bool]
     _p_charges: Dict[int, int]
     _p_radicals: Dict[int, bool]
-    _plane: Dict[int, Tuple[float, float]]
-    _conformers: List[Dict[int, Tuple[float, float, float]]]
 
     def __init__(self):
         self._atoms = {}
@@ -49,8 +42,6 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2D
         self._radicals = {}
         self._p_charges = {}
         self._p_radicals = {}
-        self._plane = {}
-        self._conformers = []
 
     def bonds(self) -> Iterator[Tuple[int, int, DynamicBond]]:
         """
@@ -82,17 +73,6 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2D
 
         return tuple(center)
 
-    @cached_property
-    def aromatic_rings(self) -> Tuple[Tuple[int, ...], ...]:
-        """
-        existed or formed aromatic rings atoms numbers
-        """
-        adj = self._bonds
-        return tuple(ring for ring in self.sssr if
-                     adj[ring[0]][ring[-1]].order == 4 and all(adj[n][m].order == 4 for n, m in zip(ring, ring[1:])) or
-                     adj[ring[0]][ring[-1]].p_order == 4 and all(adj[n][m].p_order == 4 for n, m in zip(ring, ring[1:]))
-                     )
-
     def substructure(self, atoms) -> 'CGRContainer':
         """
         Create substructure containing atoms from atoms list
@@ -103,7 +83,6 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2D
         sa = self._atoms
         sc = self._charges
         sr = self._radicals
-        sp = self._plane
         sb = self._bonds
         spc = self._p_charges
         spr = self._p_radicals
@@ -113,8 +92,6 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2D
         sub._radicals = {n: sr[n] for n in atoms}
         sub._p_charges = {n: spc[n] for n in atoms}
         sub._p_radicals = {n: spr[n] for n in atoms}
-        sub._plane = {n: sp[n] for n in atoms}
-        sub._conformers = [{n: c[n] for n in atoms} for c in self._conformers]
 
         sub._atoms = ca = {}
         for n in atoms:
@@ -131,33 +108,6 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2D
                     cbn[m] = bond.copy()
         return sub
 
-    def decompose(self) -> Tuple['molecule.MoleculeContainer', 'molecule.MoleculeContainer']:
-        """
-        decompose CGR to pair of Molecules, which represents reactants and products state of reaction
-
-        :return: tuple of two molecules
-        """
-        charges = self._charges
-        p_charges = self._p_charges
-        radicals = self._radicals
-        p_radicals = self._p_radicals
-        plane = self._plane
-
-        reactants = molecule.MoleculeContainer()
-        products = molecule.MoleculeContainer()
-
-        for n, atom in self._atoms.items():
-            atom = Element.from_atomic_number(atom.atomic_number)(atom.isotope)
-            reactants.add_atom(atom, n, charge=charges[n], is_radical=radicals[n], xy=plane[n])
-            products.add_atom(atom.copy(), n, charge=p_charges[n], is_radical=p_radicals[n], xy=plane[n])
-
-        for n, m, bond in self.bonds():
-            if bond.order:
-                reactants.add_bond(n, m, bond.order)
-            if bond.p_order:
-                products.add_bond(n, m, bond.p_order)
-        return reactants, products
-
     def get_mapping(self, other: 'CGRContainer', /, **kwargs):
         if isinstance(other, CGRContainer):
             return super().get_mapping(other, **kwargs)
@@ -166,15 +116,8 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2D
     def __iter__(self):
         return iter(self._atoms)
 
-    def __invert__(self):
-        """
-        decompose CGR
-        """
-        return self.decompose()
-
     def __getstate__(self):
-        return {'atoms': self._atoms, 'bonds': self._bonds, 'plane': self._plane, 'conformers': self._conformers,
-                'charges': self._charges, 'radicals': self._radicals,
+        return {'atoms': self._atoms, 'bonds': self._bonds, 'charges': self._charges, 'radicals': self._radicals,
                 'p_charges': self._p_charges, 'p_radicals': self._p_radicals}
 
     def __setstate__(self, state):
@@ -183,11 +126,9 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, DepictCGR, Calculate2D
             a._attach_to_graph(self, n)
         self._charges = state['charges']
         self._radicals = state['radicals']
-        self._plane = state['plane']
         self._bonds = state['bonds']
         self._p_charges = state['p_charges']
         self._p_radicals = state['p_radicals']
-        self._conformers = state['conformers']
 
 
 __all__ = ['CGRContainer']

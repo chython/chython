@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,8 +19,6 @@
 from itertools import zip_longest
 from typing import List, Tuple, Union
 from ..containers import MoleculeContainer, QueryContainer, CGRContainer
-
-graphs = Union[MoleculeContainer, QueryContainer, CGRContainer]
 
 
 def grid_depict(molecules: Union[List[graphs], Tuple[graphs, ...]], cols: int = 3):
@@ -71,7 +69,7 @@ def grid_depict(molecules: Union[List[graphs], Tuple[graphs, ...]], cols: int = 
            f'viewBox="{-font125:.2f} {-font125:.2f} {width:.2f} '
            f'{height:.2f}" xmlns="http://www.w3.org/2000/svg" version="1.1">']
     for atoms, bonds, define, masks, uid in render:
-        svg.extend(MoleculeContainer._graph_svg(atoms, bonds, define, masks, uid, -font125, -font125, width, height))
+        svg.extend(_graph_svg(bonds, define, masks, uid, -font125, -font125, width, height))
     svg.append('</svg>')
     return '\n'.join(svg)
 
