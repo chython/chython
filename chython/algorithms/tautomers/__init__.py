@@ -24,6 +24,7 @@ from lazy_object_proxy import Proxy
 from typing import TYPE_CHECKING, Iterator, Union, List
 from ._acid import rules as acid_rules, stripped_rules as stripped_acid_rules
 from ._base import rules as base_rules, stripped_rules as stripped_base_rules
+from ..aromatics.kekule import _kekule_component
 from ...exceptions import InvalidAromaticRing
 from ...periodictable import ListElement
 
@@ -466,7 +467,7 @@ class Tautomers:
                 sb = component.keys() & single_bonded
                 sb.add(a)  # now pyrrole
                 try:
-                    next(self._kekule_component(component, sb, ()))
+                    next(_kekule_component(component, sb, ()))
                 except InvalidAromaticRing:
                     continue
                 mol = self.copy()
