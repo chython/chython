@@ -78,7 +78,7 @@ setup(
                  Extension('chython.algorithms._isomorphism', ['chython/algorithms/_isomorphism.pyx'],
                            extra_compile_args=['-O3'])],
     setup_requires=['wheel', 'cython'],
-    install_requires=['CachedMethods>=0.1.4,<0.2', 'lazy_object_proxy>=1.6', 'lxml>=4.1', 'py-mini-racer>=0.4.0',
+    install_requires=['CachedMethods>=0.1.4,<0.2', 'lazy-object-proxy>=1.6', 'lxml>=4.1', 'py-mini-racer>=0.4.0',
                       'numpy>=1.18', 'numba>=0.50'],
     extras_require={'pytest': ['pytest']},
     package_data={'chython.algorithms': ['_isomorphism.pyx'], 'chython.algorithms.calculate2d': ['clean2d.js'],

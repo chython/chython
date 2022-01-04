@@ -156,5 +156,8 @@ def parser(tokens, strong_cycle):
         raise IncorrectSmiles('bond on the end')
 
     stereo_bonds = {n: ms for n, ms in stereo_bonds.items() if len(ms) == 1 or len(ms) == set(ms.values())}
-    mol = {'atoms': atoms, 'bonds': bonds, 'order': order, 'stereo_bonds': stereo_bonds}
+    mol = {'atoms': atoms, 'bonds': bonds, 'order': order, 'stereo_bonds': stereo_bonds, 'meta': {}}
     return mol, log
+
+
+__all__ = ['parser']

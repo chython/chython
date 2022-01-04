@@ -21,11 +21,6 @@ from ...containers import QueryContainer
 from ...containers.bonds import QueryBond
 
 
-# tokens structure:
-# 13: query OR bond
-# 14: query atom
-
-
 def _convert_query(data):
     atoms = data['atoms']
     bonds = defaultdict(dict)
