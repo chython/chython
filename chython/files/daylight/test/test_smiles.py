@@ -57,3 +57,7 @@ def test_good_smiles():
 
     for t, v in zip('C1CC1 C-1CC-1 C%10CC%10 C-%11CC-%11 C12CC1C2 C-1-2CC-1C-2'.split(), (1, 1, 1, 1, 2, 2)):
         assert smiles(t).rings_count == v
+
+    assert smiles('CB') == smiles('BC')
+    assert smiles('CBr') == smiles('BrC')
+    assert smiles('C1CC%1') == smiles('C1CC1')

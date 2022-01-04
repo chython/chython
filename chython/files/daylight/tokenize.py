@@ -56,15 +56,16 @@ def _tokenize(smiles):
     token_type = token = None
     tokens = []
     for s in smiles:
+        # [atom block parser]
         if s == '[':  # open complex token
             if token_type == 5:  # two opened [
                 raise IncorrectSmiles('[..[')
             elif token_type in (10, 11):
                 raise IncorrectSmiles('SMARTS query bond invalid')
-            elif token:
-                tokens.append((token_type, token))
             elif token_type == 7:  # empty closure
                 raise IncorrectSmiles('invalid closure')
+            elif token:
+                tokens.append((token_type, token))
             token = []
             token_type = 5
         elif s == ']':  # close complex token
@@ -73,43 +74,24 @@ def _tokenize(smiles):
             elif not token:
                 raise IncorrectSmiles('empty [] brackets')
             tokens.append((5, ''.join(token)))
-            token_type = token = None
+            token = None
+            token_type = 0  # mark as atom
         elif token_type == 5:  # grow token with brackets. skip validation
             token.append(s)
-        elif s == '(':
-            if token_type in (10, 11):
-                raise IncorrectSmiles('SMARTS query bond invalid')
-            elif token:
-                tokens.append((token_type, token))
-                token = None
-            elif token_type == 7:  # empty closure
-                raise IncorrectSmiles('invalid closure')
-            elif token_type == 2:  # barely opened
-                raise IncorrectSmiles('((')
-            token_type = 2
-            tokens.append((2, None))
-        elif s == ')':
-            if token_type in (10, 11):
-                raise IncorrectSmiles('SMARTS query bond invalid')
-            elif token:
-                tokens.append((token_type, token))
-                token = None
-            elif token_type == 7:  # empty closure
-                raise IncorrectSmiles('invalid closure')
-            elif token_type == 2:  # barely opened
-                raise IncorrectSmiles('()')
-            token_type = 3
-            tokens.append((3, None))
+        # closure parser
         elif s.isnumeric():  # closures
             if token_type in (10, 11):
                 raise IncorrectSmiles('SMARTS query bond invalid')
+            elif token_type in (2, 3):
+                raise IncorrectSmiles('(1 or )1 case invalid')
             elif token_type == 7:  # % already found. collect number
                 if not token and s == '0':
                     raise IncorrectSmiles('number starts with 0')
                 token.append(s)
                 if len(token) == 2:
-                    tokens.append((token_type, token))
-                    token_type = token = None
+                    tokens.append((6, int(''.join(token))))
+                    token = None
+                    token_type = 6  # mark finished
             else:
                 if s == '0':
                     raise IncorrectSmiles('number starts with 0')
@@ -118,15 +100,18 @@ def _tokenize(smiles):
                     token = None
                 token_type = 6
                 tokens.append((6, int(s)))
+        elif token_type == 7:
+            raise IncorrectSmiles('expected closure number')
         elif s == '%':
             if token_type in (10, 11):
                 raise IncorrectSmiles('SMARTS query bond invalid')
+            elif token_type in (2, 3):
+                raise IncorrectSmiles('(%10 or )%10 case invalid')
             elif token:
                 tokens.append((token_type, token))
-            elif token_type == 7:
-                raise IncorrectSmiles('%%')
             token_type = 7
             token = []
+        # bonds parser
         elif s in '=#:-~':  # bonds found
             if token_type == 10:
                 token.append(replace_dict[s])
@@ -141,54 +126,67 @@ def _tokenize(smiles):
                     token = None
                 token_type = 1
                 tokens.append((1, replace_dict[s]))
+        elif token_type in (10, 11):  # expected bond symbol
+            raise IncorrectSmiles('SMARTS query bond invalid')
         elif s in r'\/':
-            if token_type in (10, 11):
-                raise IncorrectSmiles('SMARTS query bond invalid')
-            elif token:
+            if token:
                 tokens.append((token_type, token))
                 token = None
             token_type = 9
             tokens.append((9, s == '/'))  # Up is true
         elif s == '.':
-            if token_type in (10, 11):
-                raise IncorrectSmiles('SMARTS query bond invalid')
-            elif token:
+            if token:
                 tokens.append((token_type, token))
                 token = None
             token_type = 4
             tokens.append((4, None))
-        elif s in 'NOPSFI':  # organic atoms
-            if token_type in (10, 11):
-                raise IncorrectSmiles('SMARTS query bond invalid')
-            elif token:
-                tokens.append((token_type, token))
-                token = None
-            token_type = 0
-            tokens.append((0, s))
-        elif s in 'cnopsb':  # aromatic ring atom
-            if token_type in (10, 11):
-                raise IncorrectSmiles('SMARTS query bond invalid')
-            elif token:
-                tokens.append((token_type, token))
-                token = None
-            token_type = 8
-            tokens.append((8, s.upper()))
-        elif s in 'CB':  # flag possible Cl or Br
-            if token_type in (10, 11):
-                raise IncorrectSmiles('SMARTS query bond invalid')
-            elif token:
-                tokens.append((token_type, token))
-            token_type = 0
-            token = s
         elif s == ',':  # query bond separator
             if token_type != 1:
                 raise IncorrectSmiles('SMARTS query bond invalid')
             token_type = 10
             token = [tokens.pop(-1)[1]]
         elif s == '!':  # query not bond
-            if token_type not in (0, 2, 3, 6, 8, None):
+            if token_type not in (0, 2, 3, 6, 8):  # closures, brackets or atoms expected
                 raise IncorrectSmiles('SMARTS query bond invalid')
+            elif token:
+                tokens.append((token_type, token))
+                token = None
             token_type = 11
+        # brackets
+        elif s == '(':
+            if token_type == 2:  # barely opened
+                raise IncorrectSmiles('((')
+            elif token:
+                tokens.append((token_type, token))
+                token = None
+            token_type = 2
+            tokens.append((2, None))
+        elif s == ')':
+            if token_type == 2:  # barely opened
+                raise IncorrectSmiles('()')
+            elif token:
+                tokens.append((token_type, token))
+                token = None
+            token_type = 3
+            tokens.append((3, None))
+        # simple atoms
+        elif s in 'NOPSFI':  # organic atoms
+            if token:
+                tokens.append((token_type, token))
+                token = None
+            token_type = 0
+            tokens.append((0, s))
+        elif s in 'cnopsb':  # aromatic ring atom
+            if token:
+                tokens.append((token_type, token))
+                token = None
+            token_type = 8
+            tokens.append((8, s.upper()))
+        elif s in 'CB':  # flag possible Cl or Br
+            if token:
+                tokens.append((token_type, token))
+            token_type = 0
+            token = s
         elif token_type == 0:
             if s == 'l':
                 if token == 'C':
@@ -209,11 +207,14 @@ def _tokenize(smiles):
 
     if token_type == 5:
         raise IncorrectSmiles('atom description has not finished')
-    elif token_type == 2:
-        raise IncorrectSmiles('not closed')
+    elif token_type == 7:
+        if token:
+            tokens.append((6, int(token[0])))
+        else:
+            raise IncorrectSmiles('invalid %closure')
     elif token:
-        tokens.append((token_type, token))  # %closure or C or B
-    return [(6, int(''.join(y))) if x == 7 else (x, y) for x, y in tokens]  # composite closures folding
+        tokens.append((token_type, token))  # C or B
+    return tokens
 
 
 def _atom_parse(token):
