@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -27,8 +27,9 @@ from struct import pack_into, unpack_from
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 from weakref import ref
 from zlib import compress, decompress
-from . import cgr, query  # cyclic imports resolve
+from . import query  # cyclic imports resolve
 from .bonds import Bond, DynamicBond, QueryBond
+from .cgr import CGRContainer
 from .graph import Graph
 from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
@@ -47,7 +48,7 @@ from ..periodictable import DynamicElement, Element, QueryElement
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, StandardizeMolecule, MoleculeSmiles,
                         DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS, Huckel, X3domMolecule):
-    __slots__ = ('_conformers', '_atoms_stereo', '_hydrogens', '_cis_trans_stereo', '_allenes_stereo',
+    __slots__ = ('_plane', '_conformers', '_atoms_stereo', '_hydrogens', '_cis_trans_stereo', '_allenes_stereo',
                  '_parsed_mapping', '_backup', '__meta', '__name')
 
     def __init__(self):
@@ -58,6 +59,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         self._allenes_stereo: Dict[int, bool] = {}
         self._cis_trans_stereo: Dict[Tuple[int, int], bool] = {}
         self._parsed_mapping: Dict[int, int] = {}
+        self._plane: Dict[int, Tuple[float, float]] = {}
         self.__meta = None
         self.__name = None
 
@@ -209,7 +211,17 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         """Counted atoms dict"""
         return Counter(x.atomic_symbol for x in self._atoms.values())
 
-    def add_atom(self, atom: Union[Element, int, str], *args, charge=0, is_radical=False, **kwargs):
+    @cached_property
+    def aromatic_rings(self) -> Tuple[Tuple[int, ...], ...]:
+        """
+        Aromatic rings atoms numbers
+        """
+        bonds = self._bonds
+        return tuple(ring for ring in self.sssr if bonds[ring[0]][ring[-1]] == 4
+                     and all(bonds[n][m] == 4 for n, m in zip(ring, ring[1:])))
+
+    def add_atom(self, atom: Union[Element, int, str], *args, charge=0, is_radical=False,
+                 xy: Tuple[float, float] = (0., 0.), **kwargs):
         """
         Add new atom.
         """
@@ -220,8 +232,11 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 atom = Element.from_atomic_number(atom)()
             else:
                 raise TypeError('Element object expected')
+        if not isinstance(xy, tuple) or len(xy) != 2 or not isinstance(xy[0], float) or not isinstance(xy[1], float):
+            raise TypeError('XY should be tuple with 2 float')
 
         _map = super().add_atom(atom, *args, charge=charge, is_radical=is_radical, **kwargs)
+        self._plane[_map] = xy
         self._conformers.clear()  # clean conformers. need full recalculation for new system
 
         if atom.atomic_number != 1:
@@ -269,6 +284,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         super().delete_atom(n)
 
         del self._hydrogens[n]
+        del self._plane[n]
         self._conformers.clear()  # clean conformers. need full recalculation for new system
         try:
             del self._parsed_mapping[n]
@@ -403,6 +419,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             copy._MoleculeContainer__meta = None
         else:
             copy._MoleculeContainer__meta = self.__meta.copy()
+        copy._plane = self._plane.copy()
         copy._hydrogens = self._hydrogens.copy()
         copy._parsed_mapping = self._parsed_mapping.copy()
         copy._conformers = [c.copy() for c in self._conformers]
@@ -425,6 +442,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         u = super().union(other)
         u._MoleculeContainer__name = u._MoleculeContainer__meta = None
         u._conformers.clear()
+        u._plane.update(other._plane)
         u._hydrogens.update(other._hydrogens)
         u._parsed_mapping.update(other._parsed_mapping)
         u._atoms_stereo.update(other._atoms_stereo)
@@ -568,7 +586,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         """
         return [self.substructure(c, recalculate_hydrogens=False) for c in self.connected_components]
 
-    def compose(self, other: 'MoleculeContainer') -> 'cgr.CGRContainer':
+    def compose(self, other: 'MoleculeContainer') -> 'CGRContainer':
         """
         Compose 2 graphs to CGR.
         """
@@ -577,7 +595,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         sa = self._atoms
         sc = self._charges
         sr = self._radicals
-        sp = self._plane
         sb = self._bonds
 
         bonds = []
@@ -586,24 +603,21 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         oa = other._atoms
         oc = other._charges
         or_ = other._radicals
-        op = other._plane
         ob = other._bonds
 
         common = sa.keys() & oa.keys()
 
-        h = cgr.CGRContainer()
+        h = CGRContainer()
         ha = h._atoms
         hb = h._bonds
         hc = h._charges
         hpc = h._p_charges
         hr = h._radicals
         hpr = h._p_radicals
-        hp = h._plane
 
         for n in sa.keys() - common:  # cleavage atoms
             hc[n] = hpc[n] = sc[n]
             hr[n] = hpr[n] = sr[n]
-            hp[n] = sp[n]
             hb[n] = {}
             ha[n] = a = DynamicElement.from_atom(sa[n])
             a._attach_to_graph(h, n)
@@ -618,7 +632,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         for n in oa.keys() - common:  # coupling atoms
             hc[n] = hpc[n] = oc[n]
             hr[n] = hpr[n] = or_[n]
-            hp[n] = op[n]
             hb[n] = {}
             ha[n] = a = DynamicElement.from_atom(oa[n])
             a._attach_to_graph(h, n)
@@ -647,7 +660,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             hpc[n] = oc[n]
             hr[n] = sr[n]
             hpr[n] = or_[n]
-            hp[n] = sp[n]
             hb[n] = {}
             ha[n] = a = DynamicElement.from_atom(san)
             a._attach_to_graph(h, n)
@@ -1187,7 +1199,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         return {'conformers': self._conformers, 'hydrogens': self._hydrogens, 'atoms_stereo': self._atoms_stereo,
                 'allenes_stereo': self._allenes_stereo, 'cis_trans_stereo': self._cis_trans_stereo,
                 'parsed_mapping': self._parsed_mapping, 'meta': self.__meta, 'name': self.__name,
-                **super().__getstate__()}
+                'plane': self._plane, **super().__getstate__()}
 
     def __setstate__(self, state):
         super().__setstate__(state)
@@ -1197,6 +1209,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         self._cis_trans_stereo = state['cis_trans_stereo']
         self._hydrogens = state['hydrogens']
         self._parsed_mapping = state['parsed_mapping']
+        self._plane = state['plane']
         self.__meta = state['meta']
         self.__name = state['name']
 

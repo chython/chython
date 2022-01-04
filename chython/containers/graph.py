@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -30,21 +30,19 @@ Bond = TypeVar('Bond')
 
 
 class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
-    __slots__ = ('_atoms', '_bonds', '_plane', '_charges', '_radicals', '__dict__', '__weakref__')
+    __slots__ = ('_atoms', '_bonds', '_charges', '_radicals', '__dict__', '__weakref__')
     __class_cache__ = {}
 
     _atoms: Dict[int, Atom]
     _bonds: Dict[int, Dict[int, Bond]]
     _charges: Dict[int, int]
     _radicals: Dict[int, bool]
-    _plane: Dict[int, Tuple[float, float]]
 
     def __init__(self):
         self._atoms = {}
         self._bonds = {}
         self._charges = {}
         self._radicals = {}
-        self._plane = {}
 
     def atom(self, n: int) -> Atom:
         return self._atoms[n]
@@ -92,8 +90,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         return sum(len(x) for x in self._bonds.values()) // 2
 
     @abstractmethod
-    def add_atom(self, atom: Atom, _map: Optional[int] = None, *, charge: int = 0,
-                 is_radical: bool = False, xy: Tuple[float, float] = (0., 0.)) -> int:
+    def add_atom(self, atom: Atom, _map: Optional[int] = None, *, charge: int = 0, is_radical: bool = False) -> int:
         """
         new atom addition
         """
@@ -103,8 +100,6 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
             raise TypeError('mapping should be integer')
         elif _map in self._atoms:
             raise MappingError('atom with same number exists')
-        elif not isinstance(xy, tuple) or len(xy) != 2 or not isinstance(xy[0], float) or not isinstance(xy[1], float):
-            raise TypeError('XY should be tuple with 2 float')
         elif not isinstance(is_radical, bool):
             raise TypeError('bool expected')
         elif not isinstance(charge, int):
@@ -115,7 +110,6 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         self._atoms[_map] = atom
         self._charges[_map] = charge
         self._radicals[_map] = is_radical
-        self._plane[_map] = xy
         self._bonds[_map] = {}
         atom._attach_to_graph(self, _map)
         self.__dict__.clear()
@@ -144,7 +138,6 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         del self._atoms[n]
         del self._charges[n]
         del self._radicals[n]
-        del self._plane[n]
         sb = self._bonds
         for m in sb.pop(n):
             del sb[m][n]
@@ -167,7 +160,6 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         copy = object.__new__(self.__class__)
         copy._charges = self._charges.copy()
         copy._radicals = self._radicals.copy()
-        copy._plane = self._plane.copy()
 
         copy._bonds = cb = {}
         for n, m_bond in self._bonds.items():
@@ -193,7 +185,6 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         u = self.copy()
         u._charges.update(other._charges)
         u._radicals.update(other._radicals)
-        u._plane.update(other._plane)
 
         ua = u._atoms
         for n, atom in other._atoms.items():
@@ -232,7 +223,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         return bool(self._atoms)
 
     def __getstate__(self):
-        state = {'atoms': self._atoms, 'bonds': self._bonds, 'plane': self._plane, 'charges': self._charges,
+        state = {'atoms': self._atoms, 'bonds': self._bonds, 'charges': self._charges,
                  'radicals': self._radicals}
         import chython
         if chython.pickle_cache:
@@ -245,7 +236,6 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
             a._attach_to_graph(self, n)
         self._charges = state['charges']
         self._radicals = state['radicals']
-        self._plane = state['plane']
         self._bonds = state['bonds']
         if 'cache' in state:
             self.__dict__.update(state['cache'])

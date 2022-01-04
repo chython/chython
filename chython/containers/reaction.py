@@ -20,7 +20,6 @@ from CachedMethods import cached_method
 from functools import reduce
 from hashlib import sha512
 from itertools import chain
-from math import ceil
 from operator import or_
 from typing import Dict, Iterable, Iterator, Optional, Tuple
 from zlib import compress, decompress
@@ -143,16 +142,6 @@ class ReactionContainer(StandardizeReaction, Calculate2DReaction, DepictReaction
         else:
             p = MoleculeContainer()
         return r ^ p
-
-    @classmethod
-    def from_cgr(cls, cgr: CGRContainer) -> 'ReactionContainer':
-        """
-        Decompose CGR into reaction
-        """
-        if not isinstance(cgr, CGRContainer):
-            raise TypeError('CGR expected')
-        r, p = ~cgr
-        return ReactionContainer(r, p)
 
     def flush_cache(self):
         self.__dict__.clear()

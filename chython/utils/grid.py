@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,19 +18,17 @@
 #
 from itertools import zip_longest
 from typing import List, Tuple, Union
-from ..containers import MoleculeContainer, QueryContainer, CGRContainer
+from ..containers import MoleculeContainer
+from ..algorithms.depict import _render_config, _graph_svg
 
-graphs = Union[MoleculeContainer, QueryContainer, CGRContainer]
 
-
-def grid_depict(molecules: Union[List[graphs], Tuple[graphs, ...]], cols: int = 3):
+def grid_depict(molecules: Union[List[MoleculeContainer], Tuple[MoleculeContainer, ...]], cols: int = 3):
     """
     Depict molecules grid.
 
     :param cols: number of molecules per row.
     """
-    config = MoleculeContainer._render_config
-    font_size = config['font_size']
+    font_size = _render_config['font_size']
     font125 = 1.25 * font_size
 
     planes = []
@@ -71,7 +69,7 @@ def grid_depict(molecules: Union[List[graphs], Tuple[graphs, ...]], cols: int = 
            f'viewBox="{-font125:.2f} {-font125:.2f} {width:.2f} '
            f'{height:.2f}" xmlns="http://www.w3.org/2000/svg" version="1.1">']
     for atoms, bonds, define, masks, uid in render:
-        svg.extend(MoleculeContainer._graph_svg(atoms, bonds, define, masks, uid, -font125, -font125, width, height))
+        svg.extend(_graph_svg(atoms, bonds, define, masks, uid, -font125, -font125, width, height))
     svg.append('</svg>')
     return '\n'.join(svg)
 

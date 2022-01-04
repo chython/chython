@@ -25,15 +25,13 @@ from typing import Dict, List, Set, Tuple, Union
 from . import molecule  # cyclic imports resolve
 from .bonds import Bond, QueryBond
 from .graph import Graph
-from ..algorithms.calculate2d import Calculate2DQuery
-from ..algorithms.depict import DepictQuery
 from ..algorithms.smiles import QuerySmiles
 from ..algorithms.stereo import Stereo
 from ..periodictable import AnyElement, AnyMetal, Element, ListElement, QueryElement
 from ..periodictable.element import Query
 
 
-class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles, DepictQuery, Calculate2DQuery):
+class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
     __slots__ = ('_neighbors', '_hybridizations', '_atoms_stereo', '_cis_trans_stereo', '_allenes_stereo',
                  '_hydrogens', '_rings_sizes', '_heteroatoms')
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2014-2019 Timur Madzhidov tmadzhidov@gmail.com features and API discussion
 #  Copyright 2014-2019 Alexandre Varnek <varnek@unistra.fr> base idea of CGR approach
 #  This file is part of chython.
@@ -18,6 +18,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from .algorithms.depict import depict_settings
 from .containers import *
 from .files import *
 from .reactor import *

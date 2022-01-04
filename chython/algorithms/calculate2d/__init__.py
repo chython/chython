@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019, 2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -17,20 +17,16 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from abc import ABC, abstractmethod
 from math import sqrt
 from pkg_resources import resource_string
 from random import random
 from typing import TYPE_CHECKING, Union
 from ...containers import molecule
-from ...containers.bonds import QueryBond
 from ...exceptions import ImplementationError
-from ...periodictable import Element
 
 
 if TYPE_CHECKING:
-    from chython import ReactionContainer, MoleculeContainer, CGRContainer, QueryContainer
-    from chython.containers.graph import Graph
+    from chython import ReactionContainer, MoleculeContainer
 
 try:
     from py_mini_racer.py_mini_racer import MiniRacer, JSEvalException
@@ -42,10 +38,10 @@ except RuntimeError:
     ctx = None
 
 
-class Calculate2D(ABC):
+class Calculate2DMolecule:
     __slots__ = ()
 
-    def clean2d(self: Union['Graph', 'Calculate2D']):
+    def clean2d(self: Union['MoleculeContainer', 'Calculate2DMolecule']):
         """
         Calculate 2d layout of graph. https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation used.
         """
@@ -53,7 +49,7 @@ class Calculate2D(ABC):
             raise ImportError('py_mini_racer not installed or broken')
         plane = {}
         for _ in range(5):
-            smiles, order = self._clean2d_prepare()
+            smiles, order = self.__clean2d_prepare()
             try:
                 xy = ctx.call('$.clean2d', smiles)
             except JSEvalException:
@@ -86,7 +82,7 @@ class Calculate2D(ABC):
                 shift_x = self._fix_plane_mean(shift_x, component=c) + .9
         self.__dict__.pop('__cached_method__repr_svg_', None)
 
-    def _fix_plane_mean(self: 'Graph', shift_x: float, shift_y=0., component=None) -> float:
+    def _fix_plane_mean(self: 'MoleculeContainer', shift_x: float, shift_y=0., component=None) -> float:
         plane = self._plane
         if component is None:
             component = plane
@@ -115,7 +111,7 @@ class Calculate2D(ABC):
                     max_x += .25
         return max_x
 
-    def _fix_plane_min(self: 'Graph', shift_x: float, shift_y=0., component=None) -> float:
+    def _fix_plane_min(self: 'MoleculeContainer', shift_x: float, shift_y=0., component=None) -> float:
         plane = self._plane
         if component is None:
             component = plane
@@ -138,15 +134,7 @@ class Calculate2D(ABC):
                     max_x += .25
         return max_x
 
-    @abstractmethod
-    def _clean2d_prepare(self):
-        ...
-
-
-class Calculate2DMolecule(Calculate2D):
-    __slots__ = ()
-
-    def _clean2d_prepare(self: 'MoleculeContainer'):
+    def __clean2d_prepare(self: 'MoleculeContainer'):
         hydrogens = self._hydrogens
         charges = self._charges
         allenes_stereo = self._allenes_stereo
@@ -160,37 +148,6 @@ class Calculate2DMolecule(Calculate2D):
             self._charges = charges
             self._allenes_stereo = allenes_stereo
             self._atoms_stereo = atoms_stereo
-        return ''.join(smiles).replace('~', '-'), order
-
-
-class Calculate2DQuery(Calculate2D):
-    __slots__ = ()
-
-    def _clean2d_prepare(self: 'QueryContainer'):
-        bond: QueryBond  # just typing
-        mol = molecule.MoleculeContainer()
-        for n, atom in self._atoms.items():
-            atom = Element.from_atomic_number(atom.atomic_number or 6)()
-            mol.add_atom(atom, n)
-        for n, m, bond in self.bonds():
-            mol.add_bond(n, m, bond.order[0])
-        mol._hydrogens = {n: 0 for n in mol._hydrogens}
-        smiles, order = mol._smiles(lambda x: random(), _return_order=True)
-        return ''.join(smiles).replace('~', '-'), order
-
-
-class Calculate2DCGR(Calculate2D):
-    __slots__ = ()
-
-    def _clean2d_prepare(self: 'CGRContainer'):
-        mol = molecule.MoleculeContainer()
-        for n, atom in self._atoms.items():
-            atom = Element.from_atomic_number(atom.atomic_number or 6)()
-            mol.add_atom(atom, n)
-        for n, m, bond in self.bonds():
-            mol.add_bond(n, m, bond.order or 1)
-        mol._hydrogens = {n: 0 for n in mol._hydrogens}
-        smiles, order = mol._smiles(lambda x: random(), _return_order=True)
         return ''.join(smiles).replace('~', '-'), order
 
 
@@ -248,4 +205,4 @@ class Calculate2DReaction:
         self.flush_cache()
 
 
-__all__ = ['Calculate2DMolecule', 'Calculate2DCGR', 'Calculate2DQuery', 'Calculate2DReaction']
+__all__ = ['Calculate2DMolecule', 'Calculate2DReaction']

@@ -7,7 +7,7 @@ Features:
    - Read/write/convert formats: MDL .RDF (.RXN) and .SDF (.MOL), .MRV, SMILES, INCHI (inchi-trust library), .XYZ, .PDB
    - Standardize molecules and reactions and valid structures checker
    - Supported python-magic
-   - Tetrahedron, Allene and CIS-TRANS stereo supporting
+   - Tetrahedron, Allene and CIS-TRANS stereo supported
    - Perform subgraph search
    - Build/edit molecules and reactions
    - Produce template based reactions and molecules
@@ -15,7 +15,6 @@ Features:
    - Perform MCS search
    - 2d coordinates generation (based on `SmilesDrawer <https://github.com/reymond-group/smilesDrawer>`_)
    - 2d/3d depiction
-   - Produce CGRs (Condensed Graph of Reaction)
 
 Full documentation can be found `here <https://chython.readthedocs.io>`_.
 
@@ -49,7 +48,7 @@ Run unit tests::
 COPYRIGHT
 =========
 
-* 2014-2021 Ramil Nugmanov nougmanoff@protonmail.com main developer
+* 2014-2022 Ramil Nugmanov nougmanoff@protonmail.com main developer
 
 CONTRIBUTORS
 ============

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -18,7 +18,12 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from math import acos, sqrt
-from collections import defaultdict
+from typing import TYPE_CHECKING, Union
+from .depict import _render_config
+
+
+if TYPE_CHECKING:
+    from chython import MoleculeContainer
 
 
 def plane_normal(nmx, nmy, nmz, nox, noy, noz):
@@ -71,10 +76,67 @@ class JupyterWidget:
         return self._repr_html_()
 
 
-class X3dom:
+def _render_aromatic_bond(n_x, n_y, n_z, m_x, m_y, m_z, c_x, c_y, c_z):
+    aromatic_space = _render_config['aromatic_space']
+
+    # n aligned xyz
+    nc_x, nc_y, nc_z = c_x - n_x, c_y - n_y, c_z - n_z
+    mc_x, mc_y, mc_z = c_x - m_x, c_y - m_y, c_z - m_z
+
+    nc_ln = sqrt(nc_x ** 2 + nc_y ** 2 + nc_z ** 2)
+    mc_ln = sqrt(mc_x ** 2 + mc_y ** 2 + mc_z ** 2)
+    sin1 = get_angle(m_x - n_x, m_y - n_y, m_z - n_z, nc_x, nc_y, nc_z)
+    sin2 = get_angle(n_x - m_x, n_y - m_y, n_z - m_z, mc_x, mc_y, mc_z)
+
+    if sin1 < .0001 or sin2 < .0001 or nc_ln < .0001 or mc_ln < .0001:
+        return
+    else:
+        coef1 = aromatic_space / (nc_ln * sin1)
+        coef2 = aromatic_space / (mc_ln * sin2)
+        return nc_x * coef1, nc_y * coef1, nc_z * coef1, mc_x * coef2, mc_y * coef2, mc_z * coef2
+
+
+def _render_dashes(nx, ny, nz, nmx, nmy, nmz, nm_ln, r_angle=None):
+    bond_radius = _render_config['bond_radius']
+    bond_color = _render_config['bond_color']
+
+    if r_angle is None:
+        dash1, dash2 = _render_config['aromatic_dashes']
+        r_angle = acos(nmy / nm_ln)
+    else:
+        dash1, dash2 = _render_config['dashes']
+
+    xml = []
+    dashes_sum = dash1 + dash2
+    if dashes_sum < .0001:
+        raise ValueError('Dashes should be nonzero')
+
+    d = dashes_sum / nm_ln
+    dx, dy, dz = nmx * d, nmy * d, nmz * d
+    b = int((nm_ln - dash1) // dashes_sum)
+    t = (nm_ln - (b * dashes_sum)) / nm_ln
+    nx, ny, nz = nx + nmx * t / 2, ny + nmy * t / 2, nz + nmz * t / 2
+    for _ in range(b):
+        xml.append(f"    <transform translation='{nx:.2f} {ny:.2f} {nz:.2f}' rotation='{nmz:.2f} 0 "
+                   f"{-nmx:.2f} {r_angle:.2f}'>\n      <shape>\n        <appearance>\n"
+                   f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
+                   f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{dash1:.2f}'>\n"
+                   "        </cylinder>\n      </shape>\n    </transform>\n")
+        nx += dx
+        ny += dy
+        nz += dz
+    xml.append(f"    <transform translation='{nx:.2f} {ny:.2f} {nz:.2f}' rotation='{nmz:.2f} 0 "
+               f"{-nmx:.2f} {r_angle:.2f}'>\n      <shape>\n        <appearance>\n"
+               f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
+               f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{dash1:.2f}'>\n"
+               "        </cylinder>\n      </shape>\n    </transform>\n")
+    return xml
+
+
+class X3domMolecule:
     __slots__ = ()
 
-    def depict3d(self, index: int = 0) -> str:
+    def depict3d(self: Union['MoleculeContainer', 'X3domMolecule'], index: int = 0) -> str:
         """Get X3DOM XML string.
 
         :param index: index of conformer
@@ -85,7 +147,7 @@ class X3dom:
         mz = sum(z for _, _, z in xyz.values()) / len(xyz)
         xyz = {n: (x - mx, y - my, z - mz) for n, (x, y, z) in xyz.items()}
         atoms = self.__render_atoms(xyz)
-        bonds = self._render_3d_bonds(xyz)
+        bonds = self.__render_bonds(xyz)
         return f'<x3d width=100% height=100%>\n  <scene>\n{atoms}{bonds}  </scene>\n</x3d>'
 
     def view3d(self, index: int = 0, width='600px', height='400px'):
@@ -98,14 +160,12 @@ class X3dom:
         """
         return JupyterWidget(self.depict3d(index), width, height)
 
-    def __render_atoms(self, xyz):
-        config = self._render_config
-
-        font = config['font_size']
-        carbon = config['carbon']
-        radius = config['atom_radius']
-        colors = config['atoms_colors']
-        mapping_color = config['mapping_color']
+    def __render_atoms(self: 'MoleculeContainer', xyz):
+        font = _render_config['font_size']
+        carbon = _render_config['carbon']
+        radius = _render_config['atom_radius']
+        colors = _render_config['atoms_colors']
+        mapping_color = _render_config['mapping_color']
 
         if radius < 0:
             multiplier = -radius
@@ -140,78 +200,13 @@ class X3dom:
                              "      </shape>\n    </transform>\n")
         return ''.join(atoms)
 
-    def _render_3d_dashes(self, nx, ny, nz, nmx, nmy, nmz, nm_ln, r_angle=None, cgr_color=''):
-        config = self._render_config
-
-        bond_radius = config['bond_radius']
-        if cgr_color:
-            bond_color = config[cgr_color]
-        else:
-            bond_color = config['bond_color']
-
-        if r_angle is None:
-            dash1, dash2 = config['aromatic_dashes']
-            r_angle = acos(nmy / nm_ln)
-        else:
-            dash1, dash2 = config['dashes']
-
-        xml = []
-        dashes_sum = dash1 + dash2
-        if dashes_sum < .0001:
-            raise ValueError('Dashes should be nonzero')
-
-        d = dashes_sum / nm_ln
-        dx, dy, dz = nmx * d, nmy * d, nmz * d
-        b = int((nm_ln - dash1) // dashes_sum)
-        t = (nm_ln - (b * dashes_sum)) / nm_ln
-        nx, ny, nz = nx + nmx * t / 2, ny + nmy * t / 2, nz + nmz * t / 2
-        for _ in range(b):
-            xml.append(f"    <transform translation='{nx:.2f} {ny:.2f} {nz:.2f}' rotation='{nmz:.2f} 0 "
-                       f"{-nmx:.2f} {r_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                       f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                       f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{dash1:.2f}'>\n"
-                       "        </cylinder>\n      </shape>\n    </transform>\n")
-            nx += dx
-            ny += dy
-            nz += dz
-        xml.append(f"    <transform translation='{nx:.2f} {ny:.2f} {nz:.2f}' rotation='{nmz:.2f} 0 "
-                   f"{-nmx:.2f} {r_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                   f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                   f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{dash1:.2f}'>\n"
-                   "        </cylinder>\n      </shape>\n    </transform>\n")
-        return xml
-
-    def _render_3d_aromatic_bond(self, n_x, n_y, n_z, m_x, m_y, m_z, c_x, c_y, c_z):
-        aromatic_space = self._render_config['aromatic_space']
-
-        # n aligned xyz
-        nc_x, nc_y, nc_z = c_x - n_x, c_y - n_y, c_z - n_z
-        mc_x, mc_y, mc_z = c_x - m_x, c_y - m_y, c_z - m_z
-
-        nc_ln = sqrt(nc_x ** 2 + nc_y ** 2 + nc_z ** 2)
-        mc_ln = sqrt(mc_x ** 2 + mc_y ** 2 + mc_z ** 2)
-        sin1 = get_angle(m_x - n_x, m_y - n_y, m_z - n_z, nc_x, nc_y, nc_z)
-        sin2 = get_angle(n_x - m_x, n_y - m_y, n_z - m_z, mc_x, mc_y, mc_z)
-
-        if sin1 < .0001 or sin2 < .0001 or nc_ln < .0001 or mc_ln < .0001:
-            return
-        else:
-            coef1 = aromatic_space / (nc_ln * sin1)
-            coef2 = aromatic_space / (mc_ln * sin2)
-            return nc_x * coef1, nc_y * coef1, nc_z * coef1, mc_x * coef2, mc_y * coef2, mc_z * coef2
-
-
-class X3domMolecule(X3dom):
-    __slots__ = ()
-
-    def _render_3d_bonds(self, xyz):
+    def __render_bonds(self: 'MoleculeContainer', xyz):
         bonds = self._bonds
-        config = self._render_config
 
-        bond_color = config['bond_color']
-        bond_radius = config['bond_radius']
-        double_space = config['double_space']
-        triple_space = config['triple_space']
+        bond_color = _render_config['bond_color']
+        bond_radius = _render_config['bond_radius']
+        double_space = _render_config['double_space']
+        triple_space = _render_config['triple_space']
         r1 = triple_space * sqrt(3) / 3
         r2 = triple_space * sqrt(3) / 6
 
@@ -314,7 +309,7 @@ class X3domMolecule(X3dom):
                            f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
                            f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
             else:
-                xml.extend(self._render_3d_dashes(nx, ny, nz, nmx, nmy, nmz, length, r_angle=rotation_angle))
+                xml.extend(_render_dashes(nx, ny, nz, nmx, nmy, nmz, length, r_angle=rotation_angle))
 
         for ring in self.aromatic_rings:
             cx = sum(xyz[n][0] for n in ring) / len(ring)
@@ -325,7 +320,7 @@ class X3domMolecule(X3dom):
                 nx, ny, nz = xyz[n]
                 mx, my, mz = xyz[m]
 
-                aromatic = self._render_3d_aromatic_bond(nx, ny, nz, mx, my, mz, cx, cy, cz)
+                aromatic = _render_aromatic_bond(nx, ny, nz, mx, my, mz, cx, cy, cz)
                 if aromatic:
                     veca_x, veca_y, veca_z, vecb_x, vecb_y, vecb_z = aromatic
                     ax, ay, az = nx + veca_x, ny + veca_y, nz + veca_z
@@ -334,12 +329,12 @@ class X3domMolecule(X3dom):
                     if ab_ln < .0001:
                         continue
                     else:
-                        xml.extend(self._render_3d_dashes(ax, ay, az, abx, aby, abz, ab_ln))
+                        xml.extend(_render_dashes(ax, ay, az, abx, aby, abz, ab_ln))
 
             i, j = ring[-1], ring[0]
             nx, ny, nz = xyz[i]
             mx, my, mz = xyz[j]
-            aromatic = self._render_3d_aromatic_bond(nx, ny, nz, mx, my, mz, cx, cy, cz)
+            aromatic = _render_aromatic_bond(nx, ny, nz, mx, my, mz, cx, cy, cz)
             if aromatic:
                 veca_x, veca_y, veca_z, vecb_x, vecb_y, vecb_z = aromatic
                 ax, ay, az = nx + veca_x, ny + veca_y, nz + veca_z
@@ -348,618 +343,8 @@ class X3domMolecule(X3dom):
                 if ab_ln < .0001:
                     continue
                 else:
-                    xml.extend(self._render_3d_dashes(ax, ay, az, abx, aby, abz, ab_ln))
-
+                    xml.extend(_render_dashes(ax, ay, az, abx, aby, abz, ab_ln))
         return ''.join(xml)
 
 
-class X3domCGR(X3dom):
-    __slots__ = ()
-
-    def _render_3d_bonds(self, xyz):
-        bonds = self._bonds
-        config = self._render_config
-
-        broken = config['broken_color']
-        formed = config['formed_color']
-        bond_color = config['bond_color']
-        bond_radius = config['bond_radius']
-        double_space = config['double_space']
-        triple_space = config['triple_space']
-        r1 = triple_space * sqrt(3) / 3
-        r2 = triple_space * sqrt(3) / 6
-
-        xml = []
-        lengths = {}
-        doubles = {}
-        h_triple = triple_space / 2
-        ar_bond_colors = defaultdict(dict)
-        for n, m, bond in self.bonds():
-            order, p_order = bond.order, bond.p_order
-            nx, ny, nz = xyz[n]
-            mx, my, mz = xyz[m]
-
-            nmx, nmy, nmz = mx - nx, my - ny, mz - nz
-            length = sqrt(nmx ** 2 + nmy ** 2 + nmz ** 2)
-            if length < .001:
-                continue
-
-            rotation_angle = acos(nmy / length)
-            lengths[(n, m)] = lengths[(m, n)] = (length, rotation_angle)
-            x, y, z = nx + nmx / 2, ny + nmy / 2, nz + nmz / 2
-            if order == 1:
-                if p_order == 1:
-                    xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
-                               f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                               f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                               f"       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 4:
-                    ar_bond_colors[n][m] = ar_bond_colors[m][n] = 'formed_color'
-                    xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
-                               f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                               f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                               f"       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 2:
-                    dx, dy, dz, doubles = self.__doubles(n, m, nmx, nmy, nmz, xyz, doubles, bonds, double_space)
-                    xml.append(
-                        f"    <transform translation='{x + dx:.2f} {y + dy:.2f} {z + dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(
-                        f"    <transform translation='{x - dx:.2f} {y - dy:.2f} {z - dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{formed}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 3:
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x + vx:.2f} {y + vy:.2f} {z + vz:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order is None:
-                    xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
-                               f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                               f"          <material diffusecolor='{broken}'>\n          </material>\n"
-                               f"       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                else:
-                    dx, dy, dz, doubles = self.__doubles(n, m, nmx, nmy, nmz, xyz, doubles, bonds, double_space)
-                    xml.append(
-                        f"    <transform translation='{x - dx:.2f} {y - dy:.2f} {z - dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{broken}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.extend(self._render_3d_dashes(nx + dx, ny + dy, nz + dz, nmx, nmy, nmz, length,
-                                                      r_angle=rotation_angle, cgr_color='formed_color'))
-            elif order == 4:
-                if p_order == 4:
-                    xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
-                               f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                               f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                               f"       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 1:
-                    ar_bond_colors[n][m] = ar_bond_colors[m][n] = 'broken_color'
-                    xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
-                               f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                               f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                               f"       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 2:
-                    ar_bond_colors[n][m] = ar_bond_colors[m][n] = 'broken_color'
-                    dx, dy, dz, doubles = self.__doubles(n, m, nmx, nmy, nmz, xyz, doubles, bonds, double_space)
-                    xml.append(
-                        f"    <transform translation='{x + dx:.2f} {y + dy:.2f} {z + dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(
-                        f"    <transform translation='{x - dx:.2f} {y - dy:.2f} {z - dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{formed}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 3:
-                    ar_bond_colors[n][m] = ar_bond_colors[m][n] = 'broken_color'
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x + vx:.2f} {y + vy:.2f} {z + vz:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order is None:
-                    ar_bond_colors[n][m] = ar_bond_colors[m][n] = 'broken_color'
-                    xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
-                               f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                               f"          <material diffusecolor='{broken}'>\n          </material>\n"
-                               f"       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                else:
-                    ar_bond_colors[n][m] = ar_bond_colors[m][n] = None
-                    xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
-                               f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                               f"          <material diffusecolor='{broken}'>\n          </material>\n"
-                               f"       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-            elif order == 2:
-                if p_order == 2:
-                    dx, dy, dz, doubles = self.__doubles(n, m, nmx, nmy, nmz, xyz, doubles, bonds, double_space)
-                    xml.append(
-                        f"    <transform translation='{x + dx:.2f} {y + dy:.2f} {z + dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(
-                        f"    <transform translation='{x - dx:.2f} {y - dy:.2f} {z - dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 1:
-                    dx, dy, dz, doubles = self.__doubles(n, m, nmx, nmy, nmz, xyz, doubles, bonds, double_space)
-                    xml.append(
-                        f"    <transform translation='{x + dx:.2f} {y + dy:.2f} {z + dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(
-                        f"    <transform translation='{x - dx:.2f} {y - dy:.2f} {z - dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{broken}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 4:
-                    ar_bond_colors[n][m] = ar_bond_colors[m][n] = 'formed_color'
-                    dx, dy, dz, doubles = self.__doubles(n, m, nmx, nmy, nmz, xyz, doubles, bonds, double_space)
-                    xml.append(
-                        f"    <transform translation='{x + dx:.2f} {y + dy:.2f} {z + dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(
-                        f"    <transform translation='{x - dx:.2f} {y - dy:.2f} {z - dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{broken}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 3:
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x + vx:.2f} {y + vy:.2f} {z + vz:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order is None:
-                    dx, dy, dz, doubles = self.__doubles(n, m, nmx, nmy, nmz, xyz, doubles, bonds, double_space)
-                    xml.append(
-                        f"    <transform translation='{x + dx:.2f} {y + dy:.2f} {z + dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{broken}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(
-                        f"    <transform translation='{x - dx:.2f} {y - dy:.2f} {z - dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{broken}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                else:
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.extend(self._render_3d_dashes(nx + vx, ny + vy, nz + vz, nmx, nmy, nmz, length,
-                                                      r_angle=rotation_angle, cgr_color='formed_color'))
-            elif order == 3:
-                if p_order == 3:
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x + vx:.2f} {y + vy:.2f} {z + vz:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 1:
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x + vx:.2f} {y + vy:.2f} {z + vz:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 4:
-                    ar_bond_colors[n][m] = ar_bond_colors[m][n] = 'formed_color'
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x + vx:.2f} {y + vy:.2f} {z + vz:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 2:
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x + vx:.2f} {y + vy:.2f} {z + vz:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{bond_color}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order is None:
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x + vx:.2f} {y + vy:.2f} {z + vz:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                else:
-                    third = next((x for x in bonds[n] if x != m), None)
-                    if third:
-                        ox, oy, oz = xyz[third]
-                        nox, noy, noz = ox - nx, oy - ny, oz - nz
-                    else:
-                        third = next((x for x in bonds[m] if x != n), None)
-                        if third:
-                            ox, oy, oz = xyz[third]
-                            nox, noy, noz = ox - nx, oy - ny, oz - nz
-                        else:
-                            nox, noy, noz = vector_normal(nmx, nmy, nmz)
-
-                    # normal for plane n m o
-                    normx, normy, normz = unit_vector(*plane_normal(nmx, nmy, nmz, nox, noy, noz))
-
-                    # normal for plane n m normal
-                    norm_x, norm_y, norm_z = unit_vector(*plane_normal(nmx, nmy, nmz, normx, normy, normz))
-
-                    doubles[n] = doubles[m] = (norm_x, norm_y, norm_z)
-                    dx1, dy1, dz1 = norm_x * double_space, norm_y * double_space, norm_z * double_space
-                    dx2, dy2, dz2 = normx * double_space, normy * double_space, normz * double_space
-                    xml.append(f"    <transform translation='{x + dx1:.2f} {y + dy1:.2f} {z + dz1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x - dx1:.2f} {y - dy1:.2f} {z - dz1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x - dx2:.2f} {y - dy2:.2f} {z - dz2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{broken}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.extend(self._render_3d_dashes(nx + dx2, ny + dy2, nz + dz2, nmx, nmy, nmz, length,
-                                                      r_angle=rotation_angle, cgr_color='formed_color'))
-            elif order is None:
-                if p_order == 1:
-                    xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
-                               f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                               f"          <material diffusecolor='{formed}'>\n          </material>\n"
-                               f"       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 4:
-                    ar_bond_colors[n][m] = ar_bond_colors[m][n] = 'formed_color'
-                    xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
-                               f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                               f"          <material diffusecolor='{formed}'>\n          </material>\n"
-                               f"       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 2:
-                    dx, dy, dz, doubles = self.__doubles(n, m, nmx, nmy, nmz, xyz, doubles, bonds, double_space)
-                    xml.append(
-                        f"    <transform translation='{x + dx:.2f} {y + dy:.2f} {z + dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{formed}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(
-                        f"    <transform translation='{x - dx:.2f} {y - dy:.2f} {z - dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{formed}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 3:
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x + vx:.2f} {y + vy:.2f} {z + vz:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                else:
-                    xml.extend(self._render_3d_dashes(nx, ny, nz, nmx, nmy, nmz, length, r_angle=rotation_angle,
-                                                      cgr_color='formed_color'))
-            else:
-                if p_order == 8:
-                    xml.extend(self._render_3d_dashes(nx, ny, nz, nmx, nmy, nmz, length, r_angle=rotation_angle))
-                elif p_order == 1:
-                    dx, dy, dz, doubles = self.__doubles(n, m, nmx, nmy, nmz, xyz, doubles, bonds, double_space)
-                    xml.extend(self._render_3d_dashes(nx + dx, ny + dy, nz + dz, nmx, nmy, nmz, length,
-                                                   r_angle=rotation_angle, cgr_color='broken_color'))
-                    xml.append(
-                        f"    <transform translation='{x - dx:.2f} {y - dy:.2f} {z - dz:.2f}' rotation='{nmz:.2f} 0 "
-                        f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                        f"          <material diffusecolor='{formed}'>\n          </material>\n"
-                        f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
-                        "        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 4:
-                    ar_bond_colors[n][m] = ar_bond_colors[m][n] = None
-                    xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
-                               f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
-                               f"          <material diffusecolor='{formed}'>\n          </material>\n"
-                               f"       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                elif p_order == 2:
-                    vx, vy, vz, x1, y1, z1, x2, y2, z2 = self.__triples(x, y, z, nmx, nmy, nmz,
-                                                                        *vector_normal(nmx, nmy, nmz), r1, r2, h_triple)
-                    xml.append(f"    <transform translation='{x1:.2f} {y1:.2f} {z1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x2:.2f} {y2:.2f} {z2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.extend(self._render_3d_dashes(nx + vx, ny + vy, nz + vz, nmx, nmy, nmz, length,
-                                                      r_angle=rotation_angle, cgr_color='broken_color'))
-                elif p_order == 3:
-                    third = next((x for x in bonds[n] if x != m), None)
-                    if third:
-                        ox, oy, oz = xyz[third]
-                        nox, noy, noz = ox - nx, oy - ny, oz - nz
-                    else:
-                        third = next((x for x in bonds[m] if x != n), None)
-                        if third:
-                            ox, oy, oz = xyz[third]
-                            nox, noy, noz = ox - nx, oy - ny, oz - nz
-                        else:
-                            nox, noy, noz = vector_normal(nmx, nmy, nmz)
-
-                    # normal for plane n m o
-                    normx, normy, normz = unit_vector(*plane_normal(nmx, nmy, nmz, nox, noy, noz))
-
-                    # normal for plane n m normal
-                    norm_x, norm_y, norm_z = unit_vector(*plane_normal(nmx, nmy, nmz, normx, normy, normz))
-
-                    doubles[n] = doubles[m] = (norm_x, norm_y, norm_z)
-                    dx1, dy1, dz1 = norm_x * double_space, norm_y * double_space, norm_z * double_space
-                    dx2, dy2, dz2 = normx * double_space, normy * double_space, normz * double_space
-                    xml.append(f"    <transform translation='{x + dx1:.2f} {y + dy1:.2f} {z + dz1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x - dx1:.2f} {y - dy1:.2f} {z - dz1:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.append(f"    <transform translation='{x - dx2:.2f} {y - dy2:.2f} {z - dz2:.2f}'"
-                               f" rotation='{nmz:.2f} 0 {-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n"
-                               f"        <appearance>\n          <material diffusecolor='{formed}'>\n"
-                               f"          </material>\n       </appearance>\n        <cylinder radius='{bond_radius}'"
-                               f" height='{length:.2f}'>\n        </cylinder>\n      </shape>\n    </transform>\n")
-                    xml.extend(self._render_3d_dashes(nx + dx2, ny + dy2, nz + dz2, nmx, nmy, nmz, length,
-                                                      r_angle=rotation_angle, cgr_color='broken_color'))
-                else:
-                    xml.extend(self._render_3d_dashes(nx, ny, nz, nmx, nmy, nmz, length, r_angle=rotation_angle,
-                                                      cgr_color='broken_color'))
-
-        for ring in self.aromatic_rings:
-            cx = sum(xyz[n][0] for n in ring) / len(ring)
-            cy = sum(xyz[n][1] for n in ring) / len(ring)
-            cz = sum(xyz[n][2] for n in ring) / len(ring)
-
-            for n, m in zip(ring, ring[1:]):
-                nx, ny, nz = xyz[n]
-                mx, my, mz = xyz[m]
-
-                color = ar_bond_colors[n].get(m)
-
-                aromatic = self._render_3d_aromatic_bond(nx, ny, nz, mx, my, mz, cx, cy, cz)
-                if aromatic:
-                    veca_x, veca_y, veca_z, vecb_x, vecb_y, vecb_z = aromatic
-                    ax, ay, az = nx + veca_x, ny + veca_y, nz + veca_z
-                    abx, aby, abz = mx + vecb_x - ax, my + vecb_y - ay, mz + vecb_z - az
-                    ab_ln = sqrt(abx ** 2 + aby ** 2 + abz ** 2)
-                    if ab_ln < .0001:
-                        continue
-                    elif color:
-                        xml.extend(self._render_3d_dashes(ax, ay, az, abx, aby, abz, ab_ln, cgr_color=color))
-                    elif color is None:
-                        xml.extend(self._render_3d_dashes(ax, ay, az, abx, aby, abz, ab_ln, r_angle=acos(aby / ab_ln)))
-                    else:
-                        xml.extend(self._render_3d_dashes(ax, ay, az, abx, aby, abz, ab_ln))
-
-            i, j = ring[-1], ring[0]
-            nx, ny, nz = xyz[i]
-            mx, my, mz = xyz[j]
-
-            color = ar_bond_colors[i].get(j)
-            aromatic = self._render_3d_aromatic_bond(nx, ny, nz, mx, my, mz, cx, cy, cz)
-            if aromatic:
-                veca_x, veca_y, veca_z, vecb_x, vecb_y, vecb_z = aromatic
-                ax, ay, az = nx + veca_x, ny + veca_y, nz + veca_z
-                abx, aby, abz = mx + vecb_x - ax, my + vecb_y - ay, mz + vecb_z - az
-                ab_ln = sqrt(abx ** 2 + aby ** 2 + abz ** 2)
-                if ab_ln < .0001:
-                    continue
-                elif color:
-                    xml.extend(self._render_3d_dashes(ax, ay, az, abx, aby, abz, ab_ln, cgr_color=color))
-                elif color is None:
-                    xml.extend(self._render_3d_dashes(ax, ay, az, abx, aby, abz, ab_ln, r_angle=acos(aby / ab_ln)))
-                else:
-                    xml.extend(self._render_3d_dashes(ax, ay, az, abx, aby, abz, ab_ln))
-        return ''.join(xml)
-
-    @staticmethod
-    def __doubles(i, j, ijx, ijy, ijz, xyz, dbls, bs, ds):
-        ix, iy, iz = xyz[i]
-
-        if i in dbls:
-            # normal for plane n m o
-            norm_x, norm_y, norm_z = plane_normal(ijx, ijy, ijz, *dbls[i])
-        elif j in dbls:
-            # normal for plane n m o
-            norm_x, norm_y, norm_z = plane_normal(ijx, ijy, ijz, *dbls[j])
-        else:
-            third = next((x for x in bs[i] if x != j), None)
-            if third:
-                ox, oy, oz = xyz[third]
-                nox, noy, noz = ox - ix, oy - iy, oz - iz
-            else:
-                third = next((x for x in bs[j] if x != i), None)
-                if third:
-                    ox, oy, oz = xyz[third]
-                    nox, noy, noz = ox - ix, oy - iy, oz - iz
-                else:
-                    nox, noy, noz = vector_normal(ijx, ijy, ijz)
-
-            # normal for plane n m o
-            normx, normy, normz = unit_vector(*plane_normal(ijx, ijy, ijz, nox, noy, noz))
-
-            # normal for plane n m normal
-            norm_x, norm_y, norm_z = plane_normal(ijx, ijy, ijz, normx, normy, normz)
-
-        dbls[i] = dbls[j] = (norm_x, norm_y, norm_z)
-        norm_dist = sqrt(norm_x ** 2 + norm_y ** 2 + norm_z ** 2)
-
-        if norm_dist < .0001:
-            coef = ds * 10000
-        else:
-            coef = ds / norm_dist
-
-        return norm_x * coef, norm_y * coef, norm_z * coef, dbls
-
-    @staticmethod
-    def __triples(x, y, z, nmx, nmy, nmz, nox, noy, noz, r1, r2, ht):
-
-        # normal for plane n m o
-        normx, normy, normz = unit_vector(*plane_normal(nmx, nmy, nmz, nox, noy, noz))
-
-        # normal for plane n m normal
-        norm_x, norm_y, norm_z = unit_vector(*plane_normal(nmx, nmy, nmz, normx, normy, normz))
-        vecx, vecy, vecz = norm_x * ht, norm_y * ht, norm_z * ht
-        xx, yy, zz = x - normx * r2, y - normy * r2, z - normz * r2
-        return normx * r1, normy * r1, normz * r1, xx - vecx, yy - vecy, zz - vecz, xx + vecx, yy + vecy, zz + vecz
-
-
-__all__ = ['X3domMolecule', 'X3domCGR']
+__all__ = ['X3domMolecule']
