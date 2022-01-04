@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -47,15 +47,6 @@ class Rings:
         if self.rings_count:
             return _sssr(self.not_special_connectivity, self.rings_count)
         return ()
-
-    @cached_property
-    def aromatic_rings(self: 'Graph') -> Tuple[Tuple[int, ...], ...]:
-        """
-        Aromatic rings atoms numbers
-        """
-        bonds = self._bonds
-        return tuple(ring for ring in self.sssr if bonds[ring[0]][ring[-1]] == 4
-                     and all(bonds[n][m] == 4 for n, m in zip(ring, ring[1:])))
 
     @cached_property
     def atoms_rings(self) -> Dict[int, Tuple[Tuple[int, ...]]]:

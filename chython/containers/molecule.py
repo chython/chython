@@ -211,6 +211,15 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         """Counted atoms dict"""
         return Counter(x.atomic_symbol for x in self._atoms.values())
 
+    @cached_property
+    def aromatic_rings(self) -> Tuple[Tuple[int, ...], ...]:
+        """
+        Aromatic rings atoms numbers
+        """
+        bonds = self._bonds
+        return tuple(ring for ring in self.sssr if bonds[ring[0]][ring[-1]] == 4
+                     and all(bonds[n][m] == 4 for n, m in zip(ring, ring[1:])))
+
     def add_atom(self, atom: Union[Element, int, str], *args, charge=0, is_radical=False,
                  xy: Tuple[float, float] = (0., 0.), **kwargs):
         """
