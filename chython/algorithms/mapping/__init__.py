@@ -18,6 +18,7 @@
 #
 from CachedMethods import class_cached_property
 from itertools import count
+from pkg_resources import resource_stream
 from typing import List, Tuple, Type, TYPE_CHECKING, Union
 from ._mapping import rules
 
@@ -29,10 +30,47 @@ if TYPE_CHECKING:
 class Mapping:
     __slots__ = ()
 
-    def reset_mapping(self) -> bool:
+    def reset_mapping(self: Union['ReactionContainer', 'Mapping']) -> bool:
         """
         Do atom-to-atom mapping. Return True if mapping changed.
         """
+        from chython import torch_device
+        from chytorch.utils.data import ReactionDataset
+        from torch import ones_like
+
+        r_map = [n for m in self.reactants for n in m]  # current atom numbers
+        p_map = [n for m in self.products for n in m]
+        ra = len(r_map)  # number of reactants atoms
+        pa = len(p_map)  # number of products atoms
+
+        converter = ReactionDataset((self,), (None,), property_type=bool)
+        a, n, i, e, r, _ = converter.collate((converter[0],))
+        a.to(torch_device); n.to(torch_device); i.to(torch_device); e.to(torch_device); r.to(torch_device)
+
+        x = e[0, 0] == 1  # rxn cls + all atoms mask
+        ram = x & (r[0] == 2)  # reactants atoms mask
+        pam = x & (r[0] == 3)  # products atoms mask
+
+        am = self.__attention_model(a, n, i, e, r, True)[1]  # raw attention matrix
+        am = am[0, pam][:, ram] + am[0, ram][:, pam].t()  # sum of reactants to products attention and vice-versa
+        am = am * (a[0, pam].unsqueeze(-1).expand(-1, ra) == a[0, ram])  # atom type attention
+
+        mm = ones_like(am)
+        mapping = {}
+        for _ in range(pa):  # iteratively map each product atom to reactant
+            nam = am * mm
+            nam = nam / nam.sum(axis=1).unsqueeze(-1).expand(-1, ra)  # normalized attention
+
+            # select highest attention
+            i, j = divmod(nam.argmax().item(), ra)
+            mapping[p_map[i]] = r_map[j]
+
+        if any(n != m for n, m in mapping.items()):  # old mapping changed
+            for m in self.products:
+                m.remap(mapping)
+            self.flush_cache()
+            return True
+        return False
 
     def fix_mapping(self: Union['ReactionContainer', 'Mapping'], *, logging: bool = False) -> \
             Union[bool, List[Union[Tuple[str, List[int]], Tuple[int, str, str, Tuple[int, ...]]]]]:
@@ -168,6 +206,16 @@ class Mapping:
     @class_cached_property
     def __remapping_compiled_rules(self):
         return ()
+
+    @class_cached_property
+    def __attention_model(self):
+        from chython import torch_device
+        from chytorch.nn import ReactionEncoder
+        from torch import load
+
+        model = ReactionEncoder(d_model=1024, dim_feedforward=3072)
+        model.load_state_dict(load(resource_stream(__package__, 'mapping.pt'), map_location=torch_device))
+        return model
 
 
 __all__ = ['Mapping']

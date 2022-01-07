@@ -65,7 +65,7 @@ if find_spec('cython'):
 
 setup(
     name='chython',
-    version='1.13',
+    version='1.14',
     packages=find_packages(),
     url='https://github.com/chython/chython',
     license='LGPLv3',
@@ -80,7 +80,7 @@ setup(
     setup_requires=['wheel', 'cython'],
     install_requires=['CachedMethods>=0.1.4,<0.2', 'lazy-object-proxy>=1.6', 'lxml>=4.1', 'py-mini-racer>=0.4.0',
                       'numpy>=1.18', 'numba>=0.50'],
-    extras_require={'pytest': ['pytest']},
+    extras_require={'pytest': ['pytest'], 'mapping': ['chytorch>=1.1']},
     package_data={'chython.algorithms': ['_isomorphism.pyx'], 'chython.algorithms.calculate2d': ['clean2d.js'],
                   'chython.containers': ['_unpack.pyx']},
     data_files=[],
