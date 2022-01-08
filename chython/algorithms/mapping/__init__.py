@@ -18,6 +18,7 @@
 #
 from CachedMethods import class_cached_property
 from itertools import count
+from numpy import ix_, ones_like, errstate, unravel_index, nanargmax, zeros
 from pkg_resources import resource_stream
 from typing import List, Tuple, Type, TYPE_CHECKING, Union
 from ._mapping import rules
@@ -30,44 +31,88 @@ if TYPE_CHECKING:
 class Mapping:
     __slots__ = ()
 
-    def reset_mapping(self: Union['ReactionContainer', 'Mapping']) -> bool:
+    def reset_mapping(self: Union['ReactionContainer', 'Mapping'], am, *, multiplier=90.) -> bool:
         """
         Do atom-to-atom mapping. Return True if mapping changed.
         """
         from chython import torch_device
         from chytorch.utils.data import ReactionDataset
-        from torch import ones_like
 
-        r_map = [n for m in self.reactants for n in m]  # current atom numbers
+        r_map = [n for m in self.reactants for n in m]
         p_map = [n for m in self.products for n in m]
         ra = len(r_map)  # number of reactants atoms
         pa = len(p_map)  # number of products atoms
+
+        r_adj = zeros((ra, ra), dtype=bool)
+        i = 0
+        for m in self.reactants:
+            a = m.adjacency_matrix()
+            j = i + len(m)
+            r_adj[i:j, i:j] = a
+            i = j
+
+        p_adj = zeros((pa, pa), dtype=bool)
+        i = 0
+        for m in self.products:
+            a = m.adjacency_matrix()
+            j = i + len(m)
+            p_adj[i:j, i:j] = a
+            i = j
 
         converter = ReactionDataset((self,), (None,), property_type=bool)
         a, n, i, e, r, _ = converter.collate((converter[0],))
         a.to(torch_device); n.to(torch_device); i.to(torch_device); e.to(torch_device); r.to(torch_device)
 
+        am = self.__attention_model(a, n, i, e, r, True)[1].squeeze(0).numpy()  # raw attention matrix
+        a = a.numpy()
+        e = e.numpy()
+        r = r.numpy()
+
         x = e[0, 0] == 1  # rxn cls + all atoms mask
         ram = x & (r[0] == 2)  # reactants atoms mask
         pam = x & (r[0] == 3)  # products atoms mask
 
-        am = self.__attention_model(a, n, i, e, r, True)[1]  # raw attention matrix
-        am = am[0, pam][:, ram] + am[0, ram][:, pam].t()  # sum of reactants to products attention and vice-versa
-        am = am * (a[0, pam].unsqueeze(-1).expand(-1, ra) == a[0, ram])  # atom type attention
+        am = am[ix_(pam, ram)] + am[ix_(ram, pam)].T  # sum of reactants to products attention and vice-versa
+        am *= a[0, pam, None] == a[0, ram]  # equal atom type attention
 
         mm = ones_like(am)
         mapping = {}
         for _ in range(pa):  # iteratively map each product atom to reactant
             nam = am * mm
-            nam = nam / nam.sum(axis=1).unsqueeze(-1).expand(-1, ra)  # normalized attention
+            with errstate(invalid='ignore'):
+                nam /= nam[:, None, :].sum(2)  # normalized attention
 
             # select highest attention
-            i, j = divmod(nam.argmax().item(), ra)
+            try:
+                i, j = unravel_index(nanargmax(nam), nam.shape)
+            except ValueError:  # no more products atoms in reactants
+                # mark as unmapped
+                for n in set(p_map).difference(mapping):
+                    mapping[n] = 0
+                break
+
             mapping[p_map[i]] = r_map[j]
+            # update mm
+            mm[ix_(p_adj[i], r_adj[j])] *= multiplier
+            mm[i] = 0  # mask already mapped product atom
+            mm[:, j] = 0  # mask already mapped reactant. todo: work with side products
 
         if any(n != m for n, m in mapping.items()):  # old mapping changed
+            r_mapping = {m: n for n, m in enumerate(r_map, 1)}  # remap reactants to contiguous range
+            for m in self.reactants:
+                m.remap(r_mapping)
+
+            p_mapping = {}
+            nm = ra
+            for n, m in mapping.items():
+                if m := r_mapping.get(m):
+                    p_mapping[n] = m
+                else:  # not found in reactants atoms. set unique numbers.
+                    nm += 1
+                    p_mapping[n] = nm
+
             for m in self.products:
-                m.remap(mapping)
+                m.remap(p_mapping)
             self.flush_cache()
             return True
         return False
@@ -215,6 +260,7 @@ class Mapping:
 
         model = ReactionEncoder(d_model=1024, dim_feedforward=3072)
         model.load_state_dict(load(resource_stream(__package__, 'mapping.pt'), map_location=torch_device))
+        model.eval()
         return model
 
 
