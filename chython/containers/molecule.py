@@ -168,7 +168,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         """
         return self._hydrogens[n] + self.explicit_hydrogens(n)
 
-    def adjacency_matrix(self, set_bonds=False):
+    @cached_args_method
+    def adjacency_matrix(self, set_bonds=False, /):
         """
         Adjacency matrix of Graph.
 
