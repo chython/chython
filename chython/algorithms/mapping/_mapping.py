@@ -17,13 +17,19 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
+from ...periodictable import ListElement
 
 
 def _rules():
+    """
+    Rules for switchable functional groups remapping
+    """
     from ...containers import QueryContainer
     raw_rules = []
 
-    # Nitro
+    # First atoms can be list of atoms or any atom, but other atoms should be same for reactants and products parts.
+
+    # nitro-group switch charge
     #
     #      O
     #     //
@@ -34,100 +40,86 @@ def _rules():
     atoms = ({'atom': 'N', 'neighbors': 3, 'hybridization': 2, 'charge': 1},
              {'atom': 'O', 'neighbors': 1, 'charge': -1}, {'atom': 'O', 'neighbors': 1})
     bonds = ((1, 2, 1), (1, 3, 2))
+    _map = {2: 3, 3: 2}
     fix = {2: 3, 3: 2}
-    raw_rules.append(((atoms, bonds), (atoms, bonds), fix))
+    raw_rules.append(((atoms, bonds), (atoms, bonds), _map, fix))
 
-    # Carbonate
+    # keep Xonyl-group in product
+    atoms = ({'atom': ListElement(['C', 'N', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At'])},
+             {'atom': 'A'}, {'atom': 'O', 'neighbors': 1})
+    bonds = ((1, 2, 1), (1, 3, 2))
+    p_atoms = ({'atom': ListElement(['C', 'N', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At'])},
+               {'atom': 'O', 'neighbors': 1}, {'atom': 'O', 'neighbors': 1})
+    p_bonds = ((1, 2, 1), (1, 3, 2))
+    _map = {3: 2}
+    fix = {3: 2, 2: 3}
+    raw_rules.append(((atoms, bonds), (p_atoms, p_bonds), _map, fix))
+
+    # oxo-acid salt switch charge
     #
     #      O
     #     //
-    # * - C
+    # * - X
     #      \
     #       O-
     #
-    atoms = ({'atom': 'C', 'neighbors': 3, 'hybridization': 2}, {'atom': 'O', 'neighbors': 1, 'charge': -1},
-             {'atom': 'O', 'neighbors': 1})
+    atoms = ({'atom': ListElement(['C', 'N', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At'])},
+             {'atom': 'O', 'neighbors': 1, 'charge': -1}, {'atom': 'O', 'neighbors': 1})
     bonds = ((1, 2, 1), (1, 3, 2))
+    p_atoms = ({'atom': ListElement(['C', 'N', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At'])},
+               {'atom': 'O', 'neighbors': 1, 'charge': -1}, {'atom': 'O', 'neighbors': 1})
+    p_bonds = ((1, 2, 1), (1, 3, 2))
+    _map = {2: 3, 3: 2}
     fix = {2: 3, 3: 2}
-    raw_rules.append(((atoms, bonds), (atoms, bonds), fix))
+    raw_rules.append(((atoms, bonds), (p_atoms, p_bonds), _map, fix))
 
-    # Carbon Acid
+    # oxo-acid switch hydrogen
     #
     #      O
     #     //
-    # * - C
+    # * - X
     #      \
     #       OH
     #
-    atoms = ({'atom': 'C', 'neighbors': 3, 'hybridization': 2}, {'atom': 'O', 'neighbors': 1},
-             {'atom': 'O', 'neighbors': 1})
+    atoms = ({'atom': ListElement(['C', 'N', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At'])},
+             {'atom': 'O', 'neighbors': 1}, {'atom': 'O', 'neighbors': 1})
     bonds = ((1, 2, 1), (1, 3, 2))
+    p_atoms = ({'atom': ListElement(['C', 'N', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At'])},
+               {'atom': 'O', 'neighbors': 1}, {'atom': 'O', 'neighbors': 1})
+    p_bonds = ((1, 2, 1), (1, 3, 2))
+    _map = {2: 3, 3: 2}
     fix = {2: 3, 3: 2}
-    raw_rules.append(((atoms, bonds), (atoms, bonds), fix))
+    raw_rules.append(((atoms, bonds), (p_atoms, p_bonds), _map, fix))
 
-    # Phosphonic acid
-    #
-    #      *
-    #      |
-    #  * - P = O
-    #      |
-    #      OH
-    #
-    atoms = ({'atom': 'P', 'neighbors': 4, 'hybridization': 2}, {'atom': 'O', 'neighbors': 1},
-             {'atom': 'O', 'neighbors': 1})
+    # oxo-acid to salt keep Xonyl-group
+    atoms = ({'atom': ListElement(['C', 'N', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At'])},
+             {'atom': 'O', 'neighbors': 1}, {'atom': 'O', 'neighbors': 1})
     bonds = ((1, 2, 1), (1, 3, 2))
+    p_atoms = ({'atom': ListElement(['C', 'N', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At'])},
+               {'atom': 'O', 'neighbors': 1, 'charge': -1}, {'atom': 'O', 'neighbors': 1})
+    p_bonds = ((1, 2, 1), (1, 3, 2))
+    _map = {2: 3, 3: 2}
     fix = {2: 3, 3: 2}
-    raw_rules.append(((atoms, bonds), (atoms, bonds), fix))
+    raw_rules.append(((atoms, bonds), (p_atoms, p_bonds), _map, fix))
 
-    # Phosphate
-    #
-    #      *
-    #      |
-    #  * - P = O
-    #      |
-    #      O-
-    #
-    atoms = ({'atom': 'P', 'neighbors': 4, 'hybridization': 2}, {'atom': 'O', 'neighbors': 1, 'charge': -1},
-             {'atom': 'O', 'neighbors': 1})
+    # oxo-acid salt to acid keep Xonyl-group
+    atoms = ({'atom': ListElement(['C', 'N', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At'])},
+             {'atom': 'O', 'neighbors': 1, 'charge': -1}, {'atom': 'O', 'neighbors': 1})
     bonds = ((1, 2, 1), (1, 3, 2))
+    p_atoms = ({'atom': ListElement(['C', 'N', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At'])},
+               {'atom': 'O', 'neighbors': 1}, {'atom': 'O', 'neighbors': 1})
+    p_bonds = ((1, 2, 1), (1, 3, 2))
+    _map = {2: 3, 3: 2}
     fix = {2: 3, 3: 2}
-    raw_rules.append(((atoms, bonds), (atoms, bonds), fix))
+    raw_rules.append(((atoms, bonds), (p_atoms, p_bonds), _map, fix))
 
-    # Sulphonic acid
+    # nitro addition
     #
-    #       O
-    #      //
-    #  * - S = O
-    #      |
-    #      OH
-    #
-    atoms = ({'atom': 'S', 'neighbors': 4}, {'atom': 'O', 'neighbors': 1}, {'atom': 'O', 'neighbors': 1},
-             {'atom': 'O', 'neighbors': 1})
-    bonds = ((1, 2, 1), (1, 3, 2), (1, 4, 2))
-    fix = {2: 3, 3: 2}
-    raw_rules.append(((atoms, bonds), (atoms, bonds), fix))
-
-    # Sulphonate
-    #
-    #       O
-    #      //
-    #  * - S = O
-    #      |
-    #      O-
-    #
-    atoms = ({'atom': 'S', 'neighbors': 4}, {'atom': 'O', 'neighbors': 1, 'charge': -1}, {'atom': 'O', 'neighbors': 1},
-             {'atom': 'O', 'neighbors': 1})
-    bonds = ((1, 2, 1), (1, 3, 2), (1, 4, 2))
-    fix = {2: 3, 3: 2}
-    raw_rules.append(((atoms, bonds), (atoms, bonds), fix))
-
-    # Nitro addition
-    #
-    #      O             O -- *
+    #      O [3]     [3] O -- *
     #     //            /
     # * - N+   >>  * = N+
     #      \            \
-    #       O-           O-
+    #       O- [2]       O- [2]
     #
     atoms = ({'atom': 'N', 'neighbors': 3, 'charge': 1, 'hybridization': 2},
              {'atom': 'O', 'neighbors': 1, 'charge': -1}, {'atom': 'O', 'neighbors': 1})
@@ -135,12 +127,13 @@ def _rules():
     p_atoms = ({'atom': 'N', 'neighbors': 3, 'charge': 1, 'hybridization': 2},
                {'atom': 'O', 'neighbors': 1, 'charge': -1}, {'atom': 'O', 'neighbors': 2})
     p_bonds = ((1, 2, 1), (1, 3, 1))
+    _map = {2: 3, 3: 2}
     fix = {2: 3, 3: 2}
-    raw_rules.append(((atoms, bonds), (p_atoms, p_bonds), fix))
+    raw_rules.append(((atoms, bonds), (p_atoms, p_bonds), _map, fix))
 
-    # Sulphate addition
+    # sulphate addition
     #
-    #      O [3]            O -- * [2]
+    #      O [3]        [2] O -- *
     #     //               /
     # * = S - *   >>  * = S - *
     #     |               \\
@@ -152,11 +145,12 @@ def _rules():
     p_atoms = ({'atom': 'S', 'neighbors': 4, 'hybridization': 3}, {'atom': 'O', 'neighbors': 2},
                {'atom': 'O', 'neighbors': 1})
     p_bonds = ((1, 2, 1), (1, 3, 2))
+    _map = {2: 3, 3: 2}
     fix = {2: 3, 3: 2}
-    raw_rules.append(((atoms, bonds), (p_atoms, p_bonds), fix))
+    raw_rules.append(((atoms, bonds), (p_atoms, p_bonds), _map, fix))
 
     compiled_rules = []
-    for (r_atoms, r_bonds), (p_atoms, p_bonds), fix in raw_rules:
+    for (r_atoms, r_bonds), (p_atoms, p_bonds), _map, fix in raw_rules:
         r_q = QueryContainer()
         p_q = QueryContainer()
         for a in r_atoms:
@@ -167,7 +161,7 @@ def _rules():
             p_q.add_atom(**a)
         for n, m, b in p_bonds:
             p_q.add_bond(n, m, b)
-        compiled_rules.append((r_q, p_q, fix))
+        compiled_rules.append((r_q, p_q, _map, fix))
     return compiled_rules
 
 

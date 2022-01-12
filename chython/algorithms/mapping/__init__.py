@@ -45,6 +45,7 @@ class Mapping:
         mm = ones_like(am)
         mapping = {}
         for _ in range(pa):  # iteratively map each product atom to reactant
+            # todo: optimize
             nam = am * mm
             with errstate(invalid='ignore'):
                 nam /= nam[:, None, :].sum(2)  # normalized attention
@@ -97,13 +98,14 @@ class Mapping:
         if not self:
             return False
 
-        for r_pattern, p_pattern, fix in rules:
+        for r_pattern, p_pattern, _map, fix in rules:
             found = []
             for m in self.reactants:
                 for mapping in r_pattern.get_mapping(m, automorphism_filter=False):
                     if mapping[1] not in seen:
-                        found.append(({fix.get(k, k): v for k, v in mapping.items()},
-                                      {mapping[k]: mapping[v] for k, v in fix.items()}))
+                        found.append((m.atom(mapping[1]).atomic_number, mapping[1],  # get matched first atom
+                                      # prepare expected in product mapping
+                                      {(v, mapping[k]) for k, v in _map.items()}))
 
             if not found:
                 continue
@@ -112,16 +114,18 @@ class Mapping:
                     atom = mapping[1]
                     if atom in seen:
                         continue
-                    for n, (k, v) in enumerate(found):
-                        if k == mapping:
+                    an = m.atom(atom).atomic_number
+                    for i, (a, n, k) in enumerate(found):
+                        if atom == n and a == an and k.issubset(mapping.items()):
                             break
                     else:
                         continue
 
-                    del found[n]
+                    del found[i]
+                    v = {mapping[k]: mapping[v] for k, v in fix.items()}
                     m.remap(v)
                     seen.add(atom)
-                    log.append(('group remap', list(v)))
+                    log.append(('group remap', list(v.values())))
         if seen:
             self.flush_cache()
             flag = True
