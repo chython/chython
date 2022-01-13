@@ -39,80 +39,18 @@ class StandardizeReaction:
         :param logging: return log from molecules with index of molecule.
             Otherwise return True if these groups found in any molecule.
         """
-        if logging:
-            total = []
-        else:
-            total = False
+        total = []
         for n, m in enumerate(self.molecules()):
-            out = m.canonicalize(logging=logging)
-            if out:
-                if logging:
-                    total.extend((n, *x) for x in out)
-                else:
-                    total = True
+            total.extend((n, *x) for x in m.canonicalize(logging=True))
 
-        if fix_mapping and self.fix_mapping():
-            if logging:
-                total.append((-1, (), -1, 'mapping fixed'))
-                return total
-            return True
+        if fix_mapping:
+            total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
 
         if total:
             self.flush_cache()
-        return total
-
-    def standardize(self: 'ReactionContainer', fix_mapping: bool = True, *, logging=False) -> \
-            Union[bool, Tuple[int, Tuple[int, ...], int, str]]:
-        """
-        Standardize functional groups.
-
-        :param fix_mapping: Search AAM errors of functional groups.
-        :param logging: return log from molecules with index of molecule at first position.
-            Otherwise return True if these groups found in any molecule.
-        """
         if logging:
-            total = []
-        else:
-            total = False
-        for n, m in enumerate(self.molecules()):
-            out = m.standardize(logging=logging)
-            if out:
-                if logging:
-                    total.extend((n, *x) for x in out)
-                else:
-                    total = True
-
-        if fix_mapping and self.fix_mapping():
-            if logging:
-                total.append((-1, (), -1, 'mapping fixed'))
-                return total
-            return True
-
-        if total:
-            self.flush_cache()
-        return total
-
-    def standardize_charges(self: 'ReactionContainer', *, logging=False) -> \
-            Union[bool, List[Tuple[int, Tuple[int, ...]]]]:
-        """
-        Set canonical positions of charges in heterocycles and some nitrogen compounds.
-
-        :param logging: return list of changed molecules with tuple of changed atoms.
-        """
-        if logging:
-            total = []
-        else:
-            total = False
-        for n, m in enumerate(self.molecules()):
-            out = m.standardize_charges(logging=logging)
-            if out:
-                if logging:
-                    total.append((n, tuple(out)))
-                else:
-                    total = True
-        if total:
-            self.flush_cache()
-        return total
+            return total
+        return bool(total)
 
     def thiele(self: 'ReactionContainer') -> bool:
         """
@@ -170,8 +108,7 @@ class StandardizeReaction:
         """
         out = []
         for n, m in enumerate(self.molecules()):
-            c = m.check_valence()
-            if c:
+            if c := m.check_valence():
                 out.append((n, tuple(c)))
         return out
 
