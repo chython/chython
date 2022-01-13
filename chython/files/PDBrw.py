@@ -146,7 +146,7 @@ class PDBRead(XYZ):
 
                 element = line[76:78].strip()
                 residue = line[17:20].strip()
-                atom_name = line[12:16].strip(' 0123456789-')
+                atom_name = line[12:16].strip(' 0123456789-+')
                 if residue in one_symbol_names:  # bio-polymers and I
                     atom_name = atom_name[0]
                 elif residue in two_symbol_names:
