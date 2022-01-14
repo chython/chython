@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -118,8 +118,11 @@ class ReactionContainer(StandardizeReaction, Calculate2DReaction, DepictReaction
         copy._ReactionContainer__reactants = tuple(x.copy() for x in self.__reactants)
         copy._ReactionContainer__products = tuple(x.copy() for x in self.__products)
         copy._ReactionContainer__reagents = tuple(x.copy() for x in self.__reagents)
-        copy._ReactionContainer__meta = self.__meta.copy()
         copy._ReactionContainer__name = self.__name
+        if self.__meta is None:
+            copy._ReactionContainer__meta = None
+        else:
+            copy._ReactionContainer__meta = self.__meta.copy()
         copy._arrow = self._arrow
         copy._signs = self._signs
         return copy
