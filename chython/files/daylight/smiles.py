@@ -55,7 +55,8 @@ class SMILESRead(Parser):
 
     For reactions . [dot] in bonds should be used only for molecules separation.
     """
-    def __init__(self, file, header=None, ignore_stereo=False, keep_implicit=False, **kwargs):
+    def __init__(self, file, header=None, ignore_stereo=False, keep_implicit=False, ignore_carbon_radicals=False,
+                 **kwargs):
         """
         :param ignore: Skip some checks of data or try to fix some errors.
         :param remap: Remap atom numbers started from one.
@@ -63,6 +64,7 @@ class SMILESRead(Parser):
         :param ignore_stereo: Ignore stereo data.
         :param keep_implicit: keep given in smiles implicit hydrogen count, otherwise ignore on valence error.
         :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
+        :param ignore_carbon_radicals: fill carbon radicals with hydrogen (X[C](X)X case).
         """
         if isinstance(file, str):
             self._file = open(file)
@@ -89,6 +91,7 @@ class SMILESRead(Parser):
 
         self.__ignore_stereo = ignore_stereo
         self.__keep_implicit = keep_implicit
+        self.__ignore_carbon_radicals = ignore_carbon_radicals
         self._data = self.__data()
 
     def __data(self):
@@ -110,7 +113,8 @@ class SMILESRead(Parser):
                 pos = file.tell()
 
     @classmethod
-    def create_parser(cls, header=None, ignore_stereo=False, keep_implicit=False, **kwargs):
+    def create_parser(cls, header=None, ignore_stereo=False, keep_implicit=False, ignore_carbon_radicals=False,
+                      **kwargs):
         """
         Create SMILES parser function configured same as SMILESRead object.
         """
@@ -118,6 +122,7 @@ class SMILESRead(Parser):
         obj._SMILESRead__header = header
         obj._SMILESRead__ignore_stereo = ignore_stereo
         obj._SMILESRead__keep_implicit = keep_implicit
+        obj._SMILESRead__ignore_carbon_radicals = ignore_carbon_radicals
         super(SMILESRead, obj).__init__(**kwargs)
         return obj.parse
 
@@ -285,6 +290,7 @@ class SMILESRead(Parser):
         calc_implicit = mol._calc_implicit
         hyb = mol.hybridization
         keep_implicit = self.__keep_implicit
+        radicalized = []
 
         for n, a in enumerate(data['atoms']):
             h = a['hydrogen']
@@ -300,6 +306,7 @@ class SMILESRead(Parser):
                 else:  # smiles don't code radicals. so, let's try to guess.
                     radicals[n] = True
                     calc_implicit(n)
+                    radicalized.append(n)
                     if hydrogens[n] != h:  # radical state also has errors.
                         if self._ignore:
                             hydrogens[n] = None  # reset hydrogens
@@ -319,6 +326,18 @@ class SMILESRead(Parser):
                     else:
                         raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
                                          f'calculated ({hc}) on atom {n}.')
+                else:
+                    radicalized.append(n)
+
+        if self.__ignore_carbon_radicals:
+            atoms = mol._atoms
+            bonds = mol._bonds
+            for n in radicalized:
+                if atoms[n].atomic_number == 6:
+                    radicals[n] = False
+                    if (h := 4 - sum(b.order for b in bonds[n].values() if b.order != 8)) >= 0:
+                        hydrogens[n] = h
+                        self._info(f'Carbon radical replaced with ({h}) implicit hydrogens')
 
         if self.__ignore_stereo:
             return mol
