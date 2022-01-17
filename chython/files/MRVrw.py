@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from io import StringIO, BytesIO, TextIOWrapper, BufferedIOBase, BufferedReader
 from itertools import count
 from lxml.etree import iterparse, QName, tostring
@@ -25,10 +25,9 @@ from traceback import format_exc
 from typing import Union, List, Iterator
 from ._mdl import MDLStereo
 from ..containers import MoleculeContainer, ReactionContainer
-from ..exceptions import EmptyMolecule
+from ..exceptions import EmptyMolecule, ParseError
 
 
-parse_error = namedtuple('MRVParseError', ('number', 'json', 'log', 'meta'))
 organic_set = {'B', 'C', 'N', 'O', 'P', 'S', 'Se', 'F', 'Cl', 'Br', 'I'}
 bond_map = {8: '1" queryType="Any', 4: 'A', 1: '1', 2: '2', 3: '3',
             'Any': 8, 'any': 8, 'A': 4, 'a': 4, '1': 1, '2': 2, '3': 3}
@@ -87,6 +86,7 @@ class MRVRead(MDLStereo):
         :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
         :param calc_cis_trans: Calculate cis/trans marks from 2d coordinates.
         :param ignore_stereo: Ignore stereo data.
+        :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
         """
         if isinstance(file, str):
             self.__file = open(file, 'rb')
@@ -126,12 +126,12 @@ class MRVRead(MDLStereo):
         return list(iter(self))
 
     def __iter__(self) -> Iterator[Union[ReactionContainer, MoleculeContainer]]:
-        return (x for x in self._data if not isinstance(x, parse_error))
+        return (x for x in self._data if not isinstance(x, ParseError))
 
     def __next__(self) -> Union[ReactionContainer, MoleculeContainer]:
         return next(iter(self))
 
-    def __reader(self) -> Iterator[Union[ReactionContainer, MoleculeContainer, parse_error]]:
+    def __reader(self) -> Iterator[Union[ReactionContainer, MoleculeContainer, ParseError]]:
         for n, (_, element) in enumerate(iterparse(self.__file, tag='{*}MChemicalStruct')):
             parsed = xml_dict(element)
             element.clear()
@@ -146,14 +146,14 @@ class MRVRead(MDLStereo):
                     record = self.__parse_molecule(parsed)
                 except (KeyError, ValueError):
                     self._info(f'record consist errors:\n{format_exc()}')
-                    yield parse_error(n, parsed, self._format_log(), meta)
+                    yield ParseError(n, None, self._format_log(), parsed)
                 else:
                     record['meta'].update(meta)
                     try:
                         container = self._convert_molecule(record)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
-                        yield parse_error(n, parsed, self._format_log(), meta)
+                        yield ParseError(n, None, self._format_log(), parsed)
                     else:
                         yield container
             elif 'reaction' in parsed and isinstance(parsed['reaction'], dict):
@@ -167,19 +167,19 @@ class MRVRead(MDLStereo):
                     record = self.__parse_reaction(parsed)
                 except (KeyError, ValueError):
                     self._info(f'record consist errors:\n{format_exc()}')
-                    yield parse_error(n, parsed, self._format_log(), meta)
+                    yield ParseError(n, None, self._format_log(), parsed)
                 else:
                     record['meta'] = meta
                     try:
                         container = self._convert_reaction(record)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
-                        yield parse_error(n, parsed, self._format_log(), meta)
+                        yield ParseError(n, None, self._format_log(), parsed)
                     else:
                         yield container
             else:
                 self._info('invalid MDocument')
-                yield parse_error(n, parsed, self._format_log(), {})
+                yield ParseError(n, None, self._format_log(), parsed)
 
     def __parse_reaction(self, data):
         reaction = {'reactants': [], 'products': [], 'reagents': []}

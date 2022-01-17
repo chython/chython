@@ -62,6 +62,7 @@ class SMILESRead(Parser):
         :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
         :param ignore_stereo: Ignore stereo data.
         :param keep_implicit: keep given in smiles implicit hydrogen count, otherwise ignore on valence error.
+        :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
         """
         if isinstance(file, str):
             self._file = open(file)

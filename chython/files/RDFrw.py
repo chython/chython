@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -25,8 +25,9 @@ from subprocess import check_output
 from time import strftime
 from traceback import format_exc
 from typing import Union
-from ._mdl import parse_error, MDLRead, MDLWrite, MOLRead, EMOLRead, RXNRead, ERXNRead, EMDLWrite
+from ._mdl import MDLRead, MDLWrite, MOLRead, EMOLRead, RXNRead, ERXNRead, EMDLWrite
 from ..containers import ReactionContainer, MoleculeContainer
+from ..exceptions import ParseError
 
 
 class RDFRead(MDLRead):
@@ -48,6 +49,7 @@ class RDFRead(MDLRead):
         :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
         :param calc_cis_trans: Calculate cis/trans marks from 2d coordinates.
         :param ignore_stereo: Ignore stereo data.
+        :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
         """
         super().__init__(file, **kwargs)
         self.__file = iter(self._file.readline, '')
@@ -154,7 +156,7 @@ class RDFRead(MDLRead):
                 except ValueError:
                     parser = None
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
-                    seek = yield parse_error(count, pos, self._format_log(), {})
+                    seek = yield ParseError(count, pos, self._format_log(), None)
                     if seek is not None:
                         yield
                         count = seek - 1
@@ -173,7 +175,7 @@ class RDFRead(MDLRead):
                             container = self._convert_molecule(record)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
-                        seek = yield parse_error(count, pos, self._format_log(), record['meta'])
+                        seek = yield ParseError(count, pos, self._format_log(), None)
                     else:
                         seek = yield container
 
@@ -204,7 +206,7 @@ class RDFRead(MDLRead):
                             container = self._convert_molecule(record)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
-                        seek = yield parse_error(count, pos, self._format_log(), record['meta'])
+                        seek = yield ParseError(count, pos, self._format_log(), None)
                     else:
                         seek = yield container
 
@@ -252,7 +254,7 @@ class RDFRead(MDLRead):
                 except ValueError:
                     failed = True
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
-                    seek = yield parse_error(count, pos, self._format_log(), {})
+                    seek = yield ParseError(count, pos, self._format_log(), None)
                     if seek is not None:
                         yield
                         count = seek - 1
@@ -268,7 +270,7 @@ class RDFRead(MDLRead):
                     container = self._convert_molecule(record)
             except ValueError:
                 self._info(f'record consist errors:\n{format_exc()}')
-                yield parse_error(count, pos, self._format_log(), record['meta'])
+                yield ParseError(count, pos, self._format_log(), None)
             else:
                 yield container
 

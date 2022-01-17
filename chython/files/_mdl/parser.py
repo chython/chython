@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,15 +16,11 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from collections import namedtuple
 from itertools import count
 from ...containers import MoleculeContainer, ReactionContainer
 from ...containers.bonds import Bond
 from ...exceptions import AtomNotFound, MappingError
 from ...periodictable import Element
-
-
-parse_error = namedtuple('ParseError', ('number', 'position', 'log', 'meta'))
 
 
 class Parser:
@@ -34,10 +30,11 @@ class Parser:
     MoleculeContainer = MoleculeContainer
     ReactionContainer = ReactionContainer
 
-    def __init__(self, remap=False, ignore=False, store_log=False):
+    def __init__(self, remap=False, ignore=False, ignore_bad_isotopes=False, store_log=False):
         self.__remap = remap
         self._ignore = ignore
         self._store_log = store_log
+        self.__ignore_bad_isotopes = ignore_bad_isotopes
         self._log_buffer = []
 
     def _info(self, msg):
@@ -162,7 +159,13 @@ class Parser:
         bonds = {}
         for n, atom in enumerate(data['atoms']):
             n = mapping[n]
-            atoms[n] = Element.from_symbol(atom['element'])(atom['isotope'])
+            e = Element.from_symbol(atom['element'])
+            try:
+                atoms[n] = e(atom['isotope'])
+            except ValueError:
+                if not self.__ignore_bad_isotopes:
+                    raise
+                atoms[n] = e()  # reset isotope mark on errors.
             bonds[n] = {}
             if (charge := atom['charge']) > 4 or charge < -4:
                 raise ValueError('formal charge should be in range [-4, 4]')
@@ -193,4 +196,4 @@ class Parser:
         return g
 
 
-__all__ = ['Parser', 'parse_error']
+__all__ = ['Parser']

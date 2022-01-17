@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -23,9 +23,9 @@ from re import match, compile
 from subprocess import check_output
 from traceback import format_exc
 from typing import Optional
-from ._mdl import parse_error, MDLRead, MDLWrite, MOLRead, EMOLRead, EMDLWrite, MDLStereo
+from ._mdl import MDLRead, MDLWrite, MOLRead, EMOLRead, EMDLWrite, MDLStereo
 from ..containers import MoleculeContainer
-from ..exceptions import EmptyMolecule
+from ..exceptions import EmptyMolecule, ParseError
 
 
 head = compile(r'>\s.*<(.*)>')
@@ -50,6 +50,7 @@ class SDFRead(MDLRead):
         :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
         :param calc_cis_trans: Calculate cis/trans marks from 2d coordinates.
         :param ignore_stereo: Ignore stereo data.
+        :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
         """
         super().__init__(file, **kwargs)
         self.__file = iter(self._file.readline, '')
@@ -135,7 +136,7 @@ class SDFRead(MDLRead):
                 except ValueError:
                     parser = None
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
-                    seek = yield parse_error(count, pos, self._format_log(), {})
+                    seek = yield ParseError(count, pos, self._format_log(), None)
                     if seek is not None:  # seeked to start of mol block
                         yield
                         count = seek
@@ -155,7 +156,7 @@ class SDFRead(MDLRead):
                         container = self._convert_molecule(record)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
-                        seek = yield parse_error(count, pos, self._format_log(), record['meta'])
+                        seek = yield ParseError(count, pos, self._format_log(), None)
                     else:
                         seek = yield container
                     if seek is not None:  # seeked position
@@ -202,7 +203,7 @@ class SDFRead(MDLRead):
                         raise ValueError('invalid MOL entry')
                 except ValueError:
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
-                    seek = yield parse_error(count, pos, self._format_log(), {})
+                    seek = yield ParseError(count, pos, self._format_log(), None)
                     if seek is not None:  # seeked to start of mol block
                         yield
                         count = seek
@@ -222,7 +223,7 @@ class SDFRead(MDLRead):
                 container = self._convert_molecule(record)
             except ValueError:
                 self._info(f'record consist errors:\n{format_exc()}')
-                yield parse_error(count, pos, self._format_log(), record['meta'])
+                yield ParseError(count, pos, self._format_log(), None)
             else:
                 yield container
 

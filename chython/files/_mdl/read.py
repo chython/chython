@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -26,9 +26,9 @@ from pickle import dump, load, UnpicklingError
 from sys import platform
 from tempfile import gettempdir
 from typing import Union, Iterator, List
-from .parser import parse_error
 from .stereo import MDLStereo
 from ...containers import ReactionContainer, MoleculeContainer
+from ...exceptions import ParseError
 
 
 class MDLReadMeta(type):
@@ -113,12 +113,12 @@ class MDLRead(MDLStereo, metaclass=MDLReadMeta):
         return list(iter(self))
 
     def __iter__(self) -> Iterator[Union[ReactionContainer, MoleculeContainer]]:
-        return (x for x in self._data if not isinstance(x, parse_error))
+        return (x for x in self._data if not isinstance(x, ParseError))
 
     def __next__(self) -> Union[ReactionContainer, MoleculeContainer]:
         return next(iter(self))
 
-    def __getitem__(self, item) -> Union[ReactionContainer, MoleculeContainer, parse_error]:
+    def __getitem__(self, item) -> Union[ReactionContainer, MoleculeContainer, ParseError]:
         """
         Getting the item by index from the original file,
         For slices records with errors skipped.
@@ -140,13 +140,13 @@ class MDLRead(MDLStereo, metaclass=MDLReadMeta):
                     return []
                 if step == 1:
                     self.seek(start)
-                    records = [x for x in islice(self._data, stop - start) if not isinstance(x, parse_error)]
+                    records = [x for x in islice(self._data, stop - start) if not isinstance(x, ParseError)]
                 else:
                     records = []
                     for index in range(start, stop, step):
                         self.seek(index)
                         record = next(self._data)
-                        if not isinstance(record, parse_error):
+                        if not isinstance(record, ParseError):
                             records.append(record)
                 return records
             else:

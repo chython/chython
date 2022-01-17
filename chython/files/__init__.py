@@ -23,7 +23,6 @@ from .PDBrw import *
 from .RDFrw import *
 from .SDFrw import *
 from .XYZrw import *
-from ._mdl import parse_error
 
 
 __all__ = [x for x in locals() if x.endswith(('Read', 'Write'))]
