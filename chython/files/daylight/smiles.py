@@ -17,13 +17,11 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from fileinput import FileInput
-from functools import reduce
 from io import StringIO, TextIOWrapper
 from itertools import chain
-from operator import or_
 from pathlib import Path
 from re import compile, findall, search, split
-from typing import List, Union
+from typing import List, Union, Optional
 from .parser import parser
 from .tokenize import smiles_tokenize
 from .._mdl import Parser
@@ -57,12 +55,13 @@ class SMILESRead(Parser):
 
     For reactions . [dot] in bonds should be used only for molecules separation.
     """
-    def __init__(self, file, header=None, ignore_stereo=False, **kwargs):
+    def __init__(self, file, header=None, ignore_stereo=False, keep_implicit=False, **kwargs):
         """
         :param ignore: Skip some checks of data or try to fix some errors.
         :param remap: Remap atom numbers started from one.
         :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
         :param ignore_stereo: Ignore stereo data.
+        :param keep_implicit: keep given in smiles implicit hydrogen count, otherwise ignore on valence error.
         """
         if isinstance(file, str):
             self._file = open(file)
@@ -88,6 +87,7 @@ class SMILESRead(Parser):
             self.__header = None
 
         self.__ignore_stereo = ignore_stereo
+        self.__keep_implicit = keep_implicit
         self._data = self.__data()
 
     def __data(self):
@@ -109,14 +109,15 @@ class SMILESRead(Parser):
                 pos = file.tell()
 
     @classmethod
-    def create_parser(cls, header=None, ignore_stereo=False, *args, **kwargs):
+    def create_parser(cls, header=None, ignore_stereo=False, keep_implicit=False, **kwargs):
         """
         Create SMILES parser function configured same as SMILESRead object.
         """
         obj = object.__new__(cls)
         obj._SMILESRead__header = header
         obj._SMILESRead__ignore_stereo = ignore_stereo
-        super(SMILESRead, obj).__init__(*args, **kwargs)
+        obj._SMILESRead__keep_implicit = keep_implicit
+        super(SMILESRead, obj).__init__(**kwargs)
         return obj.parse
 
     def close(self, force=False):
@@ -153,6 +154,8 @@ class SMILESRead(Parser):
         if not smiles:
             raise ValueError('Empty string')
 
+        contract: Optional[List[List[int]]]  # typing
+
         smi, *data = smiles.split()
         if data and data[0].startswith('|') and data[0].endswith('|'):
             fr = search(cx_fragments, data[0])
@@ -160,9 +163,6 @@ class SMILESRead(Parser):
                 contract = [sorted(int(x) for x in x.split('.')) for x in fr.group()[2:].split(',')]
                 if len({x for x in contract for x in x}) < len([x for x in contract for x in x]):
                     self._info(f'collisions in cxsmiles fragments description: {data[0]}')
-                    contract = None
-                elif any(x[0] < 0 for x in contract):
-                    self._info(f'invalid cxsmiles fragments description: {data[0]}')
                     contract = None
 
                 radicals = [int(x) for x in findall(cx_radicals, data[0]) for x in x[3:].split(',')]
@@ -172,7 +172,7 @@ class SMILESRead(Parser):
                 if len(set(radicals)) != len(radicals):
                     self._info(f'collisions in cxsmiles radicals description: {data[0]}')
                     radicals = []
-                data = data[1:]
+                data.pop(0)
             else:
                 radicals = [int(x) for x in findall(cx_radicals, data[0]) for x in x[3:].split(',')]
                 if radicals:
@@ -182,7 +182,7 @@ class SMILESRead(Parser):
                     if len(set(radicals)) != len(radicals):
                         self._info(f'collisions in cxsmiles radicals description: {data[0]}')
                         radicals = []
-                    data = data[1:]
+                    data.pop(0)
                 contract = None
         else:
             radicals = []
@@ -206,19 +206,60 @@ class SMILESRead(Parser):
             except ValueError as e:
                 raise ValueError('invalid reaction smiles') from e
 
+            mol_count = 0
             for k, d in zip(('reactants', 'products', 'reagents'), (reactants, products, reagents)):
-                if d:
-                    for x in d.split('.'):
-                        if not x:
-                            if self._ignore:
-                                self._info('two dots in line ignored')
-                            else:
-                                raise ValueError('invalid reaction smiles. two dots in line')
+                if not d:
+                    continue
+                for x in d.split('.'):
+                    if not x:
+                        if self._ignore:
+                            self._info('two dots in line ignored')
                         else:
-                            r, log = parser(smiles_tokenize(x), not self._ignore)
-                            record[k].append(r)
-                            for l in log:
-                                self._info(l)
+                            raise ValueError('invalid reaction smiles. two dots in line')
+                    else:
+                        record[k].append(x)
+                        mol_count += 1
+
+            if contract:
+                if max(x for x in contract for x in x) >= mol_count:
+                    self._info(f'skipped invalid contract data: {contract}')
+                lr = len(record['reactants'])
+                lp = len(record['products'])
+                reactants = set(range(lr))
+                reagents = set(range(lr, mol_count - lp))
+                products = set(range(mol_count - lp, mol_count))
+                new_molecules: List[Optional[str]] = [None] * mol_count
+                for c in contract:
+                    if reactants.issuperset(c):
+                        new_molecules[c[0]] = '.'.join(record['reactants'][x] for x in c)
+                        reactants.difference_update(c)
+                    elif products.issuperset(c):
+                        new_molecules[c[0]] = '.'.join(record['products'][x - mol_count] for x in c)
+                        products.difference_update(c)
+                    elif reagents.issuperset(c):
+                        new_molecules[c[0]] = '.'.join(record['reagents'][x - lr] for x in c)
+                        reagents.difference_update(c)
+                    else:
+                        self._info(f'impossible to contract different parts of reaction: {contract}')
+                for x in reactants:
+                    new_molecules[x] = record['reactants'][x]
+                for x in products:
+                    new_molecules[x] = record['products'][x - mol_count]
+                for x in reagents:
+                    new_molecules[x] = record['reagents'][x - lr]
+
+                record['reactants'] = [x for x in new_molecules[:lr] if x is not None]
+                record['products'] = [x for x in new_molecules[-lp:] if x is not None]
+                record['reagents'] = [x for x in new_molecules[lr: -lp] if x is not None]
+
+            for k in ('reactants', 'products', 'reagents'):
+                tmp = []
+                for x in record[k]:
+                    r, log = parser(smiles_tokenize(x), not self._ignore)
+                    tmp.append(r)
+                    for l in log:
+                        self._info(l)
+                record[k] = tmp
 
             if radicals:
                 atom_map = dict(enumerate(a for m in chain(record['reactants'], record['reagents'], record['products'])
@@ -226,49 +267,7 @@ class SMILESRead(Parser):
                 for x in radicals:
                     atom_map[x]['is_radical'] = True
 
-            container = self._convert_reaction(record)
-            if contract:
-                if max(x for x in contract for x in x) >= len(container):
-                    self._info(f'skipped invalid contract data: {contract}')
-                lr = len(container.reactants)
-                reactants = set(range(lr))
-                reagents = set(range(lr, lr + len(container.reagents)))
-                products = set(range(lr + len(container.reagents),
-                                     lr + len(container.reagents) + len(container.products)))
-                new_molecules = [None] * len(container)
-                for c in contract:
-                    if reactants.issuperset(c):
-                        new_molecules[c[0]] = reduce(or_, (container.reactants[x] for x in c))
-                        reactants.difference_update(c)
-                    elif products.issuperset(c):
-                        new_molecules[c[0]] = reduce(or_, (container.products[x - len(container)] for x in c))
-                        products.difference_update(c)
-                    elif reagents.issuperset(c):
-                        new_molecules[c[0]] = reduce(or_, (container.reagents[x - lr] for x in c))
-                        reagents.difference_update(c)
-                    else:
-                        self._info(f'impossible to contract different parts of reaction: {contract}')
-                for x in reactants:
-                    new_molecules[x] = container.reactants[x]
-                for x in products:
-                    new_molecules[x] = container.products[x - len(container)]
-                for x in reagents:
-                    new_molecules[x] = container.reagents[x - lr]
-
-                meta = container.meta
-                if self._store_log:
-                    if log := self._format_log():
-                        if 'ParserLog' in meta:
-                            meta['ParserLog'] += '\n' + log
-                        else:
-                            meta['ParserLog'] = log
-                else:
-                    self._flush_log()
-                return ReactionContainer([x for x in new_molecules[:lr] if x is not None],
-                                         [x for x in new_molecules[-len(container.products):] if x is not None],
-                                         [x for x in new_molecules[lr: -len(container.products)] if x is not None],
-                                         meta=meta)
-            return container
+            return self._convert_reaction(record)
         else:
             record, log = parser(smiles_tokenize(smi), not self._ignore)
             for l in log:
@@ -284,32 +283,41 @@ class SMILESRead(Parser):
         radicals = mol._radicals
         calc_implicit = mol._calc_implicit
         hyb = mol.hybridization
+        keep_implicit = self.__keep_implicit
 
         for n, a in enumerate(data['atoms']):
             h = a['hydrogen']
-            if h is None:
+            if h is None:  # simple atom token
                 continue
+            # bracket token should always contain implicit hydrogens count.
             n = mapping[n]
-            hc = hydrogens[n]
-            if hc is None:  # aromatic rings. just store given H count.
-                if hyb(n) == 4:
+            if keep_implicit:  # override any calculated hydrogens count.
+                hydrogens[n] = h
+            elif (hc := hydrogens[n]) is None:  # atom has invalid valence for now.
+                if hyb(n) == 4:  # this is aromatic rings. just store given H count.
                     hydrogens[n] = h
-            elif hc != h:  # H count mismatch. try radical state of atom.
-                if radicals[n]:  # non-radical form not found. it's probably a bad valence.
-                    if self._ignore:
-                        self._info(f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
-                    else:
-                        raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
                 else:  # smiles don't code radicals. so, let's try to guess.
                     radicals[n] = True
                     calc_implicit(n)
                     if hydrogens[n] != h:  # radical state also has errors.
                         if self._ignore:
+                            hydrogens[n] = None  # reset hydrogens
                             radicals[n] = False  # reset radical state
                             self._info(f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
                         else:
                             raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
                                              f'calculated ({hc}) on atom {n}.')
+            elif hc != h:  # H count mismatch. try radical state of atom.
+                radicals[n] = True
+                calc_implicit(n)
+                if hydrogens[n] != h:  # radical state also has errors.
+                    if self._ignore:
+                        hydrogens[n] = hc  # reset hydrogens to previous valid state
+                        radicals[n] = False  # reset radical state
+                        self._info(f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
+                    else:
+                        raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
+                                         f'calculated ({hc}) on atom {n}.')
 
         if self.__ignore_stereo:
             return mol
