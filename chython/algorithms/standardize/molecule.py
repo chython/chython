@@ -345,7 +345,8 @@ class Standardize:
             m = start_map
             for n in to_add:
                 m = self.add_atom(H(), _map=m)
-                bonds[n][m] = bonds[m][n] = Bond(1)
+                bonds[n][m] = bonds[m][n] = b = Bond(1)
+                b._attach_graph(self, n, m)
                 hydrogens[n] = 0
                 log.append((n, m))
                 m += 1
@@ -424,9 +425,10 @@ class Standardize:
                                 # expected original molecule don't contain `any` bonds or these bonds not changed
                                 flush = True
                         else:
-                            bonds[n][m] = bonds[m][n] = Bond(b)
                             if b != 8:
                                 flush = True
+                            bonds[n][m] = bonds[m][n] = b = Bond(b)
+                            b._attach_graph(self, n, m)
                     log.append((tuple(match), r, str(pattern)))
 
             if not hs:  # not matched

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -50,7 +50,7 @@ class Morgan:
         """
         Adjacency with integer-coded bonds.
         """
-        return {n: {m: int(b) for m, b in mb.items()} for n, mb in self._bonds.items()}
+        return {n: {m: hash(b) for m, b in mb.items()} for n, mb in self._bonds.items()}
 
 
 def _morgan(atoms: Dict[int, int], bonds: Dict[int, Dict[int, int]]) -> Dict[int, int]:

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -18,6 +18,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import defaultdict
+from ..containers import QueryContainer
 from ..containers.bonds import Bond
 from ..periodictable import Element
 
@@ -40,12 +41,15 @@ class BaseReactor:
             else:  # use atom from reactant
                 elements[n] = None
 
-        bonds = []
-        for n, m, b in products.bonds():
-            if len(b.order) > 1:
-                raise ValueError('bond list in patch not supported')
-            else:
-                bonds.append((n, m, Bond(b.order[0])))
+        if isinstance(products, QueryContainer):
+            bonds = []
+            for n, m, b in products.bonds():
+                if len(b.order) > 1:
+                    raise ValueError('bond list in patch not supported')
+                else:
+                    bonds.append((n, m, Bond(b.order[0])))
+        else:
+            bonds = [(n, m, b.copy()) for n, m, b in products.bonds()]
 
         self.__bonds = bonds
         self.__atom_attrs = dict(atoms)

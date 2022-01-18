@@ -95,7 +95,8 @@ class Saturation:
                     radicals[n] = r
                     for m in env:
                         if m not in seen:
-                            bonds[n][m] = bonds[m][n] = Bond(1)
+                            bonds[n][m] = bonds[m][n] = b = Bond(1)
+                            b._attach_graph(self, n, m)
                 else:
                     unsaturated[n] = [(c, r, h)]
             else:
@@ -141,7 +142,8 @@ class Saturation:
                     return False
 
             for n, m, b in sb:
-                bonds[n][m] = bonds[m][n] = Bond(b)
+                bonds[n][m] = bonds[m][n] = b = Bond(b)
+                b._attach_graph(self, n, m)
             for n, c, r in sa:
                 charges[n] = c
                 radicals[n] = r

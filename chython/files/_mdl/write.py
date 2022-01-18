@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -56,21 +56,12 @@ class MDLWrite(_MDLWrite):
         out = []
         for n, (m, a) in enumerate(g._atoms.items(), start=1):
             x, y = gp[m]
-            c = gc[m]
-            if c in (-4, 4):
-                if self._mapping:
-                    out.append(f'{x:10.4f}{y:10.4f}    0.0000 {a.atomic_symbol:3s} '
-                               f'0  0  0  0  0  0  0  0  0{m:3d}  0  0\n')
-                else:
-                    out.append(f'{x:10.4f}{y:10.4f}    0.0000 {a.atomic_symbol:3s} '
-                               f'0  0  0  0  0  0  0  0  0  0  0  0\n')
+            if self._mapping:
+                out.append(f'{x:10.4f}{y:10.4f}    0.0000 {a.atomic_symbol:3s} 0{charge_map[gc[m]]}  0  0  0  0'
+                           f'  0  0  0{m:3d}  0  0\n')
             else:
-                if self._mapping:
-                    out.append(f'{x:10.4f}{y:10.4f}    0.0000 {a.atomic_symbol:3s} 0{charge_map[c]}  0  0  0  0'
-                               f'  0  0  0{m:3d}  0  0\n')
-                else:
-                    out.append(f'{x:10.4f}{y:10.4f}    0.0000 {a.atomic_symbol:3s} 0{charge_map[c]}  0  0  0  0'
-                               f'  0  0  0  0  0  0\n')
+                out.append(f'{x:10.4f}{y:10.4f}    0.0000 {a.atomic_symbol:3s} 0{charge_map[gc[m]]}  0  0  0  0'
+                           f'  0  0  0  0  0  0\n')
         return ''.join(out)
 
     def __convert_atoms3d(self, g, xyz):
@@ -78,20 +69,12 @@ class MDLWrite(_MDLWrite):
         out = []
         for n, (m, a) in enumerate(g._atoms.items(), start=1):
             x, y, z = xyz[m]
-            c = gc[m]
-            if c in (-4, 4):
-                if self._mapping:
-                    out.append(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} '
-                               f'0  0  0  0  0  0  0  0  0{m:3d}  0  0\n')
-                else:
-                    out.append(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} 0  0  0  0  0  0  0  0  0  0  0  0\n')
+            if self._mapping:
+                out.append(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} 0{charge_map[gc[m]]}  0  0  0  0'
+                           f'  0  0  0{m:3d}  0  0\n')
             else:
-                if self._mapping:
-                    out.append(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} 0{charge_map[c]}  0  0  0  0'
-                               f'  0  0  0{m:3d}  0  0\n')
-                else:
-                    out.append(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} 0{charge_map[c]}  0  0  0  0'
-                               f'  0  0  0  0  0  0\n')
+                out.append(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} 0{charge_map[gc[m]]}  0  0  0  0'
+                           f'  0  0  0  0  0  0\n')
         return ''.join(out)
 
     @staticmethod

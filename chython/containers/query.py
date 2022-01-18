@@ -31,6 +31,26 @@ from ..periodictable import AnyElement, AnyMetal, Element, ListElement, QueryEle
 from ..periodictable.element import Query
 
 
+def _validate_neighbors(neighbors):
+    if neighbors is None:
+        neighbors = ()
+    elif isinstance(neighbors, int):
+        if neighbors < 0 or neighbors > 14:
+            raise ValueError('neighbors should be in range [0, 14]')
+        neighbors = (neighbors,)
+    elif isinstance(neighbors, (tuple, list)):
+        if not all(isinstance(n, int) for n in neighbors):
+            raise TypeError('neighbors should be list or tuple of ints')
+        if any(n < 0 or n > 14 for n in neighbors):
+            raise ValueError('neighbors should be in range [0, 14]')
+        if len(set(neighbors)) != len(neighbors):
+            raise ValueError('neighbors should be unique')
+        neighbors = tuple(sorted(neighbors))
+    else:
+        raise TypeError('neighbors should be int or list or tuple of ints')
+    return neighbors
+
+
 class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
     __slots__ = ('_neighbors', '_hybridizations', '_atoms_stereo', '_cis_trans_stereo', '_allenes_stereo',
                  '_hydrogens', '_rings_sizes', '_heteroatoms')
@@ -62,11 +82,43 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
                  rings_sizes: Union[int, List[int], Tuple[int, ...], None] = None,
                  heteroatoms: Union[int, List[int], Tuple[int, ...], None] = None,
                  **kwargs):
-        neighbors = self._validate_neighbors(neighbors)
-        hybridization = self._validate_hybridization(hybridization)
-        hydrogens = self._validate_neighbors(hydrogens)
-        rings_sizes = self._validate_rings(rings_sizes)
-        heteroatoms = self._validate_neighbors(heteroatoms)
+        if hybridization is None:
+            hybridization = ()
+        elif isinstance(hybridization, int):
+            if hybridization < 1 or hybridization > 4:
+                raise ValueError('hybridization should be in range [1, 4]')
+            hybridization = (hybridization,)
+        elif isinstance(hybridization, (tuple, list)):
+            if not all(isinstance(h, int) for h in hybridization):
+                raise TypeError('hybridizations should be list or tuple of ints')
+            if any(h < 1 or h > 4 for h in hybridization):
+                raise ValueError('hybridizations should be in range [1, 4]')
+            if len(set(hybridization)) != len(hybridization):
+                raise ValueError('hybridizations should be unique')
+            hybridization = tuple(sorted(hybridization))
+        else:
+            raise TypeError('hybridization should be int or list or tuple of ints')
+
+        if rings_sizes is None:
+            rings_sizes = ()
+        elif isinstance(rings_sizes, int):
+            if rings_sizes < 3 and rings_sizes != 0:
+                raise ValueError('rings should be greater or equal 3. ring equal to zero is no ring atom mark')
+            rings_sizes = (rings_sizes,)
+        elif isinstance(rings_sizes, (tuple, list)):
+            if not all(isinstance(n, int) for n in rings_sizes):
+                raise TypeError('rings should be list or tuple of ints')
+            if any(n < 3 for n in rings_sizes):
+                raise ValueError('rings should be greater or equal 3')
+            if len(set(rings_sizes)) != len(rings_sizes):
+                raise ValueError('rings should be unique')
+            rings_sizes = tuple(sorted(rings_sizes))
+        else:
+            raise TypeError('rings should be int or list or tuple of ints')
+
+        neighbors = _validate_neighbors(neighbors)
+        hydrogens = _validate_neighbors(hydrogens)
+        heteroatoms = _validate_neighbors(heteroatoms)
 
         if not isinstance(atom, Query):
             if isinstance(atom, Element):
@@ -159,6 +211,16 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
 
     def copy(self) -> 'QueryContainer':
         copy = super().copy()
+
+        copy._bonds = cb = {}
+        for n, m_bond in self._bonds.items():
+            cb[n] = cbn = {}
+            for m, bond in m_bond.items():
+                if m in cb:  # bond partially exists. need back-connection.
+                    cbn[m] = cb[m][n]
+                else:
+                    cbn[m] = bond.copy()
+
         copy._neighbors = self._neighbors.copy()
         copy._hybridizations = self._hybridizations.copy()
         copy._hydrogens = self._hydrogens.copy()
@@ -173,6 +235,16 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
         if not isinstance(other, QueryContainer):
             raise TypeError('QueryContainer expected')
         u = super().union(other)
+
+        ub = u._bonds
+        for n, m_bond in other._bonds.items():
+            ub[n] = ubn = {}
+            for m, bond in m_bond.items():
+                if m in ub:  # bond partially exists. need back-connection.
+                    ubn[m] = ub[m][n]
+                else:
+                    ubn[m] = bond.copy()
+
         u._neighbors.update(other._neighbors)
         u._hybridizations.update(other._hybridizations)
         u._hydrogens.update(other._hydrogens)
@@ -234,8 +306,9 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
         """
         Fingerprints of all possible simple queries. Used for isomorphism tests filtering.
         """
-        params = molecule.MoleculeContainer._fingerprint_config
-        if not params or any(isinstance(a, (AnyElement, AnyMetal)) for _, a in self.atoms()):
+        from chython import fingerprint_config
+
+        if not fingerprint_config or any(isinstance(a, (AnyElement, AnyMetal)) for _, a in self.atoms()):
             return ()  # skip queries with Any element
 
         fps = []
@@ -249,7 +322,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
 
             # extract only longest chains
             chains = []
-            for c in sorted(mol._chains(**params), reverse=True, key=len):
+            for c in sorted(mol._chains(**fingerprint_config), reverse=True, key=len):
                 sc = set(c)
                 if any(sc.issubset(x) for x in chains):
                     continue
@@ -451,66 +524,6 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
                                array('I', closures), array('I', q_from), array('I', q_to),
                                array('I', indices), array('Q', bonds)))
         return components
-
-    @staticmethod
-    def _validate_neighbors(neighbors):
-        if neighbors is None:
-            neighbors = ()
-        elif isinstance(neighbors, int):
-            if neighbors < 0 or neighbors > 14:
-                raise ValueError('neighbors should be in range [0, 14]')
-            neighbors = (neighbors,)
-        elif isinstance(neighbors, (tuple, list)):
-            if not all(isinstance(n, int) for n in neighbors):
-                raise TypeError('neighbors should be list or tuple of ints')
-            if any(n < 0 or n > 14 for n in neighbors):
-                raise ValueError('neighbors should be in range [0, 14]')
-            if len(set(neighbors)) != len(neighbors):
-                raise ValueError('neighbors should be unique')
-            neighbors = tuple(sorted(neighbors))
-        else:
-            raise TypeError('neighbors should be int or list or tuple of ints')
-        return neighbors
-
-    @staticmethod
-    def _validate_rings(rings):
-        if rings is None:
-            rings = ()
-        elif isinstance(rings, int):
-            if rings < 3 and rings != 0:
-                raise ValueError('rings should be greater or equal 3. ring equal to zero is no ring atom mark')
-            rings = (rings,)
-        elif isinstance(rings, (tuple, list)):
-            if not all(isinstance(n, int) for n in rings):
-                raise TypeError('rings should be list or tuple of ints')
-            if any(n < 3 for n in rings):
-                raise ValueError('rings should be greater or equal 3')
-            if len(set(rings)) != len(rings):
-                raise ValueError('rings should be unique')
-            rings = tuple(sorted(rings))
-        else:
-            raise TypeError('rings should be int or list or tuple of ints')
-        return rings
-
-    @staticmethod
-    def _validate_hybridization(hybridization):
-        if hybridization is None:
-            hybridization = ()
-        elif isinstance(hybridization, int):
-            if hybridization < 1 or hybridization > 4:
-                raise ValueError('hybridization should be in range [1, 4]')
-            hybridization = (hybridization,)
-        elif isinstance(hybridization, (tuple, list)):
-            if not all(isinstance(h, int) for h in hybridization):
-                raise TypeError('hybridizations should be list or tuple of ints')
-            if any(h < 1 or h > 4 for h in hybridization):
-                raise ValueError('hybridizations should be in range [1, 4]')
-            if len(set(hybridization)) != len(hybridization):
-                raise ValueError('hybridizations should be unique')
-            hybridization = tuple(sorted(hybridization))
-        else:
-            raise TypeError('hybridization should be int or list or tuple of ints')
-        return hybridization
 
     def __getstate__(self):
         return {'atoms_stereo': self._atoms_stereo, 'allenes_stereo': self._allenes_stereo,

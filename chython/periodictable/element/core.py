@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -42,11 +42,11 @@ class Core(ABC):
     def __setstate__(self, state):
         self.__isotope = state['isotope']
 
-    def __int__(self):
+    @abstractmethod
+    def __hash__(self):
         """
-        Same as hash
+        Atom hash used in Morgan atom numbering algorithm.
         """
-        return hash(self)
 
     @property
     @abstractmethod

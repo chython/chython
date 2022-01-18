@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2020 Nail Samikaev <samikaevn@yandex.ru>
 #  This file is part of chython.
 #
@@ -22,6 +22,7 @@ from functools import cached_property
 from itertools import product, chain, repeat, combinations
 from lazy_object_proxy import Proxy
 from typing import TYPE_CHECKING, Iterator, Union, List
+from weakref import ref
 from ._acid import rules as acid_rules, stripped_rules as stripped_acid_rules
 from ._base import rules as base_rules, stripped_rules as stripped_base_rules
 from ..aromatics.kekule import _kekule_component
@@ -94,6 +95,9 @@ class Tautomers:
         if canon != self:  # attach state of canonic tautomer to self
             # atoms, radicals state, parsed_mapping and plane are unchanged
             self._bonds = canon._bonds
+            for n, m, b in self.bonds():  # move bonds attachments
+                b._Bond__graph = ref(self)
+
             self._charges = canon._charges  # for zwitter-ionic tautomers
             self._hydrogens = canon._hydrogens
             self._atoms_stereo = canon._atoms_stereo

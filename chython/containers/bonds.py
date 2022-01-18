@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,10 +17,12 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from typing import Optional, Tuple
+from weakref import ref
+from ..exceptions import IsConnectedBond, IsNotConnectedBond
 
 
 class Bond:
-    __slots__ = ('__order',)
+    __slots__ = ('__order', '__graph', '__n', '__m')
 
     def __init__(self, order):
         if not isinstance(order, int):
@@ -40,14 +42,36 @@ class Bond:
         return f'{self.__class__.__name__}({self.__order})'
 
     def __int__(self):
+        """
+        Bond order.
+        """
         return self.__order
 
     def __hash__(self):
+        """
+        Bond order. Used in Morgan atoms ordering.
+        """
         return self.__order
+
+    def __getstate__(self):
+        return {'order': self.__order}
+
+    def __setstate__(self, state):
+        if isinstance(state, tuple):  # <= 1.13
+            self.__order = state[1]['_Bond__order']
+        else:
+            self.__order = state['order']
 
     @property
     def order(self) -> int:
         return self.__order
+
+    @property
+    def in_ring(self):
+        try:
+            return self.__graph().is_ring_bond(self.__n, self.__m)
+        except AttributeError:
+            raise IsNotConnectedBond
 
     def copy(self) -> 'Bond':
         copy = object.__new__(self.__class__)
@@ -58,9 +82,28 @@ class Bond:
     def from_bond(cls, bond):
         if isinstance(bond, cls):
             copy = object.__new__(cls)
-            copy._Bond__order = bond._Bond__order
+            copy._Bond__order = bond.order
             return copy
         raise TypeError('Bond expected')
+
+    def _attach_graph(self, graph, n, m):
+        try:
+            self.__graph
+        except AttributeError:
+            self.__graph = ref(graph)
+            self.__n = n
+            self.__m = m
+        else:
+            raise IsConnectedBond
+
+    def _change_map(self, n, m):
+        try:
+            self.__graph
+        except AttributeError:
+            raise IsNotConnectedBond
+        else:
+            self.__n = n
+            self.__m = m
 
 
 class DynamicBond:
@@ -90,9 +133,15 @@ class DynamicBond:
         return f'{self.__class__.__name__}({self.__order}, {self.__p_order})'
 
     def __int__(self):
+        """
+        Hash of bond orders.
+        """
         return hash(self)
 
     def __hash__(self):
+        """
+        Hash of bond orders.
+        """
         return hash((self.__order or 0, self.__p_order or 0))
 
     @property
@@ -120,20 +169,20 @@ class DynamicBond:
     def from_bond(cls, bond):
         if isinstance(bond, Bond):
             copy = object.__new__(cls)
-            copy._DynamicBond__order = copy._DynamicBond__p_order = bond._Bond__order
+            copy._DynamicBond__order = copy._DynamicBond__p_order = bond.order
             return copy
         elif isinstance(bond, cls):
             copy = object.__new__(cls)
-            copy._DynamicBond__order = bond._DynamicBond__order
-            copy._DynamicBond__p_order = bond._DynamicBond__p_order
+            copy._DynamicBond__order = bond.order
+            copy._DynamicBond__p_order = bond.p_order
             return copy
         raise TypeError('DynamicBond expected')
 
 
 class QueryBond:
-    __slots__ = ('__order',)
+    __slots__ = ('__order', '__in_ring')
 
-    def __init__(self, order):
+    def __init__(self, order, in_ring=None):
         if isinstance(order, (list, tuple, set)):
             if not all(isinstance(x, int) for x in order):
                 raise TypeError('invalid order value')
@@ -146,7 +195,10 @@ class QueryBond:
             order = (order,)
         else:
             raise TypeError('invalid order value')
+        if in_ring is not None and not isinstance(in_ring, bool):
+            raise TypeError('in_ring mark should be boolean or None')
         self.__order = order
+        self.__in_ring = in_ring
 
     def __eq__(self, other):
         if isinstance(other, Bond):
@@ -158,34 +210,47 @@ class QueryBond:
         return False
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self.__order})'
+        return f'{self.__class__.__name__}({self.__order}, {self.__in_ring})'
 
     def __int__(self):
+        """
+        Simple bond order or hash of sorted tuple of orders.
+        """
         if len(self.__order) == 1:
             return self.__order[0]
         return hash(self.__order)
 
     def __hash__(self):
-        return hash(self.__order)
+        """
+        Hash of orders and cycle mark. Used in Morgan atoms ordering.
+        """
+        return hash((self.__order, self.__in_ring))
 
     @property
     def order(self) -> Tuple[int, ...]:
         return self.__order
 
+    @property
+    def in_ring(self):
+        return self.__in_ring
+
     def copy(self) -> 'QueryBond':
         copy = object.__new__(self.__class__)
         copy._QueryBond__order = self.__order
+        copy._QueryBond__in_ring = self.__in_ring
         return copy
 
     @classmethod
     def from_bond(cls, bond):
         if isinstance(bond, Bond):
             copy = object.__new__(cls)
-            copy._QueryBond__order = (bond._Bond__order,)
+            copy._QueryBond__order = (bond.order,)
+            copy._QueryBond__in_ring = None
             return copy
         elif isinstance(bond, cls):
             copy = object.__new__(cls)
-            copy._QueryBond__order = bond._QueryBond__order
+            copy._QueryBond__order = bond.order
+            copy._QueryBond__in_ring = bond.in_ring
             return copy
         raise TypeError('QueryBond or Bond expected')
 

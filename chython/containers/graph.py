@@ -161,15 +161,6 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         copy._charges = self._charges.copy()
         copy._radicals = self._radicals.copy()
 
-        copy._bonds = cb = {}
-        for n, m_bond in self._bonds.items():
-            cb[n] = cbn = {}
-            for m, bond in m_bond.items():
-                if m in cb:  # bond partially exists. need back-connection.
-                    cbn[m] = cb[m][n]
-                else:
-                    cbn[m] = bond.copy()
-
         copy._atoms = ca = {}
         for n, atom in self._atoms.items():
             atom = atom.copy()
@@ -190,15 +181,6 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         for n, atom in other._atoms.items():
             ua[n] = atom = atom.copy()
             atom._attach_to_graph(u, n)
-
-        ub = u._bonds
-        for n, m_bond in other._bonds.items():
-            ub[n] = ubn = {}
-            for m, bond in m_bond.items():
-                if m in ub:  # bond partially exists. need back-connection.
-                    ubn[m] = ub[m][n]
-                else:
-                    ubn[m] = bond.copy()
         return u
 
     def flush_cache(self):

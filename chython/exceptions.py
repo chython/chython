@@ -66,6 +66,18 @@ class IsNotConnectedAtom(Exception):
     """
 
 
+class IsConnectedBond(Exception):
+    """
+    Bond is already attached to graph
+    """
+
+
+class IsNotConnectedBond(Exception):
+    """
+    Bond is not attached to graph
+    """
+
+
 class ValenceError(Exception):
     """
     Atom has valence error
