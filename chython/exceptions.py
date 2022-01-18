@@ -36,6 +36,12 @@ class AtomNotFound(KeyError):
     """
 
 
+class BondNotFound(KeyError):
+    """
+    Bad atoms numbers
+    """
+
+
 class NotChiral(KeyError):
     """
     Atom not chiral

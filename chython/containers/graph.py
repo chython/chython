@@ -22,7 +22,7 @@ from typing import Dict, Generic, Iterator, Optional, Tuple, TypeVar
 from ..algorithms.isomorphism import Isomorphism
 from ..algorithms.morgan import Morgan
 from ..algorithms.rings import Rings
-from ..exceptions import AtomNotFound, MappingError
+from ..exceptions import AtomNotFound, MappingError, BondNotFound
 
 
 Atom = TypeVar('Atom')
@@ -65,7 +65,10 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         return iter(self._atoms)
 
     def bond(self, n: int, m: int) -> Bond:
-        return self._bonds[n][m]
+        try:
+            return self._bonds[n][m]
+        except KeyError as e:
+            raise BondNotFound from e
 
     def has_bond(self, n: int, m: int) -> bool:
         try:
@@ -121,35 +124,13 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         Add bond.
         """
         if n == m:
-            raise ValueError('atom loops impossible')
+            raise MappingError('atom loops impossible')
         if n not in self._bonds or m not in self._bonds:
             raise AtomNotFound('atoms not found')
         if n in self._bonds[m]:
-            raise ValueError('atoms already bonded')
+            raise MappingError('atoms already bonded')
 
         self._bonds[n][m] = self._bonds[m][n] = bond
-        self.__dict__.clear()
-
-    @abstractmethod
-    def delete_atom(self, n: int):
-        """
-        Remove atom.
-        """
-        del self._atoms[n]
-        del self._charges[n]
-        del self._radicals[n]
-        sb = self._bonds
-        for m in sb.pop(n):
-            del sb[m][n]
-        self.__dict__.clear()
-
-    @abstractmethod
-    def delete_bond(self, n: int, m: int):
-        """
-        Remove bond.
-        """
-        del self._bonds[n][m]
-        del self._bonds[m][n]
         self.__dict__.clear()
 
     @abstractmethod

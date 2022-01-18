@@ -162,53 +162,6 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
                 if (n in path or m in path) and c in self._allenes_stereo:
                     del self._allenes_stereo[c]
 
-    def delete_atom(self, n):
-        bonds = set(self._bonds[n])  # save
-        sct = self._stereo_cis_trans_paths
-        sa = self._stereo_allenes_paths
-
-        super().delete_atom(n)
-
-        del self._neighbors[n]
-        del self._hybridizations[n]
-        del self._hydrogens[n]
-        del self._rings_sizes[n]
-        del self._heteroatoms[n]
-
-        sas = self._atoms_stereo
-        if n in sas:
-            del sas[n]
-        for m in bonds:
-            if m in sas:
-                del sas[m]
-        if self._cis_trans_stereo:
-            for nm, path in sct.items():
-                if not bonds.isdisjoint(path) and nm in self._cis_trans_stereo:
-                    del self._cis_trans_stereo[nm]
-        if self._allenes_stereo:
-            for c, path in sa.items():
-                if not bonds.isdisjoint(path) and c in self._allenes_stereo:
-                    del self._allenes_stereo[c]
-
-    def delete_bond(self, n, m):
-        sct = self._stereo_cis_trans_paths  # save
-        sa = self._stereo_allenes_paths
-
-        super().delete_bond(n, m)
-
-        if n in self._atoms_stereo:
-            del self._atoms_stereo[n]
-        if m in self._atoms_stereo:
-            del self._atoms_stereo[m]
-        if self._cis_trans_stereo:
-            for nm, path in sct.items():
-                if (n in path or m in path) and nm in self._cis_trans_stereo:
-                    del self._cis_trans_stereo[nm]
-        if self._allenes_stereo:
-            for c, path in sa.items():
-                if (n in path or m in path) and c in self._allenes_stereo:
-                    del self._allenes_stereo[c]
-
     def copy(self) -> 'QueryContainer':
         copy = super().copy()
 

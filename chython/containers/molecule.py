@@ -168,11 +168,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         """
         return self._hydrogens[n] + self.explicit_hydrogens(n)
 
-    def is_ring_bond(self, n: int, m: int) -> bool:
-        """
-        Check is bond in any ring
-        """
-
     def adjacency_matrix(self, set_bonds=False):
         """
         Adjacency matrix of Graph.
@@ -277,7 +272,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             # fix stereo if formed not to hydrogen bond
             self.fix_stereo()
 
-    def delete_atom(self, n):
+    def delete_atom(self, n: int):
         """
         Remove atom.
 
@@ -285,25 +280,29 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         Implicit hydrogens marks will not be set if atoms in aromatic rings.
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
-        old_bonds = self._bonds[n]  # save bonds
         isnt_hydrogen = self._atoms[n].atomic_number != 1
-        super().delete_atom(n)
 
+        del self._atoms[n]
+        del self._charges[n]
+        del self._radicals[n]
         del self._hydrogens[n]
         del self._plane[n]
+
+        for m in self._bonds.pop(n):
+            del self._bonds[m][n]
+            self._calc_implicit(m)
+
         self._conformers.clear()  # clean conformers. need full recalculation for new system
         try:
             del self._parsed_mapping[n]
         except KeyError:
             pass
 
-        for m in old_bonds:
-            self._calc_implicit(m)
-
         if isnt_hydrogen:  # hydrogen atom not used for stereo coding
             self.fix_stereo()
+        self.flush_cache()
 
-    def delete_bond(self, n, m):
+    def delete_bond(self, n: int, m: int):
         """
         Disconnect atoms.
 
@@ -311,7 +310,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         Implicit hydrogens marks will not be set if atoms in aromatic rings.
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
-        super().delete_bond(n, m)
+        del self._bonds[n][m]
+        del self._bonds[m][n]
         self._conformers.clear()  # clean conformers. need full recalculation for new system
 
         self._calc_implicit(n)
@@ -319,6 +319,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
         if self._atoms[n].atomic_number != 1 and self._atoms[m].atomic_number != 1:
             self.fix_stereo()
+        self.flush_cache()
 
     def remap(self, mapping: Dict[int, int], *, copy: bool = False) -> 'MoleculeContainer':
         if len(mapping) != len(set(mapping.values())) or \
