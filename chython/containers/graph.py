@@ -93,15 +93,15 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         return sum(len(x) for x in self._bonds.values()) // 2
 
     @abstractmethod
-    def add_atom(self, atom: Atom, _map: Optional[int] = None, *, charge: int = 0, is_radical: bool = False) -> int:
+    def add_atom(self, atom: Atom, n: Optional[int] = None, *, charge: int = 0, is_radical: bool = False) -> int:
         """
         new atom addition
         """
-        if _map is None:
-            _map = max(self._atoms, default=0) + 1
-        elif not isinstance(_map, int):
+        if n is None:
+            n = max(self._atoms, default=0) + 1
+        elif not isinstance(n, int):
             raise TypeError('mapping should be integer')
-        elif _map in self._atoms:
+        elif n in self._atoms:
             raise MappingError('atom with same number exists')
         elif not isinstance(is_radical, bool):
             raise TypeError('bool expected')
@@ -110,13 +110,13 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         elif charge > 4 or charge < -4:
             raise ValueError('formal charge should be in range [-4, 4]')
 
-        atom._attach_graph(self, _map)
-        self._atoms[_map] = atom
-        self._charges[_map] = charge
-        self._radicals[_map] = is_radical
-        self._bonds[_map] = {}
+        atom._attach_graph(self, n)
+        self._atoms[n] = atom
+        self._charges[n] = charge
+        self._radicals[n] = is_radical
+        self._bonds[n] = {}
         self.__dict__.clear()
-        return _map
+        return n
 
     @abstractmethod
     def add_bond(self, n: int, m: int, bond: Bond):

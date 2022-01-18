@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Dmitrij Zanadvornykh <zandmitrij@gmail.com>
 #  This file is part of chython.
 #
@@ -34,21 +34,21 @@ class Query(Core, ABC):
     @property
     def neighbors(self) -> Tuple[int, ...]:
         try:
-            return self._graph()._neighbors[self._map]
+            return self._graph()._neighbors[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 
     @property
     def hybridization(self):
         try:
-            return self._graph()._hybridizations[self._map]
+            return self._graph()._hybridizations[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 
     @property
     def heteroatoms(self) -> Tuple[int, ...]:
         try:
-            return self._graph()._heteroatoms[self._map]
+            return self._graph()._heteroatoms[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 
@@ -58,7 +58,7 @@ class Query(Core, ABC):
         Atom rings sizes.
         """
         try:
-            return self._graph()._rings_sizes[self._map]
+            return self._graph()._rings_sizes[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
         except KeyError:
@@ -67,7 +67,7 @@ class Query(Core, ABC):
     @property
     def implicit_hydrogens(self) -> Tuple[int, ...]:
         try:
-            return self._graph()._hydrogens[self._map]
+            return self._graph()._hydrogens[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 

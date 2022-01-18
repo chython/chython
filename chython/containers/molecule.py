@@ -235,20 +235,20 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         if not isinstance(xy, tuple) or len(xy) != 2 or not isinstance(xy[0], float) or not isinstance(xy[1], float):
             raise TypeError('XY should be tuple with 2 float')
 
-        _map = super().add_atom(atom, *args, charge=charge, is_radical=is_radical, **kwargs)
-        self._plane[_map] = xy
+        n = super().add_atom(atom, *args, charge=charge, is_radical=is_radical, **kwargs)
+        self._plane[n] = xy
         self._conformers.clear()  # clean conformers. need full recalculation for new system
 
         if atom.atomic_number != 1:
             try:
                 rules = atom.valence_rules(charge, is_radical, 0)
             except ValenceError:
-                self._hydrogens[_map] = None
+                self._hydrogens[n] = None
             else:
-                self._hydrogens[_map] = rules[0][2]  # first rule without neighbors
+                self._hydrogens[n] = rules[0][2]  # first rule without neighbors
         else:
-            self._hydrogens[_map] = 0
-        return _map
+            self._hydrogens[n] = 0
+        return n
 
     def add_bond(self, n, m, bond: Union[Bond, int]):
         """
@@ -896,7 +896,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             atoms[n] = a = object.__new__(Element.from_atomic_number(a))
             a._Core__isotope = i
             a._graph = ref(mol)
-            a._map = n
+            a._n = n
         for b in bonds_flat:
             b._Bond__graph = ref(mol)
 

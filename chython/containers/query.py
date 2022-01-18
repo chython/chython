@@ -130,13 +130,13 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
             else:
                 raise TypeError('QueryElement object expected')
 
-        _map = super().add_atom(atom, *args, **kwargs)
-        self._neighbors[_map] = neighbors
-        self._hybridizations[_map] = hybridization
-        self._hydrogens[_map] = hydrogens
-        self._rings_sizes[_map] = rings_sizes
-        self._heteroatoms[_map] = heteroatoms
-        return _map
+        n = super().add_atom(atom, *args, **kwargs)
+        self._neighbors[n] = neighbors
+        self._hybridizations[n] = hybridization
+        self._hydrogens[n] = hydrogens
+        self._rings_sizes[n] = rings_sizes
+        self._heteroatoms[n] = heteroatoms
+        return n
 
     def add_bond(self, n, m, bond: Union[QueryBond, Bond, int, Tuple[int, ...]]):
         if isinstance(bond, Bond):

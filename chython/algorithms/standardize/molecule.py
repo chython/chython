@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Dmitrij Zanadvornykh <zandmitrij@gmail.com>
 #  Copyright 2018 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
@@ -344,7 +344,7 @@ class Standardize:
             bonds = self._bonds
             m = start_map
             for n in to_add:
-                m = self.add_atom(H(), _map=m)
+                m = self.add_atom(H(), m)
                 bonds[n][m] = bonds[m][n] = b = Bond(1)
                 b._attach_graph(self, n, m)
                 hydrogens[n] = 0
