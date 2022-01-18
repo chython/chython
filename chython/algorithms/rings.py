@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from CachedMethods import cached_args_method
 from collections import defaultdict, deque
 from functools import cached_property
 from itertools import combinations
@@ -65,6 +66,17 @@ class Rings:
         Sizes of rings containing atom.
         """
         return {n: tuple(len(r) for r in rs) for n, rs in self.atoms_rings.items()}
+
+    @cached_args_method
+    def is_ring_bond(self: 'Graph', n: int, m: int, /) -> bool:
+        """
+        Check is bond in any ring.
+        """
+        self.bond(n, m)  # check if bond exists
+        try:
+            return not set(self.atoms_rings[n]).isdisjoint(self.atoms_rings[m])
+        except KeyError:
+            return False
 
     @cached_property
     def ring_atoms(self):

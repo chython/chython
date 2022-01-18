@@ -22,7 +22,7 @@ from typing import Dict, Generic, Iterator, Optional, Tuple, TypeVar
 from ..algorithms.isomorphism import Isomorphism
 from ..algorithms.morgan import Morgan
 from ..algorithms.rings import Rings
-from ..exceptions import AtomNotFound, MappingError
+from ..exceptions import AtomNotFound, MappingError, BondNotFound
 
 
 Atom = TypeVar('Atom')
@@ -65,7 +65,10 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         return iter(self._atoms)
 
     def bond(self, n: int, m: int) -> Bond:
-        return self._bonds[n][m]
+        try:
+            return self._bonds[n][m]
+        except KeyError as e:
+            raise BondNotFound from e
 
     def has_bond(self, n: int, m: int) -> bool:
         try:
@@ -90,15 +93,15 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         return sum(len(x) for x in self._bonds.values()) // 2
 
     @abstractmethod
-    def add_atom(self, atom: Atom, _map: Optional[int] = None, *, charge: int = 0, is_radical: bool = False) -> int:
+    def add_atom(self, atom: Atom, n: Optional[int] = None, *, charge: int = 0, is_radical: bool = False) -> int:
         """
         new atom addition
         """
-        if _map is None:
-            _map = max(self._atoms, default=0) + 1
-        elif not isinstance(_map, int):
+        if n is None:
+            n = max(self._atoms, default=0) + 1
+        elif not isinstance(n, int):
             raise TypeError('mapping should be integer')
-        elif _map in self._atoms:
+        elif n in self._atoms:
             raise MappingError('atom with same number exists')
         elif not isinstance(is_radical, bool):
             raise TypeError('bool expected')
@@ -107,13 +110,13 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         elif charge > 4 or charge < -4:
             raise ValueError('formal charge should be in range [-4, 4]')
 
-        self._atoms[_map] = atom
-        self._charges[_map] = charge
-        self._radicals[_map] = is_radical
-        self._bonds[_map] = {}
-        atom._attach_to_graph(self, _map)
+        atom._attach_graph(self, n)
+        self._atoms[n] = atom
+        self._charges[n] = charge
+        self._radicals[n] = is_radical
+        self._bonds[n] = {}
         self.__dict__.clear()
-        return _map
+        return n
 
     @abstractmethod
     def add_bond(self, n: int, m: int, bond: Bond):
@@ -121,35 +124,13 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         Add bond.
         """
         if n == m:
-            raise ValueError('atom loops impossible')
+            raise MappingError('atom loops impossible')
         if n not in self._bonds or m not in self._bonds:
             raise AtomNotFound('atoms not found')
         if n in self._bonds[m]:
-            raise ValueError('atoms already bonded')
+            raise MappingError('atoms already bonded')
 
         self._bonds[n][m] = self._bonds[m][n] = bond
-        self.__dict__.clear()
-
-    @abstractmethod
-    def delete_atom(self, n: int):
-        """
-        Remove atom.
-        """
-        del self._atoms[n]
-        del self._charges[n]
-        del self._radicals[n]
-        sb = self._bonds
-        for m in sb.pop(n):
-            del sb[m][n]
-        self.__dict__.clear()
-
-    @abstractmethod
-    def delete_bond(self, n: int, m: int):
-        """
-        Remove bond.
-        """
-        del self._bonds[n][m]
-        del self._bonds[m][n]
         self.__dict__.clear()
 
     @abstractmethod
@@ -161,20 +142,11 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         copy._charges = self._charges.copy()
         copy._radicals = self._radicals.copy()
 
-        copy._bonds = cb = {}
-        for n, m_bond in self._bonds.items():
-            cb[n] = cbn = {}
-            for m, bond in m_bond.items():
-                if m in cb:  # bond partially exists. need back-connection.
-                    cbn[m] = cb[m][n]
-                else:
-                    cbn[m] = bond.copy()
-
         copy._atoms = ca = {}
         for n, atom in self._atoms.items():
             atom = atom.copy()
             ca[n] = atom
-            atom._attach_to_graph(copy, n)
+            atom._attach_graph(copy, n)
         return copy
 
     @abstractmethod
@@ -189,16 +161,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         ua = u._atoms
         for n, atom in other._atoms.items():
             ua[n] = atom = atom.copy()
-            atom._attach_to_graph(u, n)
-
-        ub = u._bonds
-        for n, m_bond in other._bonds.items():
-            ub[n] = ubn = {}
-            for m, bond in m_bond.items():
-                if m in ub:  # bond partially exists. need back-connection.
-                    ubn[m] = ub[m][n]
-                else:
-                    ubn[m] = bond.copy()
+            atom._attach_graph(u, n)
         return u
 
     def flush_cache(self):
@@ -234,7 +197,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
     def __setstate__(self, state):
         self._atoms = state['atoms']
         for n, a in state['atoms'].items():
-            a._attach_to_graph(self, n)
+            a._attach_graph(self, n)
         self._charges = state['charges']
         self._radicals = state['radicals']
         self._bonds = state['bonds']

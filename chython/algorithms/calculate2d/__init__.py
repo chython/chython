@@ -21,7 +21,6 @@ from math import sqrt
 from pkg_resources import resource_string
 from random import random
 from typing import TYPE_CHECKING, Union
-from ...containers import molecule
 from ...exceptions import ImplementationError
 
 
@@ -102,13 +101,12 @@ class Calculate2DMolecule:
             x, y = plane[n]
             plane[n] = (x - min_x, y - mean_y)
 
-        if isinstance(self, molecule.MoleculeContainer):
-            if -.18 <= plane[right_atom][1] <= .18:
-                factor = self._hydrogens[right_atom]
-                if factor == 1:
-                    max_x += .15
-                elif factor:
-                    max_x += .25
+        if -.18 <= plane[right_atom][1] <= .18:
+            factor = self._hydrogens[right_atom]
+            if factor == 1:
+                max_x += .15
+            elif factor:
+                max_x += .25
         return max_x
 
     def _fix_plane_min(self: 'MoleculeContainer', shift_x: float, shift_y=0., component=None) -> float:
@@ -125,13 +123,12 @@ class Calculate2DMolecule:
             x, y = plane[n]
             plane[n] = (x - min_x, y - min_y)
 
-        if isinstance(self, molecule.MoleculeContainer):
-            if shift_y - .18 <= plane[right_atom][1] <= shift_y + .18:
-                factor = self._hydrogens[right_atom]
-                if factor == 1:
-                    max_x += .15
-                elif factor:
-                    max_x += .25
+        if shift_y - .18 <= plane[right_atom][1] <= shift_y + .18:
+            factor = self._hydrogens[right_atom]
+            if factor == 1:
+                max_x += .15
+            elif factor:
+                max_x += .25
         return max_x
 
     def __clean2d_prepare(self: 'MoleculeContainer'):

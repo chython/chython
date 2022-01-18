@@ -22,8 +22,8 @@ from itertools import repeat
 from pathlib import Path
 from traceback import format_exc
 from typing import Optional, Iterable
-from ._mdl import parse_error
 from .XYZrw import XYZ
+from ..exceptions import ParseError
 
 
 one_symbol_names = {'ALA', 'CYS', 'ASP', 'GLU', 'PHE', 'GLY', 'HIS', 'ILE', 'LYS', 'LEU', 'MET', 'ASN', 'PRO', 'GLN',
@@ -132,7 +132,7 @@ class PDBRead(XYZ):
                         self._info(f'Line [{n}]: consist errors in charge')
                         failkey = True
                         atoms = []
-                        yield parse_error(count, pos, self._format_log(), line)
+                        yield ParseError(count, pos, self._format_log(), line)
                 else:
                     charge = None
                 try:
@@ -141,12 +141,12 @@ class PDBRead(XYZ):
                     self._info(f'Line [{n}]: consist errors in coordinates definition')
                     failkey = True
                     atoms = []
-                    yield parse_error(count, pos, self._format_log(), line)
+                    yield ParseError(count, pos, self._format_log(), line)
                     continue
 
                 element = line[76:78].strip()
                 residue = line[17:20].strip()
-                atom_name = line[12:16].strip(' 0123456789-')
+                atom_name = line[12:16].strip(' 0123456789-+')
                 if residue in one_symbol_names:  # bio-polymers and I
                     atom_name = atom_name[0]
                 elif residue in two_symbol_names:
@@ -173,7 +173,7 @@ class PDBRead(XYZ):
                     if not ignore:
                         failkey = True
                         atoms = []
-                        yield parse_error(count, pos, self._format_log(), line)
+                        yield ParseError(count, pos, self._format_log(), line)
                         continue
                 atoms.append((atom_name, charge, x, y, z, residue))
             elif line.startswith('END'):  # EOF or end of complex
@@ -182,7 +182,7 @@ class PDBRead(XYZ):
                         container = self._convert_molecule(atoms, next(charges), next(radicals))
                     except ValueError:
                         self._info(f'Structure consist errors:\n{format_exc()}')
-                        yield parse_error(count, pos, self._format_log(), None)
+                        yield ParseError(count, pos, self._format_log(), None)
                     except StopIteration:
                         raise ValueError('charge_map or radical_map invalid')
                     else:
@@ -195,13 +195,13 @@ class PDBRead(XYZ):
                     except StopIteration:
                         raise ValueError('charge_map or radical_map invalid')
                     self._info(f'Line [{n}]: END or ENDMDL before ATOM or HETATM')
-                    yield parse_error(count, pos, self._format_log(), line)
+                    yield ParseError(count, pos, self._format_log(), line)
                 count += 1
                 if seekable:
                     pos = file.tell()
         if atoms:  # ENDMDL or END not found
             self._info('PDB not finished')
-            yield parse_error(count, pos, self._format_log(), {})
+            yield ParseError(count, pos, self._format_log(), None)
 
     def _convert_molecule(self, matrix, charge=0, radical=0):
         if self.__parsed_first is None:

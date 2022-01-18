@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -81,11 +81,11 @@ class Element(Core, ABC):
             raise ValueError('formal charge should be in range [-4, 4]')
         try:
             g = self._graph()
-            g._charges[self._map] = charge
+            g._charges[self._n] = charge
         except AttributeError:
             raise IsNotConnectedAtom
         else:
-            g._calc_implicit(self._map)
+            g._calc_implicit(self._n)
             g.flush_cache()
             g.fix_stereo()
 
@@ -95,39 +95,39 @@ class Element(Core, ABC):
             raise TypeError('bool expected')
         try:
             g = self._graph()
-            g._radicals[self._map] = is_radical
+            g._radicals[self._n] = is_radical
         except AttributeError:
             raise IsNotConnectedAtom
         else:
-            g._calc_implicit(self._map)
+            g._calc_implicit(self._n)
             g.flush_cache()
             g.fix_stereo()
 
     @property
     def implicit_hydrogens(self) -> Optional[int]:
         try:
-            return self._graph()._hydrogens[self._map]
+            return self._graph()._hydrogens[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 
     @property
     def explicit_hydrogens(self) -> int:
         try:
-            return self._graph().explicit_hydrogens(self._map)
+            return self._graph().explicit_hydrogens(self._n)
         except AttributeError:
             raise IsNotConnectedAtom
 
     @property
     def total_hydrogens(self) -> int:
         try:
-            return self._graph().total_hydrogens(self._map)
+            return self._graph().total_hydrogens(self._n)
         except AttributeError:
             raise IsNotConnectedAtom
 
     @property
     def heteroatoms(self) -> int:
         try:
-            return self._graph().heteroatoms(self._map)
+            return self._graph().heteroatoms(self._n)
         except AttributeError:
             raise IsNotConnectedAtom
 
@@ -137,7 +137,7 @@ class Element(Core, ABC):
         Neighbors count of atom
         """
         try:
-            return self._graph().neighbors(self._map)
+            return self._graph().neighbors(self._n)
         except AttributeError:
             raise IsNotConnectedAtom
 
@@ -149,7 +149,7 @@ class Element(Core, ABC):
         two double bonded and any amount of single bonded neighbors, 4 - if atom in aromatic ring.
         """
         try:
-            return self._graph().hybridization(self._map)
+            return self._graph().hybridization(self._n)
         except AttributeError:
             raise IsNotConnectedAtom
 
@@ -159,7 +159,7 @@ class Element(Core, ABC):
         Atom rings sizes.
         """
         try:
-            return self._graph().atoms_rings_sizes[self._map]
+            return self._graph().atoms_rings_sizes[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
         except KeyError:
@@ -171,7 +171,7 @@ class Element(Core, ABC):
         Atom in any ring.
         """
         try:
-            return self._map in self._graph().ring_atoms
+            return self._n in self._graph().ring_atoms
         except AttributeError:
             raise IsNotConnectedAtom
 

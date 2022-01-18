@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -25,8 +25,8 @@ from numba.core.types import Tuple as nTuple
 from pathlib import Path
 from traceback import format_exc
 from typing import List, Iterable, Tuple, Optional
-from ._mdl import parse_error
 from ..containers import MoleculeContainer
+from ..exceptions import ParseError
 from ..periodictable import Element
 
 
@@ -113,7 +113,7 @@ class XYZ:
         return list(iter(self))
 
     def __iter__(self) -> Iterable[MoleculeContainer]:
-        return (x for x in self._data if not isinstance(x, parse_error))
+        return (x for x in self._data if not isinstance(x, ParseError))
 
     def __next__(self) -> MoleculeContainer:
         return next(iter(self))
@@ -131,7 +131,7 @@ class XYZ:
         charges = mol._charges
         for n, (a, c, x, y, z) in enumerate(matrix, 1):
             atoms[n] = atom = Element.from_symbol(a)()
-            atom._attach_to_graph(mol, n)
+            atom._attach_graph(mol, n)
             bonds[n] = {}
             plane[n] = (x, y)
             conformer[n] = (x, y, z)
@@ -216,7 +216,7 @@ class XYZRead(XYZ):
                         except ValueError:
                             failkey = True
                             self._info(f'Line [{n}]: consist errors in charge definition')
-                            yield parse_error(count, pos, self._format_log(), line)
+                            yield ParseError(count, pos, self._format_log(), line)
                             break
                     elif x.startswith('radical='):
                         try:
@@ -224,7 +224,7 @@ class XYZRead(XYZ):
                         except ValueError:
                             failkey = True
                             self._info(f'Line [{n}]: consist errors in radical atoms count definition')
-                            yield parse_error(count, pos, self._format_log(), line)
+                            yield ParseError(count, pos, self._format_log(), line)
                             break
                 else:
                     meta = False
@@ -235,20 +235,20 @@ class XYZRead(XYZ):
                 except ValueError:
                     failkey = True
                     self._info(f'Line [{n}]: consist errors in xyz atom coordinates definition')
-                    yield parse_error(count, pos, self._format_log(), line)
+                    yield ParseError(count, pos, self._format_log(), line)
                 else:
                     if len(xyz) == size:
                         try:
                             container = self._convert_molecule(xyz, charge, radical)
                         except ValueError:
                             self._info(f'record consist errors:\n{format_exc()}')
-                            yield parse_error(count, pos, self._format_log(), None)
+                            yield ParseError(count, pos, self._format_log(), None)
                         else:
                             yield container
                         failkey = True  # trigger end of XYZ
         if not failkey:  # cut XYZ
             self._info('Last structure not finished')
-            yield parse_error(count, pos, self._format_log(), {})
+            yield ParseError(count, pos, self._format_log(), None)
 
     def parse(self, matrix: Iterable[Tuple[str, float, float, float]], charge: int = 0, radical: int = 0) -> \
             Optional[MoleculeContainer]:

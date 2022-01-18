@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -26,7 +26,7 @@ T = TypeVar('T')
 
 
 class Core(ABC):
-    __slots__ = ('__isotope', '_graph', '_map')
+    __slots__ = ('__isotope', '_graph', '_n')
 
     def __init__(self, isotope: Optional[int] = None):
         self.__isotope = isotope
@@ -42,11 +42,11 @@ class Core(ABC):
     def __setstate__(self, state):
         self.__isotope = state['isotope']
 
-    def __int__(self):
+    @abstractmethod
+    def __hash__(self):
         """
-        Same as hash
+        Atom hash used in Morgan atom numbering algorithm.
         """
-        return hash(self)
 
     @property
     @abstractmethod
@@ -75,7 +75,7 @@ class Core(ABC):
         Charge of atom
         """
         try:
-            return self._graph()._charges[self._map]
+            return self._graph()._charges[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 
@@ -85,7 +85,7 @@ class Core(ABC):
         Radical state of atoms
         """
         try:
-            return self._graph()._radicals[self._map]
+            return self._graph()._radicals[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 
@@ -95,7 +95,7 @@ class Core(ABC):
         X coordinate of atom on 2D plane
         """
         try:
-            return self._graph()._plane[self._map][0]
+            return self._graph()._plane[self._n][0]
         except AttributeError:
             raise IsNotConnectedAtom
 
@@ -105,7 +105,7 @@ class Core(ABC):
         Y coordinate of atom on 2D plane
         """
         try:
-            return self._graph()._plane[self._map][1]
+            return self._graph()._plane[self._n][1]
         except AttributeError:
             raise IsNotConnectedAtom
 
@@ -115,7 +115,7 @@ class Core(ABC):
         (X, Y) coordinates of atom on 2D plane
         """
         try:
-            return self._graph()._plane[self._map]
+            return self._graph()._plane[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 
@@ -127,22 +127,22 @@ class Core(ABC):
         copy._Core__isotope = self.__isotope
         return copy
 
-    def _attach_to_graph(self, graph, _map):
+    def _attach_graph(self, graph, n):
         try:
             self._graph
         except AttributeError:
             self._graph = ref(graph)
-            self._map = _map
+            self._n = n
         else:
             raise IsConnectedAtom
 
-    def _change_map(self, _map):
+    def _change_map(self, n):
         try:
             self._graph
         except AttributeError:
             raise IsNotConnectedAtom
         else:
-            self._map = _map
+            self._n = n
 
 
 __all__ = ['Core']

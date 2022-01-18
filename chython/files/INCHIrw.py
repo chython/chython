@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -27,10 +27,10 @@ from re import split
 from sys import prefix, exec_prefix
 from typing import List, Iterator
 from warnings import warn
-from ._mdl import Parser, common_isotopes, parse_error
+from ._mdl import Parser, common_isotopes
 from ..containers import MoleculeContainer
 from ..containers.bonds import Bond
-from ..exceptions import ValenceError, IsChiral, NotChiral
+from ..exceptions import ValenceError, IsChiral, NotChiral, ParseError
 from ..periodictable import H
 
 
@@ -57,6 +57,7 @@ class INCHIRead(Parser):
         :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
         :param calc_cis_trans: Calculate cis/trans marks from 2d coordinates.
         :param ignore_stereo: Ignore stereo data.
+        :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
         """
         if isinstance(file, str):
             self._file = open(file)
@@ -96,7 +97,7 @@ class INCHIRead(Parser):
             try:
                 x = parse(line)
             except ValueError:
-                yield parse_error(n, pos, self._format_log(), line)
+                yield ParseError(n, pos, self._format_log(), line)
             else:
                 yield x
             if seekable:
@@ -137,7 +138,7 @@ class INCHIRead(Parser):
         return list(iter(self))
 
     def __iter__(self) -> Iterator[MoleculeContainer]:
-        return (x for x in self._data if not isinstance(x, parse_error))
+        return (x for x in self._data if not isinstance(x, ParseError))
 
     def __next__(self) -> MoleculeContainer:
         return next(iter(self))
@@ -170,7 +171,10 @@ class INCHIRead(Parser):
         mol = super()._create_molecule(data, mapping, _skip_calc_implicit=True)
         atoms = mol._atoms
         bonds = mol._bonds
+        charges = mol._charges
+        radicals = mol._radicals
         hydrogens = mol._hydrogens
+        plane = mol._plane
 
         # set hydrogen atoms. INCHI designed for hydrogens handling. hope correctly.
         free = count(max(mapping.values()) + 1)
@@ -181,12 +185,16 @@ class INCHIRead(Parser):
             # in chython hydrogens never have implicit H.
             elif atom['hydrogens']:  # >[xH]-H case
                 m = next(free)
-                atoms[m] = a = H()
-                a._attach_to_graph(mol, m)
-                bonds[n][m] = b = Bond(1)
-                bonds[m] = {n: b}
+                charges[m] = 0
+                radicals[m] = False
+                plane[m] = (0., 0.)
                 hydrogens[n] = 0
                 hydrogens[m] = 0
+                atoms[m] = a = H()
+                a._attach_graph(mol, m)
+                bonds[n][m] = b = Bond(1)
+                bonds[m] = {n: b}
+                b._attach_graph(mol, n, m)
             else:  # H+, H* or >H-[xH] cases
                 hydrogens[n] = 0
             # convert isotopic implicit hydrogens to explicit
@@ -194,11 +202,15 @@ class INCHIRead(Parser):
                 if atom[k]:
                     for _ in range(atom[k]):
                         m = next(free)
+                        charges[m] = 0
+                        radicals[m] = False
+                        plane[m] = (0., 0.)
+                        hydrogens[m] = 0
                         atoms[m] = a = H(i)
-                        a._attach_to_graph(mol, m)
+                        a._attach_graph(mol, m)
                         bonds[n][m] = b = Bond(1)
                         bonds[m] = {n: b}
-                        hydrogens[m] = 0
+                        b._attach_graph(mol, n, m)
 
         if self.__ignore_stereo or \
                 not data['stereo_atoms'] and not data['stereo_cumulenes'] and not data['stereo_allenes']:

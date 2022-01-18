@@ -34,10 +34,10 @@ def unpack(const unsigned char[::1] data not None):
     cdef double[4095] x, y
     cdef bint[4096] seen
 
-    cdef object bond
+    cdef object bond, py_n, py_m
     cdef dict py_charges, py_radicals, py_hydrogens, py_plane, py_bonds, tmp
     cdef dict py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo
-    cdef list py_mapping, py_atoms, py_isotopes
+    cdef list py_mapping, py_atoms, py_isotopes, py_bonds_flat
 
     # lets extract data
     a, b, c = data[1], data[2], data[3]
@@ -118,40 +118,46 @@ def unpack(const unsigned char[::1] data not None):
     py_atoms_stereo = {}
     py_allenes_stereo = {}
     py_cis_trans_stereo = {}
+    py_bonds_flat = []
 
     shift = 0
     for i in range(na):
         n = mapping[i]
+        py_n = n
 
         # fill intermediate data
-        py_mapping.append(n)
+        py_mapping.append(py_n)
         py_atoms.append(atom[i])
         py_isotopes.append(isotopes[i] or None)
 
-        py_charges[n] = charges[i]
-        py_radicals[n] = radicals[i]
+        py_charges[py_n] = charges[i]
+        py_radicals[py_n] = radicals[i]
         if hydrogens[i] == 7:
-            py_hydrogens[n] = None
+            py_hydrogens[py_n] = None
         else:
-            py_hydrogens[n] = hydrogens[i]
-        py_plane[n] = (x[i], y[i])
+            py_hydrogens[py_n] = hydrogens[i]
+        py_plane[py_n] = (x[i], y[i])
 
         if is_tet[i]:
-            py_atoms_stereo[n] = tet_sign[i]
+            py_atoms_stereo[py_n] = tet_sign[i]
         if is_all[i]:
-            py_allenes_stereo[n] = all_sign[i]
+            py_allenes_stereo[py_n] = all_sign[i]
 
         tmp = {}
-        py_bonds[n] = tmp
+        py_bonds[py_n] = tmp
         seen[n] = True
         for j in range(shift, shift + neighbors[i]):
             m = connections[j]
+            py_m = m
             if seen[m]:  # bond partially exists. need back-connection.
-                tmp[m] = py_bonds[m][n]
+                tmp[py_m] = py_bonds[py_m][py_n]
             else:
                 bond = object.__new__(Bond)
                 bond._Bond__order = orders[order_shift]
-                tmp[m] = bond
+                bond._Bond__n = py_n
+                bond._Bond__m = py_m
+                tmp[py_m] = bond
+                py_bonds_flat.append(bond)
                 order_shift += 1
 
         shift += neighbors[i]
@@ -161,7 +167,7 @@ def unpack(const unsigned char[::1] data not None):
 
     return (py_mapping, py_atoms, py_isotopes,
             py_charges, py_radicals, py_hydrogens, py_plane, py_bonds,
-            py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo, pack_length)
+            py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo, pack_length, py_bonds_flat)
 
 
 cdef int[119] common_isotopes

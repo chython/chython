@@ -450,6 +450,19 @@ def _rules_single():
     bonds_fix = ((1, 2, 1),)
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
 
+    # false N-oxide radical
+    #
+    #    |        |
+    #  = N  >> = [N+]
+    #     \        \
+    #      O*       [O-]
+    #
+    atoms = ({'atom': 'N', 'neighbors': 3, 'hybridization': 2}, {'atom': 'O', 'neighbors': 1, 'is_radical': True})
+    bonds = ((1, 2, 1),)
+    atom_fix = {1: (1, False), 2: (-1, False)}
+    bonds_fix = ()
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
     #
     # C           C
     #  \           \

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Dmitrij Zanadvornykh <zandmitrij@gmail.com>
 #  This file is part of chython.
 #
@@ -31,82 +31,26 @@ _inorganic = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'F', 'Cl', 'Br', 'I', 'B', 'C', 'N',
 class Query(Core, ABC):
     __slots__ = ()
 
-    @Core.charge.setter
-    def charge(self, charge):
-        if not isinstance(charge, int):
-            raise TypeError('formal charge should be int in range [-4, 4]')
-        elif charge > 4 or charge < -4:
-            raise ValueError('formal charge should be in range [-4, 4]')
-        try:
-            g = self._graph()
-            g._charges[self._map] = charge
-        except AttributeError:
-            raise IsNotConnectedAtom
-        else:
-            g.flush_cache()
-
-    @Core.is_radical.setter
-    def is_radical(self, is_radical):
-        if not isinstance(is_radical, bool):
-            raise TypeError('bool expected')
-        try:
-            g = self._graph()
-            g._radicals[self._map] = is_radical
-        except AttributeError:
-            raise IsNotConnectedAtom
-        else:
-            g.flush_cache()
-
     @property
     def neighbors(self) -> Tuple[int, ...]:
         try:
-            return self._graph()._neighbors[self._map]
+            return self._graph()._neighbors[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 
     @property
     def hybridization(self):
         try:
-            return self._graph()._hybridizations[self._map]
+            return self._graph()._hybridizations[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
-
-    @neighbors.setter
-    def neighbors(self, neighbors):
-        try:
-            g = self._graph()
-            g._neighbors[self._map] = g._validate_neighbors(neighbors)
-        except AttributeError:
-            raise IsNotConnectedAtom
-        else:
-            g.flush_cache()
-
-    @hybridization.setter
-    def hybridization(self, hybridization):
-        try:
-            g = self._graph()
-            g._hybridizations[self._map] = g._validate_hybridization(hybridization)
-        except AttributeError:
-            raise IsNotConnectedAtom
-        else:
-            g.flush_cache()
 
     @property
     def heteroatoms(self) -> Tuple[int, ...]:
         try:
-            return self._graph()._heteroatoms[self._map]
+            return self._graph()._heteroatoms[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
-
-    @heteroatoms.setter
-    def heteroatoms(self, heteroatoms):
-        try:
-            g = self._graph()
-            g._heteroatoms[self._map] = g._validate_neighbors(heteroatoms)
-        except AttributeError:
-            raise IsNotConnectedAtom
-        else:
-            g.flush_cache()
 
     @property
     def ring_sizes(self) -> Tuple[int, ...]:
@@ -114,38 +58,18 @@ class Query(Core, ABC):
         Atom rings sizes.
         """
         try:
-            return self._graph()._rings_sizes[self._map]
+            return self._graph()._rings_sizes[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
         except KeyError:
             return ()
 
-    @ring_sizes.setter
-    def ring_sizes(self, ring_sizes):
-        try:
-            g = self._graph()
-            g._rings_sizes[self._map] = g._validate_rings(ring_sizes)
-        except AttributeError:
-            raise IsNotConnectedAtom
-        else:
-            g.flush_cache()
-
     @property
     def implicit_hydrogens(self) -> Tuple[int, ...]:
         try:
-            return self._graph()._hydrogens[self._map]
+            return self._graph()._hydrogens[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
-
-    @implicit_hydrogens.setter
-    def implicit_hydrogens(self, implicit_hydrogens):
-        try:
-            g = self._graph()
-            g._hydrogens[self._map] = g._validate_neighbors(implicit_hydrogens)
-        except AttributeError:
-            raise IsNotConnectedAtom
-        else:
-            g.flush_cache()
 
 
 class QueryElement(Query, ABC):

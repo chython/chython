@@ -36,6 +36,12 @@ class AtomNotFound(KeyError):
     """
 
 
+class BondNotFound(KeyError):
+    """
+    Bad atoms numbers
+    """
+
+
 class NotChiral(KeyError):
     """
     Atom not chiral
@@ -63,6 +69,18 @@ class IsConnectedAtom(Exception):
 class IsNotConnectedAtom(Exception):
     """
     Atom is not attached to graph
+    """
+
+
+class IsConnectedBond(Exception):
+    """
+    Bond is already attached to graph
+    """
+
+
+class IsNotConnectedBond(Exception):
+    """
+    Bond is not attached to graph
     """
 
 

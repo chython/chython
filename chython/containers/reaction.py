@@ -119,8 +119,11 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         copy._ReactionContainer__reactants = tuple(x.copy() for x in self.__reactants)
         copy._ReactionContainer__products = tuple(x.copy() for x in self.__products)
         copy._ReactionContainer__reagents = tuple(x.copy() for x in self.__reagents)
-        copy._ReactionContainer__meta = self.__meta.copy()
         copy._ReactionContainer__name = self.__name
+        if self.__meta is None:
+            copy._ReactionContainer__meta = None
+        else:
+            copy._ReactionContainer__meta = self.__meta.copy()
         copy._arrow = self._arrow
         copy._signs = self._signs
         return copy

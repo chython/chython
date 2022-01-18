@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
@@ -458,7 +458,11 @@ class QuerySmiles(Smiles):
         return ''.join(smi)
 
     def _format_bond(self: 'QueryContainer', n, m, adjacency, **kwargs):
-        return ','.join(order_str[x] for x in self._bonds[n][m].order)
+        b = self._bonds[n][m]
+        s = ','.join(order_str[x] for x in b.order)
+        if (c := b.in_ring) is not None:
+            s += ';@' if c else ';!@'
+        return s
 
 
 __all__ = ['MoleculeSmiles', 'CGRSmiles', 'QuerySmiles']
