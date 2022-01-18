@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -91,7 +91,7 @@ class MorganFingerprint:
         if with_pharmacophores:
             identifiers = self.pharmacophores
         elif include_hydrogens:
-            identifiers = {idx: int(atom) for idx, atom in self.atoms()}
+            identifiers = {idx: hash(atom) for idx, atom in self.atoms()}
         else:
             identifiers = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                            for idx, atom in self.atoms()}

@@ -24,7 +24,7 @@ from itertools import zip_longest
 from math import ceil
 from numpy import uint, zeros
 from struct import pack_into, unpack_from
-from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 from weakref import ref
 from zlib import compress, decompress
 from . import query  # cyclic imports resolve
@@ -1008,27 +1008,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 break
             nodes.append(n)
         return nodes
-
-    @cached_property
-    def _screen_fingerprint(self) -> Dict[int, Set[int]]:
-        """
-        Fingerprint of available linear fragments with set of mapped atoms.
-        Required for isomorphism tests filtering speedup.
-        Parameters can be modified globally in `MoleculeContainer._fingerprint_config`.
-        """
-        from chython import fingerprint_config
-
-        if fingerprint_config:
-            return {hash(k): {x for x in v for x in x} for k, v in self._fragments(**fingerprint_config).items()}
-        return {}
-
-    @cached_args_method
-    def _component_fingerprint(self, component):
-        """
-        Fingerprint of specific component.
-        """
-        scope = set(self.connected_components[component])
-        return {k: v & scope for k, v in self._screen_fingerprint.items() if not v.isdisjoint(scope)}
 
     @cached_property
     def _cython_compiled_structure(self):
