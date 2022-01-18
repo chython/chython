@@ -257,8 +257,9 @@ class ReactionContainer(StandardizeReaction, Calculate2DReaction, DepictReaction
     def __getstate__(self):
         state = {'reactants': self.__reactants, 'products': self.__products, 'reagents': self.__reagents,
                  'meta': self.__meta, 'name': self.__name, 'arrow': self._arrow, 'signs': self._signs}
-        import chython
-        if chython.pickle_cache:
+        from chython import pickle_cache
+
+        if pickle_cache:
             state['cache'] = self.__dict__
         return state
 

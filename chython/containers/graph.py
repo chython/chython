@@ -188,8 +188,9 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
     def __getstate__(self):
         state = {'atoms': self._atoms, 'bonds': self._bonds, 'charges': self._charges,
                  'radicals': self._radicals}
-        import chython
-        if chython.pickle_cache:
+        from chython import pickle_cache
+
+        if pickle_cache:
             state['cache'] = {k: v for k, v in self.__dict__.items() if k != '__cached_method___hash__'}
         return state
 
