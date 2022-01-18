@@ -57,10 +57,7 @@ class Bond:
         return {'order': self.__order}
 
     def __setstate__(self, state):
-        if isinstance(state, tuple):  # <= 1.13
-            self.__order = state[1]['_Bond__order']
-        else:
-            self.__order = state['order']
+        self.__order = state['order']
 
     @property
     def order(self) -> int:
