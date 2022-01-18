@@ -127,7 +127,7 @@ class Core(ABC):
         copy._Core__isotope = self.__isotope
         return copy
 
-    def _attach_to_graph(self, graph, _map):
+    def _attach_graph(self, graph, _map):
         try:
             self._graph
         except AttributeError:

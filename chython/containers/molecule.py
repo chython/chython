@@ -352,7 +352,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 m = mg(n, n)
                 atom = atom.copy()
                 ha[m] = atom
-                atom._attach_to_graph(h, m)
+                atom._attach_graph(h, m)
 
             # deep copy of bonds
             for n, m_bond in self._bonds.items():
@@ -533,7 +533,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         sub._atoms = ca = {}
         for n in atoms:
             ca[n] = atom = atom_type.from_atom(sa[n])
-            atom._attach_to_graph(sub, n)
+            atom._attach_graph(sub, n)
 
         sub._bonds = cb = {}
         for n in atoms:
@@ -659,7 +659,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             hr[n] = hpr[n] = sr[n]
             hb[n] = {}
             ha[n] = a = DynamicElement.from_atom(sa[n])
-            a._attach_to_graph(h, n)
+            a._attach_graph(h, n)
 
             for m, bond in sb[n].items():
                 if m not in ha:
@@ -673,7 +673,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             hr[n] = hpr[n] = or_[n]
             hb[n] = {}
             ha[n] = a = DynamicElement.from_atom(oa[n])
-            a._attach_to_graph(h, n)
+            a._attach_graph(h, n)
 
             for m, bond in ob[n].items():
                 if m not in ha:
@@ -701,7 +701,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             hpr[n] = or_[n]
             hb[n] = {}
             ha[n] = a = DynamicElement.from_atom(san)
-            a._attach_to_graph(h, n)
+            a._attach_graph(h, n)
 
             for m, (o1, o2) in adj[n].items():
                 if m not in ha:
@@ -950,7 +950,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             else:
                 ai = None
             atoms[n] = a = a(ai)
-            a._attach_to_graph(mol, n)
+            a._attach_graph(mol, n)
 
             charges[n] = ((hcr >> 1) & 0x0f) - 4
             radicals[n] = bool(hcr & 0x01)
@@ -1206,7 +1206,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         for n, atom in self._atoms.items():
             atom = atom.copy()
             atoms[n] = atom
-            atom._attach_to_graph(self, n)
+            atom._attach_graph(self, n)
 
         bonds = {}
         for n, m_bond in self._bonds.items():

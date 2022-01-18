@@ -107,11 +107,11 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         elif charge > 4 or charge < -4:
             raise ValueError('formal charge should be in range [-4, 4]')
 
+        atom._attach_graph(self, _map)
         self._atoms[_map] = atom
         self._charges[_map] = charge
         self._radicals[_map] = is_radical
         self._bonds[_map] = {}
-        atom._attach_to_graph(self, _map)
         self.__dict__.clear()
         return _map
 
@@ -165,7 +165,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         for n, atom in self._atoms.items():
             atom = atom.copy()
             ca[n] = atom
-            atom._attach_to_graph(copy, n)
+            atom._attach_graph(copy, n)
         return copy
 
     @abstractmethod
@@ -180,7 +180,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
         ua = u._atoms
         for n, atom in other._atoms.items():
             ua[n] = atom = atom.copy()
-            atom._attach_to_graph(u, n)
+            atom._attach_graph(u, n)
         return u
 
     def flush_cache(self):
@@ -215,7 +215,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
     def __setstate__(self, state):
         self._atoms = state['atoms']
         for n, a in state['atoms'].items():
-            a._attach_to_graph(self, n)
+            a._attach_graph(self, n)
         self._charges = state['charges']
         self._radicals = state['radicals']
         self._bonds = state['bonds']

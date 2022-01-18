@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -276,7 +276,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
             copy = self.copy()
             for (n, _), a in zip(atoms, combo):
                 copy._atoms[n] = a = QueryElement.from_atomic_number(a)()
-                a._attach_to_graph(copy, n)
+                a._attach_graph(copy, n)
             for (n, m, _), b in zip(bonds, combo[len(atoms):]):
                 copy._bonds[n][m]._QueryBond__order = (b,)
 
