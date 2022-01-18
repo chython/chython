@@ -131,7 +131,7 @@ class XYZ:
         charges = mol._charges
         for n, (a, c, x, y, z) in enumerate(matrix, 1):
             atoms[n] = atom = Element.from_symbol(a)()
-            atom._attach_to_graph(mol, n)
+            atom._attach_graph(mol, n)
             bonds[n] = {}
             plane[n] = (x, y)
             conformer[n] = (x, y, z)

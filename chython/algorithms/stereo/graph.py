@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -79,7 +79,7 @@ class Stereo:
         for n, atom in atoms.items():
             if atom.atomic_number == 6 and not charges[n] and not radicals[n]:
                 env = bonds[n]
-                if all(x == 1 for x in env.values()):
+                if all(int(x) == 1 for x in env.values()):
                     if sum(int(x) for x in env.values()) > 4:
                         continue
                     tetra.append(n)
@@ -299,14 +299,14 @@ class Stereo:
                 if atom.atomic_number in _heteroatoms:
                     adj_n = adj[n].add
                     for m, bond in bonds[n].items():
-                        if bond == 2 and atoms[m].atomic_number in _heteroatoms:
+                        if int(bond) == 2 and atoms[m].atomic_number in _heteroatoms:
                             adj_n(m)
         else:
             for n, atom in atoms.items():
                 if atom.atomic_number == 6:
                     adj_n = adj[n].add
                     for m, bond in bonds[n].items():
-                        if bond == 2 and atoms[m].atomic_number == 6:
+                        if int(bond) == 2 and atoms[m].atomic_number == 6:
                             adj_n(m)
         if not adj:
             return ()

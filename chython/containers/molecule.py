@@ -24,7 +24,7 @@ from itertools import zip_longest
 from math import ceil
 from numpy import uint, zeros
 from struct import pack_into, unpack_from
-from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 from weakref import ref
 from zlib import compress, decompress
 from . import query  # cyclic imports resolve
@@ -235,20 +235,20 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         if not isinstance(xy, tuple) or len(xy) != 2 or not isinstance(xy[0], float) or not isinstance(xy[1], float):
             raise TypeError('XY should be tuple with 2 float')
 
-        _map = super().add_atom(atom, *args, charge=charge, is_radical=is_radical, **kwargs)
-        self._plane[_map] = xy
+        n = super().add_atom(atom, *args, charge=charge, is_radical=is_radical, **kwargs)
+        self._plane[n] = xy
         self._conformers.clear()  # clean conformers. need full recalculation for new system
 
         if atom.atomic_number != 1:
             try:
                 rules = atom.valence_rules(charge, is_radical, 0)
             except ValenceError:
-                self._hydrogens[_map] = None
+                self._hydrogens[n] = None
             else:
-                self._hydrogens[_map] = rules[0][2]  # first rule without neighbors
+                self._hydrogens[n] = rules[0][2]  # first rule without neighbors
         else:
-            self._hydrogens[_map] = 0
-        return _map
+            self._hydrogens[n] = 0
+        return n
 
     def add_bond(self, n, m, bond: Union[Bond, int]):
         """
@@ -261,6 +261,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         if not isinstance(bond, Bond):
             bond = Bond(bond)
 
+        bond._attach_graph(self, n, m)
         super().add_bond(n, m, bond)
         self._conformers.clear()  # clean conformers. need full recalculation for new system
 
@@ -271,7 +272,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             # fix stereo if formed not to hydrogen bond
             self.fix_stereo()
 
-    def delete_atom(self, n):
+    def delete_atom(self, n: int):
         """
         Remove atom.
 
@@ -279,25 +280,29 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         Implicit hydrogens marks will not be set if atoms in aromatic rings.
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
-        old_bonds = self._bonds[n]  # save bonds
         isnt_hydrogen = self._atoms[n].atomic_number != 1
-        super().delete_atom(n)
 
+        del self._atoms[n]
+        del self._charges[n]
+        del self._radicals[n]
         del self._hydrogens[n]
         del self._plane[n]
+
+        for m in self._bonds.pop(n):
+            del self._bonds[m][n]
+            self._calc_implicit(m)
+
         self._conformers.clear()  # clean conformers. need full recalculation for new system
         try:
             del self._parsed_mapping[n]
         except KeyError:
             pass
 
-        for m in old_bonds:
-            self._calc_implicit(m)
-
         if isnt_hydrogen:  # hydrogen atom not used for stereo coding
             self.fix_stereo()
+        self.flush_cache()
 
-    def delete_bond(self, n, m):
+    def delete_bond(self, n: int, m: int):
         """
         Disconnect atoms.
 
@@ -305,7 +310,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         Implicit hydrogens marks will not be set if atoms in aromatic rings.
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
-        super().delete_bond(n, m)
+        del self._bonds[n][m]
+        del self._bonds[m][n]
         self._conformers.clear()  # clean conformers. need full recalculation for new system
 
         self._calc_implicit(n)
@@ -313,6 +319,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
         if self._atoms[n].atomic_number != 1 and self._atoms[m].atomic_number != 1:
             self.fix_stereo()
+        self.flush_cache()
 
     def remap(self, mapping: Dict[int, int], *, copy: bool = False) -> 'MoleculeContainer':
         if len(mapping) != len(set(mapping.values())) or \
@@ -346,7 +353,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 m = mg(n, n)
                 atom = atom.copy()
                 ha[m] = atom
-                atom._attach_to_graph(h, m)
+                atom._attach_graph(h, m)
 
             # deep copy of bonds
             for n, m_bond in self._bonds.items():
@@ -357,7 +364,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                     if m in hb:  # bond partially exists. need back-connection.
                         hbn[m] = hb[m][n]
                     else:
-                        hbn[m] = bond.copy()
+                        hbn[m] = bond = bond.copy()
+                        bond._attach_graph(h, n, m)
         else:
             hb = {}
             ha = {}
@@ -376,7 +384,15 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 atom._change_map(m)  # change mapping number
 
             for n, m_bond in self._bonds.items():
-                hb[mg(n, n)] = {mg(m, m): b for m, b in m_bond.items()}
+                n = mg(n, n)
+                hb[n] = hbn = {}
+                for m, bond in m_bond.items():
+                    m = mg(m, m)
+                    if m in hb:  # bond partially exists. need back-connection.
+                        hbn[m] = hb[m][n]
+                    else:
+                        hbn[m] = bond
+                        bond._change_map(n, m)
 
         for n in self._atoms:
             m = mg(n, n)
@@ -414,6 +430,17 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
     def copy(self) -> 'MoleculeContainer':
         copy = super().copy()
+
+        copy._bonds = cb = {}
+        for n, m_bond in self._bonds.items():
+            cb[n] = cbn = {}
+            for m, bond in m_bond.items():
+                if m in cb:  # bond partially exists. need back-connection.
+                    cbn[m] = cb[m][n]
+                else:
+                    cbn[m] = bond = bond.copy()
+                    bond._attach_graph(copy, n, m)
+
         copy._MoleculeContainer__name = self.__name
         if self.__meta is None:
             copy._MoleculeContainer__meta = None
@@ -440,6 +467,17 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             else:
                 raise MappingError('mapping of graphs is not disjoint')
         u = super().union(other)
+
+        ub = u._bonds
+        for n, m_bond in other._bonds.items():
+            ub[n] = ubn = {}
+            for m, bond in m_bond.items():
+                if m in ub:  # bond partially exists. need back-connection.
+                    ubn[m] = ub[m][n]
+                else:
+                    ubn[m] = bond = bond.copy()
+                    bond._attach_graph(u, n, m)
+
         u._MoleculeContainer__name = u._MoleculeContainer__meta = None
         u._conformers.clear()
         u._plane.update(other._plane)
@@ -496,7 +534,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         sub._atoms = ca = {}
         for n in atoms:
             ca[n] = atom = atom_type.from_atom(sa[n])
-            atom._attach_to_graph(sub, n)
+            atom._attach_graph(sub, n)
 
         sub._bonds = cb = {}
         for n in atoms:
@@ -505,7 +543,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 if m in cb:  # bond partially exists. need back-connection.
                     cbn[m] = cb[m][n]
                 elif m in atoms:
-                    cbn[m] = bond_type.from_bond(bond)
+                    cbn[m] = bond = bond_type.from_bond(bond)
+                    if not as_query:
+                        bond._attach_graph(sub, n, m)
 
         if as_query:
             lost = {n for n, a in sa.items() if a.atomic_number != 1} - set(atoms)  # atoms not in substructure
@@ -620,7 +660,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             hr[n] = hpr[n] = sr[n]
             hb[n] = {}
             ha[n] = a = DynamicElement.from_atom(sa[n])
-            a._attach_to_graph(h, n)
+            a._attach_graph(h, n)
 
             for m, bond in sb[n].items():
                 if m not in ha:
@@ -634,7 +674,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             hr[n] = hpr[n] = or_[n]
             hb[n] = {}
             ha[n] = a = DynamicElement.from_atom(oa[n])
-            a._attach_to_graph(h, n)
+            a._attach_graph(h, n)
 
             for m, bond in ob[n].items():
                 if m not in ha:
@@ -662,7 +702,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             hpr[n] = or_[n]
             hb[n] = {}
             ha[n] = a = DynamicElement.from_atom(san)
-            a._attach_to_graph(h, n)
+            a._attach_graph(h, n)
 
             for m, (o1, o2) in adj[n].items():
                 if m not in ha:
@@ -834,7 +874,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             raise ValueError('invalid pack header')
 
         (mapping, atom_numbers, isotopes, charges, radicals, hydrogens, plane, bonds,
-         atoms_stereo, allenes_stereo, cis_trans_stereo, pack_length) = unpack(data)
+         atoms_stereo, allenes_stereo, cis_trans_stereo, pack_length, bonds_flat) = unpack(data)
 
         mol = object.__new__(cls)
         mol._bonds = bonds
@@ -856,7 +896,10 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             atoms[n] = a = object.__new__(Element.from_atomic_number(a))
             a._Core__isotope = i
             a._graph = ref(mol)
-            a._map = n
+            a._n = n
+        for b in bonds_flat:
+            b._Bond__graph = ref(mol)
+
         if _return_pack_length:
             return mol, pack_length
         return mol
@@ -908,7 +951,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             else:
                 ai = None
             atoms[n] = a = a(ai)
-            a._attach_to_graph(mol, n)
+            a._attach_graph(mol, n)
 
             charges[n] = ((hcr >> 1) & 0x0f) - 4
             radicals[n] = bool(hcr & 0x01)
@@ -943,7 +986,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 if m in bonds:  # bond partially exists. need back-connection.
                     cbn[m] = bonds[m][n]
                 else:
-                    cbn[m] = Bond(next(ords))
+                    cbn[m] = b = Bond(next(ords))
+                    b._attach_graph(mol, n, m)
 
         shift += 2 * ceil(bc / 5)
         for o in range(acs & 0x0fff):  # cis/trans
@@ -965,25 +1009,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 break
             nodes.append(n)
         return nodes
-
-    @cached_property
-    def _screen_fingerprint(self) -> Dict[int, Set[int]]:
-        """
-        Fingerprint of available linear fragments with set of mapped atoms.
-        Required for isomorphism tests filtering speedup.
-        Parameters can be modified globally in `MoleculeContainer._fingerprint_config`.
-        """
-        if self._fingerprint_config:
-            return {hash(k): {x for x in v for x in x} for k, v in self._fragments(**self._fingerprint_config).items()}
-        return {}
-
-    @cached_args_method
-    def _component_fingerprint(self, component):
-        """
-        Fingerprint of specific component.
-        """
-        scope = set(self.connected_components[component])
-        return {k: v & scope for k, v in self._screen_fingerprint.items() if not v.isdisjoint(scope)}
 
     @cached_property
     def _cython_compiled_structure(self):
@@ -1161,7 +1186,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         for n, atom in self._atoms.items():
             atom = atom.copy()
             atoms[n] = atom
-            atom._attach_to_graph(self, n)
+            atom._attach_graph(self, n)
 
         bonds = {}
         for n, m_bond in self._bonds.items():
@@ -1170,7 +1195,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 if m in bonds:  # bond partially exists. need back-connection.
                     cbn[m] = bonds[m][n]
                 else:
-                    cbn[m] = bond.copy()
+                    cbn[m] = bond = bond.copy()
+                    bond._attach_graph(self, n, m)
+
         self._backup = {'atoms': atoms, 'bonds': bonds, 'parsed_mapping': self._parsed_mapping.copy(),
                         'plane': self._plane.copy(), 'charges': self._charges.copy(), 'radicals': self._radicals.copy(),
                         'hydrogens': self._hydrogens.copy(), 'conformers': [x.copy() for x in self._conformers],
@@ -1213,7 +1240,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         self.__meta = state['meta']
         self.__name = state['name']
 
-    _fingerprint_config = {'min_radius': 2, 'max_radius': 4}  # set empty for disable screening
+        # attach bonds to graph
+        for n, m, b in self.bonds():
+            b._attach_graph(self, n, m)
 
 
 __all__ = ['MoleculeContainer']

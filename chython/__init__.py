@@ -31,6 +31,9 @@ xyz = XYZRead.create_parser()
 
 pickle_cache = False  # store cached attributes in pickle
 
+# screen procedure for isomorphism
+fingerprint_config = {'min_radius': 2, 'max_radius': 4}  # set empty for disable screening
+
 
 __all__ = ['smiles', 'xyz', 'mdl_mol']
 

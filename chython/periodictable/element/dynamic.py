@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -66,14 +66,14 @@ class DynamicElement(Core, ABC):
     @property
     def p_charge(self) -> int:
         try:
-            return self._graph()._p_charges[self._map]
+            return self._graph()._p_charges[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 
     @property
     def p_is_radical(self) -> bool:
         try:
-            return self._graph()._p_radicals[self._map]
+            return self._graph()._p_radicals[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 

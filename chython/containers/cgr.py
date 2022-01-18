@@ -96,7 +96,7 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism):
         sub._atoms = ca = {}
         for n in atoms:
             ca[n] = atom = sa[n].copy()
-            atom._attach_to_graph(sub, n)
+            atom._attach_graph(sub, n)
 
         sub._bonds = cb = {}
         for n in atoms:
@@ -123,7 +123,7 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism):
     def __setstate__(self, state):
         self._atoms = state['atoms']
         for n, a in state['atoms'].items():
-            a._attach_to_graph(self, n)
+            a._attach_graph(self, n)
         self._charges = state['charges']
         self._radicals = state['radicals']
         self._bonds = state['bonds']
