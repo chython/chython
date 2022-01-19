@@ -1014,11 +1014,13 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
     def _cython_compiled_structure(self):
         # long I:
         # bond: single, double, triple, aromatic, special = 5 bit
-        # atom: H-Ce: 58 bit
+        # bond in ring: 2 bit
+        # atom: H-Ba: 56 bit
         # transfer bit
 
         # long II:
-        # atom Pr-Og: 60 bit
+        # atom La-Mc: 59 bit
+        # Lv-Ts-Og: 3 elements packed into 1 bit.
         # hybridizations: 1-4 = 4 bit
 
         # long III:
@@ -1051,11 +1053,13 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             mapping[n] = i
             numbers.append(n)
             v2 = 1 << (hybridization(n) - 1)
-            if (an := a.atomic_number) > 58:
+            if (an := a.atomic_number) > 56:
+                if an > 116:  # Ts, Og
+                    an = 116
                 v1 = 1  # transfer bit
-                v2 |= 1 << (122 - an)
+                v2 |= 1 << (120 - an)
             else:
-                v1 = 1 << (59 - an)
+                v1 = 1 << (57 - an)
 
             if a.isotope:
                 v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 54)
@@ -1111,6 +1115,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                     v |= 0x2000000000000000
                 else:
                     v |= 0x8000000000000000
+                v |= 0x0400000000000000 if b.in_ring else 0x0200000000000000
                 bonds[j] = v
             start += len(ms)
             o_to[i] = start
