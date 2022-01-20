@@ -32,7 +32,7 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                 unsigned long long[::1] q_masks3 not None, unsigned long long[::1] q_masks4 not None,
                 unsigned int[::1] q_closures not None, unsigned int[::1] q_from not None,
                 unsigned int[::1] q_to not None, unsigned int[::1] q_indices not None,
-                unsigned int[::1] q_bonds not None, unsigned long[::1] o_numbers not None,
+                unsigned long long[::1] q_bonds not None, unsigned long[::1] o_numbers not None,
                 unsigned long long[::1] o_bits1 not None, unsigned long long[::1] o_bits2 not None,
                 unsigned long long[::1] o_bits3 not None, unsigned long long[::1] o_bits4 not None,
                 unsigned long long[::1] o_bonds not None, unsigned int[::1] o_from not None,
@@ -40,8 +40,8 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                 unsigned int[::1] scope not None):
     # expected less than 2^16 atoms in structure.
     cdef unsigned int stack = 0, path_size = 0, q_size, q_size_dec, o_size, depth, front, back, closures_num
-    cdef unsigned int n, m, o, i, j, closures_counter, c_bond
-    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond
+    cdef unsigned int n, m, o, i, j, closures_counter
+    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond, c_bond
     cdef dict mapping
 
     q_size = len(q_numbers)
@@ -51,13 +51,13 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
     cdef int *stack_index = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef int *stack_depth = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
     cdef bint *matched = <bint *> PyMem_Malloc(o_size * sizeof(bint))
-    cdef unsigned int *o_closures = <unsigned int *> PyMem_Malloc(o_size * sizeof(unsigned int))
+    cdef unsigned long long *o_closures = <unsigned long long *> PyMem_Malloc(o_size * sizeof(unsigned long long))
 
     if not path or not stack_index or not stack_depth or not matched or not o_closures:
         raise MemoryError()
 
     memset(matched, 0, o_size * sizeof(bint))
-    memset(o_closures, 0, o_size * sizeof(unsigned int))
+    memset(o_closures, 0, o_size * sizeof(unsigned long long))
 
     # find entry-points.
     q_mask1 = q_masks1[0]
@@ -125,13 +125,13 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                             for j in range(o_from[m], o_to[m]):
                                 o = o_indices[j]
                                 if o != n and matched[o]:
-                                    o_closures[o] = o_bonds[j] >> 57  # keep only bond bits
+                                    o_closures[o] = o_bonds[j]
                                     closures_counter += 1
 
                             if closures_counter == closures_num:
                                 for j in range(q_from[front], q_to[front]):
                                     c_bond = o_closures[path[q_indices[j]]]
-                                    if q_bonds[j] & c_bond != c_bond:  # compare order and ring bits
+                                    if not c_bond or q_bonds[j] & c_bond != c_bond:  # compare order and ring bits
                                         break
                                 else:
                                     stack_index[stack] = m

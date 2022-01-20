@@ -78,9 +78,10 @@ class Standardize:
         l, f = self.__standardize(double_rules)
         log.extend(l)
         fixed.update(f)
-        l, f = self.__standardize(double_rules)  # double shot rules for overlapped groups
-        log.extend(l)
-        fixed.update(f)
+        if f:
+            l, f = self.__standardize(double_rules)  # double shot rules for overlapped groups
+            log.extend(l)
+            fixed.update(f)
         l, f = self.__standardize(single_rules)
         log.extend(l)
         fixed.update(f)

@@ -474,24 +474,24 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
                     closures[i] = len(ms)
                     q_from[i] = start
                     for j, (m, b) in enumerate(ms, start):
-                        v = 0
+                        v = 0x01ffffffffffffff  # atom doesn't matter.
                         for o in b.order:
                             if o == 1:
-                                v |= 0x04
+                                v |= 0x0800000000000000
                             elif o == 4:
-                                v |= 0x20
+                                v |= 0x4000000000000000
                             elif o == 2:
-                                v |= 0x08
+                                v |= 0x1000000000000000
                             elif o == 3:
-                                v |= 0x10
+                                v |= 0x2000000000000000
                             else:
-                                v |= 0x40
+                                v |= 0x8000000000000000
                         if b.in_ring is None:
-                            v |= 0x03
+                            v |= 0x0600000000000000
                         elif b.in_ring:
-                            v |= 0x02
+                            v |= 0x0400000000000000
                         else:
-                            v |= 0x01
+                            v |= 0x0200000000000000
                         bonds[j] = v
                         indices[j] = mapping[m]
                     start += len(ms)
@@ -499,7 +499,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
             components.append((array('L', [n for n, *_ in c]), array('I', [0] + [mapping[x] for _, x, *_ in c[1:]]),
                                array('Q', masks1), array('Q', masks2), array('Q', masks3), array('Q', masks4),
                                array('I', closures), array('I', q_from), array('I', q_to),
-                               array('I', indices), array('I', bonds)))
+                               array('I', indices), array('Q', bonds)))
         return components
 
     def __getstate__(self):

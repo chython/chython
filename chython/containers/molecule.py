@@ -490,7 +490,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
     def substructure(self, atoms: Iterable[int], *, as_query: bool = False, recalculate_hydrogens=True,
                      skip_neighbors_marks=False, skip_hybridizations_marks=False, skip_hydrogens_marks=False,
-                     skip_rings_sizes_marks=False,) -> Union['MoleculeContainer', 'query.QueryContainer']:
+                     skip_rings_sizes_marks=False) -> Union['MoleculeContainer', 'query.QueryContainer']:
         """
         Create substructure containing atoms from atoms list.
 
