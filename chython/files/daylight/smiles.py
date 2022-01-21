@@ -303,10 +303,10 @@ class SMILESRead(Parser):
             elif (hc := hydrogens[n]) is None:  # atom has invalid valence for now.
                 if hyb(n) == 4:  # this is aromatic rings. just store given H count.
                     hydrogens[n] = h
-                else:  # smiles don't code radicals. so, let's try to guess.
+                elif not radicals[n]:  # CXSMILES radical not set.
+                    # SMILES doesn't code radicals. so, let's try to guess.
                     radicals[n] = True
                     calc_implicit(n)
-                    radicalized.append(n)
                     if hydrogens[n] != h:  # radical state also has errors.
                         if self._ignore:
                             hydrogens[n] = None  # reset hydrogens
@@ -315,7 +315,9 @@ class SMILESRead(Parser):
                         else:
                             raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
                                              f'calculated ({hc}) on atom {n}.')
-            elif hc != h:  # H count mismatch. try radical state of atom.
+                    else:
+                        radicalized.append(n)
+            elif hc != h and not radicals[n]:  # H count mismatch. try radical state of atom.
                 radicals[n] = True
                 calc_implicit(n)
                 if hydrogens[n] != h:  # radical state also has errors.

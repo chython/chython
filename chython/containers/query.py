@@ -211,6 +211,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
     def get_mapping(self, other: Union['QueryContainer', 'molecule.MoleculeContainer'], /, *, _cython=True, **kwargs):
         # _cython - by default cython implementation enabled.
         # disable it by overriding method if Query Atoms or Containers logic changed.
+        # Lv, Ts and Og in cython optimized mode treated as equal.
         if isinstance(other, QueryContainer):
             return super().get_mapping(other, **kwargs)
         elif isinstance(other, molecule.MoleculeContainer):
@@ -322,11 +323,13 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
     def _cython_compiled_query(self):
         # long I:
         # bond: single, double, triple, aromatic, special = 5 bit
-        # atom: H-Ce: 58 bit
+        # bond in ring: 2 bit
+        # atom: H-Ba: 56 bit
         # transfer bit
 
         # long II:
-        # atom Pr-Og: 60 bit
+        # atom La-Mc: 59 bit
+        # Lv-Ts-Og: 3 elements packed into 1 bit.
         # hybridizations: 1-4 = 4 bit
 
         # long III:
@@ -339,6 +342,11 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
 
         # long IV:
         # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
+
+        # int V: bonds closures
+        # padding: 1 bit
+        # bond: single, double, triple, aromatic, special = 5 bit
+        # bond in ring: 2 bit
         from ..files._mdl.mol import common_isotopes
 
         _components, _closures = self._compiled_query
@@ -352,28 +360,32 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
             for *_, a, b in c:
                 if isinstance(a, AnyMetal):  # isotope, radical, charge, hydrogens and heteroatoms states ignored
                     # elements except 1, 2, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 32, 33, 34, 35, 36, 51, 52, 53, 54
-                    v1 = 0x0181c1fff07ffe1f
+                    v1 = 0x0060707ffc1fff87
                     v2 = 0xfffffffffffffff0
                     v3 = 0xffffffffc0007fff
                     v4 = 0xffffffffffffffff
                 else:
                     if isinstance(a, AnyElement):
-                        v1 = 0x07ffffffffffffff
+                        v1 = 0x01ffffffffffffff
                         v2 = 0xfffffffffffffff0
                     else:
                         if isinstance(a, ListElement):
                             v1 = v2 = 0
                             for n in a._numbers:
-                                if n > 58:
+                                if n > 56:
+                                    if n > 116:  # Ts, Og
+                                        n = 116
                                     v1 |= 1  # set transfer bit
-                                    v2 |= 1 << (122 - n)
+                                    v2 |= 1 << (120 - n)
                                 else:
-                                    v1 |= 1 << (59 - n)
-                        elif (n := a.atomic_number) > 58:
+                                    v1 |= 1 << (57 - n)
+                        elif (n := a.atomic_number) > 56:
+                            if n > 116:  # Ts, Og
+                                n = 116
                             v1 = 1  # transfer bit
-                            v2 = 1 << (122 - n)
+                            v2 = 1 << (120 - n)
                         else:
-                            v1 = 1 << (59 - n)
+                            v1 = 1 << (57 - n)
                             v2 = 0
                     if a.isotope:
                         v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 54)
@@ -438,6 +450,12 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
                             v1 |= 0x2000000000000000
                         else:
                             v1 |= 0x8000000000000000
+                    if b.in_ring is None:
+                        v1 |= 0x0600000000000000
+                    elif b.in_ring:
+                        v1 |= 0x0400000000000000
+                    else:
+                        v1 |= 0x0200000000000000
 
                 masks1.append(v1)
                 masks2.append(v2)
@@ -456,7 +474,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
                     closures[i] = len(ms)
                     q_from[i] = start
                     for j, (m, b) in enumerate(ms, start):
-                        v = 0
+                        v = 0x01ffffffffffffff  # atom doesn't matter.
                         for o in b.order:
                             if o == 1:
                                 v |= 0x0800000000000000
@@ -468,6 +486,12 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
                                 v |= 0x2000000000000000
                             else:
                                 v |= 0x8000000000000000
+                        if b.in_ring is None:
+                            v |= 0x0600000000000000
+                        elif b.in_ring:
+                            v |= 0x0400000000000000
+                        else:
+                            v |= 0x0200000000000000
                         bonds[j] = v
                         indices[j] = mapping[m]
                     start += len(ms)

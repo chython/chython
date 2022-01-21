@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
@@ -41,7 +41,7 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
     # expected less than 2^16 atoms in structure.
     cdef unsigned int stack = 0, path_size = 0, q_size, q_size_dec, o_size, depth, front, back, closures_num
     cdef unsigned int n, m, o, i, j, closures_counter
-    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond
+    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond, c_bond
     cdef dict mapping
 
     q_size = len(q_numbers)
@@ -66,7 +66,7 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
     q_mask4 = q_masks4[0]
     for n in range(o_size):
         if (scope[n] and
-            q_mask1 & o_bits1[n] and
+            q_mask1 & o_bits1[n] and  # o_bits1 doesn't contain bond bits.
             q_mask2 & o_bits2[n] == o_bits2[n] and
             q_mask3 & o_bits3[n] == o_bits3[n] and
             q_mask4 & o_bits4[n]):
@@ -113,7 +113,7 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                     o_bond = o_bonds[i]
                     m = o_indices[i]
                     if (scope[m] and not matched[m] and
-                        q_mask1 & o_bond == o_bond and
+                        q_mask1 & o_bond == o_bond and  # bond order, in ring mark and atom bit should match.
                         q_mask2 & o_bits2[m] == o_bits2[m] and
                         q_mask3 & o_bits3[m] == o_bits3[m] and
                         q_mask4 & o_bits4[m]):
@@ -121,7 +121,7 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                         if closures_num:  # candidate atom should have same closures.
                             closures_counter = 0
                             # make a map of closures for o_n atom
-                            # an index is an neighbor atom and an value is an bond between o_n and the neighbor
+                            # an index is a neighbor atom and a value is a bond between o_n and the neighbor
                             for j in range(o_from[m], o_to[m]):
                                 o = o_indices[j]
                                 if o != n and matched[o]:
@@ -130,7 +130,8 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
 
                             if closures_counter == closures_num:
                                 for j in range(q_from[front], q_to[front]):
-                                    if not q_bonds[j] & o_closures[path[q_indices[j]]]:  # if true then enough
+                                    c_bond = o_closures[path[q_indices[j]]]
+                                    if not c_bond or q_bonds[j] & c_bond != c_bond:  # compare order and ring bits
                                         break
                                 else:
                                     stack_index[stack] = m

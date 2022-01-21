@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union, List, Set
 from weakref import ref
 from ..exceptions import IsConnectedBond, IsNotConnectedBond
 
@@ -24,10 +24,10 @@ from ..exceptions import IsConnectedBond, IsNotConnectedBond
 class Bond:
     __slots__ = ('__order', '__graph', '__n', '__m')
 
-    def __init__(self, order):
+    def __init__(self, order: int):
         if not isinstance(order, int):
             raise TypeError('invalid order value')
-        if order not in (1, 4, 2, 3, 8):
+        elif order not in (1, 4, 2, 3, 8):
             raise ValueError('order should be from [1, 2, 3, 4, 8]')
         self.__order = order
 
@@ -64,7 +64,7 @@ class Bond:
         return self.__order
 
     @property
-    def in_ring(self):
+    def in_ring(self) -> bool:
         try:
             return self.__graph().is_ring_bond(self.__n, self.__m)
         except AttributeError:
@@ -179,7 +179,7 @@ class DynamicBond:
 class QueryBond:
     __slots__ = ('__order', '__in_ring')
 
-    def __init__(self, order, in_ring=None):
+    def __init__(self, order: Union[int, List[int], Set[int], Tuple[int, ...]], in_ring: Optional[bool] = None):
         if isinstance(order, (list, tuple, set)):
             if not all(isinstance(x, int) for x in order):
                 raise TypeError('invalid order value')
@@ -199,9 +199,12 @@ class QueryBond:
 
     def __eq__(self, other):
         if isinstance(other, Bond):
+            if self.__in_ring is not None:
+                if self.__in_ring != other.in_ring:
+                    return False
             return other.order in self.__order
         elif isinstance(other, QueryBond):
-            return self.__order == other.order
+            return self.__order == other.order and self.__in_ring == other.in_ring
         elif isinstance(other, int):
             return other in self.__order
         return False
@@ -228,7 +231,7 @@ class QueryBond:
         return self.__order
 
     @property
-    def in_ring(self):
+    def in_ring(self) -> Optional[bool]:
         return self.__in_ring
 
     def copy(self) -> 'QueryBond':
