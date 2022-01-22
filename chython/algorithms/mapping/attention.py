@@ -93,10 +93,15 @@ class Attention:
         from chytorch.nn import ReactionEncoder
         from torch import load
 
-        model = ReactionEncoder(d_model=1024, dim_feedforward=3072)
-        model.load_state_dict(load(resource_stream(__package__, 'mapping.pt'), map_location=torch_device))
+        data = load(resource_stream(__package__, 'mapping.pt'), map_location=torch_device)
+        model = ReactionEncoder(**data['hyper_parameters'])
+        model.load_state_dict(data['state_dict'])
         model.eval()
         return model
+
+    @class_cached_property
+    def __cutoff(self):
+        return self.__attention_model.molecule_encoder.spatial_encoder.num_embeddings - 3
 
     def __prepare_remapping(self: 'ReactionContainer'):
         r_map = [n for m in self.reactants for n in m]
@@ -139,11 +144,11 @@ class Attention:
 
     def __get_attention(self):
         from chython import torch_device
-        from chytorch.utils.data import ReactionDataset
+        from chytorch.utils.data import ReactionDataset, collate_reactions
         from torch import no_grad
 
-        converter = ReactionDataset((self,), (None,), property_type=bool)
-        a, n, i, e, r, _ = converter.collate((converter[0],))
+        converter = ReactionDataset((self,), distance_cutoff=self.__cutoff)
+        a, n, i, e, r = collate_reactions((converter[0],))
         a.to(torch_device)
         n.to(torch_device)
         i.to(torch_device)
@@ -151,7 +156,7 @@ class Attention:
         r.to(torch_device)
 
         with no_grad():
-            am = self.__attention_model(a, n, i, e, r, True)[1].squeeze(0).cpu().numpy()  # raw attention matrix
+            am = self.__attention_model(a, n, i, e, r, need_embedding=False, need_weights=True).squeeze(0).cpu().numpy()
         return am
 
 
