@@ -19,7 +19,6 @@
 from CachedMethods import class_cached_property
 from itertools import repeat
 from numpy import ix_, ones_like, errstate, unravel_index, nanargmax, zeros, array
-from pkg_resources import resource_stream
 from typing import TYPE_CHECKING, Union
 
 
@@ -84,24 +83,9 @@ class Attention:
             for m in self.products:
                 m.remap(p_mapping)
             self.flush_cache()
+            self.fix_groups_mapping()  # fix carboxy etc
             return True
         return False
-
-    @class_cached_property
-    def __attention_model(self):
-        from chython import torch_device
-        from chytorch.nn import ReactionEncoder
-        from torch import load
-
-        data = load(resource_stream(__package__, 'mapping.pt'), map_location=torch_device)
-        model = ReactionEncoder(**data['hyper_parameters'])
-        model.load_state_dict(data['state_dict'])
-        model.eval()
-        return model
-
-    @class_cached_property
-    def __cutoff(self):
-        return self.__attention_model.molecule_encoder.spatial_encoder.num_embeddings - 3
 
     def __prepare_remapping(self: 'ReactionContainer'):
         r_map = [n for m in self.reactants for n in m]
@@ -142,13 +126,19 @@ class Attention:
         pam = array(pam, dtype=bool)
         return r_map, p_map, r_atoms, p_atoms, r_adj, p_adj, ram, pam, ra, pa
 
+    @class_cached_property
+    def __attention_model(self):
+        from chython import torch_device
+        from chytorch.zoo import RxnMap
+
+        return RxnMap.pretrained().to(torch_device)
+
     def __get_attention(self):
         from chython import torch_device
-        from chytorch.utils.data import ReactionDataset, collate_reactions
-        from torch import no_grad
+        from torch import no_grad, LongTensor
 
-        converter = ReactionDataset((self,), distance_cutoff=self.__cutoff)
-        a, n, i, e, r = collate_reactions((converter[0],))
+        ds = self.__attention_model.prepare_dataloader([self], LongTensor([1]))
+        (a, n, i, e, r), _ = b = next(iter(ds))
         a.to(torch_device)
         n.to(torch_device)
         i.to(torch_device)
@@ -156,7 +146,7 @@ class Attention:
         r.to(torch_device)
 
         with no_grad():
-            am = self.__attention_model(a, n, i, e, r, need_embedding=False, need_weights=True).squeeze(0).cpu().numpy()
+            am = self.__attention_model(b, mapping_task=True).squeeze(0).cpu().numpy()
         return am
 
 
