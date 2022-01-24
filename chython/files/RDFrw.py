@@ -30,6 +30,20 @@ from ..containers import ReactionContainer, MoleculeContainer
 from ..exceptions import ParseError
 
 
+class FallBack:
+    def __init__(self, is_reaction):
+        self.is_reaction = is_reaction
+
+    def __call__(self, line):
+        return line.startswith(('M  END', 'M  V30 END CTAB'))
+
+    def getvalue(self):
+        # ad-hocs for raising ValueError
+        if self.is_reaction:
+            return {'reactants': None, 'products': None, 'reagents': None, 'meta': {}}
+        return {'atoms': [{'element': '!', 'mapping': 0}], 'meta': {}}
+
+
 class RDFRead(MDLRead):
     """
     MDL RDF files reader. works similar to opened file object. support `with` context manager.
@@ -154,8 +168,11 @@ class RDFRead(MDLRead):
                         record = parser.getvalue()
                         parser = None
                 except ValueError:
-                    parser = None
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
+                    if self._store_log:
+                        parser = FallBack(is_reaction)
+                        continue
+                    parser = None
                     seek = yield ParseError(count, pos, self._format_log(), None)
                     if seek is not None:
                         yield
@@ -175,7 +192,7 @@ class RDFRead(MDLRead):
                             container = self._convert_molecule(record)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
-                        seek = yield ParseError(count, pos, self._format_log(), None)
+                        seek = yield ParseError(count, pos, self._format_log(), record['meta'])
                     else:
                         seek = yield container
 
@@ -206,7 +223,7 @@ class RDFRead(MDLRead):
                             container = self._convert_molecule(record)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
-                        seek = yield ParseError(count, pos, self._format_log(), None)
+                        seek = yield ParseError(count, pos, self._format_log(), record['meta'])
                     else:
                         seek = yield container
 
@@ -252,8 +269,11 @@ class RDFRead(MDLRead):
                         else:
                             raise ValueError('invalid MOL entry')
                 except ValueError:
-                    failed = True
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
+                    if self._store_log:
+                        parser = FallBack(is_reaction)
+                        continue
+                    failed = True
                     seek = yield ParseError(count, pos, self._format_log(), None)
                     if seek is not None:
                         yield
@@ -270,7 +290,7 @@ class RDFRead(MDLRead):
                     container = self._convert_molecule(record)
             except ValueError:
                 self._info(f'record consist errors:\n{format_exc()}')
-                yield ParseError(count, pos, self._format_log(), None)
+                yield ParseError(count, pos, self._format_log(), record['meta'])
             else:
                 yield container
 
