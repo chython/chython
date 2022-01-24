@@ -31,6 +31,14 @@ from ..exceptions import EmptyMolecule, ParseError
 head = compile(r'>\s.*<(.*)>')
 
 
+class FallBack:
+    def __call__(self, line):
+        return line.startswith(('M  END', 'M  V30 END CTAB'))
+
+    def getvalue(self):
+        return {'atoms': [{'element': '!', 'mapping': 0}], 'meta': {}}  # ad-hoc for raising ValueError
+
+
 class SDFRead(MDLRead):
     """
     MDL SDF files reader. works similar to opened file object. support `with` context manager.
@@ -134,16 +142,17 @@ class SDFRead(MDLRead):
                         record = parser.getvalue()
                         parser = None
                 except ValueError:
-                    parser = None
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
+                    if self._store_log:  # mol block broken. try to collect metadata
+                        parser = FallBack()
+                        continue
+                    parser = None
                     seek = yield ParseError(count, pos, self._format_log(), None)
                     if seek is not None:  # seeked to start of mol block
                         yield
                         count = seek
                         pos = file.tell()
                         im = 3
-                        mkey = None
-                        meta = defaultdict(list)
                         self.__already_seeked = False
                     else:
                         failkey = True
@@ -156,7 +165,7 @@ class SDFRead(MDLRead):
                         container = self._convert_molecule(record)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
-                        seek = yield ParseError(count, pos, self._format_log(), None)
+                        seek = yield ParseError(count, pos, self._format_log(), record['meta'])
                     else:
                         seek = yield container
                     if seek is not None:  # seeked position
@@ -203,14 +212,15 @@ class SDFRead(MDLRead):
                         raise ValueError('invalid MOL entry')
                 except ValueError:
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
+                    if self._store_log:
+                        parser = FallBack()
+                        continue
                     seek = yield ParseError(count, pos, self._format_log(), None)
                     if seek is not None:  # seeked to start of mol block
                         yield
                         count = seek
                         pos = file.tell()
                         im = 3
-                        mkey = None
-                        meta = defaultdict(list)
                         self.__already_seeked = False
                     else:
                         failkey = True
@@ -223,7 +233,7 @@ class SDFRead(MDLRead):
                 container = self._convert_molecule(record)
             except ValueError:
                 self._info(f'record consist errors:\n{format_exc()}')
-                yield ParseError(count, pos, self._format_log(), None)
+                yield ParseError(count, pos, self._format_log(), record['meta'])
             else:
                 yield container
 
