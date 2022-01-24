@@ -576,6 +576,17 @@ def _rules_single():
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
 
     #
+    # fix pyridin. note: don't move.
+    #
+    atoms = ({'atom': 'C', 'neighbors': 3}, {'atom': 'O', 'neighbors': 1}, {'atom': 'N', 'neighbors': 2},
+             {'atom': 'C', 'hybridization': 1}, {'atom': 'A', 'hybridization': 2},
+             {'atom': 'A', 'hybridization': 2}, {'atom': 'A', 'hybridization': 2})
+    bonds = ((1, 2, 2), (1, 3, 1), (1, 4, 1), (3, 7, 2), (4, 5, 1), (5, 6, (1, 2)), (6, 7, 1))
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (1, 4, 2))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+
+    #
     #       A                   A
     #       |                   |
     #  A - [P+] - [O-]  >>  A - P = O
