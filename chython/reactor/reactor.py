@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -20,12 +20,16 @@
 from collections import deque
 from functools import reduce
 from itertools import count, permutations, combinations
-from logging import info
+from logging import getLogger, INFO
 from operator import or_
 from typing import Iterable, List, Iterator, Tuple, Union
 from .base import BaseReactor
 from .._functions import lazy_product
 from ..containers import QueryContainer, MoleculeContainer, ReactionContainer
+
+
+logger = getLogger('chython.reactor')
+logger.setLevel(INFO)
 
 
 class Reactor(BaseReactor):
@@ -96,7 +100,7 @@ class Reactor(BaseReactor):
                             continue
                         seen.add(str(r))
                         if len(r.products) != len(ignored) + len(self.__products_atoms):
-                            info('ambiguous multicomponent structures. skip multistage processing')
+                            logger.info('ambiguous multicomponent structures. skip multistage processing')
                             yield r
                             continue
                     elif str(r) in seen:
@@ -144,8 +148,8 @@ class Reactor(BaseReactor):
             if intersection:
                 mapping = dict(zip(intersection, count(max(max(checked_atoms), max(structure)) + 1)))
                 structure = structure.remap(mapping, copy=True)
-                info('some atoms in input structures had the same numbers.\n'
-                     f'atoms {list(mapping)} were remapped to {list(mapping.values())}')
+                logger.info('some atoms in input structures had the same numbers.\n'
+                            f'atoms {list(mapping)} were remapped to {list(mapping.values())}')
             checked_atoms.update(structure)
             checked.append(structure)
         return checked

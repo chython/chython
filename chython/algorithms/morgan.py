@@ -18,9 +18,12 @@
 #
 from functools import cached_property
 from itertools import groupby
-from logging import warning
+from logging import getLogger
 from operator import itemgetter
 from typing import Dict, TYPE_CHECKING
+
+
+logger = getLogger('chython.morgan')
 
 
 if TYPE_CHECKING:
@@ -72,7 +75,7 @@ def _morgan(atoms: Dict[int, int], bonds: Dict[int, Dict[int, int]]) -> Dict[int
             stab = 0
     else:
         if numb < old_numb:
-            warning('morgan. number of attempts exceeded. uniqueness has decreased.')
+            logger.warning('number of attempts exceeded. uniqueness has decreased.')
 
     return {n: i for i, (_, g) in enumerate(groupby(sorted(atoms.items(), key=itemgetter(1)), key=itemgetter(1)),
                                             start=1) for n, _ in g}

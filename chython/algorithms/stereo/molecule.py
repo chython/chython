@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,11 +19,15 @@
 from collections import defaultdict
 from functools import cached_property
 from itertools import combinations
-from logging import info
+from logging import getLogger, INFO
 from typing import Dict, Set, Tuple, Union, TYPE_CHECKING
 from .graph import Stereo
 from ..morgan import _morgan
 from ...exceptions import AtomNotFound, IsChiral, NotChiral
+
+
+logger = getLogger('chython.stereo')
+logger.setLevel(INFO)
 
 
 if TYPE_CHECKING:
@@ -386,7 +390,7 @@ class MoleculeStereo(Stereo):
             s = self._translate_allene_sign(n, *order[:2])
             v = _allene_sign((*plane[order[0]], 1), plane[order[2]], plane[order[3]], (*plane[order[1]], 0))
             if not v:
-                info(f'need 2d clean. wedge stereo ambiguous for atom {{{n}}}')
+                logger.info(f'need 2d clean. allenes wedge stereo ambiguous for atom {{{n}}}')
             if s:
                 wedge.append((order[2], order[0], v))
             else:
@@ -408,7 +412,7 @@ class MoleculeStereo(Stereo):
                 v = _pyramid_sign((*plane[order[3]], 0),
                                   (*plane[order[0]], 1), (*plane[order[1]], 0), (*plane[order[2]], 0))
             if not v:
-                info(f'need 2d clean. wedge stereo ambiguous for atom {{{n}}}')
+                logger.info(f'need 2d clean. tetrahedron wedge stereo ambiguous for atom {{{n}}}')
             if s:
                 wedge.append((n, order[0], v))
             else:
