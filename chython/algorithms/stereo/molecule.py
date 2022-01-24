@@ -171,23 +171,31 @@ class MoleculeStereo(Stereo):
                 elif c not in self._chiral_allenes:
                     raise NotChiral
 
-                order = self._stereo_allenes[c]
                 t1, t2 = self._stereo_allenes_terminals[c]
-                w = order.index(m)
-                if w == 0:
-                    m1 = order[1]
-                    r = False
-                elif w == 1:
-                    m1 = order[0]
-                    t1, t2 = t2, t1
-                    r = False
-                elif w == 2:
-                    m1 = order[1]
+                order = self._stereo_allenes[c]
+                if self._atoms[m].atomic_number == 1:
+                    if t1 == n:
+                        m1 = order[1]
+                    else:
+                        t1, t2 = t2, t1
+                        m1 = order[0]
                     r = True
                 else:
-                    m1 = order[0]
-                    t1, t2 = t2, t1
-                    r = True
+                    w = order.index(m)
+                    if w == 0:
+                        m1 = order[1]
+                        r = False
+                    elif w == 1:
+                        m1 = order[0]
+                        t1, t2 = t2, t1
+                        r = False
+                    elif w == 2:
+                        m1 = order[1]
+                        r = True
+                    else:
+                        m1 = order[0]
+                        t1, t2 = t2, t1
+                        r = True
                 s = _allene_sign((*plane[m], mark), plane[t1], plane[t2], (*plane[m1], 0))
                 if s:
                     self._allenes_stereo[c] = s < 0 if r else s > 0
