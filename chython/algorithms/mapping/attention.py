@@ -84,6 +84,7 @@ class Attention:
                 m.remap(p_mapping)
             self.flush_cache()
             self.fix_groups_mapping()  # fix carboxy etc
+            self.fix_mapping()  # fix common mistakes in mechanisms
             return True
         return False
 
