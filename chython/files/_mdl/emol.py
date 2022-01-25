@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -98,7 +98,7 @@ class EMOLRead:
 
     def __record_collector(self, line):
         if not line.endswith('-\n'):
-            line = line[6:]
+            line = line[7:]  # skip `M  V30 `
             if self.__record:
                 line = self.__record + line
                 self.__record = None
@@ -129,7 +129,7 @@ class EMOLRead:
 
             return collect
 
-        line = line[6:-2]
+        line = line[7:-2]  # skip `M  V30 ` and `-\n`
         if not self.__record:
             self.__record = line
         else:
