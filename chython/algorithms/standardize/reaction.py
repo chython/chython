@@ -52,6 +52,31 @@ class StandardizeReaction:
             return total
         return bool(total)
 
+    def standardize(self: 'ReactionContainer', fix_mapping: bool = True, *, logging=False) -> \
+            Union[bool, List[Tuple[int, Tuple[int, ...], int, str]]]:
+        """
+        Fix functional groups representation.
+        Return True if in any molecule fixed group.
+
+        Deprecated method. Use `canonicalize` directly.
+
+        :param fix_mapping: Search AAM errors of functional groups.
+        :param logging: return log from molecules with index of molecule.
+            Otherwise return True if these groups found in any molecule.
+        """
+        total = []
+        for n, m in enumerate(self.molecules()):
+            total.extend((n, *x) for x in m.standardize(logging=True))
+
+        if fix_mapping:
+            total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
+
+        if total:
+            self.flush_cache()
+        if logging:
+            return total
+        return bool(total)
+
     def thiele(self: 'ReactionContainer') -> bool:
         """
         Convert structures to aromatic form.
@@ -67,7 +92,7 @@ class StandardizeReaction:
 
     def kekule(self: 'ReactionContainer') -> bool:
         """
-        Convert structures to kekule form. Works only for Molecules.
+        Convert structures to kekule form.
         Return True if in any molecule found aromatic ring
         """
         total = False

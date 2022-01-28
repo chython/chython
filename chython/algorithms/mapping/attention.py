@@ -42,9 +42,8 @@ class Attention:
 
         mm = ones_like(am)
         mapping = {}
-        scope = ones(pa, dtype=bool)
         for _ in range(pa):  # iteratively map each product atom to reactant
-            nam = am[scope] * mm[scope]
+            nam = am * mm
             with errstate(invalid='ignore'):
                 nam /= nam[:, None, :].sum(2)  # normalized attention
 
@@ -58,7 +57,6 @@ class Attention:
                 break
 
             mapping[p_map[i]] = r_map[j]
-            scope[i] = False
             # update mm
             mm[ix_(p_adj[i], r_adj[j])] *= multiplier
             mm[i] = 0  # mask already mapped product atom
