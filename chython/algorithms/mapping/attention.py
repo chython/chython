@@ -18,7 +18,7 @@
 #
 from CachedMethods import class_cached_property
 from itertools import repeat
-from numpy import ix_, ones_like, errstate, unravel_index, nanargmax, zeros, array
+from numpy import ix_, ones_like, errstate, unravel_index, nanargmax, zeros, array, ones
 from typing import TYPE_CHECKING, Union
 
 
@@ -42,9 +42,9 @@ class Attention:
 
         mm = ones_like(am)
         mapping = {}
+        scope = ones(pa, dtype=bool)
         for _ in range(pa):  # iteratively map each product atom to reactant
-            # todo: optimize
-            nam = am * mm
+            nam = am[scope] * mm[scope]
             with errstate(invalid='ignore'):
                 nam /= nam[:, None, :].sum(2)  # normalized attention
 
@@ -58,6 +58,7 @@ class Attention:
                 break
 
             mapping[p_map[i]] = r_map[j]
+            scope[i] = False
             # update mm
             mm[ix_(p_adj[i], r_adj[j])] *= multiplier
             mm[i] = 0  # mask already mapped product atom
