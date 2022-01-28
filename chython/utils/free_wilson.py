@@ -16,17 +16,17 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
-from itertools import product
-from typing import Union, List, Dict
+from typing import Union, List
 from ..containers import MoleculeContainer, QueryContainer
+from ..periodictable import H
 
 
-def fw_prepare_groups(core: Union[MoleculeContainer, QueryContainer], molecule: MoleculeContainer):
+def fw_prepare_groups(core: Union[MoleculeContainer, QueryContainer], molecule: MoleculeContainer) -> \
+       List[MoleculeContainer]:
     """
-    Prepare dict of core atoms in keys and list of connected groups in values.
-    Hydrogens added to groups for marking connection point.
-    Groups connected multiple times (rings) - contains multiple hydrogens and presented in each key.
+    Prepare list of core with connected groups. Hydrogens added to groups for marking connection point.
+    Hydrogens have isotope marks equal to mapping of core atoms.
+    Groups connected multiple times (rings) - contains multiple hydrogens.
 
     :param core: core structure for searching
     :param molecule: target structure
@@ -34,60 +34,31 @@ def fw_prepare_groups(core: Union[MoleculeContainer, QueryContainer], molecule: 
     try:
         core_map = next(core.get_mapping(molecule))
     except StopIteration:
-        return {}
+        return []
 
     reverse = {v: k for k, v in core_map.items()}
     cs = set(core_map.values())
-    groups = molecule - cs
+    groups = molecule.substructure(molecule._atoms.keys() - cs, recalculate_hydrogens=False)
     gs = set(groups)
+    hs = molecule._hydrogens
+    hgs = groups._hydrogens
+    plane = molecule._plane
 
-    mapping = {}
     for n, m, b in molecule.bonds():
         if n in cs:
             if m in gs:
-                x = groups.add_atom('H')
-                mapping[x] = n
-                groups.add_bond(x, m, b.copy())
+                h = H()
+                h._Core__isotope = reverse[n]  # mark mapping to isotope
+                groups.add_bond(groups.add_atom(h, xy=plane[n]), m, b.copy())
+                hgs[m] = hs[m]  # restore H count
         elif m in cs and n in gs:
-            x = groups.add_atom('H')
-            mapping[x] = m
-            groups.add_bond(x, n, b.copy())
-
-    r_groups = defaultdict(list)
-    for g in groups.split():
-        for n in set(g).intersection(mapping):
-            r_groups[reverse[mapping[n]]].append(g)
-    return dict(r_groups)
+            h = H()
+            h._Core__isotope = reverse[m]
+            groups.add_bond(groups.add_atom(h, xy=plane[m]), n, b.copy())
+            hgs[n] = hs[n]
+    groups = groups.split()
+    groups.insert(0, molecule.substructure(cs, recalculate_hydrogens=False))
+    return groups
 
 
-def fw_onehot_groups(groups: List[Dict[int, List[MoleculeContainer]]]):
-    """
-    Prepare one-hot matrix with found groups separated by connection points.
-
-    :param groups: List of groups returned from `fw_prepare_groups`
-    """
-    unique = set()
-    for kgs in groups:
-        unique.update((k, g) for k, gs in kgs.items() for g in gs)
-
-    mapping = {x: {i} for i, x in enumerate(sorted(unique, key=lambda x: x[0]))}
-    q_mapping = [(k, g.substructure(set(g), as_query=True, skip_neighbors_marks=True, skip_hybridizations_marks=False,
-                                    skip_hydrogens_marks=True, skip_rings_sizes_marks=True),
-                  v)
-                 for (k, g), v in mapping.items()]
-    for (a, xa, ia), (b, xb, ib) in product(q_mapping, repeat=2):
-        if a == b and xa < xb:
-            ib.update(ia)
-
-    out = [[k for k, _ in mapping], [g for _, g in mapping]]  # legend
-    for kgs in groups:
-        onehot = [0] * len(mapping)
-        for k, gs in kgs.items():
-            for g in gs:
-                for i in mapping[(k, g)]:
-                    onehot[i] = 1
-        out.append(onehot)
-    return out
-
-
-__all__ = ['fw_prepare_groups', 'fw_onehot_groups']
+__all__ = ['fw_prepare_groups']
