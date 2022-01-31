@@ -18,7 +18,7 @@
 #
 from CachedMethods import class_cached_property
 from itertools import repeat
-from numpy import ix_, ones_like, errstate, unravel_index, nanargmax, zeros, array, ones
+from numpy import ix_, unravel_index, argmax, zeros, array, isclose, nonzero, ones
 from typing import TYPE_CHECKING, Union
 
 
@@ -29,39 +29,47 @@ if TYPE_CHECKING:
 class Attention:
     __slots__ = ()
 
-    def reset_mapping(self: Union['ReactionContainer', 'Attention'], *, multiplier=90.,
+    def reset_mapping(self: Union['ReactionContainer', 'Attention'], *, multiplier=2.,
                       keep_reactants_numbering=False) -> bool:
         """
         Do atom-to-atom mapping. Return True if mapping changed.
         """
-        r_map, p_map, r_atoms, p_atoms, r_adj, p_adj, ram, pam, ra, pa = self.__prepare_remapping()
+        equal_atoms, p2r, r2p, r_adj, p_adj, r_map, p_map, pa = self.__prepare_remapping()
+
+        # rxnmapper-inspired algorithm
         am = self.__get_attention()
+        # sum of reactants to products attention and vice-versa for equal atom types only
+        am = (am[p2r] + am[r2p].T) * equal_atoms
 
-        am = am[ix_(pam, ram)] + am[ix_(ram, pam)].T  # sum of reactants to products attention and vice-versa
-        am *= p_atoms[:, None] == r_atoms  # equal atom type attention
-
-        mm = ones_like(am)
         mapping = {}
-        for _ in range(pa):  # iteratively map each product atom to reactant
-            nam = am * mm
-            with errstate(invalid='ignore'):
-                nam /= nam[:, None, :].sum(2)  # normalized attention
-
+        scope = zeros(pa, dtype=bool)
+        seen = ones(pa, dtype=bool)
+        for x in range(pa):  # iteratively map each product atom to reactant
             # select highest attention
-            try:
-                i, j = unravel_index(nanargmax(nam), nam.shape)
-            except ValueError:  # no more products atoms in reactants
+            # todo: optimize
+            if not x:
+                i, j = unravel_index(argmax(am), am.shape)
+            else:
+                ams = am[scope]
+                if ams.size:
+                    i, j = unravel_index(argmax(ams), ams.shape)
+                    i = nonzero(scope)[0][i]
+                else:
+                    i, j = unravel_index(argmax(am), am.shape)
+            if isclose(am[i, j], 0.):  # no more products atoms in reactants
                 # mark as unmapped
                 for n in set(p_map).difference(mapping):
                     mapping[n] = 0
                 break
 
             mapping[p_map[i]] = r_map[j]
-            # update mm
-            mm[ix_(p_adj[i], r_adj[j])] *= multiplier
-            mm[i] = 0  # mask already mapped product atom
-            mm[:, j] = 0  # mask already mapped reactant. todo: work with side products
+            am[ix_(p_adj[i], r_adj[j])] *= multiplier  # highlight neighbors
+            am[i] = am[:, j] = 0  # mask mapped product and reactant atoms
+            seen[i] = False
+            scope[i] = False
+            scope[p_adj[i] & seen] = True
 
+        # mapping done.
         if any(n != m for n, m in mapping.items()):  # old mapping changed
             if keep_reactants_numbering:
                 r_mapping = {n: n for n in r_map}
@@ -71,7 +79,7 @@ class Attention:
                     m.remap(r_mapping)
 
             p_mapping = {}
-            nm = ra
+            nm = max(r_mapping.values())
             for n, m in mapping.items():
                 if m := r_mapping.get(m):
                     p_mapping[n] = m
@@ -124,7 +132,7 @@ class Attention:
         ram.extend(repeat(False, len(pam) - len(ram)))
         ram = array(ram, dtype=bool)
         pam = array(pam, dtype=bool)
-        return r_map, p_map, r_atoms, p_atoms, r_adj, p_adj, ram, pam, ra, pa
+        return p_atoms[:, None] == r_atoms, ix_(pam, ram), ix_(ram, pam), r_adj, p_adj, r_map, p_map, pa
 
     @class_cached_property
     def __attention_model(self):

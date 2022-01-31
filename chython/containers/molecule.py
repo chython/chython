@@ -859,7 +859,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         return bytes(data)
 
     @classmethod
-    def unpack(cls, data: bytes, /, *, compressed=True, _return_pack_length=False) -> 'MoleculeContainer':
+    def unpack(cls, data: Union[bytes, memoryview], /, *, compressed=True,
+               _return_pack_length=False) -> 'MoleculeContainer':
         """
         Unpack from compressed bytes.
 
@@ -906,7 +907,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         return mol
 
     @classmethod
-    def pure_unpack(cls, data: bytes, /, *, compressed=True, _return_pack_length=False) -> 'MoleculeContainer':
+    def pure_unpack(cls, data: Union[bytes, memoryview], /, *, compressed=True,
+                    _return_pack_length=False) -> 'MoleculeContainer':
         """
         Unpack from compressed bytes. Python implementation.
         """
