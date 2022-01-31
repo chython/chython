@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from CachedMethods import class_cached_property
-from itertools import repeat
+from itertools import chain, count, repeat
 from numpy import ix_, unravel_index, argmax, zeros, array, isclose, nonzero, ones
 from typing import TYPE_CHECKING, Union
 
@@ -34,6 +34,7 @@ class Attention:
         """
         Do atom-to-atom mapping. Return True if mapping changed.
         """
+        fixed = self.__fix_collisions()
         equal_atoms, p2r, r2p, r_adj, p_adj, r_map, p_map, pa = self.__prepare_remapping()
 
         # rxnmapper-inspired algorithm
@@ -71,7 +72,7 @@ class Attention:
 
         # mapping done.
         if any(n != m for n, m in mapping.items()):  # old mapping changed
-            if keep_reactants_numbering:
+            if keep_reactants_numbering or fixed:
                 r_mapping = {n: n for n in r_map}
             else:
                 r_mapping = {m: n for n, m in enumerate(r_map, 1)}  # remap reactants to contiguous range
@@ -93,7 +94,19 @@ class Attention:
             self.fix_groups_mapping()  # fix carboxy etc
             self.fix_mapping()  # fix common mistakes in mechanisms
             return True
-        return False
+        return fixed
+
+    def __fix_collisions(self: 'ReactionContainer'):
+        r = [n for m in chain(self.reactants, self.reagents) for n in m._atoms]
+        p = [n for m in self.products for n in m._atoms]
+        c = count(1)
+        if len(r) != len(set(r)):
+            for m in chain(self.reactants, self.reagents):
+                m.remap({n: next(c) for n in m._atoms})
+        if len(p) != len(set(p)):
+            for m in self.products:
+                m.remap({n: next(c) for n in m._atoms})
+        return next(c) != 1
 
     def __prepare_remapping(self: 'ReactionContainer'):
         r_map = [n for m in self.reactants for n in m]
