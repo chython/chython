@@ -343,7 +343,7 @@ class SMILESRead(Parser):
 
         if self.__ignore_stereo:
             return mol
-        stereo_atoms = [(n, s) for n, a in enumerate(data['atoms']) if (s := a['stereo']) if not None]
+        stereo_atoms = [(n, s) for n, a in enumerate(data['atoms']) if (s := a['stereo']) is not None]
         if not stereo_atoms and not data['stereo_bonds']:
             return mol
 
