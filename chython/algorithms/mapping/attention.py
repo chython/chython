@@ -18,7 +18,7 @@
 #
 from CachedMethods import class_cached_property
 from itertools import chain, count, repeat
-from numpy import ix_, unravel_index, argmax, zeros, array, isclose, nonzero, ones
+from numpy import ix_, unravel_index, argmax, zeros, array, isclose, nonzero, ones, mean
 from typing import TYPE_CHECKING, Union
 
 
@@ -29,8 +29,8 @@ if TYPE_CHECKING:
 class Attention:
     __slots__ = ()
 
-    def reset_mapping(self: Union['ReactionContainer', 'Attention'], *, multiplier=2.,
-                      keep_reactants_numbering=False) -> bool:
+    def reset_mapping(self: Union['ReactionContainer', 'Attention'], *, return_score: bool = False, multiplier=2.,
+                      keep_reactants_numbering=False) -> Union[bool, float]:
         """
         Do atom-to-atom mapping. Return True if mapping changed.
         """
@@ -45,6 +45,7 @@ class Attention:
         mapping = {}
         scope = zeros(pa, dtype=bool)
         seen = ones(pa, dtype=bool)
+        score = []
         for x in range(pa):  # iteratively map each product atom to reactant
             # select highest attention
             # todo: optimize
@@ -57,12 +58,13 @@ class Attention:
                     i = nonzero(scope)[0][i]
                 else:
                     i, j = unravel_index(argmax(am), am.shape)
-            if isclose(am[i, j], 0.):  # no more products atoms in reactants
+            if isclose(aw := am[i, j], 0.):  # no more products atoms in reactants
                 # mark as unmapped
                 for n in set(p_map).difference(mapping):
                     mapping[n] = 0
                 break
 
+            score.append(aw)
             mapping[p_map[i]] = r_map[j]
             am[ix_(p_adj[i], r_adj[j])] *= multiplier  # highlight neighbors
             am[i] = am[:, j] = 0  # mask mapped product and reactant atoms
@@ -70,6 +72,7 @@ class Attention:
             scope[i] = False
             scope[p_adj[i] & seen] = True
 
+        score = float(mean(score)) if score else 0.
         # mapping done.
         if any(n != m for n, m in mapping.items()):  # old mapping changed
             if keep_reactants_numbering or fixed:
@@ -93,7 +96,11 @@ class Attention:
             self.flush_cache()
             self.fix_groups_mapping()  # fix carboxy etc
             self.fix_mapping()  # fix common mistakes in mechanisms
+            if return_score:
+                return score
             return True
+        if return_score:
+            return score
         return fixed
 
     def __fix_collisions(self: 'ReactionContainer'):
