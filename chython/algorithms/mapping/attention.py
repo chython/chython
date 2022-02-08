@@ -41,6 +41,7 @@ class Attention:
         am = self.__get_attention()
         # sum of reactants to products attention and vice-versa for equal atom types only
         am = (am[p2r] + am[r2p].T) * equal_atoms
+        amc = am.copy()
 
         mapping = {}
         scope = zeros(pa, dtype=bool)
@@ -58,7 +59,7 @@ class Attention:
                     i = nonzero(scope)[0][i]
                 else:
                     i, j = unravel_index(argmax(am), am.shape)
-            if isclose(aw := am[i, j], 0.):  # no more products atoms in reactants
+            if isclose(aw := amc[i, j], 0.):  # no more products atoms in reactants
                 # mark as unmapped
                 for n in set(p_map).difference(mapping):
                     mapping[n] = 0
