@@ -158,9 +158,9 @@ class Attention:
     @class_cached_property
     def __attention_model(self):
         from chython import torch_device
-        from chytorch.zoo.rxnmap import RxnMap
+        from chytorch.zoo.rxnmap import Model
 
-        return RxnMap.pretrained().to(torch_device)
+        return Model.pretrained().to(torch_device)
 
     def __get_attention(self):
         from chython import torch_device
