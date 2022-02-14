@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -70,6 +70,7 @@ class Kekule:
 
     def __fix_rings(self: 'MoleculeContainer'):
         bonds = self._bonds
+        charges = self._charges
         seen = set()
         for q, af, bf in rules:
             for mapping in q.get_mapping(self, automorphism_filter=False):
@@ -78,10 +79,9 @@ class Kekule:
                     continue
                 seen.update(match)
 
-                for n, fix in af.items():
+                for n, c in af.items():
                     n = mapping[n]
-                    for key, value in fix.items():
-                        getattr(self, key)[n] = value
+                    charges[n] = c
                 for n, m, b in bf:
                     n = mapping[n]
                     m = mapping[m]
