@@ -376,6 +376,7 @@ class Tautomers:
             yield mol, donors | acceptors
 
     def _enumerate_keto_enol_tautomers(self: Union['MoleculeContainer', 'Tautomers']):
+        hs = self._hydrogens
         for fix, ket in self.__enumerate_bonds():
             if ket:
                 a = fix[-1][1]
@@ -383,6 +384,8 @@ class Tautomers:
             else:
                 a = fix[0][0]
                 d = fix[-1][1]
+            if not hs[d]:
+                continue
 
             mol = self.copy()
             m_bonds = mol._bonds
