@@ -167,13 +167,7 @@ class Attention:
         from torch import no_grad, LongTensor
 
         ds = self.__attention_model.prepare_dataloader([self], LongTensor([1]))
-        (a, n, i, e, r), _ = b = next(iter(ds))
-        a.to(torch_device)
-        n.to(torch_device)
-        i.to(torch_device)
-        e.to(torch_device)
-        r.to(torch_device)
-
+        b = [[x.to(torch_device) for x, _ in ds for x in x]]
         with no_grad():
             am = self.__attention_model(b, mapping_task=True).squeeze(0).cpu().numpy()
         return am
