@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -57,13 +57,10 @@ class Resonance:
             n = entries.pop()
             for path in self.__find_delocalize_path(n, exits, constrains, False):
                 l, m, b = path[-1]
-                if n in nitrogen_cat:
-                    if m in nitrogen_ani:
-                        continue
-                    c_n = 1
-                else:
-                    c_n = 0
-                c_m = -1 if m in nitrogen_ani else 0
+                if n in nitrogen_cat and m in nitrogen_ani:
+                    continue
+
+                c_m = charges[m] - 1
                 if m in sulfur_cat:  # prevent X-[S+]=X >> X=S=X
                     if b != 1:
                         continue
@@ -73,7 +70,7 @@ class Resonance:
                     except ValenceError:
                         continue
 
-                charges[n] = c_n
+                charges[n] += 1
                 hs.add(n)
                 for n, m, b in path:
                     hs.add(m)
@@ -129,6 +126,7 @@ class Resonance:
         charges = self._charges
         radicals = self._radicals
         bonds = self._bonds
+        atoms = self._atoms
         errors = {n for n, h in self._hydrogens.items() if h is None}
 
         transfer = set()
@@ -138,7 +136,7 @@ class Resonance:
         nitrogen_cat = set()
         nitrogen_ani = set()
         sulfur_cat = set()
-        for n, a in self._atoms.items():
+        for n, a in atoms.items():
             if a.atomic_number not in {5, 6, 7, 8, 14, 15, 16, 33, 34, 52}:
                 # filter non-organic set, halogens and aromatics
                 continue
@@ -153,17 +151,29 @@ class Resonance:
                     continue
                 entries.add(n)
             elif charges[n] == 1:
-                if (lb := len(bonds[n])) == 4 and a.atomic_number == 7:  # skip ammonia
-                    continue
-                if a.atomic_number == 16 and lb == 2 and hybridization(n) == 2:  # ad-hoc for X-[S+]=X
-                    sulfur_cat.add(n)
+                lb = len(bonds[n])
+                if a.atomic_number == 7:
+                    if lb == 4:  # skip ammonia
+                        continue
+                    elif lb == 2 and hybridization(n) == 3:  # skip Azide
+                        (n1, b1), (n2, b2) = bonds[n].items()
+                        if b1.order == b2.order == 2 and (charges[n1] == -1 and atoms[n1].atomic_number == 7 or
+                                                          charges[n2] == -1 and atoms[n2].atomic_number == 7):
+                            continue
+                    elif lb == 3 and hybridization(n) == 2:  # X=[N+](-X)-X - prevent N-N migration
+                        nitrogen_ani.add(n)
                 exits.add(n)
+                if a.atomic_number == 16:
+                    if lb == 2 and hybridization(n) == 2:  # ad-hoc for X-[S+]=X
+                        sulfur_cat.add(n)
+                    elif lb == 3 and hybridization(n) == 1:  # ad-hoc for X-[S+](-X)-X
+                        exits.discard(n)
             transfer.add(n)
 
         if exits or entries:  # try to move cation to nitrogen. saturation fixup.
             for n, a in self._atoms.items():
                 if a.atomic_number == 7 and not charges[n]:
-                    if hybridization(n) == 1 and neighbors(n) == 3:
+                    if hybridization(n) == 1 and neighbors(n) <= 3:  # any amine - potential e-donor
                         entries.add(n)
                         nitrogen_cat.add(n)
                     elif hybridization(n) == 3 and neighbors(n) == 1:  # N#X-[X-] >> [N-]=X=X
