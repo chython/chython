@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasyrova@gmail.com>
@@ -33,11 +33,11 @@ class O(Element, PeriodII, GroupXVI):
 
     @property
     def isotopes_distribution(self):
-        return {16: 0.99757, 17: 0.00038, 18: 0.00205}
+        return {15: 0., 16: 0.99757, 17: 0.00038, 18: 0.00205}
 
     @property
     def isotopes_masses(self):
-        return {16: 15.994915, 17: 16.999132, 18: 17.99916}
+        return {15: 15.003065, 16: 15.994915, 17: 16.999132, 18: 17.99916}
 
     @property
     def _common_valences(self):

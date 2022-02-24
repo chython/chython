@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasyrova@gmail.com>
 #  This file is part of chython.
@@ -89,11 +89,11 @@ class Ga(Element, PeriodIV, GroupXIII):
 
     @property
     def isotopes_distribution(self):
-        return {67: 0., 69: 0.60108, 71: 0.39892}
+        return {67: 0., 68: 0., 69: 0.60108, 71: 0.39892}
 
     @property
     def isotopes_masses(self):
-        return {67: 66.928202, 69: 68.925581, 71: 70.924705}
+        return {67: 66.928202, 68: 67.927980, 69: 68.925581, 71: 70.924705}
 
     @property
     def _common_valences(self):

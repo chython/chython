@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasyrova@gmail.com>
 #  This file is part of chython.
@@ -32,11 +32,11 @@ class C(Element, PeriodII, GroupXIV):
 
     @property
     def isotopes_distribution(self):
-        return {12: 0.9893, 13: 0.0107, 14: 0.0}
+        return {11: 0., 12: 0.9893, 13: 0.0107, 14: 0.}
 
     @property
     def isotopes_masses(self):
-        return {12: 12.0, 13: 13.003355, 14: 14.003242}
+        return {11: 11.011432, 12: 12.0, 13: 13.003355, 14: 14.003242}
 
     @property
     def _common_valences(self):
