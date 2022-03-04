@@ -32,7 +32,7 @@ from ..periodictable import Element
 
 @njit(nTuple((u2[:, :], f8[:]))(f8[:, :], f8[:], f8),
       {'size': u2, 'max_bonds': u4, 'c': u4, 'n': u2, 'm': u2, 'rn': f8, 'r': f8, 'd': f8,
-       'nx': f8, 'ny': f8, 'nz': f8, 'mx': f8, 'my': f8, 'mz': f8}, cache=True)
+       'nx': f8, 'ny': f8, 'nz': f8, 'mx': f8, 'my': f8, 'mz': f8})
 def _get_possible_bonds(xyz, radii, multiplier):
     size = len(xyz)
     max_bonds = size * 10  # each atom has less then 10 neighbors approximately

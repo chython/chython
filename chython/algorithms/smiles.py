@@ -318,7 +318,7 @@ class MoleculeSmiles(Smiles):
                 smi[4] = 'H'
             elif ih:
                 smi[4] = f'H{ih}'
-        elif hyb == 4 and ih and atom.atomic_number in (5, 7, 15):  # pyrole
+        elif hyb == 4 and ih and atom.atomic_number in (5, 7, 15):  # pyrrole
             smi[0] = '['
             smi[-1] = ']'
             if ih == 1:
