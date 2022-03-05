@@ -18,11 +18,9 @@
 #
 from fileinput import FileInput
 from io import StringIO, TextIOWrapper
-from math import sqrt
-from numpy import array, uint16, empty
-from numba import njit, f8, u2, u4
-from numba.core.types import Tuple as nTuple
+from numpy import array, where
 from pathlib import Path
+from scipy.spatial import distance_matrix
 from traceback import format_exc
 from typing import List, Iterable, Tuple, Optional
 from ..containers import MoleculeContainer
@@ -30,36 +28,19 @@ from ..exceptions import ParseError
 from ..periodictable import Element
 
 
-@njit(nTuple((u2[:, :], f8[:]))(f8[:, :], f8[:], f8),
-      {'size': u2, 'max_bonds': u4, 'c': u4, 'n': u2, 'm': u2, 'rn': f8, 'r': f8, 'd': f8,
-       'nx': f8, 'ny': f8, 'nz': f8, 'mx': f8, 'my': f8, 'mz': f8})
-def _get_possible_bonds(xyz, radii, multiplier):
-    size = len(xyz)
-    max_bonds = size * 10  # each atom has less then 10 neighbors approximately
-    nm = empty((max_bonds, 2), dtype=uint16)
-    ds = empty(max_bonds)
-    c = 0
-    for n in range(size - 1):
-        nx, ny, nz = xyz[n]
-        rn = radii[n]
-        for m in range(n + 1, size):
-            mx, my, mz = xyz[m]
-            d = sqrt((nx - mx) ** 2 + (ny - my) ** 2 + (nz - mz) ** 2)
-            r = (rn + radii[m]) * multiplier
-            if d <= r:
-                nm[c] = n + 1, m + 1
-                ds[c] = d
-                c += 1
-    return nm[:c], ds[:c]
-
-
 def get_possible_bonds(atoms, conformer, multiplier):
     possible_bonds = {n: {} for n in atoms}  # distance matrix
-    radii = array([a.atomic_radius for a in atoms.values()])
+    radii = array([a.atomic_radius for a in atoms.values()]).reshape(-1, 1)
     xyz = array(list(conformer.values()))
-    nm, ds = _get_possible_bonds(xyz, radii, multiplier)
-    for (n, m), d in zip(nm.tolist(), ds.tolist()):
-        possible_bonds[n][m] = possible_bonds[m][n] = d
+    dist = distance_matrix(x=xyz, y=xyz)
+    radii_matrix = distance_matrix(x=radii, y=radii*-1) * multiplier
+    crit_matrix = dist-radii_matrix
+    index_x, index_y = where(crit_matrix < 0)
+    index_x = (index_x + 1).tolist()
+    index_y = (index_y + 1).tolist()
+    for a, b in zip(index_x, index_y):
+        if a != b:
+            possible_bonds[a][b] = possible_bonds[b][a] = float(dist[a-1][b-1])
     return possible_bonds
 
 
