@@ -47,9 +47,9 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
     q_size = len(q_numbers)
     q_size_dec = q_size - 1
     o_size = len(o_numbers)
-    cdef int *path = <int *> PyMem_Malloc(q_size_dec * sizeof(int))
-    cdef int *stack_index = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
-    cdef int *stack_depth = <int *> PyMem_Malloc(2 * o_size * sizeof(int))
+    cdef unsigned int *path = <unsigned int *> PyMem_Malloc(q_size_dec * sizeof(unsigned int))
+    cdef unsigned int *stack_index = <unsigned int *> PyMem_Malloc(2 * o_size * sizeof(unsigned int))
+    cdef unsigned int *stack_depth = <unsigned int *> PyMem_Malloc(2 * o_size * sizeof(unsigned int))
     cdef bint *matched = <bint *> PyMem_Malloc(o_size * sizeof(bint))
     cdef unsigned long long *o_closures = <unsigned long long *> PyMem_Malloc(o_size * sizeof(unsigned long long))
 

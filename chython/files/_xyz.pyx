@@ -28,16 +28,19 @@ cdef extern from "Python.h":
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def possible_bonds(double[:, ::1] xyz not None, double[::1] radii not None, double multiplier):
-    cdef int size, max_bonds, c = 0, b = 0, n, m, k
+    cdef unsigned int size, max_bonds, c = 0, b = 0, n, m, k
     cdef double d, nx, ny, nz, rn, mx, my, mz
     cdef dict py_bonds, tmp
 
     size = xyz.shape[0]
     max_bonds = size * 10  # each atom has less then 10 neighbors approximately
 
-    cdef int *ni = <int *> PyMem_Malloc(size * sizeof(int))
-    cdef int *mi = <int *> PyMem_Malloc(max_bonds * sizeof(int))
+    cdef unsigned int *ns = <unsigned int *> PyMem_Malloc(size * sizeof(unsigned int))
+    cdef unsigned int *mi = <unsigned int *> PyMem_Malloc(max_bonds * sizeof(unsigned int))
     cdef double *ds = <double *> PyMem_Malloc(max_bonds * sizeof(double))
+
+    if not ns or not mi or not ds:
+        raise MemoryError()
 
     for n in range(size - 1):
         nx, ny, nz = xyz[n, 0], xyz[n, 1], xyz[n, 2]
@@ -49,15 +52,15 @@ def possible_bonds(double[:, ::1] xyz not None, double[::1] radii not None, doub
                 mi[c] = m
                 ds[c] = d
                 c += 1
-        ni[n] = c
+        ns[n] = c
 
     # prepare dict of dicts
     py_bonds = _PyDict_NewPresized(size)
     for n in range(size):
         py_bonds[n + 1] = {}
 
-    for n in range(size):
-        c = ni[n]
+    for n in range(size - 1):
+        c = ns[n]
         n += 1
         tmp = py_bonds[n]
         for m in range(b, c):
@@ -65,7 +68,7 @@ def possible_bonds(double[:, ::1] xyz not None, double[::1] radii not None, doub
             tmp[k] = py_bonds[k][n] = ds[m]
         b = c
 
-    PyMem_Free(ni)
+    PyMem_Free(ns)
     PyMem_Free(mi)
     PyMem_Free(ds)
     return py_bonds
