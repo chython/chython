@@ -18,16 +18,13 @@
 #
 from fileinput import FileInput
 from io import StringIO, TextIOWrapper
-from numpy import array, where, fill_diagonal, tril, zeros, tril_indices, asarray
+from numpy import array, asarray
 from pathlib import Path
-from scipy.spatial import distance_matrix
-from scipy.spatial.distance import pdist,squareform,sqeuclidean
 from traceback import format_exc
 from typing import List, Iterable, Tuple, Optional
 from ..containers import MoleculeContainer
 from ..exceptions import ParseError
 from ..periodictable import Element
-
 from .possible_bonds import _possible_bonds
 
 
