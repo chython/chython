@@ -33,6 +33,8 @@ delimiter = compile(r'[=:]')
 cx_fragments = compile(r'f:(?:[0-9]+(?:\.[0-9]+)+)(?:,(?:[0-9]+(?:\.[0-9]+)+))*')
 cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
 
+implicit_mismatch_key = 'implicit_mismatch'
+
 
 class SMILESRead(Parser):
     """SMILES separated per lines files reader. Works similar to opened file object. Support `with` context manager.
@@ -285,6 +287,9 @@ class SMILESRead(Parser):
 
     def _create_molecule(self, data, mapping):
         mol = super()._create_molecule(data, mapping)
+        atoms = mol._atoms
+        bonds = mol._bonds
+        charges = mol._charges
         hydrogens = mol._hydrogens
         radicals = mol._radicals
         calc_implicit = mol._calc_implicit
@@ -303,6 +308,11 @@ class SMILESRead(Parser):
             elif (hc := hydrogens[n]) is None:  # atom has invalid valence for now.
                 if hyb(n) == 4:  # this is aromatic rings. just store given H count.
                     hydrogens[n] = h
+                    if not h and not charges[n] and atoms[n].atomic_number in (5, 6, 7, 15) and \
+                            sum(b.order != 8 for b in bonds[n].values()) == 2:
+                        # c[c]c - aromatic B,C,N,P radical
+                        radicals[n] = True
+                        radicalized.append(n)
                 elif not radicals[n]:  # CXSMILES radical not set.
                     # SMILES doesn't code radicals. so, let's try to guess.
                     radicals[n] = True
@@ -311,6 +321,10 @@ class SMILESRead(Parser):
                         if self._ignore:
                             hydrogens[n] = None  # reset hydrogens
                             radicals[n] = False  # reset radical state
+                            if implicit_mismatch_key in mol.meta:
+                                mol.meta[implicit_mismatch_key][n] = h
+                            else:
+                                mol.meta[implicit_mismatch_key] = {n: h}
                             self._info(f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
                         else:
                             raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
@@ -324,6 +338,10 @@ class SMILESRead(Parser):
                     if self._ignore:
                         hydrogens[n] = hc  # reset hydrogens to previous valid state
                         radicals[n] = False  # reset radical state
+                        if implicit_mismatch_key in mol.meta:
+                            mol.meta[implicit_mismatch_key][n] = h
+                        else:
+                            mol.meta[implicit_mismatch_key] = {n: h}
                         self._info(f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
                     else:
                         raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
@@ -332,8 +350,6 @@ class SMILESRead(Parser):
                     radicalized.append(n)
 
         if self.__ignore_carbon_radicals:
-            atoms = mol._atoms
-            bonds = mol._bonds
             for n in radicalized:
                 if atoms[n].atomic_number == 6:
                     radicals[n] = False

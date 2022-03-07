@@ -345,7 +345,7 @@ class Standardize:
             bonds = self._bonds
             m = start_map
             for n in to_add:
-                m = self.add_atom(H(), m)
+                self.add_atom(H(), m)
                 bonds[n][m] = bonds[m][n] = b = Bond(1)
                 b._attach_graph(self, n, m)
                 hydrogens[n] = 0

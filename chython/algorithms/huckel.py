@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 basis = {(5, 0, False, False): (-1., .75, 0),  # X3B
          (6, 0, False, True): (0., 1., 1),
          (7, 0, False, True): (.5, 1., 1),  # pyridine
-         (7, 0, False, False): (1.49, .8, 2),  # pyrole
+         (7, 0, False, False): (1.49, .8, 2),  # pyrrole
          (7, 1, False, True): (2.3, .7, 1),  # nitro
          (8, 0, False, True): (1., 1., 1),  # X=O
          (8, 0, False, False): (2., .8, 2),  # X-O-Y

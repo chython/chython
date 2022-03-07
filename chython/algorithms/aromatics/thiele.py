@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,6 +20,7 @@ from collections import defaultdict
 from lazy_object_proxy import Proxy
 from typing import TYPE_CHECKING
 from ..rings import _sssr, _connected_components
+from ...periodictable import ListElement
 
 
 if TYPE_CHECKING:
@@ -31,7 +32,7 @@ def _freaks():
     rules = []
 
     q = QueryContainer()
-    q.add_atom('N', neighbors=2)
+    q.add_atom(ListElement(['N', 'O', 'S']), neighbors=2)
     q.add_atom('A')
     q.add_atom('A')
     q.add_atom('A')
@@ -56,7 +57,7 @@ class Thiele:
         Convert structure to aromatic form (Huckel rule ignored). Return True if found any kekule ring.
         Also marks atoms as aromatic.
 
-        :param fix_tautomers: try to fix condensed rings with pyroles.
+        :param fix_tautomers: try to fix condensed rings with pyrroles.
             N1C=CC2=NC=CC2=C1>>N1C=CC2=CN=CC=C12
         """
         atoms = self._atoms
@@ -67,7 +68,7 @@ class Thiele:
 
         rings = defaultdict(set)  # aromatic? skeleton. include quinones
         tetracycles = []
-        pyroles = set()
+        pyrroles = set()
         acceptors = set()
         donors = []
         freaks = []
@@ -80,7 +81,7 @@ class Thiele:
                 if lr == 4:  # two bonds condensed aromatic rings
                     tetracycles.append(ring)
                 else:
-                    if fix_tautomers and lr % 2:  # find potential pyroles
+                    if fix_tautomers and lr % 2:  # find potential pyrroles
                         try:
                             n = next(n for n in ring if atoms[n].atomic_number == 7 and not charges[n])
                         except StopIteration:
@@ -93,7 +94,7 @@ class Thiele:
                     for n, m in zip(ring, ring[1:]):
                         rings[n].add(m)
                         rings[m].add(n)
-            elif 4 < lr == sp2 + 1:  # pyroles, furanes, etc
+            elif 4 < lr == sp2 + 1:  # pyrroles, furanes, etc
                 try:
                     n = next(n for n in ring if sh(n) == 1)
                 except StopIteration:  # exotic, just skip
@@ -104,7 +105,7 @@ class Thiele:
                 elif an in (5, 7, 8, 15, 16, 34) and not charges[n]:
                     if fix_tautomers and lr == 6 and an == 7 and len(bonds[n]) == 2:
                         donors.append(n)
-                    pyroles.add(n)
+                    pyrroles.add(n)
                     n, *_, m = ring
                     rings[n].add(m)
                     rings[m].add(n)
@@ -112,15 +113,15 @@ class Thiele:
                         rings[n].add(m)
                         rings[m].add(n)
                 elif an == 6 and lr == 5 and charges[n] == -1:  # ferrocene, etc.
-                    pyroles.add(n)
+                    pyrroles.add(n)
                     n, *_, m = ring
                     rings[n].add(m)
                     rings[m].add(n)
                     for n, m in zip(ring, ring[1:]):
                         rings[n].add(m)
                         rings[m].add(n)
-            # like N1C=Cn2cccc12
-            elif lr == 5 and sum(atoms[x].atomic_number == 7 and not charges[x] for x in ring) > 1:
+            # like N1C=Cn2cccc12, S1C=Cn2cccc12
+            elif lr == 5 and sp2 == 3:
                 freaks.append(ring)
         if not rings:
             return False
@@ -141,8 +142,8 @@ class Thiele:
                     if current in acceptors:  # we found
                         if order == 1:
                             acceptors.discard(current)
-                            pyroles.discard(start)
-                            pyroles.add(current)
+                            pyrroles.discard(start)
+                            pyrroles.add(current)
                             hydrogens[current] = 1
                             hydrogens[start] = 0
                             break
@@ -174,7 +175,7 @@ class Thiele:
                 except StopIteration:
                     break
                 m = rings.pop(n).pop()
-                if n in pyroles:
+                if n in pyrroles:
                     rings[m].discard(n)
                 else:
                     pm = rings.pop(m)
@@ -211,7 +212,7 @@ class Thiele:
         for ring in freaks:  # aromatize rule based
             rs = set(ring)
             for q in freak_rules:
-                if any(True for match in q.get_mapping(self) if rs == set(match.values())):
+                if any(rs == set(match.values()) for match in q.get_mapping(self)):
                     n, *_, m = ring
                     bonds[n][m]._Bond__order = 4
                     for n, m in zip(ring, ring[1:]):
