@@ -142,7 +142,7 @@ class Rings:
         """
         if not self._atoms:
             return ()
-        return tuple(tuple(x) for x in _connected_components(self._bonds))
+        return tuple(tuple(x) for x in self._connected_components)
 
     @property
     def connected_components_count(self) -> int:
@@ -157,6 +157,10 @@ class Rings:
         Graph without terminal atoms. Only rings and linkers
         """
         return _skin_graph(self._bonds)
+
+    @cached_property
+    def _connected_components(self: 'Graph') -> List[Set[int]]:
+        return _connected_components(self._bonds)
 
 
 def _sssr(bonds: Dict[int, Union[Set[int], Dict[int, Any]]], n_sssr: int) -> Tuple[Tuple[int, ...], ...]:

@@ -43,6 +43,19 @@ def _freaks():
     q.add_bond(4, 5, 4)
     q.add_bond(1, 5, 1)
     rules.append(q)
+
+    q = QueryContainer()
+    q.add_atom('N', neighbors=3, hybridization=1)
+    q.add_atom('A')
+    q.add_atom('A')
+    q.add_atom('A')
+    q.add_atom('A')
+    q.add_bond(1, 2, 1)
+    q.add_bond(2, 3, (2, 4))
+    q.add_bond(3, 4, 1)
+    q.add_bond(4, 5, 4)
+    q.add_bond(1, 5, 1)
+    rules.append(q)
     return rules
 
 
@@ -210,9 +223,8 @@ class Thiele:
 
         self.flush_cache()
         for ring in freaks:  # aromatize rule based
-            rs = set(ring)
             for q in freak_rules:
-                if any(rs == set(match.values()) for match in q.get_mapping(self)):
+                if next(q.get_mapping(self, searching_scope=ring, automorphism_filter=False), None):
                     n, *_, m = ring
                     bonds[n][m]._Bond__order = 4
                     for n, m in zip(ring, ring[1:]):
