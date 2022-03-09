@@ -59,13 +59,13 @@ class Attention:
                     i = nonzero(scope)[0][i]
                 else:
                     i, j = unravel_index(argmax(am), am.shape)
-            if isclose(aw := amc[i, j], 0.):  # no more products atoms in reactants
+            if isclose(am[i, j], 0.):  # no more products atoms in reactants
                 # mark as unmapped
                 for n in set(p_map).difference(mapping):
                     mapping[n] = 0
                 break
-
-            score.append(aw)
+            else:
+                score.append(amc[i, j])
             mapping[p_map[i]] = r_map[j]
             am[ix_(p_adj[i], r_adj[j])] *= multiplier  # highlight neighbors
             am[i] = am[:, j] = 0  # mask mapped product and reactant atoms
@@ -162,12 +162,16 @@ class Attention:
 
         return Model.pretrained().to(torch_device)
 
+    @class_cached_property
+    def __cutoff(self):
+        return self.__attention_model.encoder.molecule_encoder.spatial_encoder.num_embeddings - 3
+
     def __get_attention(self):
         from chython import torch_device
-        from torch import no_grad, LongTensor
+        from torch import no_grad
+        from chytorch.utils.data import ReactionDataset
 
-        ds = self.__attention_model.prepare_dataloader([self], LongTensor([1]))
-        b = [[x.to(torch_device) for x, _ in ds for x in x]]
+        b = [[x.unsqueeze(0).to(torch_device) for x in ReactionDataset([self], distance_cutoff=self.__cutoff)[0]]]
         with no_grad():
             am = self.__attention_model(b, mapping_task=True).squeeze(0).cpu().numpy()
         return am
