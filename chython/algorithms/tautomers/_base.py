@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -60,7 +60,7 @@ def _stripped_rules():
     q.add_bond(2, 4, 2)
     rules.append(q)
 
-    # ions. Note: this rule ignored in pharmacophores and neutralize_metal_salts. keep in mind then editing list.
+    # ions. Note: this rule ignored in neutralize_metal_salts. keep in mind then editing list.
     q = QueryContainer()
     q.add_atom(ListElement(['O', 'F', 'Cl', 'Br', 'I', 'S']), charge=-1, neighbors=0)
     rules.append(q)

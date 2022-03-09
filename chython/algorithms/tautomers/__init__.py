@@ -22,7 +22,6 @@ from functools import cached_property
 from itertools import product, chain, repeat, combinations
 from lazy_object_proxy import Proxy
 from typing import TYPE_CHECKING, Iterator, Union, List
-from weakref import ref
 from ._acid import rules as acid_rules, stripped_rules as stripped_acid_rules
 from ._base import rules as base_rules, stripped_rules as stripped_base_rules
 from ..aromatics.kekule import _kekule_component
@@ -77,36 +76,6 @@ class Tautomers:
         if logging:
             return list(changed)
         return True
-
-    def tautomerize(self: 'MoleculeContainer', *, prepare_molecules=True, limit: int = 1000) -> bool:
-        """
-        Convert structure to canonical tautomeric form. Return True if structure changed.
-        """
-        def key(m):
-            # more aromatic rings is better
-            # less charged atoms is better
-            # lower Huckel energy is better
-            # smiles alphabetically sorted (descent). bad rule!
-            return len(m.aromatic_rings), -sum(x != 0 for x in m._charges.values()), -m.huckel_energy, str(m)
-
-        # do zwitter-ions enumeration for charged structure - search canonic ion.
-        canon = max(self.enumerate_tautomers(prepare_molecules=prepare_molecules, full=bool(int(self)), limit=limit),
-                    key=key)
-        if canon != self:  # attach state of canonic tautomer to self
-            # atoms, radicals state, parsed_mapping and plane are unchanged
-            self._bonds = canon._bonds
-            for n, m, b in self.bonds():  # move bonds attachments
-                b._Bond__graph = ref(self)
-
-            self._charges = canon._charges  # for zwitter-ionic tautomers
-            self._hydrogens = canon._hydrogens
-            self._atoms_stereo = canon._atoms_stereo
-            self._allenes_stereo = canon._allenes_stereo
-            self._cis_trans_stereo = canon._cis_trans_stereo
-            self._conformers.clear()  # flush 3d
-            self.flush_cache()
-            return True
-        return False
 
     def enumerate_tautomers(self: 'MoleculeContainer', *, prepare_molecules=True, full=True, limit: int = 1000) -> \
             Iterator['MoleculeContainer']:

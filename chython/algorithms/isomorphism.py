@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -21,7 +21,7 @@ from array import array
 from collections import defaultdict, deque
 from functools import cached_property, partial
 from itertools import permutations
-from typing import Any, Dict, Iterator, Set, TYPE_CHECKING, Union
+from typing import Any, Collection, Dict, Iterator, Optional, TYPE_CHECKING, Union
 from .._functions import lazy_product
 from ..periodictable.element import Element, Query
 
@@ -96,11 +96,13 @@ class Isomorphism:
         return True
 
     @abstractmethod
-    def get_mapping(self, other, /, *, automorphism_filter: bool = True, _cython=False) -> Iterator[Dict[int, int]]:
+    def get_mapping(self, other, /, *, automorphism_filter: bool = True,
+                    searching_scope: Optional[Collection[int]] = None, _cython=False) -> Iterator[Dict[int, int]]:
         """
         Get self to other substructure mapping generator.
 
         :param automorphism_filter: Skip matches to same atoms.
+        :param searching_scope: substructure atoms list to localize isomorphism.
         """
         if _cython:  # ad-hoc for QueryContainer
             try:  # windows? ;)
@@ -118,12 +120,16 @@ class Isomorphism:
             components, closures = self._compiled_query
             get_mapping = partial(_get_mapping, query_closures=closures, o_atoms=other._atoms, o_bonds=other._bonds)
 
+        if searching_scope is not None and not isinstance(searching_scope, set):
+            searching_scope = set(searching_scope)
+
         seen = set()
         if len(components) == 1:
-            for other_component in range(other.connected_components_count):
-                candidate = self._isomorphism_candidates(other, 0, other_component)
-                if not candidate:
-                    continue
+            for candidate in other._connected_components:
+                if searching_scope:
+                    candidate = searching_scope.intersection(candidate)
+                    if not candidate:
+                        continue
                 for mapping in get_mapping(components[0], scope=candidate):
                     if automorphism_filter:
                         atoms = frozenset(mapping.values())
@@ -132,12 +138,13 @@ class Isomorphism:
                         seen.add(atoms)
                     yield mapping
         else:
-            for cs in permutations(range(other.connected_components_count), len(components)):
+            for candidates in permutations(other._connected_components, len(components)):
                 mappers = []
-                for self_component, component, other_component in zip(range(len(components)), components, cs):
-                    candidate = self._isomorphism_candidates(other, self_component, other_component)
-                    if not candidate:
-                        break
+                for component, candidate in zip(components, candidates):
+                    if searching_scope:
+                        candidate = searching_scope.intersection(candidate)
+                        if not candidate:
+                            break
                     mappers.append(get_mapping(component, scope=candidate))
                 else:
                     for match in lazy_product(*mappers):
@@ -150,13 +157,6 @@ class Isomorphism:
                                 continue
                             seen.add(atoms)
                         yield mapping
-
-    def _isomorphism_candidates(self, other, self_component: int, other_component: int) -> Set[int]:
-        """
-        Filter of atoms with possible isomorphism.
-        By default do nothing.
-        """
-        return set(other.connected_components[other_component])
 
     @cached_property
     def _compiled_query(self: 'Graph'):
