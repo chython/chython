@@ -24,7 +24,6 @@ pygments_style = 'sphinx'
 todo_include_todos = False
 autoclass_content = 'both'
 
-html_theme = 'sphinx_rtd_theme'
 html_logo = 'logo256.png'
 html_favicon = 'logo256.png'
 html_theme_options = {'github_user': 'chython', 'github_repo': 'chython', 'show_related': True}

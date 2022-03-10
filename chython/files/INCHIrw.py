@@ -145,7 +145,7 @@ class INCHIRead(Parser):
 
     def parse(self, inchi: str) -> MoleculeContainer:
         """
-        convert INCHI string into MoleculeContainer object. string should be start with INCHI and
+        Convert INCHI string into MoleculeContainer object. String should start with INCHI and
         optionally continues with space/tab separated list of key:value [or key=value] data.
         """
         if not inchi:

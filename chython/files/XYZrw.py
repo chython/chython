@@ -218,6 +218,9 @@ class XYZRead(XYZ):
 
     def parse(self, matrix: Iterable[Tuple[str, float, float, float]], charge: int = 0, radical: int = 0) -> \
             Optional[MoleculeContainer]:
+        """
+        Create molecule from xyz coordinates.
+        """
         try:
             container = self._convert_molecule([(e, None, x, y, z) for e, x, y, z in matrix], charge, radical)
         except ValueError:

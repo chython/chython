@@ -235,7 +235,7 @@ class MoleculeStereo(Stereo):
 
     def add_atom_stereo(self: 'MoleculeContainer', n: int, env: Tuple[int, ...], mark: bool, *, clean_cache=True):
         """
-        Add stereo data for specified neighbors bypass. Use it for tetrahedrons of allenes.
+        Add stereo data for specified neighbors bypass. Use it for tetrahedrons or allenes.
 
         :param n: number of tetrahedron atom or central atom of allene.
         :param env: numbers of atoms with specified bypass

@@ -23,4 +23,7 @@ Subpackages
 Tutorial
 ========
 
-todo
+.. toctree::
+    :maxdepth: 1
+
+    tutorial/notebook.ipynb

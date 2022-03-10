@@ -99,8 +99,5 @@ setup(
                  'Topic :: Scientific/Engineering :: Information Analysis',
                  'Topic :: Software Development',
                  'Topic :: Software Development :: Libraries',
-                 'Topic :: Software Development :: Libraries :: Python Modules'],
-    command_options={'build_sphinx': {'source_dir': ('setup.py', 'doc'),
-                                      'build_dir':  ('setup.py', 'build/doc'),
-                                      'all_files': ('setup.py', True)}}
+                 'Topic :: Software Development :: Libraries :: Python Modules']
 )
