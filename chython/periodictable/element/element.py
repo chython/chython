@@ -23,6 +23,13 @@ from typing import Dict, List, Optional, Set, Tuple, Type
 from .core import Core
 from ...exceptions import IsNotConnectedAtom, ValenceError
 
+non_metals = ['H', 'He',
+                   'B',  'C',  'N',  'O',  'F',  'Ne',
+                         'Si', 'P',  'S',  'Cl', 'Ar',
+                               'As', 'Se', 'Br', 'Kr',
+                                     'Te', 'I',  'Xe',
+                                           'At', 'Rn']
+
 
 class Element(Core, ABC):
     __slots__ = ()
@@ -102,6 +109,10 @@ class Element(Core, ABC):
             g._calc_implicit(self._n)
             g.flush_cache()
             g.fix_stereo()
+
+    @class_cached_property
+    def is_metal(self) -> bool:
+        return self.atomic_symbol not in non_metals
 
     @property
     def implicit_hydrogens(self) -> Optional[int]:
