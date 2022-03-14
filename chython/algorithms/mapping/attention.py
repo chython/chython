@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 class Attention:
     __slots__ = ()
 
-    def reset_mapping(self: Union['ReactionContainer', 'Attention'], *, return_score: bool = False, multiplier=2.,
+    def reset_mapping(self: Union['ReactionContainer', 'Attention'], *, return_score: bool = False, multiplier=1.75,
                       keep_reactants_numbering=False) -> Union[bool, float]:
         """
         Do atom-to-atom mapping. Return True if mapping changed.
@@ -171,7 +171,7 @@ class Attention:
         from torch import no_grad
         from chytorch.utils.data import ReactionDataset
 
-        b = [[x.unsqueeze(0).to(torch_device) for x in ReactionDataset([self], distance_cutoff=self.__cutoff)[0]]]
+        b = [x.unsqueeze(0).to(torch_device) for x in ReactionDataset([self], distance_cutoff=self.__cutoff)[0]]
         with no_grad():
             am = self.__attention_model(b, mapping_task=True).squeeze(0).cpu().numpy()
         return am
