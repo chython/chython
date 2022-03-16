@@ -20,8 +20,7 @@ Full documentation can be found `here <https://chython.readthedocs.io>`_.
 
 Chython is fork of `CGRtools <https://github.com/stsouko/CGRtools>`_.
 
-
-INSTALL
+Install
 =======
 
 Only python 3.8+.
@@ -36,7 +35,7 @@ Note: for using `clean2d` install NodeJS into system.
 
     pip install -U git+https://github.com/chython/chython.git@master#egg=chython
 
-TESTS
+Tests
 =====
 
 Run unit tests::
@@ -45,12 +44,12 @@ Run unit tests::
     pip install -e .
     pytest --pyargs chython
 
-COPYRIGHT
+Copyright
 =========
 
 * 2014-2022 Ramil Nugmanov nougmanoff@protonmail.com main developer
 
-CONTRIBUTORS
+Contributors
 ============
 
 * Adelia Fatykhova adelik21979@gmail.com

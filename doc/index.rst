@@ -1,7 +1,7 @@
 .. include:: ../README.rst
 
-chython package
-===============
+Chython package API
+===================
 
 .. automodule:: chython
     :members: smiles, inchi, xyz
@@ -22,6 +22,8 @@ Subpackages
 
 Tutorial
 ========
+
+Here described the common API of Chython.
 
 .. toctree::
     :maxdepth: 1

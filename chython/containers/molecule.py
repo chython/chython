@@ -736,38 +736,42 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
     def pack(self, *, compressed=True) -> bytes:
         """
         Pack into compressed bytes.
-        Note:
-            * Less than 4096 atoms supported. Atoms mapping should be in range 1-4095.
-            * Implicit hydrogens count should be in range 0-6 or unspecified.
-            * Isotope shift should be in range -15 - 15 relatively mdl.common_isotopes
-            * Atoms neighbors should be in range 0-15
 
-        Format specification:
-        Big endian bytes order
-        8 bit - empty byte for future extending
-        12 bit - number of atoms
-        12 bit - cis/trans stereo block size
-        Atom block 9 bytes (repeated):
-        12 bit - atom number
-        4 bit - number of neighbors
-        2 bit tetrahedron sign (00 - not stereo, 10 or 11 - has stereo)
-        2 bit - allene sign
-        5 bit - isotope (00000 - not specified, over = isotope - common_isotope + 16)
-        7 bit - atomic number (<=118)
-        32 bit - XY float16 coordinates
-        3 bit - hydrogens (0-7). Note: 7 == None
-        4 bit - charge (charge + 4. possible range -4 - 4)
-        1 bit - radical state
-        Connection table: flatten list of neighbors. neighbors count stored in atom block.
-        For example CC(=O)O - {1: [2], 2: [1, 3, 4], 3: [2], 4: [2]} >> [2, 1, 3, 4, 2, 2].
-        Repeated block (equal to bonds count).
-        24 bit - paired 12 bit numbers.
-        Bonds order block (repeated):
-        16 bit - 5 bonds grouped (3 bit each). 1 bit unused. Zero padding used than bonds count not proportional to 5.
-        Cis/trans data block (repeated):
-        24 bit - atoms pair
-        7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
-        1 bit - sign
+        Note:
+
+        * Less than 4096 atoms supported. Atoms mapping should be in range 1-4095.
+        * Implicit hydrogens count should be in range 0-6 or unspecified.
+        * Isotope shift should be in range -15 - 15 relatively chython.files._mdl.mol.common_isotopes
+        * Atoms neighbors should be in range 0-15
+
+        Format specification::
+
+            Big endian bytes order
+            8 bit - empty byte for future extending
+            12 bit - number of atoms
+            12 bit - cis/trans stereo block size
+            Atom block 9 bytes (repeated):
+            12 bit - atom number
+            4 bit - number of neighbors
+            2 bit tetrahedron sign (00 - not stereo, 10 or 11 - has stereo)
+            2 bit - allene sign
+            5 bit - isotope (00000 - not specified, over = isotope - common_isotope + 16)
+            7 bit - atomic number (<=118)
+            32 bit - XY float16 coordinates
+            3 bit - hydrogens (0-7). Note: 7 == None
+            4 bit - charge (charge + 4. possible range -4 - 4)
+            1 bit - radical state
+            Connection table: flatten list of neighbors. neighbors count stored in atom block.
+            For example CC(=O)O - {1: [2], 2: [1, 3, 4], 3: [2], 4: [2]} >> [2, 1, 3, 4, 2, 2].
+            Repeated block (equal to bonds count).
+            24 bit - paired 12 bit numbers.
+            Bonds order block (repeated):
+            16 bit - 5 bonds grouped (3 bit each). 1 bit unused.
+             Zero padding used than bonds count not proportional to 5.
+            Cis/trans data block (repeated):
+            24 bit - atoms pair
+            7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
+            1 bit - sign
 
         :param compressed: return zlib-compressed pack.
         """
