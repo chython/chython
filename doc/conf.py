@@ -7,7 +7,7 @@ if parent not in path:
 from chython.periodictable import C, DynamicC, QueryC, ListElement, AnyElement, AnyMetal
 
 author = 'Dr. Ramil Nugmanov'
-copyright = '2014-2021, Dr. Ramil Nugmanov <nougmanoff@protonmail.com>'
+copyright = '2014-2022, Dr. Ramil Nugmanov <nougmanoff@protonmail.com>'
 version = '1.x'
 project = 'chython'
 
@@ -24,7 +24,6 @@ pygments_style = 'sphinx'
 todo_include_todos = False
 autoclass_content = 'both'
 
-html_theme = 'sphinx_rtd_theme'
 html_logo = 'logo256.png'
 html_favicon = 'logo256.png'
 html_theme_options = {'github_user': 'chython', 'github_repo': 'chython', 'show_related': True}

@@ -22,7 +22,6 @@ from numpy import array
 from pathlib import Path
 from traceback import format_exc
 from typing import List, Iterable, Tuple, Optional
-from ._xyz import possible_bonds
 from ..containers import MoleculeContainer
 from ..exceptions import ParseError
 from ..periodictable import Element
@@ -84,6 +83,8 @@ class XYZ:
         return next(iter(self))
 
     def _convert_molecule(self, matrix: Iterable[Tuple[str, Optional[int], float, float, float]], charge=0, radical=0):
+        from ._xyz import possible_bonds  # windows?
+
         mol = self.MoleculeContainer()
         conformer = {}
         mol._conformers.append(conformer)
@@ -218,6 +219,9 @@ class XYZRead(XYZ):
 
     def parse(self, matrix: Iterable[Tuple[str, float, float, float]], charge: int = 0, radical: int = 0) -> \
             Optional[MoleculeContainer]:
+        """
+        Create molecule from xyz coordinates.
+        """
         try:
             container = self._convert_molecule([(e, None, x, y, z) for e, x, y, z in matrix], charge, radical)
         except ValueError:

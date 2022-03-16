@@ -55,14 +55,16 @@ class Tautomers:
     """
     __slots__ = ()
 
-    def neutralize(self: 'MoleculeContainer', *, logging=False, _fix_stereo=True) -> Union[bool, List[int]]:
+    def neutralize(self: 'MoleculeContainer', *, keep_charge=True, logging=False,
+                   _fix_stereo=True) -> Union[bool, List[int]]:
         """
         Convert organic salts to neutral form if possible. Only one possible form used for charge unbalanced structures.
 
-        :param logging: return changed atoms list
+        :param keep_charge: do partial neutralization to keep total charge of molecule.
+        :param logging: return changed atoms list.
         """
         try:
-            mol, changed = next(self._neutralize())
+            mol, changed = next(self._neutralize(keep_charge))
         except StopIteration:
             if logging:
                 return []
@@ -300,7 +302,7 @@ class Tautomers:
                     if counter == limit:
                         return
 
-    def _neutralize(self: 'MoleculeContainer'):
+    def _neutralize(self: 'MoleculeContainer', keep_charge=True):
         donors = set()
         acceptors = set()
         for q in stripped_acid_rules:
@@ -310,31 +312,41 @@ class Tautomers:
             for mapping in q.get_mapping(self, automorphism_filter=False):
                 acceptors.add(mapping[1])
 
-        if not donors or not acceptors:
-            return
-        elif len(donors) > len(acceptors):
-            copy = self.copy()
-            for a in acceptors:
-                copy._hydrogens[a] += 1
-                copy._charges[a] += 1
-            for c in combinations(donors, len(acceptors)):
-                mol = copy.copy()
-                for d in c:
+        if keep_charge:
+            if not donors or not acceptors:
+                return  # neutralization impossible
+            elif len(donors) > len(acceptors):
+                copy = self.copy()
+                for a in acceptors:
+                    copy._hydrogens[a] += 1
+                    copy._charges[a] += 1
+                for c in combinations(donors, len(acceptors)):
+                    mol = copy.copy()
+                    for d in c:
+                        mol._hydrogens[d] -= 1
+                        mol._charges[d] -= 1
+                    yield mol, acceptors.union(c)
+            elif len(donors) < len(acceptors):
+                copy= self.copy()
+                for d in donors:
+                    copy._hydrogens[d] -= 1
+                    copy._charges[d] -= 1
+                for c in combinations(acceptors, len(donors)):
+                    mol = copy.copy()
+                    for a in c:
+                        mol._hydrogens[a] += 1
+                        mol._charges[a] += 1
+                    yield mol, donors.union(c)
+            else:  # balanced!
+                mol = self.copy()
+                for d in donors:
                     mol._hydrogens[d] -= 1
                     mol._charges[d] -= 1
-                yield mol, acceptors | set(c)
-        elif len(donors) < len(acceptors):
-            copy = self.copy()
-            for d in donors:
-                copy._hydrogens[d] -= 1
-                copy._charges[d] -= 1
-            for c in combinations(acceptors, len(donors)):
-                mol = copy.copy()
-                for a in c:
+                for a in acceptors:
                     mol._hydrogens[a] += 1
                     mol._charges[a] += 1
-                yield mol, donors | set(c)
-        else:
+                yield mol, donors | acceptors
+        elif donors or acceptors:
             mol = self.copy()
             for d in donors:
                 mol._hydrogens[d] -= 1

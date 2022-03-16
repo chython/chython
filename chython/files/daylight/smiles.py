@@ -158,7 +158,10 @@ class SMILESRead(Parser):
         return next(iter(self))
 
     def parse(self, smiles: str) -> Union[MoleculeContainer, ReactionContainer]:
-        """SMILES string parser."""
+        """
+        SMILES string parser. String should start with SMILES and
+        optionally continues with space/tab separated list of key:value [or key=value] data.
+        """
         if not smiles:
             raise ValueError('Empty string')
 

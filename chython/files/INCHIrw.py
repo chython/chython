@@ -41,12 +41,16 @@ class INCHIRead(Parser):
     pathlib.Path object or another buffered reader object.
     line should be start with INCHI string and
     optionally continues with space/tab separated list of key:value [or key=value] data if header=None.
+
         example:
             InChI=1S/C2H5/c1-2/h1H2,2H3/q+1 id:123 key=value
+
     if header=True then first line of file should be space/tab separated list of keys including INCHI column key.
+
         example:
             ignored_inchi_key key1 key2
             InChI=1S/C2H5/c1-2/h1H2,2H3/q+1 1 2
+
     also possible to pass list of keys (without inchi_pseudo_key) for mapping space/tab separated list
     of INCHI and values: header=['key1', 'key2'] # order depended
     """
@@ -145,7 +149,7 @@ class INCHIRead(Parser):
 
     def parse(self, inchi: str) -> MoleculeContainer:
         """
-        convert INCHI string into MoleculeContainer object. string should be start with INCHI and
+        Convert INCHI string into MoleculeContainer object. String should start with INCHI and
         optionally continues with space/tab separated list of key:value [or key=value] data.
         """
         if not inchi:
