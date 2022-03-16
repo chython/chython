@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,8 +16,10 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from typing import TYPE_CHECKING, Union, List, Dict
+from typing import TYPE_CHECKING, List, Tuple, Union
 from ..tautomers._base import stripped_rules
+from ...periodictable.element.query import _inorganic
+
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
@@ -26,14 +28,14 @@ if TYPE_CHECKING:
 class Salts:
     __slots__ = ()
 
-    def neutralize_metal_salts(self: 'MoleculeContainer', *, logging=False) -> Union[bool, Dict]:
+    def neutralize_metal_salts(self: 'MoleculeContainer', *, logging=False) -> Union[bool, Tuple[List[int], List[int]]]:
         """
         Convert metal salts to mixture of metal base and neutral anion form. Works only for stripped salts.
 
         Example: [K+].CC(=O)[O-] >> [K+].[OH-].CC(=O)O
         Note: do '.neutralize()' procedure before for preventing ambiguous results.
 
-        :param logging: return changed atoms list
+        :param logging: return changed atoms list and hydroxides list
         """
         charges = self._charges
         bonds = self._bonds
@@ -41,7 +43,7 @@ class Salts:
 
         metals = []
         for n, a in self._atoms.items():
-            if a.is_metal and charges[n] > 0 and not bonds[n]:
+            if a.atomic_symbol not in _inorganic and charges[n] > 0 and not bonds[n]:
                 metals.append(n)
 
         if metals:
@@ -52,56 +54,41 @@ class Salts:
 
             # for imbalanced structures neutralize only part.
             acceptors = list(acceptors)[:sum(charges[n] for n in metals)]
-            new_atoms = []
+            hydroxides = []
             for n in acceptors:
                 hydrogens[n] += 1
                 charges[n] += 1
-                new_atoms.append(self.add_atom('O', charge=-1))
+                hydroxides.append(self.add_atom('O', charge=-1))
 
             if logging:
-                return {"charge_changed": acceptors, "new_atoms": new_atoms}
+                return acceptors, hydroxides
             return bool(acceptors)
         elif logging:
-            return []
+            return [], []
         return False
 
     def remove_metals(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List]:
-        deleted_atoms = []
-        for n, atom in self.atoms():
-            if atom.is_metal and not atom.neighbors:
-                deleted_atoms.append((n, atom.atomic_symbol))
-        if deleted_atoms:
-            for n, _ in deleted_atoms:
-                self.delete_atom(n)
-        if logging:
-            return deleted_atoms
-        else:
-            return bool(deleted_atoms)
+        """
+        Remove disconnected metals.
 
-    def split_metals(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List]:
-        changed = []
-        for n, atom in self.atoms():
-            if atom.is_metal:
-                for neighbour_n, neighbour_atom in list(self.augmented_substructure([n]).atoms()):
-                    if not neighbour_atom.is_metal:
-                        # Grignard reactivs and Li organics
-                        if atom.atomic_symbol in ["Mg", "Zn", "Li"] and neighbour_atom.atomic_symbol == "C":
-                            continue
-                        # keep M-O-O- type compounds unchanged (peroxides, sulfides, selenides)
-                        if neighbour_atom.atomic_symbol in ["S", "Se", "O"] and \
-                                self.atom(neighbour_n).neighbors > 1 and \
-                                all([neighbour_atom.atomic_symbol == atom.atomic_symbol for i, atom in
-                                     list(self.augmented_substructure([neighbour_n]).atoms()) if i != n]):
-                            continue
-                        atom.charge += 1
-                        changed.append(n)
-                        self.atom(neighbour_n).charge -= 1
-                        changed.append(neighbour_n)
-                        self.delete_bond(n, neighbour_n)
-        if logging:
-            return changed
-        else:
-            return bool(changed)
+        :param logging: return deleted atoms list.
+        """
+        bonds = self._bonds
+
+        metals = []
+        for n, a in self._atoms.items():
+            if a.atomic_symbol not in _inorganic and not bonds[n]:
+                metals.append(n)
+
+        if metals:
+            for n in metals:
+                self.delete_atom(n)
+            if logging:
+                return metals
+            return True
+        elif logging:
+            return []
+        return False
 
 
 __all__ = ['Salts']
