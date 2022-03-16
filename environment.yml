@@ -8,7 +8,6 @@ dependencies:
   - pip
   - ipython
   - wheel
-  - sphinx_rtd_theme
   - nbsphinx
   - cython
   - pip:
