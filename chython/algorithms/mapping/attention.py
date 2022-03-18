@@ -95,11 +95,12 @@ class Attention:
             for m in self.products:
                 m.remap(p_mapping)
             self.flush_cache()
-            self.fix_groups_mapping()  # fix carboxy etc
-            self.fix_mapping()  # fix common mistakes in mechanisms
-            if return_score:
-                return score
-            return True
+            fixed = True
+
+        if self.fix_groups_mapping():  # fix carboxy etc
+            fixed = True
+        if self.fix_mapping():  # fix common mistakes in mechanisms
+            fixed = True
         if return_score:
             return score
         return fixed
@@ -114,7 +115,10 @@ class Attention:
         if len(p) != len(set(p)):
             for m in self.products:
                 m.remap({n: next(c) for n in m._atoms})
-        return next(c) != 1
+        if next(c) != 1:
+            self.flush_cache()
+            return True
+        return False
 
     def __prepare_remapping(self: 'ReactionContainer'):
         r_map = [n for m in self.reactants for n in m]

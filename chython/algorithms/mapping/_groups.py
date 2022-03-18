@@ -60,7 +60,7 @@ def _substituents():
     # nitro addition
     #
     #      O [3]     [2] O -- *
-    #     //            /
+    #     //            /:
     # * - N+   >>  * = N+
     #      \            \
     #       O- [2]       O- [3]
@@ -70,10 +70,39 @@ def _substituents():
     q.add_atom('O', neighbors=1, charge=-1)
     q.add_atom('O', neighbors=2)
     q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, 1)
+    q.add_bond(1, 3, (1, 4))
     rules.append((q, ((2, 3), (3, 2))))
 
-    # keep Xonyl-group
+    #
+    #      NH [3]          NH2 [3]
+    #     //               /
+    # * - X       >>  * - X
+    #      \              :
+    #       NH2 [2]       N [2]
+    #
+    q = QueryContainer()
+    q.add_atom('C', neighbors=3)
+    q.add_atom('N')
+    q.add_atom('N', neighbors=2, hydrogens=0)
+    q.add_bond(1, 2, 1)
+    q.add_bond(1, 3, (2, 4))
+    rules.append((q, ((2, 3), (3, 2))))
+
+    #
+    #      O [3]        [3] O - R
+    #     //               /
+    # * - X       >>  * - X
+    #      \              \\
+    #       OH [2]         O [2]
+    #
+    q = QueryContainer()
+    q.add_atom(ListElement(['C', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At']))
+    q.add_atom(ListElement(['S', 'O', 'Se', 'N']), neighbors=2)
+    q.add_atom(ListElement(['S', 'O', 'Se', 'N']), neighbors=1)
+    q.add_bond(1, 2, 1)
+    q.add_bond(1, 3, 2)
+    rules.append((q, ((2, 3), (3, 2))))
+
     #
     #      O [3]            A
     #     //               /
@@ -87,7 +116,7 @@ def _substituents():
     q.add_atom(ListElement(['S', 'O', 'Se', 'N']), neighbors=1)
     q.add_bond(1, 2, 1)
     q.add_bond(1, 3, 2)
-    rules.append((q, ((3, 2),)))
+    rules.append((q, ((3, 2),)))  # possible only: (3, 2)
     return rules
 
 

@@ -38,11 +38,14 @@ class FixMapper:
                 return []
             return False
 
-        log = []
-
         cgr = ~self
+        if not cgr.center_atoms:
+            if logging:
+                return []
+            return False
         del self.__dict__['__cached_method_compose']
 
+        log = []
         free_number = count(max(cgr) + 1)
         components = [(cgr.substructure(c),
                        cgr.augmented_substructure(c, 2),  # deep DEPENDS on rules!
