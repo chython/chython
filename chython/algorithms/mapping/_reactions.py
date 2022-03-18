@@ -44,6 +44,12 @@ def _rules():
     r = smiles('[CH3:6][O:1][OH:5].[CH3:4][CH:2]=[CH2:3]>>[CH3:4][CH:2]1[CH2:3][O:1]1')
     raw_rules.append((r, {1: 5}))
 
+    r = smiles('[cH2:4]:[cH:3]:[cH:2][O:1][CH2:5][CH:6]=[CH2:7]>>[OH:1][cH:2]:[c:3](:[cH2:4])[CH2:5][CH:6]=[CH2:7]')
+    raw_rules.append((r, {5: 7, 7: 5}))
+
+    r = smiles('[CH3:1][CH:2]=[CH2:3].[CH3:5][CH:4]=[CH2:6]>>[CH3:5]\[CH:3]=[CH:2]\[CH3:1]')
+    raw_rules.append((r, {3: 4}))
+
     rules = []
     for r, f in raw_rules:
         c = ~r
