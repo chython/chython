@@ -27,10 +27,11 @@ from .cgr import CGRContainer
 from .molecule import MoleculeContainer
 from ..algorithms.calculate2d import Calculate2DReaction
 from ..algorithms.depict import DepictReaction
+from ..algorithms.mapping import Mapping
 from ..algorithms.standardize import StandardizeReaction
 
 
-class ReactionContainer(StandardizeReaction, Calculate2DReaction, DepictReaction):
+class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, DepictReaction):
     """
     Reaction storage. Contains reactants, products and reagents lists.
 

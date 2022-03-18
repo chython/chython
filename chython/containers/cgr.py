@@ -108,6 +108,17 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism):
                     cbn[m] = bond.copy()
         return sub
 
+    def augmented_substructure(self, atoms, deep: int = 1):
+        atoms = set(atoms)
+        bonds = self._bonds
+
+        for _ in range(deep):
+            n = {y for x in atoms for y in bonds[x]} | atoms
+            if n == atoms:
+                break
+            atoms = n
+        return self.substructure(atoms)
+
     def get_mapping(self, other: 'CGRContainer', /, **kwargs):
         if isinstance(other, CGRContainer):
             return super().get_mapping(other, **kwargs)
