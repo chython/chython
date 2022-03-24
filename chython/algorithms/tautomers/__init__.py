@@ -20,33 +20,16 @@
 from collections import deque, defaultdict
 from functools import cached_property
 from itertools import product, chain, repeat, combinations
-from lazy_object_proxy import Proxy
 from typing import TYPE_CHECKING, Iterator, Union, List
 from ._acid import rules as acid_rules, stripped_rules as stripped_acid_rules
 from ._base import rules as base_rules, stripped_rules as stripped_base_rules
+from ._keto_enol import *
 from ..aromatics.kekule import _kekule_component
 from ...exceptions import InvalidAromaticRing
-from ...periodictable import ListElement
 
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
-
-
-def _sugar_group():
-    from ...containers import QueryContainer
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'N']), hydrogens=(1, 2))  # enol
-    q.add_atom(ListElement(['O', 'N']))  # ketone
-    q.add_atom('C', hybridization=1)
-    q.add_atom('C', hybridization=2)
-    q.add_bond(1, 3, 1)
-    q.add_bond(3, 4, 1)
-    q.add_bond(2, 4, 2)
-    return q
-
-
-sugar_group = Proxy(_sugar_group)
 
 
 class Tautomers:
@@ -79,107 +62,59 @@ class Tautomers:
             return list(changed)
         return True
 
-    def enumerate_tautomers(self: 'MoleculeContainer', *, prepare_molecules=True, full=True, limit: int = 1000) -> \
-            Iterator['MoleculeContainer']:
+    def enumerate_tautomers(self: Union['MoleculeContainer', 'Tautomers'], *, prepare_molecules=True, zwitter=True,
+                            partial=False, increase_aromaticity=True, keep_sugars=True,
+                            limit: int = 1000) -> Iterator['MoleculeContainer']:
         """
         Enumerate all possible tautomeric forms of molecule.
 
         :param prepare_molecules: Standardize structures for correct processing.
-        :param full: Do zwitter-ions enumeration.
+        :param zwitter: Do zwitter-ions enumeration.
+        :param partial: Allow OC=CC=C>>O=CCC=C or O=CC=CC>>OC=C=CC
+        :param increase_aromaticity: prevent aromatic ring destruction
+        :param keep_sugars: prevent carbonyl moving in sugars
         :param limit: Maximum amount of generated structures.
         """
         if limit < 3:
             raise ValueError('limit should be greater or equal 3')
 
-        atoms_stereo = self._atoms_stereo
-        allenes_stereo = self._allenes_stereo
-        cis_trans_stereo = self._cis_trans_stereo
-
-        # sssr, neighbors and heteroatoms are same for all tautomers.
-        # prevent recalculation by sharing cache.
-        if '__cached_args_method_neighbors' in self.__dict__:
-            neighbors = self.__dict__['__cached_args_method_neighbors']
-        else:
-            neighbors = self.__dict__['__cached_args_method_neighbors'] = {}
-        if '__cached_args_method_heteroatoms' in self.__dict__:
-            heteroatoms = self.__dict__['__cached_args_method_heteroatoms']
-        else:
-            heteroatoms = self.__dict__['__cached_args_method_heteroatoms'] = {}
-
-        has_stereo = bool(atoms_stereo or allenes_stereo or cis_trans_stereo)
+        has_stereo = bool(self._atoms_stereo or self._allenes_stereo or self._cis_trans_stereo)
         counter = 1
 
         copy = self.copy()
         copy.clean_stereo()
-        # share cache
-        copy.__dict__['sssr'] = self.sssr  # thiele
-        copy.__dict__['ring_atoms'] = self.ring_atoms  # morgan
-        copy.__dict__['connected_components'] = self.connected_components  # isomorphism
-        copy.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes  # isomorphism
-        copy.__dict__['__cached_args_method_neighbors'] = neighbors  # isomorphism
-        copy.__dict__['__cached_args_method_heteroatoms'] = heteroatoms  # isomorphism
-        if prepare_molecules:
+        # sssr, neighbors and heteroatoms are same for all tautomers.
+        # prevent recalculation by sharing cache.
+        self.__set_cache(copy)
+        if prepare_molecules:  # transform to kekule form without hydrogens
             k = copy.kekule()
             i = copy.implicify_hydrogens(_fix_stereo=False)
-            if k or i:  # reset after flush
-                copy.__dict__['sssr'] = self.sssr
-                copy.__dict__['ring_atoms'] = self.ring_atoms
-                copy.__dict__['connected_components'] = self.connected_components
-                copy.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes
-                copy.__dict__['__cached_args_method_neighbors'] = neighbors
-                copy.__dict__['__cached_args_method_heteroatoms'] = heteroatoms
+            if k or i:  # reset cache after flush
+                self.__set_cache(copy)
 
-        thiele = copy.copy()
-        thiele.__dict__['sssr'] = self.sssr
-        thiele.__dict__['__cached_args_method_neighbors'] = neighbors
+        thiele = copy.copy()  # transform to thiele to prevent duplicates and dearomatization
+        self.__set_cache(thiele)
         if thiele.thiele(fix_tautomers=False):
-            thiele.__dict__['sssr'] = self.sssr
-            thiele.__dict__['__cached_args_method_neighbors'] = neighbors  # isomorphism
-        thiele.__dict__['__cached_args_method_heteroatoms'] = heteroatoms  # isomorphism
-        thiele.__dict__['ring_atoms'] = self.ring_atoms  # morgan
-        thiele.__dict__['connected_components'] = self.connected_components  # isomorphism
-        thiele.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes  # isomorphism
+            self.__set_cache(thiele)
 
+        # return origin structure as first tautomer
         if has_stereo:
-            out = thiele.copy()
-            out._atoms_stereo.update(atoms_stereo)
-            out._allenes_stereo.update(allenes_stereo)
-            out._cis_trans_stereo.update(cis_trans_stereo)
-            out.fix_stereo()
-            yield out  # no cache
+            yield self.__set_stereo(thiele.copy())
         else:
             yield thiele
 
         seen = {thiele: None}  # value is parent molecule - required for preventing migrations in sugars.
 
-        # first of all try to neutralize
-        if copy.neutralize(_fix_stereo=False):
+        # first try to neutralize
+        if copy.neutralize(_fix_stereo=False):  # found neutral form
             thiele = copy.copy()
-
-            copy.__dict__['sssr'] = self.sssr
-            copy.__dict__['ring_atoms'] = self.ring_atoms
-            copy.__dict__['connected_components'] = self.connected_components
-            copy.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes
-            copy.__dict__['__cached_args_method_neighbors'] = neighbors
-            copy.__dict__['__cached_args_method_heteroatoms'] = heteroatoms
-
-            thiele.__dict__['sssr'] = self.sssr
-            thiele.__dict__['__cached_args_method_neighbors'] = neighbors
+            self.__set_cache(copy)  # restore cache
+            self.__set_cache(thiele)
             if thiele.thiele(fix_tautomers=False):
-                thiele.__dict__['sssr'] = self.sssr
-                thiele.__dict__['__cached_args_method_neighbors'] = neighbors
-            thiele.__dict__['__cached_args_method_heteroatoms'] = heteroatoms
-            thiele.__dict__['ring_atoms'] = self.ring_atoms
-            thiele.__dict__['connected_components'] = self.connected_components
-            thiele.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes
+                self.__set_cache(thiele)
 
             if has_stereo:
-                out = thiele.copy()
-                out._atoms_stereo.update(atoms_stereo)
-                out._allenes_stereo.update(allenes_stereo)
-                out._cis_trans_stereo.update(cis_trans_stereo)
-                out.fix_stereo()
-                yield out
+                yield self.__set_stereo(thiele.copy())
             else:
                 yield thiele
             counter += 1
@@ -193,45 +128,34 @@ class Tautomers:
 
         while queue:
             current, thiele_current = queue.popleft()
-            for mol, ket in current._enumerate_keto_enol_tautomers():
+            for mol, ket in current._enumerate_keto_enol_tautomers(partial):
                 thiele = mol.copy()
-                # set cache to child structures.
-                mol.__dict__['sssr'] = self.sssr
-                mol.__dict__['ring_atoms'] = self.ring_atoms
-                mol.__dict__['connected_components'] = self.connected_components
-                mol.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes
-                mol.__dict__['__cached_args_method_neighbors'] = neighbors
-                mol.__dict__['__cached_args_method_heteroatoms'] = heteroatoms
-
-                thiele.__dict__['sssr'] = self.sssr
-                thiele.__dict__['__cached_args_method_neighbors'] = neighbors
+                self.__set_cache(mol)
+                self.__set_cache(thiele)
                 if thiele.thiele(fix_tautomers=False):  # reset cache after flush_cache.
-                    thiele.__dict__['sssr'] = self.sssr
-                    thiele.__dict__['__cached_args_method_neighbors'] = neighbors
-                thiele.__dict__['__cached_args_method_heteroatoms'] = heteroatoms
-                thiele.__dict__['ring_atoms'] = self.ring_atoms
-                thiele.__dict__['connected_components'] = self.connected_components
-                thiele.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes
+                    self.__set_cache(thiele)
 
                 if thiele not in seen:
                     seen[thiele] = current
                     rc = len(thiele.aromatic_rings)
-                    if rc < rings_count:  # skip aromatic rings destruction
-                        continue
-                    elif rc > rings_count:  # higher aromaticity found. flush old queues.
-                        rings_count = rc
-                        queue = deque([(mol, thiele)])
-                        new_queue = [thiele]
-                        copy = mol  # new entry point.
-                        if has_stereo:
-                            thiele = thiele.copy()
-                            thiele._atoms_stereo.update(atoms_stereo)
-                            thiele._allenes_stereo.update(allenes_stereo)
-                            thiele._cis_trans_stereo.update(cis_trans_stereo)
-                            thiele.fix_stereo()
-                        yield thiele
-                        break
-                    elif current is not copy and ket:  # prevent carbonyl migration in sugars. skip entry point.
+                    if increase_aromaticity:
+                        if rc < rings_count:  # skip aromatic rings destruction
+                            continue
+                        elif rc > rings_count:  # higher aromaticity found. flush old queues.
+                            rings_count = rc
+                            queue = deque([(mol, thiele)])
+                            new_queue = [thiele]
+                            copy = mol  # new entry point.
+                            if has_stereo:
+                                yield self.__set_stereo(thiele.copy())
+                            else:
+                                yield thiele
+                            counter += 1
+                            if counter == limit:
+                                return
+                            break
+                    if keep_sugars and current is not copy and ket:
+                        # prevent carbonyl migration in sugars. skip entry point.
                         # search alpha hydroxy ketone inversion
                         before = seen[thiele_current]._sugar_groups
                         if any((k, e) in before for e, k in mol._sugar_groups):
@@ -240,12 +164,9 @@ class Tautomers:
                     queue.append((mol, thiele))
                     new_queue.append(thiele)
                     if has_stereo:
-                        thiele = thiele.copy()
-                        thiele._atoms_stereo.update(atoms_stereo)
-                        thiele._allenes_stereo.update(allenes_stereo)
-                        thiele._cis_trans_stereo.update(cis_trans_stereo)
-                        thiele.fix_stereo()
-                    yield thiele
+                        yield self.__set_stereo(thiele.copy())
+                    else:
+                        yield thiele
                     counter += 1
                     if counter == limit:
                         return
@@ -254,53 +175,65 @@ class Tautomers:
         while queue:
             current = queue.popleft()
             for mol in current._enumerate_hetero_arene_tautomers():
-                mol.__dict__['sssr'] = self.sssr
-                mol.__dict__['__cached_args_method_neighbors'] = neighbors
-                mol.__dict__['__cached_args_method_heteroatoms'] = heteroatoms
-                mol.__dict__['ring_atoms'] = self.ring_atoms
-                mol.__dict__['connected_components'] = self.connected_components
-                mol.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes
+                self.__set_cache(mol)
                 if mol not in seen:
                     seen[mol] = None
                     queue.append(mol)
                     new_queue.append(mol)  # new hetero-arenes also should be included to this list.
                     if has_stereo:
-                        mol = mol.copy()
-                        mol._atoms_stereo.update(atoms_stereo)
-                        mol._allenes_stereo.update(allenes_stereo)
-                        mol._cis_trans_stereo.update(cis_trans_stereo)
-                        mol.fix_stereo()
-                    yield mol
+                        yield self.__set_stereo(mol.copy())
+                    else:
+                        yield mol
                     counter += 1
                     if counter == limit:
                         return
 
-        if not full:
+        if not zwitter:
             return
-
         queue = deque(new_queue)
         while queue:
             current = queue.popleft()
             for mol in current._enumerate_zwitter_tautomers():
-                mol.__dict__['sssr'] = self.sssr
-                mol.__dict__['__cached_args_method_neighbors'] = neighbors
-                mol.__dict__['__cached_args_method_heteroatoms'] = heteroatoms
-                mol.__dict__['ring_atoms'] = self.ring_atoms
-                mol.__dict__['connected_components'] = self.connected_components
-                mol.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes
+                self.__set_cache(mol)
                 if mol not in seen:
                     seen[mol] = None
                     queue.append(mol)
                     if has_stereo:
-                        mol = mol.copy()  # prevent seen hashtable breaking
-                        mol._atoms_stereo.update(atoms_stereo)
-                        mol._allenes_stereo.update(allenes_stereo)
-                        mol._cis_trans_stereo.update(cis_trans_stereo)
-                        mol.fix_stereo()
-                    yield mol
+                        yield self.__set_stereo(mol.copy())
+                    else:
+                        yield mol
                     counter += 1
                     if counter == limit:
                         return
+
+    def __set_cache(self: 'MoleculeContainer', mol):
+        try:
+            neighbors = self.__dict__['__cached_args_method_neighbors']
+        except KeyError:
+            neighbors = self.__dict__['__cached_args_method_neighbors'] = {}
+        try:
+            heteroatoms = self.__dict__['__cached_args_method_heteroatoms']
+        except KeyError:
+            heteroatoms = self.__dict__['__cached_args_method_heteroatoms'] = {}
+        try:
+            is_ring_bond = self.__dict__['__cached_args_method_is_ring_bond']
+        except KeyError:
+            is_ring_bond = self.__dict__['__cached_args_method_is_ring_bond'] = {}
+
+        mol.__dict__['sssr'] = self.sssr  # thiele/kekule
+        mol.__dict__['ring_atoms'] = self.ring_atoms  # morgan
+        mol.__dict__['_connected_components'] = self._connected_components  # isomorphism
+        mol.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes  # isomorphism
+        mol.__dict__['__cached_args_method_neighbors'] = neighbors  # isomorphism
+        mol.__dict__['__cached_args_method_heteroatoms'] = heteroatoms  # isomorphism
+        mol.__dict__['__cached_args_method_is_ring_bond'] = is_ring_bond  # isomorphism
+
+    def __set_stereo(self: 'MoleculeContainer', mol):
+        mol._atoms_stereo.update(self._atoms_stereo)
+        mol._allenes_stereo.update(self._allenes_stereo)
+        mol._cis_trans_stereo.update(self._cis_trans_stereo)
+        mol.fix_stereo()
+        return mol
 
     def _neutralize(self: 'MoleculeContainer', keep_charge=True):
         donors = set()
@@ -327,7 +260,7 @@ class Tautomers:
                         mol._charges[d] -= 1
                     yield mol, acceptors.union(c)
             elif len(donors) < len(acceptors):
-                copy= self.copy()
+                copy = self.copy()
                 for d in donors:
                     copy._hydrogens[d] -= 1
                     copy._charges[d] -= 1
@@ -356,17 +289,14 @@ class Tautomers:
                 mol._charges[a] += 1
             yield mol, donors | acceptors
 
-    def _enumerate_keto_enol_tautomers(self: Union['MoleculeContainer', 'Tautomers']):
-        hs = self._hydrogens
-        for fix, ket in self.__enumerate_bonds():
+    def _enumerate_keto_enol_tautomers(self: Union['MoleculeContainer', 'Tautomers'], partial=False):
+        for fix, ket in self.__enumerate_bonds(partial):
             if ket:
                 a = fix[-1][1]
                 d = fix[0][0]
             else:
                 a = fix[0][0]
                 d = fix[-1][1]
-            if not hs[d]:
-                continue
 
             mol = self.copy()
             m_bonds = mol._bonds
@@ -455,7 +385,7 @@ class Tautomers:
                 sb = component.keys() & single_bonded
                 sb.add(a)  # now pyrrole
                 try:
-                    next(_kekule_component(component, sb, ()))
+                    next(_kekule_component(component, sb, (), 0))
                 except InvalidAromaticRing:
                     continue
                 mol = self.copy()
@@ -471,41 +401,39 @@ class Tautomers:
             ek.append((e, k))
         return ek
 
-    def __enumerate_bonds(self: 'MoleculeContainer'):
+    def __enumerate_bonds(self: 'MoleculeContainer', partial):
         atoms = self._atoms
         bonds = self._bonds
-        charge = self._charges
         hydrogens = self._hydrogens
         hybridization = self.hybridization
-        heteroatoms = self.heteroatoms
-        neighbors = self.neighbors
+        rings = self.atoms_rings_sizes
 
         # search neutral oxygen and nitrogen
-        donors = []
-        acceptors = []
-        for n, a in atoms.items():
-            if charge[n] or not neighbors(n) or heteroatoms(n):
-                continue
-            if a.atomic_number in (7, 8):
-                if hybridization(n) == 2:  # imine!
-                    acceptors.append(n)
-                elif hydrogens[n]:  # amine!
-                    donors.append(n)
+        donors = defaultdict(set)
+        acceptors = defaultdict(set)
+        for q in enol_rules:
+            for mapping in q.get_mapping(self, automorphism_filter=False):
+                donors[mapping[1]].add(mapping[2])
+        for q in keto_rules:
+            for mapping in q.get_mapping(self, automorphism_filter=False):
+                acceptors[mapping[1]].add(mapping[2])
 
-        for atom, hydrogen in chain(zip(donors, repeat(True)), zip(acceptors, repeat(False))):
+        for (atom, dirs), hydrogen, anti in chain(zip(donors.items(), repeat(True), repeat(acceptors)),
+                                                  zip(acceptors.items(), repeat(False), repeat(donors))):
             path = []
             seen = {atom}
-            # stack is neighbors
-            if hydrogen:  # enol
-                stack = [(atom, n, 2, 0) for n in bonds[atom] if hybridization(n) == 2]
-            else:  # ketone
-                stack = [(atom, n, 1, 0) for n, b in bonds[atom].items() if hybridization(n) == 2 and b.order == 2]
-
+            stack = [(atom, n, 2 if hydrogen else 1, 0) for n in dirs]
             while stack:
                 last, current, bond, depth = stack.pop()
 
-                if len(path) > depth:
-                    if len(path) % 2 == 0:
+                if partial and path and not len(path) % 2 and \
+                        (hydrogen or  # enol > ketone
+                         hydrogens[(x := path[-1][1])] and (x not in rings or all(x > 7 for x in rings[x]))):  # ketone>
+                    # return partial hops. ignore allenes in small rings.
+                    yield path, hydrogen
+                if len(path) > depth:  # fork found
+                    if not partial and not len(path) % 2 and (hydrogen or hydrogens[path[-1][1]]):
+                        # end of path found. return it and start new one.
                         yield path, hydrogen
                     seen.difference_update(x for _, x, _ in path[depth:])
                     path = path[:depth]
@@ -524,23 +452,35 @@ class Tautomers:
                     if n == last:
                         continue
                     elif n in seen:  # aromatic ring destruction. pyridine double bonds shift
-                        if not stack:
-                            path = []
-                    elif b.order == bond and atoms[n].atomic_number == 6:
+                        continue
+                    elif n in anti:  # enol-ketone switch
+                        if current in anti[n]:
+                            if hydrogens:
+                                if b.order == 2:
+                                    cp = path.copy()
+                                    cp.append((current, n, 1))
+                                    yield cp, True
+                            elif b.order == 1:
+                                cp = path.copy()
+                                cp.append((current, n, 2))
+                                yield cp, False
+                    elif b.order == bond and atoms[n].atomic_number == 6:  # classic keto-enol route
                         hb = hybridization(n)
                         if hb == 2:  # grow up
                             stack.append((current, n, next_bond, depth))
                         elif hydrogen:
-                            if hb == 3:  # OC=CC=C=A case
+                            if hb == 3:  # OC=CC=C=C case
                                 cp = path.copy()
                                 cp.append((current, n, 1))
                                 yield cp, True  # ketone found
-                        elif hb == 1 and hydrogens[n]:  # ketone >> enole
+                        elif hb == 1 and hydrogens[n]:  # ketone >> enol
                             cp = path.copy()
                             cp.append((current, n, 2))
                             yield cp, False
 
-            if path and len(path) % 2 == 0:  # time to yield
+            if path and not len(path) % 2 and \
+                    (hydrogen or  # enol > ketone
+                     hydrogens[(x := path[-1][1])] and (x not in rings or all(x > 7 for x in rings[x]))):
                 yield path, hydrogen
 
 

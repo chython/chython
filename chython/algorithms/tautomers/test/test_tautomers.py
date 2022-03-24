@@ -63,11 +63,11 @@ def test_base_nitrogen():
                              ('CN(C)C(=NN)N(C)C.Cl', 'CN(C)C(N(C)C)=[NH+]N.[Cl-]'),
                              ('Cl.NC(=N)OC', '[NH2+]=C(N)OC.[Cl-]'), ('Cl.NC(=N)SC', '[NH2+]=C(N)SC.[Cl-]'),
                              ('COC(OC)=N.Cl', 'COC(OC)=[NH2+].[Cl-]'),
-                             ('COC(C)=N.Cl', 'COC(C)=[NH2+].[Cl-]', 'C(N)(OC)=C.Cl'),
+                             ('COC(C)=N.Cl', 'COC(C)=[NH2+].[Cl-]'),
                              ('CNN.Cl', 'CN[NH3+].[Cl-]', 'C[NH2+]N.[Cl-]'),
                              ('CN.Cl', 'C[NH3+].[Cl-]')]):
         s = smiles(t)
-        t = set(s.enumerate_tautomers(full=True))
+        t = set(s.enumerate_tautomers(zwitter=True))
         if v:
             assert len(t) == len(v), ' '.join(str(x) for x in t)
             vs = set()
