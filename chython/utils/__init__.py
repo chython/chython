@@ -18,11 +18,12 @@
 #
 from importlib.util import find_spec
 from .free_wilson import *
-from .functional_groups import functional_groups
-from .grid import grid_depict
+from .functional_groups import *
+from .grid import *
+from .retro import *
 
 
-__all__ = ['functional_groups', 'grid_depict', 'fw_prepare_groups']
+__all__ = ['functional_groups', 'grid_depict', 'fw_prepare_groups', 'GridDepict', 'retro_depict', 'RetroDepict']
 
 
 if find_spec('rdkit'):

@@ -17,24 +17,33 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from itertools import zip_longest
-from typing import List, Tuple, Union
+from typing import List, Optional
 from ..containers import MoleculeContainer
 from ..algorithms.depict import _render_config, _graph_svg
 
 
-def grid_depict(molecules: Union[List[MoleculeContainer], Tuple[MoleculeContainer, ...]], cols: int = 3):
+def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] = None, *, cols: int = 3):
     """
     Depict molecules grid.
 
-    :param cols: number of molecules per row.
+    :param molecules: list of molecules
+    :param labels: optional list of text labels
+    :param cols: number of molecules per row
     """
     font_size = _render_config['font_size']
+    symbols_font_style = _render_config['symbols_font_style']
     font125 = 1.25 * font_size
+    font75 = .75 * font_size
 
     planes = []
     render = []
-    shift_y = 2.
+    render_labels = []
+    shift_y = 0.
     shift_x = 0.
+    if labels is not None:
+        assert len(molecules) == len(labels)
+        labels = iter(labels)
+
     for ms in zip_longest(*[iter(molecules)] * cols):
         height = 0.
         for m in ms:
@@ -47,17 +56,20 @@ def grid_depict(molecules: Union[List[MoleculeContainer], Tuple[MoleculeContaine
                 height = h
             planes.append(m._plane.copy())
 
-        # now align mols by height
-        shift_y -= height / 2. + 2.
         max_x = 0.
         for m in ms:
             if m is None:
                 break
-            max_x = m._fix_plane_mean(max_x, shift_y) + 2.
+            if labels is not None:
+                render_labels.append(f'    <text x="{max_x:.2f}" y="{-shift_y:.2f}">{next(labels)}</text>')
+                y = shift_y - height / 2. - font125  # blank
+            else:
+                y = shift_y - height / 2.
+            max_x = m._fix_plane_mean(max_x, y) + 2.
             render.append(m.depict(embedding=True)[:5])
             if max_x > shift_x:  # get total width
                 shift_x = max_x
-        shift_y -= height / 2.
+        shift_y -= height + 2.
 
     # restore planes
     for p, m in zip(planes, molecules):
@@ -66,12 +78,33 @@ def grid_depict(molecules: Union[List[MoleculeContainer], Tuple[MoleculeContaine
     width = shift_x + 3.0 * font_size
     height = -shift_y + 2.5 * font_size
     svg = [f'<svg width="{width:.2f}cm" height="{height:.2f}cm" '
-           f'viewBox="{-font125:.2f} {-font125:.2f} {width:.2f} '
-           f'{height:.2f}" xmlns="http://www.w3.org/2000/svg" version="1.1">']
+           f'viewBox="{-font125:.2f} {-font125:.2f} {width:.2f} {height:.2f}" '
+           'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">']
     for atoms, bonds, define, masks, uid in render:
         svg.extend(_graph_svg(atoms, bonds, define, masks, uid, -font125, -font125, width, height))
+    svg.append(f'  <g font-size="{font75:.2f}" font-family="{symbols_font_style}">')
+    svg.extend(render_labels)
+    svg.append('  </g>')
     svg.append('</svg>')
     return '\n'.join(svg)
 
 
-__all__ = ['grid_depict']
+class GridDepict:
+    """
+    Grid depict for Jupyter notebooks.
+    """
+    def __init__(self, molecules: List[MoleculeContainer], labels: Optional[List[str]] = None, *, cols: int = 3):
+        """
+        :param molecules: list of molecules
+        :param labels: optional list of text labels
+        :param cols: number of molecules per row
+        """
+        self.molecules = molecules
+        self.labels = labels
+        self.cols = cols
+
+    def _repr_svg_(self):
+        return grid_depict(self.molecules, self.labels, cols=self.cols)
+
+
+__all__ = ['grid_depict', 'GridDepict']
