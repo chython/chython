@@ -16,7 +16,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from itertools import product
 from typing import Union, List
+from .retro import Tree
 from ..containers import MoleculeContainer, QueryContainer
 from ..periodictable import H
 
@@ -61,4 +63,38 @@ def fw_prepare_groups(core: Union[MoleculeContainer, QueryContainer], molecule: 
     return groups
 
 
-__all__ = ['fw_prepare_groups']
+def fw_decomposition_tree(groups: List[MoleculeContainer]) -> Tree:
+    assert len(groups) == len(set(groups))
+
+    pred = {}  # directed graph from substructures to superstructures
+    succ = {}
+    for m in groups:
+        pred[m] = set()
+        succ[m] = set()
+
+    cache_mapping = {}
+    for m in groups:
+        cache_mapping[m] = cm = {}
+        for n in groups:
+            if len(n) > len(m) and (mp := next(m.get_mapping(n), None)) is not None:
+                cm[n] = mp
+                pred[n].add(m)
+                succ[m].add(n)
+
+    # break triangles
+    scope = {m for m, ns in succ.items() if len(ns) > 1}
+    while scope:
+        m = sorted(scope, key=lambda x: len(pred[x]))[0]
+        s = succ[m]
+        scope.discard(m)
+        while True:
+            for x, y in product((x for x in s if succ[x]), (x for x in s if len(pred[x]) > 1)):
+                if y in succ[x]:
+                    s.discard(y)
+                    pred[y].discard(m)
+                    break
+            else:
+                break
+
+
+__all__ = ['fw_prepare_groups', 'fw_decomposition_tree']

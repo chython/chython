@@ -17,15 +17,12 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from typing import Tuple, List, TYPE_CHECKING
+from chython import MoleculeContainer
+from typing import Tuple, List
 from ..algorithms.depict import _render_config, _graph_svg
 
 
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
-
-
-Tree = Tuple['MoleculeContainer', List['Tree']]
+Tree = Tuple[MoleculeContainer, List['Tree']]
 
 
 def retro_depict(tree: Tree) -> str:
