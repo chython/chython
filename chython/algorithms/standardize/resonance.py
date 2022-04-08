@@ -162,12 +162,14 @@ class Resonance:
                             continue
                     elif lb == 3 and hybridization(n) == 2:  # X=[N+](-X)-X - prevent N-N migration
                         nitrogen_ani.add(n)
-                exits.add(n)
-                if a.atomic_number == 16:
+                elif a.atomic_number == 15 and lb == 4:  # skip [P+]R4
+                    continue
+                elif a.atomic_number == 16:
                     if lb == 2 and hybridization(n) == 2:  # ad-hoc for X-[S+]=X
                         sulfur_cat.add(n)
                     elif lb == 3 and hybridization(n) == 1:  # ad-hoc for X-[S+](-X)-X
-                        exits.discard(n)
+                        continue
+                exits.add(n)
             transfer.add(n)
 
         if exits or entries:  # try to move cation to nitrogen. saturation fixup.
