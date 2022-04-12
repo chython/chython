@@ -16,7 +16,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from itertools import product
 from typing import Union, List
+from .retro import Tree
 from ..containers import MoleculeContainer, QueryContainer
 from ..periodictable import H
 
@@ -44,6 +46,9 @@ def fw_prepare_groups(core: Union[MoleculeContainer, QueryContainer], molecule: 
     hgs = groups._hydrogens
     plane = molecule._plane
 
+    cf = molecule.substructure(cs, recalculate_hydrogens=False)
+    chs = cf._hydrogens
+
     for n, m, b in molecule.bonds():
         if n in cs:
             if m in gs:
@@ -51,14 +56,59 @@ def fw_prepare_groups(core: Union[MoleculeContainer, QueryContainer], molecule: 
                 h._Core__isotope = reverse[n]  # mark mapping to isotope
                 groups.add_bond(groups.add_atom(h, xy=plane[n]), m, b.copy())
                 hgs[m] = hs[m]  # restore H count
+
+                cf.add_bond(cf.add_atom(h.copy(), xy=plane[m]), n, b.copy())
+                chs[n] = hs[n]
         elif m in cs and n in gs:
             h = H()
             h._Core__isotope = reverse[m]
             groups.add_bond(groups.add_atom(h, xy=plane[m]), n, b.copy())
             hgs[n] = hs[n]
+
+            cf.add_bond(cf.add_atom(h.copy(), xy=plane[n]), m, b.copy())
+            chs[m] = hs[m]
     groups = groups.split()
-    groups.insert(0, molecule.substructure(cs, recalculate_hydrogens=False))
+    groups.insert(0, cf)
     return groups
 
 
-__all__ = ['fw_prepare_groups']
+def fw_decomposition_tree(groups: List[MoleculeContainer]) -> Tree:
+    assert len(groups) == len(set(groups))
+
+    pred = {}  # directed graph from substructures to superstructures
+    succ = {}
+    for m in groups:
+        pred[m] = set()
+        succ[m] = set()
+
+    for m in groups:
+        for n in groups:
+            if m < n:
+                pred[n].add(m)
+                succ[m].add(n)
+
+    # break triangles
+    scope = {m for m, ns in succ.items() if len(ns) > 1}
+    while scope:
+        m = sorted(scope, key=lambda x: len(pred[x]))[0]
+        s = succ[m]
+        scope.discard(m)
+        while True:
+            for x, y in product((x for x in s if succ[x]), (x for x in s if len(pred[x]) > 1)):
+                if y in succ[x]:
+                    s.discard(y)
+                    pred[y].discard(m)
+                    break
+            else:
+                break
+
+    def _rec_tree(x):
+        return x, [_rec_tree(y) for y in succ[x]]
+
+    m = MoleculeContainer()
+    m.add_atom('H')
+
+    return m, [_rec_tree(x) for x, p in pred.items() if not p]
+
+
+__all__ = ['fw_prepare_groups', 'fw_decomposition_tree']
