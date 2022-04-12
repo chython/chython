@@ -46,6 +46,9 @@ def fw_prepare_groups(core: Union[MoleculeContainer, QueryContainer], molecule: 
     hgs = groups._hydrogens
     plane = molecule._plane
 
+    cf = molecule.substructure(cs, recalculate_hydrogens=False)
+    chs = cf._hydrogens
+
     for n, m, b in molecule.bonds():
         if n in cs:
             if m in gs:
@@ -53,13 +56,19 @@ def fw_prepare_groups(core: Union[MoleculeContainer, QueryContainer], molecule: 
                 h._Core__isotope = reverse[n]  # mark mapping to isotope
                 groups.add_bond(groups.add_atom(h, xy=plane[n]), m, b.copy())
                 hgs[m] = hs[m]  # restore H count
+
+                cf.add_bond(cf.add_atom(h.copy(), xy=plane[m]), n, b.copy())
+                chs[n] = hs[n]
         elif m in cs and n in gs:
             h = H()
             h._Core__isotope = reverse[m]
             groups.add_bond(groups.add_atom(h, xy=plane[m]), n, b.copy())
             hgs[n] = hs[n]
+
+            cf.add_bond(cf.add_atom(h.copy(), xy=plane[n]), m, b.copy())
+            chs[m] = hs[m]
     groups = groups.split()
-    groups.insert(0, molecule.substructure(cs, recalculate_hydrogens=False))
+    groups.insert(0, cf)
     return groups
 
 
@@ -72,12 +81,9 @@ def fw_decomposition_tree(groups: List[MoleculeContainer]) -> Tree:
         pred[m] = set()
         succ[m] = set()
 
-    cache_mapping = {}
     for m in groups:
-        cache_mapping[m] = cm = {}
         for n in groups:
-            if len(n) > len(m) and (mp := next(m.get_mapping(n), None)) is not None:
-                cm[n] = mp
+            if m < n:
                 pred[n].add(m)
                 succ[m].add(n)
 
@@ -95,6 +101,14 @@ def fw_decomposition_tree(groups: List[MoleculeContainer]) -> Tree:
                     break
             else:
                 break
+
+    def _rec_tree(x):
+        return x, [_rec_tree(y) for y in succ[x]]
+
+    m = MoleculeContainer()
+    m.add_atom('H')
+
+    return m, [_rec_tree(x) for x, p in pred.items() if not p]
 
 
 __all__ = ['fw_prepare_groups', 'fw_decomposition_tree']

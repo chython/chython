@@ -25,12 +25,14 @@ from ..algorithms.depict import _render_config, _graph_svg
 Tree = Tuple[MoleculeContainer, List['Tree']]
 
 
-def retro_depict(tree: Tree) -> str:
+def retro_depict(tree: Tree, *, y_gap=3., x_gap=5.) -> str:
     """
     Depict retrosynthetic tree.
 
     :param tree: Graph of molecules with recursive structure. Each node is tuple of molecule and list of child nodes.
         Child nodes list can be empty.
+    :param y_gap: vertical gap between molecules.
+    :param x_gap: horizontal gap between molecules.
     """
     font_size = _render_config['font_size']
     font125 = 1.25 * font_size
@@ -58,7 +60,7 @@ def retro_depict(tree: Tree) -> str:
     for column in columns:
         current_layer = []
         heights = [max(y for _, y in m._plane.values()) - min(y for _, y in m._plane.values()) for m in column]
-        y_shift = sum(heights) + 3. * (len(heights) - 1)  # column height with gaps
+        y_shift = sum(heights) + y_gap * (len(heights) - 1)  # column height with gaps
         if y_shift > c_max_y:
             c_max_y = y_shift
         y_shift /= 2.  # center align
@@ -72,12 +74,12 @@ def retro_depict(tree: Tree) -> str:
             current_layer.append((mx + 1., y_shift - h / 2.))
             if x_shift:  # except first column
                 arrows_coords.append((*last_layer[next(arrows)], x_shift - 1., y_shift - h / 2.))
-                y_shift -= h + 3.
+                y_shift -= h + y_gap
 
             render.append(m.depict(embedding=True)[:5])
             m._plane = plane  # restore
 
-        x_shift = c_max_x + 5.  # between columns gap
+        x_shift = c_max_x + x_gap  # between columns gap
         last_layer = current_layer
 
     width = c_max_x + 3.0 * font_size
