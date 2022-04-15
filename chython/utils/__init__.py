@@ -23,7 +23,8 @@ from .grid import *
 from .retro import *
 
 
-__all__ = ['functional_groups', 'grid_depict', 'fw_prepare_groups', 'GridDepict', 'retro_depict', 'RetroDepict']
+__all__ = ['functional_groups', 'fw_prepare_groups', 'fw_decomposition_tree',
+           'grid_depict', 'GridDepict', 'retro_depict', 'RetroDepict']
 
 
 if find_spec('rdkit'):

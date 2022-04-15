@@ -20,7 +20,7 @@ from CachedMethods import cached_method
 from functools import reduce
 from hashlib import sha512
 from itertools import chain
-from operator import or_
+from operator import itemgetter, or_
 from typing import Dict, Iterable, Iterator, Optional, Tuple
 from zlib import compress, decompress
 from .cgr import CGRContainer
@@ -227,28 +227,47 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
 
     def __format__(self, format_spec):
         """
-        :param format_spec: see specification of nested containers.
-            !c - Keep nested containers order
-            !C - skip cxsmiles fragments contract
+        :param format_spec:
+            !c - Keep nested containers order.
+            a - Generate asymmetric closures.
+            !s - Disable stereo marks.
+            A - Use aromatic bonds instead aromatic atoms.
+            m - Set atom mapping.
+            r - Generate random-ordered smiles.
+            h - Show implicit hydrogens.
+            !b - Disable bonds tokens.
+            !x - Disable CXSMILES extension.
         """
         sig = []
         count = 0
         contract = []
+        orders = []
+
         for ml in (self.__reactants, self.__reagents, self.__products):
+            mso = [(m, *m.__format__(format_spec, _return_order=True)) for m in ml]
             if not format_spec or '!c' not in format_spec:
-                ml = sorted(ml, key=str)
-            for m in ml:
+                mso.sort(key=itemgetter(1))
+
+            ss = []
+            for m, s, o in mso:
                 if m.connected_components_count > 1:
                     contract.append([str(x + count) for x in range(m.connected_components_count)])
                     count += m.connected_components_count
                 else:
                     count += 1
-            if format_spec:
-                sig.append('.'.join(format(x, format_spec) for x in ml))
-            else:
-                sig.append('.'.join(str(x) for x in ml))
-        if (not format_spec or '!C' not in format_spec) and contract:
-            return f"{'>'.join(sig)} |f:{','.join('.'.join(x) for x in contract)}|"
+
+                orders.append((m, o))
+                ss.append(s)
+            sig.append('.'.join(ss))
+
+        if not format_spec or '!x' not in format_spec:
+            cx = []
+            if r := ','.join(str(n) for n, (m, a) in enumerate((m, a) for m, o in orders for a in o) if m._radicals[a]):
+                cx.append(f'^1:{r}')
+            if contract:
+                cx.append(f"f:{','.join('.'.join(x) for x in contract)}")
+            if cx:
+                return f"{'>'.join(sig)} |{','.join(cx)}|"
         return '>'.join(sig)
 
     @cached_method

@@ -24,7 +24,7 @@ from functools import cached_property
 from hashlib import sha512
 from itertools import count, product
 from random import random
-from typing import Callable, Tuple, TYPE_CHECKING, Union
+from typing import Callable, Optional, Tuple, TYPE_CHECKING, Union
 
 
 if TYPE_CHECKING:
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 charge_str = {-4: '-4', -3: '-3', -2: '-2', -1: '-', 0: '0', 1: '+', 2: '+2', 3: '+3', 4: '+4'}
 order_str = {1: '-', 2: '=', 3: '#', 4: ':', 8: '~', None: '.'}
 organic_set = {'C', 'N', 'O', 'P', 'S', 'F', 'Cl', 'Br', 'I', 'B'}
-hybridization_str = {4: 'a', 3: 't', 2: 'd', 1: 's', None: 'n'}
+hybridization_str = {4: '4', 3: '1', 2: '2', 1: '3', None: 'n'}
 dyn_order_str = {(None, 1): '[.>-]', (None, 2): '[.>=]', (None, 3): '[.>#]', (None, 4): '[.>:]', (None, 8): '[.>~]',
                  (1, None): '[->.]', (1, 1): '', (1, 2): '[->=]', (1, 3): '[->#]', (1, 4): '[->:]', (1, 8): '[->~]',
                  (2, None): '[=>.]', (2, 1): '[=>-]', (2, 2): '=', (2, 3): '[=>#]', (2, 4): '[=>:]', (2, 8): '[=>~]',
@@ -54,9 +54,15 @@ class Smiles(ABC):
 
     @cached_method
     def __str__(self):
-        return ''.join(self._smiles(self._smiles_order()))
+        smiles, order = self._smiles(self._smiles_order(), _return_order=True)
+        if (cx := self._format_cxsmiles(order)) is not None:
+            smiles.append(' ')
+            smiles.append(cx)
 
-    def __format__(self: Union['Graph', 'Smiles'], format_spec):
+        self.__dict__['smiles_atoms_order'] = tuple(order)  # cache smiles_atoms_order
+        return ''.join(smiles)
+
+    def __format__(self: Union['Graph', 'Smiles'], format_spec, *, _return_order=False):
         """
         Signature generation options.
 
@@ -68,6 +74,7 @@ class Smiles(ABC):
             r - Generate random-ordered smiles.
             h - Show implicit hydrogens.
             !b - Disable bonds tokens.
+            !x - Disable CXSMILES extension.
 
             Combining possible. Order independent. Another keys ignored.
         """
@@ -85,6 +92,7 @@ class Smiles(ABC):
                 kwargs['hydrogens'] = True
             if '!b' in format_spec:
                 kwargs['bonds'] = False
+
             if 'r' in format_spec:
                 kwargs['random'] = True
 
@@ -92,7 +100,26 @@ class Smiles(ABC):
                     return random()
             else:
                 w = self._smiles_order('!s' not in format_spec)
-            return ''.join(self._smiles(w, **kwargs))
+
+            smiles, order = self._smiles(w, _return_order=True, **kwargs)
+            if _return_order:
+                return ''.join(smiles), order
+            elif '!x' in format_spec or (cx := self._format_cxsmiles(order)) is None:
+                return ''.join(smiles)
+            else:
+                smiles.append(' ')
+                smiles.append(cx)
+                return ''.join(smiles)
+
+        elif _return_order:
+            smiles, order = self._smiles(self._smiles_order(), _return_order=True)
+            smiles = ''.join(smiles)
+            if (cx := self._format_cxsmiles(order)) is not None:  # cache molecule smiles
+                self.__dict__['__cached_method___str__'] = f'{smiles} {cx}'
+            else:
+                self.__dict__['__cached_method___str__'] = smiles
+            self.__dict__['smiles_atoms_order'] = tuple(order)  # cache smiles_atoms_order
+            return smiles, order
         return str(self)
 
     def __eq__(self, other):
@@ -112,7 +139,10 @@ class Smiles(ABC):
         Atoms order in canonic SMILES.
         """
         smiles, order = self._smiles(self._smiles_order(), _return_order=True)
-        self.__dict__['__cached_method___str__'] = ''.join(smiles)  # cache smiles also
+        if (cx := self._format_cxsmiles(order)) is not None:
+            smiles.append(' ')
+            smiles.append(cx)
+        self.__dict__['__cached_method___str__'] = ''.join(smiles)  # cache smiles
         return tuple(order)
 
     def _smiles(self: Union['Graph', 'Smiles'], weights, *, asymmetric_closures=False,
@@ -269,6 +299,9 @@ class Smiles(ABC):
     def _smiles_order(self: 'Graph', stereo=True) -> Callable:
         return self.atoms_order.__getitem__
 
+    def _format_cxsmiles(self, order) -> Optional[str]:
+        ...
+
 
 class MoleculeSmiles(Smiles):
     __slots__ = ()
@@ -278,6 +311,12 @@ class MoleculeSmiles(Smiles):
             return self._chiral_morgan.__getitem__
         else:
             return self.atoms_order.__getitem__
+
+    def _format_cxsmiles(self: 'MoleculeContainer', order):
+        if self.is_radical:
+            radical = self._radicals
+            return f'|^1:{",".join(str(n) for n, m in enumerate(order) if radical[m])}|'
+        return
 
     def _format_atom(self: 'MoleculeContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
@@ -411,6 +450,26 @@ class CGRSmiles(Smiles):
 class QuerySmiles(Smiles):
     __slots__ = ()
 
+    def _format_cxsmiles(self: 'QueryContainer', order):
+        hybridization = self._hybridizations
+        heteroatoms = self._heteroatoms
+        radical = self._radicals
+
+        hh = ['atomProp']
+        cx = []
+        if any(radical.values()):
+            cx.append(f'^1:{",".join(str(n) for n, m in enumerate(order) if radical[m])}')
+
+        for n, m in enumerate(order):
+            if len(hb := hybridization[m]) > 1 or (hb and hb[0] != 4):
+                hh.append(f'{n}.hyb.{"".join(hybridization_str[x] for x in hb)}')
+            if ha := heteroatoms[m]:
+                hh.append(f'{n}.het.{"".join(str(x) for x in ha)}')
+        if len(hh) > 1:
+            cx.append(':'.join(hh))
+        if cx:
+            return f'|{",".join(cx)}|'
+
     def _format_atom(self: 'QueryContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
         charge = self._charges[n]
@@ -418,46 +477,43 @@ class QuerySmiles(Smiles):
         neighbors = self._neighbors[n]
         hydrogens = self._hydrogens[n]
         rings = self._rings_sizes[n]
-        heteroatoms = self._heteroatoms[n]
 
         if atom.isotope:
             smi = ['[', str(atom.isotope), atom.atomic_symbol]
         else:
             smi = ['[', atom.atomic_symbol]
 
-        if n in self._atoms_stereo:  # carbon only
-            smi.append('@' if self._translate_tetrahedron_sign(n, adjacency[n]) else '@@')
-
-        if neighbors:
-            smi.append(';D')
-            smi.append(''.join(str(x) for x in neighbors))
-
-        if hydrogens:
-            smi.append(';H')
-            smi.append(''.join(str(x) for x in hydrogens))
-
-        if rings:
-            smi.append(';r')
-            smi.append(''.join(str(x) for x in rings))
-
-        if hybridization:
-            smi.append(';Z')
-            smi.append(''.join(hybridization_str[x] for x in hybridization))
-
-        if heteroatoms:
-            smi.append(';W')
-            smi.append(''.join(str(x) for x in heteroatoms))
-
-        if self._radicals[n]:
-            smi.append(';*')
+        if n in self._atoms_stereo:  # mark atom as chiral. it's too difficult to set correct sign
+            smi.append('@?')
+        if n in self._allenes_stereo:
+            smi.append('@?')
 
         if charge:
             smi.append(charge_str[charge])
+
+        if hydrogens:  # h<n> 	implicit-H-count 	<n> implicit hydrogens
+            smi.append(';')
+            smi.append(''.join(f'h{x}' for x in hydrogens))
+
+        if neighbors:  # D<n> 	degree 	<n> explicit connections
+            smi.append(';')
+            smi.append(','.join(f'D{x}' for x in neighbors))
+
+        if rings:
+            smi.append(';')
+            if rings[0]:
+                smi.append(''.join(f'r{x}' for x in rings))
+            else:
+                smi.append('!R')
+
+        if len(hybridization) == 1 and hybridization[0] == 4:  # only aromatic. other marks in cx extension
+            smi.append(';a')
 
         smi.append(']')
         return ''.join(smi)
 
     def _format_bond(self: 'QueryContainer', n, m, adjacency, **kwargs):
+        # bond chirality skipped. too difficult to implement.
         b = self._bonds[n][m]
         s = ','.join(order_str[x] for x in b.order)
         if (c := b.in_ring) is not None:
