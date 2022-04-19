@@ -96,6 +96,12 @@ class IncorrectSmiles(ValueError):
     """
 
 
+class IncorrectSmarts(IncorrectSmiles):
+    """
+    SMARTS string invalid or unsupported
+    """
+
+
 class ImplementationError(Exception):
     """
     Algorithm has errors. Please send example of structure to author for analyze.

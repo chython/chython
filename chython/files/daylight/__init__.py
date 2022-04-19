@@ -17,7 +17,8 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .smiles import SMILESRead
+from .smarts import *
+from .smiles import *
 
 
-__all__ = ['SMILESRead']
+__all__ = ['SMILESRead', 'smarts']

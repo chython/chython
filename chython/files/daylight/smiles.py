@@ -177,19 +177,13 @@ class SMILESRead(Parser):
                     contract = None
 
                 radicals = [int(x) for x in findall(cx_radicals, data[0]) for x in x[3:].split(',')]
-                if any(x < 0 for x in radicals):
-                    self._info(f'invalid cxsmiles radicals description: {data[0]}')
-                    radicals = []
-                if len(set(radicals)) != len(radicals):
+                if radicals and len(set(radicals)) != len(radicals):
                     self._info(f'collisions in cxsmiles radicals description: {data[0]}')
                     radicals = []
                 data.pop(0)
             else:
                 radicals = [int(x) for x in findall(cx_radicals, data[0]) for x in x[3:].split(',')]
                 if radicals:
-                    if any(x < 0 for x in radicals):
-                        self._info(f'invalid cxsmiles radicals description: {data[0]}')
-                        radicals = []
                     if len(set(radicals)) != len(radicals):
                         self._info(f'collisions in cxsmiles radicals description: {data[0]}')
                         radicals = []
@@ -210,7 +204,7 @@ class SMILESRead(Parser):
         else:
             meta = dict(zip(self.__header, data))
 
-        if '>' in smi and (smi[smi.index('>') + 1] in '>([' or smi[smi.index('>') + 1].isalpha()):
+        if '>' in smi:
             record = {'reactants': [], 'reagents': [], 'products': [], 'meta': meta, 'title': ''}
             try:
                 reactants, reagents, products = smi.split('>')

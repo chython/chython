@@ -9,12 +9,13 @@ Features:
    - Supported python-magic
    - Tetrahedron, Allene and CIS-TRANS stereo supported
    - Perform subgraph search
-   - Build/edit molecules and reactions
+   - Build/edit molecules and reactions with Python API
    - Produce template based reactions and molecules
-   - Atom-to-atom mapping checker and rule-based fixer
+   - Atom-to-atom mapping, checking and rule-based fixing
    - Perform MCS search
    - 2d coordinates generation (based on `SmilesDrawer <https://github.com/reymond-group/smilesDrawer>`_)
-   - 2d/3d depiction
+   - 2d/3d depiction with Jupyter support
+   - SMARTS parser with restrictions
 
 Full documentation can be found `here <https://chython.readthedocs.io>`_.
 
@@ -34,15 +35,6 @@ Note: for using `clean2d` install NodeJS into system.
 * Install chython library DEV version for features that are not well tested::
 
     pip install -U git+https://github.com/chython/chython.git@master#egg=chython
-
-Tests
-=====
-
-Run unit tests::
-
-    git clone https://github.com/chython/chython.git && cd chython  # skip if already got sources
-    pip install -e .
-    pytest --pyargs chython
 
 Copyright
 =========

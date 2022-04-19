@@ -55,7 +55,7 @@ def parser(tokens, strong_cycle):
                 last_num = stack.pop()
             except IndexError:
                 raise IncorrectSmiles('close chain more than open')
-        elif token_type in (1, 4, 9):  # bonds. only keeping for atoms connecting
+        elif token_type in (1, 4, 9, 10, 12):  # bonds. only keeping for atoms connecting
             if previous:
                 raise IncorrectSmiles('2 bonds in a row')
             elif not atoms:
@@ -136,7 +136,7 @@ def parser(tokens, strong_cycle):
 
                         stereo_bonds[last_num][atom_num] = b
                         stereo_bonds[atom_num][last_num] = not b
-                    elif bt == 1:
+                    elif bt in (1, 10, 12):
                         bonds.append((atom_num, last_num, b))
                         order[last_num].append(atom_num)
                         order[atom_num].append(last_num)

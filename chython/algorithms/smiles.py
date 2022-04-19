@@ -484,16 +484,17 @@ class QuerySmiles(Smiles):
             smi = ['[', atom.atomic_symbol]
 
         if n in self._atoms_stereo:  # mark atom as chiral. it's too difficult to set correct sign
-            smi.append('@?')
+            smi.append(';@?')
         if n in self._allenes_stereo:
-            smi.append('@?')
+            smi.append(';@?')
 
         if charge:
+            smi.append(';')
             smi.append(charge_str[charge])
 
         if hydrogens:  # h<n> 	implicit-H-count 	<n> implicit hydrogens
             smi.append(';')
-            smi.append(''.join(f'h{x}' for x in hydrogens))
+            smi.append(','.join(f'h{x}' for x in hydrogens))
 
         if neighbors:  # D<n> 	degree 	<n> explicit connections
             smi.append(';')
@@ -502,7 +503,7 @@ class QuerySmiles(Smiles):
         if rings:
             smi.append(';')
             if rings[0]:
-                smi.append(''.join(f'r{x}' for x in rings))
+                smi.append(','.join(f'r{x}' for x in rings))
             else:
                 smi.append('!R')
 

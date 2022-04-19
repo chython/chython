@@ -4,7 +4,7 @@ from sys import path
 parent = abspath('..')
 if parent not in path:
     path.insert(0, parent)
-from chython.periodictable import C, DynamicC, QueryC, ListElement, AnyElement, AnyMetal
+from chython.periodictable import C, QueryC, ListElement, AnyElement, AnyMetal
 
 author = 'Dr. Ramil Nugmanov'
 copyright = '2014-2022, Dr. Ramil Nugmanov <nougmanoff@protonmail.com>'
