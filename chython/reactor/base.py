@@ -18,7 +18,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import defaultdict
-from ..containers import QueryContainer
+from ..containers import MoleculeContainer, QueryContainer
 from ..containers.bonds import Bond
 from ..periodictable import Element
 
@@ -34,7 +34,7 @@ class BaseReactor:
             atoms[n].update(charge=atom.charge, is_radical=atom.is_radical)
             if atom.atomic_number:  # replace atom
                 elements[n] = Element.from_atomic_number(atom.atomic_number)(atom.isotope)
-                if n not in reactants:
+                if n not in reactants and isinstance(products, MoleculeContainer):
                     atoms[n]['xy'] = atom.xy
             elif n not in reactants:
                 raise ValueError('New atom should be defined')
@@ -65,6 +65,8 @@ class BaseReactor:
         bonds = structure._bonds
         charges = structure._charges
         radicals = structure._radicals
+
+        stereo_override = set()
 
         to_delete = {mapping[x] for x in self.__to_delete}
         if to_delete:
@@ -133,11 +135,13 @@ class BaseReactor:
                 m = mapping[n]
                 new._atoms_stereo[m] = products._translate_tetrahedron_sign(n, [r_mapping[x] for x in
                                                                                 new._stereo_tetrahedrons[m]], s)
+                stereo_override.add(m)
 
             for n, s in products._allenes_stereo.items():
                 m = mapping[n]
                 t1, t2, *_ = new._stereo_allenes[m]
                 new._allenes_stereo[m] = products._translate_allene_sign(n, r_mapping[t1], r_mapping[t2], s)
+                stereo_override.add(m)
 
             for (n, m), s in products._cis_trans_stereo.items():
                 nm = (mapping[n], mapping[m])
@@ -147,17 +151,18 @@ class BaseReactor:
                     nm = nm[::-1]
                     t2, t1, *_ = new._stereo_cis_trans[nm]
                 new._cis_trans_stereo[nm] = products._translate_cis_trans_sign(n, m, r_mapping[t1], r_mapping[t2], s)
+                stereo_override.update(nm)
 
-            # set unmatched part stereo
+            # set unmatched part stereo and not overridden by patch.
             for n, s in structure._atoms_stereo.items():
-                if n in patch_atoms or n not in new._stereo_tetrahedrons or \
+                if n in stereo_override or n not in new._stereo_tetrahedrons or \
                         new._bonds[n].keys() != structure._bonds[n].keys():
                     # skip atoms with changed neighbors
                     continue
                 new._atoms_stereo[n] = structure._translate_tetrahedron_sign(n, new._stereo_tetrahedrons[n], s)
 
             for n, s in structure._allenes_stereo.items():
-                if n in patch_atoms or n not in new._stereo_allenes or \
+                if n in stereo_override or n not in new._stereo_allenes or \
                         set(new._stereo_allenes[n]) != set(structure._stereo_allenes[n]):
                     # skip changed allenes
                     continue
@@ -166,7 +171,7 @@ class BaseReactor:
 
             for nm, s in structure._cis_trans_stereo.items():
                 n, m = nm
-                if n in patch_atoms or m in patch_atoms:
+                if n in stereo_override or m in stereo_override:
                     continue
                 env = structure._stereo_cis_trans[nm]
                 try:

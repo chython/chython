@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, TypeVar
+from typing import Optional, TypeVar
 from weakref import ref
 from ...exceptions import IsConnectedAtom, IsNotConnectedAtom
 
@@ -86,36 +86,6 @@ class Core(ABC):
         """
         try:
             return self._graph()._radicals[self._n]
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @property
-    def x(self) -> float:
-        """
-        X coordinate of atom on 2D plane
-        """
-        try:
-            return self._graph()._plane[self._n][0]
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @property
-    def y(self) -> float:
-        """
-        Y coordinate of atom on 2D plane
-        """
-        try:
-            return self._graph()._plane[self._n][1]
-        except AttributeError:
-            raise IsNotConnectedAtom
-
-    @property
-    def xy(self) -> Tuple[float, float]:
-        """
-        (X, Y) coordinates of atom on 2D plane
-        """
-        try:
-            return self._graph()._plane[self._n]
         except AttributeError:
             raise IsNotConnectedAtom
 
