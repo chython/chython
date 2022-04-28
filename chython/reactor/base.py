@@ -24,11 +24,13 @@ from ..periodictable import Element
 
 
 class BaseReactor:
-    def __init__(self, reactants, products, delete_atoms):
+    def __init__(self, reactants, products, delete_atoms, fix_rings, fix_tautomers):
         self.__to_delete = reactants.difference(products) if delete_atoms else set()
 
         # prepare atoms patch
         self.__elements = elements = {}
+        self.__hydrogens = hydrogens = {}
+
         atoms = defaultdict(dict)
         for n, atom in products.atoms():
             atoms[n].update(charge=atom.charge, is_radical=atom.is_radical)
@@ -36,6 +38,8 @@ class BaseReactor:
                 elements[n] = Element.from_atomic_number(atom.atomic_number)(atom.isotope)
                 if n not in reactants and isinstance(products, MoleculeContainer):
                     atoms[n]['xy'] = atom.xy
+                    if atom.hybridization == 4 and atom.implicit_hydrogens is not None:
+                        hydrogens[n] = atom.implicit_hydrogens  # keep it for new aromatic atoms
             elif n not in reactants:
                 raise ValueError('New atom should be defined')
             else:  # use atom from reactant
@@ -54,10 +58,13 @@ class BaseReactor:
         self.__bonds = bonds
         self.__atom_attrs = dict(atoms)
         self.__products = products
+        self.__fix_rings = fix_rings
+        self.__fix_tautomers = fix_tautomers
 
-    def _patcher(self, structure, mapping):
+    def _patcher(self, structure: MoleculeContainer, mapping):
         elements = self.__elements
         products = self.__products
+        patch_hydrogens = self.__hydrogens
         patch_bonds = self.__bonds
 
         atoms = structure._atoms
@@ -65,8 +72,7 @@ class BaseReactor:
         bonds = structure._bonds
         charges = structure._charges
         radicals = structure._radicals
-
-        stereo_override = set()
+        hydrogens = structure._hydrogens
 
         to_delete = {mapping[x] for x in self.__to_delete}
         if to_delete:
@@ -95,7 +101,8 @@ class BaseReactor:
             to_delete.update(delete)
 
         new = structure.__class__()
-        max_atom = max(atoms) + 1
+        keep_hydrogens = {}
+        max_atom = max(atoms)
         for n, atom in self.__atom_attrs.items():
             if n in mapping:  # add matched atoms
                 m = mapping[n]
@@ -104,13 +111,17 @@ class BaseReactor:
                     e = atoms[m]
                 new.add_atom(e.copy(), m, xy=plane[m], **atom)
             else:  # new atoms
-                mapping[n] = new.add_atom(elements[n].copy(), max_atom, **atom)
                 max_atom += 1
+                mapping[n] = new.add_atom(elements[n].copy(), max_atom, **atom)
+                if n in patch_hydrogens:  # keep patch aromatic atoms hydrogens count
+                    keep_hydrogens[max_atom] = patch_hydrogens[n]
 
-        patch_atoms = set(new._atoms)
+        patch_atoms = set(new)  # don't move!
         for n, atom in structure.atoms():  # add unmatched atoms
             if n not in patch_atoms and n not in to_delete:
                 new.add_atom(atom.copy(), n, charge=charges[n], is_radical=radicals[n], xy=plane[n])
+                if structure.hybridization(n) == 4:  # keep hydrogens on unmatched aromatic atoms as is.
+                    keep_hydrogens[n] = hydrogens[n]
 
         for n, m, bond in patch_bonds:  # add patch bonds
             new.add_bond(mapping[n], mapping[m], bond.copy())
@@ -125,9 +136,16 @@ class BaseReactor:
                     continue
                 new.add_bond(n, m, bond.copy())
 
+        # fix hydrogens count.
+        new._hydrogens.update(keep_hydrogens)
+        if self.__fix_rings:
+            new.kekule()
+            new.thiele(fix_tautomers=self.__fix_tautomers)
+
         # check needs of stereo calculations
         if structure._atoms_stereo or structure._allenes_stereo or structure._cis_trans_stereo or \
                 products._atoms_stereo or products._allenes_stereo or products._cis_trans_stereo:
+            stereo_override = set()
             r_mapping = {m: n for n, m in mapping.items()}
 
             # set patch atoms stereo
@@ -191,17 +209,6 @@ class BaseReactor:
 
             new.fix_stereo()
         return new
-
-    def __getstate__(self):
-        return {'elements': self.__elements, 'atom_attrs': self.__atom_attrs, 'products': self.__products,
-                'to_delete': self.__to_delete, 'bonds': self.__bonds}
-
-    def __setstate__(self, state):
-        self.__elements = state['elements']
-        self.__atom_attrs = state['atom_attrs']
-        self.__products = state['products']
-        self.__to_delete = state['to_delete']
-        self.__bonds = state['bonds']
 
 
 __all__ = ['BaseReactor']

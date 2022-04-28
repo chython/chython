@@ -43,15 +43,17 @@ class Reactor(BaseReactor):
     """
     def __init__(self, patterns: Tuple[QueryContainer, ...],
                  products: Tuple[Union[MoleculeContainer, QueryContainer], ...], *,
-                 delete_atoms: bool = True, one_shot: bool = True,
-                 polymerise_limit: int = 10, automorphism_filter: bool = True):
+                 delete_atoms: bool = True, one_shot: bool = True, polymerise_limit: int = 10,
+                 automorphism_filter: bool = True, fix_aromatic_rings: bool = True, fix_tautomers: bool = True):
         """
-        :param patterns: search patterns for each reactant
-        :param products: resulted structures
-        :param delete_atoms: if True atoms exists in reactants but
-                            not exists in products will be removed
-        :param one_shot: do only single reaction center then True, else do all possible combinations of reactions.
-        :param polymerise_limit: limit of self reactions. Make sense than one_shot = False.
+        :param patterns: Search patterns for each reactant.
+        :param products: Resulted structures.
+        :param delete_atoms: If True atoms exists in reactants but not exists in products will be removed.
+        :param one_shot: Do only single reaction center then True, else do all possible combinations of reactions.
+        :param polymerise_limit: Limit of self reactions. Make sense than one_shot = False.
+        :param fix_aromatic_rings: Proceed kekule and thiele on products.
+        :param fix_tautomers: See `thiele()` docs.
+        :param automorphism_filter: Skip matches to same atoms.
         """
         if not patterns or not products:
             raise ValueError('empty template')
@@ -67,7 +69,7 @@ class Reactor(BaseReactor):
         self.__polymerise_limit = polymerise_limit
         self.__products_atoms = tuple(set(m) for m in products)
         self.__automorphism_filter = automorphism_filter
-        super().__init__({x for x in patterns for x in x}, products_, delete_atoms)
+        super().__init__({x for x in patterns for x in x}, products_, delete_atoms, fix_aromatic_rings, fix_tautomers)
 
     def __call__(self, structures: Iterable[MoleculeContainer]):
         if any(not isinstance(structure, MoleculeContainer) for structure in structures):
@@ -153,19 +155,6 @@ class Reactor(BaseReactor):
             checked_atoms.update(structure)
             checked.append(structure)
         return checked
-
-    def __getstate__(self):
-        return {'patterns': self.__patterns, 'products_atoms': self.__products_atoms,
-                'polymerise_limit': self.__polymerise_limit, 'one_shot': self.__one_shot,
-                'automorphism_filter': self.__automorphism_filter, **super().__getstate__()}
-
-    def __setstate__(self, state):
-        self.__patterns = state['patterns']
-        self.__one_shot = state['one_shot']
-        self.__polymerise_limit = state['polymerise_limit']
-        self.__products_atoms = state['products_atoms']
-        self.__automorphism_filter = state['automorphism_filter']
-        super().__setstate__(state)
 
 
 __all__ = ['Reactor']

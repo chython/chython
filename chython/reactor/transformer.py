@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -29,31 +29,29 @@ class Transformer(BaseReactor):
     Transformer calling returns generator of all possible replacements.
     """
     def __init__(self, pattern: QueryContainer, replacement: Union[MoleculeContainer, QueryContainer],
-                 delete_atoms: bool = True):
+                 delete_atoms: bool = True, automorphism_filter: bool = True, fix_aromatic_rings: bool = True,
+                 fix_tautomers: bool = True):
         """
-        :param pattern: search pattern
-        :param replacement: atoms and bonds replacement
-        :param delete_atoms: if True atoms exists in pattern but not exists in replacement will be removed
+        :param pattern: Search pattern.
+        :param replacement: Resulted structure.
+        :param delete_atoms: If True atoms exists in reactants but not exists in products will be removed.
+        :param fix_aromatic_rings: Proceed kekule and thiele on products.
+        :param fix_tautomers: See `thiele()` docs.
+        :param automorphism_filter: Skip matches to same atoms.
         """
         if not isinstance(pattern, QueryContainer) or not isinstance(replacement, (MoleculeContainer, QueryContainer)):
             raise TypeError('invalid params')
 
         self.__pattern = pattern
-        super().__init__(set(pattern), replacement, delete_atoms)
+        self.__automorphism_filter = automorphism_filter
+        super().__init__(set(pattern), replacement, delete_atoms, fix_aromatic_rings, fix_tautomers)
 
-    def __call__(self, structure: MoleculeContainer, automorphism_filter: bool = True):
+    def __call__(self, structure: MoleculeContainer):
         if not isinstance(structure, MoleculeContainer):
             raise TypeError('only Molecules possible')
 
-        for mapping in self.__pattern.get_mapping(structure, automorphism_filter=automorphism_filter):
+        for mapping in self.__pattern.get_mapping(structure, automorphism_filter=self.__automorphism_filter):
             yield self._patcher(structure, mapping)
-
-    def __getstate__(self):
-        return {'pattern': self.__pattern, **super().__getstate__()}
-
-    def __setstate__(self, state):
-        self.__pattern = state['pattern']
-        super().__setstate__(state)
 
 
 __all__ = ['Transformer']
