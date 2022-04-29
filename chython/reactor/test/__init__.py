@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,9 +16,4 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .reactor import Reactor
-from .transformer import Transformer
 
-# Note: don't import [de]protection and other predefined reactors to prevent imports crashing!
-
-__all__ = ['Transformer', 'Reactor']

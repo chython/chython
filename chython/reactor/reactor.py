@@ -76,7 +76,7 @@ class Reactor(BaseReactor):
             raise TypeError('only list of Molecules possible')
 
         len_patterns = len(self.__patterns)
-        structures = self.__remap(structures)
+        structures = fix_mapping_overlap(structures)
         s_nums = set(range(len(structures)))
         if self.__one_shot:
             for chosen in permutations(s_nums, len_patterns):
@@ -118,7 +118,7 @@ class Reactor(BaseReactor):
                         else:  # one of products molecule combined with previously chosen
                             for chp in combinations(chosen, len_patterns - 1):
                                 for i in range(len(prod)):
-                                    for ch in permutations(self.__remap((prod[i], *chp)), len_patterns):
+                                    for ch in permutations(fix_mapping_overlap((prod[i], *chp)), len_patterns):
                                         queue.append((ch, [*prod[:i], *prod[i + 1:]], depth))
                     yield r
 
@@ -141,20 +141,20 @@ class Reactor(BaseReactor):
             else:
                 yield [new]
 
-    @staticmethod
-    def __remap(structures) -> List[MoleculeContainer]:
-        checked = []
-        checked_atoms = set()
-        for structure in structures:
-            intersection = set(structure).intersection(checked_atoms)
-            if intersection:
-                mapping = dict(zip(intersection, count(max(max(checked_atoms), max(structure)) + 1)))
-                structure = structure.remap(mapping, copy=True)
-                logger.info('some atoms in input structures had the same numbers.\n'
-                            f'atoms {list(mapping)} were remapped to {list(mapping.values())}')
-            checked_atoms.update(structure)
-            checked.append(structure)
-        return checked
+
+def fix_mapping_overlap(structures) -> List[MoleculeContainer]:
+    checked = []
+    checked_atoms = set()
+    for structure in structures:
+        intersection = set(structure).intersection(checked_atoms)
+        if intersection:
+            mapping = dict(zip(intersection, count(max(max(checked_atoms), max(structure)) + 1)))
+            structure = structure.remap(mapping, copy=True)
+            logger.info('some atoms in input structures had the same numbers.\n'
+                        f'atoms {list(mapping)} were remapped to {list(mapping.values())}')
+        checked_atoms.update(structure)
+        checked.append(structure)
+    return checked
 
 
 __all__ = ['Reactor']

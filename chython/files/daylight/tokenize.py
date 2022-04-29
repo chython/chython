@@ -326,7 +326,7 @@ def _query_parse(token):
     else:
         raise IncorrectSmarts('Empty element')
 
-    hybridization = rings_sizes = neighbors = hydrogens = None
+    hybridization = rings_sizes = neighbors = hydrogens = heteroatoms = None
     for p in primitives[1:]:  # parse hydrogens (h), neighbors (D), rings_sizes (r or !R), hybridization == 4 (a)
         if not p:
             continue
@@ -340,9 +340,9 @@ def _query_parse(token):
             p = p.split(',')
             if len(p) != 1 and len({x[0] for x in p}) > 1:
                 raise IncorrectSmarts('Unsupported OR statement')
-            elif (t := p[0][0]) not in ('D', 'h', 'r'):
+            elif (t := p[0][0]) not in ('D', 'h', 'r', 'x', 'z'):
                 raise IncorrectSmarts('Unsupported SMARTS primitive. Use only D, h, r, !R and a.')
-
+                # z and x private chython marks for hybridization and heteroatoms count
             try:
                 p = [int(x[1:]) for x in p]
             except ValueError:
@@ -352,11 +352,15 @@ def _query_parse(token):
                 neighbors = p
             elif t == 'h':
                 hydrogens = p
-            else:  # r
+            elif t == 'r':  # r
                 rings_sizes = p
+            elif t == 'x':
+                heteroatoms = p
+            else:  # z
+                hybridization = p
 
     return 0, {'element': element, 'isotope': isotope, 'mapping': mapping, 'charge': charge, 'is_radical': False,
-               'heteroatoms': None, 'hydrogens': hydrogens, 'neighbors': neighbors,
+               'heteroatoms': heteroatoms, 'hydrogens': hydrogens, 'neighbors': neighbors,
                'rings_sizes': rings_sizes, 'hybridization': hybridization}
 
 
