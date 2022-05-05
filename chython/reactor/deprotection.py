@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .. import smarts
+from .. import smarts, MoleculeContainer
 from .transformer import Transformer
 
 """
@@ -283,7 +283,6 @@ _alcohol_ester = (
 )
 
 _alcohol_carbonate = _alcohol_fmoc + _alcohol_teoc + _alcohol_troc + _alcohol_alloc
-
 _alcohol_basic = _alcohol_silyl + _alcohol_ester + _alcohol_carbonate
 
 _carboxyl_basic = (
@@ -320,7 +319,6 @@ _amine_fmoc = (
 )
 
 _amine_basic = _amine_tfa + _amine_fmoc + _amine_methylcarbamate
-
 _total_basic = _alcohol_basic + _carboxyl_basic + _amine_basic
 
 #################
@@ -332,17 +330,23 @@ __all__ = [f'deprotect{k}' for k, v in globals().items() if k.startswith('_') an
 _cache = {}
 
 
-def _prepare_reactor(rules):
+def _prepare_reactor(rules, name):
     rxn = [Transformer(smarts(r), smarts(p)) for r, p, *_ in rules]
 
-    def w(m):
+    def w(molecule: MoleculeContainer, /) -> MoleculeContainer:
+        """
+        Remove protective groups from the given molecule if applicable.
+        """
         for r in rxn:
             while True:
                 try:
-                    m = next(r(m))
+                    molecule = next(r(molecule))
                 except StopIteration:
                     break
-        return m
+        return molecule
+
+    w.__module__ = __name__
+    w.__qualname__ = w.__name__ = name
     return w
 
 
@@ -351,7 +355,7 @@ def __getattr__(name):
         return _cache[name]
     except KeyError:
         if name in __all__:
-            _cache[name] = t = _prepare_reactor(globals()[name[9:]])
+            _cache[name] = t = _prepare_reactor(globals()[name[9:]], name)
             return t
         raise AttributeError
 
