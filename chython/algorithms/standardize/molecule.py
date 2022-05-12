@@ -60,11 +60,12 @@ class Standardize:
             return s
         return bool(k or s or h or t or c)
 
-    def standardize(self: Union['MoleculeContainer', 'Standardize'], *, logging=False, ignore=True,
+    def standardize(self: Union['MoleculeContainer', 'Standardize'], *, logging=False, ignore=True, fix_tautomers=True,
                     _fix_stereo=True) -> Union[bool, List[Tuple[Tuple[int, ...], int, str]]]:
         """
         Standardize functional groups. Return True if any non-canonical group found.
 
+        :param fix_tautomers: convert tautomers to canonical forms.
         :param logging: return list of fixed atoms with matched rules.
         :param ignore: ignore standardization bugs.
         """
@@ -75,17 +76,17 @@ class Standardize:
         else:
             log, fixed = [], set()
 
-        l, f = self.__standardize(double_rules)
+        l, f = self.__standardize(double_rules, fix_tautomers)
         log.extend(l)
         fixed.update(f)
         if f:
-            l, f = self.__standardize(double_rules)  # double shot rules for overlapped groups
+            l, f = self.__standardize(double_rules, fix_tautomers)  # double shot rules for overlapped groups
             log.extend(l)
             fixed.update(f)
-        l, f = self.__standardize(single_rules)
+        l, f = self.__standardize(single_rules, fix_tautomers)
         log.extend(l)
         fixed.update(f)
-        l, f = self.__standardize(metal_rules)  # metal-organics fix
+        l, f = self.__standardize(metal_rules, fix_tautomers)  # metal-organics fix
         log.extend(l)
         fixed.update(f)
 
@@ -384,7 +385,7 @@ class Standardize:
             return True
         return False
 
-    def __standardize(self: 'MoleculeContainer', rules):
+    def __standardize(self: 'MoleculeContainer', rules, fix_tautomers):
         bonds = self._bonds
         charges = self._charges
         radicals = self._radicals
@@ -393,7 +394,9 @@ class Standardize:
         log = []
         fixed = set()
         flush = False
-        for r, (pattern, atom_fix, bonds_fix, any_atoms) in enumerate(rules):
+        for r, (pattern, atom_fix, bonds_fix, any_atoms, is_tautomer) in enumerate(rules):
+            if not fix_tautomers and is_tautomer:
+                continue
             hs = set()
             seen = set()
             for mapping in pattern.get_mapping(self, automorphism_filter=False):

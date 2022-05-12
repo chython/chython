@@ -47,8 +47,9 @@ class Calculate2DMolecule:
         if ctx is None:
             raise ImportError('py_mini_racer not installed or broken')
         plane = {}
-        for _ in range(5):
-            smiles, order = self.__clean2d_prepare()
+        entry = iter(sorted(self, key=lambda n: len(self._bonds[n])))
+        for _ in range(min(5, len(self))):
+            smiles, order = self.__clean2d_prepare(next(entry))
             try:
                 xy = ctx.call('$.clean2d', smiles)
             except JSEvalException:
@@ -131,15 +132,17 @@ class Calculate2DMolecule:
                 max_x += .25
         return max_x
 
-    def __clean2d_prepare(self: 'MoleculeContainer'):
+    def __clean2d_prepare(self: 'MoleculeContainer', entry):
         hydrogens = self._hydrogens
         charges = self._charges
         allenes_stereo = self._allenes_stereo
         atoms_stereo = self._atoms_stereo
         self._charges = self._hydrogens = {n: 0 for n in hydrogens}
         self._atoms_stereo = self._allenes_stereo = {}
+        w = {n: random() for n in hydrogens}
+        w[entry] = -1
         try:
-            smiles, order = self._smiles(lambda x: random(), _return_order=True)
+            smiles, order = self._smiles(w.__getitem__, random=True, _return_order=True)
         finally:
             self._hydrogens = hydrogens
             self._charges = charges

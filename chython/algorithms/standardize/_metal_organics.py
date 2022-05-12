@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -230,7 +230,7 @@ def _rules():
     for q, atom_fix, bonds_fix in rules:
         any_atoms = [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
         any_atoms.extend(n for n, a in q.atoms() if a.atomic_symbol == 'M')
-        compiled_rules.append((q, atom_fix, bonds_fix, any_atoms))
+        compiled_rules.append((q, atom_fix, bonds_fix, any_atoms, False))
     return compiled_rules
 
 

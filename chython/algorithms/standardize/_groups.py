@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -35,10 +35,10 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (0, False), 2: (0, False)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
     bonds = ((1, 2, 2),)
     bonds_fix = ((1, 2, 3),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # A   H   A     A     H   A
@@ -52,7 +52,7 @@ def _rules_single():
     bonds = ((1, 3, 1), (1, 4, 1), (2, 3, 1), (2, 4, 1))
     atom_fix = {}
     bonds_fix = ((1, 3, 8), (2, 4, 8))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #      A         A
@@ -65,7 +65,7 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {}
     bonds_fix = ((1, 2, 8),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #     A             A
@@ -78,7 +78,7 @@ def _rules_single():
     bonds = ((1, 2, (1, 2)),)
     atom_fix = {}
     bonds_fix = ((1, 2, 8),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # R2S - B >> R2S .. B
@@ -87,7 +87,7 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {}
     bonds_fix = ((1, 2, 8),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #  [B-] = [N+] >>  B - N
@@ -97,7 +97,7 @@ def _rules_single():
     bonds = ((1, 2, 2),)
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #        [A-]                 A
@@ -111,7 +111,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 1), (1, 4, 1), (1, 5, 1))
     atom_fix = {1: (-4, None), 2: (1, None), 3: (1, None), 4: (1, None), 5: (1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #        A             A
@@ -124,7 +124,7 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (-1, None), 2: (1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #      A             A
@@ -137,7 +137,7 @@ def _rules_single():
     bonds = ()
     atom_fix = {1: (-1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #     A         A
@@ -150,7 +150,7 @@ def _rules_single():
     bonds = ()
     atom_fix = {1: (1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #  aci-nitro
     #      O          O
@@ -163,7 +163,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 2), (1, 4, 2))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 4, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     #            O               [O-]
@@ -177,7 +177,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 2), (1, 4, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # fix aci-nitro
     #       [O-]          [O-]
@@ -191,7 +191,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 1), (1, 4, 2))
     atom_fix = {}
     bonds_fix = ((1, 3, 2), (1, 4, 1))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     # fix CN(=O)=N(=O)C
     #
@@ -204,7 +204,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 2), (1, 4, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # Fix CN(=O)=N(=N)C
     # [N+] = N = N - ? >> [N+] = [N+] - [N-] - ?
@@ -216,7 +216,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 2), (1, 4, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # For N-case not unique!
     #          N             [N-]
@@ -230,7 +230,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 2), (1, 4, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # [N-] - [N+] = O >> N = [N+] - [O-]
@@ -242,7 +242,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 1))
     atom_fix = {2: (-1, None), 3: (1, None)}
     bonds_fix = ((1, 2, 1), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #         O              [O-]
@@ -256,7 +256,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 2), (1, 4, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # O : N : O      O = [N+] - [O-]
@@ -267,7 +267,7 @@ def _rules_single():
     bonds = ((1, 2, 4), (1, 3, 4), (1, 4, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # Nitrite
     #
@@ -281,7 +281,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 2))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # [O,C,N] = N # N >> [O,C,N] = [N+] = [N-]
@@ -290,7 +290,7 @@ def _rules_single():
     bonds = ((1, 2, 3), (1, 3, 2))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # [C,N,O-] - [N+] # N  >> [C,N,O] = [N+] = [N-]
@@ -300,7 +300,7 @@ def _rules_single():
     bonds = ((1, 2, 3), (1, 3, 1))
     atom_fix = {2: (-1, None), 3: (1, None)}
     bonds_fix = ((1, 2, 2), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #  A - [N+] # N = [N-]  >> A - N = [N+] = [N-]
@@ -310,7 +310,7 @@ def _rules_single():
     bonds = ((1, 2, 3), (1, 3, 2), (2, 4, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # A - N = N = N >> A - N = [N+] = [N-]
@@ -320,7 +320,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 2))
     atom_fix = {1: (1, None), 3: (-1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # A - NH - N # N >> A - N = [N+] = [N-]
@@ -330,7 +330,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 3))
     atom_fix = {1: (1, None), 3: (-1, None)}
     bonds_fix = ((1, 2, 2), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # [N-] # N = N - A >> [N-] == [N+] == N - A
@@ -340,7 +340,7 @@ def _rules_single():
     bonds = ((1, 2, 3), (1, 3, 2))
     atom_fix = {1: (1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # [N-] == N # N >> [N-] == [N+] == [N-]
@@ -349,7 +349,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 3))
     atom_fix = {1: (1, None), 3: (-1, None)}
     bonds_fix = ((1, 3, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # A - C # N = NH >> A - [CH] = [N+] = [N-]
@@ -358,7 +358,7 @@ def _rules_single():
     bonds = ((1, 2, 3), (2, 3, 2))
     atom_fix = {2: (1, None), 3: (-1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # note: order dependent
     # A - C # N = [O,N] >> A - C # [N+] - [O,N-]
@@ -368,17 +368,17 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 3))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
-    # [NH2,OH,SH] - N # C - A >> [NH,O,S-] - [N+] # C
+    # [NH2,OH,SH] - N # C - A >> [NH,O,S-] - [N+] # C - A
     #
     atoms = ({'atom': ListElement(['O', 'N', 'S']), 'neighbors': 1}, {'atom': 'N', 'neighbors': 2},
              {'atom': 'C', 'neighbors': (1, 2)})
     bonds = ((1, 2, 1), (2, 3, 3))
     atom_fix = {1: (-1, None), 2: (1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # A - [NH] - N # C >> A - [N-] - [N+] # C
@@ -388,7 +388,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (2, 3, 3))
     atom_fix = {1: (-1, None), 2: (1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # [NH2,OH,SH] - [N+] # [C-] >> [NH,O,S-] - [N+] # [CH]
@@ -398,7 +398,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (2, 3, 3))
     atom_fix = {1: (-1, None), 3: (1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     # A - [NH] - [N+] # [C-] >> A - [N-] - [N+] # [CH]
@@ -408,7 +408,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (2, 3, 3))
     atom_fix = {1: (-1, None), 3: (1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     # A - N # C >> A - [N+] # [C-]
@@ -417,7 +417,7 @@ def _rules_single():
     bonds = ((1, 2, 3), (1, 3, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # fix old diazo rule
     #
@@ -428,7 +428,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (2, 3, 2))
     atom_fix = {1: (1, None), 3: (-1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #    |           |
@@ -440,7 +440,7 @@ def _rules_single():
     bonds = ((1, 2, 2),)
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # N-oxide radical
     #
@@ -453,7 +453,7 @@ def _rules_single():
     bonds = ((1, 2, 2),)
     atom_fix = {1: (0, False), 2: (0, True)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # false N-oxide radical
     #
@@ -466,7 +466,7 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (1, False), 2: (-1, False)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # C           C
@@ -479,7 +479,7 @@ def _rules_single():
     bonds = ((1, 2, 3), (1, 3, 1), (1, 4, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #  C - N = [N+]  >>  C - [N+] # N
@@ -488,7 +488,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 3),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #  [N+] - [C-] = O  >>  N = C = O
@@ -498,7 +498,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 2))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #  N # C - OH  >>  HN = C = O
@@ -507,7 +507,7 @@ def _rules_single():
     bonds = ((1, 2, 3), (1, 3, 1))
     atom_fix = {}
     bonds_fix = ((1, 2, 2), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     #  N # C - [O-]  >>  [N-] = C = O
@@ -516,7 +516,7 @@ def _rules_single():
     bonds = ((1, 2, 3), (1, 3, 1))
     atom_fix = {2: (-1, None), 3: (1, None)}
     bonds_fix = ((1, 2, 2), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # - [N+] - [O-]  >>  - N = O
@@ -526,7 +526,7 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (-1, None), 2: (1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #     [O+]R         [O]R
@@ -538,7 +538,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 1))
     atom_fix = {2: (-1, None), 3: (1, None)}
     bonds_fix = ((1, 2, 1), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #      [O,S]H    [O,S]
@@ -550,7 +550,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 2))
     atom_fix = {}
     bonds_fix = ((1, 2, 2), (1, 3, 1))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     # fix pyridin-2-one. note: only after amide rule
@@ -561,7 +561,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 1), (1, 4, 1), (3, 7, 1), (4, 5, (1, 2)), (5, 6, (1, 2)), (6, 7, (1, 2)))
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     # todo:
     # [C;a:10][N;H:2][N:3]=[C:4]1[C:5]=,:[C:6][C:7](=[O:1])[C:8]=,:[C:9]1
@@ -578,7 +578,7 @@ def _rules_single():
     bonds = ((1, 3, 1), (2, 3, 1), (3, 4, 2))
     atom_fix = {}
     bonds_fix = ((1, 3, 2), (3, 4, 1))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     # fix pyridin. note: don't move.
@@ -589,7 +589,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 1), (1, 4, 1), (3, 7, 2), (4, 5, 1), (5, 6, (1, 2)), (6, 7, 1))
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (1, 4, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     #       A                   A
@@ -603,7 +603,7 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (-1, None), 2: (1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #       A                   A
@@ -617,7 +617,7 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #   F   F         F   F
@@ -632,7 +632,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 1), (1, 4, 1), (1, 5, 1), (1, 6, 1), (1, 7, 1))
     atom_fix = {1: (-1, None)}
     bonds_fix = ()
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #     O               O
@@ -646,7 +646,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 2), (1, 4, 1), (1, 5, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #     O           [O-]
@@ -660,7 +660,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 1))
     atom_fix = {2: (-1, None), 3: (1, None)}
     bonds_fix = ((1, 2, 1), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #     O           [OH]
@@ -674,11 +674,11 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 1))
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     #     A                A
-    #     \\               \
+    #     \\               \\
     # A -  S - [S-]  >> A - S - [O-]
     #     //               //
     #     O                S
@@ -688,7 +688,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 1), (1, 4, 2), (1, 5, 1))
     atom_fix = {2: (-1, None), 3: (1, None)}
     bonds_fix = ((1, 2, 1), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #     A                A
@@ -701,7 +701,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 1), (1, 4, 2), (1, 5, 1))
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     #           A                   A
@@ -715,7 +715,7 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (-1, None), 2: (1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #       A?                  A?
@@ -729,7 +729,7 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (-1, None), 2: (1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #       [O-]          O
@@ -743,7 +743,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 1))
     atom_fix = {1: (-2, None), 2: (1, None), 3: (1, None)}
     bonds_fix = ((1, 2, 2), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #          A                  A
@@ -757,7 +757,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 1))
     atom_fix = {1: (-2, None), 2: (1, None), 3: (1, None)}
     bonds_fix = ((1, 2, 2), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #  A - [S-] - [C+]  >>  A - S = C
@@ -769,7 +769,7 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #  O              O
@@ -783,7 +783,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 2), (1, 4, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #     O             [O-]
@@ -797,7 +797,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 2), (1, 4, 2), (1, 5, 1))
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #  O              [O-]
@@ -811,7 +811,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 2), (1, 4, 2))
     atom_fix = {1: (1, None), 2: (1, None), 3: (-1, None), 4: (-1, None)}
     bonds_fix = ((1, 2, 2), (1, 3, 1), (1, 4, 1))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #    A            A
@@ -825,7 +825,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 2))
     atom_fix = {}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #    A            A
@@ -839,7 +839,7 @@ def _rules_single():
     bonds = ((1, 2, 2), (1, 3, 1))
     atom_fix = {}
     bonds_fix = ((1, 3, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #      A{1,3}               A{1,3}
@@ -851,7 +851,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (1, 3, 2))
     atom_fix = {}
     bonds_fix = ((1, 2, 2), (1, 3, 1))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     # C # C - [O,NH,S]H  >> C=C=[O,NH,S]
@@ -861,7 +861,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (2, 3, 3))
     atom_fix = {}
     bonds_fix = ((1, 2, 2), (2, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     #
     # C # C - [NH]R  >> C=C=NR
@@ -871,7 +871,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (2, 3, 3))
     atom_fix = {}
     bonds_fix = ((1, 2, 2), (2, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     # Carbon Monoxide
     #
@@ -881,7 +881,7 @@ def _rules_single():
     bonds = ((1, 2, 2),)
     atom_fix = {1: (-1, False), 2: (1, None)}
     bonds_fix = ((1, 2, 3),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # Ozone
     #
@@ -892,7 +892,7 @@ def _rules_single():
     bonds = ((1, 2, 1), (2, 3, 1))
     atom_fix = {1: (0, False), 2: (1, None), 3: (-1, False)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # only after [A-] - [C+] rules!
     #  [C+] - N(R2)  >> C = [N+](R2)
@@ -902,17 +902,17 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # low priority for hetero-N
-    #  [C+] - N(X2)  >> C = [N+](R2)
+    #  [C+] - N(X2)  >> C = [N+](X2)
     #
     atoms = ({'atom': 'N', 'neighbors': 3, 'hybridization': 1},
              {'atom': 'C', 'charge': 1, 'hybridization': 1, 'neighbors': (1, 2, 3)})
     bonds = ((1, 2, 1),)
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #  [C+] = N(R)  >>  C # [N+](R)
@@ -922,7 +922,7 @@ def _rules_single():
     bonds = ((1, 2, 2),)
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 3),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     # Br-ion + I-ion
     #
@@ -937,7 +937,7 @@ def _rules_single():
     bonds = ()
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 1),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     #  [I+] - [O-] >> I = O
@@ -946,10 +946,10 @@ def _rules_single():
     bonds = ((1, 2, 1),)
     atom_fix = {1: (-1, None), 2: (1, None)}
     bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     compiled_rules = []
-    for atoms, bonds, atom_fix, bonds_fix in raw_rules:
+    for atoms, bonds, atom_fix, bonds_fix, is_tautomer in raw_rules:
         q = QueryContainer()
         for a in atoms:
             q.add_atom(**a)
@@ -957,7 +957,7 @@ def _rules_single():
             q.add_bond(n, m, b)
 
         any_atoms = [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
-        compiled_rules.append((q, atom_fix, bonds_fix, any_atoms))
+        compiled_rules.append((q, atom_fix, bonds_fix, any_atoms, is_tautomer))
     return compiled_rules
 
 
@@ -978,10 +978,10 @@ def _rules_double():
     bonds = ((1, 2, 1), (1, 3, 2), (1, 4, 2), (1, 5, 1))
     atom_fix = {}
     bonds_fix = ((1, 2, 2), (1, 3, 1))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
 
     compiled_rules = []
-    for atoms, bonds, atom_fix, bonds_fix in raw_rules:
+    for atoms, bonds, atom_fix, bonds_fix, is_tautomer in raw_rules:
         q = QueryContainer()
         for a in atoms:
             q.add_atom(**a)
@@ -989,7 +989,7 @@ def _rules_double():
             q.add_bond(n, m, b)
 
         any_atoms = [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
-        compiled_rules.append((q, atom_fix, bonds_fix, any_atoms))
+        compiled_rules.append((q, atom_fix, bonds_fix, any_atoms, is_tautomer))
     return compiled_rules
 
 
