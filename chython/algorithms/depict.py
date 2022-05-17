@@ -20,8 +20,8 @@
 from CachedMethods import cached_method
 from collections import defaultdict
 from math import atan2, sin, cos, hypot
-from uuid import uuid4
 from typing import Tuple, TYPE_CHECKING, Union
+from uuid import uuid4
 
 
 if TYPE_CHECKING:

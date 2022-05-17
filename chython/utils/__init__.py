@@ -21,10 +21,11 @@ from .free_wilson import *
 from .functional_groups import *
 from .grid import *
 from .retro import *
+from .svg import *
 
 
 __all__ = ['functional_groups', 'fw_prepare_groups', 'fw_decomposition_tree',
-           'grid_depict', 'GridDepict', 'retro_depict', 'RetroDepict']
+           'grid_depict', 'GridDepict', 'retro_depict', 'RetroDepict', 'svg2png']
 
 
 if find_spec('rdkit'):
