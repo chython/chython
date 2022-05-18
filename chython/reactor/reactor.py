@@ -69,7 +69,8 @@ class Reactor(BaseReactor):
         self.__polymerise_limit = polymerise_limit
         self.__products_atoms = tuple(set(m) for m in products)
         self.__automorphism_filter = automorphism_filter
-        super().__init__({x for x in patterns for x in x}, products_, delete_atoms, fix_aromatic_rings, fix_tautomers)
+        super().__init__({n for x in patterns for n, h in x._masked.items() if not h}, products_, delete_atoms,
+                         fix_aromatic_rings, fix_tautomers)
 
     def __call__(self, structures: Iterable[MoleculeContainer]):
         if any(not isinstance(structure, MoleculeContainer) for structure in structures):

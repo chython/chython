@@ -327,6 +327,7 @@ def _query_parse(token):
         raise IncorrectSmarts('Empty element')
 
     hybridization = rings_sizes = neighbors = hydrogens = heteroatoms = None
+    masked = False
     for p in primitives[1:]:  # parse hydrogens (h), neighbors (D), rings_sizes (r or !R), hybridization == 4 (a)
         if not p:
             continue
@@ -336,6 +337,8 @@ def _query_parse(token):
             continue
         elif p == '!R':
             rings_sizes = 0
+        elif p == 'M':
+            masked = True
         else:
             p = p.split(',')
             if len(p) != 1 and len({x[0] for x in p}) > 1:
@@ -361,7 +364,7 @@ def _query_parse(token):
 
     return 0, {'element': element, 'isotope': isotope, 'mapping': mapping, 'charge': charge, 'is_radical': False,
                'heteroatoms': heteroatoms, 'hydrogens': hydrogens, 'neighbors': neighbors,
-               'rings_sizes': rings_sizes, 'hybridization': hybridization}
+               'rings_sizes': rings_sizes, 'hybridization': hybridization, 'masked': masked}
 
 
 def smiles_tokenize(smi):

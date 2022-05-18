@@ -17,11 +17,9 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from array import array
-from CachedMethods import cached_args_method
-from collections import defaultdict
 from functools import cached_property
 from itertools import chain, product
-from typing import Dict, List, Set, Tuple, Union
+from typing import Dict, List, Tuple, Union
 from . import molecule  # cyclic imports resolve
 from .bonds import Bond, QueryBond
 from .graph import Graph
@@ -53,7 +51,7 @@ def _validate_neighbors(neighbors):
 
 class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
     __slots__ = ('_neighbors', '_hybridizations', '_atoms_stereo', '_cis_trans_stereo', '_allenes_stereo',
-                 '_hydrogens', '_rings_sizes', '_heteroatoms')
+                 '_hydrogens', '_rings_sizes', '_heteroatoms', '_masked')
 
     _neighbors: Dict[int, Tuple[int, ...]]
     _hybridizations: Dict[int, Tuple[int, ...]]
@@ -63,6 +61,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
     _hydrogens: Dict[int, Tuple[int, ...]]
     _rings_sizes: Dict[int, Tuple[int, ...]]
     _heteroatoms: Dict[int, Tuple[int, ...]]
+    _masked: Dict[int, bool]
 
     def __init__(self):
         super().__init__()
@@ -74,6 +73,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
         self._hydrogens = {}
         self._rings_sizes = {}
         self._heteroatoms = {}
+        self._masked = {}
 
     def add_atom(self, atom: Union[Query, Element, int, str], *args,
                  neighbors: Union[int, List[int], Tuple[int, ...], None] = None,
@@ -81,7 +81,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
                  hydrogens: Union[int, List[int], Tuple[int, ...], None] = None,
                  rings_sizes: Union[int, List[int], Tuple[int, ...], None] = None,
                  heteroatoms: Union[int, List[int], Tuple[int, ...], None] = None,
-                 **kwargs):
+                 masked: bool = False, **kwargs):
         if hybridization is None:
             hybridization = ()
         elif isinstance(hybridization, int):
@@ -136,6 +136,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
         self._hydrogens[n] = hydrogens
         self._rings_sizes[n] = rings_sizes
         self._heteroatoms[n] = heteroatoms
+        self._masked[n] = masked
         return n
 
     def add_bond(self, n, m, bond: Union[QueryBond, Bond, int, Tuple[int, ...]]):
@@ -182,6 +183,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
         copy._atoms_stereo = self._atoms_stereo.copy()
         copy._allenes_stereo = self._allenes_stereo.copy()
         copy._cis_trans_stereo = self._cis_trans_stereo.copy()
+        copy._masked = self._masked.copy()
         return copy
 
     def union(self, other: 'QueryContainer') -> 'QueryContainer':
@@ -206,6 +208,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
         u._allenes_stereo.update(other._allenes_stereo)
         u._cis_trans_stereo.update(other._cis_trans_stereo)
         u._heteroatoms.update(other._heteroatoms)
+        u._masked.update(other._masked)
         return u
 
     def get_mapping(self, other: Union['QueryContainer', 'molecule.MoleculeContainer'], /, *, _cython=True, **kwargs):
@@ -441,7 +444,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
     def __getstate__(self):
         return {'atoms_stereo': self._atoms_stereo, 'allenes_stereo': self._allenes_stereo,
                 'cis_trans_stereo': self._cis_trans_stereo, 'neighbors': self._neighbors,
-                'hybridizations': self._hybridizations, 'hydrogens': self._hydrogens,
+                'hybridizations': self._hybridizations, 'hydrogens': self._hydrogens, 'masked': self._masked,
                 'rings_sizes': self._rings_sizes, 'heteroatoms': self._heteroatoms, **super().__getstate__()}
 
     def __setstate__(self, state):
@@ -454,6 +457,7 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
         self._hydrogens = state['hydrogens']
         self._rings_sizes = state['rings_sizes']
         self._heteroatoms = state['heteroatoms']
+        self._masked = state['masked']
 
 
 __all__ = ['QueryContainer']
