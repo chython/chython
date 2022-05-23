@@ -67,7 +67,22 @@ def _rules():
     return rules
 
 
+def _acids():
+    from ... import smiles
+
+    tmp = ['Cl', 'Br', 'I', 'O[N+](=O)[O-]', 'OP(O)(O)=O',
+           'OS(O)(=O)=O', 'CS(O)(=O)=O', 'OS(=O)(=O)C(F)(F)F', 'CC1=CC=C(C=C1)S(O)(=O)=O',
+           'OC(O)=O', 'CC(O)=O', 'OC(=O)C(F)(F)F', 'OC(=O)C(O)=O', 'OC(=O)C=CC(O)=O', 'OC(C(O)C(O)=O)C(O)=O']
+    acs = set()
+    for x in tmp:
+        x = smiles(x)
+        x.thiele()
+        acs.add(x)
+    return acs
+
+
+acids = Proxy(_acids)
 rules = Proxy(_rules)
 
 
-__all__ = ['rules']
+__all__ = ['acids', 'rules']

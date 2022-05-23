@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from typing import TYPE_CHECKING, List, Tuple, Union
-from ._salts import rules
+from ._salts import acids, rules
 
 
 if TYPE_CHECKING:
@@ -29,7 +29,7 @@ class Salts:
 
     def remove_metals(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List]:
         """
-        Remove disconnected S-metals.
+        Remove disconnected S-metals and ammonia.
 
         :param logging: return deleted atoms list.
         """
@@ -37,16 +37,58 @@ class Salts:
 
         metals = []
         for n, a in self._atoms.items():
-            if a.atomic_symbol not in {3, 4, 11, 12, 19, 20, 37, 38, 55, 56} and not bonds[n]:
+            if a.atomic_symbol not in {7, 3, 4, 11, 12, 19, 20, 37, 38, 55, 56} and not bonds[n]:
                 metals.append(n)
 
-        if metals:
+        if 0 < len(metals) < len(self):
             for n in metals:
                 self.delete_atom(n)
             if logging:
                 return metals
             return True
         elif logging:
+            return []
+        return False
+
+    def remove_acids(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List[int]]:
+        """
+        Remove common acids from organic bases salts.
+
+        :param logging: return deleted atoms list.
+        """
+        if self.connected_components_count > 1:
+            log = []
+            for c in self.connected_components:
+                if self.substructure(c, recalculate_hydrogens=False) in acids:
+                    log.extend(c)
+            if 0 < len(log) < len(self):  # prevent singularity
+                atoms = self._atoms
+                charges = self._charges
+                radicals = self._radicals
+                hydrogens = self._hydrogens
+                plane = self._plane
+                bonds = self._bonds
+                parsed_mapping = self._parsed_mapping
+
+                self._conformers.clear()  # clean conformers.
+
+                for n in log:
+                    del atoms[n]
+                    del charges[n]
+                    del radicals[n]
+                    del hydrogens[n]
+                    del plane[n]
+                    del bonds[n]
+
+                    try:
+                        del parsed_mapping[n]
+                    except KeyError:
+                        pass
+                self.flush_cache()
+                if logging:
+                    return log
+                return True
+        if logging:
             return []
         return False
 
@@ -78,9 +120,10 @@ class Salts:
                     log.append((n, m))
             if log:
                 self.flush_cache()
-            if logging:
-                return log
-            return bool(log)
+                self.fix_stereo()
+                if logging:
+                    return log
+                return True
         if logging:
             return []
         return False

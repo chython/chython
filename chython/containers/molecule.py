@@ -280,15 +280,15 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         Implicit hydrogens marks will not be set if atoms in aromatic rings.
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
-        isnt_hydrogen = self._atoms[n].atomic_number != 1
+        ngb = self._bonds.pop(n)
+        fix = self._atoms.pop(n).atomic_number != 1 and ngb
 
-        del self._atoms[n]
         del self._charges[n]
         del self._radicals[n]
         del self._hydrogens[n]
         del self._plane[n]
 
-        for m in self._bonds.pop(n):
+        for m in ngb:
             del self._bonds[m][n]
             self._calc_implicit(m)
 
@@ -298,7 +298,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         except KeyError:
             pass
 
-        if isnt_hydrogen:  # hydrogen atom not used for stereo coding
+        if fix:  # hydrogen atom not used for stereo coding
             self.fix_stereo()
         self.flush_cache()
 
