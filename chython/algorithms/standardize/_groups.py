@@ -939,13 +939,35 @@ def _rules_single():
     bonds_fix = ((1, 2, 1),)
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
+    # fix rdkit
+    # [Cl,Br,I+] - [O-] >> X = O
     #
-    #  [I+] - [O-] >> I = O
-    #
-    atoms = ({'atom': 'I', 'charge': 1}, {'atom': 'O', 'charge': -1, 'neighbors': 1})
+    atoms = ({'atom': ListElement(['Cl', 'Br', 'I']), 'charge': 1, 'neighbors': 2, 'hybridization': 1},
+             {'atom': 'O', 'charge': -1, 'neighbors': 1})
     bonds = ((1, 2, 1),)
     atom_fix = {1: (-1, None), 2: (1, None)}
     bonds_fix = ((1, 2, 2),)
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
+
+    # fix rdkit
+    # A-[Hal+2]([O-])2
+    #
+    atoms = ({'atom': ListElement(['Cl', 'Br', 'I']), 'charge': 2, 'neighbors': 3, 'hybridization': 1},
+             {'atom': 'O', 'charge': -1, 'neighbors': 1}, {'atom': 'O', 'charge': -1, 'neighbors': 1})
+    bonds = ((1, 2, 1), (1, 3, 1))
+    atom_fix = {1: (-3, None), 2: (1, None), 3: (1, None)}
+    bonds_fix = ((1, 2, 2), (1, 3, 2))
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
+
+    # fix rdkit
+    # A-[Hal+3]([O-])3
+    #
+    atoms = ({'atom': ListElement(['Cl', 'Br', 'I']), 'charge': 3, 'neighbors': 4, 'hybridization': 1},
+             {'atom': 'O', 'charge': -1, 'neighbors': 1}, {'atom': 'O', 'charge': -1, 'neighbors': 1},
+             {'atom': 'O', 'charge': -1, 'neighbors': 1})
+    bonds = ((1, 2, 1), (1, 3, 1), (1, 4, 1))
+    atom_fix = {1: (-3, None), 2: (1, None), 3: (1, None), 4: (1, None)}
+    bonds_fix = ((1, 2, 2), (1, 3, 2), (1, 4, 2))
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     compiled_rules = []

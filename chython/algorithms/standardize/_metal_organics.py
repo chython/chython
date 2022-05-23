@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ...periodictable import ListElement, AnyMetal
+from ...periodictable import AnyMetal
 
 
 def _rules():

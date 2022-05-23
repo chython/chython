@@ -318,7 +318,7 @@ class Standardize:
 
         if to_remove:
             self.flush_cache()
-            self._conformers.clear()
+            self._conformers = [{x: y for x, y in c.items() if x not in to_remove} for c in self._conformers]  # noqa
             if _fix_stereo:
                 self.fix_stereo()
 
@@ -424,7 +424,7 @@ class Standardize:
                         hs.add(n)
                         hs.add(m)
                         if m in bonds[n]:
-                            bonds[n][m]._Bond__order = b
+                            bonds[n][m]._Bond__order = b  # noqa
                             if b == 8:
                                 # expected original molecule don't contain `any` bonds or these bonds not changed
                                 flush = True

@@ -17,8 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from typing import TYPE_CHECKING, List, Tuple, Union
-from ..tautomers._base import stripped_rules
-from ...periodictable.element.query import _inorganic
+from ._salts import rules
 
 
 if TYPE_CHECKING:
@@ -28,48 +27,9 @@ if TYPE_CHECKING:
 class Salts:
     __slots__ = ()
 
-    def neutralize_metal_salts(self: 'MoleculeContainer', *, logging=False) -> Union[bool, Tuple[List[int], List[int]]]:
-        """
-        Convert metal salts to mixture of metal base and neutral anion form. Works only for stripped salts.
-
-        Example: [K+].CC(=O)[O-] >> [K+].[OH-].CC(=O)O
-        Note: do '.neutralize()' procedure before for preventing ambiguous results.
-
-        :param logging: return changed atoms list and hydroxides list
-        """
-        charges = self._charges
-        bonds = self._bonds
-        hydrogens = self._hydrogens
-
-        metals = []
-        for n, a in self._atoms.items():
-            if a.atomic_symbol not in _inorganic and charges[n] > 0 and not bonds[n]:
-                metals.append(n)
-
-        if metals:
-            acceptors = set()
-            for q in stripped_rules[:-1]:  # except halogenides and hydroxy group.
-                for mapping in q.get_mapping(self, automorphism_filter=False):
-                    acceptors.add(mapping[1])
-
-            # for imbalanced structures neutralize only part.
-            acceptors = list(acceptors)[:sum(charges[n] for n in metals)]
-            hydroxides = []
-            for n in acceptors:
-                hydrogens[n] += 1
-                charges[n] += 1
-                hydroxides.append(self.add_atom('O', charge=-1))
-
-            if logging:
-                return acceptors, hydroxides
-            return bool(acceptors)
-        elif logging:
-            return [], []
-        return False
-
     def remove_metals(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List]:
         """
-        Remove disconnected metals.
+        Remove disconnected S-metals.
 
         :param logging: return deleted atoms list.
         """
@@ -77,7 +37,7 @@ class Salts:
 
         metals = []
         for n, a in self._atoms.items():
-            if a.atomic_symbol not in _inorganic and not bonds[n]:
+            if a.atomic_symbol not in {3, 4, 11, 12, 19, 20, 37, 38, 55, 56} and not bonds[n]:
                 metals.append(n)
 
         if metals:
@@ -87,6 +47,41 @@ class Salts:
                 return metals
             return True
         elif logging:
+            return []
+        return False
+
+    def split_metal_salts(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List[Tuple[int, int]]]:
+        """
+        Split connected S-metal/lanthanides/actinides salts to cation/anion pairs.
+
+        :param logging: return deleted bonds list.
+        """
+        bonds = self._bonds
+        charges = self._charges
+
+        metals = [n for n, a in self._atoms.items() if a.atomic_number in
+                  {3, 4, 11, 12, 19, 20, 37, 38, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 87, 88,
+                   89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102}]
+        if metals:
+            acceptors = set()
+            log = []
+            for q in rules:
+                for mapping in q.get_mapping(self, automorphism_filter=False):
+                    acceptors.add(mapping[1])
+
+            for n in metals:
+                for m in acceptors & bonds[n].keys():
+                    del bonds[n][m]
+                    del bonds[m][n]
+                    charges[n] += 1
+                    charges[m] -= 1
+                    log.append((n, m))
+            if log:
+                self.flush_cache()
+            if logging:
+                return log
+            return bool(log)
+        if logging:
             return []
         return False
 
