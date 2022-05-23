@@ -70,9 +70,11 @@ def _rules():
 def _acids():
     from ... import smiles
 
-    tmp = ['Cl', 'Br', 'I', 'O[N+](=O)[O-]', 'OP(O)(O)=O',
+    tmp = ['Cl', 'Br', 'I', 'O[N+](=O)[O-]', 'ON=O', 'OP(O)(O)=O', 'COP(O)(=O)OC',
            'OS(O)(=O)=O', 'CS(O)(=O)=O', 'OS(=O)(=O)C(F)(F)F', 'CC1=CC=C(C=C1)S(O)(=O)=O',
-           'OC(O)=O', 'CC(O)=O', 'OC(=O)C(F)(F)F', 'OC(=O)C(O)=O', 'OC(=O)C=CC(O)=O', 'OC(C(O)C(O)=O)C(O)=O']
+           'OC(O)=O', 'CC(O)=O', 'OC(=O)C(F)(F)F', 'OCC(O)=O', 'CC(O)C(O)=O', 'OC(=O)C(O)=O', 'OC(=O)C(Cl)Cl',
+           'OC(=O)C=CC(O)=O', 'OC(C(O)C(O)=O)C(O)=O',
+           'O[Cl](=O)(=O)=O']
     acs = set()
     for x in tmp:
         x = smiles(x)
