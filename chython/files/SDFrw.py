@@ -255,7 +255,7 @@ class SDFWrite(MDLWrite):
         self._file.write(self._convert_molecule(data, write3d))
 
         for k, v in data.meta.items():
-            self._file.write(f'>  <{k}>\n{v}\n')
+            self._file.write(f'>  <{k}>\n{v}\n\n')
         self._file.write('$$$$\n')
 
 
@@ -277,7 +277,7 @@ class ESDFWrite(EMDLWrite):
         self._file.write('M  END\n')
 
         for k, v in data.meta.items():
-            self._file.write(f'>  <{k}>\n{v}\n')
+            self._file.write(f'>  <{k}>\n{v}\n\n')
         self._file.write('$$$$\n')
 
 
