@@ -95,12 +95,7 @@ class Thiele:
                     tetracycles.append(ring)
                 else:
                     if fix_tautomers and lr % 2:  # find potential pyrroles
-                        try:
-                            n = next(n for n in ring if atoms[n].atomic_number == 7 and not charges[n])
-                        except StopIteration:
-                            pass
-                        else:
-                            acceptors.add(n)
+                        acceptors.update(n for n in ring if atoms[n].atomic_number == 7 and not charges[n])
                     n, *_, m = ring
                     rings[n].add(m)
                     rings[m].add(n)
@@ -138,7 +133,10 @@ class Thiele:
                 freaks.append(ring)
         if not rings:
             return False
-        double_bonded = {n for n in rings if any(m not in rings and b.order == 2 for m, b in bonds[n].items())}
+
+        # check out-of-ring double bonds
+        double_bonded = {n for n in rings if any(m not in rings[n] and b.order == 2
+                                                 for m, b in bonds[n].items())}
 
         # fix_tautomers
         if fix_tautomers and acceptors and donors:
@@ -168,8 +166,10 @@ class Thiele:
                     new_order = 1 if order == 2 else 2
                     stack.extend((current, n, depth, new_order) for n in rings[current] if
                                  n not in seen and n not in double_bonded and bonds[current][n].order == order)
+                else:  # path not found
+                    continue
                 for n, m, o in path:
-                    bonds[n][m]._Bond__order = o
+                    bonds[n][m]._Bond__order = o  # noqa
                 if not acceptors:
                     break
 
@@ -195,8 +195,8 @@ class Thiele:
                     pm.discard(n)
                     for x in pm:
                         rings[x].discard(m)
-        if not rings:
-            return False
+            if not rings:
+                return False
 
         n_sssr = sum(len(x) for x in rings.values()) // 2 - len(rings) + len(_connected_components(rings))
         if not n_sssr:
@@ -211,24 +211,24 @@ class Thiele:
         for ring in tetracycles:
             if seen.issuperset(ring):
                 n, *_, m = ring
-                bonds[n][m]._Bond__order = 1
+                bonds[n][m]._Bond__order = 1  # noqa
                 for n, m in zip(ring, ring[1:]):
-                    bonds[n][m]._Bond__order = 1
+                    bonds[n][m]._Bond__order = 1  # noqa
 
         for ring in rings:
             n, *_, m = ring
-            bonds[n][m]._Bond__order = 4
+            bonds[n][m]._Bond__order = 4  # noqa
             for n, m in zip(ring, ring[1:]):
-                bonds[n][m]._Bond__order = 4
+                bonds[n][m]._Bond__order = 4  # noqa
 
         self.flush_cache()
         for ring in freaks:  # aromatize rule based
             for q in freak_rules:
                 if next(q.get_mapping(self, searching_scope=ring, automorphism_filter=False), None):
                     n, *_, m = ring
-                    bonds[n][m]._Bond__order = 4
+                    bonds[n][m]._Bond__order = 4  # noqa
                     for n, m in zip(ring, ring[1:]):
-                        bonds[n][m]._Bond__order = 4
+                        bonds[n][m]._Bond__order = 4  # noqa
                     break
         if freaks:
             self.flush_cache()  # flush again
