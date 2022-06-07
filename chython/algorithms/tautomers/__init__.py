@@ -178,6 +178,28 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                     if counter == limit:
                         return
 
+    def enumerate_charged_tautomers(self: 'MoleculeContainer', *, prepare_molecules=True, partial=False,
+                                    increase_aromaticity=True, keep_sugars=True, deep: int = 4, limit: int = 1000):
+        """
+        Enumerate tautomers and protonated-deprotonated forms.
+        Better to use on neutralized non-ionic molecules.
+
+        See `enumerate_tautomers` and `enumerate_charged_forms` params description.
+        """
+        count = 0
+        for t in self.enumerate_tautomers(prepare_molecules=prepare_molecules, zwitter=False, partial=partial,
+                                          increase_aromaticity=increase_aromaticity, keep_sugars=keep_sugars,
+                                          limit=limit):
+            yield t
+            count += 1
+            if count == limit:
+                return
+            for c in t.enumerate_charged_forms(deep=deep, limit=limit):
+                yield c
+                count += 1
+                if count == limit:
+                    return
+
     def __set_cache(self: 'MoleculeContainer', mol):
         try:
             neighbors = self.__dict__['__cached_args_method_neighbors']
