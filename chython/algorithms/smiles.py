@@ -75,6 +75,7 @@ class Smiles(ABC):
             h - Show implicit hydrogens.
             !b - Disable bonds tokens.
             !x - Disable CXSMILES extension.
+            !z - Disable charge representation.
 
             Combining possible. Order independent. Another keys ignored.
         """
@@ -92,6 +93,8 @@ class Smiles(ABC):
                 kwargs['hydrogens'] = True
             if '!b' in format_spec:
                 kwargs['bonds'] = False
+            if '!z' in format_spec:
+                kwargs['charges'] = False
 
             if 'r' in format_spec:
                 kwargs['random'] = True
@@ -345,9 +348,9 @@ class MoleculeSmiles(Smiles):
                 n1 = next(x for x in adjacency[t1] if x in env)
                 n2 = next(x for x in adjacency[t2] if x in env)
                 smi[3] = '@' if self._translate_allene_sign(n, n1, n2) else '@@'
-            elif charge:
+            elif charge and kwargs.get('charges', True):
                 smi[5] = charge_str[charge]
-        elif charge:
+        elif charge and kwargs.get('charges', True):
             smi[5] = charge_str[charge]
 
         if any(smi) or atom.atomic_symbol not in organic_set or self._radicals[n] or kwargs.get('hydrogens', False):

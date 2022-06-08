@@ -237,6 +237,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
             h - Show implicit hydrogens.
             !b - Disable bonds tokens.
             !x - Disable CXSMILES extension.
+            !z - Disable charge representation.
         """
         sig = []
         count = 0
