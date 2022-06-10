@@ -35,17 +35,19 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
     __slots__ = ()
 
     def enumerate_tautomers(self: Union['MoleculeContainer', 'Tautomers'], *, prepare_molecules=True, zwitter=True,
-                            partial=False, increase_aromaticity=True, keep_sugars=True,
-                            limit: int = 1000) -> Iterator['MoleculeContainer']:
+                            partial=False, increase_aromaticity=True, keep_sugars=True, heteroarenes=True,
+                            keto_enol=True, limit: int = 1000) -> Iterator['MoleculeContainer']:
         """
         Enumerate all possible tautomeric forms of molecule.
 
-        :param prepare_molecules: Standardize structures for correct processing.
-        :param zwitter: Do zwitter-ions enumeration.
+        :param prepare_molecules: Standardize structures for correct processing
+        :param zwitter: Do zwitter-ions enumeration
         :param partial: Allow OC=CC=C>>O=CCC=C or O=CC=CC>>OC=C=CC
         :param increase_aromaticity: prevent aromatic ring destruction
         :param keep_sugars: prevent carbonyl moving in sugars
-        :param limit: Maximum amount of generated structures.
+        :param heteroarenes: enumerate heteroarenes
+        :param keto_enol: enumerate keto-enols
+        :param limit: Maximum amount of generated structures
         """
         if limit < 3:
             raise ValueError('limit should be greater or equal 3')
@@ -85,6 +87,7 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
             if thiele.thiele(fix_tautomers=False):
                 self.__set_cache(thiele)
 
+            # return found neutral form
             if has_stereo:
                 yield self.__set_stereo(thiele.copy())
             else:
@@ -94,7 +97,10 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
 
         # lets iteratively do keto-enol transformations.
         rings_count = len(thiele.aromatic_rings)  # increase rings strategy.
-        queue = deque([(copy, thiele)])
+        if keto_enol:
+            queue = deque([(copy, thiele)])
+        else:
+            queue = None
         new_queue = [thiele]  # new_queue - molecules suitable for hetero-arenes enumeration.
         # store aromatic form to seen. kekule forms not suitable for duplicate checking.
 
@@ -143,7 +149,9 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                     if counter == limit:
                         return
 
-        queue = deque(new_queue)
+        # heteroarenes tautomers enumeration
+        if heteroarenes:
+            queue = deque(new_queue)
         while queue:
             current = queue.popleft()
             for mol in current._enumerate_hetero_arene_tautomers():
@@ -160,9 +168,9 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                     if counter == limit:
                         return
 
-        if not zwitter:
-            return
-        queue = deque(new_queue)
+        # zwitter-ions enumeration
+        if zwitter:
+            queue = deque(new_queue)
         while queue:
             current = queue.popleft()
             for mol in current._enumerate_zwitter_tautomers():
@@ -179,7 +187,8 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                         return
 
     def enumerate_charged_tautomers(self: 'MoleculeContainer', *, prepare_molecules=True, partial=False,
-                                    increase_aromaticity=True, keep_sugars=True, deep: int = 4, limit: int = 1000):
+                                    increase_aromaticity=True, keep_sugars=True, heteroarenes=True,
+                                    keto_enol=True, deep: int = 4, limit: int = 1000):
         """
         Enumerate tautomers and protonated-deprotonated forms.
         Better to use on neutralized non-ionic molecules.
@@ -189,7 +198,7 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
         count = 0
         for t in self.enumerate_tautomers(prepare_molecules=prepare_molecules, zwitter=False, partial=partial,
                                           increase_aromaticity=increase_aromaticity, keep_sugars=keep_sugars,
-                                          limit=limit):
+                                          heteroarenes=heteroarenes, keto_enol=keto_enol, limit=limit):
             yield t
             count += 1
             if count == limit:

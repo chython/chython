@@ -50,14 +50,15 @@ class HeteroArenes:
         single_bonded = set()
         for n, ms in rings.items():
             if len(ms) == 2:
-                if atoms[n].atomic_number in (5, 7, 15) and not charges[n] and not radicals[n]:
-                    # only neutral B, N, P
-                    if hydrogens[n]:  # pyrrole
-                        donors.add(n)
-                    elif len(bonds[n]) == 2:  # pyridine
-                        acceptors.add(n)
-                    else:
-                        single_bonded.add(n)
+                if atoms[n].atomic_number in (5, 7, 15):
+                    if not charges[n] and not radicals[n]:
+                        # only neutral B, N, P
+                        if hydrogens[n]:  # pyrrole
+                            donors.add(n)
+                        elif len(bonds[n]) == 2:  # pyridine
+                            acceptors.add(n)
+                        else:
+                            single_bonded.add(n)
                 elif charges[n] == -1 and atoms[n].atomic_number == 6:  # ferrocene
                     single_bonded.add(n)
             elif len(ms) == 3 and atoms[n].atomic_number in (5, 7, 15) and not charges[n] and not radicals[n]:
