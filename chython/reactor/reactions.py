@@ -17,6 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import deque
+from itertools import product
 from typing import Iterator, Optional, List
 from .. import smarts, ReactionContainer
 from .reactor import Reactor, fix_mapping_overlap
@@ -26,6 +27,8 @@ Predefined reactors for common reactions.
 """
 
 _amidation = (
+    # alerts
+    ('[C;z1;x1]-[O;D1]', '[C;z4]-[O;D1]'),
     # [H,R]COOH + Ar-NH2
     ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;D1:4][C;a;M:5]', '[A:2]-[A:4]'),
     # Alk-NH2
@@ -39,6 +42,8 @@ _amidation = (
 )
 
 _amine_alcohol_carbamoyl = (
+    # alerts
+    (),
     # ROH + Ar-NH2
     ('[C;x1;z1;M:1][O;D1:2]', '[N;D1:3][C;a;M:4]', '[A:2]-C(=O)-[A:3]'),
     # Alk-NH2
@@ -52,6 +57,8 @@ _amine_alcohol_carbamoyl = (
 )
 
 _amine_phenol_carbamoyl = (
+    # alerts
+    (),
     # ROH + Ar-NH2
     ('[C;a;M:1][O;D1:2]', '[N;D1:3][C;a;M:4]', '[A:2]-C(=O)-[A:3]'),
     # Alk-NH2
@@ -64,9 +71,16 @@ _amine_phenol_carbamoyl = (
     ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]', '[A:2]-C(=O)-[A:3]'),
 )
 
-_amine_carbol_carbamoyl = _amine_alcohol_carbamoyl + _amine_phenol_carbamoyl
+_amine_carbol_carbamoyl = (
+    # alerts
+    _amine_alcohol_carbamoyl[0] + _amine_phenol_carbamoyl[0],
+    *_amine_alcohol_carbamoyl[1:],
+    *_amine_phenol_carbamoyl[1:]
+)
 
 _amine_carbonyl_reductive_amination = (
+    # alerts
+    (),
     # R2C=O + Ar-NH2
     ('[C;x1;z2:1]=[O:2]', '[N;D1:3][C;a;M:4]', '[A:1]-[A:3]'),
     # Alk-NH2
@@ -80,6 +94,8 @@ _amine_carbonyl_reductive_amination = (
 )
 
 _suzuki = (
+    # alerts
+    (),
     # Ar-X + Ar-B
     ('[C;a:1]-[Cl,Br,I;D1:2]', '[C;a:3]-[B;D3;z1:4]', '[A:1]-[A:3]'),
     # Ar-X + C=C-B
@@ -91,10 +107,14 @@ _suzuki = (
 )
 
 _suzuki_amide = (
+    # alerts
+    (),
     ('[C;a:1]-[B;D3;z1:2]', '[C;a;M:3]-[C:4](=[O;M:5])-N([C;x1;z1])-C(=O)[C;x0;z1]', '[A:1]-[A:4]'),
 )
 
 _buchwald_hartwig = (
+    # alerts
+    (),
     # Ar-Hal + Ar-NH2
     ('[C;a:1]-[Cl,Br,I;D1:2]', '[N;D1:3][C;a;M:4]', '[A:1]-[A:3]'),
     # Alk-NH2
@@ -108,6 +128,8 @@ _buchwald_hartwig = (
 )
 
 _sulfonamidation = (
+    # alerts
+    (),
     # RSOOX + Ar-NH2
     ('[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D1:6][C;a;M:7]', '[A:2]-[A:6]'),
     # Alk-NH2
@@ -121,6 +143,8 @@ _sulfonamidation = (
 )
 
 _amine_isocyanate = (
+    # alerts
+    (),
     # RN=C=O + Ar-NH2
     ('[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D1:5][C;a;M:6]', '[A:2][A:3]-[A:5]'),
     # Alk-NH2
@@ -134,6 +158,8 @@ _amine_isocyanate = (
 )
 
 _sonogashira = (
+    # alerts
+    (),
     # Ar-Hal + HC#C-R
     ('[C;a:1]-[Cl,Br,I;D1:2]', '[C;D1:3]#[C;D2;M:4]', '[A:1]-[A:3]'),
     # C=C-Hal
@@ -146,16 +172,18 @@ _sonogashira = (
 # Magic Factory #
 #################
 
-__all__ = [f'rxn{k}' for k, v in globals().items() if k.startswith('_') and isinstance(v, tuple) and v]
+__all__ = [k[1:] for k, v in globals().items() if k.startswith('_') and isinstance(v, tuple) and v]
 
 _cache = {}
 
 
 def _prepare_reactor(rules, name):
-    rxn = [Reactor([smarts(r) for r in rs], [smarts(p)], one_shot=False) for *rs, p in rules] # noqa
-    rxn_os = [Reactor([smarts(r) for r in rs], [smarts(p)]) for *rs, p in rules]  # noqa
+    rxn = [Reactor([smarts(r) for r in rs], [smarts(p)], one_shot=False) for *rs, p in rules[1:]] # noqa
+    rxn_os = [Reactor([smarts(r) for r in rs], [smarts(p)]) for *rs, p in rules[1:]]  # noqa
+    alerts = [smarts(x) for x in rules[0]]
 
-    def w(molecules, /, *, one_shot=False, rules_set: Optional[List[int]] = None) -> Iterator[ReactionContainer]:
+    def w(*molecules, one_shot=False, rules_set: Optional[List[int]] = None,
+          alerts_set: Optional[List[int]] = None) -> Iterator[ReactionContainer]:
         """
         Generate reactions with given reactants.
 
@@ -163,10 +191,19 @@ def _prepare_reactor(rules, name):
 
         %s
 
+        Alerts:
+
+        %s
+
         :param molecules: Reactants molecules.
         :param one_shot: Generate only single stage products. Otherwise, all possible combinations, including products.
         :param rules_set: Select only specific rules.
+        :param alerts_set: Check only specific structural alerts of reactants. Pass empty list to disable any checks.
         """
+        alerts_set = alerts if alerts_set is None else [alerts[x] for x in alerts_set]
+        if any(a < m for a, m in product(alerts_set, molecules)):
+            return
+
         molecules = fix_mapping_overlap(molecules)
         seen = set()
         if one_shot:
@@ -216,7 +253,8 @@ def _prepare_reactor(rules, name):
 
     w.__module__ = __name__
     w.__qualname__ = w.__name__ = name
-    doc = w.__doc__ % '\n'.join(f'{n}: {".".join(str(x) for x in r)}>>{p}' for n, (*r, p) in enumerate(rules))
+    doc = w.__doc__ % ('\n'.join(f'{n}: {".".join(r)}>>{p}' for n, (*r, p) in enumerate(rules[1:])),
+                       '\n'.join(f'{n}: {r}' for n, r in enumerate(rules[0])) or '--')
     w.__doc__ = '\n'.join(x.lstrip() for x in doc.splitlines())
     return w
 
@@ -226,7 +264,7 @@ def __getattr__(name):
         return _cache[name]
     except KeyError:
         if name in __all__:
-            _cache[name] = t = _prepare_reactor(globals()[name[3:]], name)
+            _cache[name] = t = _prepare_reactor(globals()[f'_{name}'], name)
             return t
         raise AttributeError
 

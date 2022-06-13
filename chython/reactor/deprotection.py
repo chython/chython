@@ -234,8 +234,8 @@ _diol13 = (  # acetals based
      '[A:3][A:4][A:5][A:1][A:2]'),
 ) + _diol13_benzylidene
 
-_diols_acid = _diols = _diol12 + _diol13
-_alcohol_acid = _alcohol_silyl + _alcohol_acetal + _alcohol_tritil + _diols
+_diol_acid = _diol = _diol12 + _diol13
+_alcohol_acid = _alcohol_silyl + _alcohol_acetal + _alcohol_tritil + _diol  # noqa
 
 _carbonyl = (  # acetals
     ('[C;D3,D4;z1;x2:1]1[O,S;D2][C;D2][C;D2][O,S;D2]1', '[A:1]=O'),  # dioxolane
@@ -325,7 +325,7 @@ _total_basic = _alcohol_basic + _carboxyl_basic + _amine_basic
 # Magic Factory #
 #################
 
-__all__ = [f'deprotect{k}' for k, v in globals().items() if k.startswith('_') and isinstance(v, tuple) and v]
+__all__ = [k[1:] for k, v in globals().items() if k.startswith('_') and isinstance(v, tuple) and v]
 
 _cache = {}
 
@@ -355,7 +355,7 @@ def __getattr__(name):
         return _cache[name]
     except KeyError:
         if name in __all__:
-            _cache[name] = t = _prepare_reactor(globals()[name[9:]], name)
+            _cache[name] = t = _prepare_reactor(globals()[f'_{name}'], name)
             return t
         raise AttributeError
 
