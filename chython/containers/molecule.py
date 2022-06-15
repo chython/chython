@@ -135,10 +135,10 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
     @cached_args_method
     def heteroatoms(self, n: int) -> int:
         """
-        Number of neighbored heteroatoms (not carbon or hydrogen)
+        Number of neighbored heteroatoms (not carbon or hydrogen) except any-bond connected.
         """
         atoms = self._atoms
-        return sum(atoms[m].atomic_number not in (1, 6) for m in self._bonds[n])
+        return sum(atoms[m].atomic_number not in (1, 6) for m, b in self._bonds[n].items() if b.order != 8)
 
     def implicit_hydrogens(self, n: int) -> Optional[int]:
         """
@@ -322,6 +322,12 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         self.flush_cache()
 
     def remap(self, mapping: Dict[int, int], *, copy: bool = False) -> 'MoleculeContainer':
+        """
+        Change atom numbers.
+
+        :param mapping: dict with atoms to change.
+        :param copy: keep original graph.
+        """
         if len(mapping) != len(set(mapping.values())) or \
                 not (self._atoms.keys() - mapping.keys()).isdisjoint(mapping.values()):
             raise ValueError('mapping overlap')
@@ -490,7 +496,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
     def substructure(self, atoms: Iterable[int], *, as_query: bool = False, recalculate_hydrogens=True,
                      skip_neighbors_marks=False, skip_hybridizations_marks=False, skip_hydrogens_marks=False,
-                     skip_rings_sizes_marks=False) -> Union['MoleculeContainer', 'query.QueryContainer']:
+                     skip_rings_sizes_marks=False, skip_heteroatoms_marks=False) -> \
+            Union['MoleculeContainer', 'query.QueryContainer']:
         """
         Create substructure containing atoms from atoms list.
 
@@ -505,6 +512,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         :param skip_hybridizations_marks: Don't set hybridizations marks on substructured queries
         :param skip_hydrogens_marks: Don't set hydrogens count marks on substructured queries
         :param skip_rings_sizes_marks: Don't set rings_sizes marks on substructured queries
+        :param skip_heteroatoms_marks: Don't set heteroatoms count marks
         """
         if not atoms:
             raise ValueError('empty atoms list not allowed')
@@ -525,11 +533,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         sb = self._bonds
         sc = self._charges
         sr = self._radicals
-        sp = self._plane
 
         sub._charges = {n: sc[n] for n in atoms}
         sub._radicals = {n: sr[n] for n in atoms}
-        sub._plane = {n: sp[n] for n in atoms}
 
         sub._atoms = ca = {}
         for n in atoms:
@@ -558,7 +564,12 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                                      if not_skin.issuperset(self._stereo_cis_trans_paths[nm]) and
                                         not_skin.issuperset(x for x in self._stereo_cis_trans[nm] if x)}
 
-            sub._heteroatoms = {n: () for n in atoms}
+            sub._masked = {n: False for n in atoms}
+            if skip_heteroatoms_marks:
+                sub._heteroatoms = {n: () for n in atoms}
+            else:
+                sha = self.heteroatoms
+                sub._heteroatoms = {n: (sha(n),) for n in atoms}
 
             if skip_hybridizations_marks:
                 sub._hybridizations = {n: () for n in atoms}
@@ -591,6 +602,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 hg = self._hydrogens
                 sub._hydrogens = {n: hg[n] for n in atoms}
 
+            sp = self._plane
+            sub._plane = {n: sp[n] for n in atoms}
             sub._parsed_mapping = {n: m for n, m in self._parsed_mapping.items() if n in atoms}
 
             # fix_stereo will repair data

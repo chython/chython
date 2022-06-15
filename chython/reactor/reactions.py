@@ -28,7 +28,7 @@ Predefined reactors for common reactions.
 
 _amidation = (
     # alerts
-    ('[C;z1;x1]-[O;D1]', '[C;z4]-[O;D1]'),
+    ('[C;z1;x1]-[O;D1]', '[C,N;a]-[O;D1]'),
     # [H,R]COOH + Ar-NH2
     ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;D1:4][C;a;M:5]', '[A:2]-[A:4]'),
     # Alk-NH2
@@ -39,36 +39,37 @@ _amidation = (
     ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;D2:4]([C;a;M:5])[C;z1;x1;M:6]', '[A:2]-[A:4]'),
     # Alk2NH
     ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;D2:4]([C;z1;x1;M:5])[C;z1;x1;M:6]', '[A:2]-[A:4]'),
+    ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;a;h1:4]', '[A:2]-[A:4]'),
 )
 
 _amine_alcohol_carbamoyl = (
     # alerts
     (),
     # ROH + Ar-NH2
-    ('[C;x1;z1;M:1][O;D1:2]', '[N;D1:3][C;a;M:4]', '[A:2]-C(=O)-[A:3]'),
+    ('[C;x1;z1;M:1][O;D1:2]', '[N;D1:3][C;a;M:4]', '[A:2]-[C:5](=[O:6])-[A:3]'),
     # Alk-NH2
-    ('[C;x1;z1;M:1][O;D1:2]', '[N;D1:3][C;z1;x1;M:4]', '[A:2]-C(=O)-[A:3]'),
+    ('[C;x1;z1;M:1][O;D1:2]', '[N;D1:3][C;z1;x1;M:4]', '[A:2]-[C:5](=[O:6])-[A:3]'),
     # Ar-NH-Ar
-    # ('[C;x1;z1;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;a;M:5]', '[A:2]-C(=O)-[A:3]'),
+    # ('[C;x1;z1;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;a;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
     # Alk-NH-Ar
-    ('[C;x1;z1;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;z1;x1;M:5]', '[A:2]-C(=O)-[A:3]'),
+    ('[C;x1;z1;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;z1;x1;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
     # Alk2NH
-    ('[C;x1;z1;M:1][O;D1:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]', '[A:2]-C(=O)-[A:3]'),
+    ('[C;x1;z1;M:1][O;D1:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
 )
 
 _amine_phenol_carbamoyl = (
     # alerts
     (),
     # ROH + Ar-NH2
-    ('[C;a;M:1][O;D1:2]', '[N;D1:3][C;a;M:4]', '[A:2]-C(=O)-[A:3]'),
+    ('[C;a;M:1][O;D1:2]', '[N;D1:3][C;a;M:4]', '[A:2]-[C:5](=[O:6])-[A:3]'),
     # Alk-NH2
-    ('[C;a;M:1][O;D1:2]', '[N;D1:3][C;z1;x1;M:4]', '[A:2]-C(=O)-[A:3]'),
+    ('[C;a;M:1][O;D1:2]', '[N;D1:3][C;z1;x1;M:4]', '[A:2]-[C:5](=[O:6])-[A:3]'),
     # Ar-NH-Ar
-    # ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;a;M:5]', '[A:2]-C(=O)-[A:3]'),
+    # ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;a;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
     # Alk-NH-Ar
-    ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;z1;x1;M:5]', '[A:2]-C(=O)-[A:3]'),
+    ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;z1;x1;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
     # Alk2NH
-    ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]', '[A:2]-C(=O)-[A:3]'),
+    ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
 )
 
 _amine_carbol_carbamoyl = (
@@ -140,6 +141,7 @@ _sulfonamidation = (
     ('[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D2:6]([C;a;M:7])[C;z1;x1;M:8]', '[A:2]-[A:6]'),
     # Alk2NH
     ('[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D2:6]([C;z1;x1;M:7])[C;z1;x1;M:8]', '[A:2]-[A:6]'),
+    ('[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;a;h1:6]', '[A:2]-[A:6]'),
 )
 
 _amine_isocyanate = (
@@ -212,10 +214,10 @@ def _prepare_reactor(rules, name):
             else:
                 picked_rxn = [rxn_os[x] for x in rules_set]
             for rx in picked_rxn:
-                for r in rx(molecules):
-                    if str(r) in seen:
+                for r in rx(*molecules):
+                    if str(r.products[0]) in seen:
                         continue
-                    seen.add(str(r))
+                    seen.add(str(r.products[0]))
                     yield r
             return
 

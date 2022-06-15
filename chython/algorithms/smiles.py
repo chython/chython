@@ -456,6 +456,7 @@ class QuerySmiles(Smiles):
     def _format_cxsmiles(self: 'QueryContainer', order):
         hybridization = self._hybridizations
         heteroatoms = self._heteroatoms
+        masked = self._masked
         radical = self._radicals
 
         hh = ['atomProp']
@@ -468,6 +469,8 @@ class QuerySmiles(Smiles):
                 hh.append(f'{n}.hyb.{"".join(hybridization_str[x] for x in hb)}')
             if ha := heteroatoms[m]:
                 hh.append(f'{n}.het.{"".join(str(x) for x in ha)}')
+            if masked[m]:
+                hh.append(f'{n}.msk.1')
         if len(hh) > 1:
             cx.append(':'.join(hh))
         if cx:

@@ -25,7 +25,7 @@ from ...periodictable import QueryElement
 
 
 cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
-cx_hh = compile(r'atomProp(:[0-9]+\.(?:hyb|het)\.[0-9]+)+')
+cx_hh = compile(r'atomProp(:[0-9]+\.(?:hyb|het|msk)\.[0-9]+)+')
 hybridization = {'4': 4, '3': 1, '2': 2, '1': 3}
 
 
@@ -42,20 +42,28 @@ def smarts(data: str):
     * A - treats as any element. <A> primitive (aliphatic) ignored.
     * M - treats as any metal..
     * <&> logic operator unsupported.
-    * <;> logic operator is mandatory except for charge, isotope, stereo marks. however preferable.
+    * <;> logic operator is mandatory except (however preferable) for charge, isotope, stereo marks.
     * CXSMARTS radicals supported.
-    * hybridization and heteroatoms count in CXSMARTS atomProp notation as <hyb> and <het> keys supported.
+    * hybridization and heteroatoms count in CXSMARTS atomProp notation coded as <hyb> and <het> keys.
+    * masked atom - `chython.Reactor` specific mark for masking reactant atoms from deletion.
+        Coded in CXSMARTS atomProp as <msk> key with any value.
 
     For example::
 
         [C;r5,r6;a]-;!@[C;h1,h2] |^1:1,atomProp:1.hyb.24:1.het.0| - aromatic C member of 5 or 6 atoms ring
         connected with non-ring single bond to aromatic or SP2 radical C with 1 or 2 hydrogens.
 
+    Alternative hybridization, heteroatoms and masks coding:
+
+    * primitive <xN> - heteroatoms (e.g. x2 - two heteroatoms)
+    * primitive <zN> - hybridization (N = 1 - sp3, 2 - sp2, 3 - sp, 4 - aromatic)
+    * primitive <M> - masked atom
     """
     smr, *cx = data.split()
 
     hyb = {}
     het = {}
+    msk = []
     if cx and cx[0].startswith('|') and cx[0].endswith('|'):
         radicals = [int(x) for x in findall(cx_radicals, cx[0]) for x in x[3:].split(',')]
 
@@ -65,8 +73,10 @@ def smarts(data: str):
                 i = int(i)
                 if h == 'hyb':
                     hyb[i] = [hybridization[x] for x in v]
-                else:
+                elif h == 'het':
                     het[i] = [int(y) for y in v]
+                else:
+                    msk.append(i)
     else:
         radicals = []
 
@@ -78,6 +88,8 @@ def smarts(data: str):
         data['atoms'][i]['hybridization'] = v
     for i, v in het.items():
         data['atoms'][i]['heteroatoms'] = v
+    for i in msk:
+        data['atoms'][i]['masked'] = True
 
     g = QueryContainer()
 

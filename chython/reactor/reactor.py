@@ -22,7 +22,7 @@ from functools import reduce
 from itertools import count, permutations, combinations
 from logging import getLogger, INFO
 from operator import or_
-from typing import Iterable, List, Iterator, Tuple, Union
+from typing import List, Iterator, Tuple, Union
 from .base import BaseReactor
 from .._functions import lazy_product
 from ..containers import QueryContainer, MoleculeContainer, ReactionContainer
@@ -62,21 +62,21 @@ class Reactor(BaseReactor):
             raise TypeError('invalid params')
         elif not all(isinstance(x, (QueryContainer, MoleculeContainer)) for x in products):
             raise TypeError('invalid params')
-        self.__patterns = patterns
-        products_ = reduce(or_, products)
+        self.patterns = patterns
+        self.products = products
 
         self.__one_shot = one_shot
         self.__polymerise_limit = polymerise_limit
         self.__products_atoms = tuple(set(m) for m in products)
         self.__automorphism_filter = automorphism_filter
-        super().__init__({n for x in patterns for n, h in x._masked.items() if not h}, products_, delete_atoms,
-                         fix_aromatic_rings, fix_tautomers)
+        super().__init__({n for x in patterns for n, h in x._masked.items() if not h}, reduce(or_, products),
+                         delete_atoms, fix_aromatic_rings, fix_tautomers)
 
-    def __call__(self, structures: Iterable[MoleculeContainer]):
+    def __call__(self, *structures: MoleculeContainer):
         if any(not isinstance(structure, MoleculeContainer) for structure in structures):
             raise TypeError('only list of Molecules possible')
 
-        len_patterns = len(self.__patterns)
+        len_patterns = len(self.patterns)
         structures = fix_mapping_overlap(structures)
         s_nums = set(range(len(structures)))
         if self.__one_shot:
@@ -84,7 +84,9 @@ class Reactor(BaseReactor):
                 ignored = [structures[x] for x in s_nums.difference(chosen)]
                 chosen = [structures[x] for x in chosen]
                 for new in self.__single_stage(chosen, {x for x in ignored for x in x}):
-                    r = ReactionContainer([x.copy() for x in structures], new + [x.copy() for x in ignored])
+                    # store reacted molecules in same order as matched pattern
+                    r = ReactionContainer([x.copy() for x in chosen] + [x.copy() for x in ignored],
+                                          new + [x.copy() for x in ignored])
                     if len(new) > 1:  # try to keep salts
                         r.contract_ions()
                     yield r
@@ -128,7 +130,7 @@ class Reactor(BaseReactor):
         united_chosen = reduce(or_, chosen)
         split = len(self.__products_atoms) > 1
         for match in lazy_product(*(x.get_mapping(y, automorphism_filter=self.__automorphism_filter) for x, y in
-                                    zip(self.__patterns, chosen))):
+                                    zip(self.patterns, chosen))):
             mapping = match[0].copy()
             for m in match[1:]:
                 mapping.update(m)

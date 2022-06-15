@@ -211,6 +211,125 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QuerySmiles):
         u._masked.update(other._masked)
         return u
 
+    def remap(self, mapping: Dict[int, int], *, copy=False) -> 'QueryContainer':
+        """
+        Change atom numbers.
+
+        :param copy: keep original graph.
+        """
+        if len(mapping) != len(set(mapping.values())) or \
+                not (self._atoms.keys() - mapping.keys()).isdisjoint(mapping.values()):
+            raise ValueError('mapping overlap')
+
+        mg = mapping.get
+        charges = self._charges
+        radicals = self._radicals
+        hydrogens = self._hydrogens
+        neighbors = self._neighbors
+        hybridizations = self._hybridizations
+        heteroatoms = self._heteroatoms
+        rings_sizes = self._rings_sizes
+        masked = self._masked
+
+        if copy:
+            h = self.__class__()
+            ha = h._atoms
+            hb = h._bonds
+            hc = h._charges
+            hr = h._radicals
+            hhg = h._hydrogens
+            hn = h._neighbors
+            hh = h._hybridizations
+            hx = h._heteroatoms
+            hrs = h._rings_sizes
+            hm = h._masked
+            has = h._atoms_stereo
+            hal = h._allenes_stereo
+            hcs = h._cis_trans_stereo
+
+            for n, atom in self._atoms.items():
+                m = mg(n, n)
+                atom = atom.copy()
+                ha[m] = atom
+                atom._attach_graph(h, m)
+
+            # deep copy of bonds
+            for n, m_bond in self._bonds.items():
+                n = mg(n, n)
+                hb[n] = hbn = {}
+                for m, bond in m_bond.items():
+                    m = mg(m, m)
+                    if m in hb:  # bond partially exists. need back-connection.
+                        hbn[m] = hb[m][n]
+                    else:
+                        hbn[m] = bond.copy()
+        else:
+            ha = {}
+            hb = {}
+            hc = {}
+            hr = {}
+            hhg = {}
+            hn = {}
+            hh = {}
+            hx = {}
+            hrs = {}
+            hm = {}
+            has = {}
+            hal = {}
+            hcs = {}
+
+            for n, atom in self._atoms.items():
+                m = mg(n, n)
+                ha[m] = atom
+                atom._change_map(m)  # change mapping number
+
+            for n, m_bond in self._bonds.items():
+                n = mg(n, n)
+                hb[n] = hbn = {}
+                for m, bond in m_bond.items():
+                    m = mg(m, m)
+                    if m in hb:  # bond partially exists. need back-connection.
+                        hbn[m] = hb[m][n]
+                    else:
+                        hbn[m] = bond
+
+        for n in self._atoms:
+            m = mg(n, n)
+            hc[m] = charges[n]
+            hr[m] = radicals[n]
+            hhg[m] = hydrogens[n]
+            hn[m] = neighbors[n]
+            hh[m] = hybridizations[n]
+            hx[m] = heteroatoms[n]
+            hrs[m] = rings_sizes[n]
+            hm[m] = masked[n]
+
+        for n, stereo in self._atoms_stereo.items():
+            has[mg(n, n)] = stereo
+        for n, stereo in self._allenes_stereo.items():
+            hal[mg(n, n)] = stereo
+        for (n, m), stereo in self._cis_trans_stereo.items():
+            hcs[(mg(n, n), mg(m, m))] = stereo
+
+        if copy:
+            return h
+
+        self._atoms = ha
+        self._bonds = hb
+        self._charges = hc
+        self._radicals = hr
+        self._hydrogens = hhg
+        self._neighbors = hn
+        self._hybridizations = hh
+        self._heteroatoms = hx
+        self._rings_sizes = hrs
+        self._masked = hm
+        self._atoms_stereo = has
+        self._allenes_stereo = hal
+        self._cis_trans_stereo = hcs
+        self.flush_cache()
+        return self
+
     def get_mapping(self, other: Union['QueryContainer', 'molecule.MoleculeContainer'], /, *, _cython=True, **kwargs):
         # _cython - by default cython implementation enabled.
         # disable it by overriding method if Query Atoms or Containers logic changed.
