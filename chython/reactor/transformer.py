@@ -42,7 +42,8 @@ class Transformer(BaseReactor):
         if not isinstance(pattern, QueryContainer) or not isinstance(replacement, (MoleculeContainer, QueryContainer)):
             raise TypeError('invalid params')
 
-        self.__pattern = pattern
+        self.pattern = pattern
+        self.replacement = replacement
         self.__automorphism_filter = automorphism_filter
         super().__init__({n for n, h in pattern._masked.items() if not h}, replacement, delete_atoms,
                          fix_aromatic_rings, fix_tautomers)
@@ -51,7 +52,7 @@ class Transformer(BaseReactor):
         if not isinstance(structure, MoleculeContainer):
             raise TypeError('only Molecules possible')
 
-        for mapping in self.__pattern.get_mapping(structure, automorphism_filter=self.__automorphism_filter):
+        for mapping in self.pattern.get_mapping(structure, automorphism_filter=self.__automorphism_filter):
             yield self._patcher(structure, mapping)
 
 

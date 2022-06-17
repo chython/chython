@@ -22,10 +22,26 @@ from .functional_groups import *
 from .grid import *
 from .retro import *
 from .svg import *
+from ..containers.graph import Graph
+
+
+def patch_pandas():
+    """
+    Fix pandas molecules representation.
+    """
+    from pandas.io.formats import printing
+    from pandas.io.formats.printing import is_sequence
+
+    def w(obj):
+        if isinstance(obj, Graph):
+            return False
+        return is_sequence(obj)
+
+    printing.is_sequence = w
 
 
 __all__ = ['functional_groups', 'fw_prepare_groups', 'fw_decomposition_tree',
-           'grid_depict', 'GridDepict', 'retro_depict', 'RetroDepict', 'svg2png']
+           'grid_depict', 'GridDepict', 'retro_depict', 'RetroDepict', 'svg2png', 'patch_pandas']
 
 
 if find_spec('rdkit'):

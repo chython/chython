@@ -72,13 +72,6 @@ _amine_phenol_carbamoyl = (
     ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
 )
 
-_amine_carbol_carbamoyl = (
-    # alerts
-    _amine_alcohol_carbamoyl[0] + _amine_phenol_carbamoyl[0],
-    *_amine_alcohol_carbamoyl[1:],
-    *_amine_phenol_carbamoyl[1:]
-)
-
 _amine_carbonyl_reductive_amination = (
     # alerts
     (),
@@ -168,6 +161,13 @@ _sonogashira = (
     ('[C;x1;z2:1]-[Cl,Br,I;D1:2]', '[C;D1:3]#[C;D2;M:4]', '[A:1]-[A:3]'),
     # R-C(=O)-Hal
     ('[C;x2:1](=[O;M:2])-[Cl,Br,I;D1:3]', '[C;D1:4]#[C;D2;M:5]', '[A:1]-[A:4]'),
+)
+
+_cross_electrophile = (
+    # alerts
+    (),
+    # Ar-Hal + Alk-Hal
+    ('[C;a:1]-[Cl,Br,I;D1:2]', '[C;z1;x1:3]-[Cl,Br,I;D1:4]', '[A:1]-[A:3]'),
 )
 
 #################

@@ -33,7 +33,7 @@ pickle_cache = False  # store cached attributes in pickle
 torch_device = 'cpu'  # AAM model device. Change before first `reset_mapping` call!
 
 
-__all__ = ['depict_settings', 'smiles', 'xyz', 'mdl_mol', 'smarts']
+__all__ = ['depict_settings', 'smiles', 'xyz', 'mdl_mol', 'smarts', 'patch_pandas']
 
 if 'INCHIRead' in locals():
     inchi = INCHIRead.create_parser()
