@@ -53,6 +53,7 @@ class Salts:
     def remove_acids(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List[int]]:
         """
         Remove common acids from organic bases salts.
+        Works only for neutral pairs like HA+B. Use `neutralize` before.
 
         :param logging: return deleted atoms list.
         """

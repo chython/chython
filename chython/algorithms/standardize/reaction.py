@@ -19,6 +19,7 @@
 #
 from collections import defaultdict
 from typing import List, Tuple, TYPE_CHECKING, Union
+from ._reagents import *
 from ...exceptions import MappingError
 
 
@@ -198,13 +199,81 @@ class StandardizeReaction:
             self.flush_cache()
         return total
 
-    def remove_reagents(self: 'ReactionContainer', *, keep_reagents: bool = False) -> bool:
+    def remove_reagents(self, *, keep_reagents: bool = False, mapping: bool = True) -> bool:
         """
-        Preprocess reaction according to mapping, using the following idea: molecules(each separated graph) will be
-        placed to reagents if it is not changed in the reaction (no bonds, charges reorders)
+        Place molecules, except reactants, to reagents list. Reagents - molecules which atoms not presented in products.
+        Mapping based approach remove molecules without reaction center.
+        Rule based approach remove equal molecules in reactants and products, and predefined reactants.
+
+        :param mapping: use atom-to-atom mapping to detect reagents, otherwise use predefined list of common reagents.
+        :param keep_reagents: delete reagents if False
 
         Return True if any reagent found.
         """
+        if mapping:
+            return self.__remove_reagents_mapping(keep_reagents)
+        return self.__remove_reagents_rules(keep_reagents)
+
+    def __remove_reagents_rules(self: 'ReactionContainer', keep_reagents):
+        if not self.reactants or not self.products:  # there is no reaction
+            return False
+
+        reactants_st1 = []
+        products_st1 = []
+        reagents_st1 = set(self.reagents)
+
+        # find the same molecules in reactants and products
+        for m in self.reactants:
+            if m in self.products:
+                reagents_st1.add(m)
+            else:
+                reactants_st1.append(m)
+        for m in self.products:
+            if m in self.reactants:
+                reagents_st1.add(m)
+            else:
+                products_st1.append(m)
+        if not reactants_st1 or not products_st1:
+            return False  # keep bad reaction as is
+
+        reactants_st2 = []
+        products_st2 = []
+        reagents_st2 = reagents_st1.copy()
+
+        # filter out predefined reagents
+        for m in reactants_st1:
+            if m in reagents_set:
+                reagents_st2.add(m)
+            else:
+                reactants_st2.append(m)
+        for m in products_st1:
+            if m in reagents_set:
+                reagents_st2.add(m)
+            else:
+                products_st2.append(m)
+        if not reactants_st2 or not products_st2:  # reaction contains only simple molecules. roll-back to step 1
+            reactants_st2 = reactants_st1
+            products_st2 = products_st1
+            reagents_st2 = reagents_st1
+
+        if keep_reagents:
+            tmp = []
+            for m in self.reagents:
+                if m in reagents_st2:
+                    tmp.append(m)
+                    reagents_st2.discard(m)
+            tmp.extend(reagents_st2)
+            reagents = tuple(tmp)
+        else:
+            reagents = ()
+        self._ReactionContainer__reactants = tuple(reactants_st2)
+        self._ReactionContainer__products = tuple(products_st2)
+        self._ReactionContainer__reagents = reagents
+        self.flush_cache()
+        self.fix_positions()
+        return True
+
+    def __remove_reagents_mapping(self: 'ReactionContainer', keep_reagents):
         cgr = ~self
         if cgr.center_atoms:
             active = set(cgr.center_atoms)
@@ -232,8 +301,7 @@ class StandardizeReaction:
             else:
                 reagents = ()
 
-            if len(reactants) != len(self.reactants) or len(products) != len(self.products) or \
-                    len(reagents) != len(self.reagents):
+            if len(reactants) != len(self.reactants) or len(products) != len(self.products):
                 self._ReactionContainer__reactants = tuple(reactants)
                 self._ReactionContainer__products = tuple(products)
                 self._ReactionContainer__reagents = reagents
