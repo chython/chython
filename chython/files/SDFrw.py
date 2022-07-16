@@ -25,7 +25,7 @@ from traceback import format_exc
 from typing import Optional
 from ._mdl import MDLRead, MDLWrite, MOLRead, EMOLRead, EMDLWrite, MDLStereo
 from ..containers import MoleculeContainer
-from ..exceptions import EmptyMolecule, ParseError
+from ..exceptions import EmptyMolecule, EmptyV2000, ParseError
 
 
 head = compile(r'>\s.*<(.*)>')
@@ -36,7 +36,7 @@ class FallBack:
         return line.startswith(('M  END', 'M  V30 END CTAB'))
 
     def getvalue(self):
-        return {'atoms': [{'element': '!', 'mapping': 0}], 'meta': {}}  # ad-hoc for raising ValueError
+        return {'atoms': [], 'meta': {}}  # ad-hoc for raising ValueError
 
 
 class SDFRead(MDLRead):
@@ -141,21 +141,30 @@ class SDFRead(MDLRead):
                     if parser(line):
                         record = parser.getvalue()
                         parser = None
+                except EmptyV2000:  # ad-hoc
+                    self._info('empty v2000 in v3000 parser')
+                    parser = None
+                    if self._store_log:
+                        record = {'atoms': [], 'meta': {}}
+                        continue
                 except ValueError:
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
                     if self._store_log:  # mol block broken. try to collect metadata
                         parser = FallBack()
                         continue
                     parser = None
-                    seek = yield ParseError(count, pos, self._format_log(), None)
-                    if seek is not None:  # seeked to start of mol block
-                        yield
-                        count = seek
-                        pos = file.tell()
-                        im = 3
-                        self.__already_seeked = False
-                    else:
-                        failkey = True
+                else:
+                    continue
+                # exceptions
+                seek = yield ParseError(count, pos, self._format_log(), None)
+                if seek is not None:  # seeked to start of mol block
+                    yield
+                    count = seek
+                    pos = file.tell()
+                    im = 3
+                    self.__already_seeked = False
+                else:
+                    failkey = True
             elif line.startswith("$$$$"):
                 if record:
                     record['meta'].update(self._prepare_meta(meta))
@@ -195,7 +204,7 @@ class SDFRead(MDLRead):
                 if im == 3:  # parse mol title
                     title = line.strip()
                 im -= 1
-            elif not im:
+            else:
                 try:
                     if 'V2000' in line:
                         try:

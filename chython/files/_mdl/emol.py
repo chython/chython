@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from ...exceptions import EmptyMolecule
+from ...exceptions import EmptyMolecule, EmptyV2000
 
 
 class EMOLRead:
@@ -63,7 +63,7 @@ class EMOLRead:
                 elif self.__parser:
                     collected = self.__record_collector(line)
                     if collected:
-                        self.__parser(collected)
+                        self.__parser(collected)  # noqa
 
                 elif line.startswith('M  V30 BEGIN ATOM'):
                     self.__parser = self.__atom_parser
@@ -91,6 +91,8 @@ class EMOLRead:
 
         elif self.__in_mol is not None:
             raise SyntaxError('invalid usage')
+        elif line.startswith('M  END'):  # ad-hoc for empy V2000
+            raise EmptyV2000
         elif not line.startswith('M  V30 BEGIN CTAB'):
             raise ValueError('invalid CTAB')
         else:

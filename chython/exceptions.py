@@ -120,3 +120,7 @@ class ParseError(ValueError):
         self.position = position
         self.log = log
         self.meta = meta
+
+
+class EmptyV2000(ValueError):
+    """Empty V2000 in EMol parser"""
