@@ -201,6 +201,8 @@ class EMOLRead:
             self.__star_points.append(n)
             self.__atoms_count -= 1
             return
+        elif a == 'R#':
+            raise ValueError('R-groups not supported')
 
         i = None
         c = 0
@@ -230,7 +232,7 @@ class EMOLRead:
             for kv in kvs:
                 k, v = kv.split('=', 1)
                 if k == 'ATOMS':
-                    a = tuple(self.__atom_map[x] for x in v[1:-1].split()[1:])
+                    a = tuple(self.__atom_map[x] for x in v[1:-1].split()[1:] if x not in self.__star_points)
                 elif k == 'FIELDNAME':
                     f = v.strip('"')
                 if k == 'FIELDDATA':
