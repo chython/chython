@@ -25,10 +25,19 @@ from .svg import *
 from ..containers.graph import Graph
 
 
+_patched = False
+
+
 def patch_pandas():
     """
     Fix pandas molecules representation.
     """
+    # prevent recursive patching
+    global _patched
+    if _patched:
+        return
+    _patched = True
+
     from pandas.io.formats import printing
     from pandas.io.formats.printing import is_sequence
 
