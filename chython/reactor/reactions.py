@@ -187,7 +187,7 @@ def _prepare_reactor(rules, name):
     def w(*molecules, one_shot=False, rules_set: Optional[List[int]] = None,
           alerts_set: Optional[List[int]] = None) -> Iterator[ReactionContainer]:
         """
-        Generate reactions with given reactants.
+        Generate reactions for given reactants.
 
         Rules:
 
@@ -202,6 +202,8 @@ def _prepare_reactor(rules, name):
         :param rules_set: Select only specific rules.
         :param alerts_set: Check only specific structural alerts of reactants. Pass empty list to disable any checks.
         """
+        if not molecules:
+            raise ValueError('empty molecule list')
         alerts_set = alerts if alerts_set is None else [alerts[x] for x in alerts_set]
         if any(a < m for a, m in product(alerts_set, molecules)):
             return
@@ -210,37 +212,40 @@ def _prepare_reactor(rules, name):
         seen = set()
         if one_shot:
             if rules_set is None:
-                picked_rxn = rxn_os
+                picked_rxn = enumerate(rxn_os)
             else:
-                picked_rxn = [rxn_os[x] for x in rules_set]
-            for rx in picked_rxn:
+                picked_rxn = [(x, rxn_os[x]) for x in rules_set]
+            for i, rx in picked_rxn:
                 for r in rx(*molecules):
-                    if str(r.products[0]) in seen:
+                    if (s := str(r.products[0])) in seen:
                         continue
-                    seen.add(str(r.products[0]))
+                    seen.add(s)
+                    r.meta['MATCHED_RULE'] = i
                     yield r
             return
 
         if rules_set is None:
-            picked_rxn = rxn
+            picked_rxn = list(enumerate(rxn))
         else:
-            picked_rxn = [rxn[x] for x in rules_set]
+            picked_rxn = [(x, rxn[x]) for x in rules_set]
 
         stack = deque([])
-        for n, r in enumerate(picked_rxn):
+        for i, r in enumerate(picked_rxn):
             x = picked_rxn.copy()
-            del x[n]
+            del x[i]
             stack.appendleft((r, molecules, x))
 
         while stack:
-            rx, rct, nxt_rxn = stack.pop()
-            for r in rx(rct):
+            (i, rx), rct, nxt_rxn = stack.pop()
+            for r in rx(*rct):
                 p = r.products[0].copy()
                 if str(p) in seen:
                     continue
                 seen.add(str(p))
 
-                yield ReactionContainer([x.copy() for x in molecules], r.products)
+                r = ReactionContainer([x.copy() for x in molecules], r.products)
+                r.meta['MATCHED_RULE'] = i
+                yield r
 
                 x = molecules.copy()
                 x.insert(0, p)
