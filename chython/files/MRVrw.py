@@ -378,8 +378,8 @@ class MRVWrite:
                     buffer.append(f'<property title="{k}"><scalar>{v}</scalar></property>')
                 buffer.append('</propertyList>')
             c = count(1)
-            for i, j in ((data.reactants, 'reactantList'), (data.products, 'productList'),
-                         (data.reagents, 'agentList')):
+            for i, j in ((data.reactants, 'reactantList'), (data.reagents, 'agentList'),
+                         (data.products, 'productList')):
                 if not i:
                     continue
                 buffer.append(f'<{j}>')
