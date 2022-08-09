@@ -8,7 +8,7 @@
     "build": "webpack && mv dist/clean2d.js ../chython/algorithms/calculate2d"
   },
   "dependencies": {
-    "smiles-drawer": "^1.2.0"
+    "smiles-drawer": "^2.0.1"
   },
   "keywords": [],
   "author": "",

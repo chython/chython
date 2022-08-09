@@ -1,14 +1,10 @@
-const { Parser, Drawer } = require('smiles-drawer');
-
-const options = {
-      debug: false,
-      atomVisualization: 'default'
-    };
-const drawer = new Drawer(options);
+import DrawerBase from 'smiles-drawer/src/DrawerBase';
+import Parser from 'smiles-drawer/src/Parser';
 
 
 function clean2d(smiles) {
-    let parsed = Parser.parse(smiles);
+    const drawer = new DrawerBase({});
+    const parsed = Parser.parse(smiles);
     drawer.initDraw(parsed, 'light', false);
     drawer.processGraph();
 
