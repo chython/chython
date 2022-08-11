@@ -209,7 +209,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
     @cached_property
     def brutto(self) -> Dict[str, int]:
         """Counted atoms dict"""
-        return Counter(x.atomic_symbol for x in self._atoms.values())
+        c = Counter(x.atomic_symbol for x in self._atoms.values())
+        c['H'] += sum(self._hydrogens.values())
+        return dict(c)
 
     @cached_property
     def aromatic_rings(self) -> Tuple[Tuple[int, ...], ...]:
