@@ -113,9 +113,11 @@ def from_rdkit_molecule(data):
     return mol
 
 
-def to_rdkit_molecule(data: MoleculeContainer):
+def to_rdkit_molecule(data: MoleculeContainer, *, keep_mapping=True):
     """
     MoleculeContainer to RDKit molecule object converter.
+
+    :param keep_mapping: set atom numbers.
 
     Note: implicit hydrogens data omitted.
     """
@@ -125,7 +127,8 @@ def to_rdkit_molecule(data: MoleculeContainer):
 
     for n, a in data.atoms():
         ra = Atom(a.atomic_number)
-        ra.SetAtomMapNum(n)
+        if keep_mapping:
+            ra.SetAtomMapNum(n)
         if a.charge:
             ra.SetFormalCharge(a.charge)
         if a.isotope:
