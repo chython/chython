@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 class StandardizeReaction:
     __slots__ = ()
 
-    def canonicalize(self: 'ReactionContainer', fix_mapping: bool = True, *, logging=False) -> \
+    def canonicalize(self: 'ReactionContainer', *, fix_mapping: bool = True, logging=False, fix_tautomers=True) -> \
             Union[bool, List[Tuple[int, Tuple[int, ...], int, str]]]:
         """
         Convert molecules to canonical forms of functional groups and aromatic rings without explicit hydrogens.
@@ -38,11 +38,12 @@ class StandardizeReaction:
 
         :param fix_mapping: Search AAM errors of functional groups.
         :param logging: return log from molecules with index of molecule.
-            Otherwise return True if these groups found in any molecule.
+            Otherwise, return True if these groups found in any molecule.
+        :param fix_tautomers: convert tautomers to canonical forms.
         """
         total = []
         for n, m in enumerate(self.molecules()):
-            total.extend((n, *x) for x in m.canonicalize(logging=True))
+            total.extend((n, *x) for x in m.canonicalize(logging=True, fix_tautomers=fix_tautomers))
 
         if fix_mapping:
             total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
@@ -53,7 +54,7 @@ class StandardizeReaction:
             return total
         return bool(total)
 
-    def standardize(self: 'ReactionContainer', fix_mapping: bool = True, *, logging=False) -> \
+    def standardize(self: 'ReactionContainer', *, fix_mapping: bool = True, logging=False, fix_tautomers=True) -> \
             Union[bool, List[Tuple[int, Tuple[int, ...], int, str]]]:
         """
         Fix functional groups representation.
@@ -63,11 +64,12 @@ class StandardizeReaction:
 
         :param fix_mapping: Search AAM errors of functional groups.
         :param logging: return log from molecules with index of molecule.
-            Otherwise return True if these groups found in any molecule.
+            Otherwise, return True if these groups found in any molecule.
+        :param fix_tautomers: convert tautomers to canonical forms.
         """
         total = []
         for n, m in enumerate(self.molecules()):
-            total.extend((n, *x) for x in m.standardize(logging=True))
+            total.extend((n, *x) for x in m.standardize(logging=True, fix_tautomers=fix_tautomers))
 
         if fix_mapping:
             total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
@@ -78,27 +80,31 @@ class StandardizeReaction:
             return total
         return bool(total)
 
-    def thiele(self: 'ReactionContainer') -> bool:
+    def thiele(self: 'ReactionContainer', *, fix_tautomers=True) -> bool:
         """
         Convert structures to aromatic form.
         Return True if in any molecule found kekule ring
+
+        :param fix_tautomers: convert tautomers to canonical forms.
         """
         total = False
         for m in self.molecules():
-            if m.thiele() and not total:
+            if m.thiele(fix_tautomers=fix_tautomers) and not total:
                 total = True
         if total:
             self.flush_cache()
         return total
 
-    def kekule(self: 'ReactionContainer') -> bool:
+    def kekule(self: 'ReactionContainer', *, buffer_size=7) -> bool:
         """
         Convert structures to kekule form.
         Return True if in any molecule found aromatic ring
+
+        :param buffer_size: number of attempts of pyridine form searching.
         """
         total = False
         for m in self.molecules():
-            if m.kekule() and not total:
+            if m.kekule(buffer_size=buffer_size) and not total:
                 total = True
         if total:
             self.flush_cache()
