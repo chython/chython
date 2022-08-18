@@ -17,9 +17,10 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from itertools import count
+from traceback import format_exc
 from ...containers import MoleculeContainer, ReactionContainer
 from ...containers.bonds import Bond
-from ...exceptions import AtomNotFound, MappingError
+from ...exceptions import AtomNotFound, MappingError, ParseReactionError
 from ...periodictable import Element
 
 
@@ -107,15 +108,26 @@ class Parser:
                         maps[i] = tmp = [x if x < j else x - 1 for x in tmp]
 
         rc = {'reactants': [], 'products': [], 'reagents': []}
+        error = data.get('errors', False)
         for i, tmp in maps.items():
             shift = 0
             for j in data[i]:
                 atom_len = len(j['atoms'])
                 remapped = {x: y for x, y in enumerate(tmp[shift: atom_len + shift])}
                 shift += atom_len
-                g = self._create_molecule(j, remapped)
-                g.meta.update(j['meta'])
-                rc[i].append(g)
+                try:
+                    g = self._create_molecule(j, remapped)
+                except ValueError:
+                    if not self._ignore:
+                        raise
+                    self._info('Found bad molecule in reaction')
+                    self._info(format_exc())
+                    error = True  # catch error
+                else:
+                    g.meta.update(j['meta'])
+                    rc[i].append(g)
+        if error:
+            raise ParseReactionError(ReactionContainer(name=data.get('title'), **rc))
         if self._store_log:
             if log := self._format_log():
                 data['meta']['ParserLog'] = log
@@ -188,7 +200,7 @@ class Parser:
             conformers = []
         g.__setstate__(
                 {'atoms': atoms, 'bonds': bonds, 'meta': data['meta'], 'plane': plane, 'parsed_mapping': pm,
-                 'charges': charges, 'radicals': radicals, 'name': data.get('title', ''), 'conformers': conformers,
+                 'charges': charges, 'radicals': radicals, 'name': data.get('title'), 'conformers': conformers,
                  'atoms_stereo': {}, 'allenes_stereo': {}, 'cis_trans_stereo': {}, 'hydrogens': {}})
         if not _skip_calc_implicit:
             for n in atoms:

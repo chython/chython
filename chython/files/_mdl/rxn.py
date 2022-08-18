@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from traceback import format_exc
 from .mol import MOLRead
 from ...exceptions import EmptyMolecule
 
@@ -61,10 +62,15 @@ class RXNRead:
         else:
             try:
                 self.__parser = MOLRead(line, self.__log_buffer)
-            except EmptyMolecule:
+            except ValueError as e:
                 if not self.__ignore:
                     raise
-                self.__log_buffer.append('empty molecule ignored')
+                if not isinstance(e, EmptyMolecule):
+                    self.__errors = True
+                    self.__log_buffer.append(format_exc())
+                    self.__log_buffer.append('bad molecule ignored')
+                else:
+                    self.__log_buffer.append('empty molecule ignored')
                 if len(self.__molecules) < self.__reactants_count:
                     self.__reactants_count -= 1
                     self.__products_count -= 1
@@ -84,11 +90,11 @@ class RXNRead:
             return {'reactants': self.__molecules[:self.__reactants_count],
                     'products': self.__molecules[self.__reactants_count:self.__products_count],
                     'reagents': self.__molecules[self.__products_count:self.__reagents_count],
-                    'meta': {}}
+                    'meta': {}, 'errors': self.__errors}
         raise ValueError('reaction not complete')
 
     __parser = None
-    __empty_skip = __rend = False
+    __empty_skip = __rend = __errors = False
     __im = 4
 
 

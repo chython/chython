@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from traceback import format_exc
 from .emol import EMOLRead
 from ...exceptions import EmptyMolecule
 
@@ -43,14 +44,19 @@ class ERXNRead:
         elif self.__in_mol:
             try:
                 x = self.__parser(line)
-            except EmptyMolecule:
+            except ValueError as e:
                 if not self.__ignore:
                     raise
+                if not isinstance(e, EmptyMolecule):
+                    self.__errors = True
+                    self.__log_buffer.append(format_exc())
+                    self.__log_buffer.append('bad molecule ignored')
+                else:
+                    self.__log_buffer.append('empty molecule ignored')
                 self.__empty_skip = True
                 self.__in_mol -= 1
                 if self.__in_mol:
                     self.__parser = EMOLRead(self.__ignore, self.__log_buffer)
-                self.__log_buffer.append('empty molecule ignored')
             else:
                 if x:
                     x = self.__parser.getvalue()
@@ -89,11 +95,12 @@ class ERXNRead:
 
     def getvalue(self):
         if self.__rend:
-            return {'reactants': self.__reactants, 'products': self.__products, 'reagents': self.__reagents, 'meta': {}}
+            return {'reactants': self.__reactants, 'products': self.__products, 'reagents': self.__reagents, 'meta': {},
+                    'errors': self.__errors}
         raise ValueError('reaction not complete')
 
     __parser_group = __parser = None
-    __rend = __empty_skip = False
+    __rend = __empty_skip = __errors = False
     __in_mol = 0
 
 

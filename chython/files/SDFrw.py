@@ -36,7 +36,7 @@ class FallBack:
         return line.startswith(('M  END', 'M  V30 END CTAB'))
 
     def getvalue(self):
-        return {'atoms': [], 'meta': {}}  # ad-hoc for raising ValueError
+        return {'meta': {}}  # ad-hoc for raising ValueError
 
 
 class SDFRead(MDLRead):
@@ -145,7 +145,7 @@ class SDFRead(MDLRead):
                     self._info('empty v2000 in v3000 parser')
                     parser = None
                     if self._store_log:
-                        record = {'atoms': [], 'meta': {}}
+                        record = {'meta': {}}  # fall-back ad-hoc
                         continue
                 except ValueError:
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
@@ -170,13 +170,16 @@ class SDFRead(MDLRead):
                     record['meta'].update(self._prepare_meta(meta))
                     if title:
                         record['title'] = title
-                    try:
-                        container = self._convert_molecule(record)
-                    except ValueError:
-                        self._info(f'record consist errors:\n{format_exc()}')
+                    if 'atoms' not in record:  # fall-back ad-hoc
                         seek = yield ParseError(count, pos, self._format_log(), record['meta'])
                     else:
-                        seek = yield container
+                        try:
+                            container = self._convert_molecule(record)
+                        except ValueError:
+                            self._info(f'record consist errors:\n{format_exc()}')
+                            seek = yield ParseError(count, pos, self._format_log(), record['meta'])
+                        else:
+                            seek = yield container
                     if seek is not None:  # seeked position
                         yield
                         count = seek - 1
@@ -238,13 +241,16 @@ class SDFRead(MDLRead):
             record['meta'].update(self._prepare_meta(meta))
             if title:
                 record['title'] = title
-            try:
-                container = self._convert_molecule(record)
-            except ValueError:
-                self._info(f'record consist errors:\n{format_exc()}')
+            if 'atoms' not in record:  # fall-back ad-hoc
                 yield ParseError(count, pos, self._format_log(), record['meta'])
             else:
-                yield container
+                try:
+                    container = self._convert_molecule(record)
+                except ValueError:
+                    self._info(f'record consist errors:\n{format_exc()}')
+                    yield ParseError(count, pos, self._format_log(), record['meta'])
+                else:
+                    yield container
 
     __already_seeked = False
 

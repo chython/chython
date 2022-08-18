@@ -112,15 +112,23 @@ class ParseError(ValueError):
     """
     File parsing error
     """
-    __slots__ = ('number', 'position', 'log', 'meta')
+    __slots__ = ('number', 'position', 'log', 'meta', 'structure')
 
-    def __init__(self, number, position, log, meta):
+    def __init__(self, number, position, log, meta, structure=None):
         super().__init__()
         self.number = number
         self.position = position
         self.log = log
         self.meta = meta
+        self.structure = structure
 
 
 class EmptyV2000(ValueError):
     """Empty V2000 in EMol parser"""
+
+
+class ParseReactionError(ValueError):
+    __slots__ = ('structure',)
+
+    def __init__(self, structure):
+        self.structure = structure

@@ -27,7 +27,7 @@ from traceback import format_exc
 from typing import Union
 from ._mdl import MDLRead, MDLWrite, MOLRead, EMOLRead, RXNRead, ERXNRead, EMDLWrite
 from ..containers import ReactionContainer, MoleculeContainer
-from ..exceptions import ParseError
+from ..exceptions import ParseError, ParseReactionError
 
 
 class FallBack:
@@ -41,7 +41,7 @@ class FallBack:
         # ad-hocs for raising ValueError
         if self.is_reaction:
             return {'reactants': None, 'products': None, 'reagents': None, 'meta': {}}
-        return {'atoms': [{'element': '!', 'mapping': 0}], 'meta': {}}
+        return {'meta': {}}
 
 
 class RDFRead(MDLRead):
@@ -188,8 +188,12 @@ class RDFRead(MDLRead):
                     try:
                         if is_reaction:
                             container = self._convert_reaction(record)
+                        elif 'atoms' not in record:  # mol fall-back ad-hoc
+                            container = ParseError(count, pos, self._format_log(), record['meta'])
                         else:
                             container = self._convert_molecule(record)
+                    except ParseReactionError as e:  # ad-hoc for logging partially parsed reactions
+                        seek = yield ParseError(count, pos, self._format_log(), record['meta'], e.structure)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
                         seek = yield ParseError(count, pos, self._format_log(), record['meta'])
@@ -219,8 +223,12 @@ class RDFRead(MDLRead):
                     try:
                         if is_reaction:
                             container = self._convert_reaction(record)
+                        elif 'atoms' not in record:  # mol fall-back ad-hoc
+                            container = ParseError(count, pos, self._format_log(), record['meta'])
                         else:
                             container = self._convert_molecule(record)
+                    except ParseReactionError as e:  # ad-hoc for logging partially parsed reactions
+                        seek = yield ParseError(count, pos, self._format_log(), record['meta'], e.structure)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
                         seek = yield ParseError(count, pos, self._format_log(), record['meta'])
@@ -286,8 +294,12 @@ class RDFRead(MDLRead):
             try:
                 if is_reaction:
                     container = self._convert_reaction(record)
+                elif 'atoms' not in record:  # mol fall-back ad-hoc
+                    container = ParseError(count, pos, self._format_log(), record['meta'])
                 else:
                     container = self._convert_molecule(record)
+            except ParseReactionError as e:  # ad-hoc for logging partially parsed reactions
+                yield ParseError(count, pos, self._format_log(), record['meta'], e.structure)
             except ValueError:
                 self._info(f'record consist errors:\n{format_exc()}')
                 yield ParseError(count, pos, self._format_log(), record['meta'])
