@@ -108,26 +108,32 @@ class Thiele:
                 except StopIteration:  # exotic, just skip
                     continue
                 an = atoms[n].atomic_number
-                if lr == 7 and an != 5:  # skip electron-rich 7-membered rings
+                if lr == 7:  # skip electron-rich 7-membered rings
+                    if an != 5:
+                        continue
+                elif (c := charges[n]) == -1:
+                    if an != 6 or lr != 5:  # ferrocene, etc.
+                        continue
+                elif c:  # skip charged
                     continue
-                elif an in (5, 7, 8, 15, 16, 34) and not charges[n]:
-                    if fix_tautomers and lr == 6 and an == 7 and len(bonds[n]) == 2:
+                elif an in (8, 16, 34):  # O, S, Se
+                    if len(bonds[n]) != 2:  # like CS1(C)C=CC=C1
+                        continue
+                elif an == 7:
+                    if (b := len(bonds[n])) > 3:
+                        continue
+                    elif fix_tautomers and lr == 6 and b == 2:
                         donors.append(n)
-                    pyrroles.add(n)
-                    n, *_, m = ring
+                elif an in (5, 15) and len(bonds[n]) > 3:
+                    continue
+
+                pyrroles.add(n)
+                n, *_, m = ring
+                rings[n].add(m)
+                rings[m].add(n)
+                for n, m in zip(ring, ring[1:]):
                     rings[n].add(m)
                     rings[m].add(n)
-                    for n, m in zip(ring, ring[1:]):
-                        rings[n].add(m)
-                        rings[m].add(n)
-                elif an == 6 and lr == 5 and charges[n] == -1:  # ferrocene, etc.
-                    pyrroles.add(n)
-                    n, *_, m = ring
-                    rings[n].add(m)
-                    rings[m].add(n)
-                    for n, m in zip(ring, ring[1:]):
-                        rings[n].add(m)
-                        rings[m].add(n)
             # like N1C=Cn2cccc12, S1C=Cn2cccc12
             elif lr == 5 and sp2 == 3:
                 freaks.append(ring)
