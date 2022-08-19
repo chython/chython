@@ -31,17 +31,18 @@ from ..exceptions import ParseError, ParseReactionError
 
 
 class FallBack:
-    def __init__(self, is_reaction):
+    def __init__(self, is_reaction, meta=None):
         self.is_reaction = is_reaction
+        self.__meta = {} if meta is None else meta
 
     def __call__(self, line):
         return line.startswith(('M  END', 'M  V30 END CTAB'))
 
     def getvalue(self):
-        # ad-hocs for raising ValueError
         if self.is_reaction:
+            # ad-hocs for raising ValueError
             return {'reactants': None, 'products': None, 'reagents': None, 'meta': {}}
-        return {'meta': {}}
+        return {'meta': self.__meta}
 
 
 class RDFRead(MDLRead):
@@ -170,7 +171,10 @@ class RDFRead(MDLRead):
                 except ValueError:
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
                     if self._store_log:
-                        parser = FallBack(is_reaction)
+                        if isinstance(parser, EMOLRead):  # try to restore metadata
+                            parser = FallBack(is_reaction, parser._meta)  # noqa
+                        else:
+                            parser = FallBack(is_reaction)
                         continue
                     parser = None
                     seek = yield ParseError(count, pos, self._format_log(), None)
@@ -189,13 +193,16 @@ class RDFRead(MDLRead):
                         if is_reaction:
                             container = self._convert_reaction(record)
                         elif 'atoms' not in record:  # mol fall-back ad-hoc
+                            record['meta']['chytorch_mdl_title'] = title
                             container = ParseError(count, pos, self._format_log(), record['meta'])
                         else:
                             container = self._convert_molecule(record)
                     except ParseReactionError as e:  # ad-hoc for logging partially parsed reactions
-                        seek = yield ParseError(count, pos, self._format_log(), record['meta'], e.structure)
+                        record['meta']['chytorch_mdl_title'] = title
+                        seek = yield ParseError(count, pos, self._format_log(), record['meta'], e.structure, e.errors)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
+                        record['meta']['chytorch_mdl_title'] = title
                         seek = yield ParseError(count, pos, self._format_log(), record['meta'])
                     else:
                         seek = yield container
@@ -224,13 +231,16 @@ class RDFRead(MDLRead):
                         if is_reaction:
                             container = self._convert_reaction(record)
                         elif 'atoms' not in record:  # mol fall-back ad-hoc
+                            record['meta']['chytorch_mdl_title'] = title
                             container = ParseError(count, pos, self._format_log(), record['meta'])
                         else:
                             container = self._convert_molecule(record)
                     except ParseReactionError as e:  # ad-hoc for logging partially parsed reactions
-                        seek = yield ParseError(count, pos, self._format_log(), record['meta'], e.structure)
+                        record['meta']['chytorch_mdl_title'] = title
+                        seek = yield ParseError(count, pos, self._format_log(), record['meta'], e.structure, e.errors)
                     except ValueError:
                         self._info(f'record consist errors:\n{format_exc()}')
+                        record['meta']['chytorch_mdl_title'] = title
                         seek = yield ParseError(count, pos, self._format_log(), record['meta'])
                     else:
                         seek = yield container
@@ -295,13 +305,16 @@ class RDFRead(MDLRead):
                 if is_reaction:
                     container = self._convert_reaction(record)
                 elif 'atoms' not in record:  # mol fall-back ad-hoc
+                    record['meta']['chytorch_mdl_title'] = title
                     container = ParseError(count, pos, self._format_log(), record['meta'])
                 else:
                     container = self._convert_molecule(record)
             except ParseReactionError as e:  # ad-hoc for logging partially parsed reactions
-                yield ParseError(count, pos, self._format_log(), record['meta'], e.structure)
+                record['meta']['chytorch_mdl_title'] = title
+                yield ParseError(count, pos, self._format_log(), record['meta'], e.structure, e.errors)
             except ValueError:
                 self._info(f'record consist errors:\n{format_exc()}')
+                record['meta']['chytorch_mdl_title'] = title
                 yield ParseError(count, pos, self._format_log(), record['meta'])
             else:
                 yield container

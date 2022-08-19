@@ -31,6 +31,7 @@ class ERXNRead:
         self.__reactants = []
         self.__products = []
         self.__reagents = []
+        self.__errors = []
         self.__ignore = ignore
         if log_buffer is None:
             log_buffer = []
@@ -48,7 +49,7 @@ class ERXNRead:
                 if not self.__ignore:
                     raise
                 if not isinstance(e, EmptyMolecule):
-                    self.__errors = True
+                    self.__errors.append(self.__parser._meta)  # noqa
                     self.__log_buffer.append(format_exc())
                     self.__log_buffer.append('bad molecule ignored')
                 else:
@@ -100,7 +101,7 @@ class ERXNRead:
         raise ValueError('reaction not complete')
 
     __parser_group = __parser = None
-    __rend = __empty_skip = __errors = False
+    __rend = __empty_skip = False
     __in_mol = 0
 
 

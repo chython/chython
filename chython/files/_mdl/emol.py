@@ -25,7 +25,7 @@ class EMOLRead:
         self.__bonds = []
         self.__atom_map = {}
         self.__stereo = []
-        self.__meta = {}
+        self._meta = {}
         self.__hydrogens = {}
         self.__star_points = []
         self.__ignore = ignore
@@ -36,7 +36,7 @@ class EMOLRead:
     def getvalue(self):
         if self.__in_mol or self.__in_mol is None:
             raise ValueError('molecule not complete')
-        return {'atoms': self.__atoms, 'bonds': self.__bonds, 'stereo': self.__stereo, 'meta': self.__meta,
+        return {'atoms': self.__atoms, 'bonds': self.__bonds, 'stereo': self.__stereo, 'meta': self._meta,
                 'hydrogens': self.__hydrogens}
 
     def __call__(self, line):
@@ -87,7 +87,7 @@ class EMOLRead:
                     if '=' in kv:
                         k, v = kv.split('=', 1)
                         if k and v:
-                            self.__meta[k] = v
+                            self._meta[k] = v
 
         elif self.__in_mol is not None:
             raise SyntaxError('invalid usage')
@@ -241,7 +241,7 @@ class EMOLRead:
                 if f == 'MRV_IMPLICIT_H':
                     self.__hydrogens[a[0]] = int(d[6:])
                 else:
-                    self.__meta[f'SGROUP DAT {i}'] = (a, f, d)
+                    self._meta[f'SGROUP DAT {i}'] = (a, f, d)
         elif _type.startswith('SRU'):
             raise ValueError('Polymers not supported')
 

@@ -112,15 +112,16 @@ class ParseError(ValueError):
     """
     File parsing error
     """
-    __slots__ = ('number', 'position', 'log', 'meta', 'structure')
+    __slots__ = ('number', 'position', 'log', 'meta', 'structure', 'errors')
 
-    def __init__(self, number, position, log, meta, structure=None):
+    def __init__(self, number, position, log, meta, structure=None, errors=None):
         super().__init__()
         self.number = number
         self.position = position
         self.log = log
         self.meta = meta
         self.structure = structure
+        self.errors = errors
 
 
 class EmptyV2000(ValueError):
@@ -128,7 +129,8 @@ class EmptyV2000(ValueError):
 
 
 class ParseReactionError(ValueError):
-    __slots__ = ('structure',)
+    __slots__ = ('structure', 'errors')
 
-    def __init__(self, structure):
+    def __init__(self, structure, errors):
         self.structure = structure
+        self.errors = errors

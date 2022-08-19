@@ -108,7 +108,7 @@ class Parser:
                         maps[i] = tmp = [x if x < j else x - 1 for x in tmp]
 
         rc = {'reactants': [], 'products': [], 'reagents': []}
-        error = data.get('errors', False)
+        errors = data.get('errors', [])
         for i, tmp in maps.items():
             shift = 0
             for j in data[i]:
@@ -122,12 +122,12 @@ class Parser:
                         raise
                     self._info('Found bad molecule in reaction')
                     self._info(format_exc())
-                    error = True  # catch error
+                    errors.append(j['meta'])  # catch error
                 else:
                     g.meta.update(j['meta'])
                     rc[i].append(g)
-        if error:
-            raise ParseReactionError(ReactionContainer(name=data.get('title'), **rc))
+        if errors:
+            raise ParseReactionError(ReactionContainer(name=data.get('title'), **rc), errors)
         if self._store_log:
             if log := self._format_log():
                 data['meta']['ParserLog'] = log

@@ -28,6 +28,7 @@ class RXNRead:
         self.__reagents_count = int(line[6:].rstrip() or 0) + self.__products_count
         self.__molecules = []
         self.__ignore = ignore
+        self.__errors = []
         if log_buffer is None:
             log_buffer = []
         self.__log_buffer = log_buffer
@@ -66,7 +67,7 @@ class RXNRead:
                 if not self.__ignore:
                     raise
                 if not isinstance(e, EmptyMolecule):
-                    self.__errors = True
+                    self.__errors.append({})  # empty metadata in V2000
                     self.__log_buffer.append(format_exc())
                     self.__log_buffer.append('bad molecule ignored')
                 else:
@@ -94,7 +95,7 @@ class RXNRead:
         raise ValueError('reaction not complete')
 
     __parser = None
-    __empty_skip = __rend = __errors = False
+    __empty_skip = __rend = False
     __im = 4
 
 
