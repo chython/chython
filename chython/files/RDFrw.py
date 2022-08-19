@@ -172,7 +172,7 @@ class RDFRead(MDLRead):
                     self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
                     if self._store_log:
                         if isinstance(parser, EMOLRead):  # try to restore metadata
-                            parser = FallBack(is_reaction, parser._meta)  # noqa
+                            parser = FallBack(False, parser._meta)  # noqa
                         else:
                             parser = FallBack(is_reaction)
                         continue

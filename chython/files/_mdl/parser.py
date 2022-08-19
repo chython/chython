@@ -128,7 +128,7 @@ class Parser:
                     g.meta.update(j['meta'])
                     rc[i].append(g)
         if errors:
-            raise ParseReactionError(ReactionContainer(name=data.get('title'), **rc), errors)
+            raise ParseReactionError(ReactionContainer(**rc) if any(rc.values()) else None, errors)
         if self._store_log:
             if log := self._format_log():
                 data['meta']['ParserLog'] = log
