@@ -122,6 +122,7 @@ class Parser:
                         raise
                     self._info('Found bad molecule in reaction')
                     self._info(format_exc())
+                    j['meta']['chytorch_molecule_role'] = i
                     errors.append(j['meta'])  # catch error
                 else:
                     g.meta.update(j['meta'])

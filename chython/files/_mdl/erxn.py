@@ -49,7 +49,9 @@ class ERXNRead:
                 if not self.__ignore:
                     raise
                 if not isinstance(e, EmptyMolecule):
-                    self.__errors.append(self.__parser._meta)  # noqa
+                    m = self.__parser._meta  # noqa
+                    m['chytorch_molecule_role'] = _roles[self.__parser_group]
+                    self.__errors.append(m)
                     self.__log_buffer.append(format_exc())
                     self.__log_buffer.append('bad molecule ignored')
                 else:
@@ -103,6 +105,9 @@ class ERXNRead:
     __parser_group = __parser = None
     __rend = __empty_skip = False
     __in_mol = 0
+
+
+_roles = {'REACTANT': 'reactants', 'PRODUCT': 'products', 'AGENT': 'reagents'}
 
 
 __all__ = ['ERXNRead']

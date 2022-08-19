@@ -35,16 +35,43 @@ class RXNRead:
 
     def __call__(self, line):
         if self.__parser:
-            if self.__parser(line):
-                self.__im = 4
-                mol = self.__parser.getvalue()
-                if self.__title:
-                    mol['title'] = self.__title
-                self.__molecules.append(mol)
+            try:
+                x = self.__parser(line)
+            except ValueError:
+                if not self.__ignore:
+                    raise
+                if (lm := len(self.__molecules)) < self.__reactants_count:
+                    self.__reactants_count -= 1
+                    self.__products_count -= 1
+                    self.__reagents_count -= 1
+                    m = 'reactants'
+                elif lm < self.__products_count:
+                    self.__products_count -= 1
+                    self.__reagents_count -= 1
+                    m = 'products'
+                else:
+                    self.__reagents_count -= 1
+                    m = 'reagents'
+
+                self.__errors.append({'chytorch_molecule_role': m})
+                self.__log_buffer.append(format_exc())
+                self.__log_buffer.append('bad molecule ignored')
                 self.__parser = None
-                if len(self.__molecules) == self.__reagents_count:
+                if lm == self.__reagents_count:  # empty molecule is last in list
                     self.__rend = True
                     return True
+                self.__empty_skip = True
+            else:
+                if x:
+                    self.__im = 4
+                    mol = self.__parser.getvalue()
+                    if self.__title:
+                        mol['title'] = self.__title
+                    self.__molecules.append(mol)
+                    self.__parser = None
+                    if len(self.__molecules) == self.__reagents_count:
+                        self.__rend = True
+                        return True
         elif self.__empty_skip:
             if not line.startswith('$MOL'):
                 return
@@ -66,24 +93,29 @@ class RXNRead:
             except ValueError as e:
                 if not self.__ignore:
                     raise
+                if (lm := len(self.__molecules)) < self.__reactants_count:
+                    self.__reactants_count -= 1
+                    self.__products_count -= 1
+                    self.__reagents_count -= 1
+                    m = 'reactants'
+                elif lm < self.__products_count:
+                    self.__products_count -= 1
+                    self.__reagents_count -= 1
+                    m = 'products'
+                else:
+                    self.__reagents_count -= 1
+                    m = 'reagents'
+
                 if not isinstance(e, EmptyMolecule):
-                    self.__errors.append({})  # empty metadata in V2000
+                    self.__errors.append({'chytorch_molecule_role': m})
                     self.__log_buffer.append(format_exc())
                     self.__log_buffer.append('bad molecule ignored')
                 else:
                     self.__log_buffer.append('empty molecule ignored')
-                if len(self.__molecules) < self.__reactants_count:
-                    self.__reactants_count -= 1
-                    self.__products_count -= 1
-                    self.__reagents_count -= 1
-                elif len(self.__molecules) < self.__products_count:
-                    self.__products_count -= 1
-                    self.__reagents_count -= 1
-                elif len(self.__molecules) < self.__reagents_count:
-                    self.__reagents_count -= 1
-                    if len(self.__molecules) == self.__reagents_count:  # empty molecule is last in list
-                        self.__rend = True
-                        return True
+
+                if lm == self.__reagents_count:  # empty molecule is last in list
+                    self.__rend = True
+                    return True
                 self.__empty_skip = True
 
     def getvalue(self):
