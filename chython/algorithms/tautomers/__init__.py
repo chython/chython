@@ -47,13 +47,13 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
         :param keep_sugars: prevent carbonyl moving in sugars
         :param heteroarenes: enumerate heteroarenes
         :param keto_enol: enumerate keto-enols
-        :param limit: Maximum amount of generated structures
+        :param limit: Maximum attempts count
         """
-        if limit < 3:
-            raise ValueError('limit should be greater or equal 3')
+        if limit < 1:
+            raise ValueError('limit should be greater or equal 1')
 
         has_stereo = bool(self._atoms_stereo or self._allenes_stereo or self._cis_trans_stereo)
-        counter = 1
+        counter = 0
 
         copy = self.copy()
         copy.clean_stereo()
@@ -128,9 +128,6 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                                 yield self.__set_stereo(thiele.copy())
                             else:
                                 yield thiele
-                            counter += 1
-                            if counter == limit:
-                                return
                             break
                     if keep_sugars and current is not copy and ket:
                         # prevent carbonyl migration in sugars. skip entry point.
@@ -145,9 +142,9 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                         yield self.__set_stereo(thiele.copy())
                     else:
                         yield thiele
-                    counter += 1
-                    if counter == limit:
-                        return
+                counter += 1
+                if counter == limit:
+                    return
 
         # heteroarenes tautomers enumeration
         if heteroarenes:
@@ -164,9 +161,9 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                         yield self.__set_stereo(mol.copy())
                     else:
                         yield mol
-                    counter += 1
-                    if counter == limit:
-                        return
+                counter += 1
+                if counter == limit:
+                    return
 
         # zwitter-ions enumeration
         if zwitter:
@@ -182,9 +179,9 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                         yield self.__set_stereo(mol.copy())
                     else:
                         yield mol
-                    counter += 1
-                    if counter == limit:
-                        return
+                counter += 1
+                if counter == limit:
+                    return
 
     def enumerate_charged_tautomers(self: 'MoleculeContainer', *, prepare_molecules=True, partial=False,
                                     increase_aromaticity=True, keep_sugars=True, heteroarenes=True,

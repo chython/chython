@@ -93,10 +93,9 @@ class AcidBase:
                         if n is not None:
                             mol._hydrogens[n] -= 1
                             mol._charges[n] -= 1
-                    if mol in seen:
-                        continue
-                    seen.add(mol)
-                    yield mol
+                    if mol not in seen:
+                        seen.add(mol)
+                        yield mol
                     limit -= 1
                     if not limit:
                         return
@@ -119,10 +118,9 @@ class AcidBase:
                         if n is not None:
                             mol._hydrogens[n] -= 1
                             mol._charges[n] -= 1
-                    if mol in seen:
-                        continue
-                    seen.add(mol)
-                    yield mol
+                    if mol not in seen:
+                        seen.add(mol)
+                        yield mol
                     limit -= 1
                     if not limit:
                         return
