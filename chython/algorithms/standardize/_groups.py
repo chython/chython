@@ -970,6 +970,14 @@ def _rules_single():
     bonds_fix = ((1, 2, 2), (1, 3, 2), (1, 4, 2))
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
+    # fix reaxys [Cl-]=O > Cl-[O-]
+    atoms = ({'atom': ListElement(['Cl', 'Br', 'I']), 'charge': -1, 'neighbors': 1},
+             {'atom': 'O', 'neighbors': 1})
+    bonds = ((1, 2, 2),)
+    atom_fix = {1: (1, None), 2: (-1, None)}
+    bonds_fix = ((1, 2, 1),)
+    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
+
     compiled_rules = []
     for atoms, bonds, atom_fix, bonds_fix, is_tautomer in raw_rules:
         q = QueryContainer()
