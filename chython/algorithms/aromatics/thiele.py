@@ -109,8 +109,9 @@ class Thiele:
                     continue
                 an = atoms[n].atomic_number
                 if lr == 7:  # skip electron-rich 7-membered rings
-                    if an != 5:
+                    if an != 5:  # not B?
                         continue
+                # below lr == 5 or 6 only
                 elif (c := charges[n]) == -1:
                     if an != 6 or lr != 5:  # ferrocene, etc.
                         continue
@@ -120,11 +121,14 @@ class Thiele:
                     if len(bonds[n]) != 2:  # like CS1(C)C=CC=C1
                         continue
                 elif an == 7:
-                    if (b := len(bonds[n])) > 3:
+                    if (b := len(bonds[n])) > 3:  # extra check for invalid N(IV)
                         continue
                     elif fix_tautomers and lr == 6 and b == 2:
                         donors.append(n)
-                elif an in (5, 15) and len(bonds[n]) > 3:
+                elif an in (5, 15):  # B, P
+                    if len(bonds[n]) > 3:
+                        continue
+                else:  # only B, [C-], N, O, P, S, Se
                     continue
 
                 pyrroles.add(n)
