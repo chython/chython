@@ -20,8 +20,9 @@ from CachedMethods import cached_method
 from functools import reduce
 from hashlib import sha512
 from itertools import chain
+from math import ceil
 from operator import itemgetter, or_
-from typing import Dict, Iterable, Iterator, Optional, Tuple
+from typing import Dict, Iterable, Iterator, Optional, Tuple, List
 from zlib import compress, decompress
 from .cgr import CGRContainer
 from .molecule import MoleculeContainer
@@ -175,6 +176,34 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         if compressed:
             return compress(data, 9)
         return data
+
+    @classmethod
+    def pack_len(cls, data: bytes, /, *, compressed=True) -> Tuple[List[int], List[int], List[int]]:
+        """
+        Returns reactants, reagents, products molecules atoms count in reaction pack.
+        """
+        if compressed:
+            data = decompress(data)
+        data = memoryview(data)
+        if data[0] != 1:
+            raise ValueError('invalid pack header')
+        reactants, reagents, products = data[1], data[2], data[3]
+        shift = 5  # RH+RC+RC+PC+MH
+        molecules = []
+        for _ in range(reactants + reagents + products - 1):
+            acs = int.from_bytes(data[shift: shift + 3], 'big')
+            neighbors = 0
+            ac = acs >> 12
+            shift += 4  # AC+CC+AN
+            for _ in range(ac):
+                neighbors += data[shift] & 0x0f
+                shift += 9
+            neighbors //= 2
+            shift += 3 * neighbors + ceil(neighbors / 5) * 2 + (acs & 0x0fff) * 4
+            molecules.append(ac)
+        if reactants or reagents or products:
+            molecules.append(int.from_bytes(data[shift: shift + 3], 'big') >> 12)
+        return molecules[:reactants], molecules[reactants: -products], molecules[-products:]
 
     @classmethod
     def unpack(cls, data: bytes, /, *, compressed=True) -> 'ReactionContainer':

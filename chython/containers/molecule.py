@@ -877,6 +877,17 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         return bytes(data)
 
     @classmethod
+    def pack_len(cls, data: bytes, /, *, compressed=True) -> int:
+        """
+        Returns atoms count in molecule pack.
+        """
+        if compressed:
+            data = decompress(data)
+        if data[0] != 0:
+            raise ValueError('invalid pack header')
+        return int.from_bytes(data[1:3], 'big') >> 4
+
+    @classmethod
     def unpack(cls, data: Union[bytes, memoryview], /, *, compressed=True,
                _return_pack_length=False) -> 'MoleculeContainer':
         """
