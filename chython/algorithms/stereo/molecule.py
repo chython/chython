@@ -364,35 +364,62 @@ class MoleculeStereo(Stereo):
             self.flush_stereo_cache()
 
     @cached_property
-    def _wedge_map(self: 'MoleculeContainer'):
-        plane = self._plane
+    def _wedge_map(self: Union['MoleculeContainer', 'MoleculeStereo']):
         atoms_stereo = self._atoms_stereo
         allenes_centers = self._stereo_allenes_centers
         atoms = self._atoms
 
         space = []
+        solved = []
+        seen = set()
         for n, s in self._allenes_stereo.items():
             env = self._stereo_allenes[n]
             term = self._stereo_allenes_terminals[n]
             orders = [(*env[:2], *term, n, True), (*env[1::-1], *term[::-1], n, True)]
             if env[2]:
                 orders.append((env[2], env[1], *term, n, True))
-                orders.append((env[1], env[2], *term[::-1], n, True))
             if env[3]:
                 orders.append((env[3], env[0], *term[::-1], n, True))
-                orders.append((env[0], env[3], *term, n, True))
-            orders = sorted(orders, key=lambda x: (x[0] in atoms_stereo, x[0] in allenes_centers,
-                                                   -atoms[x[0]].atomic_number))
             space.append(orders)
-        for n, s in atoms_stereo.items():
-            order = sorted(self._stereo_tetrahedrons[n], key=lambda x: (x in atoms_stereo, x in allenes_centers,
-                                                                        -atoms[x].atomic_number, atoms[x].in_ring))
+        for n, s in self._atoms_stereo.items():
+            order = list(self._stereo_tetrahedrons[n])
             orders = [(*order, n, False)]
             for _ in range(1, len(order)):
                 order = order.copy()
                 order.append(order.pop(0))
                 orders.append((*order, n, False))
             space.append(orders)
+
+        while space:
+            ls = len(space)
+            unsolved = []
+            for orders in space:
+                good = []
+                if orders[0][-1]:
+                    for x in orders:
+                        if (x0 := x[0]) in seen or x0 not in atoms_stereo and x0 not in allenes_centers:
+                            good.append(x)
+                            seen.add(x[2])
+                    if good:
+                        solved.append(max(good, key=lambda x: (atoms[x[0]].in_ring, atoms[x[0]].atomic_number)))
+                    else:
+                        unsolved.append(orders)
+                else:
+                    for x in orders:
+                        if (x0 := x[0]) in seen or x0 not in atoms_stereo and x0 not in allenes_centers:
+                            good.append(x)
+                    if good:
+                        seen.add(x[-2])
+                        solved.append(max(good, key=lambda x: (atoms[x[0]].in_ring, atoms[x[0]].atomic_number)))
+                    else:
+                        unsolved.append(orders)
+            space = unsolved
+            if len(unsolved) == ls:
+                break
+
+        solved = [y for x in solved if (y := self.__wedge_sign(x))]
+        if not space:
+            return solved
 
         for orders in product(*space):
             used = set()
@@ -402,38 +429,47 @@ class MoleculeStereo(Stereo):
                     if (order[0], order[2]) in used:
                         break
                     used.add((order[2], order[0]))
-                    s = self._translate_allene_sign(order[-2], *order[:2])
-                    v = _allene_sign((*plane[order[0]], 1), plane[order[2]], plane[order[3]], (*plane[order[1]], 0))
-                    if not v:
-                        logger.info(f'need 2d clean. allenes wedge stereo ambiguous for atom {{{order[-2]}}}')
-                    if s:
-                        wedge.append((order[2], order[0], v))
-                    else:
-                        wedge.append((order[2], order[0], -v))
+                    wedge.append(self.__wedge_sign(order))
                 else:  # TH
                     n = order[-2]
                     if (order[0], n) in used:
                         break
                     used.add((n, order[0]))
-
-                    s = self._translate_tetrahedron_sign(n, order[:-2])
-                    # need recalculation if XY changed
-                    if len(order) == 5:
-                        v = _pyramid_sign((*plane[n], 0),
-                                          (*plane[order[0]], 1), (*plane[order[1]], 0), (*plane[order[2]], 0))
-                    else:
-                        v = _pyramid_sign((*plane[order[3]], 0),
-                                          (*plane[order[0]], 1), (*plane[order[1]], 0), (*plane[order[2]], 0))
-                    if not v:
-                        logger.info(f'need 2d clean. tetrahedron wedge stereo ambiguous for atom {{{n}}}')
-                    if s:
-                        wedge.append((n, order[0], v))
-                    else:
-                        wedge.append((n, order[0], -v))
+                    wedge.append(self.__wedge_sign(order))
             else:  # found
-                return tuple(wedge)
+                solved.extend(wedge)
+                return solved
         logger.info('wedge stereo mapping failed')
-        return ()
+        return solved
+
+    def __wedge_sign(self: 'MoleculeContainer', order):
+        plane = self._plane
+
+        if order[-1]:  # allene
+            s = self._translate_allene_sign(order[-2], *order[:2])
+            v = _allene_sign((*plane[order[0]], 1), plane[order[2]], plane[order[3]], (*plane[order[1]], 0))
+            if not v:
+                logger.info(f'need 2d clean. allenes wedge stereo ambiguous for atom {{{order[-2]}}}')
+            if s:
+                return order[2], order[0], v
+            else:
+                return order[2], order[0], -v
+        else:  # TH
+            n = order[-2]
+            s = self._translate_tetrahedron_sign(n, order[:-2])
+            # need recalculation if XY changed
+            if len(order) == 5:
+                v = _pyramid_sign((*plane[n], 0),
+                                  (*plane[order[0]], 1), (*plane[order[1]], 0), (*plane[order[2]], 0))
+            else:
+                v = _pyramid_sign((*plane[order[3]], 0),
+                                  (*plane[order[0]], 1), (*plane[order[1]], 0), (*plane[order[2]], 0))
+            if not v:
+                logger.info(f'need 2d clean. tetrahedron wedge stereo ambiguous for atom {{{n}}}')
+            if s:
+                return n, order[0], v
+            else:
+                return n, order[0], -v
 
     @property
     def _chiral_tetrahedrons(self) -> Set[int]:
