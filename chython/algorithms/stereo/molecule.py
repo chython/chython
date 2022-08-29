@@ -154,13 +154,17 @@ class MoleculeStereo(Stereo):
         if n in self._chiral_tetrahedrons:
             if m not in self._bonds[n]:
                 raise AtomNotFound
-
+            th = self._stereo_tetrahedrons[n]
             if self._atoms[m].atomic_number == 1:
-                s = _pyramid_sign((*plane[m], mark), *((*plane[x], 0) for x in self._stereo_tetrahedrons[n]))
+                s = _pyramid_sign((*plane[m], mark), *((*plane[x], 0) for x in th))
             else:
-                order = [(*plane[x], mark if x == m else 0) for x in self._stereo_tetrahedrons[n]]
+                order = [(*plane[x], mark if x == m else 0) for x in th]
                 if len(order) == 3:
-                    s = _pyramid_sign((*plane[n], 0), *order)
+                    if len(self._bonds[n]) == 4:  # explicit hydrogen
+                        x = next(x for x in self._bonds[n] if x not in th)
+                        s = _pyramid_sign((*plane[x], 0), *order)
+                    else:
+                        s = _pyramid_sign((*plane[n], 0), *order)
                 else:
                     s = _pyramid_sign(order[-1], *order[:3])
             if s:
