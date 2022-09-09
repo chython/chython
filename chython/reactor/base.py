@@ -18,9 +18,10 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import defaultdict
+from itertools import product
 from ..containers import MoleculeContainer, QueryContainer
 from ..containers.bonds import Bond
-from ..periodictable import Element
+from ..periodictable import Element, ListElement, AnyElement
 
 
 class BaseReactor:
@@ -30,6 +31,7 @@ class BaseReactor:
         # prepare atoms patch
         self.__elements = elements = {}
         self.__hydrogens = hydrogens = {}
+        self.__variable = variable = []
 
         atoms = defaultdict(dict)
         for n, atom in products.atoms():
@@ -41,8 +43,13 @@ class BaseReactor:
                     if atom.hybridization == 4 and atom.implicit_hydrogens is not None:
                         hydrogens[n] = atom.implicit_hydrogens  # keep it for new aromatic atoms
             elif n not in reactants:
-                raise ValueError('New atom should be defined')
+                if not isinstance(atom, ListElement):
+                    raise ValueError('New atom should be defined')
+                elements[n] = [Element.from_atomic_number(x)() for x in atom._numbers]
+                variable.append(n)
             else:  # use atom from reactant
+                if not isinstance(atom, AnyElement):
+                    raise ValueError('Only AnyElement can be used for matched atom propagation')
                 elements[n] = None
 
         if isinstance(products, QueryContainer):
@@ -63,9 +70,52 @@ class BaseReactor:
 
     def _patcher(self, structure: MoleculeContainer, mapping):
         elements = self.__elements
-        products = self.__products
+        variable = self.__variable
+
+        new = self.__prepare_skeleton(structure, mapping)
+        self.__set_stereo(new, structure, mapping)
+
+        if not variable:
+            if self.__fix_rings:
+                new.kekule()  # keeps stereo as is
+                if not new.thiele(fix_tautomers=self.__fix_tautomers):  # fixes stereo if any ring aromatized
+                    new.fix_stereo()
+            else:
+                new.fix_stereo()
+            yield new
+        else:
+            copy = new.copy()
+            if self.__fix_rings:
+                copy.kekule()
+                if not copy.thiele(fix_tautomers=self.__fix_tautomers):
+                    copy.fix_stereo()
+            else:
+                copy.fix_stereo()
+            yield copy
+
+            for atoms in product(*(elements[x][1:] for x in variable)):
+                copy = new.copy()
+                for n, atom in zip(variable, atoms):
+                    n = mapping[n]
+                    # replace atom
+                    copy._atoms[n] = a = atom.copy()  # noqa
+                    a._attach_graph(copy, n)  # noqa
+                    copy._calc_implicit(n)  # noqa
+                if self.__fix_rings:
+                    copy.kekule()
+                    if not copy.thiele(fix_tautomers=self.__fix_tautomers):
+                        copy.fix_stereo()
+                    else:
+                        copy.fix_stereo()
+                else:
+                    copy.fix_stereo()
+                yield copy
+
+    def __prepare_skeleton(self, structure, mapping):
+        elements = self.__elements
         patch_hydrogens = self.__hydrogens
         patch_bonds = self.__bonds
+        variable = self.__variable
 
         atoms = structure._atoms
         plane = structure._plane
@@ -109,22 +159,26 @@ class BaseReactor:
                 e = elements[n]
                 if e is None:
                     e = atoms[m]
-                new.add_atom(e.copy(), m, xy=plane[m], **atom)
+                new.add_atom(e.copy(), m, xy=plane[m], _skip_hydrogen_calculation=True, **atom)
             else:  # new atoms
                 max_atom += 1
-                mapping[n] = new.add_atom(elements[n].copy(), max_atom, **atom)
-                if n in patch_hydrogens:  # keep patch aromatic atoms hydrogens count
-                    keep_hydrogens[max_atom] = patch_hydrogens[n]
+                if n in variable:
+                    # use first from the list
+                    mapping[n] = new.add_atom(elements[n][0].copy(), max_atom, _skip_hydrogen_calculation=True, **atom)
+                else:
+                    mapping[n] = new.add_atom(elements[n].copy(), max_atom, _skip_hydrogen_calculation=True, **atom)
+                    if n in patch_hydrogens:  # keep patch aromatic atoms hydrogens count
+                        keep_hydrogens[max_atom] = patch_hydrogens[n]
 
         patch_atoms = set(new)  # don't move!
         for n, atom in structure.atoms():  # add unmatched atoms
             if n not in patch_atoms and n not in to_delete:
-                new.add_atom(atom.copy(), n, charge=charges[n], is_radical=radicals[n], xy=plane[n])
-                if structure.hybridization(n) == 4:  # keep hydrogens on unmatched aromatic atoms as is.
-                    keep_hydrogens[n] = hydrogens[n]
+                new.add_atom(atom.copy(), n, charge=charges[n], is_radical=radicals[n], xy=plane[n],
+                             _skip_hydrogen_calculation=True)
+                keep_hydrogens[n] = hydrogens[n]  # keep hydrogens on unmatched atoms as is.
 
         for n, m, bond in patch_bonds:  # add patch bonds
-            new.add_bond(mapping[n], mapping[m], bond.copy())
+            new.add_bond(mapping[n], mapping[m], bond.copy(), _skip_hydrogen_calculation=True)
 
         for n, m_bond in bonds.items():
             if n in to_delete:  # atoms for removing
@@ -134,81 +188,78 @@ class BaseReactor:
                 # ignore deleted atoms and patch atoms
                 if m in to_delete or n in patch_atoms and m in patch_atoms:
                     continue
-                new.add_bond(n, m, bond.copy())
+                new.add_bond(n, m, bond.copy(), _skip_hydrogen_calculation=True)
 
         # fix hydrogens count.
-        new._hydrogens.update(keep_hydrogens)
-        if self.__fix_rings:
-            new.kekule()
-            new.thiele(fix_tautomers=self.__fix_tautomers)
+        new._hydrogens.update(keep_hydrogens)  # noqa
+        for n in new:
+            if n not in keep_hydrogens:
+                new._calc_implicit(n)  # noqa
+        return new
 
-        # check needs of stereo calculations
-        if structure._atoms_stereo or structure._allenes_stereo or structure._cis_trans_stereo or \
-                products._atoms_stereo or products._allenes_stereo or products._cis_trans_stereo:
-            stereo_override = set()
-            r_mapping = {m: n for n, m in mapping.items()}
+    def __set_stereo(self, new, structure, mapping):
+        products = self.__products
+        stereo_override = set()
+        r_mapping = {m: n for n, m in mapping.items()}
 
-            # set patch atoms stereo
-            for n, s in products._atoms_stereo.items():
-                m = mapping[n]
-                new._atoms_stereo[m] = products._translate_tetrahedron_sign(n, [r_mapping[x] for x in
-                                                                                new._stereo_tetrahedrons[m]], s)
-                stereo_override.add(m)
+        # set patch atoms stereo
+        for n, s in products._atoms_stereo.items():
+            m = mapping[n]
+            new._atoms_stereo[m] = products._translate_tetrahedron_sign(n, [r_mapping[x] for x in
+                                                                            new._stereo_tetrahedrons[m]], s)
+            stereo_override.add(m)
 
-            for n, s in products._allenes_stereo.items():
-                m = mapping[n]
-                t1, t2, *_ = new._stereo_allenes[m]
-                new._allenes_stereo[m] = products._translate_allene_sign(n, r_mapping[t1], r_mapping[t2], s)
-                stereo_override.add(m)
+        for n, s in products._allenes_stereo.items():
+            m = mapping[n]
+            t1, t2, *_ = new._stereo_allenes[m]
+            new._allenes_stereo[m] = products._translate_allene_sign(n, r_mapping[t1], r_mapping[t2], s)
+            stereo_override.add(m)
 
-            for (n, m), s in products._cis_trans_stereo.items():
-                nm = (mapping[n], mapping[m])
-                try:
-                    t1, t2, *_ = new._stereo_cis_trans[nm]
-                except KeyError:
-                    nm = nm[::-1]
-                    t2, t1, *_ = new._stereo_cis_trans[nm]
-                new._cis_trans_stereo[nm] = products._translate_cis_trans_sign(n, m, r_mapping[t1], r_mapping[t2], s)
-                stereo_override.update(nm)
+        for (n, m), s in products._cis_trans_stereo.items():
+            nm = (mapping[n], mapping[m])
+            try:
+                t1, t2, *_ = new._stereo_cis_trans[nm]
+            except KeyError:
+                nm = nm[::-1]
+                t2, t1, *_ = new._stereo_cis_trans[nm]
+            new._cis_trans_stereo[nm] = products._translate_cis_trans_sign(n, m, r_mapping[t1], r_mapping[t2], s)
+            stereo_override.update(nm)
 
-            # set unmatched part stereo and not overridden by patch.
-            for n, s in structure._atoms_stereo.items():
-                if n in stereo_override or n not in new._stereo_tetrahedrons or \
-                        new._bonds[n].keys() != structure._bonds[n].keys():
-                    # skip atoms with changed neighbors
-                    continue
-                new._atoms_stereo[n] = structure._translate_tetrahedron_sign(n, new._stereo_tetrahedrons[n], s)
+        # set unmatched part stereo and not overridden by patch.
+        for n, s in structure._atoms_stereo.items():
+            if n in stereo_override or n not in new._stereo_tetrahedrons or \
+                    new._bonds[n].keys() != structure._bonds[n].keys():
+                # skip atoms with changed neighbors
+                continue
+            new._atoms_stereo[n] = structure._translate_tetrahedron_sign(n, new._stereo_tetrahedrons[n], s)
 
-            for n, s in structure._allenes_stereo.items():
-                if n in stereo_override or n not in new._stereo_allenes or \
-                        set(new._stereo_allenes[n]) != set(structure._stereo_allenes[n]):
-                    # skip changed allenes
-                    continue
-                t1, t2, *_ = new._stereo_allenes[n]
-                new._allenes_stereo[n] = structure._translate_allene_sign(n, t1, t2, s)
+        for n, s in structure._allenes_stereo.items():
+            if n in stereo_override or n not in new._stereo_allenes or \
+                    set(new._stereo_allenes[n]) != set(structure._stereo_allenes[n]):
+                # skip changed allenes
+                continue
+            t1, t2, *_ = new._stereo_allenes[n]
+            new._allenes_stereo[n] = structure._translate_allene_sign(n, t1, t2, s)
 
-            for nm, s in structure._cis_trans_stereo.items():
-                n, m = nm
-                if n in stereo_override or m in stereo_override:
-                    continue
-                env = structure._stereo_cis_trans[nm]
+        for nm, s in structure._cis_trans_stereo.items():
+            n, m = nm
+            if n in stereo_override or m in stereo_override:
+                continue
+            env = structure._stereo_cis_trans[nm]
+            try:
+                new_env = new._stereo_cis_trans[nm]
+            except KeyError:
+                nm = nm[::-1]
                 try:
                     new_env = new._stereo_cis_trans[nm]
                 except KeyError:
-                    nm = nm[::-1]
-                    try:
-                        new_env = new._stereo_cis_trans[nm]
-                    except KeyError:
-                        continue
-                    t2, t1, *_ = new_env
-                else:
-                    t1, t2, *_ = new_env
-                if set(env) != set(new_env):
                     continue
-                new._cis_trans_stereo[nm] = structure._translate_cis_trans_sign(n, m, t1, t2, s)
-
-            new.fix_stereo()
-        return new
+                t2, t1, *_ = new_env
+            else:
+                t1, t2, *_ = new_env
+            if set(env) != set(new_env):
+                continue
+            new._cis_trans_stereo[nm] = structure._translate_cis_trans_sign(n, m, t1, t2, s)
 
 
 __all__ = ['BaseReactor']

@@ -223,7 +223,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                      and all(bonds[n][m] == 4 for n, m in zip(ring, ring[1:])))
 
     def add_atom(self, atom: Union[Element, int, str], *args, charge=0, is_radical=False,
-                 xy: Tuple[float, float] = (0., 0.), **kwargs):
+                 xy: Tuple[float, float] = (0., 0.), _skip_hydrogen_calculation=False, **kwargs):
         """
         Add new atom.
         """
@@ -241,7 +241,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         self._plane[n] = xy
         self._conformers.clear()  # clean conformers. need full recalculation for new system
 
-        if atom.atomic_number != 1:
+        if _skip_hydrogen_calculation:
+            self._hydrogens[n] = None
+        elif atom.atomic_number != 1:
             try:
                 rules = atom.valence_rules(charge, is_radical, 0)
             except ValenceError:
@@ -252,7 +254,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             self._hydrogens[n] = 0
         return n
 
-    def add_bond(self, n, m, bond: Union[Bond, int]):
+    def add_bond(self, n, m, bond: Union[Bond, int], *, _skip_hydrogen_calculation=False):
         """
         Connect atoms with bonds.
 
@@ -266,6 +268,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         bond._attach_graph(self, n, m)
         super().add_bond(n, m, bond)
         self._conformers.clear()  # clean conformers. need full recalculation for new system
+
+        if _skip_hydrogen_calculation:  # skip stereo fixing too
+            return
 
         self._calc_implicit(n)
         self._calc_implicit(m)

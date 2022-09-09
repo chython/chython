@@ -134,15 +134,15 @@ class Reactor(BaseReactor):
             mapping = match[0].copy()
             for m in match[1:]:
                 mapping.update(m)
-            new = self._patcher(united_chosen, mapping)
-            collision = set(new).intersection(ignored)
-            if collision:
-                new.remap(dict(zip(collision, count(max(max_ignored_number, max(new)) + 1))))
+            for new in self._patcher(united_chosen, mapping):
+                collision = set(new).intersection(ignored)
+                if collision:
+                    new.remap(dict(zip(collision, count(max(max_ignored_number, max(new)) + 1))))
 
-            if split:
-                yield new.split()
-            else:
-                yield [new]
+                if split:
+                    yield new.split()
+                else:
+                    yield [new]
 
 
 def fix_mapping_overlap(structures) -> List[MoleculeContainer]:
@@ -160,4 +160,4 @@ def fix_mapping_overlap(structures) -> List[MoleculeContainer]:
     return checked
 
 
-__all__ = ['Reactor']
+__all__ = ['Reactor', 'fix_mapping_overlap']

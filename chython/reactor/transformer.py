@@ -53,7 +53,7 @@ class Transformer(BaseReactor):
             raise TypeError('only Molecules possible')
 
         for mapping in self.pattern.get_mapping(structure, automorphism_filter=self.__automorphism_filter):
-            yield self._patcher(structure, mapping)
+            yield from self._patcher(structure, mapping)
 
 
 __all__ = ['Transformer']

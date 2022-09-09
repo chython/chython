@@ -28,147 +28,111 @@ Predefined reactors for common reactions.
 
 _amidation = (
     # alerts
-    ('[C;z1;x1]-[O;D1]', '[C,N;a]-[O;D1]'),
+    ['[C;z1;x1]-[O;D1]', '[C,N;a]-[O;D1]'],
     # [H,R]COOH + Ar-NH2
-    ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;D1:4][C;a;M:5]', '[A:2]-[A:4]'),
+    (['[O;M:1]=[C;x2:2][O;D1:3]', '[N;D1:4][C;a;M:5]'], ['[A:2]-[A:4]']),  # 2 reactants, 1 product
     # Alk-NH2
-    ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;D1:4][C;z1;x1;M:5]', '[A:2]-[A:4]'),
+    (['[O;M:1]=[C;x2:2][O;D1:3]', '[N;D1:4][C;z1;x1;M:5]'], ['[A:2]-[A:4]']),
     # Ar-NH-Ar
-    # ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;D2:4]([C;a;M:5])[C;a;M:6]', '[A:2]-[A:4]'),
+    (['[O;M:1]=[C;x2:2][O;D1:3]', '[N;D2:4]([C;a;M:5])[C;a;M:6]'], ['[A:2]-[A:4]']),
     # Alk-NH-Ar
-    ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;D2:4]([C;a;M:5])[C;z1;x1;M:6]', '[A:2]-[A:4]'),
+    (['[O;M:1]=[C;x2:2][O;D1:3]', '[N;D2:4]([C;a;M:5])[C;z1;x1;M:6]'], ['[A:2]-[A:4]']),
     # Alk2NH
-    ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;D2:4]([C;z1;x1;M:5])[C;z1;x1;M:6]', '[A:2]-[A:4]'),
-    ('[O;M:1]=[C;x2:2][O;D1:3]', '[N;a;h1:4]', '[A:2]-[A:4]'),
-)
-
-_amine_alcohol_carbamoyl = (
-    # alerts
-    (),
-    # ROH + Ar-NH2
-    ('[C;x1;z1;M:1][O;D1:2]', '[N;D1:3][C;a;M:4]', '[A:2]-[C:5](=[O:6])-[A:3]'),
-    # Alk-NH2
-    ('[C;x1;z1;M:1][O;D1:2]', '[N;D1:3][C;z1;x1;M:4]', '[A:2]-[C:5](=[O:6])-[A:3]'),
-    # Ar-NH-Ar
-    # ('[C;x1;z1;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;a;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
-    # Alk-NH-Ar
-    ('[C;x1;z1;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;z1;x1;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
-    # Alk2NH
-    ('[C;x1;z1;M:1][O;D1:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
-)
-
-_amine_phenol_carbamoyl = (
-    # alerts
-    (),
-    # ROH + Ar-NH2
-    ('[C;a;M:1][O;D1:2]', '[N;D1:3][C;a;M:4]', '[A:2]-[C:5](=[O:6])-[A:3]'),
-    # Alk-NH2
-    ('[C;a;M:1][O;D1:2]', '[N;D1:3][C;z1;x1;M:4]', '[A:2]-[C:5](=[O:6])-[A:3]'),
-    # Ar-NH-Ar
-    # ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;a;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
-    # Alk-NH-Ar
-    ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;a;M:4])[C;z1;x1;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
-    # Alk2NH
-    ('[C;a;M:1][O;D1:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]', '[A:2]-[C:6](=[O:7])-[A:3]'),
+    (['[O;M:1]=[C;x2:2][O;D1:3]', '[N;D2:4]([C;z1;x1;M:5])[C;z1;x1;M:6]'], ['[A:2]-[A:4]']),
+    (['[O;M:1]=[C;x2:2][O;D1:3]', '[N;a;h1:4]'], ['[A:2]-[A:4]'])
 )
 
 _amine_carbonyl_reductive_amination = (
     # alerts
-    (),
+    [],
     # R2C=O + Ar-NH2
-    ('[C;x1;z2:1]=[O:2]', '[N;D1:3][C;a;M:4]', '[A:1]-[A:3]'),
+    (['[C;x1;z2:1]=[O:2]', '[N;D1:3][C;a;M:4]'], ['[A:1]-[A:3]']),
     # Alk-NH2
-    ('[C;x1;z2:1]=[O:2]', '[N;D1:3][C;z1;x1;M:4]', '[A:1]-[A:3]'),
+    (['[C;x1;z2:1]=[O:2]', '[N;D1:3][C;z1;x1;M:4]'], ['[A:1]-[A:3]']),
     # Ar-NH-Ar
-    # ('[C;x1;z2:1]=[O:2]', '[N;D2:3]([C;a;M:4])[C;a;M:5]', '[A:1]-[A:3]'),
+    # (['[C;x1;z2:1]=[O:2]', '[N;D2:3]([C;a;M:4])[C;a;M:5]'], ['[A:1]-[A:3]']),
     # Alk-NH-Ar
-    ('[C;x1;z2:1]=[O:2]', '[N;D2:3]([C;a;M:4])[C;z1;x1;M:5]', '[A:1]-[A:3]'),
+    (['[C;x1;z2:1]=[O:2]', '[N;D2:3]([C;a;M:4])[C;z1;x1;M:5]'], ['[A:1]-[A:3]']),
     # Alk2NH
-    ('[C;x1;z2:1]=[O:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]', '[A:1]-[A:3]'),
+    (['[C;x1;z2:1]=[O:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]'], ['[A:1]-[A:3]'])
 )
 
 _suzuki = (
     # alerts
-    (),
+    [],
     # Ar-X + Ar-B
-    ('[C;a:1]-[Cl,Br,I;D1:2]', '[C;a:3]-[B;D3;z1:4]', '[A:1]-[A:3]'),
+    (['[C;a:1]-[Cl,Br,I;D1:2]', '[C;a:3]-[B;D3;z1:4]'], ['[A:1]-[A:3]']),
     # Ar-X + C=C-B
-    ('[C;a:1]-[Cl,Br,I;D1:2]', '[C;x1;z2:3]-[B;D3;z1:4]', '[A:1]-[A:3]'),
+    (['[C;a:1]-[Cl,Br,I;D1:2]', '[C;x1;z2:3]-[B;D3;z1:4]'], ['[A:1]-[A:3]']),
     # C=C-X + C=C-B
-    ('[C;x1;z2:1]-[Cl,Br,I;D1:2]', '[C;x1;z2:3]-[B;D3;z1:4]', '[A:1]-[A:3]'),
+    (['[C;x1;z2:1]-[Cl,Br,I;D1:2]', '[C;x1;z2:3]-[B;D3;z1:4]'], ['[A:1]-[A:3]']),
     # C=C-X + Ar-B
-    ('[C;x1;z2:1]-[Cl,Br,I;D1:2]', '[C;a:3]-[B;D3;z1:4]', '[A:1]-[A:3]'),
+    (['[C;x1;z2:1]-[Cl,Br,I;D1:2]', '[C;a:3]-[B;D3;z1:4]'], ['[A:1]-[A:3]'])
 )
 
 _suzuki_amide = (
     # alerts
-    (),
-    ('[C;a:1]-[B;D3;z1:2]', '[C;a;M:3]-[C:4](=[O;M:5])-N([C;x1;z1])-C(=O)[C;x0;z1]', '[A:1]-[A:4]'),
+    [],
+    (['[C;a:1]-[B;D3;z1:2]', '[C;a;M:3]-[C:4](=[O;M:5])-N([C;x1;z1])-C(=O)[C;x0;z1]'], ['[A:1]-[A:4]'])
 )
 
 _buchwald_hartwig = (
     # alerts
-    (),
+    [],
     # Ar-Hal + Ar-NH2
-    ('[C;a:1]-[Cl,Br,I;D1:2]', '[N;D1:3][C;a;M:4]', '[A:1]-[A:3]'),
+    (['[C;a:1]-[Cl,Br,I;D1:2]', '[N;D1:3][C;a;M:4]'], ['[A:1]-[A:3]']),
     # Alk-NH2
-    ('[C;a:1]-[Cl,Br,I;D1:2]', '[N;D1:3][C;z1;x1;M:4]', '[A:1]-[A:3]'),
+    (['[C;a:1]-[Cl,Br,I;D1:2]', '[N;D1:3][C;z1;x1;M:4]'], ['[A:1]-[A:3]']),
     # Ar-NH-Ar
-    # ('[C;a:1]-[Cl,Br,I;D1:2]', '[N;D2:3]([C;a;M:4])[C;a;M:5]', '[A:1]-[A:3]'),
+    # (['[C;a:1]-[Cl,Br,I;D1:2]', '[N;D2:3]([C;a;M:4])[C;a;M:5]'], ['[A:1]-[A:3]']),
     # Alk-NH-Ar
-    ('[C;a:1]-[Cl,Br,I;D1:2]', '[N;D2:3]([C;a;M:4])[C;z1;x1;M:5]', '[A:1]-[A:3]'),
+    (['[C;a:1]-[Cl,Br,I;D1:2]', '[N;D2:3]([C;a;M:4])[C;z1;x1;M:5]'], ['[A:1]-[A:3]']),
     # Alk2NH
-    ('[C;a:1]-[Cl,Br,I;D1:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]', '[A:1]-[A:3]'),
+    (['[C;a:1]-[Cl,Br,I;D1:2]', '[N;D2:3]([C;z1;x1;M:4])[C;z1;x1;M:5]'], ['[A:1]-[A:3]'])
 )
 
 _sulfonamidation = (
     # alerts
-    (),
+    [],
     # RSOOX + Ar-NH2
-    ('[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D1:6][C;a;M:7]', '[A:2]-[A:6]'),
+    (['[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D1:6][C;a;M:7]'], ['[A:2]-[A:6]']),
     # Alk-NH2
-    ('[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D1:6][C;z1;x1;M:7]', '[A:2]-[A:6]'),
+    (['[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D1:6][C;z1;x1;M:7]'], ['[A:2]-[A:6]']),
     # Ar-NH-Ar
-    # ('[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D2:6]([C;a;M:7])[C;a;M:8]', '[A:2]-[A:6]'),
+    (['[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D2:6]([C;a;M:7])[C;a;M:8]'], ['[A:2]-[A:6]']),
     # Alk-NH-Ar
-    ('[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D2:6]([C;a;M:7])[C;z1;x1;M:8]', '[A:2]-[A:6]'),
+    (['[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D2:6]([C;a;M:7])[C;z1;x1;M:8]'], ['[A:2]-[A:6]']),
     # Alk2NH
-    ('[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D2:6]([C;z1;x1;M:7])[C;z1;x1;M:8]', '[A:2]-[A:6]'),
-    ('[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;a;h1:6]', '[A:2]-[A:6]'),
+    (['[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;D2:6]([C;z1;x1;M:7])[C;z1;x1;M:8]'], ['[A:2]-[A:6]']),
+    (['[O;M:1]=[S:2](=[O;M:3])([C;M:4])-[O,F,Cl,Br,I;D1:5]', '[N;a;h1:6]'], ['[A:2]-[A:6]'])
 )
 
 _amine_isocyanate = (
     # alerts
-    (),
+    [],
     # RN=C=O + Ar-NH2
-    ('[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D1:5][C;a;M:6]', '[A:2][A:3]-[A:5]'),
+    (['[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D1:5][C;a;M:6]'], ['[A:2][A:3]-[A:5]']),
     # Alk-NH2
-    ('[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D1:5][C;z1;x1;M:6]', '[A:2][A:3]-[A:5]'),
+    (['[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D1:5][C;z1;x1;M:6]'], ['[A:2][A:3]-[A:5]']),
     # Ar-NH-Ar
-    # ('[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D2:5]([C;a;M:6])[C;a;M:7]', '[A:2][A:3]-[A:5]'),
+    (['[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D2:5]([C;a;M:6])[C;a;M:7]'], ['[A:2][A:3]-[A:5]']),
     # Alk-NH-Ar
-    ('[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D2:5]([C;a;M:6])[C;z1;x1;M:7]', '[A:2][A:3]-[A:5]'),
+    (['[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D2:5]([C;a;M:6])[C;z1;x1;M:7]'], ['[A:2][A:3]-[A:5]']),
     # Alk2NH
-    ('[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D2:5]([C;z1;x1;M:6])[C;z1;x1;M:7]', '[A:2][A:3]-[A:5]'),
+    (['[C;M:1][N:2]=[C:3]=[O;M:4]', '[N;D2:5]([C;z1;x1;M:6])[C;z1;x1;M:7]'], ['[A:2][A:3]-[A:5]'])
 )
 
 _sonogashira = (
     # alerts
-    (),
+    [],
     # Ar-Hal + HC#C-R
-    ('[C;a:1]-[Cl,Br,I;D1:2]', '[C;D1:3]#[C;D2;M:4]', '[A:1]-[A:3]'),
+    (['[C;a:1]-[Cl,Br,I;D1:2]', '[C;D1:3]#[C;D2;M:4]'], ['[A:1]-[A:3]']),
     # C=C-Hal
-    ('[C;x1;z2:1]-[Cl,Br,I;D1:2]', '[C;D1:3]#[C;D2;M:4]', '[A:1]-[A:3]'),
+    (['[C;x1;z2:1]-[Cl,Br,I;D1:2]', '[C;D1:3]#[C;D2;M:4]'], ['[A:1]-[A:3]']),
     # R-C(=O)-Hal
-    ('[C;x2:1](=[O;M:2])-[Cl,Br,I;D1:3]', '[C;D1:4]#[C;D2;M:5]', '[A:1]-[A:4]'),
+    (['[C;x2:1](=[O;M:2])-[Cl,Br,I;D1:3]', '[C;D1:4]#[C;D2;M:5]'], ['[A:1]-[A:4]'])
 )
 
-_cross_electrophile = (
-    # alerts
-    (),
-    # Ar-Hal + Alk-Hal
-    ('[C;a:1]-[Cl,Br,I;D1:2]', '[C;z1;x1:3]-[Cl,Br,I;D1:4]', '[A:1]-[A:3]'),
-)
 
 #################
 # Magic Factory #
@@ -180,8 +144,10 @@ _cache = {}
 
 
 def _prepare_reactor(rules, name):
-    rxn = [Reactor([smarts(r) for r in rs], [smarts(p)], one_shot=False) for *rs, p in rules[1:]] # noqa
-    rxn_os = [Reactor([smarts(r) for r in rs], [smarts(p)]) for *rs, p in rules[1:]]  # noqa
+    rxn = [Reactor([smarts(r) for r in rs], [smarts(p) for p in ps], one_shot=False, automorphism_filter=False)  # noqa
+           for rs, ps in rules[1:]]
+    rxn_os = [Reactor([smarts(r) for r in rs], [smarts(p) for p in ps], automorphism_filter=False)  # noqa
+              for rs, ps in rules[1:]]
     alerts = [smarts(x) for x in rules[0]]
 
     def w(*molecules, one_shot=False, rules_set: Optional[List[int]] = None,
@@ -217,7 +183,7 @@ def _prepare_reactor(rules, name):
                 picked_rxn = [(x, rxn_os[x]) for x in rules_set]
             for i, rx in picked_rxn:
                 for r in rx(*molecules):
-                    if (s := str(r.products[0])) in seen:
+                    if (s := ' '.join(str(x) for x in r.products)) in seen:
                         continue
                     seen.add(s)
                     r.meta['MATCHED_RULE'] = i
@@ -238,19 +204,19 @@ def _prepare_reactor(rules, name):
         while stack:
             (i, rx), rct, nxt_rxn = stack.pop()
             for r in rx(*rct):
-                p = r.products[0].copy()
-                if str(p) in seen:
+                if (s := ' '.join(str(x) for x in r.products)) in seen:
                     continue
-                seen.add(str(p))
+                seen.add(s)
 
                 r = ReactionContainer([x.copy() for x in molecules], r.products)
                 r.meta['MATCHED_RULE'] = i
                 yield r
 
                 x = molecules.copy()
-                x.insert(0, p)
+                for p in reversed(r.products):
+                    x.insert(0, p.copy())
                 x = fix_mapping_overlap(x)
-                for n in range(1, len(molecules) + 1):
+                for n in range(len(r.products), len(molecules) + len(r.products)):
                     y = x.copy()
                     del y[n]
                     for m, nrx in enumerate(nxt_rxn):
@@ -260,7 +226,7 @@ def _prepare_reactor(rules, name):
 
     w.__module__ = __name__
     w.__qualname__ = w.__name__ = name
-    doc = w.__doc__ % ('\n'.join(f'{n}: {".".join(r)}>>{p}' for n, (*r, p) in enumerate(rules[1:])),
+    doc = w.__doc__ % ('\n'.join(f'{n}: {".".join(r)}>>{".".join(p)}' for n, (r, p) in enumerate(rules[1:])),
                        '\n'.join(f'{n}: {r}' for n, r in enumerate(rules[0])) or '--')
     w.__doc__ = '\n'.join(x.lstrip() for x in doc.splitlines())
     return w

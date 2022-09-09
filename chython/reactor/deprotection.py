@@ -96,9 +96,9 @@ _diol13_benzylidene = (
 )
 
 _carbonyl_dithioacetal = (  # MeI - S methylation + hydrolysis
-    ('[C;D3,D4;z1;x2:1]1[S;D2][C;D2][C;D2][S;D2]1', '[A:1]=O'),
-    ('[C;D3,D4;z1;x2:1]1[S;D2][C;D2][C;D2][C;D2][S;D2]1', '[A:1]=O'),
-    ('[C;D3,D4;z1;x2:1]([S;D2][C;D1])[S;D2][C;D1]', '[A:1]=O'),
+    ('[C;D3,D4;z1;x2:1]1[S;D2:3][C;D2][C;D2][S;D2]1', '[A:1]=O'),
+    ('[C;D3,D4;z1;x2:1]1[S;D2:3][C;D2][C;D2][C;D2][S;D2]1', '[A:1]=O'),
+    ('[C;D3,D4;z1;x2:1]([S;D2:3][C;D1])[S;D2][C;D1]', '[A:1]=O'),
 )
 
 _carboxyl_allyl = (  # [Pd] + NuH
@@ -187,9 +187,10 @@ _amine_nosyl = (  # NS. With SH-CH2-CH2-OH
 # acidic deprotection #
 #######################
 
-_alcohol_acetal = (  # MOM THP
+_alcohol_acetal = (
     ('[C;D2,D3,D4;z1;x1:1][O:2][C;D2]O[C;D1]', '[A:1][A:2]'),  # MOM
     ('[C;D2,D3,D4;z1;x1:1][O:2][C;D3]1[O][C;D2][C;D2][C;D2][C;D2]1', '[A:1][A:2]'),  # THP
+    ('[C;D2,D3,D4;z1;x1:1][O:2][C;D2]O[C;D2]C:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1][A:2]'),  # BOM
 )
 
 _alcohol_tritil = (  # Ph3C-
@@ -225,9 +226,9 @@ _diol13 = (  # acetals based
 )
 
 _carbonyl = (  # acetals
-    ('[C;D3,D4;z1;x2:1]1[O,S;D2][C;D2][C;D2][O,S;D2]1', '[A:1]=O'),  # dioxolane
-    ('[C;D3,D4;z1;x2:1]1[O,S;D2][C;D2][C;D2][C;D2][O,S;D2]1', '[A:1]=O'),  # dioxane
-    ('[C;D3,D4;z1;x2:1]([O,S;D2][C;D1])[O,S;D2][C;D1]', '[A:1]=O'),  # dimethoxy
+    ('[C;D3,D4;z1;x2:1]1[O,S;D2:3][C;D2][C;D2][O,S;D2]1', '[A:1]=O'),  # dioxolane
+    ('[C;D3,D4;z1;x2:1]1[O,S;D2:3][C;D2][C;D2][C;D2][O,S;D2]1', '[A:1]=O'),  # dioxane
+    ('[C;D3,D4;z1;x2:1]([O,S;D2:3][C;D1])[O,S;D2][C;D1]', '[A:1]=O'),  # dimethoxy
 )
 
 _carboxyl_tbu = (
@@ -235,7 +236,7 @@ _carboxyl_tbu = (
 )
 
 _carboxyl_trioxabicyclooctane = (  # Note! second step of basic hydrolysis required.
-    ('[C;D4;x3:1]12O[C;D2]C([C;D1])([C;D2]O1)[C;D2]O2', '[A:1](=O)O',
+    ('[C;D4;x3:1]12[O:4][C;D2]C([C;D1])([C;D2]O1)[C;D2]O2', '[A:1](=O)O',
      'CC(C)C12OCC(C)(CO1)CO2', 'CC(C)C(O)=O', 'CC(C)C12OCC(CC)(CO1)CO2', 'CC(C)C12OC(C)C(C)(CO1)CO2'),
 )
 
@@ -264,8 +265,8 @@ _alcohol_ester = (
 )
 
 _carboxyl_basic = (
-    ('[C;D3;x2:1](=[O:2])-O-[C;D1]', '[A:1](=[A:2])O'),  # Me
-    ('[C;D3;x2:1](=[O:2])-O-[C;D2]C(F)(F)F', '[A:1](=[A:2])O'),  # CF3-CH2-
+    ('[C;D3;x2:1](=[O:2])-[O:4]-[C;D1]', '[A:1](=[A:2])O'),  # Me
+    ('[C;D3;x2:1](=[O:2])-[O:4]-[C;D2]C(F)(F)F', '[A:1](=[A:2])O'),  # CF3-CH2-
 )
 
 _amine_tfa = (
