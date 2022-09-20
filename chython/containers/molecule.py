@@ -42,7 +42,7 @@ from ..algorithms.stereo import MoleculeStereo
 from ..algorithms.tautomers import Tautomers
 from ..algorithms.x3dom import X3domMolecule
 from ..exceptions import MappingError, ValenceError
-from ..periodictable import DynamicElement, Element, QueryElement
+from ..periodictable import DynamicElement, Element, QueryElement, H
 
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, StandardizeMolecule, MoleculeSmiles,
@@ -204,7 +204,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
     @cached_property
     def molecular_mass(self) -> float:
-        return sum(x.atomic_mass for x in self._atoms.values())
+        return sum(x.atomic_mass for x in self._atoms.values()) + sum(self._hydrogens.values()) * H().atomic_mass
 
     @cached_property
     def brutto(self) -> Dict[str, int]:
