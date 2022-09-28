@@ -151,7 +151,7 @@ def _prepare_reactor(rules, name):
     alerts = [smarts(x) for x in rules[0]]
 
     def w(*molecules, one_shot=False, rules_set: Optional[List[int]] = None,
-          alerts_set: Optional[List[int]] = None) -> Iterator[ReactionContainer]:
+          alerts_set: Optional[List[int]] = None, excess: Optional[List[int]] = None) -> Iterator[ReactionContainer]:
         """
         Generate reactions for given reactants.
 
@@ -167,6 +167,7 @@ def _prepare_reactor(rules, name):
         :param one_shot: Generate only single stage products. Otherwise, all possible combinations, including products.
         :param rules_set: Select only specific rules.
         :param alerts_set: Check only specific structural alerts of reactants. Pass empty list to disable any checks.
+        :param excess: Molecules indices which can be involved in multistep synthesis. All by default.
         """
         if not molecules:
             raise ValueError('empty molecule list')
@@ -177,52 +178,56 @@ def _prepare_reactor(rules, name):
         molecules = fix_mapping_overlap(molecules)
         seen = set()
         if one_shot:
-            if rules_set is None:
-                picked_rxn = enumerate(rxn_os)
-            else:
-                picked_rxn = [(x, rxn_os[x]) for x in rules_set]
+            picked_rxn = enumerate(rxn_os) if rules_set is None else [(x, rxn_os[x]) for x in rules_set]
             for i, rx in picked_rxn:
                 for r in rx(*molecules):
                     if (s := ' '.join(str(x) for x in r.products)) in seen:
                         continue
                     seen.add(s)
-                    r.meta['MATCHED_RULE'] = i
+                    r.meta['MATCHED_RULES'] = [i]
                     yield r
             return
 
-        if rules_set is None:
-            picked_rxn = list(enumerate(rxn))
-        else:
-            picked_rxn = [(x, rxn[x]) for x in rules_set]
+        excess = molecules if excess is None else [molecules[x] for x in excess]
+        picked_rxn = list(enumerate(rxn)) if rules_set is None else [(x, rxn[x]) for x in rules_set]
 
         stack = deque([])
         for i, r in enumerate(picked_rxn):
             x = picked_rxn.copy()
             del x[i]
-            stack.appendleft((r, molecules, x))
+            stack.appendleft((r, [], molecules, x))
 
         while stack:
-            (i, rx), rct, nxt_rxn = stack.pop()
+            (i, rx), chain, rct, nxt_rxn = stack.pop()
+            chain = chain + [i]
             for r in rx(*rct):
                 if (s := ' '.join(str(x) for x in r.products)) in seen:
                     continue
                 seen.add(s)
 
                 r = ReactionContainer([x.copy() for x in molecules], r.products)
-                r.meta['MATCHED_RULE'] = i
+                r.meta['MATCHED_RULES'] = chain
                 yield r
 
-                x = molecules.copy()
+                x = excess.copy()
                 for p in reversed(r.products):
                     x.insert(0, p.copy())
                 x = fix_mapping_overlap(x)
-                for n in range(len(r.products), len(molecules) + len(r.products)):
-                    y = x.copy()
-                    del y[n]
+                if excess is not molecules:
+                    # expected that product can react with all excess molecules simultaneously.
+                    # e.g. multicomponent reaction (Ugi)
                     for m, nrx in enumerate(nxt_rxn):
                         z = nxt_rxn.copy()
                         del z[m]
-                        stack.append((nrx, y, z))
+                        stack.append((nrx, chain, x.copy(), z))
+                else:  # drop one of the reactants
+                    for n in range(len(r.products), len(x)):
+                        y = x.copy()
+                        del y[n]
+                        for m, nrx in enumerate(nxt_rxn):
+                            z = nxt_rxn.copy()
+                            del z[m]
+                            stack.append((nrx, chain, y, z))
 
     w.__module__ = __name__
     w.__qualname__ = w.__name__ = name
