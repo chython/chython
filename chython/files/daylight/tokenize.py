@@ -102,8 +102,8 @@ def _tokenize(smiles):
         elif s.isnumeric():  # closures
             if token_type in (10, 11):
                 raise IncorrectSmarts('Query bond invalid')
-            elif token_type in (2, 3):
-                raise IncorrectSmiles('(1 or )1 case invalid')
+            elif token_type == 2:
+                raise IncorrectSmiles('(1 case invalid')
             elif token_type == 7:  # % already found. collect number
                 if not token and s == '0':
                     raise IncorrectSmiles('number starts with 0')
@@ -125,8 +125,8 @@ def _tokenize(smiles):
         elif s == '%':
             if token_type in (10, 11):
                 raise IncorrectSmarts('Query bond invalid')
-            elif token_type in (2, 3):
-                raise IncorrectSmiles('(%10 or )%10 case invalid')
+            elif token_type == 2:
+                raise IncorrectSmiles('(%10 case invalid')
             elif token:
                 tokens.append((token_type, token))
             token_type = 7
