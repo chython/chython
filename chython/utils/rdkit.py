@@ -123,6 +123,7 @@ def to_rdkit_molecule(data: MoleculeContainer, *, keep_mapping=True):
     """
     mol = RWMol()
     mapping = {}
+    atoms = data._atoms
     bonds = data._bonds
 
     for n, a in data.atoms():
@@ -138,6 +139,8 @@ def to_rdkit_molecule(data: MoleculeContainer, *, keep_mapping=True):
         mapping[n] = mol.AddAtom(ra)
 
     for n, m, b in data.bonds():
+        if atoms[n].atomic_symbol not in _inorganic:
+            n, m = m, n  # fix direction of dative bond
         mol.AddBond(mapping[n], mapping[m], _bond_map[b.order])
 
     for n in data._atoms_stereo:
@@ -172,12 +175,15 @@ def to_rdkit_molecule(data: MoleculeContainer, *, keep_mapping=True):
 
 
 _rdkit_bond_map = {BondType.SINGLE: 1, BondType.DOUBLE: 2, BondType.TRIPLE: 3, BondType.AROMATIC: 4, BondType.ZERO: 8,
-                   BondType.UNSPECIFIED: 8}
-_bond_map = {1: BondType.SINGLE, 2: BondType.DOUBLE, 3: BondType.TRIPLE, 4: BondType.AROMATIC, 8: BondType.ZERO}
+                   BondType.UNSPECIFIED: 8, BondType.DATIVE: 8}
+_bond_map = {1: BondType.SINGLE, 2: BondType.DOUBLE, 3: BondType.TRIPLE, 4: BondType.AROMATIC, 8: BondType.DATIVE}
 
 _chiral_cw = ChiralType.CHI_TETRAHEDRAL_CW
 _chiral_ccw = ChiralType.CHI_TETRAHEDRAL_CCW
 _trans = BondStereo.STEREOE
 _cis = BondStereo.STEREOZ
+_inorganic = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'F', 'Cl', 'Br', 'I', 'C', 'N', 'O',
+              'H', 'Si', 'P', 'S', 'Se', 'Ge', 'As', 'Sb', 'Te'}
+
 
 __all__ = ['from_rdkit_molecule', 'to_rdkit_molecule']

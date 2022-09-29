@@ -48,8 +48,8 @@ class Resonance:
                 hs.add(n)
                 for n, m, b in path:
                     hs.add(m)
-                    bonds[n][m]._Bond__order = b
-                radicals[m] = False
+                    bonds[n][m]._Bond__order = b  # noqa
+                radicals[m] = False  # noqa
                 rads.discard(m)
                 break  # path found
             # path not found. atom n keep as is
@@ -74,7 +74,7 @@ class Resonance:
                 hs.add(n)
                 for n, m, b in path:
                     hs.add(m)
-                    bonds[n][m]._Bond__order = b
+                    bonds[n][m]._Bond__order = b  # noqa
                 charges[m] = c_m
                 exits.discard(m)
                 break  # path from negative atom to positive atom found.

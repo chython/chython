@@ -31,14 +31,14 @@ def _rules_single():
     #
     #  [A*] - [A*] >> A = A or [A*] = [A*] >> A # A
     #
-    atoms = ({'atom': 'A', 'is_radical': True}, {'atom': 'A', 'is_radical': True})
-    bonds = ((1, 2, 1),)
-    atom_fix = {1: (0, False), 2: (0, False)}
-    bonds_fix = ((1, 2, 2),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
-    bonds = ((1, 2, 2),)
-    bonds_fix = ((1, 2, 3),)
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
+    # atoms = ({'atom': 'A', 'is_radical': True}, {'atom': 'A', 'is_radical': True})
+    # bonds = ((1, 2, 1),)
+    # atom_fix = {1: (0, False), 2: (0, False)}
+    # bonds_fix = ((1, 2, 2),)
+    # raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
+    # bonds = ((1, 2, 2),)
+    # bonds_fix = ((1, 2, 3),)
+    # raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
     # A   H   A     A     H   A
