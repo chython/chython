@@ -146,6 +146,12 @@ def _rules():
     bonds_fix = ((1, 2, 8),)
     rules.append((q, atom_fix, bonds_fix))
 
+    # ethers
+    q = smarts('[M:1]-[O+:2](-C)-C')
+    atom_fix = {1: (1, None), 2: (-1, None)}
+    bonds_fix = ((1, 2, 8),)
+    rules.append((q, atom_fix, bonds_fix))
+
     compiled_rules = []
     for q, atom_fix, bonds_fix in rules:
         any_atoms = [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
