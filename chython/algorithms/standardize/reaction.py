@@ -379,26 +379,40 @@ def _sift_ions(mols):
 
 
 def _contract_ions(anions, cations, total):
-    salts = []
     if not anions or not cations:  # nothing to contract
         return
     # check ambiguous cases
     if total > 0:
         if len(cations) > 1:  # deficit of anions
-            return
+            # we have an excess of cations. we can't assign anions univocally
+            return  # unite is ambiguous
+        salt = cations[0]
+        shift_x = salt._fix_plane_mean(0) + 1
+        for x in anions:
+            shift_x = x._fix_plane_mean(shift_x) + 1
+            salt = salt | x
+        return [salt]
     elif total < 0:
         if len(anions) > 1:  # deficit of cations
-            return
+            # we have an excess of anions. we can't assign cations univocally
+            return  # unite is ambiguous
+        salt = anions[0]
+        shift_x = salt._fix_plane_mean(0) + 1
+        for x in cations:
+            shift_x = x._fix_plane_mean(shift_x) + 1
+            salt = salt | x
+        return [salt]
     elif len(set(anions)) > 1 and len(set(cations)) > 1:  # different anions and cations
         return
 
+    salts = []
     anions = anions.copy()
     cations = cations.copy()
     while anions:
         ct = cations.pop()
         an = anions.pop()
         shift_x = ct._fix_plane_mean(0) + 1
-        shift_x = an._fix_plane_mean(shift_x)
+        shift_x = an._fix_plane_mean(shift_x) + 1
         salt = ct | an
         while True:
             c = int(salt)
