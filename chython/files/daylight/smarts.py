@@ -28,6 +28,10 @@ cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
 cx_hh = compile(r'atomProp(:[0-9]+\.(?:hyb|het|msk)\.[0-9]+)+')
 hybridization = {'4': 4, '3': 1, '2': 2, '1': 3}
 
+# AD-HOC for masked atoms in SMARTS
+# not thread safe
+global_free_masked = count(10 ** 10 + 1)
+
 
 def smarts(data: str):
     """
@@ -58,6 +62,10 @@ def smarts(data: str):
     * primitive <xN> - heteroatoms (e.g. x2 - two heteroatoms)
     * primitive <zN> - hybridization (N = 1 - sp3, 2 - sp2, 3 - sp, 4 - aromatic)
     * primitive <M> - masked atom
+
+    Note: atom numbers greater than 10 ** 9 forbidden for usage and reserved for masked atoms numbering.
+    In multiprocess mode has potential bugs in reaction enumeration task then used templates prepared from components
+    from different processes. For avoiding, prepare templates on single process and then share it.
     """
     smr, *cx = data.split()
 
@@ -96,7 +104,7 @@ def smarts(data: str):
     mapping = {}
     free = count(max(a['mapping'] for a in data['atoms']) + 1)
     for i, a in enumerate(data['atoms']):
-        mapping[i] = n = a.pop('mapping') or next(free)
+        mapping[i] = n = a.pop('mapping') or next(global_free_masked if a['masked'] else free)
         e = a.pop('element')
         if it := a.pop('isotope'):
             if isinstance(e, int):

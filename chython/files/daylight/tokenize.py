@@ -390,7 +390,7 @@ def smarts_tokenize(smi):
         if token_type in (0, 8):  # simple atom
             out.append((0, {'element': token, 'isotope': None, 'mapping': 0, 'charge': 0, 'is_radical': False,
                             'heteroatoms': None, 'hydrogens': None, 'neighbors': None,
-                            'rings_sizes': None, 'hybridization': None}))
+                            'rings_sizes': None, 'hybridization': None, 'masked': False}))
         elif token_type == 5:
             out.append(_query_parse(token))
         else:
