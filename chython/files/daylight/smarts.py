@@ -30,7 +30,7 @@ hybridization = {'4': 4, '3': 1, '2': 2, '1': 3}
 
 # AD-HOC for masked atoms in SMARTS
 # not thread safe
-global_free_masked = count(10 ** 10 + 1)
+global_free_masked = count(10 ** 9 + 1)
 
 
 def smarts(data: str):
