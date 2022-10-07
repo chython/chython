@@ -182,9 +182,9 @@ def _prepare_reactor(rules, name):
             picked_rxn = enumerate(rxn_os) if rules_set is None else [(x, rxn_os[x]) for x in rules_set]
             for i, rx in picked_rxn:
                 for r in rx(*molecules):
-                    if (s := ' '.join(str(x) for x in r.products)) in seen:
+                    if str(r) in seen:
                         continue
-                    seen.add(s)
+                    seen.add(str(r))
                     r.meta['MATCHED_RULES'] = [i]
                     yield r
             return
@@ -202,9 +202,9 @@ def _prepare_reactor(rules, name):
             (i, rx), chain, rct, nxt_rxn = stack.pop()
             chain = chain + [i]
             for r in rx(*rct):
-                if (s := ' '.join(str(x) for x in r.products)) in seen:
+                if str(r) in seen:
                     continue
-                seen.add(s)
+                seen.add(str(r))
 
                 r = ReactionContainer([x.copy() for x in molecules], r.products)
                 r.meta['MATCHED_RULES'] = chain

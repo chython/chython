@@ -79,6 +79,7 @@ class Reactor(BaseReactor):
         len_patterns = len(self.patterns)
         structures = fix_mapping_overlap(structures)
         s_nums = set(range(len(structures)))
+        seen = set()
         if self.__one_shot:
             for chosen in permutations(s_nums, len_patterns):
                 ignored = [structures[x] for x in s_nums.difference(chosen)]
@@ -89,11 +90,13 @@ class Reactor(BaseReactor):
                                           new + [x.copy() for x in ignored])
                     if len(new) > 1:  # try to keep salts
                         r.contract_ions()
+                    if str(r) in seen:
+                        continue
+                    seen.add(str(r))
                     yield r
         else:
             queue = deque(([structures[x] for x in chosen], [structures[x] for x in s_nums.difference(chosen)], 0)
                           for chosen in permutations(s_nums, len_patterns))
-            seen = set()
             while queue:
                 chosen, ignored, depth = queue.popleft()
                 depth += 1
