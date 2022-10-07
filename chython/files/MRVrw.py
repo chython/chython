@@ -327,7 +327,7 @@ class MRVWrite:
 
     def close(self, force=False):
         """
-        write close tag of MRV file and close opened file
+        Write close tag of MRV file and close opened file
 
         :param force: force closing of externally opened file or buffer
         """
@@ -348,18 +348,20 @@ class MRVWrite:
         self.close()
 
     @staticmethod
-    def __write_closed(_):
+    def __write_closed(data, *, skip_mapping=False):
         raise ValueError('I/O operation on closed writer')
 
-    def write(self, data: Union[ReactionContainer, MoleculeContainer]):
+    def write(self, data: Union[ReactionContainer, MoleculeContainer], *, skip_mapping: bool = False):
         """
-        write single molecule or reaction into file
+        Write single molecule or reaction into file
+
+        :param skip_mapping: prepare structures without atom mappings
         """
         self._file.write('<cml>\n')
-        self.__write(data)
+        self.__write(data, skip_mapping=skip_mapping)
         self.write = self.__write
 
-    def __write(self, data):
+    def __write(self, data, *, skip_mapping=False):
         if isinstance(data, ReactionContainer):
             buffer = ['<MDocument><MChemicalStruct>']
             if not data._arrow:
@@ -388,7 +390,7 @@ class MRVWrite:
                         buffer.append(f'<molecule title="{m.name}" molID="m{n}">')
                     else:
                         buffer.append(f'<molecule molID="m{n}">')
-                    buffer.append(self.__convert_structure(m))
+                    buffer.append(self.__convert_structure(m, skip_mapping))
                     buffer.append('</molecule>')
                 buffer.append(f'</{j}>')
 
@@ -399,7 +401,7 @@ class MRVWrite:
         elif not isinstance(data, MoleculeContainer):
             raise TypeError('MoleculeContainer expected')
         else:
-            m = self.__convert_structure(data)
+            m = self.__convert_structure(data, skip_mapping)
             self._file.write('<MDocument><MChemicalStruct>')
 
             if data.name:
@@ -419,7 +421,7 @@ class MRVWrite:
         self._file.write('</MChemicalStruct></MDocument>\n')
 
     @staticmethod
-    def __convert_structure(g):
+    def __convert_structure(g, skip_mapping):
         gp = g._plane
         gc = g._charges
         gr = g._radicals
@@ -431,8 +433,9 @@ class MRVWrite:
         for n, atom in g._atoms.items():
             x, y = gp[n]
             ih = hg[n]
-            out.append(f'<atom id="a{n}" elementType="{atom.atomic_symbol}" '
-                       f'x2="{x * 2:.4f}" y2="{y * 2:.4f}" mrvMap="{n}"')
+            out.append(f'<atom id="a{n}" elementType="{atom.atomic_symbol}" x2="{x * 2:.4f}" y2="{y * 2:.4f}"')
+            if not skip_mapping:
+                out.append(f' mrvMap="{n}"')
             if gc[n]:
                 out.append(f' formalCharge="{gc[n]}"')
             if gr[n]:
