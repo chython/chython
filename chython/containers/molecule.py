@@ -826,7 +826,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         """
         if compressed:
             data = decompress(data)
-        if data[0] != 0:
+        if data[0] != 2:
             raise ValueError('invalid pack header')
 
         (mapping, atom_numbers, isotopes, charges, radicals, hydrogens, plane, bonds,
