@@ -20,15 +20,14 @@ from array import array
 from CachedMethods import cached_args_method
 from collections import Counter, defaultdict
 from functools import cached_property
-from itertools import zip_longest
-from math import ceil
 from numpy import uint, zeros
-from struct import pack_into, unpack_from
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 from weakref import ref
 from zlib import compress, decompress
 from . import query  # cyclic imports resolve
 from .bonds import Bond, DynamicBond, QueryBond
+from ._pack import pack
+from ._unpack import unpack
 from .cgr import CGRContainer
 from .graph import Graph
 from ..algorithms.aromatics import Aromatize
@@ -753,7 +752,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             return super().get_mapping(other, **kwargs)
         raise TypeError('MoleculeContainer expected')
 
-    def pack(self, *, compressed=True) -> bytes:
+    def pack(self, *, compressed=True, check=True) -> bytes:
         """
         Pack into compressed bytes.
 
@@ -767,7 +766,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         Format specification::
 
             Big endian bytes order
-            8 bit - empty byte for future extending
+            8 bit - 0x02 byte (current format specification)
             12 bit - number of atoms
             12 bit - cis/trans stereo block size
             Atom block 9 bytes (repeated):
@@ -785,101 +784,26 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             For example CC(=O)O - {1: [2], 2: [1, 3, 4], 3: [2], 4: [2]} >> [2, 1, 3, 4, 2, 2].
             Repeated block (equal to bonds count).
             24 bit - paired 12 bit numbers.
-            Bonds order block (repeated):
-            16 bit - 5 bonds grouped (3 bit each). 1 bit unused.
-             Zero padding used than bonds count not proportional to 5.
+            Bonds order block 3 bit per bond zero-padded to full byte at the end.
             Cis/trans data block (repeated):
             24 bit - atoms pair
             7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
             1 bit - sign
 
         :param compressed: return zlib-compressed pack.
+        :param check: check molecule for format restrictions.
         """
-        bonds = self._bonds
-        if max(bonds) > 4095:
-            raise ValueError('Big molecules not supported')
-        if any(len(x) > 15 for x in bonds.values()):
-            raise ValueError('To many neighbors not supported')
-        from ..files._mdl.mol import common_isotopes
+        if check:
+            bonds = self._bonds
+            if max(bonds) > 4095:
+                raise ValueError('Big molecules not supported')
+            if any(len(x) > 15 for x in bonds.values()):
+                raise ValueError('To many neighbors not supported')
 
-        plane = self._plane
-        charges = self._charges
-        radicals = self._radicals
-        hydrogens = self._hydrogens
-        atoms_stereo = self._atoms_stereo
-        allenes_stereo = self._allenes_stereo
-        cis_trans_stereo = self._cis_trans_stereo
-
-        data = bytearray(4 +  # extension byte + atoms count + cis/trans bit
-                         9 * self.atoms_count +  # atoms data
-                         3 * self.bonds_count +  # connection table
-                         2 * ceil(self.bonds_count / 5) +  # bonds order
-                         4 * len(cis_trans_stereo))
-        pack_into('>HB', data, 1, (self.atoms_count << 4) | (len(cis_trans_stereo) >> 8), len(cis_trans_stereo) & 0xff)
-        shift = 4
-
-        neighbors = []
-        bonds_pack = []
-        seen = set()
-        hold = []
-        for o, (n, a) in enumerate(self._atoms.items()):
-            bs = bonds[n]
-            neighbors.extend(bs)
-            seen.add(n)
-            for m, b in bs.items():
-                if m not in seen:
-                    bonds_pack.append(b.order - 1)  # 8 - 4 bit, but 7 - 3 bit
-
-            # 3 bit - hydrogens (0-7) | 4 bit - charge | 1 bit - radical
-            hcr = (charges[n] + 4) << 1
-            if radicals[n]:
-                hcr |= 1
-            if (h := hydrogens[n]) is None:
-                hcr |= 224
-            else:
-                hcr |= h << 5
-
-            # 2 bit tetrahedron sign | 2 bit - allene sign | 5 bit - isotope | 7 bit - atomic number (<=118)
-            sia = a.atomic_number
-            if a.isotope:
-                sia |= (a.isotope - common_isotopes[a.atomic_symbol] + 16) << 7
-
-            if n in atoms_stereo:
-                if atoms_stereo[n]:
-                    sia |= 0xc000
-                else:
-                    sia |= 0x8000
-            if n in allenes_stereo:
-                if allenes_stereo[n]:
-                    sia |= 0x3000
-                else:
-                    sia |= 0x2000
-
-            hold.append((shift + 9 * o, (n << 4) | len(bs), sia, *plane[n], hcr))
-
-        shift += 9 * self.atoms_count + 3 * self.bonds_count - 4
-        ngb = iter(reversed(neighbors))
-        for o, (n2, n1) in enumerate(zip_longest(ngb, ngb)):
-            # 12 bit + 12 bit
-            pack_into('>I', data, shift - 3 * o, (n1 << 12) | n2)
-
-        # pack after connection table for preventing override!
-        for x in hold:
-            pack_into('>2H2eB', data, *x)
-
-        # 16 bit - 5 bonds packing. 1 bit empty.
-        shift += 4
-        bp = iter(bonds_pack)
-        for o, (b1, b2, b3, b4, b5) in enumerate(zip_longest(bp, bp, bp, bp, bp, fillvalue=0)):
-            pack_into('>H', data, shift + 2 * o, (b1 << 12) | (b2 << 9) | (b3 << 6) | (b4 << 3) | b5)
-
-        shift += 2 * ceil(self.bonds_count / 5)
-        for o, ((n, m), s) in enumerate(cis_trans_stereo.items()):
-            pack_into('>I', data, shift + 4 * o, (n << 20) | (m << 8) | s)
-
+        data = pack(self)
         if compressed:
-            return compress(bytes(data), 9)
-        return bytes(data)
+            return compress(data, 9)
+        return data
 
     @classmethod
     def pack_len(cls, data: bytes, /, *, compressed=True) -> int:
@@ -900,10 +824,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
         :param compressed: decompress data before processing.
         """
-        try:  # windows? ;)
-            from ._unpack import unpack
-        except ImportError:
-            return cls.pure_unpack(data, compressed=compressed, _return_pack_length=_return_pack_length)
         if compressed:
             data = decompress(data)
         if data[0] != 0:
@@ -938,100 +858,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
         if _return_pack_length:
             return mol, pack_length
-        return mol
-
-    @classmethod
-    def pure_unpack(cls, data: Union[bytes, memoryview], /, *, compressed=True,
-                    _return_pack_length=False) -> 'MoleculeContainer':
-        """
-        Unpack from compressed bytes. Python implementation.
-        """
-        from ..files._mdl.mol import common_isotopes
-        if compressed:
-            data = memoryview(decompress(data))
-        elif not isinstance(data, memoryview):
-            data = memoryview(data)
-        if data[0] != 0:
-            raise ValueError('invalid pack header')
-
-        mol = cls()
-        atoms = mol._atoms
-        bonds = mol._bonds
-        plane = mol._plane
-        charges = mol._charges
-        radicals = mol._radicals
-        hydrogens = mol._hydrogens
-        atoms_stereo = mol._atoms_stereo
-        allenes_stereo = mol._allenes_stereo
-        cis_trans_stereo = mol._cis_trans_stereo
-
-        neighbors = {}
-        acs = int.from_bytes(data[1:4], 'big')
-        shift = 4
-        for o in range(acs >> 12):
-            nn, sia, x, y, hcr = unpack_from('>2H2eB', data, shift + 9 * o)
-            n = nn >> 4
-            neighbors[n] = nn & 0x0f
-            # stereo
-            s = sia >> 14
-            if s:
-                atoms_stereo[n] = s == 3
-            s = (sia >> 12) & 3
-            if s:
-                allenes_stereo[n] = s == 3
-
-            # atoms
-            a = Element.from_atomic_number(sia & 0x7f)
-            ai = (sia >> 7) & 0x1f
-            if ai:
-                ai += common_isotopes[a.__name__] - 16
-            else:
-                ai = None
-            atoms[n] = a = a(ai)
-            a._attach_graph(mol, n)
-
-            charges[n] = ((hcr >> 1) & 0x0f) - 4
-            radicals[n] = bool(hcr & 0x01)
-            hydrogens[n] = None if (h := hcr >> 5) == 7 else h
-            plane[n] = (x, y)
-
-        bc = sum(neighbors.values()) // 2
-        shift += 9 * len(neighbors) - 1
-        connections = []
-        for o in range(bc):
-            nn = unpack_from('>I', data, shift + 3 * o)[0]
-            connections.append((nn >> 12) & 0x0fff)
-            connections.append(nn & 0x0fff)
-
-        shift += 1 + 3 * bc
-        orders = []
-        for o in range(ceil(bc / 5)):
-            bb = unpack_from('>H', data, shift + 2 * o)[0]
-            orders.append(((bb >> 12) & 0x07) + 1)
-            orders.append(((bb >> 9) & 0x07) + 1)
-            orders.append(((bb >> 6) & 0x07) + 1)
-            orders.append(((bb >> 3) & 0x07) + 1)
-            orders.append((bb & 0x07) + 1)
-        orders = orders[:bc]  # skip padding
-
-        con = iter(connections)
-        ords = iter(orders)
-        for n, ms in neighbors.items():
-            bonds[n] = cbn = {}
-            for _ in range(ms):
-                m = next(con)
-                if m in bonds:  # bond partially exists. need back-connection.
-                    cbn[m] = bonds[m][n]
-                else:
-                    cbn[m] = b = Bond(next(ords))
-                    b._attach_graph(mol, n, m)
-
-        shift += 2 * ceil(bc / 5)
-        for o in range(acs & 0x0fff):  # cis/trans
-            ct = unpack_from('>I', data, shift + 4 * o)[0]
-            cis_trans_stereo[(ct >> 20, (ct >> 8) & 0x0fff)] = ct & 0x01
-        if _return_pack_length:
-            return mol, shift + (acs & 0x0fff) * 4
         return mol
 
     def _augmented_substructure(self, atoms: Iterable[int], deep: int):

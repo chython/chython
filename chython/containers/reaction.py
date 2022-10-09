@@ -163,7 +163,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
 
         Format specification:
         Big endian bytes order
-        8 bit - header byte = 0x01. Extending possible
+        8 bit - header byte = 0x03. Extending possible
         8 bit - reactants count
         8 bit - reagents count
         8 bit - products count
@@ -171,7 +171,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
 
         :param compressed: return zlib-compressed pack.
         """
-        data = b''.join((bytearray((1, len(self.__reactants), len(self.__reagents), len(self.__products))),
+        data = b''.join((bytearray((3, len(self.__reactants), len(self.__reagents), len(self.__products))),
                          *(m.pack(compressed=False) for m in self.molecules())))
         if compressed:
             return compress(data, 9)
@@ -215,13 +215,13 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         if compressed:
             data = decompress(data)
         data = memoryview(data)
-        if data[0] != 1:
+        if data[0] != 3:
             raise ValueError('invalid pack header')
 
         reactants, reagents, products = data[1], data[2], data[3]
         molecules = []
         shift = 4
-        for i in range(reactants + reagents + products):
+        for _ in range(reactants + reagents + products):
             m, pl = MoleculeContainer.unpack(data[shift:], compressed=False, _return_pack_length=True)
             molecules.append(m)
             shift += pl
