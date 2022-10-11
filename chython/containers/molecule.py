@@ -26,8 +26,6 @@ from weakref import ref
 from zlib import compress, decompress
 from . import query  # cyclic imports resolve
 from .bonds import Bond, DynamicBond, QueryBond
-from ._pack import pack
-from ._unpack import unpack
 from .cgr import CGRContainer
 from .graph import Graph
 from ..algorithms.aromatics import Aromatize
@@ -793,6 +791,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         :param compressed: return zlib-compressed pack.
         :param check: check molecule for format restrictions.
         """
+        from ._pack import pack
+
         if check:
             bonds = self._bonds
             if not bonds:
@@ -826,6 +826,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
 
         :param compressed: decompress data before processing.
         """
+        from ._unpack import unpack
+
         if compressed:
             data = decompress(data)
         if data[0] not in (0, 2):
