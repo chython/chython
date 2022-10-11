@@ -57,7 +57,7 @@ def _rules():
 
     # metathesis
     r = smiles('[CH3:1][CH:2]=[CH2:3].[CH3:5][CH:4]=[CH2:6]>>[CH3:5][CH:3]=[CH:2][CH3:1]')
-    raw_rules.append((r, {3: 4}, None))
+    raw_rules.append((r, {3: 4, 4: 3}, None))
 
     rules = []
     for r, f, m in raw_rules:
