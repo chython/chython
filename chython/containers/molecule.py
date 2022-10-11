@@ -75,7 +75,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             raise TypeError('name should be string up to 80 symbols')
         self.__name = name
 
-    @cached_args_method
     def environment(self, atom: int, include_bond: bool = True, include_atom: bool = True) -> \
             Tuple[Union[Tuple[int, Bond, Element],
                         Tuple[int, Element],
