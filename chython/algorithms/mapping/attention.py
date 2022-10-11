@@ -18,12 +18,16 @@
 #
 from CachedMethods import class_cached_property
 from itertools import chain, count, repeat
+from logging import getLogger, INFO
 from numpy import ix_, unravel_index, argmax, zeros, array, isclose, nonzero, ones, mean
 from typing import TYPE_CHECKING, Union
 
 
 if TYPE_CHECKING:
     from chython import ReactionContainer
+
+logger = getLogger('chython.attention')
+logger.setLevel(INFO)
 
 
 class Attention:
@@ -34,6 +38,9 @@ class Attention:
         """
         Do atom-to-atom mapping. Return True if mapping changed.
         """
+        if any(len(bs) > 14 for m in self.molecules() for bs in m._bonds.values()):
+            logger.info('atom-to-atom mapping not supported for hypervalent compounds')
+            return False
         fixed = self.__fix_collisions()
         equal_atoms, p2r, r2p, r_adj, p_adj, r_map, p_map, pa = self.__prepare_remapping()
 
