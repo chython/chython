@@ -153,26 +153,27 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         for m in self.molecules():
             m.flush_cache()
 
-    def pack(self, *, compressed=True):
+    def pack(self, *, compressed=True, check=True):
         """
         Pack into compressed bytes.
 
         Note:
             * Same restrictions as in molecules pack.
-            * reactants, reagents nad products should contain less than 257 molecules.
+            * reactants, reagents nad products should contain less than 256 molecules.
 
         Format specification:
         Big endian bytes order
-        8 bit - header byte = 0x01. Extending possible
+        8 bit - header byte = 0x01 (current format specification)
         8 bit - reactants count
         8 bit - reagents count
         8 bit - products count
         x bit - concatenated molecules packs
 
         :param compressed: return zlib-compressed pack.
+        :param check: check molecules for format restrictions.
         """
         data = b''.join((bytearray((1, len(self.__reactants), len(self.__reagents), len(self.__products))),
-                         *(m.pack(compressed=False) for m in self.molecules())))
+                         *(m.pack(compressed=False, check=check) for m in self.molecules())))
         if compressed:
             return compress(data, 9)
         return data
@@ -188,6 +189,8 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         if data[0] != 1:
             raise ValueError('invalid pack header')
         reactants, reagents, products = data[1], data[2], data[3]
+
+        v = data[4]  # mol pack version
         shift = 5  # RH+RC+RC+PC+MH
         molecules = []
         for _ in range(reactants + reagents + products - 1):
@@ -199,7 +202,10 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
                 neighbors += data[shift] & 0x0f
                 shift += 9
             neighbors //= 2
-            shift += 3 * neighbors + ceil(neighbors / 5) * 2 + (acs & 0x0fff) * 4
+            if v == 2:
+                shift += 3 * neighbors + ceil(neighbors * 3 / 8) + (acs & 0x0fff) * 4
+            elif v == 0:
+                shift += 3 * neighbors + ceil(neighbors / 5) * 2 + (acs & 0x0fff) * 4
             molecules.append(ac)
         if reactants or reagents or products:
             molecules.append(int.from_bytes(data[shift: shift + 3], 'big') >> 12)
@@ -221,7 +227,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         reactants, reagents, products = data[1], data[2], data[3]
         molecules = []
         shift = 4
-        for i in range(reactants + reagents + products):
+        for _ in range(reactants + reagents + products):
             m, pl = MoleculeContainer.unpack(data[shift:], compressed=False, _return_pack_length=True)
             molecules.append(m)
             shift += pl

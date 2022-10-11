@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,100 +17,185 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 cimport cython
+from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.math cimport ldexp
+
 from chython.containers.bonds import Bond
 
 
+@cython.nonecheck(False)
 @cython.boundscheck(False)
+@cython.cdivision(True)
+@cython.wraparound(False)
 def unpack(const unsigned char[::1] data not None):
-    cdef int isotope_shift
-    cdef unsigned char a, b, c, d
-    cdef unsigned int na, nct, i, j, n, m, pack_length, shift = 4, order_shift = 0, nb = 0
-
-    cdef unsigned int[4095] mapping, atom, isotopes, hydrogens, neighbors, orders, cis_trans_1, cis_trans_2
-    cdef unsigned int[8190] connections
-    cdef int[4095] charges
-    cdef bint[4095] radicals, is_tet, is_all, tet_sign, all_sign, ct_sign
-    cdef double[4095] x, y
-    cdef bint[4096] seen
+    cdef char *charges
+    cdef unsigned char a, b, c, d, isotope, atomic_number, neighbors_count, s = 0, nc, version
+    cdef unsigned char *atoms, *hydrogens, *neighbors, *radicals, *orders
+    cdef unsigned char *is_tet, *is_all, *tet_sign, *all_sign, *ct_sign
+    cdef unsigned short atoms_count, bonds_count = 0, cis_trans_count, order_count
+    cdef unsigned short i, j, k = 0, n, m, buffer_b, shift = 0
+    cdef unsigned short *mapping, *isotopes, *cis_trans_1, *cis_trans_2, *connections
+    cdef unsigned int size, atoms_shift = 4, bonds_shift, order_shift, cis_trans_shift
+    cdef double *x_coord, *y_coord
+    cdef unsigned char[4096] seen
 
     cdef object bond, py_n, py_m
-    cdef dict py_charges, py_radicals, py_hydrogens, py_plane, py_bonds, tmp
+    cdef dict py_charges, py_radicals, py_hydrogens, py_plane, py_bonds, py_ngb
     cdef dict py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo
     cdef list py_mapping, py_atoms, py_isotopes, py_bonds_flat
 
-    # lets extract data
+    # read header
+    version = data[0]
     a, b, c = data[1], data[2], data[3]
-    na = a << 4| (b & 0xf0) >> 4
-    nct = (b & 0x0f) << 8 | c
+    atoms_count = a << 4| b >> 4
+    cis_trans_count = (b & 0x0f) << 8 | c
 
-    for i in range(na):
-        a, b = data[shift], data[shift + 1]
-        mapping[i] = n = a << 4 | (b & 0xf0) >> 4
-        seen[n] = False
-        neighbors[i] = b & 0x0f
-        nb += b & 0x0f
+    # allocate memory
+    charges = <char*> PyMem_Malloc(atoms_count * sizeof(char))
+    radicals = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
+    atoms = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
+    hydrogens = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
+    neighbors = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
+    is_tet = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
+    is_all = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
+    tet_sign = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
+    all_sign = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
+    mapping = <unsigned short*> PyMem_Malloc(atoms_count * sizeof(unsigned short))
+    isotopes = <unsigned short*> PyMem_Malloc(atoms_count * sizeof(unsigned short))
+    x_coord = <double*> PyMem_Malloc(atoms_count * sizeof(double))
+    y_coord = <double*> PyMem_Malloc(atoms_count * sizeof(double))
 
-        a, b = data[shift + 2], data[shift + 3]
-        if a & 0x80:
-            is_tet[i] = True
-            tet_sign[i] = a & 0x40
+    if not charges or not radicals or not atoms or not hydrogens or not neighbors or not is_tet or not is_all:
+        raise MemoryError()
+    if not tet_sign or not all_sign or not mapping or not isotopes or not x_coord or not y_coord:
+        raise MemoryError()
+
+    # unpack atom block to separate attributes arrays
+    for i in range(atoms_count):
+        a, b = data[atoms_shift], data[atoms_shift + 1]
+        mapping[i] = n = a << 4 | b >> 4
+        seen[n] = 0  # erase random value
+        neighbors[i] = neighbors_count = b & 0x0f
+        bonds_count += neighbors_count
+
+        a, b = data[atoms_shift + 2], data[atoms_shift + 3]
+        if a >> 7:  # tetrahedron bit set
+            is_tet[i] = 1
+            is_all[i] = 0
+            tet_sign[i] = a & 0x40 != 0
         else:
-            is_tet[i] = False
-        if a & 0x20:
-            is_all[i] = True
-            all_sign[i] = a & 0x10
-        else:
-            is_all[i] = False
+            is_tet[i] = 0
+            if a >> 5:  # allene bit set
+                is_all[i] = 1
+                all_sign[i] = a & 0x10 != 0
+            else:
+                is_all[i] = 0
 
-        atom[i] = b & 0x7f
-        isotope_shift = (a & 0x0f) << 1 | b >> 7
-        if isotope_shift:
-            isotopes[i] = common_isotopes[b & 0x7f] + isotope_shift
+        atoms[i] = atomic_number = b & 0x7f
+        isotope = (a & 0x0f) << 1 | b >> 7
+        if isotope:
+            isotopes[i] = common_isotopes[atomic_number] + isotope
         else:
             isotopes[i] = 0
 
-        a, b = data[shift + 4], data[shift + 5]
-        x[i] = double_from2bytes(a, b)
-        a, b = data[shift + 6], data[shift + 7]
-        y[i] = double_from2bytes(a, b)
+        a, b = data[atoms_shift + 4], data[atoms_shift + 5]
+        x_coord[i] = double_from_bytes(a, b)
+        a, b = data[atoms_shift + 6], data[atoms_shift + 7]
+        y_coord[i] = double_from_bytes(a, b)
 
-        a = data[shift + 8]
+        a = data[atoms_shift + 8]
         hydrogens[i] = a >> 5
         charges[i] = ((a >> 1) & 0x0f) - 4
         radicals[i] = a & 0x01
+        atoms_shift += 9
 
-        shift += 9
+    # calculate bonds count and pack sections
+    bonds_count /= 2
 
-    nb //= 2
-    for i in range(nb):
-        a, b, c = data[shift], data[shift + 1], data[shift + 2]
-        connections[i * 2] = a << 4| (b & 0xf0) >> 4
-        connections[i * 2 + 1] = (b & 0x0f) << 8 | c
-        shift += 3
+    if version == 2:
+        order_count = bonds_count * 3
+        if order_count % 8:
+            order_count = order_count / 8 + 1
+        else:
+            order_count /= 8
+    elif version == 0:
+        order_count = bonds_count / 5
+        if bonds_count % 5:
+            order_count += 1
+        order_count *= 2
 
-    for i in range((nb // 5 + 1) if nb % 5 else (nb // 5)):
-        a, b = data[shift], data[shift + 1]
-        orders[i * 5] = (a >> 4) + 1
-        orders[i * 5 + 1] = ((a >> 1) & 0x07) + 1
-        orders[i * 5 + 2] = ((a & 0x01) << 2 | b >> 6) + 1
-        orders[i * 5 + 3] = ((b >> 3) & 0x07) + 1
-        orders[i * 5 + 4] = (b & 0x07) + 1
-        shift += 2
+    bonds_shift = atoms_shift
+    order_shift = bonds_shift + 3 * bonds_count
+    cis_trans_shift = order_count + order_shift
+    size = cis_trans_shift + 4 * cis_trans_count
 
-    for i in range(nct):
-        a, b, c, d = data[shift], data[shift + 1], data[shift + 2], data[shift + 3]
-        cis_trans_1[i] = a << 4 | (b & 0xf0) >> 4
-        cis_trans_2[i] = (b & 0x0f) << 8 | c
-        ct_sign[i] = d & 0x01
-        shift += 4
-    pack_length = shift
+    if bonds_count:
+        # keep 4 extra cells for padding
+        orders = <unsigned char*> PyMem_Malloc((bonds_count + 4) * sizeof(unsigned char))
+        connections = <unsigned short*> PyMem_Malloc(2 * bonds_count * sizeof(unsigned short))
+
+        # connection table is bidirected
+        for i in range(0, 2 * bonds_count, 2):
+            a, b, c = data[bonds_shift], data[bonds_shift + 1], data[bonds_shift + 2]
+            connections[i] = a << 4| b >> 4
+            connections[i + 1] = (b & 0x0f) << 8 | c
+            bonds_shift += 3
+
+        # collect flat bond order list
+        i = 0
+        if version == 2:
+            for j in range(order_shift, cis_trans_shift):
+                # 3 3 2 | 1 3 3 1 | 2 3 3
+                a = data[j]
+                if s == 1:
+                    orders[i] = buffer_b | a >> 7
+                    orders[i + 1] = (a >> 4) & 0x7
+                    orders[i + 2] = (a >> 1) & 0x7
+                    buffer_b = (a & 1) << 2
+                    s = 2
+                    i += 3
+                elif s == 2:
+                    orders[i] = buffer_b | a >> 6
+                    orders[i + 1] = (a >> 3) & 0x7
+                    orders[i + 2] = a & 0x7
+                    i += 3
+                    s = 0
+                else:
+                    orders[i] = a >> 5
+                    orders[i + 1] = (a >> 2) & 0x7
+                    buffer_b = (a & 0x3) << 1
+                    s = 1
+                    i += 2
+        elif version == 0:
+            for j in range(order_shift, cis_trans_shift, 2):
+                # 0 3 3 1 | 2 3 3
+                a, b = data[j], data[j + 1]
+                orders[i] = a >> 4
+                orders[i + 1] = (a >> 1) & 0x7
+                orders[i + 2] = (a & 0x1) << 2 | b >> 6
+                orders[i + 3] = (b >> 3) & 0x7
+                orders[i + 4] = b & 0x7
+                i += 5
+
+        if cis_trans_count:
+            cis_trans_1 = <unsigned short *> PyMem_Malloc(cis_trans_count * sizeof(unsigned short))
+            cis_trans_2 = <unsigned short *> PyMem_Malloc(cis_trans_count * sizeof(unsigned short))
+            ct_sign = <unsigned char *> PyMem_Malloc(cis_trans_count * sizeof(unsigned char))
+            if not cis_trans_1 or not cis_trans_2 or not ct_sign:
+                raise MemoryError()
+
+            for i in range(cis_trans_count):
+                a, b = data[cis_trans_shift], data[cis_trans_shift + 1]
+                c, d = data[cis_trans_shift + 2], data[cis_trans_shift + 3]
+                cis_trans_1[i] = a << 4 | b >> 4
+                cis_trans_2[i] = (b & 0x0f) << 8 | c
+                ct_sign[i] = d
+                cis_trans_shift += 4
 
     # define returned data
     py_mapping = []
     py_atoms = []
     py_isotopes = []
-    py_bonds = {}
     py_charges = {}
     py_radicals = {}
     py_hydrogens = {}
@@ -118,59 +203,80 @@ def unpack(const unsigned char[::1] data not None):
     py_atoms_stereo = {}
     py_allenes_stereo = {}
     py_cis_trans_stereo = {}
+    py_bonds = {}
     py_bonds_flat = []
 
-    shift = 0
-    for i in range(na):
+    for i in range(atoms_count):
         n = mapping[i]
-        py_n = n
+        py_n = n  # shared py int obj
 
         # fill intermediate data
         py_mapping.append(py_n)
-        py_atoms.append(atom[i])
+        py_atoms.append(atoms[i])
         py_isotopes.append(isotopes[i] or None)
 
         py_charges[py_n] = charges[i]
-        py_radicals[py_n] = radicals[i]
+        py_radicals[py_n] = bool(radicals[i])
         if hydrogens[i] == 7:
             py_hydrogens[py_n] = None
         else:
             py_hydrogens[py_n] = hydrogens[i]
-        py_plane[py_n] = (x[i], y[i])
+
+        py_plane[py_n] = (x_coord[i], y_coord[i])
 
         if is_tet[i]:
-            py_atoms_stereo[py_n] = tet_sign[i]
-        if is_all[i]:
-            py_allenes_stereo[py_n] = all_sign[i]
+            py_atoms_stereo[py_n] = bool(tet_sign[i])
+        elif is_all[i]:
+            py_allenes_stereo[py_n] = bool(all_sign[i])
 
-        tmp = {}
-        py_bonds[py_n] = tmp
-        seen[n] = True
-        for j in range(shift, shift + neighbors[i]):
+        py_bonds[py_n] = py_ngb = {}
+        seen[n] = 1
+
+        nc = neighbors[i]
+        for j in range(shift, shift + nc):
             m = connections[j]
             py_m = m
             if seen[m]:  # bond partially exists. need back-connection.
-                tmp[py_m] = py_bonds[py_m][py_n]
+                py_ngb[py_m] = py_bonds[py_m][py_n]
             else:
                 bond = object.__new__(Bond)
-                bond._Bond__order = orders[order_shift]
+                bond._Bond__order = orders[k] + 1
                 bond._Bond__n = py_n
                 bond._Bond__m = py_m
-                tmp[py_m] = bond
+                py_ngb[py_m] = bond
                 py_bonds_flat.append(bond)
-                order_shift += 1
+                k += 1
+        shift += nc
 
-        shift += neighbors[i]
-
-    for i in range(nct):
+    for i in range(cis_trans_count):
         py_cis_trans_stereo[(cis_trans_1[i], cis_trans_2[i])] = ct_sign[i]
 
+    PyMem_Free(charges)
+    PyMem_Free(radicals)
+    PyMem_Free(atoms)
+    PyMem_Free(hydrogens)
+    PyMem_Free(neighbors)
+    PyMem_Free(is_tet)
+    PyMem_Free(is_all)
+    PyMem_Free(tet_sign)
+    PyMem_Free(all_sign)
+    PyMem_Free(mapping)
+    PyMem_Free(isotopes)
+    PyMem_Free(x_coord)
+    PyMem_Free(y_coord)
+    if bonds_count:
+        PyMem_Free(connections)
+        PyMem_Free(orders)
+        if cis_trans_count:
+            PyMem_Free(cis_trans_1)
+            PyMem_Free(cis_trans_2)
+            PyMem_Free(ct_sign)
     return (py_mapping, py_atoms, py_isotopes,
             py_charges, py_radicals, py_hydrogens, py_plane, py_bonds,
-            py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo, pack_length, py_bonds_flat)
+            py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo, size, py_bonds_flat)
 
 
-cdef int[119] common_isotopes
+cdef short[119] common_isotopes
 common_isotopes[:] = [0, -15, -12, -9, -7, -5, -4, -2, 0, 3, 4, 7, 8, 11, 12, 15, 16, 19, 24, 23, 24, 29,
                       32, 35, 36, 39, 40, 43, 43, 48, 49, 54, 57, 59, 63, 64, 68, 69, 72, 73, 75, 77,
                       80, 82, 85, 87, 90, 92, 96, 99, 103, 106, 112, 111, 115, 117, 121, 123, 124, 125,
@@ -180,7 +286,7 @@ common_isotopes[:] = [0, -15, -12, -9, -7, -5, -4, -2, 0, 3, 4, 7, 8, 11, 12, 15
                       254, 262, 265, 265, 269, 262, 273, 273, 277, 281, 278]
 
 
-cdef double double_from2bytes(unsigned char a, unsigned char b):
+cdef double double_from_bytes(unsigned char a, unsigned char b):
     cdef bint sign
     cdef int e
     cdef unsigned int f
