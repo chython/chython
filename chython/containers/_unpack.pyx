@@ -29,10 +29,11 @@ from chython.containers.bonds import Bond
 @cython.wraparound(False)
 def unpack(const unsigned char[::1] data not None):
     cdef char *charges
-    cdef unsigned char a, b, c, d, isotope, atomic_number, neighbors_count, s = 0, nc
-    cdef unsigned char *atoms, *hydrogens, *neighbors, *radicals, *is_tet, *is_all, *tet_sign, *all_sign, *ct_sign
-    cdef unsigned char *orders
-    cdef unsigned short atoms_count, bonds_count = 0, cis_trans_count, order_count, i, j, k = 0, n, m, buffer_b, shift = 0
+    cdef unsigned char a, b, c, d, isotope, atomic_number, neighbors_count, s = 0, nc, version
+    cdef unsigned char *atoms, *hydrogens, *neighbors, *radicals, *orders
+    cdef unsigned char *is_tet, *is_all, *tet_sign, *all_sign, *ct_sign
+    cdef unsigned short atoms_count, bonds_count = 0, cis_trans_count, order_count
+    cdef unsigned short i, j, k = 0, n, m, buffer_b, shift = 0
     cdef unsigned short *mapping, *isotopes, *cis_trans_1, *cis_trans_2, *connections
     cdef unsigned int size, atoms_shift = 4, bonds_shift, order_shift, cis_trans_shift
     cdef double *x_coord, *y_coord
@@ -44,6 +45,7 @@ def unpack(const unsigned char[::1] data not None):
     cdef list py_mapping, py_atoms, py_isotopes, py_bonds_flat
 
     # read header
+    version = data[0]
     a, b, c = data[1], data[2], data[3]
     atoms_count = a << 4| b >> 4
     cis_trans_count = (b & 0x0f) << 8 | c
@@ -62,35 +64,32 @@ def unpack(const unsigned char[::1] data not None):
     isotopes = <unsigned short*> PyMem_Malloc(atoms_count * sizeof(unsigned short))
     x_coord = <double*> PyMem_Malloc(atoms_count * sizeof(double))
     y_coord = <double*> PyMem_Malloc(atoms_count * sizeof(double))
-    cis_trans_1 = <unsigned short*> PyMem_Malloc(cis_trans_count * sizeof(unsigned short))
-    cis_trans_2 = <unsigned short*> PyMem_Malloc(cis_trans_count * sizeof(unsigned short))
-    ct_sign = <unsigned char*> PyMem_Malloc(cis_trans_count * sizeof(unsigned char))
 
     if not charges or not radicals or not atoms or not hydrogens or not neighbors or not is_tet or not is_all:
         raise MemoryError()
-    if not tet_sign or not all_sign or not ct_sign or not mapping or not isotopes or not cis_trans_1 or not cis_trans_2:
-        raise MemoryError()
-    if not x_coord or not y_coord:
+    if not tet_sign or not all_sign or not mapping or not isotopes or not x_coord or not y_coord:
         raise MemoryError()
 
+    # unpack atom block to separate attributes arrays
     for i in range(atoms_count):
         a, b = data[atoms_shift], data[atoms_shift + 1]
         mapping[i] = n = a << 4 | b >> 4
-        seen[n] = 0
+        seen[n] = 0  # erase random value
         neighbors[i] = neighbors_count = b & 0x0f
         bonds_count += neighbors_count
 
         a, b = data[atoms_shift + 2], data[atoms_shift + 3]
-        if a >> 7:
+        if a >> 7:  # tetrahedron bit set
             is_tet[i] = 1
-            tet_sign[i] = a & 0x40
+            is_all[i] = 0
+            tet_sign[i] = a & 0x40 != 0
         else:
             is_tet[i] = 0
-        if a >> 5:
-            is_all[i] = 1
-            all_sign[i] = a & 0x10
-        else:
-            is_all[i] = 0
+            if a >> 5:  # allene bit set
+                is_all[i] = 1
+                all_sign[i] = a & 0x10 != 0
+            else:
+                is_all[i] = 0
 
         atoms[i] = atomic_number = b & 0x7f
         isotope = (a & 0x0f) << 1 | b >> 7
@@ -110,57 +109,88 @@ def unpack(const unsigned char[::1] data not None):
         radicals[i] = a & 0x01
         atoms_shift += 9
 
+    # calculate bonds count and pack sections
     bonds_count /= 2
-    order_count = bonds_count * 3
-    if order_count % 8:
-        order_count = order_count / 8 + 1
-    else:
-        order_count /= 8
+
+    if version == 2:
+        order_count = bonds_count * 3
+        if order_count % 8:
+            order_count = order_count / 8 + 1
+        else:
+            order_count /= 8
+    elif version == 0:
+        order_count = bonds_count / 5
+        if bonds_count % 5:
+            order_count += 1
+        order_count *= 2
+
     bonds_shift = atoms_shift
     order_shift = bonds_shift + 3 * bonds_count
     cis_trans_shift = order_count + order_shift
     size = cis_trans_shift + 4 * cis_trans_count
 
-    orders = <unsigned char*> PyMem_Malloc(bonds_count * sizeof(unsigned char))
-    connections = <unsigned short*> PyMem_Malloc(2 * bonds_count * sizeof(unsigned short))
+    if bonds_count:
+        # keep 4 extra cells for padding
+        orders = <unsigned char*> PyMem_Malloc((bonds_count + 4) * sizeof(unsigned char))
+        connections = <unsigned short*> PyMem_Malloc(2 * bonds_count * sizeof(unsigned short))
 
-    for i in range(0, 2 * bonds_count, 2):
-        a, b, c = data[bonds_shift], data[bonds_shift + 1], data[bonds_shift + 2]
-        connections[i] = a << 4| b >> 4
-        connections[i + 1] = (b & 0x0f) << 8 | c
-        bonds_shift += 3
+        # connection table is bidirected
+        for i in range(0, 2 * bonds_count, 2):
+            a, b, c = data[bonds_shift], data[bonds_shift + 1], data[bonds_shift + 2]
+            connections[i] = a << 4| b >> 4
+            connections[i + 1] = (b & 0x0f) << 8 | c
+            bonds_shift += 3
 
-    i = 0
-    for order_shift in range(order_shift, cis_trans_shift):
-        # 3 3 2 | 1 3 3 1 | 2 3 3
-        a = data[order_shift]
-        if s == 1:
-            orders[i] = buffer_b | a >> 7
-            orders[i + 1] = (a >> 4) & 0x7
-            orders[i + 2] = (a >> 1) & 0x7
-            buffer_b = (a & 1) << 2
-            s = 2
-            i += 3
-        elif s == 2:
-            orders[i] = buffer_b | a >> 6
-            orders[i + 1] = (a >> 3) & 0x7
-            orders[i + 2] = a & 0x7
-            i += 3
-            s = 0
-        else:
-            orders[i] = a >> 5
-            orders[i + 1] = (a >> 2) & 0x7
-            buffer_b = (a & 0x3) << 1
-            s = 1
-            i += 2
+        # collect flat bond order list
+        i = 0
+        if version == 2:
+            for j in range(order_shift, cis_trans_shift):
+                # 3 3 2 | 1 3 3 1 | 2 3 3
+                a = data[j]
+                if s == 1:
+                    orders[i] = buffer_b | a >> 7
+                    orders[i + 1] = (a >> 4) & 0x7
+                    orders[i + 2] = (a >> 1) & 0x7
+                    buffer_b = (a & 1) << 2
+                    s = 2
+                    i += 3
+                elif s == 2:
+                    orders[i] = buffer_b | a >> 6
+                    orders[i + 1] = (a >> 3) & 0x7
+                    orders[i + 2] = a & 0x7
+                    i += 3
+                    s = 0
+                else:
+                    orders[i] = a >> 5
+                    orders[i + 1] = (a >> 2) & 0x7
+                    buffer_b = (a & 0x3) << 1
+                    s = 1
+                    i += 2
+        elif version == 0:
+            for j in range(order_shift, cis_trans_shift, 2):
+                # 0 3 3 1 | 2 3 3
+                a, b = data[j], data[j + 1]
+                orders[i] = a >> 4
+                orders[i + 1] = (a >> 1) & 0x7
+                orders[i + 2] = (a & 0x1) << 2 | b >> 6
+                orders[i + 3] = (b >> 3) & 0x7
+                orders[i + 4] = b & 0x7
+                i += 5
 
-    for i in range(cis_trans_count):
-        a, b = data[cis_trans_shift], data[cis_trans_shift + 1]
-        c, d = data[cis_trans_shift + 2], data[cis_trans_shift + 3]
-        cis_trans_1[i] = a << 4 | b >> 4
-        cis_trans_2[i] = (b & 0x0f) << 8 | c
-        ct_sign[i] = d
-        cis_trans_shift += 4
+        if cis_trans_count:
+            cis_trans_1 = <unsigned short *> PyMem_Malloc(cis_trans_count * sizeof(unsigned short))
+            cis_trans_2 = <unsigned short *> PyMem_Malloc(cis_trans_count * sizeof(unsigned short))
+            ct_sign = <unsigned char *> PyMem_Malloc(cis_trans_count * sizeof(unsigned char))
+            if not cis_trans_1 or not cis_trans_2 or not ct_sign:
+                raise MemoryError()
+
+            for i in range(cis_trans_count):
+                a, b = data[cis_trans_shift], data[cis_trans_shift + 1]
+                c, d = data[cis_trans_shift + 2], data[cis_trans_shift + 3]
+                cis_trans_1[i] = a << 4 | b >> 4
+                cis_trans_2[i] = (b & 0x0f) << 8 | c
+                ct_sign[i] = d
+                cis_trans_shift += 4
 
     # define returned data
     py_mapping = []
@@ -178,7 +208,7 @@ def unpack(const unsigned char[::1] data not None):
 
     for i in range(atoms_count):
         n = mapping[i]
-        py_n = n
+        py_n = n  # shared py int obj
 
         # fill intermediate data
         py_mapping.append(py_n)
@@ -196,7 +226,7 @@ def unpack(const unsigned char[::1] data not None):
 
         if is_tet[i]:
             py_atoms_stereo[py_n] = bool(tet_sign[i])
-        if is_all[i]:
+        elif is_all[i]:
             py_allenes_stereo[py_n] = bool(all_sign[i])
 
         py_bonds[py_n] = py_ngb = {}
@@ -234,11 +264,13 @@ def unpack(const unsigned char[::1] data not None):
     PyMem_Free(isotopes)
     PyMem_Free(x_coord)
     PyMem_Free(y_coord)
-    PyMem_Free(cis_trans_1)
-    PyMem_Free(cis_trans_2)
-    PyMem_Free(ct_sign)
-    PyMem_Free(connections)
-    PyMem_Free(orders)
+    if bonds_count:
+        PyMem_Free(connections)
+        PyMem_Free(orders)
+        if cis_trans_count:
+            PyMem_Free(cis_trans_1)
+            PyMem_Free(cis_trans_2)
+            PyMem_Free(ct_sign)
     return (py_mapping, py_atoms, py_isotopes,
             py_charges, py_radicals, py_hydrogens, py_plane, py_bonds,
             py_atoms_stereo, py_allenes_stereo, py_cis_trans_stereo, size, py_bonds_flat)

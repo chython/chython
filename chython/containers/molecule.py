@@ -766,7 +766,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         Format specification::
 
             Big endian bytes order
-            8 bit - 0x02 byte (current format specification)
+            8 bit - 0x02 (current format specification)
             12 bit - number of atoms
             12 bit - cis/trans stereo block size
             Atom block 9 bytes (repeated):
@@ -795,6 +795,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         """
         if check:
             bonds = self._bonds
+            if not bonds:
+                raise ValueError('Empty molecules not supported')
             if max(bonds) > 4095:
                 raise ValueError('Big molecules not supported')
             if any(len(x) > 15 for x in bonds.values()):
@@ -812,7 +814,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         """
         if compressed:
             data = decompress(data)
-        if data[0] != 0:
+        if data[0] not in (0, 2):
             raise ValueError('invalid pack header')
         return int.from_bytes(data[1:3], 'big') >> 4
 
@@ -826,7 +828,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         """
         if compressed:
             data = decompress(data)
-        if data[0] != 2:
+        if data[0] not in (0, 2):
             raise ValueError('invalid pack header')
 
         (mapping, atom_numbers, isotopes, charges, radicals, hydrogens, plane, bonds,

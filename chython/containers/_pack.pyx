@@ -137,20 +137,20 @@ def pack(object molecule):
         atoms_shift += 9
 
         # collect connection table
-        for n, py_bond in py_ngb.items():
+        for m, py_bond in py_ngb.items():
             if b:  # 8 + 4
-                data[bonds_shift] = n >> 4
+                data[bonds_shift] = m >> 4
                 bonds_shift += 1
-                buffer_b = n << 4
+                buffer_b = m << 4
                 b = False  # switch
             else:  # 4 + 8
-                data[bonds_shift] = buffer_b | n >> 8
+                data[bonds_shift] = buffer_b | m >> 8
                 bonds_shift += 1
-                data[bonds_shift] = n
+                data[bonds_shift] = m
                 bonds_shift += 1  # next free 3 bytes block
                 b = True
 
-            if not seen[n]:
+            if not seen[m]:
                 bond = <unsigned char> py_bond._Bond__order - 1
                 # 3 3 2 | 1 3 3 1 | 2 3 3
                 if s == 0:
@@ -178,10 +178,13 @@ def pack(object molecule):
                 elif s == 6:
                     buffer_o |= bond << 3
                     s = 7
-                else:
+                else:  # 7
                     data[order_shift] = buffer_o | bond
                     order_shift += 1
                     s = 0
+
+    if s:  # flush buffer
+        data[order_shift] = buffer_o
 
     for py_tuple, b in py_cis_trans_stereo.items():
         n, m = py_tuple
