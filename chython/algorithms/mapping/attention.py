@@ -171,21 +171,47 @@ class Attention:
         from chython import torch_device
         from chytorch.zoo.rxnmap import Model
 
-        return Model.pretrained().to(torch_device)
+        model = Model.pretrained().to(torch_device)
+        for p in model.parameters():
+            p.requires_grad = False
+        return model
 
     @class_cached_property
     def __cutoff(self):
         return self.__attention_model.encoder.molecule_encoder.spatial_encoder.num_embeddings - 3
 
+    @class_cached_property
+    def __autocast(self):
+        from chython import torch_device
+
+        if torch_device.startswith('cuda'):
+            try:
+                from torch import autocast
+            except ImportError:  # torch 1.8 ad-hoc
+                from torch.cuda.amp import autocast
+
+                return autocast()
+            else:
+                return autocast('cuda')
+        return autocast_filler()
+
     def __get_attention(self):
         from chython import torch_device
-        from torch import no_grad, autocast
+        from torch import no_grad
         from chytorch.utils.data import ReactionDataset
 
         b = [x.unsqueeze(0).to(torch_device) for x in ReactionDataset([self], distance_cutoff=self.__cutoff)[0]]
-        with no_grad(), autocast(torch_device.split(':')[0]):
+        with no_grad(), self.__autocast:
             am = self.__attention_model(b, mapping_task=True).squeeze(0).float().cpu().numpy()
         return am
+
+
+class autocast_filler:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        ...
 
 
 __all__ = ['Attention']
