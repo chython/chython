@@ -35,20 +35,34 @@ if TYPE_CHECKING:
 class Standardize:
     __slots__ = ()
 
-    def canonicalize(self: 'MoleculeContainer', *, logging=False, ignore=True, fix_tautomers=True) -> \
-            Union[bool, List[Tuple[Tuple[int, ...], int, str]]]:
+    def canonicalize(self: 'MoleculeContainer', *, fix_tautomers=True, keep_kekule=False,
+                     logging=False, ignore=True) -> Union[bool, List[Tuple[Tuple[int, ...], int, str]]]:
         """
         Convert molecule to canonical forms of functional groups and aromatic rings without explicit hydrogens.
 
         :param logging: return log.
         :param ignore: ignore standardization bugs.
         :param fix_tautomers: convert tautomers to canonical forms.
+        :param keep_kekule: return kekule form.
         """
         k = self.kekule()
         s = self.standardize(_fix_stereo=False, logging=True, ignore=ignore, fix_tautomers=fix_tautomers)
         h, changed = self.implicify_hydrogens(_fix_stereo=False, logging=True)
+
+        if keep_kekule:  # save bond orders
+            bonds = [(b, b.order) for _, _, b in self.bonds()]
+
         t = self.thiele(fix_tautomers=fix_tautomers)
         c = self.standardize_charges(prepare_molecule=False, logging=True)
+
+        if keep_kekule and t:  # restore
+            if c:  # we need to do full kekule again
+                self.kekule()
+            else:
+                for b, o in bonds:
+                    b._Bond__order = o  # noqa
+            self.flush_cache()
+
         if logging:
             if k:
                 s.insert(0, ((), -1, 'kekulized'))

@@ -45,7 +45,7 @@ class Kekule:
             bonds = self._bonds
             atoms = set()
             for n, m, b in kekule:
-                bonds[n][m]._Bond__order = b
+                bonds[n][m]._Bond__order = b  # noqa
                 atoms.add(n)
                 atoms.add(m)
             for n in atoms:
@@ -63,7 +63,7 @@ class Kekule:
             bonds = copy._bonds
             atoms = set()
             for n, m, b in form:
-                bonds[n][m]._Bond__order = b
+                bonds[n][m]._Bond__order = b  # noqa
                 atoms.add(n)
                 atoms.add(m)
             for n in atoms:
@@ -87,7 +87,7 @@ class Kekule:
                 for n, m, b in bf:
                     n = mapping[n]
                     m = mapping[m]
-                    bonds[n][m]._Bond__order = b
+                    bonds[n][m]._Bond__order = b  # noqa
         if seen:
             self.flush_cache()
 
@@ -153,7 +153,7 @@ class Kekule:
                     if m not in seen:
                         rings[n].remove(m)
                         rings[m].remove(n)
-                        bonds[n][m]._Bond__order = 1
+                        bonds[n][m]._Bond__order = 1  # noqa
 
         if any(len(ms) not in (2, 3) for ms in rings.values()):
             raise InvalidAromaticRing('not in ring aromatic bond or hypercondensed rings: '
@@ -241,7 +241,7 @@ class Kekule:
                 else:
                     raise InvalidAromaticRing('Triple-bonded oxygen')
             elif an in (16, 34, 52):  # thiophene
-                if n not in double_bonded:  # not sulphoxyde or sulphone
+                if n not in double_bonded:  # not sulphoxyde nor sulphone
                     if ab == 2:
                         if radicals[n]:
                             if ac == 1:

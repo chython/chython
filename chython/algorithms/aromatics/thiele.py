@@ -110,15 +110,15 @@ class Thiele:
                 except StopIteration:  # exotic, just skip
                     continue
                 an = atoms[n].atomic_number
-                if lr == 7:  # skip electron-rich 7-membered rings
+                if (c := charges[n]) == -1:
+                    if an != 6 or lr != 5:  # skip any but ferrocene
+                        continue
+                elif c:  # skip any charged
+                    continue
+                elif lr == 7:  # skip electron-rich 7-membered rings
                     if an != 5:  # not B?
                         continue
                 # below lr == 5 or 6 only
-                elif (c := charges[n]) == -1:
-                    if an != 6 or lr != 5:  # ferrocene, etc.
-                        continue
-                elif c:  # skip charged
-                    continue
                 elif an in (8, 16, 34):  # O, S, Se
                     if len(bonds[n]) != 2:  # like CS1(C)C=CC=C1
                         continue

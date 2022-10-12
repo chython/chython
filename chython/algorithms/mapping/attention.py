@@ -179,12 +179,12 @@ class Attention:
 
     def __get_attention(self):
         from chython import torch_device
-        from torch import no_grad
+        from torch import no_grad, autocast
         from chytorch.utils.data import ReactionDataset
 
         b = [x.unsqueeze(0).to(torch_device) for x in ReactionDataset([self], distance_cutoff=self.__cutoff)[0]]
-        with no_grad():
-            am = self.__attention_model(b, mapping_task=True).squeeze(0).cpu().numpy()
+        with no_grad(), autocast(torch_device.split(':')[0]):
+            am = self.__attention_model(b, mapping_task=True).squeeze(0).float().cpu().numpy()
         return am
 
 
