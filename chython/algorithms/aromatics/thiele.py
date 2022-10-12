@@ -89,7 +89,9 @@ class Thiele:
             lr = len(ring)
             if not 3 < lr < 8:  # skip 3-membered and big rings
                 continue
-            sp2 = sum(sh(n) == 2 and atoms[n].atomic_number in (5, 6, 7, 8, 15, 16) for n in ring)
+            if any(atoms[n].atomic_number not in (6, 7, 8, 16, 5, 15) for n in ring):
+                continue
+            sp2 = sum(sh(n) == 2 for n in ring)
             if sp2 == lr:  # benzene like
                 if lr == 4:  # two bonds condensed aromatic rings
                     tetracycles.append(ring)

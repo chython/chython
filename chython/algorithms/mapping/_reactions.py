@@ -36,7 +36,7 @@ def _rules():
     # acid reduction
     r = smiles('[CH3:2][C:1]([OH:3])=[O:4]>>[CH3:2][CH2:1][OH:3]')
     m = smarts('[O;D1:3]')
-    raw_rules.append((r, {3: 4}, m))
+    raw_rules.append((r, {3: 4, 4: 3}, m))
 
     # ester reduction
     r = smiles('[CH3:5][O:3][C:1]([CH3:2])=[O:4]>>[CH3:2][CH2:1][OH:3]')

@@ -55,12 +55,12 @@ class FixMapper:
 
         r_atoms = ChainMap(*(x._atoms for x in self.reactants))
         for c, ac, cs in components:
-            for rule_num, (query, signature, restriction, fix) in enumerate(rules):
+            for rule_num, (query, signature, restrict, fix) in enumerate(rules):
                 if str(c) == signature:
                     for mapping in query.get_mapping(ac, automorphism_filter=False):
                         if not cs.issubset(mapping.values()):
                             continue
-                        if restriction is not None and any(a != r_atoms[mapping[n]] for n, a in restriction.atoms()):
+                        if restrict is not None and any(a != r_atoms.get(mapping[n]) for n, a in restrict.atoms()):
                             continue
                         mapping = {mapping[n]: next(free_number) if m is None else mapping[m] for n, m in fix.items()}
                         for m in self.products:
