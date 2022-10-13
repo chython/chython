@@ -186,7 +186,7 @@ class Kekule:
                             raise InvalidAromaticRing
                     elif ab == 3:
                         double_bonded.add(n)
-                    elif ab == 2:  # benzene an[cat]ion or pyrrole
+                    elif ab == 2:  # benzene (an|cat)ion or pyrrole
                         pyrroles.add(n)
                     else:
                         raise InvalidAromaticRing
@@ -195,7 +195,7 @@ class Kekule:
             elif an in (7, 15, 33):
                 if ac == 0:  # pyrrole or pyridine. include radical pyrrole
                     if radicals[n]:
-                        if ab != 2:
+                        if ab != 2:  # only pyrrole radical
                             raise InvalidAromaticRing
                         double_bonded.add(n)
                     elif ab == 3:
@@ -205,13 +205,13 @@ class Kekule:
                             pyrroles.add(n)
                     elif ab == 2:
                         ah = hydrogens[n]
-                        if ah is None:
+                        if ah is None:  # pyrrole or pyridine
                             pyrroles.add(n)
                         elif ah == 1:  # only pyrrole
                             double_bonded.add(n)
-                        elif ah:
+                        elif ah:  # too many hydrogens for aromatic rings
                             raise InvalidAromaticRing
-                    elif ab != 4 or an not in (15, 33):  # P(V) in ring
+                    elif ab != 4 or an not in (15, 33):  # P(V) in ring [P;a](-R1)-R2
                         raise InvalidAromaticRing
                 elif ac == -1:  # pyrrole only
                     if ab != 2 or radicals[n]:
@@ -440,36 +440,66 @@ def _kekule_component(rings, double_bonded, pyrroles, buffer_size):
                         if stack:
                             path = path[:stack[-1][-1][-1]]
                             hashed_path = {x for x, *_ in path}
+                elif atom in pyrroles:  # try pyrrole and pyridine
+                    opposite = stack[-1].copy()
+                    opposite.append((next_atom, atom, 2, None))
+                    stack[-1].append((next_atom, atom, 1, len(path)))
+                    stack.append(opposite)
                 else:
-                    if atom in pyrroles:  # try pyrrole and pyridine
-                        opposite = stack[-1].copy()
-                        opposite.append((next_atom, atom, 2, None))
-                        stack[-1].append((next_atom, atom, 1, len(path)))
-                        stack.append(opposite)
-                    else:
-                        stack[-1].append((next_atom, atom, 2, None))
-                        if closures:
-                            next_atom = closures[0]
-                            path.append((next_atom, atom, 1))  # closures always single-bonded
-                            stack[-1].remove((atom, next_atom, 1, None))  # remove fork from stack
+                    stack[-1].append((next_atom, atom, 2, None))
+                    if closures:
+                        next_atom = closures[0]
+                        path.append((next_atom, atom, 1))  # closures always single-bonded
+                        stack[-1].remove((atom, next_atom, 1, None))  # remove fork from stack
             elif for_stack:  # fork
                 next_atom1, next_atom2 = for_stack
                 if next_atom1 in double_bonded:  # quinone next from fork
-                    if next_atom2 in double_bonded:  # bad path
-                        del stack[-1]
-                        if stack:
-                            path = path[:stack[-1][-1][-1]]
-                            hashed_path = {x for x, *_ in path}
-                    else:
+                    if next_atom2 in double_bonded:
+                        if atom in pyrroles:  # shit like O=C1C=CC2=CC=CC3=C2P1C(=O)C=C3
+                            stack[-1].append((next_atom1, atom, 1, None))
+                            stack[-1].append((next_atom2, atom, 1, None))
+                        else:  # bad path
+                            del stack[-1]
+                            if stack:
+                                path = path[:stack[-1][-1][-1]]
+                                hashed_path = {x for x, *_ in path}
+                    elif atom in pyrroles:  # O=C1C=CC2=CC=CC3=C2P1C=C3 or O=C1C=CC2=CC=CC3=C2P1=CC=C3
+                        opposite = stack[-1].copy()
+                        opposite.append((next_atom1, atom, 1, None))
+                        opposite.append((next_atom2, atom, 2, None))
+                        stack[-1].append((next_atom1, atom, 1, None))
+                        stack[-1].append((next_atom2, atom, 1, len(path)))
+                        stack.append(opposite)  # pyridine first
+                    else:  # normal condensed ring
                         stack[-1].append((next_atom1, atom, 1, None))
                         stack[-1].append((next_atom2, atom, 2, None))
                 elif next_atom2 in double_bonded:  # quinone next from fork
-                    stack[-1].append((next_atom2, atom, 1, None))
-                    stack[-1].append((next_atom1, atom, 2, None))
+                    if atom in pyrroles:
+                        opposite = stack[-1].copy()
+                        opposite.append((next_atom2, atom, 1, None))
+                        opposite.append((next_atom1, atom, 2, None))
+                        stack[-1].append((next_atom1, atom, 1, None))
+                        stack[-1].append((next_atom2, atom, 1, len(path)))
+                        stack.append(opposite)
+                    else:
+                        stack[-1].append((next_atom2, atom, 1, None))
+                        stack[-1].append((next_atom1, atom, 2, None))
+                elif atom in pyrroles:  # C1=CC2=CC=CC3=C2P1C=C3 or C1=CP2=CC=CC3=C2C1=CC=C3
+                    opposite1 = stack[-1].copy()
+                    opposite1.append((next_atom2, atom, 1, None))
+                    opposite1.append((next_atom1, atom, 2, len(path)))
+                    opposite2 = stack[-1].copy()
+                    opposite2.append((next_atom1, atom, 1, None))
+                    opposite2.append((next_atom2, atom, 2, None))
+
+                    stack[-1].append((next_atom1, atom, 1, None))
+                    stack[-1].append((next_atom2, atom, 1, len(path)))
+                    stack.append(opposite1)
+                    stack.append(opposite2)
                 else:  # new path
                     opposite = stack[-1].copy()
                     stack[-1].append((next_atom1, atom, 1, None))
-                    stack[-1].append((next_atom2, atom, 2, len(path)))
+                    stack[-1].append((next_atom2, atom, 2, len(path)))  # double bond on top of stack
                     opposite.append((next_atom2, atom, 1, None))
                     opposite.append((next_atom1, atom, 2, None))
                     stack.append(opposite)
