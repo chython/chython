@@ -20,6 +20,33 @@ cimport cython
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.math cimport ldexp, frexp
 
+# Format specification::
+#
+# Big endian bytes order
+# 8 bit - 0x02 (current format specification)
+# 12 bit - number of atoms
+# 12 bit - cis/trans stereo block size
+#
+# Atom block 9 bytes (repeated):
+# 12 bit - atom number
+# 4 bit - number of neighbors
+# 2 bit tetrahedron sign (00 - not stereo, 10 or 11 - has stereo)
+# 2 bit - allene sign
+# 5 bit - isotope (00000 - not specified, over = isotope - common_isotope + 16)
+# 7 bit - atomic number (<=118)
+# 32 bit - XY float16 coordinates
+# 3 bit - hydrogens (0-7). Note: 7 == None
+# 4 bit - charge (charge + 4. possible range -4 - 4)
+# 1 bit - radical state
+# Connection table: flatten list of neighbors. neighbors count stored in atom block.
+# For example CC(=O)O - {1: [2], 2: [1, 3, 4], 3: [2], 4: [2]} >> [2, 1, 3, 4, 2, 2].
+# Repeated block (equal to bonds count).
+# 24 bit - paired 12 bit numbers.
+# Bonds order block 3 bit per bond zero-padded to full byte at the end.
+# Cis/trans data block (repeated):
+# 24 bit - atoms pair
+# 7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
+# 1 bit - sign
 
 @cython.nonecheck(False)
 @cython.boundscheck(False)

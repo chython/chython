@@ -22,6 +22,33 @@ from libc.math cimport ldexp
 
 from chython.containers.bonds import Bond
 
+# Format specification::
+#
+# Big endian bytes order
+# 8 bit - 0x02 (current format specification)
+# 12 bit - number of atoms
+# 12 bit - cis/trans stereo block size
+#
+# Atom block 9 bytes (repeated):
+# 12 bit - atom number
+# 4 bit - number of neighbors
+# 2 bit tetrahedron sign (00 - not stereo, 10 or 11 - has stereo)
+# 2 bit - allene sign
+# 5 bit - isotope (00000 - not specified, over = isotope - common_isotope + 16)
+# 7 bit - atomic number (<=118)
+# 32 bit - XY float16 coordinates
+# 3 bit - hydrogens (0-7). Note: 7 == None
+# 4 bit - charge (charge + 4. possible range -4 - 4)
+# 1 bit - radical state
+# Connection table: flatten list of neighbors. neighbors count stored in atom block.
+# For example CC(=O)O - {1: [2], 2: [1, 3, 4], 3: [2], 4: [2]} >> [2, 1, 3, 4, 2, 2].
+# Repeated block (equal to bonds count).
+# 24 bit - paired 12 bit numbers.
+# Bonds order block 3 bit per bond zero-padded to full byte at the end.
+# Cis/trans data block (repeated):
+# 24 bit - atoms pair
+# 7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
+# 1 bit - sign
 
 @cython.nonecheck(False)
 @cython.boundscheck(False)
@@ -30,8 +57,8 @@ from chython.containers.bonds import Bond
 def unpack(const unsigned char[::1] data not None):
     cdef char *charges
     cdef unsigned char a, b, c, d, isotope, atomic_number, neighbors_count, s = 0, nc, version
-    cdef unsigned char *atoms, *hydrogens, *neighbors, *radicals, *orders
-    cdef unsigned char *is_tet, *is_all, *tet_sign, *all_sign, *ct_sign
+    cdef unsigned char *atoms, *hydrogens, *neighbors, *radicals, *orders, *is_tet, *is_all
+    cdef bint *stereo_sign, *ct_sign
     cdef unsigned short atoms_count, bonds_count = 0, cis_trans_count, order_count
     cdef unsigned short i, j, k = 0, n, m, buffer_b, shift = 0
     cdef unsigned short *mapping, *isotopes, *cis_trans_1, *cis_trans_2, *connections
@@ -58,8 +85,7 @@ def unpack(const unsigned char[::1] data not None):
     neighbors = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
     is_tet = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
     is_all = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
-    tet_sign = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
-    all_sign = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
+    stereo_sign = <bint*> PyMem_Malloc(atoms_count * sizeof(bint))
     mapping = <unsigned short*> PyMem_Malloc(atoms_count * sizeof(unsigned short))
     isotopes = <unsigned short*> PyMem_Malloc(atoms_count * sizeof(unsigned short))
     x_coord = <double*> PyMem_Malloc(atoms_count * sizeof(double))
@@ -67,7 +93,7 @@ def unpack(const unsigned char[::1] data not None):
 
     if not charges or not radicals or not atoms or not hydrogens or not neighbors or not is_tet or not is_all:
         raise MemoryError()
-    if not tet_sign or not all_sign or not mapping or not isotopes or not x_coord or not y_coord:
+    if not stereo_sign or not mapping or not isotopes or not x_coord or not y_coord:
         raise MemoryError()
 
     # unpack atom block to separate attributes arrays
@@ -82,12 +108,12 @@ def unpack(const unsigned char[::1] data not None):
         if a >> 7:  # tetrahedron bit set
             is_tet[i] = 1
             is_all[i] = 0
-            tet_sign[i] = a & 0x40 != 0
+            stereo_sign[i] = a & 0x40  # mask th bit
         else:
             is_tet[i] = 0
             if a >> 5:  # allene bit set
                 is_all[i] = 1
-                all_sign[i] = a & 0x10 != 0
+                stereo_sign[i] = a & 0x10  # mask al bit
             else:
                 is_all[i] = 0
 
@@ -180,7 +206,7 @@ def unpack(const unsigned char[::1] data not None):
         if cis_trans_count:
             cis_trans_1 = <unsigned short *> PyMem_Malloc(cis_trans_count * sizeof(unsigned short))
             cis_trans_2 = <unsigned short *> PyMem_Malloc(cis_trans_count * sizeof(unsigned short))
-            ct_sign = <unsigned char *> PyMem_Malloc(cis_trans_count * sizeof(unsigned char))
+            ct_sign = <bint *> PyMem_Malloc(cis_trans_count * sizeof(bint))
             if not cis_trans_1 or not cis_trans_2 or not ct_sign:
                 raise MemoryError()
 
@@ -189,7 +215,7 @@ def unpack(const unsigned char[::1] data not None):
                 c, d = data[cis_trans_shift + 2], data[cis_trans_shift + 3]
                 cis_trans_1[i] = a << 4 | b >> 4
                 cis_trans_2[i] = (b & 0x0f) << 8 | c
-                ct_sign[i] = d
+                ct_sign[i] = d  # d = 0x01 or 0x00
                 cis_trans_shift += 4
 
     # define returned data
@@ -225,9 +251,9 @@ def unpack(const unsigned char[::1] data not None):
         py_plane[py_n] = (x_coord[i], y_coord[i])
 
         if is_tet[i]:
-            py_atoms_stereo[py_n] = bool(tet_sign[i])
+            py_atoms_stereo[py_n] = stereo_sign[i]
         elif is_all[i]:
-            py_allenes_stereo[py_n] = bool(all_sign[i])
+            py_allenes_stereo[py_n] = stereo_sign[i]
 
         py_bonds[py_n] = py_ngb = {}
         seen[n] = 1
@@ -258,8 +284,7 @@ def unpack(const unsigned char[::1] data not None):
     PyMem_Free(neighbors)
     PyMem_Free(is_tet)
     PyMem_Free(is_all)
-    PyMem_Free(tet_sign)
-    PyMem_Free(all_sign)
+    PyMem_Free(stereo_sign)
     PyMem_Free(mapping)
     PyMem_Free(isotopes)
     PyMem_Free(x_coord)
