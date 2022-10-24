@@ -45,7 +45,7 @@ class BaseReactor:
             elif n not in reactants:
                 if not isinstance(atom, ListElement):
                     raise ValueError('New atom should be defined')
-                elements[n] = [Element.from_atomic_number(x)() for x in atom._numbers]
+                elements[n] = [Element.from_symbol(x)() for x in atom._elements]
                 variable.append(n)
             else:  # use atom from reactant
                 if not isinstance(atom, AnyElement):
