@@ -17,11 +17,10 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ...periodictable import ListElement
 
 
 def _rules():
-    from ...containers import QueryContainer
+    from ... import smarts
 
     rules = []
 
@@ -31,13 +30,11 @@ def _rules():
     #    \\           \
     #     O           [O-]
     #
-    q = QueryContainer()
-    q.add_atom('N', neighbors=3, hybridization=4)
-    q.add_atom('O', neighbors=1)
-    q.add_bond(1, 2, 2)
+    q = smarts('[N;a;D3:1]=[O;D1:2]')
     atom_fix = {1: 1, 2: -1}
     bonds_fix = ((1, 2, 1),)
-    rules.append((q, atom_fix, bonds_fix))
+    # query, atom fix, bond fix, allow multimatch
+    rules.append((q, atom_fix, bonds_fix, False))
 
     # Aromatic N-Nitride?
     #
@@ -45,102 +42,65 @@ def _rules():
     #    \\           \
     #     N           [N-]
     #
-    q = QueryContainer()
-    q.add_atom('N', neighbors=3, hybridization=4)
-    q.add_atom('N', neighbors=(1, 2), hybridization=2)
-    q.add_bond(1, 2, 2)
+    q = smarts('[N;a;D3:1]=[N;D1,D2;z2:2]')
     atom_fix = {1: 1, 2: -1}
     bonds_fix = ((1, 2, 1),)
-    rules.append((q, atom_fix, bonds_fix))
+    rules.append((q, atom_fix, bonds_fix, False))
 
     #
     # : [S+] : >> : S :
     #    |          \\
     #   [O-]         O
     #
-    q = QueryContainer()
-    q.add_atom('S', neighbors=3, hybridization=4, charge=1)
-    q.add_atom('O', neighbors=1, charge=-1)
-    q.add_bond(1, 2, 1)
+    q = smarts('[S;a;D3;+:1]-[O;D1;-:2]')
     atom_fix = {1: 0, 2: 0}
     bonds_fix = ((1, 2, 2),)
-    rules.append((q, atom_fix, bonds_fix))
+    rules.append((q, atom_fix, bonds_fix, False))
 
     #
     # [O-]-N:C:C:[N+]=O
     #
-    q = QueryContainer()
-    q.add_atom('O', neighbors=1, charge=-1)
-    q.add_atom('N', neighbors=3)
-    q.add_atom('C')
-    q.add_atom('C')
-    q.add_atom('N', neighbors=3, charge=1)
-    q.add_atom('O', neighbors=1)
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 4)
-    q.add_bond(3, 4, 4)
-    q.add_bond(4, 5, 4)
-    q.add_bond(5, 6, 2)
-    atom_fix = {2: 1, 6: -1}
-    bonds_fix = ((5, 6, 1),)
-    rules.append((q, atom_fix, bonds_fix))
+    q = smarts('[N;a;D3;+:1](=[O;D1:2]):[C:3]:[C:4]:[N;D3:5]-[O;D1;-:6]')
+    atom_fix = {5: 1, 2: -1}
+    bonds_fix = ((1, 2, 1),)
+    rules.append((q, atom_fix, bonds_fix, False))
 
     #
     # N : A : N - ?
     #  :     :
     #   C # C
-    q = QueryContainer()
-    q.add_atom('N', neighbors=2)
-    q.add_atom('C', neighbors=2)
-    q.add_atom('C', neighbors=2)
-    q.add_atom('N', neighbors=(2, 3))
-    q.add_atom(ListElement(['C', 'N']))
-    q.add_bond(1, 2, 4)
-    q.add_bond(2, 3, 3)
-    q.add_bond(3, 4, 4)
-    q.add_bond(4, 5, 4)
-    q.add_bond(1, 5, 4)
+    q = smarts('[C;a;D2:1]:1#[C;D2:2]:[N;D2,D3:3]:[C,N:4]:[N;D2:5]:1')
     atom_fix = {}
-    bonds_fix = ((2, 3, 4),)
-    rules.append((q, atom_fix, bonds_fix))
+    bonds_fix = ((1, 2, 4),)
+    rules.append((q, atom_fix, bonds_fix, False))
 
     #
     # C:[N+]:[C-]
     #    \\
     #     O
     #
-    q = QueryContainer()
-    q.add_atom('N', neighbors=3, charge=1)
-    q.add_atom('O', neighbors=1)
-    q.add_atom('C', neighbors=(2, 3), charge=-1)
-    q.add_atom('C', neighbors=(2, 3))
-    q.add_bond(1, 2, 2)
-    q.add_bond(1, 3, 4)
-    q.add_bond(1, 4, 4)
+    q = smarts('[N;a;D3;+:1](=[O;D1:2])(:[C;D2,D3;-:3]):[C;D2,D3:4]')
     atom_fix = {2: -1, 3: 0}
     bonds_fix = ((1, 2, 1),)
-    rules.append((q, atom_fix, bonds_fix))
+    rules.append((q, atom_fix, bonds_fix, False))
 
     #
     #  O=[N+] : C
     #     :     :
     #    O : N : C
-    q = QueryContainer()
-    q.add_atom('N', neighbors=3, charge=1)
-    q.add_atom('O', neighbors=1)
-    q.add_atom('O', neighbors=2)
-    q.add_atom('C', neighbors=(2, 3))
-    q.add_atom('C', neighbors=(2, 3))
-    q.add_atom('N', neighbors=(2, 3))
-    q.add_bond(1, 2, 2)
-    q.add_bond(1, 3, 4)
-    q.add_bond(1, 4, 4)
-    q.add_bond(3, 6, 4)
-    q.add_bond(4, 5, 4)
-    q.add_bond(5, 6, 4)
+    q = smarts('[N;a;D3;+:1]:1(=[O;D1:2]):[O;D2:3]:[N;D2,D3:4]:[C;D2,D3:5]:[C;D2,D3:6]:1')
     atom_fix = {}
-    bonds_fix = ((1, 3, 1), (1, 4, 1), (3, 6, 1), (4, 5, 2), (5, 6, 1))
-    rules.append((q, atom_fix, bonds_fix))
+    bonds_fix = ((1, 3, 1), (1, 6, 1), (3, 4, 1), (4, 5, 1), (5, 6, 2))
+    rules.append((q, atom_fix, bonds_fix, False))
+
+    # bad complex representation
+    #  :           :
+    #   N - [M]  >> N ... [M]
+    #  :           :
+    q = smarts('[N;a;D3:1]-[M:2]')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 8),)
+    rules.append((q, atom_fix, bonds_fix, True))
     return rules
 
 

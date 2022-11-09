@@ -74,10 +74,10 @@ class Kekule:
         bonds = self._bonds
         charges = self._charges
         seen = set()
-        for q, af, bf in rules:
+        for q, af, bf, mm in rules:
             for mapping in q.get_mapping(self, automorphism_filter=False):
                 match = set(mapping.values())
-                if not match.isdisjoint(seen):  # prevent double patching of atoms
+                if not mm and not match.isdisjoint(seen):  # prevent double patching of atoms
                     continue
                 seen.update(match)
 
