@@ -66,7 +66,7 @@ def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] 
             else:
                 y = shift_y - height / 2.
             max_x = m._fix_plane_mean(max_x, y) + 2.
-            render.append(m.depict(embedding=True)[:5])
+            render.append(m.depict(_embedding=True)[:5])
             if max_x > shift_x:  # get total width
                 shift_x = max_x
         shift_y -= height + 2.

@@ -196,7 +196,13 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
 class DepictMolecule:
     __slots__ = ()
 
-    def depict(self: Union['MoleculeContainer', 'DepictMolecule'], *, embedding=False):
+    def depict(self: Union['MoleculeContainer', 'DepictMolecule'], *, width=None, height=None, _embedding=False) -> str:
+        """
+        Depict molecule in SVG format.
+
+        :param width: set svg width param. by default auto-calculated.
+        :param height: set svg height param. by default auto-calculated.
+        """
         uid = str(uuid4())
         values = self._plane.values()
         min_x = min(x for x, _ in values)
@@ -206,21 +212,25 @@ class DepictMolecule:
 
         bonds = self.__render_bonds()
         atoms, define, masks = self.__render_atoms(uid)
-        if embedding:
+        if _embedding:
             return atoms, bonds, define, masks, uid, min_x, min_y, max_x, max_y
 
         font_size = _render_config['font_size']
         font125 = 1.25 * font_size
-        width = max_x - min_x + 4.0 * font_size
-        height = max_y - min_y + 2.5 * font_size
+        _width = max_x - min_x + 4.0 * font_size
+        _height = max_y - min_y + 2.5 * font_size
         viewbox_x = min_x - font125
         viewbox_y = -max_y - font125
 
-        svg = [f'<svg width="{width:.2f}cm" height="{height:.2f}cm" '
-               f'viewBox="{viewbox_x:.2f} {viewbox_y:.2f} {width:.2f} '
-               f'{height:.2f}" xmlns="http://www.w3.org/2000/svg" '
-               'xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">']
-        svg.extend(_graph_svg(atoms, bonds, define, masks, uid, viewbox_x, viewbox_y, width, height))
+        if width is None:
+            width = f'{_width:.2f}cm'
+        if height is None:
+            height = f'{_height:.2f}cm'
+
+        svg = [f'<svg width="{width}" height="{height}" '
+               f'viewBox="{viewbox_x:.2f} {viewbox_y:.2f} {_width:.2f} {_height:.2f}" '
+               'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">']
+        svg.extend(_graph_svg(atoms, bonds, define, masks, uid, viewbox_x, viewbox_y, _width, _height))
         svg.append('</svg>')
         return '\n'.join(svg)
 
@@ -433,7 +443,13 @@ class DepictMolecule:
 class DepictReaction:
     __slots__ = ()
 
-    def depict(self: 'ReactionContainer'):
+    def depict(self: 'ReactionContainer', *, width=None, height=None) -> str:
+        """
+        Depict reaction in SVG format.
+
+        :param width: set svg width param. by default auto-calculated.
+        :param height: set svg height param. by default auto-calculated.
+        """
         if not self._arrow:
             self.fix_positions()
 
@@ -444,7 +460,7 @@ class DepictReaction:
         r_uids = []
         r_max_x = r_max_y = r_min_y = 0
         for m in self.molecules():
-            atoms, bonds, define, masks, uid, min_x, min_y, max_x, max_y = m.depict(embedding=True)
+            atoms, bonds, define, masks, uid, min_x, min_y, max_x, max_y = m.depict(_embedding=True)
             r_atoms.append(atoms)
             r_bonds.append(bonds)
             r_defines.append(define)
@@ -459,13 +475,18 @@ class DepictReaction:
 
         font_size = _render_config['font_size']
         font125 = 1.25 * font_size
-        width = r_max_x + 4.0 * font_size
-        height = r_max_y - r_min_y + 2.5 * font_size
+        _width = r_max_x + 4.0 * font_size
+        _height = r_max_y - r_min_y + 2.5 * font_size
         viewbox_x = -font125
         viewbox_y = -r_max_y - font125
 
-        svg = [f'<svg width="{width:.2f}cm" height="{height:.2f}cm" '
-               f'viewBox="{viewbox_x:.2f} {viewbox_y:.2f} {width:.2f} {height:.2f}" '
+        if width is None:
+            width = f'{_width:.2f}cm'
+        if height is None:
+            height = f'{_height:.2f}cm'
+
+        svg = [f'<svg width="{width}" height="{height}" '
+               f'viewBox="{viewbox_x:.2f} {viewbox_y:.2f} {_width:.2f} {_height:.2f}" '
                'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">\n'
                '  <defs>\n    <marker id="arrow" markerWidth="10" markerHeight="10" '
                'refX="0" refY="3" orient="auto">\n      <path d="M0,0 L0,6 L9,3"/>\n    </marker>\n  </defs>\n'
@@ -481,7 +502,7 @@ class DepictReaction:
             svg.append('  </g>')
 
         for atoms, bonds, define, masks, uid in zip(r_atoms, r_bonds, r_defines, r_masks, r_uids):
-            svg.extend(_graph_svg(atoms, bonds, define, masks, uid, viewbox_x, viewbox_y, width, height))
+            svg.extend(_graph_svg(atoms, bonds, define, masks, uid, viewbox_x, viewbox_y, _width, _height))
         svg.append('</svg>')
         return '\n'.join(svg)
 
