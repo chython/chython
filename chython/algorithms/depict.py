@@ -213,6 +213,10 @@ class DepictMolecule:
         max_y = max(y for _, y in values)
         if clean2d and len(self) > 1 and max_y - min_y < .01 and max_x - min_x < 0.01:
             self.clean2d()
+            min_x = min(x for x, _ in values)
+            max_x = max(x for x, _ in values)
+            min_y = min(y for _, y in values)
+            max_y = max(y for _, y in values)
 
         bonds = self.__render_bonds()
         atoms, define, masks = self.__render_atoms(uid)
