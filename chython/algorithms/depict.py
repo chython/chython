@@ -196,12 +196,14 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
 class DepictMolecule:
     __slots__ = ()
 
-    def depict(self: Union['MoleculeContainer', 'DepictMolecule'], *, width=None, height=None, _embedding=False) -> str:
+    def depict(self: Union['MoleculeContainer', 'DepictMolecule'], *, width=None, height=None, clean2d: bool = True,
+               _embedding=False) -> str:
         """
         Depict molecule in SVG format.
 
         :param width: set svg width param. by default auto-calculated.
         :param height: set svg height param. by default auto-calculated.
+        :param clean2d: calculate coordinates if necessary.
         """
         uid = str(uuid4())
         values = self._plane.values()
@@ -209,6 +211,8 @@ class DepictMolecule:
         max_x = max(x for x, _ in values)
         min_y = min(y for _, y in values)
         max_y = max(y for _, y in values)
+        if clean2d and len(self) > 1 and max_y - min_y < .01 and max_x - min_x < 0.01:
+            self.clean2d()
 
         bonds = self.__render_bonds()
         atoms, define, masks = self.__render_atoms(uid)
@@ -443,14 +447,25 @@ class DepictMolecule:
 class DepictReaction:
     __slots__ = ()
 
-    def depict(self: 'ReactionContainer', *, width=None, height=None) -> str:
+    def depict(self: 'ReactionContainer', *, width=None, height=None, clean2d: bool = True) -> str:
         """
         Depict reaction in SVG format.
 
         :param width: set svg width param. by default auto-calculated.
         :param height: set svg height param. by default auto-calculated.
+        :param clean2d: calculate coordinates if necessary.
         """
         if not self._arrow:
+            if clean2d:
+                for m in self.molecules():
+                    if len(m) > 1:
+                        values = m._plane.values()  # noqa
+                        min_x = min(x for x, _ in values)
+                        max_x = max(x for x, _ in values)
+                        min_y = min(y for _, y in values)
+                        max_y = max(y for _, y in values)
+                        if max_y - min_y < .01 and max_x - min_x < 0.01:
+                            m.clean2d()
             self.fix_positions()
 
         r_atoms = []
@@ -460,7 +475,7 @@ class DepictReaction:
         r_uids = []
         r_max_x = r_max_y = r_min_y = 0
         for m in self.molecules():
-            atoms, bonds, define, masks, uid, min_x, min_y, max_x, max_y = m.depict(_embedding=True)
+            atoms, bonds, define, masks, uid, min_x, min_y, max_x, max_y = m.depict(clean2d=False, _embedding=True)
             r_atoms.append(atoms)
             r_bonds.append(bonds)
             r_defines.append(define)
