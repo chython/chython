@@ -20,12 +20,18 @@ from io import StringIO, TextIOWrapper
 from pathlib import Path
 
 
+default_escape_map = {'>': '&gt;', '<': '&lt;'}
+
+
 class _MDLWrite:
-    def __init__(self, file, *, mapping: bool = True, append: bool = False):
+    def __init__(self, file, *, mapping: bool = True, append: bool = False, escape_map: dict = default_escape_map):
         """
         :param mapping: write atom mapping.
+        :param append: open file path in append mode.
+        :param escape_map: SDF metadata keys symbols escaping map.
         """
         self._mapping = mapping
+        self._escape_map = escape_map
 
         if isinstance(file, str):
             self._file = open(file, 'a' if append else 'w')

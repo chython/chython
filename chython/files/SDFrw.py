@@ -19,7 +19,6 @@
 from bisect import bisect_left
 from collections import defaultdict
 from io import BytesIO
-from re import match, compile
 from subprocess import check_output
 from traceback import format_exc
 from typing import Optional
@@ -28,7 +27,7 @@ from ..containers import MoleculeContainer
 from ..exceptions import EmptyMolecule, EmptyV2000, ParseError
 
 
-head = compile(r'>\s.*<(.*)>')
+default_escape_map = {'&gt;': '>', '&lt;': '<'}
 
 
 class FallBack:
@@ -48,7 +47,7 @@ class SDFRead(MDLRead):
     on initialization accept opened in text mode file, string path to file,
     pathlib.Path object or another buffered reader object
     """
-    def __init__(self, file, indexable=False, **kwargs):
+    def __init__(self, file, indexable: bool = False, escape_map: dict = default_escape_map, **kwargs):
         """
         :param indexable: if True: supported methods seek, tell, object size and subscription, it only works when
             dealing with a real file (the path to the file is specified) because the external grep utility is used,
@@ -56,6 +55,7 @@ class SDFRead(MDLRead):
 
             if False: works like generator converting a record into MoleculeContainer and returning each object in
             order, records with errors are skipped
+        :param escape_map: SDF metadata keys symbols escaping map.
         :param ignore: Skip some checks of data or try to fix some errors.
         :param remap: Remap atom numbers started from one.
         :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
@@ -65,6 +65,7 @@ class SDFRead(MDLRead):
         """
         super().__init__(file, **kwargs)
         self.__file = iter(self._file.readline, '')
+        self._escape_map = escape_map
         self._data = self.__reader()
         next(self._data)
 
@@ -202,11 +203,15 @@ class SDFRead(MDLRead):
                 mkey = None
                 meta = defaultdict(list)
             elif record:
-                head_line = match(head, line)
-                if head_line:
-                    mkey = head_line.group(1).strip()
-                    if not mkey:
+                if line.startswith('>') and line.endswith('>\n'):
+                    mkey = line[1:-2].rstrip()  # > x <y>\n | x <y
+                    if '<' not in mkey:
+                        mkey = None
                         self._info(f'invalid metadata entry: {line}')
+                    else:
+                        mkey = mkey[mkey.index('<') + 1:].lstrip()  # x <y | y
+                        for e, s in self._escape_map.items():
+                            mkey = mkey.replace(e, s)
                 elif mkey:
                     data = line.strip()
                     if data:
@@ -280,6 +285,8 @@ class SDFWrite(MDLWrite):
         self._file.write(self._convert_molecule(data, write3d))
 
         for k, v in data.meta.items():
+            for e, s in self._escape_map.items():
+                k = k.replace(e, s)
             self._file.write(f'>  <{k}>\n{v}\n\n')
         self._file.write('$$$$\n')
 
@@ -302,6 +309,8 @@ class ESDFWrite(EMDLWrite):
         self._file.write('M  END\n')
 
         for k, v in data.meta.items():
+            for e, s in self._escape_map.items():
+                k = k.replace(e, s)
             self._file.write(f'>  <{k}>\n{v}\n\n')
         self._file.write('$$$$\n')
 
