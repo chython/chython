@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
 #
@@ -43,20 +43,20 @@ class Ti(Element, PeriodIV, GroupIV):
 
     @property
     def _valences_exceptions(self):
-        return ((-2, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),  # [TiF6]2-
+        return ((4, False, 0, ()),  # [Ti(CN)6]2- or SCN or OCN or ONC
+                (2, False, 0, ((2, 'O'),)),  # [TiO(CN)4]2-
+                (2, False, 0, ((1, 'O'), (1, 'O'))),
+
+                (-2, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),  # [TiF6]2-
                 (-2, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'))),  # [TiCl6]2-
                 (-2, False, 0, ((1, 'Br'), (1, 'Br'), (1, 'Br'), (1, 'Br'), (1, 'Br'), (1, 'Br'))),  # [TiBr6]2-
                 (-2, False, 0, ((1, 'I'), (1, 'I'), (1, 'I'), (1, 'I'), (1, 'I'), (1, 'I'))),  # [TiI6]2-
-                (-2, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # [Ti(SO4)3]2-
-                (-2, False, 0, ((1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'))),  # [Ti(SCN)6]2-
-                (-2, False, 0, ((1, 'N'), (1, 'N'), (1, 'N'), (1, 'N'), (1, 'N'), (1, 'N'))),  # [Ti(NCS)6]2-
-                (-2, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'))),  # [Ti(CN)6]2-
 
+                (-2, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),
+                (-2, False, 0, ((2, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),
+                (-2, False, 0, ((2, 'O'), (2, 'O'), (1, 'O'), (1, 'O'))),
                 (-2, False, 0, ((2, 'O'), (2, 'O'), (2, 'O'))),  # [TiO3]2-
-                (-2, False, 0, ((2, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # [TiO(SO4)2]2-
                 (-2, False, 0, ((2, 'O'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),  # [TiOF4]2-
-                (-2, False, 0, ((2, 'O'), (1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'))),  # [TiO(SCN)4]2-
-                (-2, False, 0, ((2, 'O'), (1, 'N'), (1, 'N'), (1, 'N'), (1, 'N'))),  # [TiO(NCS)4]2-
 
                 (0, False, 0, ((1, 'F'), (1, 'F'))),
                 (0, False, 0, ((1, 'Cl'), (1, 'Cl'))),

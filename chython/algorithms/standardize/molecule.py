@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Dmitrij Zanadvornykh <zandmitrij@gmail.com>
 #  Copyright 2018 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
@@ -49,6 +49,8 @@ class Standardize:
         s = self.standardize(_fix_stereo=False, logging=True, ignore=ignore, fix_tautomers=fix_tautomers)
         h, changed = self.implicify_hydrogens(_fix_stereo=False, logging=True)
 
+        if fix_tautomers and (logging or keep_kekule):  # thiele can change tautomeric form
+            hgs = self._hydrogens.copy()
         if keep_kekule:  # save bond orders
             bonds = [(b, b.order) for _, _, b in self.bonds()]
 
@@ -56,10 +58,11 @@ class Standardize:
         c = self.standardize_charges(prepare_molecule=False, logging=True)
 
         if keep_kekule and t:  # restore
-            if c:  # we need to do full kekule again
-                self.kekule()
+            # check ring charge/hydrogen moving
+            if c or fix_tautomers and hgs != self._hydrogens:  # noqa
+                self.kekule()  # we need to do full kekule again
             else:
-                for b, o in bonds:
+                for b, o in bonds:  # noqa
                     b._Bond__order = o  # noqa
             self.flush_cache()
 
@@ -70,8 +73,16 @@ class Standardize:
                 s.append((tuple(changed), -1, 'implicified'))
             if t:
                 s.append(((), -1, 'aromatized'))
+                if fix_tautomers and hgs != self._hydrogens:
+                    s.append((tuple(x for x, y in self._hydrogens.items() if hgs[x] != y),
+                              -1, 'aromatic tautomer found'))
             if c:
                 s.append((tuple(c), -1, 'recharged'))
+            if keep_kekule and t:
+                if c or fix_tautomers and hgs != self._hydrogens:
+                    s.append(((), -1, 'kekulized again'))
+                else:
+                    s.append(((), -1, 'kekule form restored'))
             return s
         return bool(k or s or h or t or c)
 

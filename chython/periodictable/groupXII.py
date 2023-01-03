@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
 #  This file is part of chython.
 #
@@ -44,10 +44,7 @@ class Zn(Element, PeriodIV, GroupXII):
     @property
     def _valences_exceptions(self):
         return ((2, False, 0, ()), (1, False, 0, ((1, 'C'),)),
-                (-2, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # Zn[(OH)4]2-
-                (-2, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'))),  # Zn[(CN)4]2-
-                (-2, False, 0, ((1, 'N'), (1, 'N'), (1, 'N'), (1, 'N'))),  # Zn[(NCS)4]2-
-                (-2, False, 0, ((1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'))))  # Zn[(SCN)4]2-
+                (-2, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))))  # Zn[(OH)4]2-
 
     @property
     def atomic_radius(self):
@@ -77,10 +74,7 @@ class Cd(Element, PeriodV, GroupXII):
     @property
     def _valences_exceptions(self):
         return ((2, False, 0, ()),
-                (-2, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # Cd[(OH)4]2-
-                (-2, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'))),  # Cd[(CN)4]2-
-                (-2, False, 0, ((1, 'N'), (1, 'N'), (1, 'N'), (1, 'N'))),  # Cd[(NCS)4]2-
-                (-2, False, 0, ((1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'))))  # Cd[(SCN)4]2-
+                (-2, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))))  # Cd[(OH)4]2-
 
     @property
     def atomic_radius(self):
@@ -110,9 +104,7 @@ class Hg(Element, PeriodVI, GroupXII):
 
     @property
     def _valences_exceptions(self):
-        return ((-2, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'))),  # Hg[(CN)4]2-
-                (-2, False, 0, ((1, 'N'), (1, 'N'), (1, 'N'), (1, 'N'))),  # Hg[(NCS)4]2-
-                (-2, False, 0, ((1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'))))  # Hg[(SCN)4]2-
+        return (2, False, 0, ()),
 
     @property
     def atomic_radius(self):

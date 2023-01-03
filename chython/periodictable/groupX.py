@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
 #  This file is part of chython.
@@ -76,9 +76,6 @@ class Pd(Element, PeriodV, GroupX):
     def _valences_exceptions(self):
         return ((2, False, 0, ()),
                 (-2, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # [Pd(OH)4]2-
-                (-2, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'))),  # [Pd(CN)4]2-
-                (-2, False, 0, ((1, 'N'), (1, 'N'), (1, 'N'), (1, 'N'))),  # [Pd(NCS)4]2-
-                (-2, False, 0, ((1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'))),  # [Pd(SCN)4]2-
                 (-2, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),  # [PdF4]2-
                 (-2, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'))))  # [PdCl4]2-
 

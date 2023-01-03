@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Alexander Nikanshin <17071996sasha@gmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
@@ -45,8 +45,8 @@ class Cu(Element, PeriodIV, GroupXI):
     @property
     def _valences_exceptions(self):
         return ((2, False, 0, ()),
-                (-1, False, 0, ((1, 'Cl'), (1, 'Cl'))),  # CuCl2^-
-                (-3, False, 0, ((1, 'S'), (1, 'S'))))  # CuS2^3- - это характерный комплекс для одновалентной меди
+                (-1, False, 0, ((1, 'Cl'), (1, 'Cl'))),  # [CuCl2]-
+                (-3, False, 0, ((1, 'S'), (1, 'S'))))  # [CuS2]3-
 
     @property
     def atomic_radius(self):
@@ -74,11 +74,10 @@ class Ag(Element, PeriodV, GroupXI):
 
     @property
     def _valences_exceptions(self):
-        return ((-1, False, 0, ((1, 'Cl'), (1, 'Cl'))),  # AgCl2^1-
-                (-1, False, 0, ((1, 'O'), (1, 'O'))),  # Ag(OH)2^1-
-                (-1, False, 0, ((1, 'S'), (1, 'S'))),  # AgS2^1-
-                (-1, False, 0, ((1, 'C'), (1, 'C'))),  # Ag(CN)2^1-
-                (1, False, 0, ()))
+        return ((1, False, 0, ()),
+                (-1, False, 0, ((1, 'Cl'), (1, 'Cl'))),  # [AgCl2]-
+                (-1, False, 0, ((1, 'O'), (1, 'O'))),  # [Ag(OH)2]-
+                (-1, False, 0, ((1, 'S'), (1, 'S'))))  # [AgS2]-
 
     @property
     def atomic_radius(self):

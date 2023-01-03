@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -49,6 +49,29 @@ def _rules():
     q = smarts('[M:3]-[C-:1]#[N:2]')
     atom_fix = {}
     bonds_fix = ((1, 3, 8),)
+    rules.append((q, atom_fix, bonds_fix))
+
+    #
+    # cyanate/fulminate
+    #
+    q = smarts('[M:1]-[O,S;D2:2]-[C:3]#[N:4]')
+    atom_fix = {1: (1, None), 4: (-1, None)}
+    bonds_fix = ((1, 2, 8), (2, 3, 2), (3, 4, 2))
+    rules.append((q, atom_fix, bonds_fix))
+
+    q = smarts('[M:1]-[N:2]=[C:3]=[O,S;D1:4]')
+    atom_fix = {1: (1, None), 2: (-1, None)}
+    bonds_fix = ((1, 2, 8),)
+    rules.append((q, atom_fix, bonds_fix))
+
+    q = smarts('[M:1]-[O,S;D2:2]-[N+:3]#[C-:4]')
+    atom_fix = {1: (1, None), 2: (-1, None)}
+    bonds_fix = ((1, 2, 8),)
+    rules.append((q, atom_fix, bonds_fix))
+
+    q = smarts('[M:1]-[C:2]#[N+:3]-[O,S;D1-:4]')
+    atom_fix = {1: (1, None), 2: (-1, None)}
+    bonds_fix = ((1, 2, 8),)
     rules.append((q, atom_fix, bonds_fix))
 
     #

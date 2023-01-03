@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasurova@gmail.com>
 #  This file is part of chython.
@@ -46,14 +46,15 @@ class Co(Element, PeriodIV, GroupIX):
     def _valences_exceptions(self):
         return ((2, False, 0, ()),
                 (3, False, 0, ()),
-                (0, False, 0, ((1, 'H'),)),
+                (0, False, 0, ((1, 'H'),)),  # HCo(CO)n
+                (2, False, 0, ((1, 'N'),)),  # B12
+
                 (-3, False, 0, ((2, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # [CoO4]3-
                 (-2, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),  # [CoF6]2-
-                (0, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'), (1, 'H'))),  # HCo(CO)4
 
                 (-1, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'))),  # [CoF3]-
                 (-1, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'))),
-                (-1, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'))),  # [Co(NO3)3]-
+                (-1, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'))),  # [Co(OH)3]-
 
                 (-2, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),  # [CoF4]2-
                 (-2, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'))),
@@ -61,16 +62,9 @@ class Co(Element, PeriodIV, GroupIX):
                 (-2, False, 0, ((1, 'I'), (1, 'I'), (1, 'I'), (1, 'I'))),
                 (-2, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # [Co(OH)4]2-
 
-                (-1, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'))),  # [Co(CN4)]-
-
-                (0, False, 0, ((1, 'N'), (1, 'N'), (1, 'N'), (1, 'N'), (1, 'N'), (1, 'C'))),  # B12
-                (-3, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'))),  # [Co(CN)6]3-
-                (-3, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # [Co(OH)6]3-
-
                 (-3, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'))),  # [CoCl5]3-
-                (-3, False, 0, ((1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'))),  # [Co(NCS)5]3-
 
-                (-4, False, 0, ((1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'), (1, 'S'))),  # [Co(NCS)6]4-
+                (-3, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # [Co(OH)6]3-
                 (-4, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))))  # [Co(OH)6]4-
 
     @property
@@ -107,8 +101,7 @@ class Rh(Element, PeriodV, GroupIX):
                 (-3, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'))),  # [RhCl6]3-
                 (-3, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # [Rh(NO2)6]3-
                 (0, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),
-                (0, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'), (1, 'H'))),  # HRh(CO)4
-                (0, False, 0, ((1, 'P'), (1, 'P'), (1, 'P'), (1, 'C'), (1, 'H'))))  # HRh(CO)[P(Ph)3]3
+                (0, False, 0, ((1, 'H'),)))  # HRh(CO)4, HRh(CO)[P(Ph)3]3
 
     @property
     def atomic_radius(self):

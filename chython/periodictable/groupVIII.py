@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
 #
@@ -43,7 +43,7 @@ class Fe(Element, PeriodIV, GroupVIII):
 
     @property
     def _valences_exceptions(self):
-        return (2, False, 0, ()), (3, False, 0, ()),
+        return (2, False, 0, ()), (3, False, 0, ())
 
     @property
     def atomic_radius(self):
