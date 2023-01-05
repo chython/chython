@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -22,7 +22,7 @@ from io import BytesIO
 from subprocess import check_output
 from traceback import format_exc
 from typing import Optional
-from ._mdl import MDLRead, MDLWrite, MOLRead, EMOLRead, EMDLWrite, MDLStereo
+from ._mdl import MDLRead, MOLRead, EMOLRead, MDLStereo, MOLWrite, EMOLWrite
 from ..containers import MoleculeContainer
 from ..exceptions import EmptyMolecule, EmptyV2000, ParseError
 
@@ -270,49 +270,54 @@ class SDFRead(MDLRead):
     __already_seeked = False
 
 
-class SDFWrite(MDLWrite):
+class SDFWrite(MOLWrite):
     """
     MDL SDF files writer. works similar to opened for writing file object. support `with` context manager.
     on initialization accept opened for writing in text mode file, string path to file,
     pathlib.Path object or another buffered writer object
     """
+    escape_map = {'>': '&gt;', '<': '&lt;'}
+
     def write(self, data: MoleculeContainer, write3d: Optional[int] = None):
         """
         write single molecule into file
 
         :param write3d: write conformer coordinates with given index
         """
-        self._file.write(self._convert_molecule(data, write3d))
+        self._write_molecule(data, write3d=write3d)
 
+        file = self._file
         for k, v in data.meta.items():
-            for e, s in self._escape_map.items():
+            for e, s in self.escape_map.items():
                 k = k.replace(e, s)
-            self._file.write(f'>  <{k}>\n{v}\n\n')
-        self._file.write('$$$$\n')
+            file.write(f'>  <{k}>\n{v}\n\n')
+        file.write('$$$$\n')
 
 
-class ESDFWrite(EMDLWrite):
+class ESDFWrite(EMOLWrite):
     """
     MDL V3000 SDF files writer. works similar to opened for writing file object. support `with` context manager.
     on initialization accept opened for writing in text mode file, string path to file,
     pathlib.Path object or another buffered writer object
     """
+    escape_map = {'>': '&gt;', '<': '&lt;'}
+
     def write(self, data: MoleculeContainer, write3d: Optional[int] = None):
         """
         write single molecule into file
 
         :param write3d: write conformer coordinates with given index
         """
-        mol = self._convert_molecule(data, write3d)
-        self._file.write(f'{data.name}\n\n\n  0  0  0     0  0            999 V3000\n')
-        self._file.write(mol)
-        self._file.write('M  END\n')
+        file = self._file
+        file.write(f'{data.name}\n\n\n  0  0  0     0  0            999 V3000\n')
+        self._write_molecule(data, write3d)
+        file.write('M  END\n')
 
         for k, v in data.meta.items():
-            for e, s in self._escape_map.items():
+            for e, s in self.escape_map.items():
                 k = k.replace(e, s)
-            self._file.write(f'>  <{k}>\n{v}\n\n')
-        self._file.write('$$$$\n')
+            file.write(f'>  <{k}>\n{v}\n\n')
+        file.write('$$$$\n')
 
 
 def mdl_mol(data: str, /, calc_cis_trans=False, ignore_stereo=False, remap=False, ignore=False, store_log=False):
