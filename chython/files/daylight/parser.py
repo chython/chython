@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -156,8 +156,8 @@ def parser(tokens, strong_cycle):
         raise IncorrectSmiles('bond on the end')
 
     stereo_bonds = {n: ms for n, ms in stereo_bonds.items() if len(ms) == 1 or len(ms) == set(ms.values())}
-    mol = {'atoms': atoms, 'bonds': bonds, 'order': order, 'stereo_bonds': stereo_bonds, 'meta': {}}
-    return mol, log
+    return {'atoms': atoms, 'bonds': bonds, 'order': order, 'stereo_bonds': stereo_bonds, 'log': log,
+            'title': None, 'meta': None}
 
 
 __all__ = ['parser']

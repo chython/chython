@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,294 +18,162 @@
 #
 from ctypes import c_char, c_double, c_short, c_long, c_char_p, c_byte, POINTER, Structure, cdll, byref
 from distutils.util import get_platform
-from fileinput import FileInput
-from io import StringIO, TextIOWrapper
 from itertools import count
 from os import name
 from pathlib import Path
-from re import split
 from sys import prefix, exec_prefix
-from typing import List, Iterator
 from warnings import warn
-from ._mdl import Parser, common_isotopes
+from ._convert import create_molecule
+from ._mdl import common_isotopes
 from ..containers import MoleculeContainer
 from ..containers.bonds import Bond
-from ..exceptions import ValenceError, IsChiral, NotChiral, ParseError
+from ..exceptions import ValenceError, IsChiral, NotChiral
 from ..periodictable import H
 
 
-class INCHIRead(Parser):
+def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> MoleculeContainer:
     """
-    INCHI separated per lines files reader. works similar to opened file object. support `with` context manager.
-    on initialization accept opened in text mode file, string path to file,
-    pathlib.Path object or another buffered reader object.
-    line should be start with INCHI string and
-    optionally continues with space/tab separated list of key:value [or key=value] data if header=None.
-
-        example:
-            InChI=1S/C2H5/c1-2/h1H2,2H3/q+1 id:123 key=value
-
-    if header=True then first line of file should be space/tab separated list of keys including INCHI column key.
-
-        example:
-            ignored_inchi_key key1 key2
-            InChI=1S/C2H5/c1-2/h1H2,2H3/q+1 1 2
-
-    also possible to pass list of keys (without inchi_pseudo_key) for mapping space/tab separated list
-    of INCHI and values: header=['key1', 'key2'] # order depended
+    INCHI string parser
     """
-    def __init__(self, file, header=None, ignore_stereo=False, **kwargs):
-        """
-        :param ignore: Skip some checks of data or try to fix some errors.
-        :param remap: Remap atom numbers started from one.
-        :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
-        :param calc_cis_trans: Calculate cis/trans marks from 2d coordinates.
-        :param ignore_stereo: Ignore stereo data.
-        :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
-        """
-        if isinstance(file, str):
-            self._file = open(file)
-            self.__is_buffer = False
-        elif isinstance(file, Path):
-            self._file = file.open()
-            self.__is_buffer = False
-        elif isinstance(file, (TextIOWrapper, StringIO, FileInput)):
-            self._file = file
-            self.__is_buffer = True
-        else:
-            raise TypeError('invalid file. TextIOWrapper, StringIO subclasses possible')
-        super().__init__(**kwargs)
-        self.__file = iter(self._file.readline, '')
+    if lib is None:
+        raise ImportError('libINCHI not found')
 
-        if header is True:
-            self.__header = next(self.__file).split()[1:]
-        elif header:
-            if not isinstance(header, (list, tuple)) or not all(isinstance(x, str) for x in header):
-                raise TypeError('expected list (tuple) of strings')
-            self.__header = header
-        else:
-            self.__header = None
-
-        self.__ignore_stereo = ignore_stereo
-        self._data = self.__data()
-
-    def __data(self):
-        file = self._file
-        parse = self.parse
-        try:
-            seekable = file.seekable()
-        except AttributeError:
-            seekable = False
-        pos = file.tell() if seekable else None
-        for n, line in enumerate(self.__file):
-            try:
-                x = parse(line)
-            except ValueError:
-                yield ParseError(n, pos, self._format_log(), line)
-            else:
-                yield x
-            if seekable:
-                pos = file.tell()
-
-    @classmethod
-    def create_parser(cls, header=None, ignore_stereo=False, *args, **kwargs):
-        """
-        Create INCHI parser function configured same as INCHIRead object
-        """
-        obj = object.__new__(cls)
-        obj._INCHIRead__header = header
-        obj._INCHIRead__ignore_stereo = ignore_stereo
-        super(INCHIRead, obj).__init__(*args, **kwargs)
-        return obj.parse
-
-    def close(self, force=False):
-        """
-        close opened file
-
-        :param force: force closing of externally opened file or buffer
-        """
-        if not self.__is_buffer or force:
-            self._file.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, _type, value, traceback):
-        self.close()
-
-    def read(self) -> List[MoleculeContainer]:
-        """
-        parse whole file
-
-        :return: list of parsed molecules
-        """
-        return list(iter(self))
-
-    def __iter__(self) -> Iterator[MoleculeContainer]:
-        return (x for x in self._data if not isinstance(x, ParseError))
-
-    def __next__(self) -> MoleculeContainer:
-        return next(iter(self))
-
-    def parse(self, inchi: str) -> MoleculeContainer:
-        """
-        Convert INCHI string into MoleculeContainer object. String should start with INCHI and
-        optionally continues with space/tab separated list of key:value [or key=value] data.
-        """
-        if not inchi:
-            raise ValueError('Empty string')
-
-        inchi, *data = inchi.split()
-        if self.__header is None:
-            meta = {}
-            for x in data:
-                try:
-                    k, v = split('[=:]', x, 1)
-                    meta[k] = v
-                except ValueError:
-                    self._info(f'invalid metadata entry: {x}')
-        else:
-            meta = dict(zip(self.__header, data))
-
-        record = self.__parse_inchi(inchi)
-        record['meta'] = meta
-        return self._convert_molecule(record)
-
-    def _create_molecule(self, data, mapping):
-        mol = super()._create_molecule(data, mapping, _skip_calc_implicit=True)
-        atoms = mol._atoms
-        bonds = mol._bonds
-        charges = mol._charges
-        radicals = mol._radicals
-        hydrogens = mol._hydrogens
-        plane = mol._plane
-
-        # set hydrogen atoms. INCHI designed for hydrogens handling. hope correctly.
-        free = count(max(mapping.values()) + 1)
-        for n, atom in enumerate(data['atoms']):
-            n = mapping[n]
-            if atom['element'] != 'H':
-                hydrogens[n] = atom['hydrogens']
-            # in chython hydrogens never have implicit H.
-            elif atom['hydrogens']:  # >[xH]-H case
-                m = next(free)
-                charges[m] = 0
-                radicals[m] = False
-                plane[m] = (0., 0.)
-                hydrogens[n] = 0
-                hydrogens[m] = 0
-                atoms[m] = a = H()
-                a._attach_graph(mol, m)
-                bonds[n][m] = b = Bond(1)
-                bonds[m] = {n: b}
-                b._attach_graph(mol, n, m)
-            else:  # H+, H* or >H-[xH] cases
-                hydrogens[n] = 0
-            # convert isotopic implicit hydrogens to explicit
-            for i, k in enumerate(('p', 'd', 't'), 1):
-                if atom[k]:
-                    for _ in range(atom[k]):
-                        m = next(free)
-                        charges[m] = 0
-                        radicals[m] = False
-                        plane[m] = (0., 0.)
-                        hydrogens[m] = 0
-                        atoms[m] = a = H(i)
-                        a._attach_graph(mol, m)
-                        bonds[n][m] = b = Bond(1)
-                        bonds[m] = {n: b}
-                        b._attach_graph(mol, n, m)
-
-        if self.__ignore_stereo or \
-                not data['stereo_atoms'] and not data['stereo_cumulenes'] and not data['stereo_allenes']:
-            return mol
-
-        st = mol._stereo_tetrahedrons
-        sa = mol._stereo_allenes
-        ctt = mol._stereo_cis_trans_terminals
-
-        stereo = []
-        for n, ngb, s in data['stereo_atoms']:
-            n = mapping[n]
-            if n in st:
-                stereo.append((mol.add_atom_stereo, n, [mapping[x] for x in ngb], s))
-        for n, nn, mn, s in data['stereo_allenes']:
-            n = mapping[n]
-            if n in sa:
-                stereo.append((mol.add_atom_stereo, n, mapping[nn], mapping[mn], s))
-        for n, m, nn, nm, s in data['stereo_cumulenes']:
-            n = mapping[n]
-            if n in ctt:
-                stereo.append((mol.add_cis_trans_stereo, n, mapping[m], mapping[nn], mapping[nm], s))
-
-        while stereo:
-            fail_stereo = []
-            old_stereo = len(stereo)
-            for f, *args in stereo:
-                try:
-                    f(*args, clean_cache=False)
-                except NotChiral:
-                    fail_stereo.append((f, *args))
-                except IsChiral:
-                    pass
-                except ValenceError:
-                    self._info('structure has errors, stereo data skipped')
-                    mol.flush_cache()
-                    break
-            else:
-                stereo = fail_stereo
-                if len(stereo) == old_stereo:
-                    break
-                mol.flush_stereo_cache()
-                continue
-            break
-        return mol
-
-    @staticmethod
-    def __parse_inchi(string):
-        structure = INCHIStructure()
-        if lib.GetStructFromINCHI(byref(InputINCHI(string)), byref(structure)):
-            lib.FreeStructFromINCHI(byref(structure))
-            raise ValueError('invalid INCHI')
-
-        atoms, bonds = [], []
-        seen = set()
-        for n in range(structure.num_atoms):
-            seen.add(n)
-            atom = structure.atom[n]
-
-            atoms.append({'element': atom.atomic_symbol, 'charge': atom.charge,
-                          'mapping': 0, 'x': atom.x, 'y': atom.y, 'z': atom.z, 'isotope': atom.isotope,
-                          'is_radical': atom.is_radical, 'hydrogens': atom.implicit_hydrogens,
-                          'p': atom.implicit_protium, 'd': atom.implicit_deuterium, 't': atom.implicit_tritium})
-
-            for k in range(atom.num_bonds):
-                m = atom.neighbor[k]
-                if m in seen:
-                    continue
-                order = atom.bond_type[k]
-                if order:
-                    bonds.append((n, m, order))
-
-        stereo_atoms = []
-        stereo_allenes = []
-        stereo_cumulenes = []
-        for i in range(structure.num_stereo0D):
-            stereo = structure.stereo0D[i]
-            sign = stereo.sign
-            if sign is not None:
-                if stereo.is_tetrahedral:
-                    stereo_atoms.append((stereo.central_atom, stereo.neighbors, sign))
-                elif stereo.is_allene:
-                    nn, *_, nm = stereo.neighbors
-                    stereo_allenes.append((stereo.central_atom, nn, nm, sign))
-                elif stereo.is_cumulene:
-                    nn, n, m, nm = stereo.neighbors
-                    stereo_cumulenes.append((n, m, nn, nm, sign))
-
+    structure = INCHIStructure()
+    if lib.GetStructFromINCHI(byref(InputINCHI(data)), byref(structure)):
         lib.FreeStructFromINCHI(byref(structure))
-        return {'atoms': atoms, 'bonds': bonds, 'stereo_atoms': stereo_atoms, 'stereo_allenes': stereo_allenes,
-                'stereo_cumulenes': stereo_cumulenes}
+        raise ValueError('invalid INCHI')
+
+    atoms, bonds = [], []
+    seen = set()
+    for n in range(structure.num_atoms):
+        seen.add(n)
+        atom = structure.atom[n]
+
+        atoms.append({'element': atom.atomic_symbol, 'charge': atom.charge, 'mapping': 0, 'x': atom.x, 'y': atom.y,
+                      'z': atom.z, 'isotope': atom.isotope, 'is_radical': atom.is_radical,
+                      'hydrogens': atom.implicit_hydrogens, 'p': atom.implicit_protium, 'd': atom.implicit_deuterium,
+                      't': atom.implicit_tritium})
+
+        for k in range(atom.num_bonds):
+            m = atom.neighbor[k]
+            if m in seen:
+                continue
+            order = atom.bond_type[k]
+            if order:
+                bonds.append((n, m, order))
+
+    stereo_atoms = []
+    stereo_allenes = []
+    stereo_cumulenes = []
+    for i in range(structure.num_stereo0D):
+        stereo = structure.stereo0D[i]
+        sign = stereo.sign
+        if sign is not None:
+            if stereo.is_tetrahedral:
+                stereo_atoms.append((stereo.central_atom, stereo.neighbors, sign))
+            elif stereo.is_allene:
+                nn, *_, nm = stereo.neighbors
+                stereo_allenes.append((stereo.central_atom, nn, nm, sign))
+            elif stereo.is_cumulene:
+                nn, n, m, nm = stereo.neighbors
+                stereo_cumulenes.append((n, m, nn, nm, sign))
+
+    lib.FreeStructFromINCHI(byref(structure))
+
+    tmp = {'atoms': atoms, 'bonds': bonds, 'stereo_atoms': stereo_atoms, 'stereo_allenes': stereo_allenes,
+           'stereo_cumulenes': stereo_cumulenes, 'mapping': list(range(1, len(atoms) + 1))}
+    mol = create_molecule(tmp, skip_calc_implicit=True, _cls=_cls)
+    postprocess_molecule(mol, tmp, ignore_stereo=ignore_stereo)
+    return mol
+
+
+def postprocess_molecule(molecule, data, *, ignore_stereo=False):
+    atoms = molecule._atoms
+    bonds = molecule._bonds
+    charges = molecule._charges
+    radicals = molecule._radicals
+    hydrogens = molecule._hydrogens
+    plane = molecule._plane
+
+    # set hydrogen atoms. INCHI designed for hydrogens handling. hope correctly.
+    free = count(len(atoms) + 1)
+    for n, atom in enumerate(data['atoms'], 1):
+        if atom['element'] != 'H':
+            hydrogens[n] = atom['hydrogens']
+        # in chython hydrogens never have implicit H.
+        elif atom['hydrogens']:  # >[xH]-H case
+            m = next(free)
+            charges[m] = 0
+            radicals[m] = False
+            plane[m] = (0., 0.)
+            hydrogens[n] = 0
+            hydrogens[m] = 0
+            atoms[m] = a = H()
+            a._attach_graph(molecule, m)
+            bonds[n][m] = b = Bond(1)
+            bonds[m] = {n: b}
+            b._attach_graph(molecule, n, m)
+        else:  # H+, H* or >H-[xH] cases
+            hydrogens[n] = 0
+        # convert isotopic implicit hydrogens to explicit
+        for i, k in enumerate(('p', 'd', 't'), 1):
+            if atom[k]:
+                for _ in range(atom[k]):
+                    m = next(free)
+                    charges[m] = 0
+                    radicals[m] = False
+                    plane[m] = (0., 0.)
+                    hydrogens[m] = 0
+                    atoms[m] = a = H(i)
+                    a._attach_graph(molecule, m)
+                    bonds[n][m] = b = Bond(1)
+                    bonds[m] = {n: b}
+                    b._attach_graph(molecule, n, m)
+
+    if ignore_stereo or not data['stereo_atoms'] and not data['stereo_cumulenes'] and not data['stereo_allenes']:
+        return
+
+    st = molecule._stereo_tetrahedrons
+    sa = molecule._stereo_allenes
+    ctt = molecule._stereo_cis_trans_terminals
+
+    stereo = []
+    for n, ngb, s in data['stereo_atoms']:
+        n += 1
+        if n in st:
+            stereo.append((molecule.add_atom_stereo, n, [x + 1 for x in ngb], s))
+    for n, nn, mn, s in data['stereo_allenes']:
+        n += 1
+        if n in sa:
+            stereo.append((molecule.add_atom_stereo, n, nn + 1, mn + 1, s))
+    for n, m, nn, nm, s in data['stereo_cumulenes']:
+        n += 1
+        if n in ctt:
+            stereo.append((molecule.add_cis_trans_stereo, n, m + 1, nn + 1, nm + 1, s))
+
+    while stereo:
+        fail_stereo = []
+        old_stereo = len(stereo)
+        for f, *args in stereo:
+            try:
+                f(*args, clean_cache=False)
+            except NotChiral:
+                fail_stereo.append((f, *args))
+            except IsChiral:
+                pass
+            except ValenceError:
+                if 'chython_parsing_log' not in molecule.meta:
+                    molecule.meta['chython_parsing_log'] = []
+                molecule.meta['chython_parsing_log'].append('structure has errors, stereo data skipped')
+                molecule.flush_cache()
+                break
+        else:
+            stereo = fail_stereo
+            if len(stereo) == old_stereo:
+                break
+            molecule.flush_stereo_cache()
+            continue
+        break
 
 
 class InputINCHI(Structure):
@@ -653,6 +521,8 @@ class INCHIStructure(Structure):
 #
 
 
+lib = None
+
 try:
     from site import getuserbase
 except ImportError:
@@ -686,8 +556,6 @@ elif platform.startswith('macosx') and platform.endswith('x86_64'):
 else:
     warn('unsupported platform for libinchi', ImportWarning)
     libname = None
-    __all__ = []
-    del INCHIRead
 
 if libname:
     for site in sitepackages:
@@ -697,12 +565,10 @@ if libname:
                 lib = cdll.LoadLibrary(str(lib_path))
             except OSError:
                 warn('libinchi loading problem', ImportWarning)
-                __all__ = []
-                del INCHIRead
                 break
-            __all__ = ['INCHIRead']
             break
     else:
         warn('broken package installation. libinchi not found', ImportWarning)
-        __all__ = []
-        del INCHIRead
+
+
+__all__ = ['inchi']

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,119 +16,52 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from traceback import format_exc
-from .mol import MOLRead
-from ...exceptions import EmptyMolecule
+from .mol import parse_mol_v2000
+from ...exceptions import EmptyMolecule, EmptyReaction, InvalidV2000
 
 
-class RXNRead:
-    def __init__(self, line, ignore=False, log_buffer=None):
-        self.__reactants_count = int(line[:3])
-        self.__products_count = int(line[3:6]) + self.__reactants_count
-        self.__reagents_count = int(line[6:].rstrip() or 0) + self.__products_count
-        self.__molecules = []
-        self.__ignore = ignore
-        self.__errors = []
-        if log_buffer is None:
-            log_buffer = []
-        self.__log_buffer = log_buffer
+def parse_rxn_v2000(data, *, ignore=True):
+    line = data[4]
+    reactants_count = int(line[:3])
+    products_count = int(line[3:6]) + reactants_count
+    reagents_count = int(line[6:].rstrip() or 0) + products_count
 
-    def __call__(self, line):
-        if self.__parser:
-            try:
-                x = self.__parser(line)
-            except ValueError:
-                if not self.__ignore:
-                    raise
-                if (lm := len(self.__molecules)) < self.__reactants_count:
-                    self.__reactants_count -= 1
-                    self.__products_count -= 1
-                    self.__reagents_count -= 1
-                    m = 'reactants'
-                elif lm < self.__products_count:
-                    self.__products_count -= 1
-                    self.__reagents_count -= 1
-                    m = 'products'
-                else:
-                    self.__reagents_count -= 1
-                    m = 'reagents'
+    if not reagents_count:
+        raise EmptyReaction
 
-                self.__errors.append({'chytorch_molecule_role': m})
-                self.__log_buffer.append(format_exc())
-                self.__log_buffer.append('bad molecule ignored')
-                self.__parser = None
-                if lm == self.__reagents_count:  # empty molecule is last in list
-                    self.__rend = True
-                    return True
-                self.__empty_skip = True
+    title = data[2].strip() or None
+    log = []
+    molecules = []
+
+    start = -1
+    for n in range(0, reagents_count):
+        try:
+            start = next(n for n, x in enumerate(data[start + 6:], start + 7) if x.startswith('$MOL'))
+        except StopIteration:
+            raise InvalidV2000
+
+        try:
+            molecules.append(parse_mol_v2000(data[start:]))
+        except ValueError as e:
+            if isinstance(e, EmptyMolecule):
+                log.append(f'ignored empty molecule {n}')
+            elif ignore:
+                log.append(f'ignored molecule {n} with {e}')
             else:
-                if x:
-                    self.__im = 4
-                    mol = self.__parser.getvalue()
-                    if self.__title:
-                        mol['title'] = self.__title
-                    self.__molecules.append(mol)
-                    self.__parser = None
-                    if len(self.__molecules) == self.__reagents_count:
-                        self.__rend = True
-                        return True
-        elif self.__empty_skip:
-            if not line.startswith('$MOL'):
-                return
-            self.__empty_skip = False
-            self.__im = 3
-        elif self.__rend:
-            raise ValueError('parser closed')
-        elif self.__im == 4:
-            if not line.startswith('$MOL'):
-                raise ValueError('invalid RXN')
-            self.__im = 3
-        elif self.__im:
-            if self.__im == 3:
-                self.__title = line.strip()
-            self.__im -= 1
-        else:
-            try:
-                self.__parser = MOLRead(line, self.__log_buffer)
-            except ValueError as e:
-                if not self.__ignore:
-                    raise
-                if (lm := len(self.__molecules)) < self.__reactants_count:
-                    self.__reactants_count -= 1
-                    self.__products_count -= 1
-                    self.__reagents_count -= 1
-                    m = 'reactants'
-                elif lm < self.__products_count:
-                    self.__products_count -= 1
-                    self.__reagents_count -= 1
-                    m = 'products'
-                else:
-                    self.__reagents_count -= 1
-                    m = 'reagents'
+                raise
 
-                if not isinstance(e, EmptyMolecule):
-                    self.__errors.append({'chytorch_molecule_role': m})
-                    self.__log_buffer.append(format_exc())
-                    self.__log_buffer.append('bad molecule ignored')
-                else:
-                    self.__log_buffer.append('empty molecule ignored')
+            if (lm := len(molecules)) < reactants_count:
+                reactants_count -= 1
+                products_count -= 1
+                reagents_count -= 1
+            elif lm < products_count:
+                products_count -= 1
+                reagents_count -= 1
+            else:
+                reagents_count -= 1
 
-                if lm == self.__reagents_count:  # empty molecule is last in list
-                    self.__rend = True
-                    return True
-                self.__empty_skip = True
-
-    def getvalue(self):
-        if self.__rend:
-            return {'reactants': self.__molecules[:self.__reactants_count],
-                    'products': self.__molecules[self.__reactants_count:self.__products_count],
-                    'reagents': self.__molecules[self.__products_count:self.__reagents_count],
-                    'meta': {}, 'errors': self.__errors}
-        raise ValueError('reaction not complete')
-
-    __parser = None
-    __empty_skip = __rend = False
-    __im = 4
+    return {'reactants': molecules[:reactants_count], 'products': molecules[reactants_count:products_count],
+            'reagents': molecules[products_count:], 'title': title, 'meta': None, 'log': log}
 
 
-__all__ = ['RXNRead']
+__all__ = ['parse_rxn_v2000']

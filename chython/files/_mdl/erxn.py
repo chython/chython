@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,98 +16,52 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from traceback import format_exc
-from .emol import EMOLRead
-from ...exceptions import EmptyMolecule
+from .emol import parse_mol_v3000
+from ...exceptions import EmptyMolecule, EmptyReaction, InvalidV2000
 
 
-class ERXNRead:
-    def __init__(self, line, ignore=False, log_buffer=None):
-        tmp = line[13:].split()
-        self.__reactants_count = int(tmp[0])
-        self.__products_count = int(tmp[1])
-        self.__reagents_count = int(tmp[2]) if len(tmp) == 3 else 0
+def parse_rxn_v3000(data, *, ignore=True):
+    tmp = data[4][13:].split()
+    reactants_count = int(tmp[0])
+    products_count = int(tmp[1]) + reactants_count
+    reagents_count = (int(tmp[2]) if len(tmp) == 3 else 0) + products_count
 
-        self.__reactants = []
-        self.__products = []
-        self.__reagents = []
-        self.__errors = []
-        self.__ignore = ignore
-        if log_buffer is None:
-            log_buffer = []
-        self.__log_buffer = log_buffer
+    if not reagents_count:
+        raise EmptyReaction
 
-    def __call__(self, line):
-        if self.__empty_skip:
-            if not line.startswith('M  V30 END CTAB'):
-                return
-            self.__empty_skip = False
-        elif self.__in_mol:
-            try:
-                x = self.__parser(line)
-            except ValueError as e:
-                if not self.__ignore:
-                    raise
-                if not isinstance(e, EmptyMolecule):
-                    m = self.__parser._meta  # noqa
-                    m['chytorch_molecule_role'] = _roles[self.__parser_group]
-                    self.__errors.append(m)
-                    self.__log_buffer.append(format_exc())
-                    self.__log_buffer.append('bad molecule ignored')
-                else:
-                    self.__log_buffer.append('empty molecule ignored')
-                self.__empty_skip = True
-                self.__in_mol -= 1
-                if self.__in_mol:
-                    self.__parser = EMOLRead(self.__ignore, self.__log_buffer)
+    title = data[2].strip() or None
+    log = []
+    molecules = []
+
+    start = 1
+    for n in range(0, reagents_count):
+        try:
+            start = next(n for n, x in enumerate(data[start + 5:], start + 5) if x.startswith('M  V30 BEGIN CTAB'))
+        except StopIteration:
+            raise InvalidV2000
+
+        try:
+            molecules.append(parse_mol_v3000(data[start:], _header=False))
+        except ValueError as e:
+            if isinstance(e, EmptyMolecule):
+                log.append(f'ignored empty molecule {n}')
+            elif ignore:
+                log.append(f'ignored molecule {n} with {e}')
             else:
-                if x:
-                    x = self.__parser.getvalue()
-                    self.__in_mol -= 1
-                    if self.__in_mol:
-                        self.__parser = EMOLRead(self.__ignore, self.__log_buffer)
-                    if self.__parser_group == 'REACTANT':
-                        self.__reactants.append(x)
-                    elif self.__parser_group == 'PRODUCT':
-                        self.__products.append(x)
-                    elif self.__parser_group == 'AGENT':
-                        self.__reagents.append(x)
-        elif self.__rend:
-            raise ValueError('parser closed')
-        elif line.startswith('M  V30 END'):
-            if self.__parser_group != line[11:].strip():
-                raise ValueError('invalid CTAB')
-        elif line.startswith('M  V30 BEGIN'):
-            x = line[13:].strip()
-            if x == 'REACTANT':
-                self.__in_mol = self.__reactants_count
-            elif x == 'PRODUCT':
-                self.__in_mol = self.__products_count
-            elif x == 'AGENT':
-                self.__in_mol = self.__reagents_count
+                raise
+
+            if (lm := len(molecules)) < reactants_count:
+                reactants_count -= 1
+                products_count -= 1
+                reagents_count -= 1
+            elif lm < products_count:
+                products_count -= 1
+                reagents_count -= 1
             else:
-                raise ValueError('invalid RXN CTAB')
-            self.__parser_group = x
-            if self.__in_mol:
-                self.__parser = EMOLRead(self.__ignore, self.__log_buffer)
-        elif line.startswith('M  END'):
-            self.__rend = True
-            return True
-        else:
-            raise ValueError('invalid CTAB')
+                reagents_count -= 1
 
-    def getvalue(self):
-        if self.__rend:
-            return {'reactants': self.__reactants, 'products': self.__products, 'reagents': self.__reagents, 'meta': {},
-                    'errors': self.__errors}
-        raise ValueError('reaction not complete')
-
-    __parser_group = __parser = None
-    __rend = __empty_skip = False
-    __in_mol = 0
+    return {'reactants': molecules[:reactants_count], 'products': molecules[reactants_count:products_count],
+            'reagents': molecules[products_count:], 'title': title, 'meta': None, 'log': log}
 
 
-_roles = {'REACTANT': 'reactants', 'PRODUCT': 'products', 'AGENT': 'reagents'}
-
-
-__all__ = ['ERXNRead']
+__all__ = ['parse_rxn_v3000']

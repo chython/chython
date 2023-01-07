@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020, 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from ...exceptions import EmptyMolecule
+from ...exceptions import EmptyMolecule, InvalidCharge, InvalidV2000
 
 
 common_isotopes = {'H': 1, 'He': 4, 'Li': 7, 'Be': 9, 'B': 11, 'C': 12, 'N': 14, 'O': 16, 'F': 19, 'Ne': 20, 'Na': 23,
@@ -36,129 +36,119 @@ _ctf_data = {'R': 'is_radical', 'C': 'charge', 'I': 'isotope'}
 _charge_map = {'  0': 0, '  1': 3, '  2': 2, '  3': 1, '  4': 0, '  5': -1, '  6': -2, '  7': -3}
 
 
-class MOLRead:
-    def __init__(self, line, log_buffer=None):
-        self.__atoms_count = int(line[0:3])
-        self.__bonds_count = int(line[3:6])
-        self.__dat = {}
-        self.__atoms = []
-        self.__bonds = []
-        self.__stereo = []
-        self.__hydrogens = {}
-        if log_buffer is None:
-            log_buffer = []
-        self.__log_buffer = log_buffer
+def parse_mol_v2000(data):
+    line = data[3]
 
-    def __new__(cls, line, log_buffer=None):
-        if line.startswith('  0'):
-            raise EmptyMolecule
-        return super().__new__(cls)
+    atoms_count = int(line[0:3])
+    bonds_count = int(line[3:6])
+    if not atoms_count:
+        raise EmptyMolecule
 
-    def getvalue(self):
-        if self.__mend:
-            return {'atoms': self.__atoms, 'bonds': self.__bonds, 'stereo': self.__stereo, 'meta': {},
-                    'hydrogens': self.__hydrogens}
-        raise ValueError('molecule not complete')
+    log = []
+    title = data[1].strip() or None
+    atoms = []
+    bonds = []
+    stereo = []
+    hydrogens = {}
+    dat = {}
 
-    def __call__(self, line):
-        if self.__mend:
-            raise ValueError('parser closed')
-        elif len(self.__atoms) < self.__atoms_count:
+    for line in data[4: 4 + atoms_count]:
+        try:
+            charge = _charge_map[line[36:39]]
+        except KeyError:
+            raise InvalidCharge
+        element = line[31:34].strip()
+        isotope = line[34:36]
+
+        if element in 'AL':
+            raise ValueError('queries not supported')
+        elif element == 'D':
+            element = 'H'
+            if isotope != ' 0':
+                raise ValueError('isotope on deuterium atom')
+            isotope = 2
+        elif isotope != ' 0':
             try:
-                charge = _charge_map[line[36:39]]
+                isotope = common_isotopes[element] + int(isotope)
             except KeyError:
-                raise ValueError('invalid charge')
-            element = line[31:34].strip()
-            isotope = line[34:36]
-
-            if element in 'AL':
-                raise ValueError('queries not supported')
-            elif element == 'D':
-                element = 'H'
-                if isotope != ' 0':
-                    raise ValueError('isotope on deuterium atom')
-                isotope = 2
-            elif isotope != ' 0':
-                try:
-                    isotope = common_isotopes[element] + int(isotope)
-                except KeyError:
-                    raise ValueError('invalid element symbol')
-            else:
-                isotope = None
-
-            mapping = line[60:63]
-            self.__atoms.append({'element': element, 'charge': charge, 'isotope': isotope, 'is_radical': False,
-                                 'mapping': int(mapping) if mapping else 0,
-                                 'x': float(line[0:10]), 'y': float(line[10:20]), 'z': float(line[20:30])})
-
-        elif len(self.__bonds) < self.__bonds_count:
-            a1, a2 = int(line[0:3]) - 1, int(line[3:6]) - 1
-            s = line[9:12]
-            if s == '  1':
-                self.__stereo.append((a1, a2, 1))
-            elif s == '  6':
-                self.__stereo.append((a1, a2, -1))
-            elif s != '  0':
-                self.__log_buffer.append('unsupported or invalid stereo')
-            b = int(line[6:9])
-            if b == 9:  # added ad-hoc for bond type 9
-                b = 8
-                self.__log_buffer.append('coordinate bond replaced with special')
-            self.__bonds.append((a1, a2, b))
-        elif line.startswith('M  END'):
-            for a in self.__atoms:
-                if a['is_radical']:
-                    a['is_radical'] = True
-            for x in self.__dat.values():
-                try:
-                    _type = x['type']
-                    if _type == 'mrv_implicit_h':
-                        atoms = x['atoms']
-                        value = x['value']
-                        if len(atoms) != 1 or atoms[0] == -1 or not value:
-                            raise ValueError(f'MRV_IMPLICIT_H spec invalid {x}')
-                        self.__hydrogens[atoms[0]] = int(value[6:])
-                    else:
-                        self.__log_buffer.append(f'ignored data: {x}')
-                except KeyError:
-                    raise ValueError(f'Invalid SGROUP {x}')
-            self.__mend = True
-            return True
+                raise ValueError('invalid element symbol')
         else:
-            self.__collect(line)
+            isotope = None
 
-    def __collect(self, line):
-        if line.startswith('M  ALS'):
+        mapping = line[60:63]
+        atoms.append({'element': element, 'charge': charge, 'isotope': isotope, 'is_radical': False,
+                      'mapping': int(mapping) if mapping else 0, 'x': float(line[0:10]), 'y': float(line[10:20]),
+                      'z': float(line[20:30])})
+
+    for line in data[4 + atoms_count: 4 + atoms_count + bonds_count]:
+        a1, a2 = int(line[0:3]) - 1, int(line[3:6]) - 1
+        s = line[9:12]
+        if s == '  1':
+            stereo.append((a1, a2, 1))
+        elif s == '  6':
+            stereo.append((a1, a2, -1))
+        elif s != '  0':
+            log.append(f'unsupported or invalid stereo: {line}')
+        b = int(line[6:9])
+        if b == 9:  # added ad-hoc for bond type 9
+            b = 8
+            log.append(f'coordinate bond replaced with special: {line}')
+        bonds.append((a1, a2, b))
+
+    for line in data[4 + atoms_count + bonds_count:]:
+        if line.startswith('M  END'):
+            break
+        elif line.startswith('M  ALS'):
             raise ValueError('list of atoms not supported')
         elif line.startswith(('M  ISO', 'M  RAD', 'M  CHG')):
             _type = _ctf_data[line[3]]
             for i in range(int(line[6:9])):
                 i8 = i * 8
                 atom = int(line[10 + i8:13 + i8])
-                if not atom or atom > len(self.__atoms):
-                    raise ValueError('invalid atoms number')
-                atom = self.__atoms[atom - 1]
+                if not atom or atom > len(atoms):
+                    raise InvalidV2000('invalid atoms number')
+                atom = atoms[atom - 1]
                 atom[_type] = int(line[14 + i8:17 + i8])
 
         elif line.startswith('M  STY'):
             for i in range(int(line[6:9])):
                 i8 = i * 8
                 if 'DAT' == line[14 + i8:17 + i8]:
-                    self.__dat[int(line[10 + i8:13 + i8])] = {}
+                    dat[int(line[10 + i8:13 + i8])] = {}
         elif line.startswith('M  SAL'):
             i = int(line[7:10])
-            if i in self.__dat:
-                self.__dat[i]['atoms'] = tuple(int(line[14 + 4 * i:17 + 4 * i]) - 1 for i in range(int(line[10:13])))
+            if i in dat:
+                dat[i]['atoms'] = tuple(int(line[14 + 4 * i:17 + 4 * i]) - 1 for i in range(int(line[10:13])))
         elif line.startswith('M  SDT'):
             i = int(line[7:10])
-            if i in self.__dat:
-                self.__dat[i]['type'] = line.split()[-1].lower()
+            if i in dat:
+                dat[i]['type'] = line.split()[-1].lower()
         elif line.startswith('M  SED'):
             i = int(line[7:10])
-            if i in self.__dat:
-                self.__dat[i]['value'] = line[10:].strip().replace('/', '').lower()
+            if i in dat:
+                dat[i]['value'] = line[10:].strip().replace('/', '').lower()
+        elif not line.startswith('M  SDD'):
+            log.append(f'ignored line: {line}')
 
-    __mend = False
+    for a in atoms:
+        if a['is_radical']:  # int to bool
+            a['is_radical'] = True
+    for x in dat.values():
+        try:
+            _type = x['type']
+            if _type == 'mrv_implicit_h':
+                _atoms = x['atoms']
+                value = x['value']
+                if len(_atoms) != 1 or _atoms[0] == -1 or not value:
+                    raise InvalidV2000(f'MRV_IMPLICIT_H spec invalid {x}')
+                hydrogens[_atoms[0]] = int(value[6:])
+            else:
+                log.append(f'ignored data: {x}')
+        except KeyError:
+            raise InvalidV2000(f'Invalid SGROUP {x}')
+
+    return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'hydrogens': hydrogens,
+            'meta': None, 'log': log}
 
 
-__all__ = ['MOLRead', 'common_isotopes']
+__all__ = ['parse_mol_v2000', 'common_isotopes']

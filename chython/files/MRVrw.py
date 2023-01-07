@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,14 +18,15 @@
 #
 from collections import defaultdict
 from io import StringIO, BytesIO, TextIOWrapper, BufferedIOBase, BufferedReader
-from itertools import count
+from itertools import count, islice, chain
 from lxml.etree import iterparse, QName, tostring
 from pathlib import Path
-from traceback import format_exc
-from typing import Union, List, Iterator
-from ._mdl import MDLStereo
+from typing import Union, List, Iterator, Dict, Optional
+from ._convert import create_molecule, create_reaction
+from ._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
+from ._mdl import postprocess_molecule
 from ..containers import MoleculeContainer, ReactionContainer
-from ..exceptions import EmptyMolecule, ParseError
+from ..exceptions import EmptyMolecule, EmptyReaction
 
 
 organic_set = {'B', 'C', 'N', 'O', 'P', 'S', 'Se', 'F', 'Cl', 'Br', 'I'}
@@ -73,17 +74,20 @@ def xml_dict(parent_element, stop_list=None):
     return out
 
 
-class MRVRead(MDLStereo):
+class MRVRead:
     """
     ChemAxon MRV files reader. works similar to opened file object. support `with` context manager.
     on initialization accept opened in binary mode file, string path to file,
     pathlib.Path object or another binary buffered reader object
     """
-    def __init__(self, file, **kwargs):
+    molecule_cls = MoleculeContainer
+    reaction_cls = ReactionContainer
+
+    def __init__(self, file, *, ignore: bool = True, remap: bool = False,
+                 calc_cis_trans: bool = False, ignore_stereo: bool = False, ignore_bad_isotopes: bool = False):
         """
         :param ignore: Skip some checks of data or try to fix some errors.
         :param remap: Remap atom numbers started from one.
-        :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
         :param calc_cis_trans: Calculate cis/trans marks from 2d coordinates.
         :param ignore_stereo: Ignore stereo data.
         :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
@@ -98,16 +102,288 @@ class MRVRead(MDLStereo):
             self.__file = file
             self.__is_buffer = True
         else:
-            raise TypeError('invalid file. BytesIO, BufferedReader and BufferedIOBase subclasses possible')
-        super().__init__(**kwargs)
-        self._data = self.__reader()
+            raise TypeError('invalid file. BytesIO, BufferedReader and BufferedIOBase subclasses expected')
+        self.__ignore = ignore
+        self.__remap = remap
+        self.__calc_cis_trans = calc_cis_trans
+        self.__ignore_stereo = ignore_stereo
+        self.__ignore_bad_isotopes = ignore_bad_isotopes
+        self.__tell = 0
+        self.__xml = iterparse(self.__file, tag='{*}MChemicalStruct')
+        self.__buffer = None
 
-    def close(self, force=False):
+    def read(self, amount: Optional[int] = None) -> List[Union[ReactionContainer, MoleculeContainer]]:
         """
-        close opened file
+        Parse whole file
+
+        :param amount: number of records to read
+        """
+        if amount:
+            return list(islice(iter(self), amount))
+        return list(iter(self))
+
+    def read_structure(self, *, current: bool = True):
+        """
+        Read Reaction or Molecule container.
+
+        :param current: return current structure if already parsed, otherwise read next
+        """
+        data = self._read_block(current=current)
+        meta = self.read_metadata()
+        log = []
+
+        if 'molecule' in data and isinstance(data['molecule'], dict):
+            data = data['molecule']
+            tmp = parse_molecule(data)
+            postprocess_parsed_molecule(tmp, remap=self.__remap, ignore=self.__ignore)
+            mol = create_molecule(tmp, ignore_bad_isotopes=self.__ignore_bad_isotopes, _cls=self.molecule_cls)
+            postprocess_molecule(mol, tmp, ignore=self.__ignore, ignore_stereo=self.__ignore_stereo,
+                                 calc_cis_trans=self.__calc_cis_trans)
+            if meta:
+                mol.meta.update(meta)
+            return mol
+        elif 'reaction' in data and isinstance(data['reaction'], dict):
+            data = data['reaction']
+            tmp = {'reactants': [], 'products': [], 'reagents': [],
+                   'meta': None, 'log': log, 'title': data.get('@title')}
+
+            n = 0
+            for tag, group in (('reactantList', 'reactants'), ('productList', 'products'), ('agentList', 'reagents')):
+                if tag in data and 'molecule' in data[tag]:
+                    molecule = data[tag]['molecule']
+                    if isinstance(molecule, dict):
+                        molecule = (molecule,)
+                    for m in molecule:
+                        n += 1
+                        try:
+                            tmp[group].append(parse_molecule(m))
+                        except ValueError as e:
+                            if isinstance(e, EmptyMolecule):
+                                log.append(f'ignored empty molecule {n}')
+                            elif self.__ignore:
+                                log.append(f'ignored molecule {n} with {e}')
+                            else:
+                                raise
+
+            if not tmp['reactants'] and not tmp['products'] and not tmp['reagents']:
+                raise EmptyReaction
+
+            postprocess_parsed_reaction(data, remap=self.__remap, ignore=self.__ignore)
+            rxn = create_reaction(tmp, ignore_bad_isotopes=self.__ignore_bad_isotopes, _m_cls=self.molecule_cls,
+                                  _r_cls=self.reaction_cls)
+            for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
+                postprocess_molecule(mol, tmp, ignore=self.__ignore, ignore_stereo=self.__ignore_stereo,
+                                     calc_cis_trans=self.__calc_cis_trans)
+            if meta:
+                rxn.meta.update(meta)
+            return rxn
+        else:
+            raise ValueError('reaction or molecule expected')
+
+    def read_metadata(self, *, current: bool = True) -> Dict[str, str]:
+        """
+        Read metadata block
+        """
+        data = self._read_block(current=current)
+        if 'molecule' in data and isinstance(data['molecule'], dict):
+            data = data['molecule']
+        elif 'reaction' in data and isinstance(data['reaction'], dict):
+            data = data['reaction']
+        else:
+            raise ValueError('reaction or molecule expected')
+
+        if 'propertyList' in data and 'property' in data['propertyList']:
+            data = data['propertyList']['property']
+            meta = {}
+            if isinstance(data, dict):
+                key = data['@title']
+                val = data['scalar']['$'].strip()
+                if key and val:
+                    meta[key] = val
+                else:
+                    meta['chython_unparsed_metadata'] = [data]
+            else:
+                for x in data:
+                    key = x['@title']
+                    val = x['scalar']['$'].strip()
+                    if key and val:
+                        meta[key] = val
+                    else:
+                        if 'chython_unparsed_metadata' not in meta:
+                            meta['chython_unparsed_metadata'] = []
+                        meta['chython_unparsed_metadata'].append(x)
+        else:
+            return {}
+
+    def close(self, force: bool = False):
+        """
+        Close opened file
 
         :param force: force closing of externally opened file or buffer
         """
+        if not self.__is_buffer or force:
+            self.__file.close()
+
+    def tell(self):
+        """
+        Number of records processed from the original file
+        """
+        return self.__tell
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _type, value, traceback):
+        self.close()
+
+    def __iter__(self) -> Iterator[Union[ReactionContainer, MoleculeContainer]]:
+        while True:
+            try:
+                yield self.read_structure(current=False)
+            except ValueError:
+                pass
+            except EOFError:
+                return
+
+    def __next__(self) -> Union[ReactionContainer, MoleculeContainer]:
+        return next(iter(self))
+
+    def _read_block(self, *, current: bool = True) -> dict:
+        if not current or not self.__buffer:
+            self.__buffer = None
+            try:
+                e = next(self.__xml)
+            except StopIteration:
+                raise EOFError
+            self.__buffer = xml_dict(e)
+            self.__tell += 1
+            e.clear()
+        return self.__buffer
+
+
+def parse_molecule(data):
+    atoms, bonds, stereo = [], [], []
+    log = []
+    hydrogens = {}
+    atom_map = {}
+    if 'atom' in data['atomArray']:
+        da = data['atomArray']['atom']
+        if isinstance(da, dict):
+            da = (da,)
+        for n, atom in enumerate(da):
+            atom_map[atom['@id']] = n
+            atoms.append({'element': atom['@elementType'],
+                          'isotope': int(atom['@isotope']) if '@isotope' in atom else None,
+                          'charge': int(atom.get('@formalCharge', 0)),
+                          'is_radical': '@radical' in atom,
+                          'mapping': int(atom.get('@mrvMap', 0))})
+            if '@z3' in atom:
+                atoms[-1].update(x=float(atom['@x3']), y=float(atom['@y3']), z=float(atom['@z3']))
+            else:
+                atoms[-1].update(x=float(atom['@x2']) / 2, y=float(atom['@y2']) / 2, z=0.)
+            if '@mrvQueryProps' in atom:
+                raise ValueError('queries unsupported')
+            if '@hydrogenCount' in atom:
+                hydrogens[n] = int(atom['@hydrogenCount'])
+    else:
+        atom = data['atomArray']
+        for n, (_id, e) in enumerate(zip(atom['@atomID'].split(), atom['@elementType'].split())):
+            atom_map[_id] = n
+            atoms.append({'element': e, 'charge': 0, 'mapping': 0, 'isotope': None, 'is_radical': False})
+        if '@z3' in atom:
+            for a, x, y, z in zip(atoms, atom['@x3'].split(), atom['@y3'].split(), atom['@z3'].split()):
+                a['x'] = float(x)
+                a['y'] = float(y)
+                a['z'] = float(z)
+        else:
+            for a, x, y in zip(atoms, atom['@x2'].split(), atom['@y2'].split()):
+                a['x'] = float(x) / 2
+                a['y'] = float(y) / 2
+                a['z'] = 0.
+        if '@isotope' in atom:
+            for a, x in zip(atoms, atom['@isotope'].split()):
+                if x != '0':
+                    a['isotope'] = int(x)
+        if '@formalCharge' in atom:
+            for a, x in zip(atoms, atom['@formalCharge'].split()):
+                if x != '0':
+                    a['charge'] = int(x)
+        if '@mrvMap' in atom:
+            for a, x in zip(atoms, atom['@mrvMap'].split()):
+                if x != '0':
+                    a['mapping'] = int(x)
+        if '@radical' in atom:
+            for a, x in zip(atoms, atom['@radical'].split()):
+                if x != '0':
+                    a['is_radical'] = True
+        if '@mrvQueryProps' in atom:
+            raise ValueError('queries unsupported')
+    if not atoms:
+        raise EmptyMolecule
+
+    if 'bond' in data['bondArray']:
+        db = data['bondArray']['bond']
+        if isinstance(db, dict):
+            db = (db,)
+        for bond in db:
+            order = bond_map[bond['@queryType' if '@queryType' in bond else '@order']]
+            a1, a2 = bond['@atomRefs2'].split()
+            if 'bondStereo' in bond:
+                if '$' in bond['bondStereo']:
+                    s = bond['bondStereo']['$']
+                    if s == 'H':
+                        stereo.append((atom_map[a1], atom_map[a2], -1))
+                    elif s == 'W':
+                        stereo.append((atom_map[a1], atom_map[a2], 1))
+                    else:
+                        log.append('invalid or unsupported stereo')
+                else:
+                    log.append('incorrect bondStereo tag')
+            bonds.append((atom_map[a1], atom_map[a2], order))
+
+    return {'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'hydrogens': hydrogens,
+            'meta': None, 'title': data.get('@title'), 'log': log}
+
+
+class MRVWrite:
+    """
+    ChemAxon MRV files writer. works similar to opened for writing file object. support `with` context manager.
+    on initialization accept opened for writing in text mode file, string path to file,
+    pathlib.Path object or another buffered writer object
+    """
+    def __init__(self, file, mapping: bool = True):
+        """
+        :param mapping: write atom mapping.
+        """
+        if isinstance(file, str):
+            self.__file = open(file, 'w')
+            self.__is_buffer = False
+        elif isinstance(file, Path):
+            self.__file = file.open('w')
+            self.__is_buffer = False
+        elif isinstance(file, (TextIOWrapper, StringIO)):
+            self.__file = file
+            self.__is_buffer = True
+        else:
+            raise TypeError('invalid file. '
+                            'TextIOWrapper, StringIO, BytesIO, BufferedReader and BufferedIOBase subclasses possible')
+        self.__writable = True
+        self.__finalized = False
+        self.__mapping = mapping
+
+    def close(self, force=False):
+        """
+        Write close tag of MRV file and close opened file
+
+        :param force: force closing of externally opened file or buffer
+        """
+        if not self.__finalized:
+            self.__file.write('</cml>\n')
+            self.__finalized = True
+        if self.__writable:
+            self.write = self.__write_closed
+            self.__writable = False
+
         if not self.__is_buffer or force:
             self.__file.close()
 
@@ -117,350 +393,115 @@ class MRVRead(MDLStereo):
     def __exit__(self, _type, value, traceback):
         self.close()
 
-    def read(self) -> List[Union[ReactionContainer, MoleculeContainer]]:
-        """
-        parse whole file
-
-        :return: list of parsed molecules or reactions
-        """
-        return list(iter(self))
-
-    def __iter__(self) -> Iterator[Union[ReactionContainer, MoleculeContainer]]:
-        return (x for x in self._data if not isinstance(x, ParseError))
-
-    def __next__(self) -> Union[ReactionContainer, MoleculeContainer]:
-        return next(iter(self))
-
-    def __reader(self) -> Iterator[Union[ReactionContainer, MoleculeContainer, ParseError]]:
-        for n, (_, element) in enumerate(iterparse(self.__file, tag='{*}MChemicalStruct')):
-            parsed = xml_dict(element)
-            element.clear()
-            if 'molecule' in parsed and isinstance(parsed['molecule'], dict):
-                parsed = parsed['molecule']
-                if 'propertyList' in parsed and 'property' in parsed['propertyList']:
-                    meta = self.__parse_property(parsed['propertyList']['property'])
-                else:
-                    meta = {}
-
-                try:
-                    record = self.__parse_molecule(parsed)
-                except (KeyError, ValueError):
-                    self._info(f'record consist errors:\n{format_exc()}')
-                    yield ParseError(n, None, self._format_log(), parsed)
-                else:
-                    record['meta'].update(meta)
-                    try:
-                        container = self._convert_molecule(record)
-                    except ValueError:
-                        self._info(f'record consist errors:\n{format_exc()}')
-                        yield ParseError(n, None, self._format_log(), parsed)
-                    else:
-                        yield container
-            elif 'reaction' in parsed and isinstance(parsed['reaction'], dict):
-                parsed = parsed['reaction']
-                if 'propertyList' in parsed and 'property' in parsed['propertyList']:
-                    meta = self.__parse_property(parsed['propertyList']['property'])
-                else:
-                    meta = {}
-
-                try:
-                    record = self.__parse_reaction(parsed)
-                except (KeyError, ValueError):
-                    self._info(f'record consist errors:\n{format_exc()}')
-                    yield ParseError(n, None, self._format_log(), parsed)
-                else:
-                    record['meta'] = meta
-                    try:
-                        container = self._convert_reaction(record)
-                    except ValueError:
-                        self._info(f'record consist errors:\n{format_exc()}')
-                        yield ParseError(n, None, self._format_log(), parsed)
-                    else:
-                        yield container
-            else:
-                self._info('invalid MDocument')
-                yield ParseError(n, None, self._format_log(), parsed)
-
-    def __parse_reaction(self, data):
-        reaction = {'reactants': [], 'products': [], 'reagents': []}
-        title = data.get('@title')
-        if title:
-            reaction['title'] = title
-        for tag, group in (('reactantList', 'reactants'), ('productList', 'products'), ('agentList', 'reagents')):
-            if tag in data and 'molecule' in data[tag]:
-                molecule = data[tag]['molecule']
-                if isinstance(molecule, dict):
-                    molecule = (molecule,)
-                for m in molecule:
-                    try:
-                        reaction[group].append(self.__parse_molecule(m))
-                    except EmptyMolecule:
-                        if not self._ignore:
-                            raise
-                        self._info('empty molecule ignored')
-        return reaction
-
-    def __parse_property(self, data):
-        meta = {}
-        if isinstance(data, dict):
-            key = data['@title']
-            val = data['scalar']['$'].strip()
-            if key and val:
-                meta[key] = val
-            else:
-                self._info(f'invalid metadata entry: {data}')
-        else:
-            for x in data:
-                key = x['@title']
-                val = x['scalar']['$'].strip()
-                if key and val:
-                    meta[key] = val
-                else:
-                    self._info(f'invalid metadata entry: {x}')
-        return meta
-
-    def __parse_molecule(self, data):
-        atoms, bonds, stereo = [], [], []
-        hydrogens = {}
-        atom_map = {}
-        if 'atom' in data['atomArray']:
-            da = data['atomArray']['atom']
-            if isinstance(da, dict):
-                da = (da,)
-            for n, atom in enumerate(da):
-                atom_map[atom['@id']] = n
-                atoms.append({'element': atom['@elementType'],
-                              'isotope': int(atom['@isotope']) if '@isotope' in atom else None,
-                              'charge': int(atom.get('@formalCharge', 0)),
-                              'is_radical': '@radical' in atom,
-                              'mapping': int(atom.get('@mrvMap', 0))})
-                if '@z3' in atom:
-                    atoms[-1].update(x=float(atom['@x3']), y=float(atom['@y3']), z=float(atom['@z3']))
-                else:
-                    atoms[-1].update(x=float(atom['@x2']) / 2, y=float(atom['@y2']) / 2, z=0.)
-                if '@mrvQueryProps' in atom:
-                    raise ValueError('queries unsupported')
-                if '@hydrogenCount' in atom:
-                    hydrogens[n] = int(atom['@hydrogenCount'])
-        else:
-            atom = data['atomArray']
-            for n, (_id, e) in enumerate(zip(atom['@atomID'].split(), atom['@elementType'].split())):
-                atom_map[_id] = n
-                atoms.append({'element': e, 'charge': 0, 'mapping': 0, 'isotope': None, 'is_radical': False})
-            if '@z3' in atom:
-                for a, x, y, z in zip(atoms, atom['@x3'].split(), atom['@y3'].split(), atom['@z3'].split()):
-                    a['x'] = float(x)
-                    a['y'] = float(y)
-                    a['z'] = float(z)
-            else:
-                for a, x, y in zip(atoms, atom['@x2'].split(), atom['@y2'].split()):
-                    a['x'] = float(x) / 2
-                    a['y'] = float(y) / 2
-                    a['z'] = 0.
-            if '@isotope' in atom:
-                for a, x in zip(atoms, atom['@isotope'].split()):
-                    if x != '0':
-                        a['isotope'] = int(x)
-            if '@formalCharge' in atom:
-                for a, x in zip(atoms, atom['@formalCharge'].split()):
-                    if x != '0':
-                        a['charge'] = int(x)
-            if '@mrvMap' in atom:
-                for a, x in zip(atoms, atom['@mrvMap'].split()):
-                    if x != '0':
-                        a['mapping'] = int(x)
-            if '@radical' in atom:
-                for a, x in zip(atoms, atom['@radical'].split()):
-                    if x != '0':
-                        a['is_radical'] = True
-            if '@mrvQueryProps' in atom:
-                raise ValueError('queries unsupported')
-        if not atoms:
-            raise EmptyMolecule
-
-        if 'bond' in data['bondArray']:
-            db = data['bondArray']['bond']
-            if isinstance(db, dict):
-                db = (db,)
-            for bond in db:
-                order = bond_map[bond['@queryType' if '@queryType' in bond else '@order']]
-                a1, a2 = bond['@atomRefs2'].split()
-                if 'bondStereo' in bond:
-                    if '$' in bond['bondStereo']:
-                        s = bond['bondStereo']['$']
-                        if s == 'H':
-                            stereo.append((atom_map[a1], atom_map[a2], -1))
-                        elif s == 'W':
-                            stereo.append((atom_map[a1], atom_map[a2], 1))
-                        else:
-                            self._info('invalid or unsupported stereo')
-                    else:
-                        self._info('incorrect bondStereo tag')
-                bonds.append((atom_map[a1], atom_map[a2], order))
-
-        mol = {'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'meta': {}, 'hydrogens': hydrogens}
-        if '@title' in data:
-            mol['title'] = data['@title']
-        return mol
-
-
-class MRVWrite:
-    """
-    ChemAxon MRV files writer. works similar to opened for writing file object. support `with` context manager.
-    on initialization accept opened for writing in text mode file, string path to file,
-    pathlib.Path object or another buffered writer object
-    """
-    def __init__(self, file):
-        if isinstance(file, str):
-            self._file = open(file, 'w')
-            self._is_buffer = False
-        elif isinstance(file, Path):
-            self._file = file.open('w')
-            self._is_buffer = False
-        elif isinstance(file, (TextIOWrapper, StringIO)):
-            self._file = file
-            self._is_buffer = True
-        else:
-            raise TypeError('invalid file. '
-                            'TextIOWrapper, StringIO, BytesIO, BufferedReader and BufferedIOBase subclasses possible')
-        self.__writable = True
-
-    def close(self, force=False):
-        """
-        Write close tag of MRV file and close opened file
-
-        :param force: force closing of externally opened file or buffer
-        """
-        if not self.__finalized:
-            self._file.write('</cml>\n')
-            self.__finalized = True
-        if self.__writable:
-            self.write = self.__write_closed
-            self.__writable = False
-
-        if not self._is_buffer or force:
-            self._file.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, _type, value, traceback):
-        self.close()
-
     @staticmethod
-    def __write_closed(data, *, skip_mapping=False):
+    def __write_closed(_):
         raise ValueError('I/O operation on closed writer')
 
-    def write(self, data: Union[ReactionContainer, MoleculeContainer], *, skip_mapping: bool = False):
+    def write(self, data: Union[ReactionContainer, MoleculeContainer]):
         """
         Write single molecule or reaction into file
-
-        :param skip_mapping: prepare structures without atom mappings
         """
-        self._file.write('<cml>\n')
-        self.__write(data, skip_mapping=skip_mapping)
+        self.__file.write('<cml>\n')
+        self.__write(data)
         self.write = self.__write
 
-    def __write(self, data, *, skip_mapping=False):
+    def __write(self, data):
+        file = self.__file
+        file.write('<MDocument><MChemicalStruct>')
         if isinstance(data, ReactionContainer):
-            buffer = ['<MDocument><MChemicalStruct>']
             if not data._arrow:
                 data.fix_positions()
-
             if data.name:
-                buffer.append(f'<reaction title="{data.name}">')
+                file.write(f'<reaction title="{data.name}">')
             else:
-                buffer.append('<reaction>')
+                file.write('<reaction>')
 
             if data.meta:
-                buffer.append('<propertyList>')
+                file.write('<propertyList>')
                 for k, v in data.meta.items():
                     if isinstance(v, str):
                         v = f'<![CDATA[{v}]]>'
-                    buffer.append(f'<property title="{k}"><scalar>{v}</scalar></property>')
-                buffer.append('</propertyList>')
+                    file.write(f'<property title="{k}"><scalar>{v}</scalar></property>')
+                file.write('</propertyList>')
+
             c = count(1)
             for i, j in ((data.reactants, 'reactantList'), (data.reagents, 'agentList'),
                          (data.products, 'productList')):
                 if not i:
                     continue
-                buffer.append(f'<{j}>')
+                file.write(f'<{j}>')
                 for n, m in zip(c, i):
                     if m.name:
-                        buffer.append(f'<molecule title="{m.name}" molID="m{n}">')
+                        file.write(f'<molecule title="{m.name}" molID="m{n}">')
                     else:
-                        buffer.append(f'<molecule molID="m{n}">')
-                    buffer.append(self.__convert_structure(m, skip_mapping))
-                    buffer.append('</molecule>')
-                buffer.append(f'</{j}>')
+                        file.write(f'<molecule molID="m{n}">')
 
-            buffer.append(f'<arrow type="DEFAULT" x1="{data._arrow[0] * 2:.4f}" y1="0" '
-                          f'x2="{data._arrow[1] * 2:.4f}" y2="0"/>')
-            buffer.append('</reaction>')
-            self._file.writelines(buffer)
+                    self.__write_molecule(m)
+                    file.write('</molecule>')
+                file.write(f'</{j}>')
+
+            file.write(f'<arrow type="DEFAULT" x1="{data._arrow[0] * 2:.4f}" y1="0" '
+                       f'x2="{data._arrow[1] * 2:.4f}" y2="0"/></reaction>')
         elif not isinstance(data, MoleculeContainer):
             raise TypeError('MoleculeContainer expected')
         else:
-            m = self.__convert_structure(data, skip_mapping)
-            self._file.write('<MDocument><MChemicalStruct>')
-
             if data.name:
-                self._file.write(f'<molecule title="{data.name}">')
+                file.write(f'<molecule title="{data.name}">')
             else:
-                self._file.write('<molecule>')
-
+                file.write('<molecule>')
             if data.meta:
-                self._file.write('<propertyList>')
+                file.write('<propertyList>')
                 for k, v in data.meta.items():
                     if isinstance(v, str):
                         v = f'<![CDATA[{v}]]>'
-                    self._file.write(f'<property title="{k}"><scalar>{v}</scalar></property>')
-                self._file.write('</propertyList>')
-            self._file.write(m)
-            self._file.write('</molecule>')
-        self._file.write('</MChemicalStruct></MDocument>\n')
+                    file.write(f'<property title="{k}"><scalar>{v}</scalar></property>')
+                file.write('</propertyList>')
 
-    @staticmethod
-    def __convert_structure(g, skip_mapping):
+            self.__write_molecule(data)
+            file.write('</molecule>')
+        file.write('</MChemicalStruct></MDocument>\n')
+
+    def __write_molecule(self, g):
         gp = g._plane
         gc = g._charges
         gr = g._radicals
         bg = g._bonds
         hg = g._hydrogens
         hb = g.hybridization
+        mapping = self.__mapping
 
-        out = ['<atomArray>']
+        file = self.__file
+        file.write('<atomArray>')
         for n, atom in g._atoms.items():
             x, y = gp[n]
             ih = hg[n]
-            out.append(f'<atom id="a{n}" elementType="{atom.atomic_symbol}" x2="{x * 2:.4f}" y2="{y * 2:.4f}"')
-            if not skip_mapping:
-                out.append(f' mrvMap="{n}"')
+            file.write(f'<atom id="a{n}" elementType="{atom.atomic_symbol}" x2="{x * 2:.4f}" y2="{y * 2:.4f}"')
+            if mapping:
+                file.write(f' mrvMap="{n}"')
             if gc[n]:
-                out.append(f' formalCharge="{gc[n]}"')
+                file.write(f' formalCharge="{gc[n]}"')
             if gr[n]:
-                out.append(' radical="monovalent"')
+                file.write(' radical="monovalent"')
             if atom.isotope:
-                out.append(f' isotope="{atom.isotope}"')
+                file.write(f' isotope="{atom.isotope}"')
             if ih and (atom.atomic_symbol not in organic_set or hb(n) == 4 and atom.atomic_number in (5, 7, 15)):
-                out.append(f' hydrogenCount="{ih}"')
-            out.append('/>')
-        out.append('</atomArray>')
+                file.write(f' hydrogenCount="{ih}"')
+            file.write('/>')
+        file.write('</atomArray>')
 
-        out.append('<bondArray>')
+        file.write('<bondArray>')
         wedge = defaultdict(set)
+        n = 0  # empty wedge trick
         for n, (i, j, s) in enumerate(g._wedge_map, start=1):
-            out.append(f'<bond id="b{n}" atomRefs2="a{i} a{j}" order="{bond_map[bg[i][j].order]}">'
+            file.write(f'<bond id="b{n}" atomRefs2="a{i} a{j}" order="{bond_map[bg[i][j].order]}">'
                        f'<bondStereo>{s == 1 and "W" or "H"}</bondStereo></bond>')
             wedge[i].add(j)
             wedge[j].add(i)
-        for n, (i, j, bond) in enumerate(g.bonds(), start=len(out)):
+        for i, j, bond in g.bonds():
             if j not in wedge[i]:
-                out.append(f'<bond id="b{n}" atomRefs2="a{i} a{j}" order="{bond_map[bond.order]}"/>')
-        out.append('</bondArray>')
-        return ''.join(out)
-
-    __finalized = False
+                n += 1
+                file.write(f'<bond id="b{n}" atomRefs2="a{i} a{j}" order="{bond_map[bond.order]}"/>')
+        file.write('</bondArray>')
 
 
 __all__ = ['MRVRead', 'MRVWrite']

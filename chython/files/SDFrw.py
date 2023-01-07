@@ -16,29 +16,17 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from bisect import bisect_left
 from collections import defaultdict
 from io import BytesIO
+from pickle import dump
 from subprocess import check_output
-from traceback import format_exc
-from typing import Optional
-from ._mdl import MDLRead, MOLRead, EMOLRead, MDLStereo, MOLWrite, EMOLWrite
+from sys import platform
+from typing import Optional, List
+from ._mdl import MDLRead, MOLWrite, EMOLWrite, parse_mol_v2000, parse_mol_v3000, postprocess_molecule
+from ._convert import create_molecule
+from ._mapping import postprocess_parsed_molecule
 from ..containers import MoleculeContainer
-from ..exceptions import EmptyMolecule, EmptyV2000, ParseError
-
-
-default_escape_map = {'&gt;': '>', '&lt;': '<'}
-
-
-class FallBack:
-    def __init__(self, meta=None):
-        self.__meta = {} if meta is None else meta
-
-    def __call__(self, line):
-        return line.startswith(('M  END', 'M  V30 END CTAB'))
-
-    def getvalue(self):
-        return {'meta': self.__meta}  # ad-hoc for raising ValueError
+from ..exceptions import BufferOverflow, InvalidMolBlock
 
 
 class SDFRead(MDLRead):
@@ -47,227 +35,120 @@ class SDFRead(MDLRead):
     on initialization accept opened in text mode file, string path to file,
     pathlib.Path object or another buffered reader object
     """
-    def __init__(self, file, indexable: bool = False, escape_map: dict = default_escape_map, **kwargs):
+    escape_map = {'&gt;': '>', '&lt;': '<'}
+    molecule_cls = MoleculeContainer
+
+    def __init__(self, file, *, buffer_size=1000, indexable: bool = False, ignore: bool = True, remap: bool = False,
+                 calc_cis_trans: bool = False, ignore_stereo: bool = False, ignore_bad_isotopes: bool = False):
         """
+        :param buffer_size: readahead size. increase if you have big molecules or metadata records.
         :param indexable: if True: supported methods seek, tell, object size and subscription, it only works when
             dealing with a real file (the path to the file is specified) because the external grep utility is used,
             supporting in unix-like OS the object behaves like a normal open file.
 
             if False: works like generator converting a record into MoleculeContainer and returning each object in
             order, records with errors are skipped
-        :param escape_map: SDF metadata keys symbols escaping map.
         :param ignore: Skip some checks of data or try to fix some errors.
         :param remap: Remap atom numbers started from one.
-        :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
         :param calc_cis_trans: Calculate cis/trans marks from 2d coordinates.
         :param ignore_stereo: Ignore stereo data.
         :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
         """
-        super().__init__(file, **kwargs)
-        self.__file = iter(self._file.readline, '')
-        self._escape_map = escape_map
-        self._data = self.__reader()
-        next(self._data)
+        super().__init__(file, indexable=indexable, ignore=ignore, remap=remap, ignore_bad_isotopes=ignore_bad_isotopes,
+                         ignore_stereo=ignore_stereo, calc_cis_trans=calc_cis_trans, buffer_size=buffer_size)
+        self.__m_end = None
 
-        if indexable:
-            self._load_cache()
+    def read_structure(self, *, current=True) -> MoleculeContainer:
+        data = self._read_mol(current=current)
+        if data[4].startswith('M  V30 BEGIN CTAB'):
+            tmp = parse_mol_v3000(data)
+        else:
+            tmp = parse_mol_v2000(data)
 
-    @staticmethod
-    def _get_shifts(file):
-        shifts = [0]
-        for x in BytesIO(check_output(['grep', '-bE', r'\$\$\$\$', file])):
-            pos, line = x.split(b':', 1)
-            shifts.append(int(pos) + len(line))
-        return shifts
+        postprocess_parsed_molecule(tmp, remap=self._remap, ignore=self._ignore)
+        mol = create_molecule(tmp, ignore_bad_isotopes=self._ignore_bad_isotopes, _cls=self.molecule_cls)
+        postprocess_molecule(mol, tmp, ignore=self._ignore, ignore_stereo=self._ignore_stereo,
+                             calc_cis_trans=self._calc_cis_trans)
+        meta = self.read_metadata()
+        if meta:
+            mol.meta.update(meta)
+        return mol
+
+    def read_metadata(self, *, current=True):
+        mkey = None
+        meta = defaultdict(list)
+        for line in self._read_metadata(current=current):
+            if line.startswith('>') and line.endswith('>\n'):
+                mkey = line[1:-2].rstrip()  # > x <y>\n | x <y
+                if '<' not in mkey:
+                    mkey = None
+                    meta['chython_unparsed_metadata'].append(line.strip())
+                else:
+                    mkey = mkey[mkey.index('<') + 1:].lstrip()  # x <y | y
+                    for e, s in self.escape_map.items():
+                        mkey = mkey.replace(e, s)
+            elif mkey:
+                if line := line.strip():
+                    meta[mkey].append(line)
+            else:
+                meta['chython_unparsed_metadata'].append(line.strip())
+        return {k: '\n'.join(v) for k, v in meta.items()}
+
+    def read_mol(self, *, current: bool = True) -> str:
+        """
+        Read MOL block without metadata
+        """
+        return ''.join(self._read_mol(current=current))
 
     def seek(self, offset):
-        """
-        shifts on a given number of record in the original file
-        :param offset: number of record
-        """
-        if self._shifts:
-            if 0 <= offset < len(self._shifts):
-                current_pos = self._file.tell()
-                new_pos = self._shifts[offset]
-                if current_pos != new_pos:
-                    if current_pos == self._shifts[-1]:  # reached the end of the file
-                        self._file.seek(new_pos)
-                        self.__file = iter(self._file.readline, '')
-                        self._data = self.__reader()
-                        next(self._data)
-                        if offset:
-                            self._data.send(offset)
-                            self.__already_seeked = True
-                    elif not self.__already_seeked:
-                        self._file.seek(new_pos)
-                        self._data.send(offset)
-                        self.__already_seeked = True
-                    else:
-                        raise BlockingIOError('File already seeked. New seek possible only after reading any data')
-            else:
-                raise IndexError('invalid offset')
+        super().seek(offset)
+        self.__m_end = None
+
+    def reset_index(self):
+        if platform != 'win32' and not self._is_buffer:
+            shifts = [0]
+            for x in BytesIO(check_output(['grep', '-bE', r'\$\$\$\$', self._file.name])):
+                pos, line = x.split(b':', 1)
+                shifts.append(int(pos) + len(line))
+            shifts.pop(-1)
+            with open(self._cache_path, 'wb') as f:
+                dump(shifts, f)
+            self._shifts = shifts
         else:
-            raise self._implement_error
+            raise NotImplementedError('Indexable supported in unix-like o.s. and for files stored on disk')
 
-    def tell(self):
-        """
-        :return: number of records processed from the original file
-        """
-        if self._shifts:
-            t = self._file.tell()
-            return bisect_left(self._shifts, t)
-        raise self._implement_error
+    def _read_block(self, *, current=True) -> List[str]:
+        if current and self._buffer:
+            return self._buffer
+        self.__m_end = m_end = None
+        self._buffer = buffer = []
+        buffer_size = self._buffer_size
 
-    def __reader(self):
-        im = 3
-        failkey = False
-        mkey = parser = record = None
-        meta = defaultdict(list)
-        file = self._file
-        try:
-            seekable = file.seekable()
-        except AttributeError:
-            seekable = False
-        seek = yield  # init stop
-        if seek is not None:
-            yield
-            pos = file.tell()
-            count = seek
-            self.__already_seeked = False
+        for n, line in enumerate(self._file):
+            if line.startswith('$$$$'):
+                break
+            elif n == buffer_size:
+                raise BufferOverflow
+            buffer.append(line)
+            if not m_end and line.startswith('M  END'):
+                self.__m_end = m_end = len(buffer)
+        if buffer:
+            self._tell += 1
         else:
-            pos = 0 if seekable else None
-            count = 0
-        for line in self.__file:
-            if failkey and not line.startswith("$$$$"):
-                continue
-            elif parser:
-                try:
-                    if parser(line):
-                        record = parser.getvalue()
-                        parser = None
-                except EmptyV2000:  # ad-hoc
-                    self._info('empty v2000 in v3000 parser')
-                    parser = None
-                    if self._store_log:
-                        record = {'meta': {}}  # fall-back ad-hoc
-                        continue
-                except ValueError:
-                    self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
-                    if self._store_log:  # mol block broken. try to collect metadata
-                        if isinstance(parser, EMOLRead):  # try to restore metadata
-                            parser = FallBack(parser._meta)  # noqa
-                        else:
-                            parser = FallBack()
-                        continue
-                    parser = None
-                else:
-                    continue
-                # exceptions
-                seek = yield ParseError(count, pos, self._format_log(), None)
-                if seek is not None:  # seeked to start of mol block
-                    yield
-                    count = seek
-                    pos = file.tell()
-                    im = 3
-                    self.__already_seeked = False
-                else:
-                    failkey = True
-            elif line.startswith("$$$$"):
-                if record:
-                    record['meta'].update(self._prepare_meta(meta))
-                    if title:
-                        record['title'] = title
-                    if 'atoms' not in record:  # fall-back ad-hoc
-                        record['meta']['chytorch_mdl_title'] = title
-                        seek = yield ParseError(count, pos, self._format_log(), record['meta'])
-                    else:
-                        try:
-                            container = self._convert_molecule(record)
-                        except ValueError:
-                            self._info(f'record consist errors:\n{format_exc()}')
-                            record['meta']['chytorch_mdl_title'] = title
-                            seek = yield ParseError(count, pos, self._format_log(), record['meta'])
-                        else:
-                            seek = yield container
-                    if seek is not None:  # seeked position
-                        yield
-                        count = seek - 1
-                        self.__already_seeked = False
-                    record = None
+            raise EOFError
+        return buffer
 
-                if seekable:
-                    pos = file.tell()
-                count += 1
-                im = 3
-                failkey = False
-                mkey = None
-                meta = defaultdict(list)
-            elif record:
-                if line.startswith('>') and line.endswith('>\n'):
-                    mkey = line[1:-2].rstrip()  # > x <y>\n | x <y
-                    if '<' not in mkey:
-                        mkey = None
-                        self._info(f'invalid metadata entry: {line}')
-                    else:
-                        mkey = mkey[mkey.index('<') + 1:].lstrip()  # x <y | y
-                        for e, s in self._escape_map.items():
-                            mkey = mkey.replace(e, s)
-                elif mkey:
-                    data = line.strip()
-                    if data:
-                        meta[mkey].append(data)
-            elif im:
-                if im == 3:  # parse mol title
-                    title = line.strip()
-                im -= 1
-            else:
-                try:
-                    if 'V2000' in line:
-                        try:
-                            parser = MOLRead(line, self._log_buffer)
-                        except EmptyMolecule:
-                            if self._ignore:
-                                parser = EMOLRead(self._ignore, self._log_buffer)
-                                self._info(f'line:\n{line}\nconsist errors:\nempty atoms list. try to parse as V3000')
-                            else:
-                                raise
-                    elif 'V3000' in line:
-                        parser = EMOLRead(self._ignore, self._log_buffer)
-                    else:
-                        raise ValueError('invalid MOL entry')
-                except ValueError:
-                    self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
-                    if self._store_log:
-                        parser = FallBack()
-                        continue
-                    seek = yield ParseError(count, pos, self._format_log(), None)
-                    if seek is not None:  # seeked to start of mol block
-                        yield
-                        count = seek
-                        pos = file.tell()
-                        im = 3
-                        self.__already_seeked = False
-                    else:
-                        failkey = True
+    def _read_mol(self, *, current: bool = True) -> List[str]:
+        data = self._read_block(current=current)
+        if not self.__m_end:
+            raise InvalidMolBlock
+        return data[:self.__m_end]
 
-        if record:  # True for MOL file only.
-            record['meta'].update(self._prepare_meta(meta))
-            if title:
-                record['title'] = title
-            if 'atoms' not in record:  # fall-back ad-hoc
-                record['meta']['chytorch_mdl_title'] = title
-                yield ParseError(count, pos, self._format_log(), record['meta'])
-            else:
-                try:
-                    container = self._convert_molecule(record)
-                except ValueError:
-                    self._info(f'record consist errors:\n{format_exc()}')
-                    record['meta']['chytorch_mdl_title'] = title
-                    yield ParseError(count, pos, self._format_log(), record['meta'])
-                else:
-                    yield container
-
-    __already_seeked = False
+    def _read_metadata(self, *, current: bool = True):
+        data = self._read_block(current=current)
+        if not self.__m_end:
+            raise InvalidMolBlock
+        return data[self.__m_end:]
 
 
 class SDFWrite(MOLWrite):
@@ -320,36 +201,22 @@ class ESDFWrite(EMOLWrite):
         file.write('$$$$\n')
 
 
-def mdl_mol(data: str, /, calc_cis_trans=False, ignore_stereo=False, remap=False, ignore=False, store_log=False):
+def mdl_mol(data: str, /, *, ignore=True, calc_cis_trans=False, ignore_stereo=False, remap=False,
+            ignore_bad_isotopes=False, _cls=MoleculeContainer) -> MoleculeContainer:
     """
     Parse string with mol file.
     """
     data = data.splitlines()
-    title = data[1]
-    converter = MDLStereo(calc_cis_trans=calc_cis_trans, ignore_stereo=ignore_stereo, remap=remap, ignore=ignore,
-                          store_log=store_log)
-    line = data[3]
-    if 'V2000' in line:
-        try:
-            parser = MOLRead(line, converter._log_buffer)
-        except EmptyMolecule:
-            if ignore:
-                parser = EMOLRead(ignore, converter._log_buffer)
-            else:
-                raise
-    elif 'V3000' in line:
-        parser = EMOLRead(ignore, converter._log_buffer)
+    if data[4].startswith('M  V30 BEGIN CTAB'):
+        tmp = parse_mol_v3000(data)
     else:
-        raise ValueError('invalid CTAB')
+        tmp = parse_mol_v2000(data)
 
-    for line in data[4:]:
-        if parser(line):
-            break
-    else:
-        raise ValueError('invalid CTAB')
-    record = parser.getvalue()
-    record['title'] = title
-    return converter._convert_molecule(record)
+    postprocess_parsed_molecule(tmp, remap=remap, ignore=ignore)
+    mol = create_molecule(tmp, ignore_bad_isotopes=ignore_bad_isotopes, _cls=_cls)
+    postprocess_molecule(mol, tmp, ignore=ignore, ignore_stereo=ignore_stereo,
+                         calc_cis_trans=calc_cis_trans)
+    return mol
 
 
 __all__ = ['SDFRead', 'SDFWrite', 'ESDFWrite', 'mdl_mol']

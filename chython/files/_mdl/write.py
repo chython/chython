@@ -111,8 +111,9 @@ class EMOLWrite(IO):
             wedge[n].add(m)
             wedge[m].add(n)
 
-        for i, (n, m, b) in enumerate(g.bonds(), start=i + 1):
+        for n, m, b in g.bonds():
             if m not in wedge[n]:
+                i += 1
                 file.write(f'M  V30 {i} {b.order} {mapping[n]} {mapping[m]}\n')
         file.write('M  V30 END BOND\nM  V30 END CTAB\n')
 

@@ -16,11 +16,10 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .emol import EMOLRead
-from .erxn import ERXNRead
-from .mol import MOLRead, common_isotopes
-from .parser import Parser
-from .rxn import RXNRead
-from .stereo import MDLStereo
+from .mol import parse_mol_v2000, common_isotopes
+from .emol import parse_mol_v3000
+from .rxn import parse_rxn_v2000
+from .erxn import parse_rxn_v3000
+from .stereo import postprocess_molecule
 from .read import MDLRead
 from .write import MOLWrite, EMOLWrite

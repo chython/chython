@@ -17,32 +17,20 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from bisect import bisect_left
 from collections import defaultdict
+from io import BytesIO
 from itertools import chain
-from os.path import getsize
+from pickle import dump
 from subprocess import check_output
+from sys import platform
 from time import strftime
-from traceback import format_exc
-from typing import Union
-from ._mdl import MDLRead, MOLRead, EMOLRead, RXNRead, ERXNRead, MOLWrite, EMOLWrite
+from typing import Union, Dict, List
+from ._mdl import (MDLRead, MOLWrite, EMOLWrite, parse_mol_v2000, parse_mol_v3000, parse_rxn_v2000, parse_rxn_v3000,
+                   postprocess_molecule)
+from ._convert import create_molecule, create_reaction
+from ._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
 from ..containers import ReactionContainer, MoleculeContainer
-from ..exceptions import ParseError, ParseReactionError
-
-
-class FallBack:
-    def __init__(self, is_reaction, meta=None):
-        self.is_reaction = is_reaction
-        self.__meta = {} if meta is None else meta
-
-    def __call__(self, line):
-        return line.startswith(('M  END', 'M  V30 END CTAB'))
-
-    def getvalue(self):
-        if self.is_reaction:
-            # ad-hocs for raising ValueError
-            return {'reactants': None, 'products': None, 'reagents': None, 'meta': {}}
-        return {'meta': self.__meta}
+from ..exceptions import BufferOverflow
 
 
 class RDFRead(MDLRead):
@@ -51,275 +39,140 @@ class RDFRead(MDLRead):
     on initialization accept opened in text mode file, string path to file,
     pathlib.Path object or another buffered reader object
     """
-    def __init__(self, file, indexable=False, **kwargs):
+    molecule_cls = MoleculeContainer
+    reaction_cls = ReactionContainer
+
+    def __init__(self, file, *, buffer_size=10000, indexable: bool = False, ignore: bool = True, remap: bool = False,
+                 calc_cis_trans: bool = False, ignore_stereo: bool = False, ignore_bad_isotopes: bool = False):
         """
+        :param buffer_size: readahead size. increase if you have big molecules or metadata records.
         :param indexable: if True: supported methods seek, tell, object size and subscription, it only works when
             dealing with a real file (the path to the file is specified) because the external grep utility is used,
             supporting in unix-like OS the object behaves like a normal open file.
 
-            if False: works like generator converting a record into ReactionContainer and returning each object in
+            if False: works like generator converting a record into MoleculeContainer and returning each object in
             order, records with errors are skipped
         :param ignore: Skip some checks of data or try to fix some errors.
         :param remap: Remap atom numbers started from one.
-        :param store_log: Store parser log if exists messages to `.meta` by key `ParserLog`.
         :param calc_cis_trans: Calculate cis/trans marks from 2d coordinates.
         :param ignore_stereo: Ignore stereo data.
         :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
         """
-        super().__init__(file, **kwargs)
-        self.__file = iter(self._file.readline, '')
-        self._data = self.__reader()
+        super().__init__(file, indexable=indexable, ignore=ignore, remap=remap, ignore_bad_isotopes=ignore_bad_isotopes,
+                         ignore_stereo=ignore_stereo, calc_cis_trans=calc_cis_trans, buffer_size=buffer_size)
+        self.__m_start = None
 
-        if indexable:
-            if next(self._data):
-                self._load_cache()
+    def read_structure(self, *, current=True) -> Union[ReactionContainer, MoleculeContainer]:
+        data = self._read_block(current=current)
+        meta = self.read_metadata()
+        if data[0].startswith('$RXN'):
+            if data[4].startswith('M  V30 COUNTS'):
+                tmp = parse_rxn_v3000(data, ignore=self._ignore)
+            else:
+                tmp = parse_rxn_v2000(data, ignore=self._ignore)
+
+            postprocess_parsed_reaction(data, remap=self._remap, ignore=self._ignore)
+            rxn = create_reaction(tmp, ignore_bad_isotopes=self._ignore_bad_isotopes, _m_cls=self.molecule_cls,
+                                  _r_cls=self.reaction_cls)
+            for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
+                postprocess_molecule(mol, tmp, ignore=self._ignore, ignore_stereo=self._ignore_stereo,
+                                     calc_cis_trans=self._calc_cis_trans)
+            if meta:
+                rxn.meta.update(meta)
+            return rxn
+        elif data[4].startswith('M  V30 BEGIN CTAB'):
+            tmp = parse_mol_v3000(data)
         else:
-            next(self._data)
+            tmp = parse_mol_v2000(data)
 
-    @staticmethod
-    def _get_shifts(file):
-        shifts = [int(x.split(b':', 1)[0]) for x in
-                  check_output(['grep', '-boE', r'^\$[RM]FMT', file]).split()]
-        shifts.append(getsize(file))
-        return shifts
+        postprocess_parsed_molecule(tmp)
+        mol = create_molecule(tmp, ignore_bad_isotopes=self._ignore_bad_isotopes, _cls=self.molecule_cls)
+        postprocess_molecule(mol, tmp, ignore=self._ignore, ignore_stereo=self._ignore_stereo,
+                             calc_cis_trans=self._calc_cis_trans)
+        if meta:
+            mol.meta.update(meta)
+        return mol
+
+    def read_metadata(self, *, current=True) -> Dict[str, str]:
+        mkey = None
+        meta = defaultdict(list)
+        for line in self._read_metadata(current=current):
+            if line.startswith('$DTYPE'):
+                mkey = line[7:].strip()
+                if not mkey:
+                    meta['chython_unparsed_metadata'].append(line.strip())
+            elif mkey:
+                data = line.lstrip("$DATUM").strip()
+                if data:
+                    meta[mkey].append(data)
+            else:
+                meta['chython_unparsed_metadata'].append(line.strip())
+        return {k: '\n'.join(v) for k, v in meta.items()}
+
+    def read_rxn(self, *, current: bool = True) -> str:
+        """
+        Read rxn block without metadata
+        """
+
+    def read_mol(self, n, /, *, current: bool = True) -> str:
+        """
+        Read requested MOL block
+        """
 
     def seek(self, offset):
-        """
-        shifts on a given number of record in the original file
-        :param offset: number of record
-        """
-        if self._shifts:
-            if 0 <= offset < len(self._shifts):
-                current_pos = self._file.tell()
-                new_pos = self._shifts[offset]
-                if current_pos != new_pos:
-                    if current_pos == self._shifts[-1]:  # reached the end of the file
-                        self._file.seek(0)
-                        self.__file = iter(self._file.readline, '')
-                        self._data = self.__reader()
-                        next(self._data)
-                        if offset:  # move not to the beginning of the file
-                            self._file.seek(new_pos)
-                            self._data.send(offset)
-                            self.__already_seeked = True
-                    else:
-                        if not self.__already_seeked:
-                            self._file.seek(new_pos)
-                            self._data.send(offset)
-                            self.__already_seeked = True
-                        else:
-                            raise BlockingIOError('File already seeked. New seek possible only after reading any data')
-            else:
-                raise IndexError('invalid offset')
+        super().seek(offset)
+        self.__m_start = None
+
+    def reset_index(self):
+        if platform != 'win32' and not self._is_buffer:
+            shifts = []
+            for x in BytesIO(check_output(['grep', '-bE', r'^\$[RM]FMT', self._file.name])):
+                pos, _ = x.split(b':', 1)
+                shifts.append(int(pos))
+            shifts[0] = 0  # first record parsing always starts from the beginning
+            with open(self._cache_path, 'wb') as f:
+                dump(shifts, f)
+            self._shifts = shifts
         else:
-            raise self._implement_error
+            raise NotImplementedError('Indexable supported in unix-like o.s. and for files stored on disk')
 
-    def tell(self):
+    def _read_block(self, *, current=True) -> List[str]:
         """
-        :return: number of records processed from the original file
+        Read RXN or MOL block with metadata
         """
-        if self._shifts:
-            t = self._file.tell()
-            if t == self._shifts[0]:
-                return 0
-            elif t == self._shifts[-1]:
-                return len(self._shifts) - 1
-            elif t in self._shifts:
-                return bisect_left(self._shifts, t)
-            else:
-                return bisect_left(self._shifts, t) - 1
-        raise self._implement_error
+        if current and self._buffer:
+            return self._buffer
+        self.__m_start = m_start = None
+        self._buffer = buffer = []
+        buffer_size = self._buffer_size
 
-    def __reader(self):
-        record = parser = mkey = pos = None
-        failed = False
-        file = self._file
-        try:
-            seekable = file.seekable()
-        except AttributeError:
-            seekable = False
-
-        if next(self.__file).startswith('$RXN'):  # parse RXN file
-            is_reaction = True
-            ir = 3
-            meta = defaultdict(list)
-            if seekable:
-                pos = 0  # $RXN line starting position
-            count = 0
-            yield False
-        elif next(self.__file).startswith('$DATM'):  # skip header
-            ir = 0
-            is_reaction = meta = None
-            seek = yield True
-            if seek is not None:
-                yield
-                count = seek - 1
-                self.__already_seeked = False
-            else:
-                count = -1
-        else:
-            raise ValueError('invalid file')
-
-        for line in self.__file:
-            if failed and not line.startswith(('$RFMT', '$MFMT')):
+        drop = not self._tell  # only first record starts from [RM]FMT search
+        for n, line in enumerate(self._file):
+            if drop:
+                if line.startswith('$RXN'):  # RXN file
+                    drop = False
+                    buffer.append(line)
+                elif line.startswith(('$RFMT', '$MFMT')):  # first occurrence found
+                    drop = False
                 continue
-            elif parser:
-                try:
-                    if parser(line):
-                        record = parser.getvalue()
-                        parser = None
-                except ValueError:
-                    self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
-                    if self._store_log:
-                        if isinstance(parser, EMOLRead):  # try to restore metadata
-                            parser = FallBack(False, parser._meta)  # noqa
-                        else:
-                            parser = FallBack(is_reaction)
-                        continue
-                    parser = None
-                    seek = yield ParseError(count, pos, self._format_log(), None)
-                    if seek is not None:
-                        yield
-                        count = seek - 1
-                        self.__already_seeked = False
-                    else:
-                        failed = True
-            elif line.startswith('$RFMT'):
-                if record:
-                    record['meta'].update(self._prepare_meta(meta))
-                    if title:
-                        record['title'] = title
-                    try:
-                        if is_reaction:
-                            container = self._convert_reaction(record)
-                        elif 'atoms' not in record:  # mol fall-back ad-hoc
-                            record['meta']['chytorch_mdl_title'] = title
-                            container = ParseError(count, pos, self._format_log(), record['meta'])
-                        else:
-                            container = self._convert_molecule(record)
-                    except ParseReactionError as e:  # ad-hoc for logging partially parsed reactions
-                        record['meta']['chytorch_mdl_title'] = title
-                        seek = yield ParseError(count, pos, self._format_log(), record['meta'], e.structure, e.errors)
-                    except ValueError:
-                        self._info(f'record consist errors:\n{format_exc()}')
-                        record['meta']['chytorch_mdl_title'] = title
-                        seek = yield ParseError(count, pos, self._format_log(), record['meta'])
-                    else:
-                        seek = yield container
+            elif n == buffer_size:
+                raise BufferOverflow
+            elif not m_start and line.startswith('$DTYPE'):
+                self.__m_start = m_start = len(buffer)
+            elif line.startswith(('$RFMT', '$MFMT')):  # next record found
+                break
+            buffer.append(line)
+        if buffer:
+            self._tell += 1
+        else:
+            raise EOFError
+        return buffer
 
-                    record = None
-                    if seek is not None:
-                        yield
-                        count = seek - 1
-                        self.__already_seeked = False
-                        continue
-
-                if seekable:
-                    pos = file.tell()  # $RXN line starting position
-                count += 1
-                is_reaction = True
-                ir = 4
-                failed = False
-                mkey = None
-                meta = defaultdict(list)
-            elif line.startswith('$MFMT'):
-                if record:
-                    record['meta'].update(self._prepare_meta(meta))
-                    if title:
-                        record['title'] = title
-                    try:
-                        if is_reaction:
-                            container = self._convert_reaction(record)
-                        elif 'atoms' not in record:  # mol fall-back ad-hoc
-                            record['meta']['chytorch_mdl_title'] = title
-                            container = ParseError(count, pos, self._format_log(), record['meta'])
-                        else:
-                            container = self._convert_molecule(record)
-                    except ParseReactionError as e:  # ad-hoc for logging partially parsed reactions
-                        record['meta']['chytorch_mdl_title'] = title
-                        seek = yield ParseError(count, pos, self._format_log(), record['meta'], e.structure, e.errors)
-                    except ValueError:
-                        self._info(f'record consist errors:\n{format_exc()}')
-                        record['meta']['chytorch_mdl_title'] = title
-                        seek = yield ParseError(count, pos, self._format_log(), record['meta'])
-                    else:
-                        seek = yield container
-
-                    record = None
-                    if seek is not None:
-                        yield
-                        count = seek - 1
-                        self.__already_seeked = False
-                        continue
-
-                if seekable:
-                    pos = file.tell()  # MOL block line starting position
-                count += 1
-                ir = 3
-                failed = is_reaction = False
-                mkey = None
-                meta = defaultdict(list)
-            elif record:
-                if line.startswith('$DTYPE'):
-                    mkey = line[7:].strip()
-                    if not mkey:
-                        self._info(f'invalid metadata entry: {line}')
-                elif mkey:
-                    data = line.lstrip("$DATUM").strip()
-                    if data:
-                        meta[mkey].append(data)
-            elif ir:
-                if ir == 3:  # parse mol or rxn title
-                    title = line.strip()
-                ir -= 1
-            else:
-                try:
-                    if is_reaction:
-                        if line.startswith('M  V30 COUNTS'):
-                            parser = ERXNRead(line, self._ignore, self._log_buffer)
-                        else:
-                            parser = RXNRead(line, self._ignore, self._log_buffer)
-                    else:
-                        if 'V2000' in line:
-                            parser = MOLRead(line, self._log_buffer)
-                        elif 'V3000' in line:
-                            parser = EMOLRead(self._ignore, self._log_buffer)
-                        else:
-                            raise ValueError('invalid MOL entry')
-                except ValueError:
-                    self._info(f'line:\n{line}\nconsist errors:\n{format_exc()}')
-                    if self._store_log:
-                        parser = FallBack(is_reaction)
-                        continue
-                    failed = True
-                    seek = yield ParseError(count, pos, self._format_log(), None)
-                    if seek is not None:
-                        yield
-                        count = seek - 1
-                        self.__already_seeked = False
-        if record:
-            record['meta'].update(self._prepare_meta(meta))
-            if title:
-                record['title'] = title
-            try:
-                if is_reaction:
-                    container = self._convert_reaction(record)
-                elif 'atoms' not in record:  # mol fall-back ad-hoc
-                    record['meta']['chytorch_mdl_title'] = title
-                    container = ParseError(count, pos, self._format_log(), record['meta'])
-                else:
-                    container = self._convert_molecule(record)
-            except ParseReactionError as e:  # ad-hoc for logging partially parsed reactions
-                record['meta']['chytorch_mdl_title'] = title
-                yield ParseError(count, pos, self._format_log(), record['meta'], e.structure, e.errors)
-            except ValueError:
-                self._info(f'record consist errors:\n{format_exc()}')
-                record['meta']['chytorch_mdl_title'] = title
-                yield ParseError(count, pos, self._format_log(), record['meta'])
-            else:
-                yield container
-
-    __already_seeked = False
+    def _read_metadata(self, *, current: bool = True):
+        data = self._read_block(current=current)
+        if not self.__m_start:
+            return []
+        return data[self.__m_start:]
 
 
 class _RDFWrite:
@@ -400,4 +253,25 @@ class ERDFWrite(_RDFWrite, EMOLWrite):
             file.write(f'$DTYPE {k}\n$DATUM {v}\n')
 
 
-__all__ = ['RDFRead', 'RDFWrite', 'ERDFWrite']
+def mdl_rxn(data: str, /, *, ignore=True, calc_cis_trans=False, ignore_stereo=False, remap=False,
+            ignore_bad_isotopes=False, _r_cls=ReactionContainer, _m_cls=MoleculeContainer) -> ReactionContainer:
+    """
+    Parse string with rxn file.
+    """
+    data = data.splitlines()
+    if not data[0].startswith('$RXN'):
+        raise ValueError('invalid RXN')
+    if data[4].startswith('M  V30 COUNTS'):
+        tmp = parse_rxn_v3000(data, ignore=ignore)
+    else:
+        tmp = parse_rxn_v2000(data, ignore=ignore)
+
+    postprocess_parsed_reaction(tmp, remap=remap, ignore=ignore)
+    rxn = create_reaction(tmp, ignore_bad_isotopes=ignore_bad_isotopes, _m_cls=_m_cls, _r_cls=_r_cls)
+    for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
+        postprocess_molecule(mol, tmp, ignore=ignore, ignore_stereo=ignore_stereo,
+                             calc_cis_trans=calc_cis_trans)
+    return rxn
+
+
+__all__ = ['RDFRead', 'RDFWrite', 'ERDFWrite', 'mdl_rxn']

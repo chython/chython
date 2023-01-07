@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,14 +17,13 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from .daylight import *
-from .INCHIrw import *
+from .inchi import *
 from .MRVrw import *
 from .PDBrw import *
 from .RDFrw import *
 from .SDFrw import *
-from .XYZrw import *
+from .xyz import *
 
 
-__all__ = [x for x in locals() if x.endswith(('Read', 'Write'))]
-__all__.append('mdl_mol')
-__all__.append('smarts')
+__all__ = ['smiles', 'smarts', 'mdl_mol', 'mdl_rxn', 'xyz', 'xyz_file', 'inchi']
+__all__.extend(x for x in locals() if x.endswith(('Read', 'Write')))

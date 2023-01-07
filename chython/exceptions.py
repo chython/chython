@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -21,6 +21,12 @@
 class EmptyMolecule(ValueError):
     """
     Molecule without atoms
+    """
+
+
+class EmptyReaction(ValueError):
+    """
+    Reaction without molecules
     """
 
 
@@ -108,29 +114,25 @@ class ImplementationError(Exception):
     """
 
 
-class ParseError(ValueError):
+class BufferOverflow(BufferError):
     """
-    File parsing error
+    Parser buffer overflow
     """
-    __slots__ = ('number', 'position', 'log', 'meta', 'structure', 'errors')
-
-    def __init__(self, number, position, log, meta, structure=None, errors=None):
-        super().__init__()
-        self.number = number
-        self.position = position
-        self.log = log
-        self.meta = meta
-        self.structure = structure
-        self.errors = errors
 
 
-class EmptyV2000(ValueError):
-    """Empty V2000 in EMol parser"""
+class InvalidV2000(ValueError):
+    """
+    Invalid V2000
+    """
 
 
-class ParseReactionError(ValueError):
-    __slots__ = ('structure', 'errors')
+class InvalidCharge(ValueError):
+    """
+    Invalid MDL charge
+    """
 
-    def __init__(self, structure, errors):
-        self.structure = structure
-        self.errors = errors
+
+class InvalidMolBlock(ValueError):
+    """
+    Invalid MDL MOL
+    """
