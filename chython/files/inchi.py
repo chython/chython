@@ -80,8 +80,8 @@ def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> Mo
 
     lib.FreeStructFromINCHI(byref(structure))
 
-    tmp = {'atoms': atoms, 'bonds': bonds, 'stereo_atoms': stereo_atoms, 'stereo_allenes': stereo_allenes,
-           'stereo_cumulenes': stereo_cumulenes, 'mapping': list(range(1, len(atoms) + 1))}
+    tmp = {'atoms': atoms, 'bonds': bonds, 'stereo_atoms': stereo_atoms, 'stereo_allenes': stereo_allenes, 'log': [],
+           'stereo_cumulenes': stereo_cumulenes, 'mapping': list(range(1, len(atoms) + 1)), 'title': None, 'meta': None}
     mol = create_molecule(tmp, skip_calc_implicit=True, _cls=_cls)
     postprocess_molecule(mol, tmp, ignore_stereo=ignore_stereo)
     return mol
