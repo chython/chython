@@ -71,7 +71,7 @@ class RDFRead(MDLRead):
             else:
                 tmp = parse_rxn_v2000(data, ignore=self._ignore)
 
-            postprocess_parsed_reaction(data, remap=self._remap, ignore=self._ignore)
+            postprocess_parsed_reaction(tmp, remap=self._remap, ignore=self._ignore)
             rxn = create_reaction(tmp, ignore_bad_isotopes=self._ignore_bad_isotopes, _m_cls=self.molecule_cls,
                                   _r_cls=self.reaction_cls)
             for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
@@ -113,11 +113,32 @@ class RDFRead(MDLRead):
         """
         Read rxn block without metadata
         """
+        return ''.join(self._read_block(current=current)[:self.__m_start])
 
-    def read_mol(self, n, /, *, current: bool = True) -> str:
+    def read_mol(self, n: int, /, *, current: bool = True) -> str:
         """
         Read requested MOL block
         """
+        data = self._read_block(current=current)
+        if data[0].startswith('$RXN'):
+            if data[4].startswith('M  V30 COUNTS'):
+                idx_l = [i for i, x in enumerate(data) if x.startswith('M  V30 BEGIN CTAB')]
+                idx_r = [i for i, x in enumerate(data, 1) if x.startswith('M  V30 END CTAB')]
+                if 0 <= n < len(idx_l):
+                    ct = ''.join(data[idx_l[n]: idx_r[n]])
+                    return f'\n\n\n  0  0  0     0  0            999 V3000\n{ct}M  END\n'
+                else:
+                    raise IndexError('molecule number is out of range')
+            else:
+                idx = [i for i, x in enumerate(data) if x.startswith('$MOL')]
+                if 0 <= n < len(idx):
+                    idx.append(self.__m_start)
+                    return ''.join(data[idx[n] + 1: idx[n + 1]])
+                else:
+                    raise IndexError('molecule number is out of range')
+        elif n:
+            raise IndexError('molecule number is out of range')
+        return ''.join(data[:self.__m_start])
 
     def seek(self, offset):
         super().seek(offset)

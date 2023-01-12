@@ -168,7 +168,7 @@ class MRVRead:
             if not tmp['reactants'] and not tmp['products'] and not tmp['reagents']:
                 raise EmptyReaction
 
-            postprocess_parsed_reaction(data, remap=self.__remap, ignore=self.__ignore)
+            postprocess_parsed_reaction(tmp, remap=self.__remap, ignore=self.__ignore)
             rxn = create_reaction(tmp, ignore_bad_isotopes=self.__ignore_bad_isotopes, _m_cls=self.molecule_cls,
                                   _r_cls=self.reaction_cls)
             for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
