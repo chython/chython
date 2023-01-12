@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasyrova@gmail.com>
 #  This file is part of chython.
@@ -44,7 +44,7 @@ class B(Element, PeriodII, GroupXIII):
 
     @property
     def _valences_exceptions(self):
-        return (-1, False, 4, ()),
+        return (-1, False, 4, ()), (0, False, 0, ())
 
     @property
     def atomic_radius(self):
@@ -68,11 +68,12 @@ class Al(Element, PeriodIII, GroupXIII):
 
     @property
     def _common_valences(self):
-        return 0,  # 3 omitted. added to exceptions
+        return 0,
 
     @property
     def _valences_exceptions(self):
-        return ((3, False, 0, ()), (2, False, 1, ()), (1, False, 2, ()), (0, False, 3, ()), (-1, False, 4, ()),
+        return ((3, False, 0, ()),
+                (2, False, 1, ()), (1, False, 2, ()), (0, False, 3, ()), (-1, False, 4, ()),  # accept [AlHx]
                 (-3, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))))
 
     @property

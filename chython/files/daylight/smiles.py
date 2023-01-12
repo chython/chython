@@ -30,14 +30,19 @@ from ...exceptions import IsChiral, NotChiral, ValenceError
 cx_fragments = compile(r'f:(?:[0-9]+(?:\.[0-9]+)+)(?:,(?:[0-9]+(?:\.[0-9]+)+))*')
 cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
 
-implicit_mismatch_key = 'implicit_mismatch'
-
 
 def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: bool = False,
            ignore_bad_isotopes: bool = False, keep_implicit: bool = False, ignore_carbon_radicals: bool = False,
            _r_cls=ReactionContainer, _m_cls=MoleculeContainer) -> Union[MoleculeContainer, ReactionContainer]:
     """
     SMILES string parser
+
+    :param ignore: Skip some checks of data or try to fix some errors.
+    :param remap: Remap atom numbers started from one.
+    :param ignore_stereo: Ignore stereo data.
+    :param keep_implicit: keep given in smiles implicit hydrogen count, otherwise ignore on valence error.
+    :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
+    :param ignore_carbon_radicals: fill carbon radicals with hydrogen (X[C](X)X case).
     """
     if not data:
         raise ValueError('Empty string')
@@ -160,9 +165,14 @@ def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, ig
     charges = molecule._charges
     hydrogens = molecule._hydrogens
     radicals = molecule._radicals
-    calc_implicit = molecule._calc_implicit
     hyb = molecule.hybridization
     radicalized = []
+
+    implicit_mismatch = {}
+    if 'chython_parsing_log' in molecule.meta:
+        log = molecule.meta['chython_parsing_log']
+    else:
+        log = []
 
     for n, a in enumerate(data['atoms']):
         h = a['hydrogen']
@@ -172,10 +182,11 @@ def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, ig
         n = mapping[n]
         if keep_implicit:  # override any calculated hydrogens count.
             hydrogens[n] = h
-        elif (hc := hydrogens[n]) is None:  # atom has invalid valence for now.
+        elif (hc := hydrogens[n]) is None:  # atom has invalid valence or aromatic ring.
             if hyb(n) == 4:  # this is aromatic rings. just store given H count.
                 hydrogens[n] = h
-                if not h and not charges[n] and atoms[n].atomic_number in (5, 6, 7, 15) and \
+                # rare H0 case
+                if not h and not charges[n] and not radicals[n] and atoms[n].atomic_number in (5, 6, 7, 15) and \
                         sum(b.order != 8 for b in bonds[n].values()) == 2:
                     # c[c]c - aromatic B,C,N,P radical
                     radicals[n] = True
@@ -183,55 +194,59 @@ def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, ig
             elif not radicals[n]:  # CXSMILES radical not set.
                 # SMILES doesn't code radicals. so, let's try to guess.
                 radicals[n] = True
-                calc_implicit(n)
-                if hydrogens[n] != h:  # radical state also has errors.
-                    if ignore:
-                        hydrogens[n] = None  # reset hydrogens
-                        radicals[n] = False  # reset radical state
-                        if implicit_mismatch_key in molecule.meta:
-                            molecule.meta[implicit_mismatch_key][n] = h
-                        else:
-                            molecule.meta[implicit_mismatch_key] = {n: h}
-                        if 'chython_parsing_log' not in molecule.meta:
-                            molecule.meta['chython_parsing_log'] = []
-                        molecule.meta['chython_parsing_log'].append(
-                                f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
-                    else:
-                        raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
-                                         f'calculated ({hc}) on atom {n}.')
-                else:
+                if molecule._check_implicit(n, h):  # radical form is valid
                     radicalized.append(n)
-        elif hc != h and not radicals[n]:  # H count mismatch. try radical state of atom.
-            radicals[n] = True
-            calc_implicit(n)
-            if hydrogens[n] != h:  # radical state also has errors.
-                if ignore:
-                    hydrogens[n] = hc  # reset hydrogens to previous valid state
+                    hydrogens[n] = h
+                elif ignore:  # radical state also has errors.
                     radicals[n] = False  # reset radical state
-                    if implicit_mismatch_key in molecule.meta:
-                        molecule.meta[implicit_mismatch_key][n] = h
-                    else:
-                        molecule.meta[implicit_mismatch_key] = {n: h}
-                    if 'chython_parsing_log' not in molecule.meta:
-                        molecule.meta['chython_parsing_log'] = []
-                    molecule.meta['chython_parsing_log'].append(
-                            f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
+                    implicit_mismatch[n] = h
+                    log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
                 else:
-                    raise ValueError(f'implicit hydrogen count ({h}) mismatch with '
-                                     f'calculated ({hc}) on atom {n}.')
+                    raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+        elif hc != h:  # H count mismatch.
+            if hyb(n) == 4:
+                if not h and not charges[n] and not radicals[n] and atoms[n].atomic_number in (5, 6, 7, 15) and \
+                        sum(b.order != 8 for b in bonds[n].values()) == 2:
+                    # c[c]c - aromatic B,C,N,P radical
+                    hydrogens[n] = 0
+                    radicals[n] = True
+                    radicalized.append(n)
+                elif ignore:
+                    implicit_mismatch[n] = h
+                    log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+                else:
+                    raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+            elif molecule._check_implicit(n, h):  # set another possible implicit state. probably Al, P
+                hydrogens[n] = h
+            elif not radicals[n]:  # CXSMILES radical is not set. try radical form
+                radicals[n] = True
+                if molecule._check_implicit(n, h):
+                    hydrogens[n] = h
+                    radicalized.append(n)
+                # radical state also has errors.
+                elif ignore:
+                    radicals[n] = False  # reset radical state
+                    implicit_mismatch[n] = h
+                    log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+                else:
+                    raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+            elif ignore:  # just ignore it
+                implicit_mismatch[n] = h
+                log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
             else:
-                radicalized.append(n)
+                raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
 
     if ignore_carbon_radicals:
         for n in radicalized:
             if atoms[n].atomic_number == 6:
                 radicals[n] = False
-                if (h := 4 - sum(b.order for b in bonds[n].values() if b.order != 8)) >= 0:
-                    hydrogens[n] = h
-                    if 'chython_parsing_log' not in molecule.meta:
-                        molecule.meta['chython_parsing_log'] = []
-                    molecule.meta['chython_parsing_log'].append(f'carbon radical replaced with {h} implicit hydrogens')
+                hydrogens[n] += 1
+                log.append(f'carbon radical {n} replaced with implicit hydrogen')
 
+    if implicit_mismatch:
+        molecule.meta['chython_implicit_mismatch'] = implicit_mismatch
+    if log and 'chython_parsing_log' not in molecule.meta:
+        molecule.meta['chython_parsing_log'] = log
     if ignore_stereo:
         return
 
@@ -287,9 +302,7 @@ def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, ig
             except IsChiral:
                 pass
             except ValenceError:
-                if 'chython_parsing_log' not in molecule.meta:
-                    molecule.meta['chython_parsing_log'] = []
-                molecule.meta['chython_parsing_log'].append('structure has errors, stereo data skipped')
+                log.append('structure has errors, stereo data skipped')
                 molecule.flush_cache()
                 break
         else:
@@ -299,6 +312,9 @@ def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, ig
             molecule.flush_stereo_cache()
             continue
         break
+
+    if log and 'chython_parsing_log' not in molecule.meta:
+        molecule.meta['chython_parsing_log'] = log
 
 
 __all__ = ['smiles']

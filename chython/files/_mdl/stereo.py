@@ -19,24 +19,44 @@
 from ...exceptions import NotChiral, IsChiral, ValenceError
 
 
-def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, calc_cis_trans=False):
+def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, calc_cis_trans=False,
+                         keep_implicit=False):
     mapping = data['mapping']
     hydrogens = molecule._hydrogens
+    hyb = molecule.hybridization
+
+    implicit_mismatch = {}
+    if 'chython_parsing_log' in molecule.meta:
+        log = molecule.meta['chython_parsing_log']
+    else:
+        log = []
+
     for n, h in data['hydrogens'].items():
         n = mapping[n]
-        hc = hydrogens[n]
-        if hc is None:  # aromatic rings or valence errors. just store given H count.
+        if keep_implicit:  # override any calculated hydrogens count.
             hydrogens[n] = h
+        if (hc := hydrogens[n]) is None:  # aromatic rings or valence errors
+            if hyb(n) == 4:  # this is aromatic rings. just store given H count.
+                hydrogens[n] = h
         elif hc != h:
-            if ignore:
-                hydrogens[n] = h  # set parsed hydrogens count
-                if 'chython_parsing_log' not in molecule.meta:
-                    molecule.meta['chython_parsing_log'] = []
-                molecule.meta['chython_parsing_log'].append(f'implicit hydrogen count ({h}) mismatch with calculated '
-                                                            f'({hc}) on atom {n}. calculated count replaced.')
+            if hyb(n) == 4:
+                if ignore:
+                    implicit_mismatch[n] = h
+                    log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+                else:
+                    raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+            elif molecule._check_implicit(n, h):  # set another possible implicit state. probably Al, P
+                hydrogens[n] = h
+            elif ignore:  # just ignore it
+                implicit_mismatch[n] = h
+                log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
             else:
-                raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated ({hc}) on atom {n}.')
+                raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
 
+    if implicit_mismatch:
+        molecule.meta['chython_implicit_mismatch'] = implicit_mismatch
+    if log and 'chython_parsing_log' not in molecule.meta:
+        molecule.meta['chython_parsing_log'] = log
     if ignore_stereo:
         return
 
@@ -55,9 +75,7 @@ def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, ca
             except IsChiral:
                 pass
             except ValenceError:
-                if 'chython_parsing_log' not in molecule.meta:
-                    molecule.meta['chython_parsing_log'] = []
-                molecule.meta['chython_parsing_log'].append('structure has errors, stereo data skipped')
+                log.append('structure has errors, stereo data skipped')
                 molecule.flush_cache()
                 break
         else:
@@ -69,6 +87,9 @@ def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, ca
                 molecule.calculate_cis_trans_from_2d(clean_cache=False)
             continue
         break
+
+    if log and 'chython_parsing_log' not in molecule.meta:
+        molecule.meta['chython_parsing_log'] = log
 
 
 __all__ = ['postprocess_molecule']

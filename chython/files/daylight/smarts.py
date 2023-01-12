@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -88,7 +88,7 @@ def smarts(data: str):
     else:
         radicals = []
 
-    data = parser(smarts_tokenize(smr), False)[0]
+    data = parser(smarts_tokenize(smr), False)
 
     for x in radicals:
         data['atoms'][x]['is_radical'] = True

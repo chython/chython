@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
@@ -361,6 +361,17 @@ class MoleculeSmiles(Smiles):
             elif ih:
                 smi[4] = f'H{ih}'
         elif hyb == 4 and ih and atom.atomic_number in (5, 7, 15):  # pyrrole
+            smi[0] = '['
+            smi[-1] = ']'
+            if ih == 1:
+                smi[4] = 'H'
+            else:
+                smi[4] = f'H{ih}'
+        elif not ih and atom.atomic_number in (5, 6, 15, 16) and not self.not_special_connectivity[n]:
+            # elemental B, C, P, S
+            smi[0] = '['
+            smi[-1] = ']'
+        elif ih and atom.atomic_number == 15 and hyb != 1:
             smi[0] = '['
             smi[-1] = ']'
             if ih == 1:

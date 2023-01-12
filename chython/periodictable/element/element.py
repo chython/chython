@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -308,11 +308,13 @@ class Element(Core, ABC):
 
         rules = defaultdict(list)
         if self._common_valences[0] and self.atomic_number != 1:  # atom has implicit hydrogens by default except H.
-            prev = -1
-            for valence in self._common_valences:
-                for h in range(valence - prev):
-                    rules[(0, False, valence - h)].append((set(), {}, h))  # any atoms and bonds possible
-                prev = valence
+            # only first common valence represents implicit H.
+            valence = self._common_valences[0]
+            for h in range(valence + 1):
+                rules[(0, False, valence - h)].append((set(), {}, h))  # any atoms and bonds possible
+
+            for valence in self._common_valences[1:]:
+                rules[(0, False, valence)].append((set(), {}, 0))
         else:
             for valence in self._common_valences:
                 rules[(0, False, valence)].append((set(), {}, 0))  # any atoms and bonds possible

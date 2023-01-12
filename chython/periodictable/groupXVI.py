@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasyrova@gmail.com>
@@ -73,7 +73,8 @@ class S(Element, PeriodIII, GroupXVI):
 
     @property
     def _valences_exceptions(self):
-        return ((-1, False, 1, ()), (-2, False, 0, ()),
+        return ((-1, False, 1, ()), (-2, False, 0, ()),  # anions
+                (0, False, 0, ()),  # elemental
                 (1, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'))),
                 (1, False, 0, ((1, 'C'), (1, 'C'), (1, 'B'))),
                 (1, False, 0, ((1, 'C'), (2, 'C'))),
@@ -230,6 +231,7 @@ class Se(Element, PeriodIV, GroupXVI):
     @property
     def _valences_exceptions(self):
         return ((-1, False, 1, ()),
+                (0, False, 0, ()),  # elemental
                 (1, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'))),
                 (1, False, 0, ((1, 'C'), (2, 'C'))),
                 (0, False, 0, ((2, 'O'), (2, 'O'))),
@@ -276,7 +278,8 @@ class Te(Element, PeriodV, GroupXVI):
 
     @property
     def _valences_exceptions(self):
-        return ((1, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'))),
+        return ((0, False, 0, ()),  # elemental,
+                (1, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'))),
                 (1, False, 0, ((1, 'C'), (2, 'C'))),
                 (0, False, 0, ((2, 'O'), (2, 'O'))),
                 (0, False, 0, ((2, 'O'), (1, 'O'), (1, 'O'))),

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -990,31 +990,86 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 array('Q', bonds), array('I', o_from), array('I', o_to), array('I', indices))
 
     def _calc_implicit(self, n: int):
+        """
+        Set firs possible hydrogens count based on rules
+        """
         atoms = self._atoms
         atom = atoms[n]
-        if atom.atomic_number != 1:
-            charge: int = self._charges[n]
-            is_radical = self._radicals[n]
-            explicit_sum = 0
-            explicit_dict = defaultdict(int)
-            for m, bond in self._bonds[n].items():
-                order = bond.order
-                if order == 4:  # aromatic rings not supported
+        if (an := atom.atomic_number) == 1:  # hydrogen nether has implicit H
+            self._hydrogens[n] = 0
+            return
+
+        charge: int = self._charges[n]
+        is_radical = self._radicals[n]
+        explicit_sum = 0
+        explicit_dict = defaultdict(int)
+        aroma = 0
+        for m, bond in self._bonds[n].items():
+            order = bond.order
+            if order == 4:  # only neutral carbon aromatic rings supported
+                if not charge and not is_radical and an == 6:
+                    aroma += 1
+                else:  # use `kekule()` to calculate proper implicit hydrogens count
                     self._hydrogens[n] = None
                     return
-                elif order != 8:  # any bond used for complexes
-                    explicit_sum += order
-                    explicit_dict[(order, atoms[m].atomic_number)] += 1
-            try:
-                rules = atom.valence_rules(charge, is_radical, explicit_sum)
-            except ValenceError:
+            elif order != 8:  # any bond used for complexes
+                explicit_sum += order
+                explicit_dict[(order, atoms[m].atomic_number)] += 1
+
+        if aroma == 2:
+            if explicit_sum == 0:  # H-Ar
+                self._hydrogens[n] = 1
+            elif explicit_sum == 1:  # R-Ar
+                self._hydrogens[n] = 0
+            else:  # invalid aromaticity
                 self._hydrogens[n] = None
+            return
+        elif aroma == 3:  # condensed rings
+            if explicit_sum:  # invalid aromaticity
+                self._hydrogens[n] = None
+            else:
+                self._hydrogens[n] = 0
+            return
+        elif aroma:
+            self._hydrogens[n] = None
+            return
+
+        try:
+            rules = atom.valence_rules(charge, is_radical, explicit_sum)
+        except ValenceError:
+            self._hydrogens[n] = None
+            return
+        for s, d, h in rules:
+            if s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()):
+                self._hydrogens[n] = h
                 return
-            for s, d, h in rules:
-                if s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()):
-                    self._hydrogens[n] = h
-                    return
-        self._hydrogens[n] = 0
+        self._hydrogens[n] = None  # rule not found
+
+    def _check_implicit(self, n: int, h: int) -> bool:
+        atoms = self._atoms
+        atom = atoms[n]
+        if atom.atomic_number == 1:  # hydrogen nether has implicit H
+            return h == 0
+
+        explicit_sum = 0
+        explicit_dict = defaultdict(int)
+
+        for m, bond in self._bonds[n].items():
+            order = bond.order
+            if order == 4:  # can't check aromatic rings
+                return False
+            elif order != 8:  # any bond used for complexes
+                explicit_sum += order
+                explicit_dict[(order, atoms[m].atomic_number)] += 1
+
+        try:
+            rules = atom.valence_rules(self._charges[n], self._radicals[n], explicit_sum)
+        except ValenceError:
+            return False
+        for s, d, _h in rules:
+            if h == _h and s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()):
+                return True
+        return False
 
     def __int__(self):
         """

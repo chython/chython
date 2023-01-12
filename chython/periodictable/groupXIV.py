@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasyrova@gmail.com>
 #  This file is part of chython.
@@ -44,7 +44,7 @@ class C(Element, PeriodII, GroupXIV):
 
     @property
     def _valences_exceptions(self):
-        return (0, True, 3, ()), (1, False, 3, ()), (-1, False, 3, ())
+        return (0, True, 3, ()), (1, False, 3, ()), (-1, False, 3, ()), (0, False, 0, ())
 
     @property
     def atomic_radius(self):
@@ -72,7 +72,7 @@ class Si(Element, PeriodIII, GroupXIV):
 
     @property
     def _valences_exceptions(self):
-        return (-2, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),
+        return (-2, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))), (0, False, 0, ())
 
     @property
     def atomic_radius(self):
@@ -100,7 +100,7 @@ class Ge(Element, PeriodIV, GroupXIV):
 
     @property
     def _valences_exceptions(self):
-        return (-2, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),
+        return (-2, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))), (0, False, 0, ())
 
     @property
     def atomic_radius(self):

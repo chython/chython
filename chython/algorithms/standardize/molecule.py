@@ -287,7 +287,6 @@ class Standardize:
         plane = self._plane
         hydrogens = self._hydrogens
         parsed_mapping = self._parsed_mapping
-        calc_implicit = self._calc_implicit
 
         explicit = defaultdict(list)
         for n, atom in atoms.items():
@@ -302,7 +301,7 @@ class Standardize:
                         raise ValenceError(f'Hydrogen atom {{{n}}} has invalid valence {{{b.order}}}.')
 
         to_remove = set()
-        fixed = []
+        fixed = {}
         for n, hs in explicit.items():
             atom = atoms[n]
             charge = charges[n]
@@ -320,11 +319,14 @@ class Standardize:
                     rules = atom.valence_rules(charge, is_radical, explicit_sum)
                 except ValenceError:
                     break
-                if any(s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()) and h >= i
-                       for s, d, h in rules):
-                    to_remove.update(hi)
-                    fixed.append(n)
-                    break
+                for s, d, h in rules:
+                    if s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()) and h == i:
+                        to_remove.update(hi)
+                        fixed[n] = i
+                        break
+                else:
+                    continue
+                break
 
         for n in to_remove:
             del atoms[n]
@@ -339,8 +341,8 @@ class Standardize:
             except KeyError:
                 pass
 
-        for n in fixed:
-            calc_implicit(n)
+        for n, h in fixed.items():
+            hydrogens[n] = h
 
         if to_remove:
             self.flush_cache()
@@ -349,7 +351,7 @@ class Standardize:
                 self.fix_stereo()
 
         if logging:
-            return len(to_remove), fixed
+            return len(to_remove), list(fixed)
         return len(to_remove)
 
     def explicify_hydrogens(self: 'MoleculeContainer', *, start_map=None, _return_map=False, _fix_stereo=True) -> \

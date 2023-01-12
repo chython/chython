@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -40,8 +40,8 @@ class BaseReactor:
                 elements[n] = Element.from_atomic_number(atom.atomic_number)(atom.isotope)
                 if n not in reactants and isinstance(products, MoleculeContainer):
                     atoms[n]['xy'] = atom.xy
-                    if atom.hybridization == 4 and atom.implicit_hydrogens is not None:
-                        hydrogens[n] = atom.implicit_hydrogens  # keep it for new aromatic atoms
+                    if atom.implicit_hydrogens is not None:
+                        hydrogens[n] = atom.implicit_hydrogens  # save available H count
             elif n not in reactants:
                 if not isinstance(atom, ListElement):
                     raise ValueError('New atom should be defined')

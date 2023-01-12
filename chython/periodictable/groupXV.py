@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Alexander Nikanshin <17071996sasha@gmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
@@ -74,6 +74,9 @@ class P(Element, PeriodIII, GroupXV):
     @property
     def _valences_exceptions(self):
         return ((-1, False, 2, ()), (1, False, 4, ()),
+                (0, False, 0, ()),  # elemental
+                (0, False, 1, ((1, 'O'), (1, 'O'), (2, 'O'))),  # Phosphorous Acid
+                (0, False, 2, ((1, 'O'), (2, 'O'))),  # Hypophosphorous Acid
                 (-1, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))))
 
     @property
