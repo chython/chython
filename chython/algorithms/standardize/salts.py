@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -114,6 +114,8 @@ class Salts:
 
             for n in metals:
                 for m in acceptors & bonds[n].keys():
+                    if charges[n] == 4:  # prevent overcharging
+                        break
                     del bonds[n][m]
                     del bonds[m][n]
                     charges[n] += 1

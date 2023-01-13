@@ -113,8 +113,10 @@ def parse_mol_v2000(data):
         elif line.startswith('M  STY'):
             for i in range(int(line[6:9])):
                 i8 = i * 8
-                if 'DAT' == line[14 + i8:17 + i8]:
+                if (st := line[14 + i8:17 + i8]) == 'DAT':
                     dat[int(line[10 + i8:13 + i8])] = {}
+                elif st == 'SUP':
+                    dat[int(line[10 + i8:13 + i8])] = {'type': 'MDL_SUP'}
         elif line.startswith('M  SAL'):
             i = int(line[7:10])
             if i in dat:
@@ -127,6 +129,10 @@ def parse_mol_v2000(data):
             i = int(line[7:10])
             if i in dat:
                 dat[i]['value'] = line[10:].strip().replace('/', '').lower()
+        elif line.startswith('M  SMT'):
+            i = int(line[7:10])
+            if i in dat:
+                dat[i]['value'] = line[10:].strip()
         elif not line.startswith('M  SDD'):
             log.append(f'ignored line: {line}')
 

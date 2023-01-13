@@ -235,41 +235,29 @@ class Standardize:
             return []
         return False
 
-    def remove_hydrogen_bonds(self: 'MoleculeContainer', *, keep_to_terminal=True, _fix_stereo=True) -> int:
-        """Remove hydrogen bonds marked with 8 (any) bond
+    def remove_coordinate_bonds(self: 'MoleculeContainer', *, keep_to_terminal=True, _fix_stereo=True) -> int:
+        """Remove coordinate (or hydrogen) bonds marked with 8 (any) bond
 
         :param keep_to_terminal: Keep any bonds to terminal hydrogens
         :return: removed bonds count
         """
         bonds = self._bonds
-        hg = defaultdict(set)
-        for n, atom in self._atoms.items():
-            if atom.atomic_number == 1:
-                for m, b in bonds[n].items():
-                    if b.order == 8:
-                        hg[n].add(m)
+
+        ab = [(n, m) for n, m, b in self.bonds() if b.order == 8]
 
         if keep_to_terminal:
-            for n, ms in hg.items():
-                if len(bonds[n]) == len(ms):  # H~A or A~H~A etc case
-                    m = ms.pop()
-                    if m in hg:  # H~H case
-                        hg[m].discard(n)
+            skeleton = self.not_special_connectivity
+            hs = {n for n, a in self._atoms.items() if a.atomic_number == 1 and not skeleton[n]}
+            ab = [(n, m) for n, m in ab if n not in hs and m not in hs]
 
-        seen = set()
-        c = 0
-        for n, ms in hg.items():
-            seen.add(n)
-            for m in ms:
-                if m in seen:
-                    continue
-                c += 1
-                del bonds[n][m], bonds[m][n]
-        if c:
+        for n, m in ab:
+            del bonds[n][m], bonds[m][n]
+
+        if ab:
             self.flush_cache()
             if _fix_stereo:
                 self.fix_stereo()
-        return c
+        return len(ab)
 
     def implicify_hydrogens(self: 'MoleculeContainer', *, logging=False, _fix_stereo=True) -> \
             Union[int, Tuple[int, List[int]]]:
@@ -292,13 +280,13 @@ class Standardize:
         for n, atom in atoms.items():
             if atom.atomic_number == 1 and (atom.isotope is None or atom.isotope == 1):
                 if len(bonds[n]) > 1:
-                    raise ValenceError(f'Hydrogen atom {{{n}}} has invalid valence. Try to use remove_hydrogen_bonds()')
+                    raise ValenceError(f'Hydrogen atom {n} has invalid valence. Try to use remove_coordinate_bonds()')
                 for m, b in bonds[n].items():
                     if b.order == 1:
                         if atoms[m].atomic_number != 1:  # not H-H
                             explicit[m].append(n)
                     elif b.order != 8:
-                        raise ValenceError(f'Hydrogen atom {{{n}}} has invalid valence {{{b.order}}}.')
+                        raise ValenceError(f'Hydrogen atom {n} has invalid valence {b.order}.')
 
         to_remove = set()
         fixed = {}
@@ -367,7 +355,7 @@ class Standardize:
             try:
                 to_add.extend([n] * h)
             except TypeError:
-                raise ValenceError(f'atom {{{n}}} has valence error')
+                raise ValenceError(f'atom {n} has valence error')
 
         if to_add:
             log = []

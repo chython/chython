@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -243,10 +243,10 @@ def _tokenize(smiles):
 
 def _atom_parse(token):
     # [isotope]Element[element][@[@]][H[n]][+-charge][:mapping]
-    match = fullmatch(atom_re, token)
-    if match is None:
-        raise IncorrectSmiles(f'atom token invalid {{{token}}}')
-    isotope, element, stereo, hydrogen, charge, mapping = match.groups()
+    _match = fullmatch(atom_re, token)
+    if _match is None:
+        raise IncorrectSmiles(f'atom token invalid {token}')
+    isotope, element, stereo, hydrogen, charge, mapping = _match.groups()
 
     if isotope:
         isotope = int(isotope)

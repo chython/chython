@@ -710,7 +710,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         for n in common:
             san = sa[n]
             if san.atomic_number != oa[n].atomic_number or san.isotope != oa[n].isotope:
-                raise MappingError(f'atoms with number {{{n}}} not equal')
+                raise MappingError(f'atoms with number {n} not equal')
 
             hc[n] = sc[n]
             hpc[n] = oc[n]

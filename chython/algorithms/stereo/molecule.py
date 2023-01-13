@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -453,7 +453,7 @@ class MoleculeStereo(Stereo):
             s = self._translate_allene_sign(order[-2], *order[:2])
             v = _allene_sign((*plane[order[0]], 1), plane[order[2]], plane[order[3]], (*plane[order[1]], 0))
             if not v:
-                logger.info(f'need 2d clean. allenes wedge stereo ambiguous for atom {{{order[-2]}}}')
+                logger.info(f'need 2d clean. allenes wedge stereo ambiguous for atom {order[-2]}')
             if s:
                 return order[2], order[0], v
             else:
@@ -469,7 +469,7 @@ class MoleculeStereo(Stereo):
                 v = _pyramid_sign((*plane[order[3]], 0),
                                   (*plane[order[0]], 1), (*plane[order[1]], 0), (*plane[order[2]], 0))
             if not v:
-                logger.info(f'need 2d clean. tetrahedron wedge stereo ambiguous for atom {{{n}}}')
+                logger.info(f'need 2d clean. tetrahedron wedge stereo ambiguous for atom {n}')
             if s:
                 return n, order[0], v
             else:

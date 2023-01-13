@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,52 +17,30 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ...periodictable import ListElement
 
 
 def _rules():
-    from ...containers import QueryContainer
+    from ... import smarts
     rules = []
 
-    # Oxo-acid salts. Me-[O,S,Se]-[P,S,Cl,Se,Br,I,Si]=O
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'S', 'Se']), neighbors=2, hybridization=1)
-    q.add_atom(ListElement(['C', 'N', 'P', 'S', 'Cl', 'Se', 'Br', 'I', 'Si']))
-    q.add_atom('O')
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 2)
+    # Oxo-acid salts
+    q = smarts('[O,S,Se;D2;z1:1]-[C,N,P,S,Cl,Se,Br,I,Si]=O')
     rules.append(q)
 
-    # Thiophosphate salts.
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'S', 'Se']), neighbors=2, hybridization=1)
-    q.add_atom('P')
-    q.add_atom(ListElement(['S', 'Se']))
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 2)
+    # Thiophosphate salts
+    q = smarts('[O,S,Se;D2;z1:1]-[P]=[S,Se]')
     rules.append(q)
 
-    # Phenole salts. Me-[O,S,Se]-Ar
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'S', 'Se']), neighbors=2, hybridization=1)
-    q.add_atom(ListElement(['C', 'N']), hybridization=4)
-    q.add_bond(1, 2, 1)
+    # Phenole salts
+    q = smarts('[O,S,Se;D2;z1:1]-[C,N;a]')
     rules.append(q)
 
-    # Nitrate. Me-O-[N+](=O)[O-]
-    q = QueryContainer()
-    q.add_atom('O', neighbors=2, hybridization=1)
-    q.add_atom('N', charge=1)
-    q.add_atom('O', charge=-1)
-    q.add_atom('O')
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 1)
-    q.add_bond(2, 4, 2)
+    # Nitrate
+    q = smarts('[O;D2;z1:1]-[N+](-[O-])=O')
     rules.append(q)
 
     # halogenides and hydroxy
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'F', 'Cl', 'Br', 'I']), neighbors=1, hybridization=1)
+    q = smarts('[O,F,Cl,Br,I;D1;z1:1]')
     rules.append(q)
     return rules
 
