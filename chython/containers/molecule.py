@@ -24,13 +24,14 @@ from numpy import uint, zeros
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 from weakref import ref
 from zlib import compress, decompress
-from . import query  # cyclic imports resolve
 from .bonds import Bond, DynamicBond, QueryBond
 from .cgr import CGRContainer
 from .graph import Graph
+from .query import QueryContainer
 from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
 from ..algorithms.depict import DepictMolecule
+from ..algorithms.isomorphism import MoleculeIsomorphism
 from ..algorithms.fingerprints import Fingerprints
 from ..algorithms.mcs import MCS
 from ..algorithms.smiles import MoleculeSmiles
@@ -42,8 +43,9 @@ from ..exceptions import MappingError, ValenceError
 from ..periodictable import DynamicElement, Element, QueryElement, H
 
 
-class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, StandardizeMolecule, MoleculeSmiles,
-                        DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS, X3domMolecule):
+class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphism, Aromatize, StandardizeMolecule,
+                        MoleculeSmiles, DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS,
+                        X3domMolecule):
     __slots__ = ('_plane', '_conformers', '_atoms_stereo', '_hydrogens', '_cis_trans_stereo', '_allenes_stereo',
                  '_parsed_mapping', '_backup', '__meta', '__name')
 
@@ -500,7 +502,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
     def substructure(self, atoms: Iterable[int], *, as_query: bool = False, recalculate_hydrogens=True,
                      skip_neighbors_marks=False, skip_hybridizations_marks=False, skip_hydrogens_marks=False,
                      skip_rings_sizes_marks=False, skip_heteroatoms_marks=False) -> \
-            Union['MoleculeContainer', 'query.QueryContainer']:
+            Union['MoleculeContainer', 'QueryContainer']:
         """
         Create substructure containing atoms from atoms list.
 
@@ -525,7 +527,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
         if as_query:
             atom_type = QueryElement
             bond_type = QueryBond
-            sub = object.__new__(query.QueryContainer)
+            sub = object.__new__(QueryContainer)
         else:
             atom_type = Element
             bond_type = Bond
@@ -744,11 +746,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
             return dict(zip(so, oo))
         raise TypeError('MoleculeContainer expected')
 
-    def get_mapping(self, other: 'MoleculeContainer', /, **kwargs):
-        if isinstance(other, MoleculeContainer):
-            return super().get_mapping(other, **kwargs)
-        raise TypeError('MoleculeContainer expected')
-
     def pack(self, *, compressed=True, check=True) -> bytes:
         """
         Pack into compressed bytes.
@@ -875,119 +872,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Aromatize, Standar
                 break
             nodes.append(n)
         return nodes
-
-    @cached_property
-    def _cython_compiled_structure(self):
-        # long I:
-        # bond: single, double, triple, aromatic, special = 5 bit
-        # bond in ring: 2 bit
-        # atom: H-Ba: 56 bit
-        # transfer bit
-
-        # long II:
-        # atom La-Mc: 59 bit
-        # Lv-Ts-Og: 3 elements packed into 1 bit.
-        # hybridizations: 1-4 = 4 bit
-
-        # long III:
-        # isotope: not specified, isotope - common_isotope = -8 - +8 = 18 bit
-        # is_radical: 2 bit
-        # charge: -4 - +4: 9 bit
-        # implicit_hydrogens: 0-4 = 5 bit
-        # neighbors: 0-14 = 15 bit
-        # heteroatoms: 0-14 = 15 bit
-
-        # long IV:
-        # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
-        from ..files._mdl.mol import common_isotopes
-
-        charges = self._charges
-        radicals = self._radicals
-        hydrogens = self._hydrogens
-        neighbors = self.neighbors
-        heteroatoms = self.heteroatoms
-        rings_sizes = self.atoms_rings_sizes
-        hybridization = self.hybridization
-
-        mapping = {}
-        numbers = []
-        bits1 = []
-        bits2 = []
-        bits3 = []
-        bits4 = []
-        for i, (n, a) in enumerate(self._atoms.items()):
-            mapping[n] = i
-            numbers.append(n)
-            v2 = 1 << (hybridization(n) - 1)
-            if (an := a.atomic_number) > 56:
-                if an > 116:  # Ts, Og
-                    an = 116
-                v1 = 1  # transfer bit
-                v2 |= 1 << (120 - an)
-            else:
-                v1 = 1 << (57 - an)
-
-            if a.isotope:
-                v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 54)
-                if radicals[n]:
-                    v3 |= 0x200000000000
-                else:
-                    v3 |= 0x100000000000
-            elif radicals[n]:
-                v3 = 0x8000200000000000
-            else:
-                v3 = 0x8000100000000000
-
-            v3 |= 1 << (charges[n] + 39)
-            v3 |= 1 << ((hydrogens[n] or 0) + 30)
-            v3 |= 1 << (neighbors(n) + 15)
-            v3 |= 1 << heteroatoms(n)
-
-            if n in rings_sizes:
-                v4 = 0
-                for r in rings_sizes[n]:
-                    if r > 65:  # big rings not supported
-                        continue
-                    v4 |= 1 << (65 - r)
-                if not v4:  # only 65+ rings. set as rings-free.
-                    v4 = 0x8000000000000000
-            else:  # not in rings
-                v4 = 0x8000000000000000
-
-            bits1.append(v1)
-            bits2.append(v2)
-            bits3.append(v3)
-            bits4.append(v4)
-
-        o_from = [0] * len(mapping)
-        o_to = [0] * len(mapping)
-        indices = [0] * self.bonds_count * 2
-        bonds = [0] * self.bonds_count * 2
-        start = 0
-        for n, ms in self._bonds.items():
-            i = mapping[n]
-            o_from[i] = start
-            for j, (m, b) in enumerate(ms.items(), start):
-                indices[j] = x = mapping[m]
-                v = bits1[x]
-                o = b.order
-                if o == 1:
-                    v |= 0x0800000000000000
-                elif o == 4:
-                    v |= 0x4000000000000000
-                elif o == 2:
-                    v |= 0x1000000000000000
-                elif o == 3:
-                    v |= 0x2000000000000000
-                else:
-                    v |= 0x8000000000000000
-                v |= 0x0400000000000000 if b.in_ring else 0x0200000000000000
-                bonds[j] = v
-            start += len(ms)
-            o_to[i] = start
-
-        return (array('L', numbers), array('Q', bits1), array('Q', bits2), array('Q', bits3), array('Q', bits4),
-                array('Q', bonds), array('I', o_from), array('I', o_to), array('I', indices))
 
     def _calc_implicit(self, n: int):
         """

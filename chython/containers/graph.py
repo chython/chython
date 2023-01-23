@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,7 +19,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import Dict, Generic, Iterator, Optional, Tuple, TypeVar
-from ..algorithms.isomorphism import Isomorphism
 from ..algorithms.morgan import Morgan
 from ..algorithms.rings import Rings
 from ..exceptions import AtomNotFound, MappingError, BondNotFound
@@ -29,7 +28,7 @@ Atom = TypeVar('Atom')
 Bond = TypeVar('Bond')
 
 
-class Graph(Generic[Atom, Bond], Morgan, Rings, Isomorphism, ABC):
+class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
     __slots__ = ('_atoms', '_bonds', '_charges', '_radicals', '__dict__', '__weakref__')
     __class_cache__ = {}
 

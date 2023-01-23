@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from functools import cached_property
-from typing import Dict, Iterator, Tuple
+from typing import Dict, Iterator, Tuple, Optional, Collection
 from .bonds import DynamicBond
 from ..algorithms.isomorphism import Isomorphism
 from ..algorithms.morgan import Morgan
@@ -119,9 +119,17 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism):
             atoms = n
         return self.substructure(atoms)
 
-    def get_mapping(self, other: 'CGRContainer', /, **kwargs):
+    def get_mapping(self, other: 'CGRContainer', /, *, automorphism_filter: bool = True,
+                    searching_scope: Optional[Collection[int]] = None):
+        """
+        Get self to other CGR substructure mapping generator.
+
+        :param other: CGR
+        :param automorphism_filter: skip matches to the same atoms.
+        :param searching_scope: substructure atoms list to localize isomorphism.
+        """
         if isinstance(other, CGRContainer):
-            return super().get_mapping(other, **kwargs)
+            return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope)
         raise TypeError('CGRContainer expected')
 
     def __iter__(self):
