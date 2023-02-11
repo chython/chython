@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,35 +17,21 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ...periodictable import ListElement
 
 
 def _xonyl_groups():
-    from ...containers import QueryContainer
+    from ... import smarts
+
     rules = []
-
-    q = QueryContainer()
-    q.add_atom('N', neighbors=3, hybridization=2, charge=1)
-    q.add_atom('O', neighbors=1, charge=-1)
-    q.add_atom('O', neighbors=1)
-    q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, 2)
+    # atom 1 - axis
+    # atoms 2, 3 - swapping
+    q = smarts('[N;D3;z2;+]([O;D1;-])=[O;D1]')
     rules.append(q)
 
-    q = QueryContainer()
-    q.add_atom(ListElement(['C', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At']))
-    q.add_atom(ListElement(['S', 'O', 'Se', 'N']), neighbors=1)
-    q.add_atom(ListElement(['S', 'O', 'Se', 'N']), neighbors=1)
-    q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, 2)
+    q = smarts('[N,O,S,Se;D1;z2:3]=[C,P,As,Sb,Bi,S,Se,Te,Po,Cl,Br,I,At:1][N,O,S,Se;D1:2]')
     rules.append(q)
 
-    q = QueryContainer()
-    q.add_atom(ListElement(['C', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At']))
-    q.add_atom(ListElement(['S', 'O', 'Se', 'N']), neighbors=1, charge=-1)
-    q.add_atom(ListElement(['S', 'O', 'Se', 'N']), neighbors=1)
-    q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, 2)
+    q = smarts('[N,O,S,Se;D1;z2:3]=[C,P,As,Sb,Bi,S,Se,Te,Po,Cl,Br,I,At:1][N,O,S,Se;D1;-:2]')
     rules.append(q)
     return rules
 
@@ -54,7 +40,8 @@ def _substituents():
     """
     Rules for switchable functional groups remapping
     """
-    from ...containers import QueryContainer
+    from ... import smarts
+
     rules = []
 
     # nitro addition
@@ -65,12 +52,7 @@ def _substituents():
     #      \            \
     #       O- [2]       O- [3]
     #
-    q = QueryContainer()
-    q.add_atom('N', neighbors=3, charge=1, hybridization=2)
-    q.add_atom('O', neighbors=1, charge=-1)
-    q.add_atom('O', neighbors=2)
-    q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, (1, 4))
+    q = smarts('[N;D3;z2,z4;+]([O;D1;-])-,:[O;D2]')
     rules.append((q, ((2, 3), (3, 2))))
 
     #
@@ -80,12 +62,7 @@ def _substituents():
     #      \              :
     #       NH2 [2]       N [2]
     #
-    q = QueryContainer()
-    q.add_atom('C', neighbors=3)
-    q.add_atom('N')
-    q.add_atom('N', neighbors=2, hydrogens=0)
-    q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, (2, 4))
+    q = smarts('[N;D2;h0;z2,z4:3]=,:[C;D3:1][N:2]')
     rules.append((q, ((2, 3), (3, 2))))
 
     #
@@ -95,12 +72,7 @@ def _substituents():
     #      \              \\
     #       OH [2]         O [2]
     #
-    q = QueryContainer()
-    q.add_atom(ListElement(['C', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At']))
-    q.add_atom(ListElement(['S', 'O', 'Se', 'N']), neighbors=2)
-    q.add_atom(ListElement(['S', 'O', 'Se', 'N']), neighbors=1)
-    q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, 2)
+    q = smarts('[N,O,S,Se;D1;z2:3]=[C,P,As,Sb,Bi,S,Se,Te,Po,Cl,Br,I,At:1][N,O,S,Se;D2:2]')
     rules.append((q, ((2, 3), (3, 2))))
 
     #
@@ -110,12 +82,7 @@ def _substituents():
     #      \              \\
     #       OH [2]         O [2]
     #
-    q = QueryContainer()
-    q.add_atom(ListElement(['C', 'P', 'S', 'Cl', 'As', 'Se', 'Br', 'Sb', 'Te', 'I', 'Bi', 'Po', 'At']))
-    q.add_atom('A')
-    q.add_atom(ListElement(['S', 'O', 'Se', 'N']), neighbors=1)
-    q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, 2)
+    q = smarts('[N,O,S,Se;D1;z2:3]=[C,P,As,Sb,Bi,S,Se,Te,Po,Cl,Br,I,At:1][A:2]')
     rules.append((q, ((3, 2),)))  # possible only: (3, 2)
     return rules
 

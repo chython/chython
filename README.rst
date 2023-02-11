@@ -16,6 +16,8 @@ Features:
    - 2d coordinates generation (based on `SmilesDrawer <https://github.com/reymond-group/smilesDrawer>`_)
    - 2d/3d depiction with Jupyter support
    - SMARTS parser with restrictions
+   - Protective groups remover
+   - Common reaction templates collection
 
 Full documentation can be found `here <https://chython.readthedocs.io>`_.
 
@@ -39,7 +41,7 @@ Note: for using `clean2d` install NodeJS into system.
 Copyright
 =========
 
-* 2014-2022 Ramil Nugmanov nougmanoff@protonmail.com main developer
+* 2014-2023 Ramil Nugmanov nougmanoff@protonmail.com main developer
 
 Contributors
 ============

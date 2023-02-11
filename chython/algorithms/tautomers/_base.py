@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,181 +17,90 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ...periodictable import ListElement
 
 
 def _stripped_rules():
-    from ...containers import QueryContainer
+    from ... import smarts
+
     rules = []
 
-    # Oxo-acid salts. [O,S,Se-]-[C,N,P,S,Cl,Se,Br,I,Si]=O
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'S', 'Se']), charge=-1)
-    q.add_atom(ListElement(['C', 'N', 'P', 'S', 'Cl', 'Se', 'Br', 'I', 'Si']))
-    q.add_atom('O')
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 2)
+    # Oxo-acid salts
+    q = smarts('[O,S,Se;D1;z1;-][C,Si,N,P,S,Se,Cl,Br,I]=O')
     rules.append(q)
 
-    # Thiophosphate salts.
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'S', 'Se']), charge=-1)
-    q.add_atom('P')
-    q.add_atom(ListElement(['S', 'Se']))
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 2)
+    # Thiophosphate salts
+    q = smarts('P([O,S,Se;D1;-:1])=[S,Se]')
     rules.append(q)
 
-    # Phenole salts, alcoholates. [O,S,Se-]-Ar
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'S', 'Se']), charge=-1)
-    q.add_atom(ListElement(['C', 'N']))
-    q.add_bond(1, 2, 1)
+    # Phenole salts, alcoholates
+    q = smarts('[O,S,Se;D1;z1;-][C,N]')
     rules.append(q)
 
-    # Nitrate. [O-]-[N+](=O)[O-]
-    q = QueryContainer()
-    q.add_atom('O', charge=-1)
-    q.add_atom('N', charge=1)
-    q.add_atom('O', charge=-1)
-    q.add_atom('O')
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 1)
-    q.add_bond(2, 4, 2)
+    # Nitrate
+    q = smarts('[N;D3;z2;+]([O;-:1])([O-])=O')
     rules.append(q)
 
     # ions
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'F', 'Cl', 'Br', 'I', 'S']), charge=-1, neighbors=0)
+    q = smarts('[O,S,F,Cl,Br,I;D0;-]')
     rules.append(q)
     return rules
 
 
 def _rules():
-    from ...containers import QueryContainer
+    from ... import smarts
+
     rules = _stripped_rules()
 
     # Guanidine
-    q = QueryContainer()
-    q.add_atom('N', heteroatoms=0)
-    q.add_atom('C')
-    q.add_atom('N')
-    q.add_atom('N')
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
-    q.add_bond(2, 4, 1)
+    q = smarts('[N;x0;z2]=C(N)N')
     rules.append(q)
 
     # Oxo-guanidine, Amino-guanidine
-    q = QueryContainer()
-    q.add_atom('N')
-    q.add_atom('C')
-    q.add_atom('N')
-    q.add_atom('N')
-    q.add_atom(ListElement(['O', 'N']))
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
-    q.add_bond(2, 4, 1)
-    q.add_bond(1, 5, 1)
+    q = smarts('[N;D2;x1;z2]([O,N])=C(N)N')
     rules.append(q)
 
     # O-alkyl-isourea, S-alkyl-isothiaurea
-    q = QueryContainer()
-    q.add_atom('N', heteroatoms=0)
-    q.add_atom('C')
-    q.add_atom('N')
-    q.add_atom(ListElement(['O', 'S']), neighbors=2, hybridization=1, heteroatoms=0)
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
-    q.add_bond(2, 4, 1)
+    q = smarts('[N;x0;z2]=C([O,S;D2;x0;z1])N')
     rules.append(q)
 
     # Dialkyl imidocarbonate
-    q = QueryContainer()
-    q.add_atom('N', heteroatoms=0)
-    q.add_atom('C')
-    q.add_atom('O', neighbors=2, heteroatoms=0)
-    q.add_atom('O', neighbors=2, heteroatoms=0)
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
-    q.add_bond(2, 4, 1)
+    q = smarts('[N;x0;z2]=C([O;D2;x0])[O;D2;x0]')
     rules.append(q)
 
     # Amidine
-    q = QueryContainer()
-    q.add_atom('N', heteroatoms=0)
-    q.add_atom('C', heteroatoms=2)
-    q.add_atom('N')
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
+    q = smarts('[N;x0;z2]=[C;x2]N')
     rules.append(q)
 
     # O-alkyl-imidate (oxazoline)
-    q = QueryContainer()
-    q.add_atom('N', heteroatoms=0)
-    q.add_atom('C', heteroatoms=2)
-    q.add_atom('O', neighbors=2, heteroatoms=0)
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
+    q = smarts('[N;x0;z2]=[C;x2][O;D2;x0]')
     rules.append(q)
 
     # Amidoxime. O-N=C([C,H])N
-    q = QueryContainer()
-    q.add_atom('N')
-    q.add_atom('C', heteroatoms=2)
-    q.add_atom('N')
-    q.add_atom('O')
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
-    q.add_bond(1, 4, 1)
+    q = smarts('[N;D2;x1;z2](O)=[C;x2]N')
     rules.append(q)
 
     # Oxime, Hydrazone. [O,N]-N=C([C,H])[C,H]
-    q = QueryContainer()
-    q.add_atom('N')
-    q.add_atom('C', heteroatoms=1, hybridization=2)
-    q.add_atom(ListElement(['N', 'O']))
-    q.add_bond(1, 2, 2)
-    q.add_bond(1, 3, 1)
+    q = smarts('[N;D2;x1;z2]([N,O])=[C;x1;z2]')
     rules.append(q)
 
-    # Imine. [C,H]N=C([C,H])[C,H]
-    q = QueryContainer()
-    q.add_atom('N', heteroatoms=0)
-    q.add_atom('C', heteroatoms=1, hybridization=2)
-    q.add_bond(1, 2, 2)
+    # Imine
+    q = smarts('[N;x0;z2]=[C;x1;z2]')
     rules.append(q)
 
     # Alkyl amine, Hydroxylamine, Hydrazine
-    q = QueryContainer()
-    q.add_atom('N', neighbors=1)
-    q.add_atom(ListElement(['C', 'O', 'N']), hybridization=1, heteroatoms=1)
-    q.add_bond(1, 2, 1)
+    q = smarts('[N;D1;z1][C,N,O;x1;z1]')
     rules.append(q)
 
     # Dialkyl amine, Alkyl hydroxylamine, Alkyl hydrazine
-    q = QueryContainer()
-    q.add_atom('N', neighbors=2)
-    q.add_atom(ListElement(['C', 'O', 'N']), hybridization=1, heteroatoms=1)
-    q.add_atom('C', hybridization=1, heteroatoms=1)
-    q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, 1)
+    q = smarts('[N;D2;z1]([C,N,O;x1;z1])[C;x1;z1]')
     rules.append(q)
 
     # Trialkyl amine, Dialkyl-hydroxylamine, Dialkyl-hydrazine
-    q = QueryContainer()
-    q.add_atom('N')
-    q.add_atom(ListElement(['C', 'O', 'N']), hybridization=1, heteroatoms=1)
-    q.add_atom('C', hybridization=1, heteroatoms=1)
-    q.add_atom('C', hybridization=1, heteroatoms=1)
-    q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, 1)
-    q.add_bond(1, 4, 1)
+    q = smarts('[N;D3;z1]([C,N,O;x1;z1])([C;x1;z1])[C;x1;z1]')
     rules.append(q)
 
     # Pyridine. Imidazole. Triazole. :N:
-    q = QueryContainer()
-    q.add_atom('N', hybridization=4, hydrogens=0, neighbors=2)
+    q = smarts('[N;a;h0;D2]')
     rules.append(q)
     return rules
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -40,6 +40,7 @@ class Kekule:
 
         :param buffer_size: number of attempts of pyridine form searching.
         """
+        fixed = self.__fix_rings()  # fix bad aromatic rings
         kekule = next(self.__kekule_full(buffer_size), None)
         if kekule:
             bonds = self._bonds
@@ -52,12 +53,13 @@ class Kekule:
                 self._calc_implicit(n)
             self.flush_cache()
             return True
-        return False
+        return fixed
 
     def enumerate_kekule(self: Union['Kekule', 'MoleculeContainer']):
         """
         Enumerate all possible kekule forms of molecule.
         """
+        self.__fix_rings()  # fix bad aromatic rings
         for form in self.__kekule_full(0):
             copy = self.copy()
             bonds = copy._bonds
@@ -90,6 +92,8 @@ class Kekule:
                     bonds[n][m]._Bond__order = b  # noqa
         if seen:
             self.flush_cache()
+            return True
+        return False
 
     def __prepare_rings(self: 'MoleculeContainer'):
         atoms = self._atoms
@@ -301,7 +305,6 @@ class Kekule:
         return rings, pyrroles, double_bonded
 
     def __kekule_full(self, buffer_size):
-        self.__fix_rings()  # fix bad aromatic rings
         rings, pyrroles, double_bonded = self.__prepare_rings()
         atoms = set(rings)
         components = []

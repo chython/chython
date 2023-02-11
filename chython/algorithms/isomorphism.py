@@ -30,22 +30,6 @@ if TYPE_CHECKING:
     from chython.containers import MoleculeContainer, QueryContainer
 
 
-frequency = {1: 10,  # H
-             6: 9,  # C
-             8: 8,  # O
-             7: 7,  # N
-             15: 6, 16: 6,  # P, S
-             9: 5,  # F
-             17: 4, 35: 4,  # Cl, Br
-             53: 3,  # I
-             5: 2, 14: 2,  # B, Si
-             11: 1, 12: 1, 19: 1, 20: 1}  # Na, Mg, K, Ca
-
-
-def atom_frequency(x):
-    return frequency.get(x.atomic_number, 0)
-
-
 class Isomorphism:
     __slots__ = ()
 
@@ -109,8 +93,7 @@ class Isomorphism:
         """
         Iterator of all possible automorphism mappings.
         """
-        return _get_automorphism_mapping(self.atoms_order, self._bonds,
-                                         {n: atom_frequency(a) for n, a in self._atoms.items()})
+        return _get_automorphism_mapping(self.atoms_order, self._bonds)
 
     def _get_mapping(self, other, /, *, automorphism_filter=True, searching_scope=None,
                      components=None, get_mapping=None) -> Iterator[Dict[int, int]]:
@@ -158,8 +141,7 @@ class Isomorphism:
 
     @cached_property
     def _compiled_query(self: 'Graph'):
-        components, closures = _compile_query(self._atoms, self._bonds,
-                                              {n: atom_frequency(a) for n, a in self._atoms.items()})
+        components, closures = _compile_query(self._atoms, self._bonds)
         if self.connected_components_count > 1:
             order = {x: n for n, c in enumerate(self.connected_components) for x in c}
             components.sort(key=lambda x: order[x[0][0]])
@@ -511,12 +493,11 @@ class QueryIsomorphism(Isomorphism):
         return components
 
 
-def _get_automorphism_mapping(atoms: Dict[int, int], bonds: Dict[int, Dict[int, Any]],
-                              atoms_frequencies: Dict[int, int]) -> Iterator[Dict[int, int]]:
+def _get_automorphism_mapping(atoms: Dict[int, int], bonds: Dict[int, Dict[int, Any]]) -> Iterator[Dict[int, int]]:
     if len(atoms) == len(set(atoms.values())):
         return  # all atoms unique
 
-    components, closures = _compile_query(atoms, bonds, atoms_frequencies)
+    components, closures = _compile_query(atoms, bonds)
     mappers = [_get_mapping(order, closures, atoms, bonds, {x for x, *_ in order})
                for order in components]
     if len(mappers) == 1:
@@ -577,15 +558,15 @@ def _get_mapping(linear_query, query_closures, o_atoms, o_bonds, scope):
                                 stack.append((o_n, depth))
 
 
-def _compile_query(atoms, bonds, atoms_frequencies):
+def _compile_query(atoms, bonds):
     closures = defaultdict(list)
     components = []
     seen = set()
+    iter_atoms = iter(atoms)
     while len(seen) < len(atoms):
-        start = min(atoms.keys() - seen, key=lambda x: atoms_frequencies[x])
+        start = next(x for x in iter_atoms if x not in seen)
         seen.add(start)
-        stack = [(n, start, atoms[n], bond) for n, bond in sorted(bonds[start].items(), reverse=True,
-                                                                  key=lambda x: atoms_frequencies[x[0]])]
+        stack = [(n, start, atoms[n], bond) for n, bond in reversed(bonds[start].items())]
         order = [(start, None, atoms[start], None)]
         components.append(order)
 
@@ -593,7 +574,7 @@ def _compile_query(atoms, bonds, atoms_frequencies):
             front, back, *_ = atom = stack.pop()
             if front not in seen:
                 order.append(atom)
-                for n, bond in sorted(bonds[front].items(), reverse=True, key=lambda x: atoms_frequencies[x[0]]):
+                for n, bond in reversed(bonds[front].items()):
                     if n != back:
                         if n not in seen:
                             stack.append((n, front, atoms[n], bond))

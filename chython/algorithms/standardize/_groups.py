@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -24,8 +24,10 @@ def _rules_single():
     """
     rules without overlapping. these rules can match once to same set of atoms.
     """
+    from ... import smarts
     from ...containers import QueryContainer
 
+    rules = []
     raw_rules = []
 
     #
@@ -47,12 +49,10 @@ def _rules_single():
     #  / \ / \       / \  .. \
     # A   H   A     A   H     A
     #
-    atoms = ({'atom': 'B', 'hybridization': 1}, {'atom': 'B', 'hybridization': 1},
-             {'atom': 'H', 'neighbors': 2}, {'atom': 'H', 'neighbors': 2})
-    bonds = ((1, 3, 1), (1, 4, 1), (2, 3, 1), (2, 4, 1))
+    q = smarts('[B;z1:1]1[H;D2:3][B;z1:2][H;D2:4]1')
     atom_fix = {}
     bonds_fix = ((1, 3, 8), (2, 4, 8))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
+    rules.append((q, atom_fix, bonds_fix, False))
 
     #
     #      A         A
@@ -988,13 +988,16 @@ def _rules_single():
 
         any_atoms = [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
         compiled_rules.append((q, atom_fix, bonds_fix, any_atoms, is_tautomer))
-    return compiled_rules
+
+    return [(q, atom_fix, bonds_fix,
+             [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix], is_tautomer)
+            for q, atom_fix, bonds_fix, is_tautomer in rules] + compiled_rules  # todo: remove compiled
 
 
 def _rules_double():
-    from ...containers import QueryContainer
+    from ... import smarts
 
-    raw_rules = []
+    rules = []
 
     #
     #     [OH]                O
@@ -1003,24 +1006,14 @@ def _rules_double():
     #      |                 |
     #      A                 A
     #
-    atoms = ({'atom': 'S', 'neighbors': 4}, {'atom': 'O', 'neighbors': 1},
-             {'atom': 'N', 'neighbors': (1, 2), 'hybridization': 2}, {'atom': 'A'}, {'atom': 'A'})
-    bonds = ((1, 2, 1), (1, 3, 2), (1, 4, 2), (1, 5, 1))
+    q = smarts('[S;D4;z3:1]([O;D1:2])(=[N;D1,D2;z2:3])(=[A])[A]')
     atom_fix = {}
     bonds_fix = ((1, 2, 2), (1, 3, 1))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
+    rules.append((q, atom_fix, bonds_fix, True))
 
-    compiled_rules = []
-    for atoms, bonds, atom_fix, bonds_fix, is_tautomer in raw_rules:
-        q = QueryContainer()
-        for a in atoms:
-            q.add_atom(**a)
-        for n, m, b in bonds:
-            q.add_bond(n, m, b)
-
-        any_atoms = [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix]
-        compiled_rules.append((q, atom_fix, bonds_fix, any_atoms, is_tautomer))
-    return compiled_rules
+    return [(q, atom_fix, bonds_fix,
+             [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix], is_tautomer)
+            for q, atom_fix, bonds_fix, is_tautomer in rules]
 
 
 single_rules = Proxy(_rules_single)

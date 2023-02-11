@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,7 +20,6 @@ from collections import defaultdict
 from lazy_object_proxy import Proxy
 from typing import TYPE_CHECKING
 from ..rings import _sssr, _connected_components
-from ...periodictable import ListElement
 
 
 if TYPE_CHECKING:
@@ -28,33 +27,14 @@ if TYPE_CHECKING:
 
 
 def _freaks():
-    from ...containers.query import QueryContainer
+    from ... import smarts
+
     rules = []
 
-    q = QueryContainer()
-    q.add_atom(ListElement(['N', 'O', 'S']), neighbors=2)
-    q.add_atom('A')
-    q.add_atom('A')
-    q.add_atom('A')
-    q.add_atom('A')
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, (2, 4))
-    q.add_bond(3, 4, 1)
-    q.add_bond(4, 5, 4)
-    q.add_bond(1, 5, 1)
+    q = smarts('[N,O,S;D2;r5;z1]1[A;r5]=,:[A;r5][A;r5]:[A;r5]1')
     rules.append(q)
 
-    q = QueryContainer()
-    q.add_atom('N', neighbors=3, hybridization=1)
-    q.add_atom('A')
-    q.add_atom('A')
-    q.add_atom('A')
-    q.add_atom('A')
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, (2, 4))
-    q.add_bond(3, 4, 1)
-    q.add_bond(4, 5, 4)
-    q.add_bond(1, 5, 1)
+    q = smarts('[N;D3;r5;z1]1[A;r5]=,:[A;r5][A;r5]:[A;r5]1')
     rules.append(q)
     return rules
 

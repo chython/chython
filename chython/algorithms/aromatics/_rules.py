@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -69,7 +69,7 @@ def _rules():
     # N : A : N - ?
     #  :     :
     #   C # C
-    q = smarts('[C;a;D2:1]:1#[C;D2:2]:[N;D2,D3:3]:[C,N:4]:[N;D2:5]:1')
+    q = smarts('[N;a;D2,D3;r5:3]:1:[C;D2;r5:1]#[C;D2;r5:2]:[N;D2;r5:5]:[C,N;r5:4]:1')
     atom_fix = {}
     bonds_fix = ((1, 2, 4),)
     rules.append((q, atom_fix, bonds_fix, False))
@@ -88,7 +88,7 @@ def _rules():
     #  O=[N+] : C
     #     :     :
     #    O : N : C
-    q = smarts('[N;a;D3;+:1]:1(=[O;D1:2]):[O;D2:3]:[N;D2,D3:4]:[C;D2,D3:5]:[C;D2,D3:6]:1')
+    q = smarts('[N;a;D3;r5;+:1]:1(=[O;D1:2]):[O;D2;r5:3]:[N;D2,D3;r5:4]:[C;D2,D3;r5:5]:[C;D2,D3;r5:6]:1')
     atom_fix = {}
     bonds_fix = ((1, 3, 1), (1, 6, 1), (3, 4, 1), (4, 5, 1), (5, 6, 2))
     rules.append((q, atom_fix, bonds_fix, False))

@@ -140,7 +140,7 @@ def _rules():
     #
     # Allyl complexes
     #
-    q = smarts('[M:1]~1~2~[C:2]=[C:3]~1-[C:4]~2 |^1:3|')
+    q = smarts('[M:1]~1~2~[C;z2:2]=[C:3]~1-[C:4]~2 |^1:3|')
     atom_fix = {1: (1, None), 4: (-1, False)}
     bonds_fix = ()
     rules.append((q, atom_fix, bonds_fix))
@@ -170,7 +170,7 @@ def _rules():
     rules.append((q, atom_fix, bonds_fix))
 
     # ethers
-    q = smarts('[M:1]-[O+:2](-C)-C')
+    q = smarts('[M:1]-[O;D3;+:2](-C)-C')
     atom_fix = {1: (1, None), 2: (-1, None)}
     bonds_fix = ((1, 2, 8),)
     rules.append((q, atom_fix, bonds_fix))

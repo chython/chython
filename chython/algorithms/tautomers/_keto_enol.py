@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,156 +17,84 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ...periodictable import ListElement
 
 
 def _sugar_group():
-    from ...containers import QueryContainer
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'N']), hydrogens=(1, 2))  # enol
-    q.add_atom(ListElement(['O', 'N']))  # ketone
-    q.add_atom('C', hybridization=1)
-    q.add_atom('C', hybridization=2)
-    q.add_bond(1, 3, 1)
-    q.add_bond(3, 4, 1)
-    q.add_bond(2, 4, 2)
-    return q
+    from ... import smarts
+
+    return smarts('[N,O;D1,D2:1][C;z1][C;z2]=[N,O:2]')
 
 
 def _keto_rules():
-    from ...containers import QueryContainer
+    from ... import smarts
+
     rules = []
     # first atom is H-acceptor
     # second is direction
 
     # C-C=[O,S,NH]
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'S', 'N']), neighbors=1)
-    q.add_atom('C', heteroatoms=1, hybridization=2, neighbors=(2, 3))
-    q.add_bond(1, 2, 2)
+    q = smarts('[N,O,S;D1;z2]=[C;D2,D3;x1;z2]')
     rules.append(q)
 
     # C-C=N-[C,N,O]
-    q = QueryContainer()
-    q.add_atom('N', neighbors=2)
-    q.add_atom('C', heteroatoms=1, hybridization=2, neighbors=(2, 3))
-    q.add_atom(ListElement(['C', 'N', 'O']))
-    q.add_bond(1, 2, 2)
-    q.add_bond(1, 3, 1)
+    q = smarts('[N;D2;z2](=[C;D2,D3;x1;z2])[C,N,O]')
     rules.append(q)
 
     # [C,H]-N=N-C
-    q = QueryContainer()
-    q.add_atom('N', neighbors=(1, 2), heteroatoms=1)
-    q.add_atom('N')
-    q.add_atom('C', heteroatoms=1)
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
+    q = smarts('[N;D1,D2;x1;z2]=N[C;x1]')
     rules.append(q)
 
     # [S,O,NR;H]-C=N
-    q = QueryContainer()
-    q.add_atom('N')
-    q.add_atom('C')
-    q.add_atom(ListElement(['N', 'S', 'O']), hydrogens=1)
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
+    q = smarts('[N;z2]=C[N,O,S;h1]')
     rules.append(q)
 
     # [NH2]-C=N-R
-    q = QueryContainer()
-    q.add_atom('N', neighbors=2)
-    q.add_atom('C')
-    q.add_atom('N', neighbors=1)
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
+    q = smarts('[N;D2;z2]=C[N;D1]')
     rules.append(q)
 
     # S=C-[N,O;H]
-    q = QueryContainer()
-    q.add_atom('S', neighbors=1)
-    q.add_atom('C')
-    q.add_atom(ListElement(['N', 'O']), hydrogens=(1, 2))
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
+    q = smarts('[S;D1;z2]=C[N,O;h1,h2]')
     rules.append(q)
 
     # O=C-[N,S;H]
-    q = QueryContainer()
-    q.add_atom('O')
-    q.add_atom('C')
-    q.add_atom(ListElement(['N', 'S']), hydrogens=(1, 2))
-    q.add_bond(1, 2, 2)
-    q.add_bond(2, 3, 1)
+    q = smarts('[O;D1;z2]=C[N,S;h1,h2]')
     rules.append(q)
     return rules
 
 
 def _enol_rules():
-    from ...containers import QueryContainer
+    from ... import smarts
+
     rules = []
     # first atom is H-donor
     # second is direction
 
     # C=C-[OH,SH,NH2]
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'S', 'N']), neighbors=1)
-    q.add_atom('C', heteroatoms=1, hybridization=2, neighbors=(2, 3))
-    q.add_bond(1, 2, 1)
+    q = smarts('[N,O,S;D1;z1][C;D2,D3;x1;z2]')
     rules.append(q)
 
     # C=C-[NH]-[C,N,O]
-    q = QueryContainer()
-    q.add_atom('N', neighbors=2)
-    q.add_atom('C', heteroatoms=1, hybridization=2, neighbors=(2, 3))
-    q.add_atom(ListElement(['C', 'N', 'O']))
-    q.add_bond(1, 2, 1)
-    q.add_bond(1, 3, 1)
+    q = smarts('[N;D2;z1]([C;D2,D3;x1;z2])[C,N,O]')
     rules.append(q)
 
     # [C,H]-[NH]-N=C
-    q = QueryContainer()
-    q.add_atom('N', neighbors=(1, 2), hybridization=1, heteroatoms=1)
-    q.add_atom('N')
-    q.add_atom('C', heteroatoms=1)
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 2)
+    q = smarts('[N;D1,D2;x1;z1][N;z2]=[C;x1]')
     rules.append(q)
 
     # [S,O,NR;H]-C=N
-    q = QueryContainer()
-    q.add_atom(ListElement(['N', 'S', 'O']), hydrogens=1)
-    q.add_atom('C')
-    q.add_atom('N')
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 2)
+    q = smarts('[N,O,S;h1;z1][C;z2]=N')
     rules.append(q)
 
     # [NH2]-C=N-R
-    q = QueryContainer()
-    q.add_atom('N', neighbors=1)
-    q.add_atom('C')
-    q.add_atom('N', neighbors=2)
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 2)
+    q = smarts('[N;D1;z1][C;z2]=[N;D2]')
     rules.append(q)
 
     # S=C-[N,O;H]
-    q = QueryContainer()
-    q.add_atom(ListElement(['N', 'O']), hydrogens=(1, 2))
-    q.add_atom('C')
-    q.add_atom('S', neighbors=1)
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 2)
+    q = smarts('[N,O;h1,h2;z1][C;z2]=[S;D1]')
     rules.append(q)
 
     # O=C-[N,S;H]
-    q = QueryContainer()
-    q.add_atom(ListElement(['N', 'S']), hydrogens=(1, 2))
-    q.add_atom('C')
-    q.add_atom('O')
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 2)
+    q = smarts('[N,S;h1,h2;z1][C;z2]=O')
     rules.append(q)
     return rules
 

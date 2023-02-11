@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -23,82 +23,30 @@ from typing import List, Tuple
 def _fixed_rules():
     """
     Rules working without Morgan.
-    This rules are used for charge canonization for heterocycles
+    These rules are used for charge canonization for heterocycles
     """
+    from ... import smarts
     from ...containers import QueryContainer
 
     rules: List[Tuple[QueryContainer, bool]] = []
 
-    # N1C=CN2[NH+]=CC=C12
-    q = QueryContainer()
-    q.add_atom('N', charge=1)  # first atom is charged
-    q.add_atom('N')  # second should be charged atom
-    q.add_atom('N')
-    for _ in range(5):
-        q.add_atom('A')
-    q.add_bond(1, 3, 4)
-    q.add_bond(3, 4, 4)
-    q.add_bond(3, 6, 4)
-    q.add_bond(4, 5, 4)
-    q.add_bond(5, 2, 4)
-    q.add_bond(2, 6, 4)
-    q.add_bond(6, 7, 4)
-    q.add_bond(7, 8, 4)
-    q.add_bond(8, 1, 4)
+    # N1C=CN2[NH+]=CC=C12>>N1C=CC2=[NH+]C=CN12
+    # first and second atoms are ryrrole-like
+    # second atom will be charged
+    # if fix is True, third atom will be uncharged else first
+    q = smarts('[N;a;r5;+:1]:1:[N;r5:3]:2:[C;r5](:[N;r5:2]:[A;r5]:[A;r5]:2):[A;r5]:[A;r5]:1')
     rules.append((q, False))
 
-    # N1C=C[N+]2=C1C=CN2
-    q = QueryContainer()
-    q.add_atom('N')
-    q.add_atom('N')  # second should be charged atom
-    q.add_atom('N', charge=1)  # bad charged
-    for _ in range(5):
-        q.add_atom('A')
-    q.add_bond(1, 3, 4)
-    q.add_bond(3, 4, 4)
-    q.add_bond(3, 6, 4)
-    q.add_bond(4, 5, 4)
-    q.add_bond(5, 2, 4)
-    q.add_bond(2, 6, 4)
-    q.add_bond(6, 7, 4)
-    q.add_bond(7, 8, 4)
-    q.add_bond(8, 1, 4)
+    # N1C=C[N+]2=C1C=CN2>>N1C=CC2=[NH+]C=CN12
+    q = smarts('[N;a;r5;+:3]:1:2:[N;r5:1]:[A;r5]:[A;r5]:[C;r5]:1:[N;r5:2]:[A;r5]:[A;r5]:2')
     rules.append((q, True))
 
-    # N1C=C2C=CN[N+]2=C1
-    q = QueryContainer()
-    q.add_atom('N')
-    q.add_atom('N')  # second should be charged atom
-    q.add_atom('N', charge=1)
-    for _ in range(5):
-        q.add_atom('A')
-    q.add_bond(1, 3, 4)
-    q.add_bond(3, 4, 4)
-    q.add_bond(3, 6, 4)
-    q.add_bond(4, 2, 4)
-    q.add_bond(2, 5, 4)
-    q.add_bond(5, 6, 4)
-    q.add_bond(6, 7, 4)
-    q.add_bond(7, 8, 4)
-    q.add_bond(8, 1, 4)
+    # N1C=C2C=CN[N+]2=C1>>N1C=CC2=C[NH+]=CN12
+    q = smarts('[N;a;r5;+:3]:1:2:[N;r5:1]:[A;r5]:[A;r5]:[C;r5]:1:[A;r5]:[N;r5:2]:[A;r5]:2')
     rules.append((q, True))
 
-    # N1C=C2NC=C[N+]2=C1
-    q = QueryContainer()
-    q.add_atom('N')
-    q.add_atom('N')  # second should be charged atom
-    q.add_atom('N', charge=1)
-    for _ in range(5):
-        q.add_atom('A')
-    q.add_bond(1, 6, 4)
-    q.add_bond(3, 4, 4)
-    q.add_bond(3, 6, 4)
-    q.add_bond(4, 2, 4)
-    q.add_bond(2, 5, 4)
-    q.add_bond(5, 6, 4)
-    q.add_bond(3, 7, 4)
-    q.add_bond(7, 8, 4)
-    q.add_bond(8, 1, 4)
+    # N1C=C2NC=C[N+]2=C1>>N1C=CN2C=[NH+]C=C12
+    q = smarts('[N;a;r5;+:3]:1:2:[C;r5](:[N;r5:1]:[A;r5]:[A;r5]:1):[A;r5]:[N;r5:2]:[A;r5]:2')
     rules.append((q, True))
 
     # C1=CC=2C(=[NH+]1)C=CNC=2

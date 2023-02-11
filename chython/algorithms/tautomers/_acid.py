@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,53 +17,37 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ...periodictable import ListElement
 
 
 def _stripped_rules():
-    from ...containers import QueryContainer
+    from ... import smarts
+
     rules = []
 
     # Ammonia, H-imine,guanidine,amidine. [H][N+]=,-,:
-    q = QueryContainer()
-    q.add_atom('N', charge=1, hydrogens=(1, 2, 3, 4))
+    q = smarts('[N;h1,h2,h3,h4;+]')
     rules.append(q)
     return rules
 
 
 def _rules():
-    from ...containers import QueryContainer
+    from ... import smarts
+
     rules = _stripped_rules()
 
-    # Phenoles, [H][O,S,Se]-Ar
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'S', 'Se']), neighbors=1)
-    q.add_atom(ListElement(['C', 'N']), hybridization=4)
-    q.add_bond(1, 2, 1)
+    # Phenoles
+    q = smarts('[O,S,Se;D1;z1][C,N;a]')
     rules.append(q)
 
-    # Oxo-acids. [H][O,S,Se]-[C,N,P,S,Cl,Se,Br,I]=O
-    q = QueryContainer()
-    q.add_atom(ListElement(['O', 'S', 'Se']), neighbors=1)
-    q.add_atom(ListElement(['C', 'N', 'P', 'S', 'Cl', 'Se', 'Br', 'I']))
-    q.add_atom('O')
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 2)
+    # Oxo-acids
+    q = smarts('[O,S,Se;D1;z1][C,N,P,S,Se,Cl,Br,I]=O')
     rules.append(q)
 
-    # Nitro acid. [H]O-[N+](=O)[O-]
-    q = QueryContainer()
-    q.add_atom('O', neighbors=1)
-    q.add_atom('N', charge=1)
-    q.add_atom('O', charge=-1)
-    q.add_atom('O')
-    q.add_bond(1, 2, 1)
-    q.add_bond(2, 3, 1)
-    q.add_bond(2, 4, 2)
+    # Nitro acid
+    q = smarts('[N;D3;z2;+]([O;D1:1])([O-])=O')
     rules.append(q)
 
-    q = QueryContainer()
-    q.add_atom(ListElement(['F', 'Cl', 'Br', 'I']), neighbors=0)
+    q = smarts('[F,Cl,Br,I;D0]')
     rules.append(q)
     return rules
 
