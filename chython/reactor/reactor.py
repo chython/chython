@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -19,7 +19,7 @@
 #
 from collections import deque
 from functools import reduce
-from itertools import count, permutations, combinations
+from itertools import count, permutations, combinations, chain
 from logging import getLogger, INFO
 from operator import or_
 from typing import List, Iterator, Tuple, Union
@@ -80,13 +80,22 @@ class Reactor(BaseReactor):
         structures = fix_mapping_overlap(structures)
         s_nums = set(range(len(structures)))
         seen = set()
+        black_list = [set() for _ in range(len_patterns)]  # unmatched patterns
         if self.__one_shot:
             for chosen in permutations(s_nums, len_patterns):
+                if any(x in b for x, b in zip(chosen, black_list)):  # drop unmatched
+                    continue
+
+                chosen_molecules = [structures[x] for x in chosen]
+                mapper = self.__get_mapping(chosen_molecules)
+                if (n := next(mapper)) is not None:
+                    black_list[n].add(chosen[n])
+                    continue
+
                 ignored = [structures[x] for x in s_nums.difference(chosen)]
-                chosen = [structures[x] for x in chosen]
-                for new in self.__single_stage(chosen, {x for x in ignored for x in x}):
+                for new in self.__single_stage(chosen_molecules, {x for x in ignored for x in x}, mapper):
                     # store reacted molecules in same order as matched pattern
-                    r = ReactionContainer([x.copy() for x in chosen] + [x.copy() for x in ignored],
+                    r = ReactionContainer([x.copy() for x in chosen_molecules] + [x.copy() for x in ignored],
                                           new + [x.copy() for x in ignored])
                     if len(new) > 1:  # try to keep salts
                         r.contract_ions()
@@ -95,12 +104,14 @@ class Reactor(BaseReactor):
                     seen.add(str(r))
                     yield r
         else:
-            queue = deque(([structures[x] for x in chosen], [structures[x] for x in s_nums.difference(chosen)], 0)
+            queue = deque(([structures[x] for x in chosen], [structures[x] for x in s_nums.difference(chosen)],
+                           lazy_product(*(q.get_mapping(structures[x], automorphism_filter=self.__automorphism_filter)
+                                          for q, x in zip(self.patterns, chosen))), 0)
                           for chosen in permutations(s_nums, len_patterns))
             while queue:
-                chosen, ignored, depth = queue.popleft()
+                chosen, ignored, mapper, depth = queue.popleft()
                 depth += 1
-                for new in self.__single_stage(chosen, {x for x in ignored for x in x}):
+                for new in self.__single_stage(chosen, {x for x in ignored for x in x}, mapper):
                     r = ReactionContainer([x.copy() for x in structures], new + [x.copy() for x in ignored])
                     if len(new) > 1:
                         r.contract_ions()  # try to keep salts
@@ -128,12 +139,24 @@ class Reactor(BaseReactor):
                                         queue.append((ch, [*prod[:i], *prod[i + 1:]], depth))
                     yield r
 
-    def __single_stage(self, chosen, ignored) -> Iterator[List[MoleculeContainer]]:
+    def __get_mapping(self, chosen):
+        mappers = []
+        for n, (q, x) in enumerate(zip(self.patterns, chosen)):
+            iso = q.get_mapping(x, automorphism_filter=self.__automorphism_filter)
+            try:
+                m = next(iso)
+            except StopIteration:
+                yield n
+                return
+            mappers.append(chain((m,), iso))
+        yield
+        yield from lazy_product(*mappers)
+
+    def __single_stage(self, chosen, ignored, mapper) -> Iterator[List[MoleculeContainer]]:
         max_ignored_number = max(ignored, default=0)
         united_chosen = reduce(or_, chosen)
         split = len(self.__products_atoms) > 1
-        for match in lazy_product(*(x.get_mapping(y, automorphism_filter=self.__automorphism_filter) for x, y in
-                                    zip(self.patterns, chosen))):
+        for match in mapper:
             mapping = match[0].copy()
             for m in match[1:]:
                 mapping.update(m)
