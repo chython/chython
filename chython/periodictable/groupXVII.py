@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Alexander Nikanshin <17071996sasha@gmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
@@ -179,10 +179,12 @@ class I(Element, PeriodV, GroupXVII):
                 (0, False, 0, ((1, 'C'), (1, 'O'), (1, 'Cl'))),
                 (0, False, 0, ((1, 'C'), (1, 'O'), (1, 'C'))),
                 (0, False, 0, ((1, 'C'), (1, 'O'), (1, 'O'))),
+                (0, False, 0, ((1, 'C'), (1, 'O'), (1, 'N'))),
                 (0, False, 0, ((1, 'C'), (1, 'F'), (1, 'F'))),
                 (0, False, 0, ((1, 'C'), (1, 'Cl'), (1, 'Cl'))),
                 (0, False, 0, ((1, 'C'), (1, 'C'), (1, 'Cl'))),
                 (0, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'))),
+                (0, False, 0, ((1, 'C'), (1, 'C'), (1, 'N'))),
 
                 (0, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),  # IF5
                 (0, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (2, 'O'))),  # IOF3

@@ -43,6 +43,18 @@ def _rules_single():
     # raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
+    #     A         A
+    #     |         |
+    #     P    >>  [P+]
+    #   / | \     / | \
+    #  A  A  A   A  A  A
+    #
+    q = smarts('[P;D4;x0;z1]')
+    atom_fix = {1: (1, None)}
+    bonds_fix = ()
+    rules.append((q, atom_fix, bonds_fix, False))
+
+    #
     # A   H   A     A     H   A
     #  \ / \ /       \  .. \ /
     #   B   B    >>   B     B
