@@ -44,7 +44,8 @@ class B(Element, PeriodII, GroupXIII):
 
     @property
     def _valences_exceptions(self):
-        return (-1, False, 4, ()), (0, False, 0, ())
+        return ((-1, False, 4, ()), (0, False, 0, ()),
+                (0, True, 2, ()))  # radical OGB-dataset
 
     @property
     def atomic_radius(self):

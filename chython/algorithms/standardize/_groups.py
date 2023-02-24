@@ -66,6 +66,29 @@ def _rules_single():
     bonds_fix = ((1, 3, 8), (2, 4, 8))
     rules.append((q, atom_fix, bonds_fix, False))
 
+    # OGB DS
+    #
+    # O*  A  [O-]  A
+    #  \ /     \  /
+    #   N  >>  [N+]
+    #   |       ||
+    #  C,N*     C,N
+    #
+    q = smarts('[O;D1;z1][N;D3;z1][C,N;z1] |^1:0,2|')
+    atom_fix = {1: (-1, False), 2: (1, None), 3: (0, False)}
+    bonds_fix = ((2, 3, 2),)
+    rules.append((q, atom_fix, bonds_fix, False))
+
+    #
+    #       |            |
+    # O* -- S -- O* >> O=S=O
+    #       |            |
+    #
+    q = smarts('[O,S;D1;z1][S;D4;z1][O;D1;z1] |^1:0,2|')
+    atom_fix = {1: (0, False), 3: (0, False)}
+    bonds_fix = ((1, 2, 2), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, False))
+
     #
     #      A         A
     #     //        //

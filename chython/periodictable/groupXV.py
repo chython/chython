@@ -74,6 +74,7 @@ class P(Element, PeriodIII, GroupXV):
     @property
     def _valences_exceptions(self):
         return ((-1, False, 2, ()), (1, False, 4, ()),
+                (0, True, 2, ()), (0, True, 4, ()),  # radical OGB-dataset
                 (0, False, 0, ()),  # elemental
                 (0, False, 1, ((1, 'O'), (1, 'O'), (2, 'O'))),  # Phosphorous Acid
                 (0, False, 2, ((1, 'O'), (2, 'O'))),  # Hypophosphorous Acid

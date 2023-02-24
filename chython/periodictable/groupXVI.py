@@ -74,6 +74,7 @@ class S(Element, PeriodIII, GroupXVI):
     @property
     def _valences_exceptions(self):
         return ((-1, False, 1, ()), (-2, False, 0, ()),  # anions
+                (0, True, 1, ()), (0, True, 3, ()),  # radical OGB-dataset
                 (0, False, 0, ()),  # elemental
 
                 (1, False, 0, ((2, 'C'), (1, 'C'))),
