@@ -48,14 +48,10 @@ def _validate_neighbors(neighbors):
 
 
 class QueryContainer(Stereo, Graph[Query, QueryBond], QueryIsomorphism, QuerySmiles):
-    __slots__ = ('_neighbors', '_hybridizations', '_atoms_stereo', '_cis_trans_stereo', '_allenes_stereo',
-                 '_hydrogens', '_rings_sizes', '_heteroatoms', '_masked')
+    __slots__ = ('_neighbors', '_hybridizations', '_hydrogens', '_rings_sizes', '_heteroatoms', '_masked')
 
     _neighbors: Dict[int, Tuple[int, ...]]
     _hybridizations: Dict[int, Tuple[int, ...]]
-    _atoms_stereo: Dict[int, bool]
-    _allenes_stereo: Dict[int, bool]
-    _cis_trans_stereo: Dict[Tuple[int, int], bool]
     _hydrogens: Dict[int, Tuple[int, ...]]
     _rings_sizes: Dict[int, Tuple[int, ...]]
     _heteroatoms: Dict[int, Tuple[int, ...]]
@@ -65,9 +61,6 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QueryIsomorphism, QuerySmi
         super().__init__()
         self._neighbors = {}
         self._hybridizations = {}
-        self._atoms_stereo = {}
-        self._allenes_stereo = {}
-        self._cis_trans_stereo = {}
         self._hydrogens = {}
         self._rings_sizes = {}
         self._heteroatoms = {}
@@ -184,13 +177,13 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QueryIsomorphism, QuerySmi
         copy._masked = self._masked.copy()
         return copy
 
-    def union(self, other: 'QueryContainer') -> 'QueryContainer':
+    def union(self, other: 'QueryContainer', *, remap: bool = False, copy: bool = True) -> 'QueryContainer':
         if not isinstance(other, QueryContainer):
             raise TypeError('QueryContainer expected')
-        u = super().union(other)
+        u, o = super().union(other, remap=remap, copy=copy)
 
         ub = u._bonds
-        for n, m_bond in other._bonds.items():
+        for n, m_bond in o._bonds.items():
             ub[n] = ubn = {}
             for m, bond in m_bond.items():
                 if m in ub:  # bond partially exists. need back-connection.
@@ -198,31 +191,19 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QueryIsomorphism, QuerySmi
                 else:
                     ubn[m] = bond.copy()
 
-        u._neighbors.update(other._neighbors)
-        u._hybridizations.update(other._hybridizations)
-        u._hydrogens.update(other._hydrogens)
-        u._rings_sizes.update(other._rings_sizes)
-        u._atoms_stereo.update(other._atoms_stereo)
-        u._allenes_stereo.update(other._allenes_stereo)
-        u._cis_trans_stereo.update(other._cis_trans_stereo)
-        u._heteroatoms.update(other._heteroatoms)
-        u._masked.update(other._masked)
+        u._neighbors.update(o._neighbors)
+        u._hybridizations.update(o._hybridizations)
+        u._hydrogens.update(o._hydrogens)
+        u._rings_sizes.update(o._rings_sizes)
+        u._heteroatoms.update(o._heteroatoms)
+        u._masked.update(o._masked)
         return u
 
     def remap(self, mapping: Dict[int, int], *, copy=False) -> 'QueryContainer':
-        """
-        Change atom numbers
-
-        :param mapping: mapping of old numbers to the new
-        :param copy: keep original graph
-        """
-        if len(mapping) != len(set(mapping.values())) or \
-                not (self._atoms.keys() - mapping.keys()).isdisjoint(mapping.values()):
-            raise ValueError('mapping overlap')
+        atoms = self._atoms  # keep original atoms dict
+        h = super().remap(mapping, copy=copy)
 
         mg = mapping.get
-        charges = self._charges
-        radicals = self._radicals
         hydrogens = self._hydrogens
         neighbors = self._neighbors
         hybridizations = self._hybridizations
@@ -231,26 +212,13 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QueryIsomorphism, QuerySmi
         masked = self._masked
 
         if copy:
-            h = self.__class__()
-            ha = h._atoms
             hb = h._bonds
-            hc = h._charges
-            hr = h._radicals
             hhg = h._hydrogens
             hn = h._neighbors
             hh = h._hybridizations
             hx = h._heteroatoms
             hrs = h._rings_sizes
             hm = h._masked
-            has = h._atoms_stereo
-            hal = h._allenes_stereo
-            hcs = h._cis_trans_stereo
-
-            for n, atom in self._atoms.items():
-                m = mg(n, n)
-                atom = atom.copy()
-                ha[m] = atom
-                atom._attach_graph(h, m)
 
             # deep copy of bonds
             for n, m_bond in self._bonds.items():
@@ -263,24 +231,13 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QueryIsomorphism, QuerySmi
                     else:
                         hbn[m] = bond.copy()
         else:
-            ha = {}
             hb = {}
-            hc = {}
-            hr = {}
             hhg = {}
             hn = {}
             hh = {}
             hx = {}
             hrs = {}
             hm = {}
-            has = {}
-            hal = {}
-            hcs = {}
-
-            for n, atom in self._atoms.items():
-                m = mg(n, n)
-                ha[m] = atom
-                atom._change_map(m)  # change mapping number
 
             for n, m_bond in self._bonds.items():
                 n = mg(n, n)
@@ -292,10 +249,8 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QueryIsomorphism, QuerySmi
                     else:
                         hbn[m] = bond
 
-        for n in self._atoms:
+        for n in atoms:
             m = mg(n, n)
-            hc[m] = charges[n]
-            hr[m] = radicals[n]
             hhg[m] = hydrogens[n]
             hn[m] = neighbors[n]
             hh[m] = hybridizations[n]
@@ -303,30 +258,16 @@ class QueryContainer(Stereo, Graph[Query, QueryBond], QueryIsomorphism, QuerySmi
             hrs[m] = rings_sizes[n]
             hm[m] = masked[n]
 
-        for n, stereo in self._atoms_stereo.items():
-            has[mg(n, n)] = stereo
-        for n, stereo in self._allenes_stereo.items():
-            hal[mg(n, n)] = stereo
-        for (n, m), stereo in self._cis_trans_stereo.items():
-            hcs[(mg(n, n), mg(m, m))] = stereo
-
         if copy:
             return h  # noqa
 
-        self._atoms = ha
         self._bonds = hb
-        self._charges = hc
-        self._radicals = hr
         self._hydrogens = hhg
         self._neighbors = hn
         self._hybridizations = hh
         self._heteroatoms = hx
         self._rings_sizes = hrs
         self._masked = hm
-        self._atoms_stereo = has
-        self._allenes_stereo = hal
-        self._cis_trans_stereo = hcs
-        self.flush_cache()
         return self
 
     def enumerate_queries(self, *, enumerate_marks: bool = False):

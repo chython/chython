@@ -29,19 +29,26 @@ Bond = TypeVar('Bond')
 
 
 class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
-    __slots__ = ('_atoms', '_bonds', '_charges', '_radicals', '__dict__', '__weakref__')
+    __slots__ = ('_atoms', '_bonds', '_charges', '_radicals', '_atoms_stereo', '_cis_trans_stereo', '_allenes_stereo',
+                 '__dict__', '__weakref__')
     __class_cache__ = {}
 
     _atoms: Dict[int, Atom]
     _bonds: Dict[int, Dict[int, Bond]]
     _charges: Dict[int, int]
     _radicals: Dict[int, bool]
+    _atoms_stereo: Dict[int, bool]
+    _allenes_stereo: Dict[int, bool]
+    _cis_trans_stereo: Dict[Tuple[int, int], bool]
 
     def __init__(self):
         self._atoms = {}
         self._bonds = {}
         self._charges = {}
         self._radicals = {}
+        self._atoms_stereo = {}
+        self._allenes_stereo = {}
+        self._cis_trans_stereo = {}
 
     def atom(self, n: int) -> Atom:
         return self._atoms[n]
@@ -149,11 +156,87 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
         return copy
 
     @abstractmethod
-    def union(self, other: 'Graph'):
+    def remap(self, mapping: Dict[int, int], *, copy=False):
+        """
+        Change atom numbers
+
+        :param mapping: mapping of old numbers to the new
+        :param copy: keep original graph
+        """
+        if len(mapping) != len(set(mapping.values())) or \
+                not (self._atoms.keys() - mapping.keys()).isdisjoint(mapping.values()):
+            raise ValueError('mapping overlap')
+
+        mg = mapping.get
+        sc = self._charges
+        sr = self._radicals
+
+        if copy:
+            h = self.__class__()
+            ha = h._atoms
+            hc = h._charges
+            hr = h._radicals
+            has = h._atoms_stereo
+            hal = h._allenes_stereo
+            hcs = h._cis_trans_stereo
+
+            for n, atom in self._atoms.items():
+                m = mg(n, n)
+                atom = atom.copy()
+                ha[m] = atom
+                atom._attach_graph(h, m)
+        else:
+            ha = {}
+            hc = {}
+            hr = {}
+            has = {}
+            hal = {}
+            hcs = {}
+
+            for n, atom in self._atoms.items():
+                m = mg(n, n)
+                ha[m] = atom
+                atom._change_map(m)  # change mapping number
+
+        for n in self._atoms:
+            m = mg(n, n)
+            hc[m] = sc[n]
+            hr[m] = sr[n]
+
+        for n, stereo in self._atoms_stereo.items():
+            has[mg(n, n)] = stereo
+        for n, stereo in self._allenes_stereo.items():
+            hal[mg(n, n)] = stereo
+        for (n, m), stereo in self._cis_trans_stereo.items():
+            hcs[(mg(n, n), mg(m, m))] = stereo
+
+        if copy:
+            return h  # noqa
+
+        self._atoms = ha
+        self._charges = hc
+        self._radicals = hr
+        self._atoms_stereo = has
+        self._allenes_stereo = hal
+        self._cis_trans_stereo = hcs
+        self.flush_cache()
+        return self
+
+    @abstractmethod
+    def union(self, other: 'Graph', *, remap: bool = False, copy: bool = True):
         """
         Merge Graphs into one.
+
+        :param remap: if atoms has collisions then remap other graph atoms else raise exception.
+        :param copy: keep original structure and return new object
         """
-        u = self.copy()
+        if self._atoms.keys() & other._atoms.keys():
+            if remap:
+                other = other.remap({n: i for i, n in enumerate(other, start=max(self._atoms) + 1)}, copy=True)
+            else:
+                raise MappingError('mapping of graphs is not disjoint')
+
+        u = self.copy() if copy else self
         u._charges.update(other._charges)
         u._radicals.update(other._radicals)
 
@@ -161,7 +244,11 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
         for n, atom in other._atoms.items():
             ua[n] = atom = atom.copy()
             atom._attach_graph(u, n)
-        return u
+
+        u._atoms_stereo.update(other._atoms_stereo)
+        u._allenes_stereo.update(other._allenes_stereo)
+        u._cis_trans_stereo.update(other._cis_trans_stereo)
+        return u, other
 
     def flush_cache(self):
         self.__dict__.clear()
@@ -173,7 +260,13 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
         """
         G | H is union of graphs
         """
-        return self.union(other)
+        return self.union(other, remap=True)
+
+    def __ior__(self, other):
+        """
+        G =| H is union of graphs
+        """
+        return self.union(other, remap=True, copy=False)
 
     def __len__(self):
         return len(self._atoms)

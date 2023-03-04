@@ -16,7 +16,6 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from array import array
 from CachedMethods import cached_args_method
 from collections import Counter, defaultdict
 from functools import cached_property
@@ -46,18 +45,19 @@ from ..periodictable import DynamicElement, Element, QueryElement, H
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphism, Aromatize, StandardizeMolecule,
                         MoleculeSmiles, DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS,
                         X3domMolecule):
-    __slots__ = ('_plane', '_conformers', '_atoms_stereo', '_hydrogens', '_cis_trans_stereo', '_allenes_stereo',
-                 '_parsed_mapping', '_backup', '__meta', '__name')
+    __slots__ = ('_plane', '_conformers', '_hydrogens', '_parsed_mapping', '_backup', '__meta', '__name')
+
+    _conformers: List[Dict[int, Tuple[float, float, float]]]
+    _hydrogens: Dict[int, Optional[int]]
+    _parsed_mapping: Dict[int, int]
+    _plane: Dict[int, Tuple[float, float]]
 
     def __init__(self):
         super().__init__()
-        self._conformers: List[Dict[int, Tuple[float, float, float]]] = []
-        self._hydrogens: Dict[int, Optional[int]] = {}
-        self._atoms_stereo: Dict[int, bool] = {}
-        self._allenes_stereo: Dict[int, bool] = {}
-        self._cis_trans_stereo: Dict[Tuple[int, int], bool] = {}
-        self._parsed_mapping: Dict[int, int] = {}
-        self._plane: Dict[int, Tuple[float, float]] = {}
+        self._conformers = []
+        self._hydrogens = {}
+        self._parsed_mapping = {}
+        self._plane = {}
         self.__meta = None
         self.__name = None
 
@@ -327,44 +327,22 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         self.flush_cache()
 
     def remap(self, mapping: Dict[int, int], *, copy: bool = False) -> 'MoleculeContainer':
-        """
-        Change atom numbers.
-
-        :param mapping: dict with atoms to change.
-        :param copy: keep original graph.
-        """
-        if len(mapping) != len(set(mapping.values())) or \
-                not (self._atoms.keys() - mapping.keys()).isdisjoint(mapping.values()):
-            raise ValueError('mapping overlap')
+        atoms = self._atoms  # keep original atoms dict
+        h = super().remap(mapping, copy=copy)
 
         mg = mapping.get
         sp = self._plane
-        sc = self._charges
-        sr = self._radicals
         shg = self._hydrogens
 
         if copy:
-            h = self.__class__()
             h._MoleculeContainer__name = self.__name
             if self.__meta is not None:
                 h._MoleculeContainer__meta = self.__meta.copy()
             hb = h._bonds
-            ha = h._atoms
-            hc = h._charges
-            hr = h._radicals
             hp = h._plane
             hhg = h._hydrogens
             hcf = h._conformers
-            has = h._atoms_stereo
-            hal = h._allenes_stereo
-            hcs = h._cis_trans_stereo
             hm = h._parsed_mapping
-
-            for n, atom in self._atoms.items():
-                m = mg(n, n)
-                atom = atom.copy()
-                ha[m] = atom
-                atom._attach_graph(h, m)
 
             # deep copy of bonds
             for n, m_bond in self._bonds.items():
@@ -379,20 +357,10 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                         bond._attach_graph(h, n, m)
         else:
             hb = {}
-            ha = {}
-            hc = {}
-            hr = {}
             hp = {}
             hhg = {}
             hcf = []
-            has = {}
-            hal = {}
-            hcs = {}
             hm = {}
-            for n, atom in self._atoms.items():
-                m = mg(n, n)
-                ha[m] = atom
-                atom._change_map(m)  # change mapping number
 
             for n, m_bond in self._bonds.items():
                 n = mg(n, n)
@@ -405,38 +373,23 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                         hbn[m] = bond
                         bond._change_map(n, m)
 
-        for n in self._atoms:
+        for n in atoms:
             m = mg(n, n)
-            hc[m] = sc[n]
-            hr[m] = sr[n]
             hp[m] = sp[n]
             hhg[m] = shg[n]
 
         hcf.extend({mg(n, n): x for n, x in c.items()} for c in self._conformers)
         for n, m in self._parsed_mapping.items():
             hm[mg(n, n)] = m
-        for n, stereo in self._atoms_stereo.items():
-            has[mg(n, n)] = stereo
-        for n, stereo in self._allenes_stereo.items():
-            hal[mg(n, n)] = stereo
-        for (n, m), stereo in self._cis_trans_stereo.items():
-            hcs[(mg(n, n), mg(m, m))] = stereo
 
         if copy:
             return h
 
-        self._atoms = ha
         self._bonds = hb
-        self._charges = hc
-        self._radicals = hr
         self._plane = hp
         self._hydrogens = hhg
         self._conformers = hcf
-        self._atoms_stereo = has
-        self._allenes_stereo = hal
-        self._cis_trans_stereo = hcs
         self._parsed_mapping = hm
-        self.flush_cache()
         return self
 
     def copy(self) -> 'MoleculeContainer':
@@ -466,21 +419,13 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         copy._cis_trans_stereo = self._cis_trans_stereo.copy()
         return copy
 
-    def union(self, other: 'MoleculeContainer', *, remap=False) -> 'MoleculeContainer':
-        """
-        :param remap: if atoms has collisions then remap other graph atoms else raise exception.
-        """
+    def union(self, other: 'MoleculeContainer', *, remap: bool = False, copy: bool = True) -> 'MoleculeContainer':
         if not isinstance(other, MoleculeContainer):
             raise TypeError('MoleculeContainer expected')
-        elif self._atoms.keys() & other._atoms.keys():
-            if remap:
-                other = other.remap({n: i for i, n in enumerate(other, start=max(self._atoms) + 1)}, copy=True)
-            else:
-                raise MappingError('mapping of graphs is not disjoint')
-        u = super().union(other)
+        u, o = super().union(other, remap=remap, copy=copy)
 
         ub = u._bonds
-        for n, m_bond in other._bonds.items():
+        for n, m_bond in o._bonds.items():
             ub[n] = ubn = {}
             for m, bond in m_bond.items():
                 if m in ub:  # bond partially exists. need back-connection.
@@ -491,12 +436,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
 
         u._MoleculeContainer__name = u._MoleculeContainer__meta = None
         u._conformers.clear()
-        u._plane.update(other._plane)
-        u._hydrogens.update(other._hydrogens)
-        u._parsed_mapping.update(other._parsed_mapping)
-        u._atoms_stereo.update(other._atoms_stereo)
-        u._allenes_stereo.update(other._allenes_stereo)
-        u._cis_trans_stereo.update(other._cis_trans_stereo)
+        u._plane.update(o._plane)
+        u._hydrogens.update(o._hydrogens)
+        u._parsed_mapping.update(o._parsed_mapping)
         return u
 
     def substructure(self, atoms: Iterable[int], *, as_query: bool = False, recalculate_hydrogens=True,
