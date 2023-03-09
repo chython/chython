@@ -77,7 +77,8 @@ class Ag(Element, PeriodV, GroupXI):
         return ((1, False, 0, ()),
                 (-1, False, 0, ((1, 'Cl'), (1, 'Cl'))),  # [AgCl2]-
                 (-1, False, 0, ((1, 'O'), (1, 'O'))),  # [Ag(OH)2]-
-                (-1, False, 0, ((1, 'S'), (1, 'S'))))  # [AgS2]-
+                (-1, False, 0, ((1, 'S'), (1, 'S'))),  # [AgS2]-
+                (0, False, 0, ((1, 'F'), (1, 'F'))))  # AgF2
 
     @property
     def atomic_radius(self):
