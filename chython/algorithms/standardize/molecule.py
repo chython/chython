@@ -136,7 +136,7 @@ class Standardize:
     def standardize_charges(self: 'MoleculeContainer', *, logging=False, prepare_molecule=True,
                             _fix_stereo=True) -> Union[bool, List[int]]:
         """
-        Set canonical positions of charges in heterocycles and some nitrogen compounds.
+        Set canonical positions of charges in heterocycles and ferrocenes.
 
         :param logging: return list of changed atoms.
         :param prepare_molecule: do thiele procedure.
@@ -145,6 +145,8 @@ class Standardize:
         bonds = self._bonds
         hydrogens = self._hydrogens
         charges = self._charges
+        atoms = self._atoms
+        hybridization = self.hybridization
 
         if prepare_molecule:
             self.thiele()
@@ -224,6 +226,31 @@ class Standardize:
                     if fix:
                         changed.append(atom_1)
             del self.__dict__['atoms_order']  # remove invalid morgan
+
+        # ferrocene
+        fcr = []
+        for r in self.sssr:
+            if len(r) != 5 or not all(hybridization(n) == 4 for n in r):
+                continue
+            ch = [(n, x) for n in r if (x := charges[n])]
+            if len(ch) != 1 or ch[0][1] != -1:
+                continue
+            ch = ch[0][0]
+            ca = [n for n in r if atoms[n].atomic_number == 6 and
+                  (len(bs := bonds[n]) == 2 or len(bs) == 3 and any(b.order == 1 for b in bs.values()))]
+            if len(ca) < 2 or ch not in ca:
+                continue
+            charges[ch] = 0  # reset charge for morgan recalculation
+            fcr.append(ca)
+            changed.append(ch)
+        if fcr:
+            self.__dict__.pop('atoms_order', None)  # remove cached morgan
+            for ca in fcr:
+                n = min(ca, key=self.atoms_order.get)
+                charges[n] = -1
+                changed.append(n)
+            del self.__dict__['atoms_order']  # remove invalid morgan
+
         if changed:
             self.flush_cache()  # clear cache
             if _fix_stereo:
