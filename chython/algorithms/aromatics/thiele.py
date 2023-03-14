@@ -55,6 +55,7 @@ class Thiele:
         """
         atoms = self._atoms
         bonds = self._bonds
+        nsc = self.not_special_connectivity
         sh = self.hybridization
         charges = self._charges
         hydrogens = self._hydrogens
@@ -70,7 +71,7 @@ class Thiele:
             if not 3 < lr < 8:  # skip 3-membered and big rings
                 continue
             # only B C N O P S with 2-3 neighbors. detects this: C1=CC=CP12=CC=CC=C2
-            if any(atoms[n].atomic_number not in (6, 7, 8, 16, 5, 15) or len(bonds[n]) > 3 for n in ring):
+            if any(atoms[n].atomic_number not in (6, 7, 8, 16, 5, 15) or len(nsc[n]) > 3 for n in ring):
                 continue
             sp2 = sum(sh(n) == 2 for n in ring)
             if sp2 == lr:  # benzene like

@@ -143,6 +143,7 @@ class Standardize:
         """
         changed: List[int] = []
         bonds = self._bonds
+        nsc = self.not_special_connectivity
         hydrogens = self._hydrogens
         charges = self._charges
         atoms = self._atoms
@@ -237,7 +238,7 @@ class Standardize:
                 continue
             ch = ch[0][0]
             ca = [n for n in r if atoms[n].atomic_number == 6 and
-                  (len(bs := bonds[n]) == 2 or len(bs) == 3 and any(b.order == 1 for b in bs.values()))]
+                  (len(bs := nsc[n]) == 2 or len(bs) == 3 and any(b.order == 1 for b in bonds[n].values()))]
             if len(ca) < 2 or ch not in ca:
                 continue
             charges[ch] = 0  # reset charge for morgan recalculation
