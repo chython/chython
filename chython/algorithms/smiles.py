@@ -23,7 +23,7 @@ from collections import defaultdict
 from functools import cached_property
 from hashlib import sha512
 from itertools import count, product
-from random import random
+from random import random, shuffle
 from typing import Callable, Optional, Tuple, TYPE_CHECKING, Union
 
 
@@ -161,13 +161,13 @@ class Smiles(ABC):
         order = []
         visited_bond = set()
 
-        groups = defaultdict(int)
-        for n in atoms_set:
-            groups[weights(n)] -= 1
-
         if kwargs.get('random', False):
             mod_weights_start = mod_weights = weights
         else:
+            groups = defaultdict(int)
+            for n in atoms_set:
+                groups[weights(n)] -= 1
+
             def mod_weights_start(x):
                 return (groups[weights(x)],  # common groups
                         weights(x))  # smallest weight
@@ -179,13 +179,14 @@ class Smiles(ABC):
 
         while True:
             start = min(atoms_set, key=mod_weights_start)
-            seen[start] = 0
-            queue = [(start, 1)]
-            while queue:
-                n, d = queue.pop(0)
-                for m in bonds[n].keys() - seen.keys():
-                    queue.append((m, d + 1))
-                    seen[m] = d
+            if not kwargs.get('random', False):
+                seen[start] = 0
+                queue = [(start, 1)]
+                while queue:
+                    n, d = queue.pop(0)
+                    for m in bonds[n].keys() - seen.keys():
+                        queue.append((m, d + 1))
+                        seen[m] = d
 
             # modified NX dfs with cycle detection
             stack = [(start, len(atoms_set), iter(sorted(bonds[start], key=mod_weights)))]
@@ -308,6 +309,70 @@ class Smiles(ABC):
 
 class MoleculeSmiles(Smiles):
     __slots__ = ()
+
+    def sticky_smiles(self: Union['MoleculeContainer', 'MoleculeSmiles'], left: int, right: int = None, *,
+                      remove_left: bool = False, remove_right: bool = False, tries: int = 10):
+        """
+        Generate smiles with fixed left and optionally right terminal atoms.
+        Note: Produce expected results only with acyclic terminal atoms.
+
+        :param remove_left: drop terminal atom and corresponding bond
+        :param remove_right: drop terminal atom and corresponding bond
+        :param tries: number of attempts to generate smiles
+        """
+        self._bonds[left]  # noqa. check left atom availability
+        if right:
+            assert tries > 0, 'tries count should be positive'
+            assert len(self._bonds[right]) == 1, 'right atom should be terminal'
+            assert left != right, 'left and right atoms the same'
+            assert self.connected_components_count == 1, 'only single component structures supported'
+
+            for attempt in range(tries):
+                path = self.__left_right_random_path(left, right, attempt)  # noqa
+
+                w = {n: x for x, n in enumerate(path, 2)}  # deprioritize path to right
+                w[left] = -1  # prioritize left
+
+                smiles, order = self._smiles(lambda x: w.get(x) or random(), _return_order=True, random=True)
+                if order[-1] != right:
+                    continue
+                if remove_left:
+                    smiles = smiles[2:]
+                if remove_right:
+                    smiles = smiles[:-2]
+                break
+            else:
+                raise Exception('generation of smiles failed')
+        else:
+            w = {n: 0 for n in self}
+            w[left] = -1  # prioritize left
+            smiles = self._smiles(w.__getitem__, random=True)
+            if remove_left:
+                smiles = smiles[2:]
+        return ''.join(smiles)
+
+    def __left_right_random_path(self: 'MoleculeContainer', left, right, _shuffle=False):
+        bonds = self._bonds
+        stack = [(left, n, 0) for n in bonds[left]]
+        if _shuffle:
+            shuffle(stack)  # randomize walk
+        path = []
+        seen = {left}
+        while stack:
+            last, current, depth = stack.pop()
+            if len(path) > depth:
+                seen.difference_update(path[depth:])
+                path = path[:depth]
+            path.append(current)
+            if current == right:  # we found
+                return path
+
+            depth += 1
+            seen.add(current)
+            nxt = [(current, n, depth) for n in bonds[current] if n not in seen]
+            if _shuffle:
+                shuffle(nxt)
+            stack.extend(nxt)
 
     def _smiles_order(self: 'MoleculeContainer', stereo=True) -> Callable:
         if stereo:
