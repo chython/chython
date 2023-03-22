@@ -101,7 +101,8 @@ class Rh(Element, PeriodV, GroupIX):
                 (-3, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'))),  # [RhCl6]3-
                 (-3, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # [Rh(NO2)6]3-
                 (0, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),
-                (0, False, 0, ((1, 'H'),)))  # HRh(CO)4, HRh(CO)[P(Ph)3]3
+                (0, False, 0, ((1, 'H'),)),  # HRh(CO)4, HRh(CO)[P(Ph)3]3
+                (0, False, 0, ((1, 'Cl'),)))  # Rh2Cl2
 
     @property
     def atomic_radius(self):
@@ -129,7 +130,8 @@ class Ir(Element, PeriodVI, GroupIX):
 
     @property
     def _valences_exceptions(self):
-        return ((0, False, 0, ((1, 'F'),)),
+        return ((0, False, 0, ((1, 'O'),)),
+                (0, False, 0, ((1, 'F'),)),
                 (0, False, 0, ((1, 'Cl'),)),
                 (0, False, 0, ((1, 'Br'),)),
                 (0, False, 0, ((1, 'I'),)),

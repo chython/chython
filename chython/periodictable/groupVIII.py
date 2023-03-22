@@ -72,7 +72,10 @@ class Ru(Element, PeriodV, GroupVIII):
 
     @property
     def _valences_exceptions(self):
-        return (0, False, 0, ((2, 'O'), (2, 'O'), (2, 'O'), (2, 'O'))),  # RuO4
+        return ((0, False, 0, ((2, 'O'), (2, 'O'), (2, 'O'), (2, 'O'))),  # RuO4
+                (0, False, 0, ((1, 'O'), (2, 'O'), (2, 'O'), (2, 'O'))),  # [RuO4]-
+                (0, False, 0, ((2, 'C'), (1, 'Cl'), (1, 'Cl'))),  # Grubbs
+                (0, False, 0, ((2, 'C'), (1, 'C'), (1, 'Cl'), (1, 'Cl'))))  # Hoveyda–Grubbs
 
     @property
     def atomic_radius(self):
