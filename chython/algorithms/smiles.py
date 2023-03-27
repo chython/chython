@@ -320,59 +320,35 @@ class MoleculeSmiles(Smiles):
         :param remove_right: drop terminal atom and corresponding bond
         :param tries: number of attempts to generate smiles
         """
-        self._bonds[left]  # noqa. check left atom availability
+        bonds = self._bonds
+        bonds[left]  # noqa. check left atom availability
         if right:
             assert tries > 0, 'tries count should be positive'
-            assert len(self._bonds[right]) == 1, 'right atom should be terminal'
+            assert len(bonds[right]) == 1, 'right atom should be terminal'
             assert left != right, 'left and right atoms the same'
             assert self.connected_components_count == 1, 'only single component structures supported'
 
-            for attempt in range(tries):
-                path = self.__left_right_random_path(left, right, attempt)  # noqa
+            seen = {right: 0}
+            queue = [(right, -1)]
+            while queue:
+                n, d = queue.pop(0)
+                for m in bonds[n].keys() - seen.keys():
+                    queue.append((m, d - 1))
+                    seen[m] = d
+            seen[left] = -len(bonds)
 
-                w = {n: x for x, n in enumerate(path, 2)}  # deprioritize path to right
-                w[left] = -1  # prioritize left
-
-                smiles, order = self._smiles(lambda x: w.get(x) or random(), _return_order=True, random=True)
-                if order[-1] != right:
-                    continue
-                if remove_left:
-                    smiles = smiles[2:]
-                if remove_right:
-                    smiles = smiles[:-2]
-                break
-            else:
+            smiles, order = self._smiles(seen.__getitem__, _return_order=True, random=True)
+            if order[-1] != right:
                 raise Exception('generation of smiles failed')
+            if remove_left:
+                smiles = smiles[2:]
+            if remove_right:
+                smiles = smiles[:-2]
         else:
-            w = {n: 0 for n in self}
-            w[left] = -1  # prioritize left
-            smiles = self._smiles(w.__getitem__, random=True)
+            smiles = self._smiles(lambda x: x != left, random=True)
             if remove_left:
                 smiles = smiles[2:]
         return ''.join(smiles)
-
-    def __left_right_random_path(self: 'MoleculeContainer', left, right, _shuffle=False):
-        bonds = self._bonds
-        stack = [(left, n, 0) for n in bonds[left]]
-        if _shuffle:
-            shuffle(stack)  # randomize walk
-        path = []
-        seen = {left}
-        while stack:
-            last, current, depth = stack.pop()
-            if len(path) > depth:
-                seen.difference_update(path[depth:])
-                path = path[:depth]
-            path.append(current)
-            if current == right:  # we found
-                return path
-
-            depth += 1
-            seen.add(current)
-            nxt = [(current, n, depth) for n in bonds[current] if n not in seen]
-            if _shuffle:
-                shuffle(nxt)
-            stack.extend(nxt)
 
     def _smiles_order(self: 'MoleculeContainer', stereo=True) -> Callable:
         if stereo:
