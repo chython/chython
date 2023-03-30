@@ -23,7 +23,7 @@ from collections import defaultdict
 from functools import cached_property
 from hashlib import sha512
 from itertools import count, product
-from random import random, shuffle
+from random import random
 from typing import Callable, Optional, Tuple, TYPE_CHECKING, Union
 
 
@@ -329,16 +329,19 @@ class MoleculeSmiles(Smiles):
             assert self.connected_components_count == 1, 'only single component structures supported'
 
             seen = {right: 0}
-            queue = [(right, -1)]
+            queue = [(right, -10)]
             while queue:
                 n, d = queue.pop(0)
                 for m in bonds[n].keys() - seen.keys():
-                    queue.append((m, d - 1))
+                    queue.append((m, d - 10))
                     seen[m] = d
-            seen[left] = -len(bonds)
+            seen[left] = -1_000_000_000  # prioritize left atom
 
-            smiles, order = self._smiles(seen.__getitem__, _return_order=True, random=True)
-            if order[-1] != right:
+            for _ in range(tries):
+                smiles, order = self._smiles(lambda x: seen[x] + random(), _return_order=True, random=True)
+                if order[-1] == right:
+                    break
+            else:
                 raise Exception('generation of smiles failed')
             if remove_left:
                 smiles = smiles[2:]
