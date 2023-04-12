@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
+# cython: language_level=3
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -57,8 +58,8 @@ from chython.containers.bonds import Bond
 def unpack(const unsigned char[::1] data not None):
     cdef char *charges
     cdef unsigned char a, b, c, d, isotope, atomic_number, neighbors_count, s = 0, nc, version
-    cdef unsigned char *atoms, *hydrogens, *neighbors, *radicals, *orders, *is_tet, *is_all
-    cdef bint *stereo_sign, *ct_sign
+    cdef unsigned char *atoms, *hydrogens, *neighbors, *orders, *is_tet, *is_all
+    cdef bint *stereo_sign, *ct_sign, *radicals
     cdef unsigned short atoms_count, bonds_count = 0, cis_trans_count, order_count
     cdef unsigned short i, j, k = 0, n, m, buffer_b, shift = 0
     cdef unsigned short *mapping, *isotopes, *cis_trans_1, *cis_trans_2, *connections
@@ -79,7 +80,7 @@ def unpack(const unsigned char[::1] data not None):
 
     # allocate memory
     charges = <char*> PyMem_Malloc(atoms_count * sizeof(char))
-    radicals = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
+    radicals = <bint*> PyMem_Malloc(atoms_count * sizeof(bint))
     atoms = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
     hydrogens = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
     neighbors = <unsigned char*> PyMem_Malloc(atoms_count * sizeof(unsigned char))
@@ -242,7 +243,7 @@ def unpack(const unsigned char[::1] data not None):
         py_isotopes.append(isotopes[i] or None)
 
         py_charges[py_n] = charges[i]
-        py_radicals[py_n] = bool(radicals[i])
+        py_radicals[py_n] = radicals[i]
         if hydrogens[i] == 7:
             py_hydrogens[py_n] = None
         else:

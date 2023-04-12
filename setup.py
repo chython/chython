@@ -65,7 +65,7 @@ if find_spec('cython'):
 
 setup(
     name='chython',
-    version='1.61',
+    version='1.62',
     packages=find_packages(),
     url='https://github.com/chython/chython',
     license='LGPLv3',
@@ -78,6 +78,7 @@ setup(
                  Extension('chython.containers._unpack', ['chython/containers/_unpack.pyx'],
                            extra_compile_args=['-O3']),
                  Extension('chython.containers._pack', ['chython/containers/_pack.pyx'], extra_compile_args=['-O3']),
+                 Extension('chython.containers._cpack', ['chython/containers/_cpack.pyx'], extra_compile_args=['-O3']),
                  Extension('chython.files._xyz', ['chython/files/_xyz.pyx'], extra_compile_args=['-O3'])],
     setup_requires=['wheel', 'cython'],
     install_requires=['CachedMethods>=0.1.4,<0.2', 'lazy-object-proxy>=1.6', 'lxml>=4.1', 'py-mini-racer>=0.4.0',
