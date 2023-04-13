@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -348,12 +348,14 @@ class Stereo:
             nf = bonds[path[0]]
             nl = bonds[path[-1]]
             n1, m1 = path[1], path[-2]
-            if any(b not in (1, 4) and atoms[m].atomic_number not in _organic_subset for m, b in nf.items() if m != n1)\
-                    or any(b not in (1, 4) and atoms[m].atomic_number not in _organic_subset
-                           for m, b in nl.items() if m != m1):
+            if any(b.order == 3 or atoms[m].atomic_number not in _organic_subset and b.order != 8
+                   for m, b in nf.items() if m != n1):
                 continue  # skip X=C=C structures and metal-carbon complexes
-            nn = [x for x in nf if x != n1 and atoms[x].atomic_number != 1]
-            mn = [x for x in nl if x != m1 and atoms[x].atomic_number != 1]
+            if any(b.order == 3 or atoms[m].atomic_number not in _organic_subset and b.order != 8
+                   for m, b in nl.items() if m != m1):
+                continue  # skip X=C=C structures and metal-carbon complexes
+            nn = [x for x, b in nf.items() if x != n1 and atoms[x].atomic_number != 1 and b.order != 8]
+            mn = [x for x, b in nl.items() if x != m1 and atoms[x].atomic_number != 1 and b.order != 8]
             if nn and mn:
                 sn = nn[1] if len(nn) == 2 else None
                 sm = mn[1] if len(mn) == 2 else None
