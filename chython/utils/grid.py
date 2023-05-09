@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -22,13 +22,15 @@ from ..containers import MoleculeContainer
 from ..algorithms.depict import _render_config, _graph_svg
 
 
-def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] = None, *, cols: int = 3):
+def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] = None, *, cols: int = 3,
+                clean2d: bool = True):
     """
     Depict molecules grid.
 
     :param molecules: list of molecules
     :param labels: optional list of text labels
     :param cols: number of molecules per row
+    :param clean2d: calculate coordinates if necessary.
     """
     font_size = _render_config['font_size']
     symbols_font_style = _render_config['symbols_font_style']
@@ -43,6 +45,17 @@ def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] 
     if labels is not None:
         assert len(molecules) == len(labels)
         labels = iter(labels)
+
+    if clean2d:
+        for m in molecules:
+            if len(m) > 1:
+                values = m._plane.values()
+                min_x = min(x for x, _ in values)
+                max_x = max(x for x, _ in values)
+                min_y = min(y for _, y in values)
+                max_y = max(y for _, y in values)
+                if max_y - min_y < .01 and max_x - min_x < 0.01:
+                    m.clean2d()
 
     for ms in zip_longest(*[iter(molecules)] * cols):
         height = 0.
@@ -65,18 +78,18 @@ def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] 
                 y = shift_y - height / 2. - font125  # blank
             else:
                 y = shift_y - height / 2.
-            max_x = m._fix_plane_mean(max_x, y) + 2.
+            max_x = m._fix_plane_mean(max_x, y) + 4. * font_size
             render.append(m.depict(_embedding=True)[:5])
             if max_x > shift_x:  # get total width
                 shift_x = max_x
-        shift_y -= height + 2.
+        shift_y -= height + 4. * font_size
 
     # restore planes
     for p, m in zip(planes, molecules):
         m._plane = p
 
-    width = shift_x + 3.0 * font_size
-    height = -shift_y + 2.5 * font_size
+    width = shift_x - 1.5 * font_size
+    height = -shift_y - 1.5 * font_size
     svg = [f'<svg width="{width:.2f}cm" height="{height:.2f}cm" '
            f'viewBox="{-font125:.2f} {-font125:.2f} {width:.2f} {height:.2f}" '
            'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">']
