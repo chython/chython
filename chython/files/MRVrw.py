@@ -252,7 +252,7 @@ class MRVRead:
         if not current or not self.__buffer:
             self.__buffer = None
             try:
-                e = next(self.__xml)
+                e = next(self.__xml)[1]
             except StopIteration:
                 raise EOFError
             self.__buffer = xml_dict(e)
