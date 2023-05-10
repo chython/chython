@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -171,14 +171,7 @@ class Attention:
         from chython import torch_device
         from chytorch.zoo.rxnmap import Model
 
-        model = Model.pretrained().to(torch_device)
-        for p in model.parameters():
-            p.requires_grad = False
-        return model
-
-    @class_cached_property
-    def __cutoff(self):
-        return self.__attention_model.encoder.molecule_encoder.spatial_encoder.num_embeddings - 3
+        return Model().to(torch_device)
 
     @class_cached_property
     def __autocast(self):
@@ -196,13 +189,10 @@ class Attention:
         return autocast_filler()
 
     def __get_attention(self):
-        from chython import torch_device
         from torch import no_grad
-        from chytorch.utils.data import ReactionDataset
 
-        b = [x.unsqueeze(0).to(torch_device) for x in ReactionDataset([self], distance_cutoff=self.__cutoff)[0]]
         with no_grad(), self.__autocast:
-            am = self.__attention_model(b, mapping_task=True).squeeze(0).float().cpu().numpy()
+            am = self.__attention_model(self).float().cpu().numpy()
         return am
 
 
