@@ -85,7 +85,7 @@ setup(
                       'numpy>=1.18'],
     extras_require={'pytest': ['pytest'], 'mapping': ['chytorch-rxnmap>=1.4']},
     package_data={'chython.algorithms': ['_isomorphism.pyx'], 'chython.algorithms.calculate2d': ['clean2d.js'],
-                  'chython.containers': ['_pack.pyx', '_unpack.pyx'], 'chython.files': ['_xyz.pyx']},
+                  'chython.containers': ['_pack.pyx', '_unpack.pyx', '_cpack.pyx'], 'chython.files': ['_xyz.pyx']},
     data_files=[],
     zip_safe=False,
     long_description=(Path(__file__).parent / 'README.rst').read_text('utf8'),
