@@ -580,23 +580,18 @@ def _rules_single():
     #      /         //
     # N = C  >> NH - C
     #
-    atoms = ({'atom': 'C', 'hybridization': 2}, {'atom': ListElement(['O', 'S']), 'neighbors': 1},
-             {'atom': 'N', 'hybridization': 2})
-    bonds = ((1, 2, 1), (1, 3, 2))
+    q = smarts('[N;z2]=[C;D2,D3;z2]-[O,S;D1]')
     atom_fix = {}
-    bonds_fix = ((1, 2, 2), (1, 3, 1))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
 
     #
     # fix pyridin-2-one. note: only after amide rule
     #
-    atoms = ({'atom': 'C', 'neighbors': 3}, {'atom': ListElement(['O', 'S']), 'neighbors': 1},
-             {'atom': 'N', 'neighbors': 2}, {'atom': 'A', 'hybridization': 2}, {'atom': 'A', 'hybridization': 2},
-             {'atom': 'A', 'hybridization': 2}, {'atom': 'A', 'hybridization': 2})
-    bonds = ((1, 2, 2), (1, 3, 1), (1, 4, 1), (3, 7, 1), (4, 5, (1, 2)), (5, 6, (1, 2)), (6, 7, (1, 2)))
+    q = smarts('[O,S;D1;z2;x0]=[C;D3;r6]1[N;D2;z1][A;z2]=[A;z2][A;z2]=[A;z2]1')
     atom_fix = {}
-    bonds_fix = ((1, 2, 1), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
 
     # todo:
     # [C;a:10][N;H:2][N:3]=[C:4]1[C:5]=,:[C:6][C:7](=[O:1])[C:8]=,:[C:9]1
@@ -609,22 +604,18 @@ def _rules_single():
     #      \           \
     #      [O,N]       [O,N]
     #
-    atoms = ({'atom': 'O', 'neighbors': 1}, {'atom': ListElement(['O', 'N'])}, {'atom': 'C'}, {'atom': 'C'})
-    bonds = ((1, 3, 1), (2, 3, 1), (3, 4, 2))
+    q = smarts('[O;D1;x0;z1]-[C;D3;z2;x2](-[O,N])=C')
     atom_fix = {}
-    bonds_fix = ((1, 3, 2), (3, 4, 1))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
+    bonds_fix = ((1, 2, 2), (2, 4, 1))
+    rules.append((q, atom_fix, bonds_fix, True))
 
     #
     # fix pyridin. note: don't move.
     #
-    atoms = ({'atom': 'C', 'neighbors': 3}, {'atom': 'O', 'neighbors': 1}, {'atom': 'N', 'neighbors': 2},
-             {'atom': 'C', 'hybridization': 1}, {'atom': 'A', 'hybridization': 2},
-             {'atom': 'A', 'hybridization': 2}, {'atom': 'A', 'hybridization': 2})
-    bonds = ((1, 2, 2), (1, 3, 1), (1, 4, 1), (3, 7, 2), (4, 5, 1), (5, 6, (1, 2)), (6, 7, 1))
+    q = smarts('[O;D1;z2;x0]=[C;D3;r6]1[N;D2;z2]=[A;z2][A;z2]-,=[A;z2][C;D2,D3;z1]1')
     atom_fix = {}
-    bonds_fix = ((1, 2, 1), (1, 4, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, True))
+    bonds_fix = ((1, 2, 1), (2, 7, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
 
     #
     #       A                   A
