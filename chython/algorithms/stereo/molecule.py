@@ -97,36 +97,23 @@ def _cis_trans_sign(n, u, v, w):
     return 0
 
 
-def _allene_sign(n, u, v, w):
+def _allene_sign(mark, u, v, w):
     # n    w
     # |   /
     # u--v
-    nx, ny, nz = n
     ux, uy = u
     vx, vy = v
-    wx, wy, wz = w
+    wx, wy = w
 
-    q1x = ux - nx
-    q1y = uy - ny
-    q1z = -nz
     q2x = vx - ux
     q2y = vy - uy
     q3x = wx - vx
     q3y = wy - vy
-    q3z = wz
 
     # cross vectors
-    q1q2x = -q1z * q2y
-    q1q2y = q1z * q2x
-    q1q2z = q1x * q2y - q1y * q2x
-    q2q3x = q2y * q3z
-    q2q3y = -q2x * q3z
     q2q3z = q2x * q3y - q2y * q3x
 
-    q1q2q3x = q1q2y * q2q3z - q1q2z * q2q3y
-    q1q2q3y = q1q2z * q2q3x - q1q2x * q2q3z
-
-    dot = q1q2q3x * q2x + q1q2q3y * q2y
+    dot = -mark * q2q3z
     if dot > 0:
         return 1
     elif dot < 0:
@@ -137,13 +124,13 @@ def _allene_sign(n, u, v, w):
 class MoleculeStereo(Stereo):
     __slots__ = ()
 
-    def add_wedge(self: 'MoleculeContainer', n: int, m: int, mark: bool, *, clean_cache=True):
+    def add_wedge(self: 'MoleculeContainer', n: int, m: int, mark: int, *, clean_cache=True):
         """
         Add stereo data by wedge notation of bonds. Use it for tetrahedrons of allenes.
 
         :param n: number of atom from which wedge bond started
         :param m: number of atom to which wedge bond coming
-        :param mark: up bond is True, down is False
+        :param mark: up bond is 1, down is -1
         """
         if n not in self._atoms:
             raise AtomNotFound
@@ -204,7 +191,7 @@ class MoleculeStereo(Stereo):
                         m1 = order[0]
                         t1, t2 = t2, t1
                         r = True
-                s = _allene_sign((*plane[m], mark), plane[t1], plane[t2], (*plane[m1], 0))
+                s = _allene_sign(mark, plane[t1], plane[t2], plane[m1])
                 if s:
                     self._allenes_stereo[c] = s < 0 if r else s > 0
                     if clean_cache:
@@ -451,7 +438,7 @@ class MoleculeStereo(Stereo):
 
         if order[-1]:  # allene
             s = self._translate_allene_sign(order[-2], *order[:2])
-            v = _allene_sign((*plane[order[0]], 1), plane[order[2]], plane[order[3]], (*plane[order[1]], 0))
+            v = _allene_sign(1, plane[order[2]], plane[order[3]], plane[order[1]])
             if not v:
                 logger.info(f'need 2d clean. allenes wedge stereo ambiguous for atom {order[-2]}')
             if s:

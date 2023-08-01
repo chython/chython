@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Alexander Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
@@ -25,7 +25,7 @@ from ..algorithms.depict import _render_config, _graph_svg
 Tree = Tuple[MoleculeContainer, List['Tree']]
 
 
-def retro_depict(tree: Tree, *, y_gap=3., x_gap=5.) -> str:
+def retro_depict(tree: Tree, *, y_gap=3., x_gap=5., clean2d: bool = True) -> str:
     """
     Depict retrosynthetic tree.
 
@@ -33,6 +33,7 @@ def retro_depict(tree: Tree, *, y_gap=3., x_gap=5.) -> str:
         Child nodes list can be empty.
     :param y_gap: vertical gap between molecules.
     :param x_gap: horizontal gap between molecules.
+    :param clean2d: calculate coordinates if necessary.
     """
     font_size = _render_config['font_size']
     font125 = 1.25 * font_size
@@ -59,6 +60,18 @@ def retro_depict(tree: Tree, *, y_gap=3., x_gap=5.) -> str:
     arrows_coords = []
     for column in columns:
         current_layer = []
+
+        if clean2d:
+            for m in column:
+                if len(m) > 1:
+                    values = m._plane.values()
+                    min_x = min(x for x, _ in values)
+                    max_x = max(x for x, _ in values)
+                    min_y = min(y for _, y in values)
+                    max_y = max(y for _, y in values)
+                    if max_y - min_y < .01 and max_x - min_x < 0.01:
+                        m.clean2d()
+
         heights = [max(y for _, y in m._plane.values()) - min(y for _, y in m._plane.values()) for m in column]
         y_shift = sum(heights) + y_gap * (len(heights) - 1)  # column height with gaps
         if y_shift > c_max_y:
@@ -76,7 +89,7 @@ def retro_depict(tree: Tree, *, y_gap=3., x_gap=5.) -> str:
                 arrows_coords.append((*last_layer[next(arrows)], x_shift - 1., y_shift - h / 2.))
                 y_shift -= h + y_gap
 
-            render.append(m.depict(embedding=True)[:5])
+            render.append(m.depict(_embedding=True)[:5])
             m._plane = plane  # restore
 
         x_shift = c_max_x + x_gap  # between columns gap

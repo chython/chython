@@ -332,13 +332,14 @@ class Standardize:
                         explicit_sum += bond.order
                         explicit_dict[(bond.order, atoms[m].atomic_number)] += 1
                 try:
+                    # aromatic rings don't match any rule
                     rules = atom.valence_rules(charge, is_radical, explicit_sum)
                 except ValenceError:
                     break
                 for s, d, h in rules:
-                    if s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()) and h == i:
+                    if s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()) and h >= i:
                         to_remove.update(hi)
-                        fixed[n] = i
+                        fixed[n] = h
                         break
                 else:
                     continue
