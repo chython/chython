@@ -155,7 +155,6 @@ def parser(tokens, strong_cycle):
     elif previous:
         raise IncorrectSmiles('bond on the end')
 
-    stereo_bonds = {n: ms for n, ms in stereo_bonds.items() if len(ms) == 1 or len(ms) == set(ms.values())}
     return {'atoms': atoms, 'bonds': bonds, 'order': order, 'stereo_bonds': stereo_bonds, 'log': log,
             'title': None, 'meta': None}
 

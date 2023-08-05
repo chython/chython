@@ -432,48 +432,77 @@ class MoleculeSmiles(Smiles):
     def _format_bond(self: 'MoleculeContainer', n, m, adjacency, **kwargs):
         if not kwargs.get('bonds', True):
             return ''
-        order = self._bonds[n][m].order
+        bonds = self._bonds
+        order = bonds[n][m].order
         if order == 4:
             if kwargs.get('aromatic', True):
                 return ''
             return ':'
-        elif kwargs.get('stereo', True) and order == 1:  # cis-trans /\
-            ctt = self._stereo_cis_trans_terminals
-            if n in ctt:
-                ts = ctt[n]
-                if ts in self._cis_trans_stereo:
-                    env = self._stereo_cis_trans[ts]
-                    if m == next(x for x in adjacency[n] if x in env):  # only first neighbor of double bonded atom
-                        if n == next(x for x in adjacency if x in ts):  # Cn(\Rm)(X)=C, Cn(=C)(\Rm)X, C(=C=Cn(\Rm)X)=C
-                            return '\\'
-                        else:  # C=Cn(Rm)(X) cases
-                            n2 = ts[1] if ts[0] == n else ts[0]
-                            m2 = next(x for x in adjacency[n2] if x in env)
-                            return '\\' if self._translate_cis_trans_sign(n2, n, m2, m) else '/'
-            elif m in ctt and self._atoms[n].atomic_number != 1:  # Hn-Cm= case ignored!
-                ts = ctt[m]
-                if ts in self._cis_trans_stereo:
-                    if m == next(x for x in adjacency if x in ts):  # Rn-Cm(X)=C case
-                        return '/'  # always start with UP R/C=C-X. RUSSIANS POSITIVE!
-                    else:  # second RnCm=1X or R1...=C1(X) case
-                        env = self._stereo_cis_trans[ts]
-                        n2 = ts[1] if ts[0] == m else ts[0]
-                        m2 = next(x for x in adjacency[n2] if x in env)
-                        return '/' if self._translate_cis_trans_sign(n2, m, m2, n) else '\\'
-
+        elif order == 1:  # cis-trans /\
             if kwargs.get('aromatic', True) and self.hybridization(n) == self.hybridization(m) == 4:
                 return '-'
+            if kwargs.get('stereo', True):
+                if 'cache' in adjacency:
+                    ct_map = adjacency['cache']
+                else:
+                    ct_map = adjacency['cache'] = self.__ct_map(adjacency)
+
+                if (x := ct_map.get((n, m))) is not None:
+                    return '/' if x else '\\'
             return ''
         elif order == 2:
             return '='
         elif order == 3:
             return '#'
-        elif order == 1:
-            if kwargs.get('aromatic', True) and self.hybridization(n) == self.hybridization(m) == 4:
-                return '-'
-            return ''
         else:  # order == 8
             return '~'
+
+    def __ct_map(self, adjacency):
+        ct_map = {}
+        cts = self._cis_trans_stereo
+        if not cts:
+            return ct_map
+        ctt = self._stereo_cis_trans_terminals
+        sct = self._stereo_cis_trans
+        ctc = self._stereo_cis_trans_counterpart
+
+        seen = set()
+        for k, vs in adjacency.items():
+            seen.add(k)
+            if (ts := ctt.get(k)) and ts in cts:
+                env = sct[ts]
+                for v in vs:
+                    if v in env:
+                        if (k, v) in ct_map:
+                            continue
+                        elif x := ct_map.get(k):  # second substituent of C=
+                            s = ct_map[(k, x)]
+                            ct_map[(k, v)] = not s  # X/C(/R)=, C(\X)(/R)=, C(=C(\X)/R)=C=
+                            ct_map[(v, k)] = s
+                            if y := ctt.get(v):  # =C(\X)/R=, C(\X)(/R=)=
+                                ct_map[v] = k
+                                seen.add(y)
+                        elif ts in seen:
+                            o = ctc[k]
+                            on = ct_map[o]
+                            s = ct_map[(o, on)]
+                            if not self._translate_cis_trans_sign(k, o, v, on):
+                                s = not s
+                            ct_map[(k, v)] = s
+                            ct_map[k] = v
+                            ct_map[(v, k)] = not s  # C/R=, R\1...C/1
+                            if y := ctt.get(v):
+                                ct_map[v] = k
+                                seen.add(y)
+                        else:  # left entry to double bond
+                            if y := ctt.get(v):  # 1,3-diene case
+                                ct_map[v] = k
+                                seen.add(y)
+                            ct_map[(v, k)] = True  # R/C=, C\1=...R/1, C(/R=)=, C(=C(/R=))=C=
+                            ct_map[(k, v)] = False  # first DOWN
+                            ct_map[k] = v
+                seen.add(ts)
+        return ct_map
 
 
 class CGRSmiles(Smiles):

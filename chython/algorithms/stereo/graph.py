@@ -406,6 +406,18 @@ class Stereo:
         return terminals
 
     @cached_property
+    def _stereo_cis_trans_counterpart(self) -> Dict[int, int]:
+        """
+        Cis-Trans terminal atoms counterparts
+        """
+        counterpart = {}
+        for nm in self._stereo_cis_trans_paths:
+            n, m = nm
+            counterpart[n] = m
+            counterpart[m] = n
+        return counterpart
+
+    @cached_property
     def _stereo_allenes(self) -> Dict[int, Tuple[int, int, Optional[int], Optional[int]]]:
         """
         Allenes which contains at least one non-hydrogen neighbor on both ends
