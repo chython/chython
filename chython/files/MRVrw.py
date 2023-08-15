@@ -136,11 +136,11 @@ class MRVRead:
             data = data['molecule']
             tmp = parse_molecule(data)
             postprocess_parsed_molecule(tmp, remap=self.__remap, ignore=self.__ignore)
+            parse_sgroup(data, tmp)
             mol = create_molecule(tmp, ignore_bad_isotopes=self.__ignore_bad_isotopes, _cls=self.molecule_cls)
             postprocess_molecule(mol, tmp, ignore=self.__ignore, ignore_stereo=self.__ignore_stereo,
                                  calc_cis_trans=self.__calc_cis_trans)
-            if meta:
-                mol.meta.update(meta)
+            mol.meta.update(meta)
             return mol
         elif 'reaction' in data and isinstance(data['reaction'], dict):
             data = data['reaction']
@@ -174,8 +174,7 @@ class MRVRead:
             for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
                 postprocess_molecule(mol, tmp, ignore=self.__ignore, ignore_stereo=self.__ignore_stereo,
                                      calc_cis_trans=self.__calc_cis_trans)
-            if meta:
-                rxn.meta.update(meta)
+            rxn.meta.update(meta)
             return rxn
         else:
             raise ValueError('reaction or molecule expected')
@@ -342,7 +341,32 @@ def parse_molecule(data):
             bonds.append((atom_map[a1], atom_map[a2], order))
 
     return {'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'hydrogens': hydrogens,
-            'meta': None, 'title': data.get('@title'), 'log': log}
+            'meta': None, 'title': data.get('@title'), 'log': log, 'atom_map': atom_map}
+
+
+def parse_sgroup(data, molecule):
+    if 'molecule' in data:
+        data = data['molecule']
+        if isinstance(data, dict):
+            data = (data,)
+
+        sgroups = {}
+        atom_map = molecule['mapping']
+        atom_map = {k: atom_map[v] for k, v in molecule['atom_map'].items()}
+        for x in data:
+            if '@atomRefs' in x:
+                atoms = [atom_map[x] for x in x['@atomRefs'].split()]
+            elif 'AttachmentPointArray' in x:
+                atoms = x['AttachmentPointArray']['attachmentPoint']
+                if isinstance(atoms, dict):
+                    atoms = (atoms,)
+                atoms = [atom_map[x['@atom']] for x in atoms]
+            else:
+                continue
+            tmp = {k[1:]: v for k, v in x.items() if k not in ('@atomRefs', '@id', '@molID') and k.startswith('@')}
+            tmp['atoms'] = atoms
+            sgroups[x['@id']] = tmp
+        molecule['meta'] = sgroups
 
 
 class MRVWrite:

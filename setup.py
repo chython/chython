@@ -65,7 +65,7 @@ if find_spec('cython'):
 
 setup(
     name='chython',
-    version='1.67',
+    version='1.68',
     packages=find_packages(),
     url='https://github.com/chython/chython',
     license='LGPLv3',
