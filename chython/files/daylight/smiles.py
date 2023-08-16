@@ -33,6 +33,7 @@ cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
 
 def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: bool = False,
            ignore_bad_isotopes: bool = False, keep_implicit: bool = False, ignore_carbon_radicals: bool = False,
+           ignore_aromatic_radicals: bool = True,
            _r_cls=ReactionContainer, _m_cls=MoleculeContainer) -> Union[MoleculeContainer, ReactionContainer]:
     """
     SMILES string parser
@@ -43,6 +44,7 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
     :param keep_implicit: keep given in smiles implicit hydrogen count, otherwise ignore on valence error.
     :param ignore_bad_isotopes: reset invalid isotope mark to non-isotopic.
     :param ignore_carbon_radicals: fill carbon radicals with hydrogen (X[C](X)X case).
+    :param ignore_aromatic_radicals: don't treat aromatic tokens like c[c]c as radicals.
     """
     if not data:
         raise ValueError('Empty string')
@@ -142,7 +144,8 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
         rxn = create_reaction(record, ignore_bad_isotopes=ignore_bad_isotopes, _r_cls=_r_cls, _m_cls=_m_cls)
         for mol, tmp in zip(rxn.molecules(), chain(record['reactants'], record['reagents'], record['products'])):
             postprocess_molecule(mol, tmp, ignore=ignore, ignore_stereo=ignore_stereo,
-                                 ignore_carbon_radicals=ignore_carbon_radicals, keep_implicit=keep_implicit)
+                                 ignore_carbon_radicals=ignore_carbon_radicals, keep_implicit=keep_implicit,
+                                 ignore_aromatic_radicals=ignore_aromatic_radicals)
         return rxn
     else:
         record = parser(smiles_tokenize(smi), not ignore)
@@ -152,12 +155,13 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
         postprocess_parsed_molecule(record, remap=remap, ignore=ignore)
         mol = create_molecule(record, ignore_bad_isotopes=ignore_bad_isotopes, _cls=_m_cls)
         postprocess_molecule(mol, record, ignore=ignore, ignore_stereo=ignore_stereo,
-                             ignore_carbon_radicals=ignore_carbon_radicals, keep_implicit=keep_implicit)
+                             ignore_carbon_radicals=ignore_carbon_radicals, keep_implicit=keep_implicit,
+                             ignore_aromatic_radicals=ignore_aromatic_radicals)
         return mol
 
 
 def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, ignore_carbon_radicals=False,
-                         keep_implicit=False):
+                         keep_implicit=False, ignore_aromatic_radicals=True):
     mapping = data['mapping']
 
     atoms = molecule._atoms
@@ -186,8 +190,8 @@ def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, ig
             if hyb(n) == 4:  # this is aromatic rings. just store given H count.
                 hydrogens[n] = h
                 # rare H0 case
-                if not h and not charges[n] and not radicals[n] and atoms[n].atomic_number in (5, 6, 7, 15) and \
-                        sum(b.order != 8 for b in bonds[n].values()) == 2:
+                if (not ignore_aromatic_radicals and not h and not charges[n] and not radicals[n] and
+                    atoms[n].atomic_number in (5, 6, 7, 15) and sum(b.order != 8 for b in bonds[n].values()) == 2):
                     # c[c]c - aromatic B,C,N,P radical
                     radicals[n] = True
                     radicalized.append(n)
