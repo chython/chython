@@ -269,7 +269,7 @@ class Element(Core, ABC):
 
     @property
     @abstractmethod
-    def _valences_exceptions(self) -> Tuple[Tuple[int, bool, int, Tuple[Tuple[int, str], ...]]]:
+    def _valences_exceptions(self) -> Tuple[Tuple[int, bool, int, Tuple[Tuple[int, str], ...]], ...]:
         """
         exceptions in charges, radical state, implicit H count, and non H neighbors of element
         examples:
