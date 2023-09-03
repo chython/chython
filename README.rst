@@ -21,6 +21,9 @@ Features:
 
 Full documentation can be found `here <https://chython.readthedocs.io>`_.
 
+CGRtools
+========
+
 Chython is fork of `CGRtools <https://github.com/stsouko/CGRtools>`_.
 
 Install
@@ -45,6 +48,8 @@ Copyright
 
 Contributors
 ============
+
+CGRtools contributors are included too.
 
 * Adelia Fatykhova adelik21979@gmail.com
 * Aleksandr Sizov murkyrussian@gmail.com
