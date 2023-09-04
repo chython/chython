@@ -151,6 +151,7 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
         record = parser(smiles_tokenize(smi), not ignore)
         for x in radicals:
             record['atoms'][x]['is_radical'] = True
+        record['log'].extend(log)
 
         postprocess_parsed_molecule(record, remap=remap, ignore=ignore)
         mol = create_molecule(record, ignore_bad_isotopes=ignore_bad_isotopes, _cls=_m_cls)
