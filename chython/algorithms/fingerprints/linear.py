@@ -18,10 +18,10 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import defaultdict, deque
+from joblib import Parallel, delayed
 from math import log2
 from numpy import uint8, zeros
 from typing import Deque, Dict, List, Set, Tuple, TYPE_CHECKING
-from joblib import Parallel, delayed
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
@@ -136,14 +136,13 @@ class LinearFingerprint:
         return arr
 
     @staticmethod
-    def _fragment(atoms: dict[int, int], bonds:  dict[int, dict[int, 'Bond']], fragment):
+    def _fragment(atoms: dict[int, int], bonds: dict[int, dict[int, 'Bond']], fragment):
         var = [atoms[fragment[0]]]
         for x, y in zip(fragment, fragment[1:]):
             var.append(int(bonds[x][y]))
             var.append(atoms[y])
         var = tuple(var)
         rev_var = var[::-1]
-        reverse = False
         if var <= rev_var:
             var = rev_var
         return var
@@ -163,7 +162,7 @@ class LinearFingerprint:
         return dict(out)
 
     def _fragments_smiles(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> \
-                  Dict[str, List[Tuple[int, ...]]]:
+            Dict[str, List[Tuple[int, ...]]]:
 
         atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
                  for idx, atom in self.atoms()}
@@ -183,11 +182,6 @@ class LinearFingerprint:
                 smi_back = smi_direct[::-1]
                 smi_direct = "".join(smi_direct).upper()
                 smi_back = "".join(smi_back).upper()
-                # smi_back = [self._format_atom(frag[-1], 0, stereo=False)]
-                # for x, y in zip(frag[::-1], frag[:-1:-1]):
-                #     smi_back.append(self._format_bond(x, y, 0, stereo=False, aromatic=False))
-                #     smi_back.append(self._format_atom(y, 0, stereo=False))
-                # smi_back = "".join(smi_back).upper()
                 smi_frag = sorted([smi_direct, smi_back])[0]
                 smiles_map[var] = smi_frag
         out = dict(out)
@@ -195,7 +189,10 @@ class LinearFingerprint:
 
 
 class Fragmentor:
-
+    """
+    Fragmentor object can store all seen fragments by .fit() procedure and then produce descriptors
+    using dictionary of seen fragments
+    """
     def __init__(self, min_radius: int = 1, max_radius: int = 4):
         self.fragments = set()
         self.fragments_map = {}
@@ -211,10 +208,11 @@ class Fragmentor:
         desc = molecule._fragments_smiles(self.min_radius, self.max_radius)
         fp = zeros(len(self.fragments), dtype=uint8)
         for key, val in desc.items():
-            if max_count > 0:
-                fp[self.smi2num[key]] = len(val) if len(val) < max_count else max_count
-            else:
-                fp[self.smi2num[key]] = len(val)
+            if key in self.fragments:
+                if max_count > 0:
+                    fp[self.smi2num[key]] = len(val) if len(val) < max_count else max_count
+                else:
+                    fp[self.smi2num[key]] = len(val)
         return fp
 
     def fit(self, molecules: list['MoleculeContainer'], n_jobs=1):
@@ -227,14 +225,15 @@ class Fragmentor:
                 self.fragments.update(self.get_keys(mol))
         else:
             for calc in Parallel(n_jobs=n_jobs)(delayed(self.get_keys)(molecule) for molecule in
-                                            molecules):
+                                                molecules):
                 self.fragments.update(calc)
         self.fragments_map = {num: val for num, val in enumerate(self.fragments)}
         self.smi2num = {val: num for num, val in enumerate(self.fragments)}
 
     def transform(self, molecules, n_jobs=1, max_count=0):
-        results = Parallel(n_jobs=n_jobs)(delayed(self.get_desciptor_vector)(molecule, max_count) for
-                                          molecule in molecules)
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(self.get_desciptor_vector)(molecule, max_count) for
+            molecule in molecules)
         return results
 
     def clear(self):
@@ -244,8 +243,8 @@ class Fragmentor:
 
     @property
     def fragments_map_smi_ordered(self):
-        return {x:self.fragments_map[x] for x in sorted(self.fragments_map, key=lambda x:
-        self.fragments_map[x])}
+        return {x: self.fragments_map[x] for x in sorted(self.fragments_map, key=lambda x:
+                self.fragments_map[x])}
 
 
 __all__ = ['LinearFingerprint', 'Fragmentor']
