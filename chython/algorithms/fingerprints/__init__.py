@@ -19,9 +19,10 @@
 #
 from .linear import *
 from .morgan import *
+from .circus import *
 
 
-class Fingerprints(LinearFingerprint, MorganFingerprint):
+class Fingerprints(LinearFingerprint, MorganFingerprint, CircusFingerprint):
     __slots__ = ()
 
 
