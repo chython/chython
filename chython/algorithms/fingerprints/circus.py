@@ -17,7 +17,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from typing import Set, TYPE_CHECKING
+from typing import TYPE_CHECKING
 from collections import defaultdict
 
 if TYPE_CHECKING:
@@ -28,7 +28,7 @@ class CircusFingerprint:
     __slots__ = ()
 
     def circus_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4,
-                        history=False):
+                        history: bool = False):
         identifiers = {
             idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
             for idx, atom in self.atoms()}
@@ -40,6 +40,7 @@ class CircusFingerprint:
         for step in range(1, max_radius + 1):
             tmp_identifiers = {}
             if step >= min_radius:
+                hash2smi.update(self._hash2smi(identifiers, arr, step))
                 arr.update(identifiers.values())
             for atom, tpl in identifiers.items():
                 hashes = tuple(x for x in sorted((int(b), identifiers[ngb]) for ngb, b in
@@ -48,19 +49,26 @@ class CircusFingerprint:
                     history_log[step].append({atom: hashes})
                 h = hash((tpl, *hashes))
                 tmp_identifiers.update({atom: h})
-                if h not in arr:
-                    smi = format(self.augmented_substructure((atom,), deep=step), "A")
-                    hash2smi[h] = smi
-                smiles2hash[hash2smi[h]].append(h)
             identifiers = tmp_identifiers
         if max_radius > 1:  # add last ring
+            hash2smi.update(self._hash2smi(identifiers, arr, max_radius))
             arr.update(identifiers.values())
             if history:
                 history_log[-1].append(identifiers)
+        for h, smi in hash2smi.items():
+            smiles2hash[smi].append(h)
         if history:
-            return arr, smiles2hash, history_log
+            return smiles2hash, history_log
         else:
-            return arr, smiles2hash
+            return smiles2hash
+
+    def _hash2smi(self: 'MoleculeContainer', identifiers, arr, radius):
+        hash2smi = {}
+        for atom, h in identifiers.items():
+            if h not in arr:
+                smi = format(self.augmented_substructure((atom,), deep=radius-1), "A")
+                hash2smi[h] = smi
+        return hash2smi
 
 
 __all__ = ['CircusFingerprint']

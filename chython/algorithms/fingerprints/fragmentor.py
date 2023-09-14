@@ -25,14 +25,15 @@ class Fragmentor:
     Fragmentor object can store all seen fragments by .fit() procedure and then produce descriptors
     using dictionary of seen fragments.
     """
-    def __init__(self, min_radius: int = 1, max_radius: int = 4):
+    def __init__(self, min_radius: int = 1, max_radius: int = 4, circus: bool = False):
         self.fragments = set()
         self.fragments_map = {}
         self.smi2num = {}
         self.min_radius = min_radius
         self.max_radius = max_radius
+        self.circus = circus
 
-    def get_keys(self, molecule: 'MoleculeContainer'):
+    def get_keys_linear(self, molecule: 'MoleculeContainer'):
         """
         returns text strings of fragments within min_radius and max_radius.
 
@@ -41,8 +42,16 @@ class Fragmentor:
         desc = molecule._fragments_smiles(self.min_radius, self.max_radius)
         return tuple(desc)
 
+    def get_keys_circus(self, molecule: 'MoleculeContainer'):
+        desc = molecule.circus_hash_set(self.min_radius, self.max_radius)
+        return desc
+
     def get_desciptor_vector(self, molecule, max_count=0):
-        desc = molecule._fragments_smiles(self.min_radius, self.max_radius)
+        if self.circus:
+            keys_getter = self.get_keys_circus
+        else:
+            keys_getter = self.get_keys_linear
+        desc = keys_getter(molecule)
         fp = zeros(len(self.fragments), dtype=uint8)
         for key, val in desc.items():
             if key in self.fragments:
@@ -71,11 +80,15 @@ class Fragmentor:
         :param molecules List[MolecularContainer] of molecules for collecting fragments
         :param n_jobs Number of jobs in parallel
         """
+        if self.circus:
+            keys_getter = self.get_keys_circus
+        else:
+            keys_getter = self.get_keys_linear
         if n_jobs < 2:
             for mol in molecules:
-                self.fragments.update(self.get_keys(mol))
+                self.fragments.update(keys_getter(mol))
         else:
-            for calc in Parallel(n_jobs=n_jobs)(delayed(self.get_keys)(molecule) for molecule in
+            for calc in Parallel(n_jobs=n_jobs)(delayed(keys_getter)(molecule) for molecule in
                                                 molecules):
                 self.fragments.update(calc)
         self.fragments_map = {num: val for num, val in enumerate(self.fragments)}
