@@ -20,11 +20,12 @@
 #
 from collections import defaultdict, deque
 from math import log2
+from typing import TYPE_CHECKING, Deque, Dict, List, Set, Tuple, Union
+
 from numpy import uint8, zeros
-from typing import Deque, Dict, List, Set, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from chython import MoleculeContainer
+    from chython import CGRContainer, MoleculeContainer
 
 
 class LinearFingerprint:
@@ -39,6 +40,9 @@ class LinearFingerprint:
     In this case will be activated 3 bits: for count 1, for count 2 and for count 3.
     This gives intersection in bits with another structure with only 2 `CC` fragments.
     """
+
+    def _atom2identifiers(self, atom):
+        raise NotImplementedError
 
     def linear_fingerprint(self, min_radius: int = 1, max_radius: int = 4,
                            length: int = 1024, number_active_bits: int = 2,
@@ -107,8 +111,9 @@ class LinearFingerprint:
                 self._fragments(min_radius, max_radius).items()
                 for cnt in range(min(len(count), number_bit_pairs))}
 
-    def _chains(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[
-        Tuple[int, ...]]:
+    def _chains(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1,
+                max_radius: int = 4) -> Set[
+                Tuple[int, ...]]:
         queue: Deque[Tuple[int, ...]]  # typing
         atoms = self._atoms
         bonds = self._bonds
@@ -147,10 +152,11 @@ class LinearFingerprint:
             var = rev_var
         return var
 
-    def _fragments(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> \
+    def _fragments(self: Union['MoleculeContainer', 'CGRContainer'], min_radius: int = 1,
+                   max_radius: int = 4) -> \
             Dict[Tuple[int, ...],
                  List[Tuple[int, ...]]]:
-        atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+        atoms = {idx: hash(self._atom2identifiers(atom))
                  for idx, atom in self.atoms()}
 
         bonds = self._bonds
@@ -161,10 +167,11 @@ class LinearFingerprint:
             out[var].append(frag)
         return dict(out)
 
-    def _fragments_smiles(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> \
+    def linear_fragments_smiles(self: Union['MoleculeContainer', 'CGRContainer'],
+                                min_radius: int = 1, max_radius: int = 4) -> \
             Dict[str, List[Tuple[int, ...]]]:
 
-        atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+        atoms = {idx: hash(self._atom2identifiers(atom))
                  for idx, atom in self.atoms()}
 
         bonds = self._bonds

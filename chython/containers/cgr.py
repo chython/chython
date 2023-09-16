@@ -24,9 +24,10 @@ from ..algorithms.morgan import Morgan
 from ..algorithms.rings import Rings
 from ..algorithms.smiles import CGRSmiles
 from ..periodictable import DynamicElement
+from ..algorithms.fingerprints import FingerprintsCGR
 
 
-class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism):
+class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism,  FingerprintsCGR):
     __slots__ = ('_atoms', '_bonds', '_charges', '_radicals', '_p_charges', '_p_radicals', '__dict__', '__weakref__')
     _atoms: Dict[int, DynamicElement]
     _bonds: Dict[int, Dict[int, DynamicBond]]
@@ -42,6 +43,12 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism):
         self._radicals = {}
         self._p_charges = {}
         self._p_radicals = {}
+
+    def atoms(self) -> Iterator[Tuple[int, DynamicElement]]:
+        """
+        iterate over all atoms
+        """
+        return iter(self._atoms.items())
 
     def bonds(self) -> Iterator[Tuple[int, int, DynamicBond]]:
         """

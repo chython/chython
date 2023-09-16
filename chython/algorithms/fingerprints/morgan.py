@@ -18,16 +18,19 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from math import log2
-from numpy import zeros, uint8
-from typing import Set, TYPE_CHECKING
+from typing import TYPE_CHECKING, Set, Union
 
+from numpy import uint8, zeros
 
 if TYPE_CHECKING:
-    from chython import MoleculeContainer
+    from chython import CGRContainer, MoleculeContainer
 
 
 class MorganFingerprint:
     __slots__ = ()
+
+    def _atom2identifiers(self, atom):
+        raise NotImplementedError
 
     def morgan_fingerprint(self, min_radius: int = 1, max_radius: int = 4,
                            length: int = 1024, number_active_bits: int = 2):
@@ -71,15 +74,16 @@ class MorganFingerprint:
                     active_bits.add(tpl & mask)
         return active_bits
 
-    def morgan_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[int]:
+    def morgan_hash_set(
+        self: Union["MoleculeContainer", "CGRContainer"], min_radius: int = 1, max_radius: int = 4
+    ) -> Set[int]:
         """
         Transform structures into integer hashes of atoms with EC.
 
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         """
-        identifiers = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
-                       for idx, atom in self.atoms()}
+        identifiers = {idx: hash(self._atom2identifiers(atom)) for idx, atom in self.atoms()}
 
         bonds = self._bonds
         arr = set()
@@ -96,4 +100,4 @@ class MorganFingerprint:
         return arr
 
 
-__all__ = ['MorganFingerprint']
+__all__ = ["MorganFingerprint"]

@@ -18,6 +18,10 @@
 #
 from joblib import Parallel, delayed
 from numpy import zeros, uint8
+from typing import TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from chython import MoleculeContainer, CGRContainer
 
 
 class Fragmentor:
@@ -33,16 +37,16 @@ class Fragmentor:
         self.max_radius = max_radius
         self.circus = circus
 
-    def get_keys_linear(self, molecule: 'MoleculeContainer'):
+    def get_keys_linear(self, molecule: Union['MoleculeContainer', 'CGRContainer']):
         """
         returns text strings of fragments within min_radius and max_radius.
 
         :param molecule MolecularContainer of molecule
         """
-        desc = molecule._fragments_smiles(self.min_radius, self.max_radius)
+        desc = molecule.linear_fragments_smiles(self.min_radius, self.max_radius)
         return tuple(desc)
 
-    def get_keys_circus(self, molecule: 'MoleculeContainer'):
+    def get_keys_circus(self, molecule: Union['MoleculeContainer', 'CGRContainer']):
         desc = molecule.circus_hash_set(self.min_radius, self.max_radius)
         return desc
 
@@ -61,7 +65,7 @@ class Fragmentor:
                     fp[self.smi2num[key]] = len(val)
         return fp
 
-    def fit(self, molecules: list['MoleculeContainer'], n_jobs=1):
+    def fit(self, molecules: list[Union['MoleculeContainer', 'CGRContainer']], n_jobs: int = 1):
         """
         Method collects all unique fragments form the set of molecules, but before clears up
         remembered fragments.
@@ -72,7 +76,8 @@ class Fragmentor:
         self.clear()
         self.partial_fit(molecules, n_jobs=n_jobs)
 
-    def partial_fit(self, molecules: list['MoleculeContainer'], n_jobs=1):
+    def partial_fit(self, molecules: list[Union['MoleculeContainer', 'CGRContainer']],
+                    n_jobs: int = 1):
         """
         Method collects all unique fragments form the set of molecules and append them to the known
         fragments. Designed for feeding data by portions.
@@ -94,7 +99,8 @@ class Fragmentor:
         self.fragments_map = {num: val for num, val in enumerate(self.fragments)}
         self.smi2num = {val: num for num, val in enumerate(self.fragments)}
 
-    def transform(self, molecules, n_jobs=1, max_count=0):
+    def transform(self, molecules: list[Union['MoleculeContainer', 'CGRContainer']],
+                  n_jobs: int = 1, max_count: int = 0):
         """
          Method produce list of descriptor vectors according to dictionary of seen fragments
 
