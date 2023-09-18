@@ -44,10 +44,10 @@ class Fragmentor:
         :param molecule MolecularContainer of molecule
         """
         desc = molecule.linear_fragments_smiles(self.min_radius, self.max_radius)
-        return tuple(desc)
+        return desc
 
     def get_keys_circus(self, molecule: Union['MoleculeContainer', 'CGRContainer']):
-        desc = molecule.circus_hash_set(self.min_radius, self.max_radius)
+        desc = molecule.circus_hash_dict(self.min_radius, self.max_radius)
         return desc
 
     def get_desciptor_vector(self, molecule, max_count=0):
