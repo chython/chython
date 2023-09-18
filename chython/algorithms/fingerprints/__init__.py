@@ -17,19 +17,18 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .circus import *
 from .linear import *
 from .morgan import *
 
 
-class FingerprintsMol(LinearFingerprint, MorganFingerprint, CircusFingerprint):
+class FingerprintsMol(LinearFingerprint, MorganFingerprint):
     __slots__ = ()
 
     def _atom2identifiers(self, atom):
         return atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical
 
 
-class FingerprintsCGR(LinearFingerprint, MorganFingerprint, CircusFingerprint):
+class FingerprintsCGR(LinearFingerprint, MorganFingerprint):
     __slots__ = ()
 
     def _atom2identifiers(self, atom):
