@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
@@ -21,19 +21,21 @@ from .linear import *
 from .morgan import *
 
 
-class FingerprintsMol(LinearFingerprint, MorganFingerprint):
+class Fingerprints(LinearFingerprint, MorganFingerprint):
     __slots__ = ()
 
-    def _atom2identifiers(self, atom):
-        return atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical
+    def _atom_identifiers(self):
+        return {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
+                for idx, atom in self._atoms.items()}
 
 
 class FingerprintsCGR(LinearFingerprint, MorganFingerprint):
     __slots__ = ()
 
-    def _atom2identifiers(self, atom):
-        return atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical, \
-               atom.p_is_radical, atom.p_charge
+    def _atom_identifiers(self):
+        return {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.p_charge,
+                           atom.is_radical, atom.p_is_radical))
+                for idx, atom in self._atoms.items()}
 
 
-__all__ = ['FingerprintsMol', 'FingerprintsCGR']
+__all__ = ['Fingerprints', 'FingerprintsCGR']
