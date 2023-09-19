@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
@@ -19,19 +19,16 @@
 #
 from collections import defaultdict
 from math import log2
-from typing import Any, TYPE_CHECKING, Set, Union
-
 from numpy import uint8, zeros
+from typing import Any, TYPE_CHECKING, Set, Union, Dict
+
 
 if TYPE_CHECKING:
-    from chython import CGRContainer, MoleculeContainer
+    from chython import MoleculeContainer
 
 
 class MorganFingerprint:
     __slots__ = ()
-
-    def _atom2identifiers(self, atom):
-        raise NotImplementedError
 
     def morgan_fingerprint(self, min_radius: int = 1, max_radius: int = 4,
                            length: int = 1024, number_active_bits: int = 2):
@@ -75,67 +72,32 @@ class MorganFingerprint:
                     active_bits.add(tpl & mask)
         return active_bits
 
-    def morgan_hash_set(self: Union["MoleculeContainer", "CGRContainer"],
-                        min_radius: int = 1,  max_radius: int = 4) -> Set[int]:
+    def morgan_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[int]:
         """
         Transform structures into integer hashes of atoms with EC.
 
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         """
-        return self.morgan_hash_dict(min_radius=min_radius, max_radius=max_radius,
-                                     identifiers_set=True)
-
-    def morgan_hash_dict(self: Union["MoleculeContainer", "CGRContainer"],
-                         min_radius: int = 1,
-                         max_radius: int = 4,
-                         identifiers_set: bool = False) -> \
-                         Union[Set[int], defaultdict[Any, list[int]]]:
-        """
-        Transform structures into integer hashes of atoms with EC.
-
-        :param min_radius: minimal radius of EC
-        :param max_radius: maximum radius of EC
-        :param identifiers_set: return dict of substructures and hashes or return only hashes
-        """
-        identifiers = {idx: hash(self._atom2identifiers(atom)) for idx, atom in self.atoms()}
+        identifiers = self._atom_identifiers
 
         bonds = self._bonds
-        hash2smi = {}
         arr = set()
         for step in range(1, max_radius + 1):
-            tmp_identifiers = {}
             if step >= min_radius:
-                if not identifiers_set:
-                    hash2smi.update(self._hash2smi(identifiers, arr, step))
                 arr.update(identifiers.values())
-            for atom, tpl in identifiers.items():
-                hashes = tuple(
-                    x
-                    for x in sorted((int(b), identifiers[ngb]) for ngb, b in bonds[atom].items())
-                    for x in x
-                )
-                tmp_identifiers.update({atom: hash((tpl, *hashes))})
-            identifiers = tmp_identifiers
+            identifiers = {idx: hash((tpl, *(x for x in
+                                             sorted((int(b), identifiers[ngb]) for ngb, b in bonds[idx].items())
+                                             for x in x)))
+                           for idx, tpl in identifiers.items()}
+
         if max_radius > 1:  # add last ring
-            if not identifiers_set:
-                hash2smi.update(self._hash2smi(identifiers, arr, max_radius))
             arr.update(identifiers.values())
-        if identifiers_set:
-            return arr
-        else:
-            smiles2hash = defaultdict(list)
-            for h, smi in hash2smi.items():
-                smiles2hash[smi].append(h)
-            return smiles2hash
+        return arr
 
-    def _hash2smi(self: Union["MoleculeContainer", "CGRContainer"], identifiers, arr, radius):
-        hash2smi = {}
-        for atom, h in identifiers.items():
-            if h not in arr:
-                smi = format(self.augmented_substructure((atom,), deep=radius - 1), "A")
-                hash2smi[h] = smi
-        return hash2smi
+    @property
+    def _atom_identifiers(self) -> Dict[int, int]:
+        raise NotImplementedError
 
 
-__all__ = ["MorganFingerprint"]
+__all__ = ['MorganFingerprint']
