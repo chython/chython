@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
@@ -101,6 +101,31 @@ class LinearFingerprint:
                 self._fragments(min_radius, max_radius).items()
                 for cnt in range(min(len(count), number_bit_pairs))}
 
+    def linear_fragments_smiles(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4,
+                                number_bit_pairs: int = 4) -> Dict[int, str]:
+        """
+        Transform structure into dict of integer hashes of fragments with count information and
+            corresponding fragment SMILES.
+
+        :param min_radius: minimal length of fragments
+        :param max_radius: maximum length of fragments
+        :param number_bit_pairs: describe how much repeating fragments we can count in hashable
+               fingerprint (if number of fragment in molecule greater or equal this number, we will be
+               activate only this number of fragments
+        """
+        out = {}
+        for frg, chains in self._fragments(min_radius, max_radius).items():
+            chain = chains[0]
+            smiles = [self._format_atom(chain[0], None, stereo=False)]
+            for x, y in zip(chain, chain[1:]):
+                smiles.append(self._format_bond(x, y, None, stereo=False, aromatic=False))
+                smiles.append(self._format_atom(y, None, stereo=False))
+            smiles = ''.join(smiles)
+
+            for cnt in range(min(len(chains), number_bit_pairs)):
+                out[hash((*frg, cnt))] = smiles
+        return out
+
     def _chains(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[Tuple[int, ...]]:
         queue: Deque[Tuple[int, ...]]  # typing
         atoms = self._atoms
@@ -130,9 +155,7 @@ class LinearFingerprint:
 
     def _fragments(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Dict[Tuple[int, ...],
                                                                                                 List[Tuple[int, ...]]]:
-        atoms = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
-                 for idx, atom in self.atoms()}
-
+        atoms = self._atom_identifiers
         bonds = self._bonds
         out = defaultdict(list)
 
@@ -146,8 +169,12 @@ class LinearFingerprint:
             if var > rev_var:
                 out[var].append(frag)
             else:
-                out[rev_var].append(frag)
+                out[rev_var].append(frag[::-1])
         return dict(out)
+
+    @property
+    def _atom_identifiers(self) -> Dict[int, int]:
+        raise NotImplementedError
 
 
 __all__ = ['LinearFingerprint']

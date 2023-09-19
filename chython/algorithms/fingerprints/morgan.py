@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
@@ -17,9 +17,10 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from collections import defaultdict
 from math import log2
-from numpy import zeros, uint8
-from typing import Set, TYPE_CHECKING
+from numpy import uint8, zeros
+from typing import Any, TYPE_CHECKING, Set, Union, Dict
 
 
 if TYPE_CHECKING:
@@ -78,8 +79,7 @@ class MorganFingerprint:
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         """
-        identifiers = {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
-                       for idx, atom in self.atoms()}
+        identifiers = self._atom_identifiers
 
         bonds = self._bonds
         arr = set()
@@ -94,6 +94,10 @@ class MorganFingerprint:
         if max_radius > 1:  # add last ring
             arr.update(identifiers.values())
         return arr
+
+    @property
+    def _atom_identifiers(self) -> Dict[int, int]:
+        raise NotImplementedError
 
 
 __all__ = ['MorganFingerprint']

@@ -19,6 +19,7 @@
 from functools import cached_property
 from typing import Dict, Iterator, Tuple, Optional, Collection
 from .bonds import DynamicBond
+from ..algorithms.fingerprints import FingerprintsCGR
 from ..algorithms.isomorphism import Isomorphism
 from ..algorithms.morgan import Morgan
 from ..algorithms.rings import Rings
@@ -26,7 +27,7 @@ from ..algorithms.smiles import CGRSmiles
 from ..periodictable import DynamicElement
 
 
-class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism):
+class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism,  FingerprintsCGR):
     __slots__ = ('_atoms', '_bonds', '_charges', '_radicals', '_p_charges', '_p_radicals', '__dict__', '__weakref__')
     _atoms: Dict[int, DynamicElement]
     _bonds: Dict[int, Dict[int, DynamicBond]]
