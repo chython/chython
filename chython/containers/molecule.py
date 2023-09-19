@@ -31,7 +31,7 @@ from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
 from ..algorithms.depict import DepictMolecule
 from ..algorithms.isomorphism import MoleculeIsomorphism
-from ..algorithms.fingerprints import FingerprintsMol
+from ..algorithms.fingerprints import Fingerprints
 from ..algorithms.mcs import MCS
 from ..algorithms.smiles import MoleculeSmiles
 from ..algorithms.standardize import StandardizeMolecule
@@ -43,8 +43,7 @@ from ..periodictable import DynamicElement, Element, QueryElement, H
 
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphism, Aromatize, StandardizeMolecule,
-                        MoleculeSmiles, DepictMolecule, Calculate2DMolecule, FingerprintsMol,
-                        Tautomers, MCS,
+                        MoleculeSmiles, DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS,
                         X3domMolecule):
     __slots__ = ('_plane', '_conformers', '_hydrogens', '_parsed_mapping', '_backup', '__meta', '__name')
 
