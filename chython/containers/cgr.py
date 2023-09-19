@@ -19,12 +19,12 @@
 from functools import cached_property
 from typing import Dict, Iterator, Tuple, Optional, Collection
 from .bonds import DynamicBond
+from ..algorithms.fingerprints import FingerprintsCGR
 from ..algorithms.isomorphism import Isomorphism
 from ..algorithms.morgan import Morgan
 from ..algorithms.rings import Rings
 from ..algorithms.smiles import CGRSmiles
 from ..periodictable import DynamicElement
-from ..algorithms.fingerprints import FingerprintsCGR
 
 
 class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism,  FingerprintsCGR):
@@ -43,12 +43,6 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism,  FingerprintsCGR):
         self._radicals = {}
         self._p_charges = {}
         self._p_radicals = {}
-
-    def atoms(self) -> Iterator[Tuple[int, DynamicElement]]:
-        """
-        iterate over all atoms
-        """
-        return iter(self._atoms.items())
 
     def bonds(self) -> Iterator[Tuple[int, int, DynamicBond]]:
         """
