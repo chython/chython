@@ -23,6 +23,7 @@ from math import log2
 from numpy import uint8, zeros
 from typing import Deque, Dict, List, Set, Tuple, TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from chython import MoleculeContainer
 
@@ -130,6 +131,7 @@ class LinearFingerprint:
                 smiles.append(self._format_bond(x, y, None, stereo=False, aromatic=False))
                 smiles.append(self._format_atom(y, None, stereo=False))
             smiles = ''.join(smiles)
+
             for cnt in range(min(len(chains), number_bit_pairs)):
                 out[hash((*frg, cnt))] = smiles
         return out
