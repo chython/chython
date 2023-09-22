@@ -124,8 +124,9 @@ class LinearFingerprint:
         """
         out = {}
         for frg, chains in self._fragments(min_radius, max_radius).items():
-            smiles = [self._format_atom(chains[0], None, stereo=False)]
-            for x, y in zip(chains, chains[1:]):
+            chain = chains[0]
+            smiles = [self._format_atom(chain[0], None, stereo=False)]
+            for x, y in zip(chain, chain[1:]):
                 smiles.append(self._format_bond(x, y, None, stereo=False, aromatic=False))
                 smiles.append(self._format_atom(y, None, stereo=False))
             smiles = ''.join(smiles)
