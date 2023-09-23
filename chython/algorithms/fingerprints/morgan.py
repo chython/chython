@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2023 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
@@ -17,10 +18,11 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from collections import defaultdict
 from math import log2
-from numpy import uint8, zeros
-from typing import TYPE_CHECKING, Set, List, Dict
+from typing import TYPE_CHECKING, Any, Dict, List, Set
 
+from numpy import uint8, zeros
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
@@ -71,6 +73,31 @@ class MorganFingerprint:
                     active_bits.add(tpl & mask)
         return active_bits
 
+    def morgan_smiles_bit(self, min_radius: int = 1, max_radius: int = 4, length: int = 1024,
+                          number_active_bits: int = 2) -> defaultdict[str, set]:
+        """
+        Transform structures into set of indexes of True-valued features.
+
+        :param min_radius: minimal radius of EC
+        :param max_radius: maximum radius of EC
+        :param length: bit string's length. Should be power of 2
+        :param number_active_bits: number of active bits for each hashed tuple
+        """
+        mask = length - 1
+        log = int(log2(length))
+
+        active_bits = defaultdict(set)
+        for smi, tpls in self.morgan_smiles_hash(min_radius, max_radius).items():
+            for tpl in tpls:
+                active_bits[smi].add(tpl & mask)
+                if number_active_bits == 2:
+                    active_bits[smi].add(tpl >> log & mask)
+                elif number_active_bits > 2:
+                    for _ in range(1, number_active_bits):
+                        tpl >>= log
+                        active_bits[smi].add(tpl & mask)
+        return active_bits
+
     def morgan_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[int]:
         """
         Transform structures into integer hashes of atoms with EC.
@@ -98,6 +125,20 @@ class MorganFingerprint:
                            for idx, tpl in identifiers.items()}
             out.append(identifiers)
         return out[-(max_radius - min_radius + 1):]  # slice [min, max] radii range
+
+    def morgan_smiles_hash(self: "MoleculeContainer", min_radius: int = 1,
+                           max_radius: int = 4) -> defaultdict[Any, list[int]]:
+        """
+        Transform structures into integer hashes of atoms with EC.
+
+        :param min_radius: minimal radius of EC
+        :param max_radius: maximum radius of EC
+        """
+        smiles_dict = defaultdict(list)
+        for radius, hash_dict in enumerate(self._morgan_hash_dict(min_radius, max_radius)):
+            for atom, morgan_hash in hash_dict.items():
+                smiles_dict[format(self.augmented_substructure((atom,), deep=radius), "A")].append(morgan_hash)
+        return smiles_dict
 
     @property
     def _atom_identifiers(self) -> Dict[int, int]:
