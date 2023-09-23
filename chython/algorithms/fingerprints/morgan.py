@@ -20,9 +20,10 @@
 #
 from collections import defaultdict
 from math import log2
-from typing import TYPE_CHECKING, Any, Dict, Set, Union
+from typing import Any, Dict, Set, TYPE_CHECKING, Union
 
 from numpy import uint8, zeros
+
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
@@ -157,4 +158,4 @@ class MorganFingerprint:
         raise NotImplementedError
 
 
-__all__ = ["MorganFingerprint"]
+__all__ = ['MorganFingerprint']
