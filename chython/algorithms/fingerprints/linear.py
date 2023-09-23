@@ -148,8 +148,7 @@ class LinearFingerprint:
         To take into account all repeating fragments put 0 as a value
         """
         out = defaultdict(list)
-        for k, v in self.linear_hash_smiles(min_radius=min_radius, max_radius=max_radius,
-                                            number_bit_pairs=number_bit_pairs).items():
+        for k, v in self.linear_hash_smiles(min_radius, max_radius, number_bit_pairs).items():
             out[v].append(k)
         return dict(out)
 
@@ -164,8 +163,7 @@ class LinearFingerprint:
         molecule greater or equal this number, it will be number of fragments). To take into account all repeating
         fragments put 0 as a value
         """
-        out = self.linear_smiles_hash(min_radius=min_radius, max_radius=max_radius,
-                                      number_bit_pairs=number_bit_pairs)
+        out = self.linear_smiles_hash(min_radius, max_radius, number_bit_pairs)
         return {smiles: len(hashes) for smiles, hashes in out.items()}
 
     def _chains(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[Tuple[int, ...]]:

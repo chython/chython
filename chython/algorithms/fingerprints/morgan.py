@@ -17,10 +17,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
 from math import log2
 from numpy import uint8, zeros
-from typing import Any, TYPE_CHECKING, Set, Union, Dict
+from typing import TYPE_CHECKING, Set, List, Dict
 
 
 if TYPE_CHECKING:
@@ -79,21 +78,26 @@ class MorganFingerprint:
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         """
+        return {x for x in self._morgan_hash_dict(min_radius, max_radius) for x in x.values()}
+
+    def _morgan_hash_dict(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> List[Dict[int, int]]:
+        """
+        Transform structures into integer hashes of atoms with EC.
+        Returns list of atom-hash pairs for different radii.
+
+        :param min_radius: minimal radius of EC
+        :param max_radius: maximum radius of EC
+        """
         identifiers = self._atom_identifiers
 
         bonds = self._bonds
-        arr = set()
-        for step in range(1, max_radius + 1):
-            if step >= min_radius:
-                arr.update(identifiers.values())
-            identifiers = {idx: hash((tpl, *(x for x in
-                                             sorted((int(b), identifiers[ngb]) for ngb, b in bonds[idx].items())
-                                             for x in x)))
+        out = [identifiers]
+        for _ in range(1, max_radius):
+            identifiers = {idx: hash((tpl, *(x for x in sorted((int(b), identifiers[ngb])
+                                                               for ngb, b in bonds[idx].items()) for x in x)))
                            for idx, tpl in identifiers.items()}
-
-        if max_radius > 1:  # add last ring
-            arr.update(identifiers.values())
-        return arr
+            out.append(identifiers)
+        return out[-(max_radius - min_radius + 1):]  # slice [min, max] radii range
 
     @property
     def _atom_identifiers(self) -> Dict[int, int]:
