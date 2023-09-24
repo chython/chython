@@ -20,9 +20,8 @@
 #
 from collections import defaultdict
 from math import log2
-from typing import Dict, List, Set, TYPE_CHECKING
-
 from numpy import uint8, zeros
+from typing import Dict, List, Set, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -135,12 +134,13 @@ class MorganFingerprint:
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         """
-        min_radius = min_radius if min_radius > 1 else 1
+        assert min_radius >= 1, 'min_radius should be positive'
+
         smiles_dict = defaultdict(list)
         for radius, hash_dict in enumerate(self._morgan_hash_dict(min_radius, max_radius), min_radius-1):
             for atom, morgan_hash in hash_dict.items():
                 smiles_dict[format(self.augmented_substructure((atom,), deep=radius), 'A')].append(morgan_hash)
-        return smiles_dict
+        return dict(smiles_dict)
 
     def morgan_smiles_count(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> \
             Dict[str, list[int]]:
