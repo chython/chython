@@ -18,7 +18,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
+from collections import Counter, defaultdict
 from math import log2
 from numpy import uint8, zeros
 from typing import Dict, List, Set, TYPE_CHECKING
@@ -150,7 +150,9 @@ class MorganFingerprint:
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         """
-        return {smi: len(hashes) for smi, hashes in self.morgan_smiles_hash(min_radius, max_radius).items()}
+        return {smi: max([x for x in Counter(hashes).values()]) for smi, hashes in
+                self.morgan_smiles_hash(min_radius, max_radius).items()}
+
 
     @property
     def _atom_identifiers(self) -> Dict[int, int]:
