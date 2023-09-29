@@ -18,7 +18,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from collections import Counter, defaultdict
+from collections import defaultdict
 from math import log2
 from numpy import uint8, zeros
 from typing import Dict, List, Set, TYPE_CHECKING
@@ -73,31 +73,6 @@ class MorganFingerprint:
                     active_bits.add(tpl & mask)
         return active_bits
 
-    def morgan_smiles_bit(self, min_radius: int = 1, max_radius: int = 4, length: int = 1024,
-                          number_active_bits: int = 2) -> Dict[str, set]:
-        """
-        Transform structures into dictionary of smiles and corresponding set of indexes of True-valued features.
-
-        :param min_radius: minimal radius of EC
-        :param max_radius: maximum radius of EC
-        :param length: bit string's length. Should be power of 2
-        :param number_active_bits: number of active bits for each hashed tuple
-        """
-        mask = length - 1
-        log = int(log2(length))
-
-        active_bits = defaultdict(set)
-        for smi, tpls in self.morgan_smiles_hash(min_radius, max_radius).items():
-            for tpl in tpls:
-                active_bits[smi].add(tpl & mask)
-                if number_active_bits == 2:
-                    active_bits[smi].add(tpl >> log & mask)
-                elif number_active_bits > 2:
-                    for _ in range(1, number_active_bits):
-                        tpl >>= log
-                        active_bits[smi].add(tpl & mask)
-        return active_bits
-
     def morgan_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[int]:
         """
         Transform structures into integer hashes of atoms with EC.
@@ -107,6 +82,32 @@ class MorganFingerprint:
         """
         return {x for x in self._morgan_hash_dict(min_radius, max_radius) for x in x.values()}
 
+    def morgan_hash_smiles(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Dict[int, List[str]]:
+        """
+        Transform structures into dictionary of hashes of atoms with EC and corresponding SMILES.
+
+        :param min_radius: minimal radius of EC
+        :param max_radius: maximum radius of EC
+        """
+        smiles_dict = defaultdict(set)
+        for radius, hash_dict in enumerate(self._morgan_hash_dict(min_radius, max_radius), min_radius - 1):
+            for atom, morgan_hash in hash_dict.items():
+                smiles_dict[morgan_hash].add(format(self.augmented_substructure((atom,), deep=radius), 'A'))
+        return {k: list(v) for k, v in smiles_dict.items()}
+
+    def morgan_smiles_hash(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Dict[str, List[int]]:
+        """
+        Transform structures into dictionary of smiles and corresponding hashes of atoms with EC.
+
+        :param min_radius: minimal radius of EC
+        :param max_radius: maximum radius of EC
+        """
+        out = defaultdict(list)
+        for k, sl in self.morgan_hash_smiles(min_radius, max_radius).items():
+            for s in sl:
+                out[s].append(k)
+        return dict(out)
+
     def _morgan_hash_dict(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> List[Dict[int, int]]:
         """
         Transform structures into integer hashes of atoms with EC.
@@ -115,6 +116,8 @@ class MorganFingerprint:
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         """
+        assert min_radius >= 1, 'min_radius should be positive'
+        assert max_radius >= min_radius, 'max_radius should be greater or equal to min_radius'
         identifiers = self._atom_identifiers
 
         bonds = self._bonds
@@ -125,34 +128,6 @@ class MorganFingerprint:
                            for idx, tpl in identifiers.items()}
             out.append(identifiers)
         return out[-(max_radius - min_radius + 1):]  # slice [min, max] radii range
-
-    def morgan_smiles_hash(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> \
-            Dict[str, list[int]]:
-        """
-        Transform structures into dictionary of smiles and corresponding hashes of atoms with EC.
-
-        :param min_radius: minimal radius of EC
-        :param max_radius: maximum radius of EC
-        """
-        assert min_radius >= 1, 'min_radius should be positive'
-
-        smiles_dict = defaultdict(list)
-        for radius, hash_dict in enumerate(self._morgan_hash_dict(min_radius, max_radius), min_radius-1):
-            for atom, morgan_hash in hash_dict.items():
-                smiles_dict[format(self.augmented_substructure((atom,), deep=radius), 'A')].append(morgan_hash)
-        return dict(smiles_dict)
-
-    def morgan_smiles_count(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> \
-            Dict[str, list[int]]:
-        """
-        Transform structures into dictionary of smiles and count of corresponding fragments.
-
-        :param min_radius: minimal radius of EC
-        :param max_radius: maximum radius of EC
-        """
-        return {smi: max([x for x in Counter(hashes).values()]) for smi, hashes in
-                self.morgan_smiles_hash(min_radius, max_radius).items()}
-
 
     @property
     def _atom_identifiers(self) -> Dict[int, int]:
