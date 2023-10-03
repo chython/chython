@@ -277,7 +277,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             # fix stereo if formed not to hydrogen bond
             self.fix_stereo()
 
-    def delete_atom(self, n: int):
+    def delete_atom(self, n: int, *, _skip_hydrogen_calculation=False):
         """
         Remove atom.
 
@@ -286,7 +286,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
         ngb = self._bonds.pop(n)
-        fix = self._atoms.pop(n).atomic_number != 1 and ngb
+        fix = self._atoms.pop(n).atomic_number != 1 and ngb and not _skip_hydrogen_calculation
 
         del self._charges[n]
         del self._radicals[n]
@@ -295,7 +295,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
 
         for m in ngb:
             del self._bonds[m][n]
-            self._calc_implicit(m)
+            if not _skip_hydrogen_calculation:
+                self._calc_implicit(m)
 
         self._conformers.clear()  # clean conformers. need full recalculation for new system
         try:
@@ -307,7 +308,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             self.fix_stereo()
         self.flush_cache()
 
-    def delete_bond(self, n: int, m: int):
+    def delete_bond(self, n: int, m: int, *, _skip_hydrogen_calculation=False):
         """
         Disconnect atoms.
 
@@ -319,10 +320,11 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         del self._bonds[m][n]
         self._conformers.clear()  # clean conformers. need full recalculation for new system
 
-        self._calc_implicit(n)
-        self._calc_implicit(m)
+        if not _skip_hydrogen_calculation:
+            self._calc_implicit(n)
+            self._calc_implicit(m)
 
-        if self._atoms[n].atomic_number != 1 and self._atoms[m].atomic_number != 1:
+        if self._atoms[n].atomic_number != 1 and self._atoms[m].atomic_number != 1 and not _skip_hydrogen_calculation:
             self.fix_stereo()
         self.flush_cache()
 
