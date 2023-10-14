@@ -17,13 +17,13 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from abc import ABC
 from collections import Counter, defaultdict
 from math import log2
-from numpy import uint8, zeros
-from typing import Dict, List, Set, TYPE_CHECKING
-from .morgan import MorganFingerprint
+from typing import TYPE_CHECKING, Dict
 
+from numpy import uint8, zeros
+
+from .morgan import MorganFingerprint
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
@@ -33,8 +33,7 @@ class CircusFingerprint(MorganFingerprint):
 
     __slots__ = ()
 
-    def circus_hash_bit(self, min_radius: int = 1, max_radius: int = 4, length: int = 1024,
-                          number_active_bits: int = 2, number_bit_pairs: int = 4) -> Dict[str, set]:
+    def circus_hash_bit(self, min_radius: int = 1, max_radius: int = 4) -> Dict[str, set]:
         """
         Transform structures into integer hashes of atoms with EC.
 
@@ -111,7 +110,7 @@ class CircusFingerprint(MorganFingerprint):
                 self.circus_smiles_hash(min_radius, max_radius).items()}
 
     def circus_fingerprint(self, min_radius: int = 1, max_radius: int = 4,
-                           length: int = 1024, number_active_bits: int = 2):
+                           length: int = 1024, number_active_bits: int = 2, number_bit_pairs: int = 4):
         """
         Transform structures into array of binary features.
         Morgan fingerprints. Similar to RDkit implementation.
@@ -121,11 +120,11 @@ class CircusFingerprint(MorganFingerprint):
         :param length: bit string's length. Should be power of 2
         :param number_active_bits: number of active bits for each hashed tuple
 
-        :return: arra
-        y(n_features)
+        :return: array(n_features)
         """
         bits = {x for x in self.circus_smiles_bit(min_radius=min_radius, max_radius=max_radius,
-                                                  number_active_bits=number_active_bits).values() for x in x}
+                                                  number_active_bits=number_active_bits,
+                                                  number_bit_pairs=number_bit_pairs).values() for x in x}
         fingerprints = zeros(length, dtype=uint8)
         fingerprints[list(bits)] = 1
         return fingerprints
