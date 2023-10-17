@@ -69,28 +69,26 @@ _esterification = {
 
 _amidation = {
     'name': 'Amidation Reaction',
-    'description': 'Amidation Reaction',
+    'description': 'Amides formation from acids and amines',
     'templates': [
         {
             'A': [
                 # [H,R]COOH
-                '[O;x0;z2;M]=[C;x2:2][O;D1:3]'
+                '[O;x0;z2;M]=[C;x2:1][O;D1:2]'
             ],
             'B': [
                 # Ar-NH2
-                '[N;D1:4][C;a;M]',
+                '[N;D1;x0;z1:3][C;a;M]',
                 # Alk-NH2
-                '[N;D1:4][C;z1;x1;M]',
+                '[N;D1;x0;z1:3][C;z1;x1;M]',
                 # Ar-NH-Ar
-                '[N;D2:4]([C;a;M])[C;a;M]',
+                '[N;D2;x0;z1:3]([C;a;M])[C;a;M]',
                 # Alk-NH-Ar
-                '[N;D2:4]([C;a;M])[C;z1;x1;M]',
+                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
                 # Alk2NH
-                '[N;D2:4]([C;z1;x1;M])[C;z1;x1;M]',
-                # # pyrrole reaction likely have different conditions need to be checked
-                # '[N;a;h1:4]'
+                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
             ],
-            'product': '[A:2]-[A:4]',
+            'product': '[A:1]-[A:3]',
             'alerts': []
         },
     ],
@@ -99,24 +97,22 @@ _amidation = {
 
 _amine_carbonyl_reductive_amination = {
     'name': 'Amine carbonyl reductive amination reaction',
-    'description': 'Amine carbonyl reductive amination reaction',
+    'description': 'Amines formation from carbonyls and amines',
     'templates': [
         {
             'A': [
                 # O=CR2
-                '[O:2]=[C;x1;z2:1]'
+                '[O;x0;z2:2]=[C;x1:1]'
             ],
             'B': [
                 # Ar-NH2
-                '[N;D1:3][C;a;M]',
+                '[N;D1;x0;z1:3][C;a;M]',
                 # Alk-NH2
-                '[N;D1:3][C;z1;x1;M]',
-                # # Ar-NH-Ar
-                # '[N;D2:3]([C;a;M])[C;a;M]',
+                '[N;D1;x0;z1:3][C;z1;x1;M]',
                 # Alk-NH-Ar
-                '[N;D2:3]([C;a;M])[C;z1;x1;M]',
+                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
                 # Alk2NH
-                '[N;D2:3]([C;z1;x1;M])[C;z1;x1;M]'
+                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
             ],
             'product': '[A:1]-[A:3]',
             'alerts': []
@@ -190,16 +186,14 @@ _buchwald_hartwig = {
                 '[Cl,Br,I;D1:1]-[C;a:2]'
             ],
             'B': [
-                # NH2-Ar
-                '[N;D1:3][C;a;M]',
-                # NH2-Alk
-                '[N;D1:3][C;z1;x1;M]',
-                # # Ar-NH-Ar
-                # '[N;D2:3]([C;a;M])[C;a;M]',
+                # Ar-NH2
+                '[N;D1;x0;z1:3][C;a;M]',
+                # Alk-NH2
+                '[N;D1;x0;z1:3][C;z1;x1;M]',
                 # Alk-NH-Ar
-                '[N;D2:3]([C;a;M])[C;z1;x1;M]',
+                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
                 # Alk2NH
-                '[N;D2:3]([C;z1;x1;M])[C;z1;x1;M]'
+                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
             ],
             'product': '[A:2]-[A:3]',
             'alerts': []
@@ -214,24 +208,22 @@ _sulfonamidation = {
     'templates': [
         {
             'A': [
-                # RS(=O)(O)X
-                '[O,F,Cl,Br,I;D1;]-[S:2](=[O;M])([C;M])=[O;M]'
+                # RS(=O)(=O)X
+                '[S;D4;x3;z3:1]([O,F,Cl,Br,I;D1:2])(=[O;M])(=[O;M])[C;M]'
             ],
             'B': [
                 # Ar-NH2
-                '[N;D1:6][C;a;M]',
+                '[N;D1;x0;z1:3][C;a;M]',
                 # Alk-NH2
-                '[N;D1:6][C;z1;x1;M]',
+                '[N;D1;x0;z1:3][C;z1;x1;M]',
                 # Ar-NH-Ar
-                '[N;D1:6][C;z1;x1;M]',
+                '[N;D2;x0;z1:3]([C;a;M])[C;a;M]',
                 # Alk-NH-Ar
-                '[N;D2:6]([C;a;M:7])[C;a;M]',
+                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
                 # Alk2NH
-                '[N;D2:6]([C;z1;x1;M:7])[C;z1;x1;M]',
-                # pyrrole
-                '[N;a;h1:6]'
+                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
             ],
-            'product': '[A:2]-[A:6]',
+            'product': '[A:1]-[A:3]',
             'alerts': []
         },
     ],
@@ -245,19 +237,19 @@ _amine_isocyanate = {
         {
             'A': [
                 # RN=C=O
-                '[C;M][N:1]=[C:2]=[O;M]'
+                '[C;D2;x2;z3:1](=[O;M])=[N;D2;x0;z2:2]'
             ],
             'B': [
                 # Ar-NH2
-                '[N;D1:3][C;a;M]',
+                '[N;D1;x0;z1:3][C;a;M]',
                 # Alk-NH2
-                '[N;D1:3][C;z1;x1;M]',
+                '[N;D1;x0;z1:3][C;z1;x1;M]',
                 # Ar-NH-Ar
-                '[N;D2:3]([C;a;M])[C;a;M]',
+                '[N;D2;x0;z1:3]([C;a;M])[C;a;M]',
                 # Alk-NH-Ar
-                '[N;D2:3]([C;a;M])[C;z1;x1;M]',
-                # Alk-NH-Alk
-                '[N;D2:3]([C;z1;x1;M])[C;z1;x1;M]'
+                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
+                # Alk2NH
+                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
             ],
             'product': '[A:1][A:2]-[A:3]',
             'alerts': []
