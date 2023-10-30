@@ -33,12 +33,30 @@ _esterification = {
         # reactants sets fully mixable
         {
             'A': [
-                '[O;D1;x0;z1:2]-[C;x2;z2:1]=[O;M]'
+                # C(=O)O
+                '[O;D1;x0;z1;M]-[C;x2;z2:1]=[O;M]',
             ],
             'B': [
+                # CO
                 '[O;D1;x0;z1:3]-[C;x1;z1;M]'
             ],
             'product': '[A:1]-[A:3]',
+            # condition-specific untolerant groups
+            'alerts': [
+                '[S;D1;x0;z1][C;x1;z1]',  # thiol
+                '[O,S;D1;z1][A;a]'  # [thia]phenol
+            ]
+        },
+{
+            'A': [
+                # C(=O)OC(=O) anhydrides
+                '[C;x2;z2:1](=[O;M])-[O;D2;x0;z1:4]-[C;x2;z2;M]=[O;M]',
+            ],
+            'B': [
+                # CO
+                '[O;D1;x0;z1:3]-[C;x1;z1;M]'
+            ],
+            'product': '[A:1]-[A:3].[A:4]',
             # condition-specific untolerant groups
             'alerts': [
                 '[S;D1;x0;z1][C;x1;z1]',  # thiol
@@ -120,7 +138,7 @@ _suzuki = {
                 # Ar-B
                 '[B;D3;z1:4]-[C;a:3]',
                 # C=C-B
-                '[B;D3;z1:4]-[C;z2:3]=[C;z2:M]',
+                '[B;D3;z1:4]-[C;z2:3]',
 
             ],
             'product': '[A:2]-[A:3]',
@@ -133,7 +151,7 @@ _suzuki = {
             ],
             'B': [
                 # C=C-B
-                '[C;x1;z2:3]-[B;D3;z1:4]'
+                '[B;D3;z1:4]-[C;x1;z2:3]'
             ],
             'product': '[A:2]-[A:3]',
             'alerts': []
@@ -272,6 +290,29 @@ _sonogashira = {
     ],
     'alerts': []
 }
+
+# _etherification = {
+#     'name': 'etherification',
+#     'description': 'Ether formation ',
+#     'templates': [
+#         # reactants sets fully mixable
+#         {
+#             'A': [
+#                 '[O;D1;x0;z1:2]-[C;x1;z1:1]'
+#             ],
+#             'B': [
+#                 '[O;D1;x0;z1:3]-[C;x1;z1;M]'
+#             ],
+#             'product': '[A:1]-[A:3]',
+#             # condition-specific untolerant groups
+#             'alerts': [
+#                 '[S;D1;x0;z1][C;x1;z1]',  # thiol
+#                 '[O,S;D1;z1][A;a]'  # [thia]phenol
+#             ]
+#         }
+#     ],
+#     'alerts': []  # global untolerant groups
+# }
 
 #################
 # Magic Factory #
