@@ -26,7 +26,7 @@ from .reactor import Reactor, fix_mapping_overlap
 Predefined reactors for common reactions.
 """
 
-_esterification =   {
+_esterification = {
     'name': 'Fischer esterification',
     'description': 'Esters formation from alcohols and acids',
     'templates': [
@@ -54,29 +54,39 @@ _esterification =   {
 # Magic Factory #
 #################
 
-__all__ = [k[1:] for k, v in globals().items() if k.startswith('_') and isinstance(v, dict) and v]
-__all__.append('prepare_reactor')
-
-_cache = {}
+__all__ = ['PreparedReactor', 'prepare_reactor']
+__all__.extend(k[1:] for k, v in globals().items() if k.startswith('_') and isinstance(v, dict) and v)
 
 
-def prepare_reactor(rules, name):
+class PreparedReactor:
     """
-    Prepare reactor with predefined sets of templates.
+    Prepared reactors with predefined sets of templates.
     """
-    rxn_ms = []
-    rxn_os = []
-    alerts = []
-    g_alerts = [smarts(x) for x in rules['alerts']]
-    for c in rules['templates']:
-        c_alerts = [smarts(x) for x in c['alerts']] + g_alerts
-        p = smarts(c['product'])
-        for rs in product(*([smarts(x) for x in c[x]] for x in 'ABCD' if x in c)):
-            rxn_ms.append(Reactor(rs, [p], one_shot=False, automorphism_filter=False))  # noqa
-            rxn_os.append(Reactor(rs, [p], one_shot=True, automorphism_filter=False))  # noqa
-            alerts.append(c_alerts)
+    def __init__(self, rules, name):
+        self.name = name
+        self.rules = rules
 
-    def w(*molecules, one_shot=True, check_alerts: bool = True,
+        self.rxn_ms = []
+        self.rxn_os = []
+        self.alerts = []
+
+        self.global_alerts = [smarts(x) for x in rules['alerts']]
+
+        for c in rules['templates']:
+            alerts = [smarts(x) for x in c['alerts']]
+            p = smarts(c['product'])
+            for rs in product(*([smarts(x) for x in c[x]] for x in 'ABCD' if x in c)):
+                self.rxn_ms.append(Reactor(rs, [p], one_shot=False, automorphism_filter=False))  # noqa
+                self.rxn_os.append(Reactor(rs, [p], one_shot=True, automorphism_filter=False))  # noqa
+                self.alerts.append(alerts)
+
+    def __repr__(self):
+        return f'{__name__}.{self.name}'
+
+    def __str__(self):
+        return f'Reactor<{self.rules["name"]}>'
+
+    def __call__(self, *molecules, one_shot=True, check_alerts: bool = True,
           excess: Optional[List[int]] = None) -> Iterator[ReactionContainer]:
         """
         %s
@@ -88,13 +98,15 @@ def prepare_reactor(rules, name):
         """
         if not molecules:
             raise ValueError('empty molecule list')
+        if check_alerts and any(a < m for a, m in product(self.global_alerts, molecules)):
+            return
 
         molecules = fix_mapping_overlap(molecules)
         seen = set()
         if one_shot:
-            for rx, al in zip(rxn_os, alerts):
+            for rx, al in zip(self.rxn_os, self.alerts):
                 if check_alerts and any(a < m for a, m in product(al, molecules)):
-                    return
+                    continue
                 for r in rx(*molecules):
                     if str(r) in seen:
                         continue
@@ -104,10 +116,10 @@ def prepare_reactor(rules, name):
 
         excess = molecules if excess is None else [molecules[x] for x in excess]
         stack = deque([])
-        for i, (rx, al) in enumerate(zip(rxn_ms, alerts)):
+        for i, (rx, al) in enumerate(zip(self.rxn_ms, self.alerts)):
             if check_alerts and any(a < m for a, m in product(al, molecules)):
-                return
-            x = rxn_ms.copy()
+                continue
+            x = self.rxn_ms.copy()
             del x[i]
             stack.appendleft((rx, molecules, x))
 
@@ -141,11 +153,9 @@ def prepare_reactor(rules, name):
                             del z[m]
                             stack.append((nrx, y, z))
 
-    w.__module__ = __name__
-    w.__qualname__ = w.__name__ = name
-    doc = w.__doc__ % rules['description']
-    w.__doc__ = '\n'.join(x.lstrip() for x in doc.splitlines())
-    return w
+
+prepare_reactor = PreparedReactor  # backward compatibility
+_cache = {}
 
 
 def __getattr__(name):
@@ -153,7 +163,7 @@ def __getattr__(name):
         return _cache[name]
     except KeyError:
         if name in __all__:
-            _cache[name] = t = prepare_reactor(globals()[f'_{name}'], name)
+            _cache[name] = t = PreparedReactor(globals()[f'_{name}'], name)
             return t
         raise AttributeError
 
