@@ -92,7 +92,7 @@ _amidation = {
             'alerts': []
         },
     ],
-    'alerts': ['[C;z1;x1]-[O;D1]', '[C,N;a]-[O;D1]']  # global untolerant groups
+    'alerts': ['[O;D1;x0;z1][C;z1;x1]', '[O;D1;x0;z1][C,N;a]']  # global untolerant groups
 }
 
 _amine_carbonyl_reductive_amination = {
@@ -270,11 +270,11 @@ _sonogashira = {
             ],
             'B': [
                 # Ar-Hal
-                '[C;a:1]-[Cl,Br,I;D1;M]',
+                '[Cl,Br,I;D1;M]-[C;a:1]',
                 # C=C-Hal
-                '[C;x1;z2:1]-[Cl,Br,I;D1;M]',
+                '[Cl,Br,I;D1;M]-[C;x1;z2:1]',
                 # R-C(=O)-Hal
-                '[C;x2:1](=[O;M])-[Cl,Br,I;D1;M]'
+                '[Cl,Br,I;D1;M]-[C;x2:1]=[O;M]'
             ],
             'product': '[A:1]-[A:3]',
             'alerts': []
