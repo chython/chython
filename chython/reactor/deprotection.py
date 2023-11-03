@@ -304,7 +304,7 @@ _amine_cbz = (  # [Pd] or Na/NH3
 _amine_chloro_cbz = (
     # Ar-NH2
     ('[C;a;M][N;D2:1]-C(=O)O[C;D2]C:1:C([Cl;D1]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
-     'c1ccccc1NC(=O)OCc2ccccc2', 'c1ccccc1N', 'c1ccccc1NC(=O)OC(C)c2ccccc2'),
+     'Clc1ccccc1COC(=O)Nc1ccccc1', 'c1ccccc1N', 'c1ccccc1NC(=O)OC(C)c2ccccc2'),
     # Alk-NH2
     ('[C;D2,D3,D4;z1;x1;M][N;D2:1]-C(=O)O[C;D2]C:1:C([Cl;D1]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]'),
     # Alk-NH-Ar

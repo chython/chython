@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019, 2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -18,10 +18,15 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from math import sqrt
-from pkg_resources import resource_string
 from random import random
 from typing import TYPE_CHECKING, Union
 from ...exceptions import ImplementationError
+
+
+try:
+    from importlib.resources import files
+except ImportError:  # python3.8
+    from importlib_resources import files
 
 
 if TYPE_CHECKING:
@@ -32,7 +37,7 @@ try:
 
     ctx = MiniRacer()
     ctx.eval('const self = this')
-    ctx.eval(resource_string(__name__, 'clean2d.js'))
+    ctx.eval(files(__package__).joinpath('clean2d.js').read_text())
 except RuntimeError:
     ctx = None
 
@@ -45,7 +50,7 @@ class Calculate2DMolecule:
         Calculate 2d layout of graph. https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation used.
         """
         if ctx is None:
-            raise ImportError('py_mini_racer not installed or broken')
+            raise ImportError('py_mini_racer is not installed or broken')
         plane = {}
         entry = iter(sorted(self, key=lambda n: len(self._bonds[n])))
         for _ in range(min(5, len(self))):

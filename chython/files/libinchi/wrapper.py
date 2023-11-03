@@ -17,18 +17,21 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from ctypes import c_char, c_double, c_short, c_long, c_char_p, c_byte, POINTER, Structure, cdll, byref
-from distutils.util import get_platform
 from itertools import count
-from os import name
-from pathlib import Path
-from sys import prefix, exec_prefix
+from sysconfig import get_platform
 from warnings import warn
-from ._convert import create_molecule
-from ._mdl import common_isotopes
-from ..containers import MoleculeContainer
-from ..containers.bonds import Bond
-from ..exceptions import ValenceError, IsChiral, NotChiral
-from ..periodictable import H
+from .._convert import create_molecule
+from .._mdl import common_isotopes
+from ...containers import MoleculeContainer
+from ...containers.bonds import Bond
+from ...exceptions import ValenceError, IsChiral, NotChiral
+from ...periodictable import H
+
+
+try:
+    from importlib.resources import files, as_file
+except ImportError:  # python3.8
+    from importlib_resources import files, as_file
 
 
 def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> MoleculeContainer:
@@ -523,26 +526,6 @@ class INCHIStructure(Structure):
 
 lib = None
 
-try:
-    from site import getuserbase
-except ImportError:
-    prefixes = {prefix, exec_prefix}
-else:
-    user_prefix = getuserbase()
-    if user_prefix:
-        prefixes = {prefix, exec_prefix, user_prefix}
-    else:
-        prefixes = {prefix, exec_prefix}
-
-sitepackages = []
-for pr in prefixes:
-    pr = Path(pr)
-    if name == 'posix':
-        sitepackages.append(pr / 'local' / 'lib')
-    else:
-        sitepackages.append(pr)
-    sitepackages.append(pr / 'lib')
-
 platform = get_platform()
 if platform == 'win-amd64':
     opt_flag = '/'
@@ -558,15 +541,13 @@ else:
     libname = None
 
 if libname:
-    for site in sitepackages:
-        lib_path = site / libname
-        if lib_path.exists():
+    file = files(__package__).joinpath(libname)
+    if file.is_file():
+        with as_file(file) as f:
             try:
-                lib = cdll.LoadLibrary(str(lib_path))
+                lib = cdll.LoadLibrary(str(f))
             except OSError:
                 warn('libinchi loading problem', ImportWarning)
-                break
-            break
     else:
         warn('broken package installation. libinchi not found', ImportWarning)
 
