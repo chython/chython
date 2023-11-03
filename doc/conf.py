@@ -7,7 +7,7 @@ if parent not in path:
 from chython.periodictable import C, QueryC, ListElement, AnyElement, AnyMetal
 
 author = 'Dr. Ramil Nugmanov'
-copyright = '2014-2022, Dr. Ramil Nugmanov <nougmanoff@protonmail.com>'
+copyright = '2014-2023, Dr. Ramil Nugmanov <nougmanoff@protonmail.com>'
 version = '1.x'
 project = 'chython'
 
@@ -19,7 +19,7 @@ templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
 
-language = None
+language = 'en'
 pygments_style = 'sphinx'
 todo_include_todos = False
 autoclass_content = 'both'

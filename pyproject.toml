@@ -1,0 +1,67 @@
+[tool.poetry]
+name = "chython"
+version = "1.70"
+description = "Library for processing molecules and reactions in python way"
+authors = ["Ramil Nugmanov <nougmanoff@protonmail.com>"]
+license = "LGPLv3"
+readme = "README.rst"
+homepage = "https://github.com/chython/chython"
+documentation = "https://chython.readthedocs.io"
+classifiers=[
+    'Environment :: Plugins',
+    'Intended Audience :: Science/Research',
+    'License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python',
+    'Programming Language :: Python :: 3 :: Only',
+    'Programming Language :: Python :: 3.8',
+    'Topic :: Scientific/Engineering',
+    'Topic :: Scientific/Engineering :: Chemistry',
+    'Topic :: Scientific/Engineering :: Information Analysis',
+    'Topic :: Software Development',
+    'Topic :: Software Development :: Libraries',
+    'Topic :: Software Development :: Libraries :: Python Modules'
+]
+
+include = [
+    { path = "chython/*/*.pyd", format = "wheel" },
+    { path = "chython/*/*.so", format = "wheel" },
+    { path = "chython/*/*.dylib", format = "wheel" },
+    { path = "chython/files/libinchi/libinchi.*", format = "wheel" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+cachedmethods = "^0.1.4"
+lazy-object-proxy = "^1.6"
+lxml = "^4.1"
+py-mini-racer = "^0.6.0"
+numpy = "^1.24"
+chytorch-rxnmap = {version = "^1.4", optional = true}
+
+[tool.poetry.extras]
+mapping = ["chytorch-rxnmap"]
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+cython = "^3.0.5"
+pytest = "^7.4.3"
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+nbsphinx = "^0.9.3"
+pandoc = "^2.3"
+rdkit = "^2023.9.1"
+ipython = "^8.12.1"
+
+[build-system]
+requires = ["poetry-core", "setuptools", "cython>=3.0.5"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.build]
+script = "build.py"
+generate-setup-file = false
