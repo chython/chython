@@ -24,10 +24,9 @@ classifiers=[
 ]
 
 include = [
-    { path = "chython/*/*.pyd", format = "wheel" },
-    { path = "chython/*/*.so", format = "wheel" },
-    { path = "chython/*/*.dylib", format = "wheel" },
-    { path = "chython/files/libinchi/libinchi.*", format = "wheel" }
+    {path = "chython/*/*.pyd", format = "wheel"},
+    {path = "chython/*/*.so", format = "wheel"},
+    {path = "chython/files/libinchi/libinchi.*", format = "wheel"}
 ]
 
 [tool.poetry.dependencies]
@@ -38,15 +37,16 @@ lxml = "^4.1"
 py-mini-racer = "^0.6.0"
 numpy = "^1.24"
 chytorch-rxnmap = {version = "^1.4", optional = true}
+rdkit = {version = "^2023.9.1", optional = true}
 
 [tool.poetry.extras]
 mapping = ["chytorch-rxnmap"]
+rdkit = ["rdkit"]
 
 [tool.poetry.group.dev]
 optional = true
 
 [tool.poetry.group.dev.dependencies]
-cython = "^3.0.5"
 pytest = "^7.4.3"
 
 [tool.poetry.group.docs]
