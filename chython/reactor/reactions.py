@@ -34,7 +34,7 @@ _esterification = {
         {
             'A': [
                 # C(=O)O
-                '[O;D1;x0;z1;M]-[C;x2;z2:1]=[O;M]',
+                '[O;D1;x0;z1:2]-[C;x2;z2:1]=[O;M]',
             ],
             'B': [
                 # CO
@@ -47,22 +47,6 @@ _esterification = {
                 '[O,S;D1;z1][A;a]'  # [thia]phenol
             ]
         },
-{
-            'A': [
-                # C(=O)OC(=O) anhydrides
-                '[C;x2;z2:1](=[O;M])-[O;D2;x0;z1:4]-[C;x2;z2;M]=[O;M]',
-            ],
-            'B': [
-                # CO
-                '[O;D1;x0;z1:3]-[C;x1;z1;M]'
-            ],
-            'product': '[A:1]-[A:3].[A:4]',
-            # condition-specific untolerant groups
-            'alerts': [
-                '[S;D1;x0;z1][C;x1;z1]',  # thiol
-                '[O,S;D1;z1][A;a]'  # [thia]phenol
-            ]
-        }
     ],
     'alerts': []  # global untolerant groups
 }
@@ -92,7 +76,7 @@ _amidation = {
             'alerts': []
         },
     ],
-    'alerts': ['[O;D1;x0;z1][C;z1;x1]', '[O;D1;x0;z1][C,N;a]']  # global untolerant groups
+    'alerts': ['[O;D1;x0;z1][C;z1;x1]', '[O;D1;z1][C,N;a]']  # global untolerant groups
 }
 
 _amine_carbonyl_reductive_amination = {
@@ -132,9 +116,9 @@ _suzuki = {
             ],
             'B': [
                 # Ar-B
-                '[B;D3;z1:4]-[C;a:3]',
+                '[B;D3;x2;z1:4]([O;M])([O;M])-[C;a:3]',
                 # C=C-B
-                '[B;D3;z1:4]-[C;z2:3]',
+                '[B;D3;x2;z1:4]([O;M])([O;M])-[C;x1;z2:3]=[C;x0;z2;M]',
 
             ],
             'product': '[A:2]-[A:3]',
@@ -143,31 +127,11 @@ _suzuki = {
         {
             'A': [
                 # X-C=C
-                '[Cl,Br,I;D1:2]-[C;x1;z2:1]'
+                '[Cl,Br,I;D1:2]-[C;x1;z2:1]=[C;x0;z2;M]'
             ],
             'B': [
                 # C=C-B
-                '[B;D3;z1:4]-[C;x1;z2:3]'
-            ],
-            'product': '[A:2]-[A:3]',
-            'alerts': []
-        },
-    ],
-    'alerts': []
-}
-
-_suzuki_amide = {
-    'name': 'Suzuki-Miyaura reaction with amides',
-    'description': 'Suzuki-Miyaura C-N coupling reaction',
-    'templates': [
-        {
-            'A': [
-                # Ar-B(O)O
-                '[B;D3;z2:1]([O;z1])([O;z1])-[C;a:2]'
-            ],
-            'B': [
-                # Ar-NH2
-                '[C;a;M]-[C:3](=[O;M])-N([C;x1;z1])-C(=O)[C;x0;z1]'
+                '[B;D3;x2;z1:4]([O;M])([O;M])-[C;x1;z2:3]=[C;x0;z2;M]'
             ],
             'product': '[A:2]-[A:3]',
             'alerts': []
@@ -266,45 +230,23 @@ _sonogashira = {
         {
             'A': [
                 # HC#C-R
-                '[C;D2;M]#[C;D1:3]'
+                '[C;D1;x0;z3:1]#[C;D2;x0;M]'
             ],
             'B': [
                 # Ar-Hal
-                '[Cl,Br,I;D1;M]-[C;a:1]',
+                '[Cl,Br,I;D1:3]-[C;a:2]',
                 # C=C-Hal
-                '[Cl,Br,I;D1;M]-[C;x1;z2:1]',
+                '[Cl,Br,I;D1:3]-[C;x1;z2:2]=[C;x0;z2;M]',
                 # R-C(=O)-Hal
-                '[Cl,Br,I;D1;M]-[C;x2:1]=[O;M]'
+                '[Cl,Br,I;D1:3]-[C;x2;z2:2]=[O;M]'
             ],
-            'product': '[A:1]-[A:3]',
+            'product': '[A:1]-[A:2]',
             'alerts': []
         },
     ],
     'alerts': []
 }
 
-# _etherification = {
-#     'name': 'etherification',
-#     'description': 'Ether formation ',
-#     'templates': [
-#         # reactants sets fully mixable
-#         {
-#             'A': [
-#                 '[O;D1;x0;z1:2]-[C;x1;z1:1]'
-#             ],
-#             'B': [
-#                 '[O;D1;x0;z1:3]-[C;x1;z1;M]'
-#             ],
-#             'product': '[A:1]-[A:3]',
-#             # condition-specific untolerant groups
-#             'alerts': [
-#                 '[S;D1;x0;z1][C;x1;z1]',  # thiol
-#                 '[O,S;D1;z1][A;a]'  # [thia]phenol
-#             ]
-#         }
-#     ],
-#     'alerts': []  # global untolerant groups
-# }
 
 #################
 # Magic Factory #
