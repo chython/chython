@@ -25,7 +25,7 @@ def test_deprotection():
     qs = set()
     ts = set()
     for x in dir(deprotection):
-        for r in getattr(deprotection, x[9:]):
+        for r in getattr(deprotection, '_' + x):
             if len(r) > 2:  # has test
                 q, p, t, a, *bs = r
                 t = smiles(t)
@@ -36,13 +36,13 @@ def test_deprotection():
                 a = smiles(a)
                 a.canonicalize()
                 # test match
-                assert q < t, f'{q} !< {t}'
+                assert q < t, f'{x}: {q} !< {t}'
                 o = next(Transformer(q, smarts(p))(t))
-                assert o == a, f'{o} != {a}'
+                assert o == a, f'{x}: {o} != {a}'
                 for b in bs:
                     b = smiles(b)
                     b.canonicalize()
-                    assert not q < b, f'{q} < {b}'
+                    assert not q < b, f'{x}: {q} < {b}'
 
     # test rule-test is unique pair
     assert len(qs) == len(ts)
