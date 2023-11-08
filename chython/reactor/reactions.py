@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2023 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -46,7 +47,7 @@ _esterification = {
                 '[S;D1;x0;z1][C;x1;z1]',  # thiol
                 '[O,S;D1;z1][A;a]'  # [thia]phenol
             ]
-        },
+        }
     ],
     'alerts': []  # global untolerant groups
 }
