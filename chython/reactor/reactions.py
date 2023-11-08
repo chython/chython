@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2023 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -33,9 +34,11 @@ _esterification = {
         # reactants sets fully mixable
         {
             'A': [
-                '[O;D1;x0;z1:2]-[C;x2;z2:1]=[O;M]'
+                # C(=O)O
+                '[O;D1;x0;z1:2]-[C;x2;z2:1]=[O;M]',
             ],
             'B': [
+                # CO
                 '[O;D1;x0;z1:3]-[C;x1;z1;M]'
             ],
             'product': '[A:1]-[A:3]',
@@ -47,6 +50,202 @@ _esterification = {
         }
     ],
     'alerts': []  # global untolerant groups
+}
+
+_amidation = {
+    'name': 'Amidation Reaction',
+    'description': 'Amides formation from acids and amines',
+    'templates': [
+        {
+            'A': [
+                # [H,R]COOH
+                '[O;x0;z2;M]=[C;x2:1][O;D1:2]'
+            ],
+            'B': [
+                # Ar-NH2
+                '[N;D1;x0;z1:3][C;a;M]',
+                # Alk-NH2
+                '[N;D1;x0;z1:3][C;z1;x1;M]',
+                # Ar-NH-Ar
+                '[N;D2;x0;z1:3]([C;a;M])[C;a;M]',
+                # Alk-NH-Ar
+                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
+                # Alk2NH
+                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+            ],
+            'product': '[A:1]-[A:3]',
+            'alerts': []
+        },
+    ],
+    'alerts': ['[O;D1;x0;z1][C;z1;x1]', '[O;D1;z1][C,N;a]']  # global untolerant groups
+}
+
+_amine_carbonyl_reductive_amination = {
+    'name': 'Amine carbonyl reductive amination reaction',
+    'description': 'Amines formation from carbonyls and amines',
+    'templates': [
+        {
+            'A': [
+                # O=CR2
+                '[O;x0;z2:2]=[C;x1:1]'
+            ],
+            'B': [
+                # Ar-NH2
+                '[N;D1;x0;z1:3][C;a;M]',
+                # Alk-NH2
+                '[N;D1;x0;z1:3][C;z1;x1;M]',
+                # Alk-NH-Ar
+                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
+                # Alk2NH
+                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+            ],
+            'product': '[A:1]-[A:3]',
+            'alerts': []
+        },
+    ],
+    'alerts': []
+}
+
+_suzuki = {
+    'name': 'Suzuki-Miyaura reaction',
+    'description': 'Suzuki-Miyaura C-C coupling reaction',
+    'templates': [
+        {
+            'A': [
+                # X-Ar
+                '[Cl,Br,I;D1:1]-[C;a:2]'
+            ],
+            'B': [
+                # Ar-B
+                '[B;D3;x2;z1:4]([O;M])([O;M])-[C;a:3]',
+                # C=C-B
+                '[B;D3;x2;z1:4]([O;M])([O;M])-[C;x1;z2:3]=[C;x0;z2;M]',
+
+            ],
+            'product': '[A:2]-[A:3]',
+            'alerts': []
+        },
+        {
+            'A': [
+                # X-C=C
+                '[Cl,Br,I;D1:2]-[C;x1;z2:1]=[C;x0;z2;M]'
+            ],
+            'B': [
+                # C=C-B
+                '[B;D3;x2;z1:4]([O;M])([O;M])-[C;x1;z2:3]=[C;x0;z2;M]'
+            ],
+            'product': '[A:2]-[A:3]',
+            'alerts': []
+        },
+    ],
+    'alerts': []
+}
+
+_buchwald_hartwig = {
+    'name': 'Buchwald-Hartwig reaction ',
+    'description': 'Buchwald-Hartwig amination reaction, C-N coupling reaction',
+    'templates': [
+        {
+            'A': [
+                # Hal-Ar
+                '[Cl,Br,I;D1:1]-[C;a:2]'
+            ],
+            'B': [
+                # Ar-NH2
+                '[N;D1;x0;z1:3][C;a;M]',
+                # Alk-NH2
+                '[N;D1;x0;z1:3][C;z1;x1;M]',
+                # Alk-NH-Ar
+                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
+                # Alk2NH
+                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+            ],
+            'product': '[A:2]-[A:3]',
+            'alerts': []
+        },
+    ],
+    'alerts': []
+}
+
+_sulfonamidation = {
+    'name': 'Sulfoamination reaction ',
+    'description': 'Sulfoamination reaction, S-N coupling reaction',
+    'templates': [
+        {
+            'A': [
+                # RS(=O)(=O)X
+                '[S;D4;x3;z3:1]([O,F,Cl,Br,I;D1:2])(=[O;M])(=[O;M])[C;M]'
+            ],
+            'B': [
+                # Ar-NH2
+                '[N;D1;x0;z1:3][C;a;M]',
+                # Alk-NH2
+                '[N;D1;x0;z1:3][C;z1;x1;M]',
+                # Ar-NH-Ar
+                '[N;D2;x0;z1:3]([C;a;M])[C;a;M]',
+                # Alk-NH-Ar
+                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
+                # Alk2NH
+                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+            ],
+            'product': '[A:1]-[A:3]',
+            'alerts': []
+        },
+    ],
+    'alerts': []
+}
+
+_amine_isocyanate = {
+    'name': 'Amine with isocyanate reaction ',
+    'description': 'Amine with isocyanate reaction, C-N coupling reaction',
+    'templates': [
+        {
+            'A': [
+                # RN=C=O
+                '[C;D2;x2;z3:1](=[O;M])=[N;D2;x0;z2:2]'
+            ],
+            'B': [
+                # Ar-NH2
+                '[N;D1;x0;z1:3][C;a;M]',
+                # Alk-NH2
+                '[N;D1;x0;z1:3][C;z1;x1;M]',
+                # Ar-NH-Ar
+                '[N;D2;x0;z1:3]([C;a;M])[C;a;M]',
+                # Alk-NH-Ar
+                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
+                # Alk2NH
+                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+            ],
+            'product': '[A:1][A:2]-[A:3]',
+            'alerts': []
+        },
+    ],
+    'alerts': []
+}
+
+_sonogashira = {
+    'name': 'Sonogashira reaction ',
+    'description': 'Sonogashira reaction, C-C coupling reaction. It employs a palladium catalyst as well as copper '
+                   'co-catalyst',
+    'templates': [
+        {
+            'A': [
+                # HC#C-R
+                '[C;D1;x0;z3:1]#[C;D2;x0;M]'
+            ],
+            'B': [
+                # Ar-Hal
+                '[Cl,Br,I;D1:3]-[C;a:2]',
+                # C=C-Hal
+                '[Cl,Br,I;D1:3]-[C;x1;z2:2]=[C;x0;z2;M]',
+                # R-C(=O)-Hal
+                '[Cl,Br,I;D1:3]-[C;x2;z2:2]=[O;M]'
+            ],
+            'product': '[A:1]-[A:2]',
+            'alerts': []
+        },
+    ],
+    'alerts': []
 }
 
 
