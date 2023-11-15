@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "chython"
-version = "1.70"
+version = "1.71"
 description = "Library for processing molecules and reactions in python way"
 authors = ["Ramil Nugmanov <nougmanoff@protonmail.com>"]
 license = "LGPLv3"
@@ -35,7 +35,7 @@ cachedmethods = "^0.1.4"
 lazy-object-proxy = "^1.6"
 lxml = "^4.1"
 py-mini-racer = "^0.6.0"
-numpy = "^1.24"
+numpy = "^1.23.3"
 chytorch-rxnmap = {version = "^1.4", optional = true}
 rdkit = {version = "^2023.9.1", optional = true}
 

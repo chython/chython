@@ -19,6 +19,7 @@
 from collections import defaultdict
 from io import BytesIO
 from pickle import dump
+from re import compile, match
 from subprocess import check_output
 from sys import platform
 from typing import Optional, List
@@ -27,6 +28,9 @@ from ._convert import create_molecule
 from ._mapping import postprocess_parsed_molecule
 from ..containers import MoleculeContainer
 from ..exceptions import BufferOverflow, InvalidMolBlock
+
+
+meta_pattern = compile(r'^>([^<]+)<([^>]+)>([^><]*)$')
 
 
 class SDFRead(MDLRead):
@@ -38,7 +42,7 @@ class SDFRead(MDLRead):
     escape_map = {'&gt;': '>', '&lt;': '<'}
     molecule_cls = MoleculeContainer
 
-    def __init__(self, file, *, buffer_size=1000, indexable: bool = False, ignore: bool = True, remap: bool = False,
+    def __init__(self, file, *, buffer_size=10000, indexable: bool = False, ignore: bool = True, remap: bool = False,
                  calc_cis_trans: bool = False, ignore_stereo: bool = False, ignore_bad_isotopes: bool = False):
         """
         :param buffer_size: readahead size. increase if you have big molecules or metadata records.
@@ -78,15 +82,10 @@ class SDFRead(MDLRead):
         mkey = None
         meta = defaultdict(list)
         for line in self._read_metadata(current=current):
-            if line.startswith('>') and line.endswith('>\n'):
-                mkey = line[1:-2].rstrip()  # > x <y>\n | x <y
-                if '<' not in mkey:
-                    mkey = None
-                    meta['chython_unparsed_metadata'].append(line.strip())
-                else:
-                    mkey = mkey[mkey.index('<') + 1:].lstrip()  # x <y | y
-                    for e, s in self.escape_map.items():
-                        mkey = mkey.replace(e, s)
+            if matched := match(meta_pattern, line):
+                mkey = ' '.join(y for x in matched.groups() if (y := x.strip()))
+                for e, s in self.escape_map.items():
+                    mkey = mkey.replace(e, s)
             elif mkey:
                 if line := line.strip():
                     meta[mkey].append(line)
