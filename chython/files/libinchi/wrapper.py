@@ -536,6 +536,9 @@ elif platform == 'linux-x86_64':
 elif platform.startswith('macosx') and platform.endswith('x86_64'):
     opt_flag = '-'
     libname = 'libinchi.dynlib'
+elif platform.startswith('macosx') and platform.endswith('arm64'):
+    opt_flag = '-'
+    libname = 'libinchi_arm64.dylib'
 else:
     warn('unsupported platform for libinchi', ImportWarning)
     libname = None

@@ -34,6 +34,9 @@ elif platform == 'linux-x86_64':
 elif platform.startswith('macosx') and platform.endswith('x86_64'):
     libname = 'libinchi.dynlib'
     extra_compile_args = []
+elif platform.startswith('macosx') and platform.endswith('arm64'):
+    libname = 'libinchi_arm64.dylib'
+    extra_compile_args = []
 else:
     libname = None
     extra_compile_args = []
