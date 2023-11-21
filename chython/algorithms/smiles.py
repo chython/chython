@@ -22,7 +22,8 @@ from CachedMethods import cached_method
 from collections import defaultdict
 from functools import cached_property
 from hashlib import sha512
-from itertools import count, product
+from heapq import heappop, heappush
+from itertools import product
 from random import random
 from typing import Callable, Optional, Tuple, TYPE_CHECKING, Union
 
@@ -155,11 +156,12 @@ class Smiles(ABC):
         bonds = self._bonds
         atoms_set = set(self._atoms)
         seen = {}
-        cycles = count()
+        cycle = 0
         casted_cycles = {}
         string = []
         order = []
         visited_bond = set()
+        heap = list(range(1, 100))
 
         if kwargs.get('random', False):
             mod_weights_start = mod_weights = weights
@@ -211,7 +213,7 @@ class Smiles(ABC):
                     elif (child, parent) not in disconnected:
                         disconnected.add((parent, child))
                         disconnected.add((child, parent))
-                        cycle = next(cycles)
+                        cycle += 1
                         tokens[parent].append((child, cycle))
                         tokens[child].append((parent, cycle))
 
@@ -250,11 +252,23 @@ class Smiles(ABC):
                 else:
                     break
 
+            # get order of each atom in ring closures
+            rings_order = {token: n for n, token in enumerate(smiles) if token in tokens}
+            for token in rings_order:  # prepare closure numbers
+                released = []
+                # order closure atoms as in smiles string
+                for _, c in sorted(tokens[token], key=lambda x: rings_order[x[0]]):
+                    if c in casted_cycles:  # release ring closure number
+                        released.append(casted_cycles[c])
+                    else:
+                        casted_cycles[c] = heappop(heap)
+                for c in released:  # delayed release to avoid duplicates. e.g. C1..C11..C1 instead of C1..C12..C2
+                    heappush(heap, c)
+
             # prepare new neighbors order for stereo sign calculation
             for token in smiles:
                 if token in tokens:
-                    tokens[token].sort(key=lambda x: casted_cycles.get(x[1]) or
-                                                     casted_cycles.setdefault(x[1], len(casted_cycles) + 1))
+                    tokens[token].sort(key=lambda x: casted_cycles[x[1]])  # order closures
                     visited[token].extend(n for n, _ in tokens[token])
                 if token in edges:
                     visited[token].extend(edges[token])
