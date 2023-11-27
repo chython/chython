@@ -40,6 +40,10 @@ def _stripped_rules():
     q = smarts('[N;D3;z2;+]([O;-:1])([O-])=O')
     rules.append(q)
 
+    # imide
+    q = smarts('[N;D1,D2;z1;-]')
+    rules.append(q)
+
     # ions
     q = smarts('[O,S,F,Cl,Br,I;D0;-]')
     rules.append(q)
