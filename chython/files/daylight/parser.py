@@ -37,7 +37,6 @@ def parser(tokens, strong_cycle):
     last_num = 0
     stack = []
     cycles = {}
-    used_cycles = set()
     stereo_bonds = defaultdict(dict)
     previous = None
 
@@ -65,13 +64,6 @@ def parser(tokens, strong_cycle):
             if previous and previous[0] == 4:
                 raise IncorrectSmiles('dot-cycle pattern invalid')
             elif token not in cycles:
-                if token in used_cycles:
-                    if strong_cycle:
-                        raise IncorrectSmiles('reused closure number')
-                    else:
-                        log.append(f'reused closure number: {token}')
-                else:
-                    used_cycles.add(token)
                 cycles[token] = (last_num, previous, len(order[last_num]))
                 order[last_num].append(None)  # Reserve a table
                 previous = None
