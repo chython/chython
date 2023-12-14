@@ -25,7 +25,7 @@ from ..algorithms.depict import _render_config, _graph_svg
 Tree = Tuple[MoleculeContainer, List['Tree']]
 
 
-def retro_depict(tree: Tree, *, y_gap=3., x_gap=5., clean2d: bool = True) -> str:
+def retro_depict(tree: Tree, *, y_gap=3., x_gap=5., width=None, height=None, clean2d: bool = True) -> str:
     """
     Depict retrosynthetic tree.
 
@@ -33,6 +33,8 @@ def retro_depict(tree: Tree, *, y_gap=3., x_gap=5., clean2d: bool = True) -> str
         Child nodes list can be empty.
     :param y_gap: vertical gap between molecules.
     :param x_gap: horizontal gap between molecules.
+    :param width: set svg width param. by default auto-calculated.
+    :param height: set svg height param. by default auto-calculated.
     :param clean2d: calculate coordinates if necessary.
     """
     font_size = _render_config['font_size']
@@ -95,16 +97,20 @@ def retro_depict(tree: Tree, *, y_gap=3., x_gap=5., clean2d: bool = True) -> str
         x_shift = c_max_x + x_gap  # between columns gap
         last_layer = current_layer
 
-    width = c_max_x + 3.0 * font_size
-    height = c_max_y + 2.5 * font_size
-    box_y = height / 2.
-    svg = [f'<svg width="{width:.2f}cm" height="{height:.2f}cm" '
-           f'viewBox="{-font125:.2f} {-box_y:.2f} {width:.2f} {height:.2f}" '
+    _width = c_max_x + 3.0 * font_size
+    _height = c_max_y + 2.5 * font_size
+    box_y = _height / 2.
+    if width is None:
+        width = f'{_width:.2f}cm'
+    if height is None:
+        height = f'{_height:.2f}cm'
+    svg = [f'<svg width="{width}" height="{height}" '
+           f'viewBox="{-font125:.2f} {-box_y:.2f} {_width:.2f} {_height:.2f}" '
            'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">',
            '  <defs>\n    <marker id="arrow" markerWidth="10" markerHeight="10" '
            'refX="0" refY="3" orient="auto">\n      <path d="M0,0 L0,6 L9,3"/>\n    </marker>\n  </defs>']
     for atoms, bonds, define, masks, uid in render:
-        svg.extend(_graph_svg(atoms, bonds, define, masks, uid, -font125, -box_y, width, height))
+        svg.extend(_graph_svg(atoms, bonds, define, masks, uid, -font125, -box_y, _width, _height))
 
     svg.append('  <g fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)">')
     for x1, y1, x2, y2 in arrows_coords:

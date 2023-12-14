@@ -23,13 +23,15 @@ from ..algorithms.depict import _render_config, _graph_svg
 
 
 def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] = None, *, cols: int = 3,
-                clean2d: bool = True):
+                width=None, height=None, clean2d: bool = True):
     """
     Depict molecules grid.
 
     :param molecules: list of molecules
     :param labels: optional list of text labels
     :param cols: number of molecules per row
+    :param width: set svg width param. by default auto-calculated.
+    :param height: set svg height param. by default auto-calculated.
     :param clean2d: calculate coordinates if necessary.
     """
     font_size = _render_config['font_size']
@@ -88,13 +90,17 @@ def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] 
     for p, m in zip(planes, molecules):
         m._plane = p
 
-    width = shift_x - 1.5 * font_size
-    height = -shift_y - 1.5 * font_size
-    svg = [f'<svg width="{width:.2f}cm" height="{height:.2f}cm" '
-           f'viewBox="{-font125:.2f} {-font125:.2f} {width:.2f} {height:.2f}" '
+    _width = shift_x - 1.5 * font_size
+    _height = -shift_y - 1.5 * font_size
+    if width is None:
+        width = f'{_width:.2f}cm'
+    if height is None:
+        height = f'{_height:.2f}cm'
+    svg = [f'<svg width="{width}" height="{height}" '
+           f'viewBox="{-font125:.2f} {-font125:.2f} {_width:.2f} {_height:.2f}" '
            'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">']
     for atoms, bonds, define, masks, uid in render:
-        svg.extend(_graph_svg(atoms, bonds, define, masks, uid, -font125, -font125, width, height))
+        svg.extend(_graph_svg(atoms, bonds, define, masks, uid, -font125, -font125, _width, _height))
     svg.append(f'  <g font-size="{font75:.2f}" font-family="{symbols_font_style}">')
     svg.extend(render_labels)
     svg.append('  </g>')
