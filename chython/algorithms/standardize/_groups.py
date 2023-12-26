@@ -525,16 +525,14 @@ def _rules_single():
     raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
 
     #
-    #     [O+]R         [O]R
-    #     //            /
-    # N - C  >> [N+] = C
+    #       [O+]R           [O]R
+    #       //              /
+    # R2N - C  >> R2[N+] = C
     #
-    atoms = ({'atom': 'C', 'hybridization': 2}, {'atom': 'O', 'neighbors': 2, 'hybridization': 2, 'charge': 1},
-             {'atom': 'N', 'hybridization': 1})
-    bonds = ((1, 2, 2), (1, 3, 1))
-    atom_fix = {2: (-1, None), 3: (1, None)}
-    bonds_fix = ((1, 2, 1), (1, 3, 2))
-    raw_rules.append((atoms, bonds, atom_fix, bonds_fix, False))
+    q = smarts('[O;D2;z2;+]=[C;z2][N;D1,D2,D3;z1]')
+    atom_fix = {1: (-1, None), 3: (1, None)}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, False))
 
     #
     #      [O,S]H    [O,S]
@@ -576,6 +574,16 @@ def _rules_single():
     q = smarts('[O;D1;x0;z1]-[C;D3;z2;x2](-[O,N])=C')
     atom_fix = {}
     bonds_fix = ((1, 2, 2), (2, 4, 1))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    # acyclic keto-enol
+    #         OH                  O
+    #        /                   //
+    # C,H - C = C - C,H >> C,H - C - C - C,H
+    #
+    q = smarts('[O;D1;z1;x0][C;D2,D3;z2;x1;!R]=[C;z2;x0]')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 2), (2, 3, 1))
     rules.append((q, atom_fix, bonds_fix, True))
 
     #
