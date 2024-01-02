@@ -487,6 +487,14 @@ def _rules_single():
     rules.append((q, atom_fix, bonds_fix, False))
 
     #
+    # CH-N=O >> C=N-OH
+    #
+    q = smarts('[O;D1;z2;x1]=[N;D2;x1;z2][C;D1,D2,D3;z1]')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
     #       [O+]R           [O]R
     #       //              /
     # R2N - C  >> R2[N+] = C
@@ -509,7 +517,15 @@ def _rules_single():
     #
     # fix pyridin-2-one. note: only after amide rule
     #
-    q = smarts('[O,S;D1;z2;x0]=[C;D3;r6]1[N;D2;z1][A;z2]-,=[A;z2][A;z2]-,=[A;z2]1')
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[N;D2;z1][A;z2]-,=[A;z2][A;z2]-,=[A;z2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyridin-2-imine
+    #
+    q = smarts('[N;D2;z2;!R]=[C;D3;r6]1[N;D2;z1][A;z2]-,=[A;z2][A;z2]-,=[A;z2]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
@@ -551,7 +567,15 @@ def _rules_single():
     #
     # fix pyridin. note: don't move.
     #
-    q = smarts('[O;D1;z2;x0]=[C;D3;r6]1[N;D2;z2]=[A;z2][A;z2]-,=[A;z2][C;D2,D3;z1]1')
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[N;D2;z2]=[A;z2][A;z2]-,=[A;z2][C;D2,D3;z1]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 7, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyridin amine.
+    #
+    q = smarts('[N;D2;z2;!R]=[C;D3;r6]1[N;D2;z2]=[A;z2][A;z2]-,=[A;z2][C;D2,D3;z1]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 7, 2))
     rules.append((q, atom_fix, bonds_fix, True))
