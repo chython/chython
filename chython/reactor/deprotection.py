@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -448,12 +448,12 @@ _amide_tritil = (
      '[A:1]'),
 )
 
-_thiol_tritil =  (
+_thiol_tritil = (
     ('[C;D2,D3,D4;z1;x1;M][S;D2:1]-C(C:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(C:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)C:3:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:3',  # noqa
      '[A:1]'),
 )
 
-_thiol_mmt =  (
+_thiol_mmt = (
     ('[C;D2,D3,D4;z1;x1;M][S;D2:1]-C(C:1:[C;D2]:[C;D2]:C(-O[C;D1]):[C;D2]:[C;D2]:1)(C:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)C:3:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:3',  # noqa
      '[A:1]'),
 )
@@ -504,8 +504,8 @@ _phosphate_benzyl = (
 # Magic Factory #
 #################
 
-__all__ = [k[1:] for k, v in globals().items() if k.startswith('_') and isinstance(v, tuple) and v]
-
+_groups = [k[1:] for k, v in globals().items() if k.startswith('_') and isinstance(v, tuple) and v]
+__all__ = ['apply_all'] + _groups
 _cache = {}
 
 
@@ -529,11 +529,21 @@ def _prepare_reactor(rules, name):
     return w
 
 
+def apply_all(molecule: MoleculeContainer, /) -> MoleculeContainer:
+    """
+    Remove all found protective groups from the given molecule.
+    """
+    for name in _groups:
+        molecule = __getattr__(name)(molecule)
+    return molecule
+
+
+
 def __getattr__(name):
     try:
         return _cache[name]
     except KeyError:
-        if name in __all__:
+        if name in _groups:
             _cache[name] = t = _prepare_reactor(globals()[f'_{name}'], name)
             return t
         raise AttributeError
