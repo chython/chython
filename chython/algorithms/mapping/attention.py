@@ -42,7 +42,7 @@ class Attention:
             logger.info('atom-to-atom mapping not supported for hypervalent compounds')
             return False
         fixed = self.__fix_collisions()
-        equal_atoms, p2r, r2p, r_adj, p_adj, r_map, p_map, pa = self.__prepare_remapping()
+        equal_atoms, p2r, r2p, r_adj, p_adj, r_map, p_map, pa, rg_map = self.__prepare_remapping()
 
         # rxnmapper-inspired algorithm
         am = self.__get_attention()
@@ -101,6 +101,12 @@ class Attention:
 
             for m in self.products:
                 m.remap(p_mapping)
+
+            if not keep_reactants_numbering and not fixed:
+                rg_mapping = {m: n for n, m in enumerate(rg_map, nm+1)}  # remap reagents to contiguous range without overlapping
+                for m in self.reagents:
+                    m.remap(rg_mapping)
+
             self.flush_cache()
             fixed = True
 
@@ -130,6 +136,7 @@ class Attention:
     def __prepare_remapping(self: 'ReactionContainer'):
         r_map = [n for m in self.reactants for n in m]
         p_map = [n for m in self.products for n in m]
+        rg_map = [n for m in self.reagents for n in m]
         ra = len(r_map)  # number of reactants atoms
         pa = len(p_map)  # number of products atoms
 
@@ -164,7 +171,7 @@ class Attention:
         ram.extend(repeat(False, len(pam) - len(ram)))
         ram = array(ram, dtype=bool)
         pam = array(pam, dtype=bool)
-        return p_atoms[:, None] == r_atoms, ix_(pam, ram), ix_(ram, pam), r_adj, p_adj, r_map, p_map, pa
+        return p_atoms[:, None] == r_atoms, ix_(pam, ram), ix_(ram, pam), r_adj, p_adj, r_map, p_map, pa, rg_map
 
     @class_cached_property
     def __attention_model(self):
