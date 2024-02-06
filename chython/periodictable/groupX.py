@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
 #  This file is part of chython.
@@ -45,6 +45,7 @@ class Ni(Element, PeriodIV, GroupX):
     @property
     def _valences_exceptions(self):
         return ((2, False, 0, ()),
+                (1, False, 0, ((1, 'C'),)),
                 (0, False, 0, ((2, 'O'), (1, 'O'))))  # Ni2O3
 
     @property
@@ -75,6 +76,7 @@ class Pd(Element, PeriodV, GroupX):
     @property
     def _valences_exceptions(self):
         return ((2, False, 0, ()),
+                (1, False, 0, ((1, 'C'),)),
                 (-2, False, 0, ((1, 'O'), (1, 'O'), (1, 'O'), (1, 'O'))),  # [Pd(OH)4]2-
                 (-2, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),  # [PdF4]2-
                 (-2, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'))))  # [PdCl4]2-
@@ -105,10 +107,12 @@ class Pt(Element, PeriodVI, GroupX):
 
     @property
     def _valences_exceptions(self):
-        return ((0, False, 0, ((1, 'N'), (1, 'N'), (1, 'Cl'), (1, 'Cl'))),
+        return ((2, False, 0, ()),
+                (0, False, 0, ((1, 'N'), (1, 'N'), (1, 'Cl'), (1, 'Cl'))),
                 (0, False, 0, ((1, 'N'), (1, 'N'), (1, 'O'), (1, 'O'))),
                 (0, False, 0, ((1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'), (1, 'F'))),  # PtF6
-                (0, False, 0, ((2, 'O'), (2, 'O'), (2, 'O'))))  # PtO3
+                (0, False, 0, ((2, 'O'), (2, 'O'), (2, 'O'))),  # PtO3
+                (0, False, 0, ((2, 'O'), (2, 'O'))))
 
     @property
     def atomic_radius(self):

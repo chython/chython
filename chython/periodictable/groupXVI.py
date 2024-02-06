@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasyrova@gmail.com>
@@ -163,6 +163,7 @@ class S(Element, PeriodIII, GroupXVI):
 
                 (0, False, 0, ((1, 'S'), (1, 'C'), (1, 'C'), (1, 'C'))),
                 (0, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'C'))),
+                (0, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'), (1, 'I'))),
 
                 (0, False, 0, ((2, 'O'), (2, 'O'), (2, 'O'))),
                 (0, False, 0, ((2, 'O'), (2, 'O'), (2, 'C'))),

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Alexander Nikanshin <17071996sasha@gmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
@@ -161,6 +161,7 @@ class I(Element, PeriodV, GroupXVII):
         return ((-1, False, 0, ()),
                 (-1, False, 0, ((1, 'I'), (1, 'I'))),  # [I-I-I]-
                 (-1, False, 0, ((1, 'I'), (1, 'Br'))),  # [I-I-Br]-
+                (-1, False, 0, ((1, 'Cl'), (1, 'Cl'))),  # [Cl-I-Cl]-
                 (1, False, 0, ((1, 'C'), (1, 'C'))),
 
                 (0, False, 0, ((1, 'O'), (2, 'O'))),  # HIO2

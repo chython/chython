@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Alexander Nikanshin <17071996sasha@gmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
@@ -44,7 +44,7 @@ class Cu(Element, PeriodIV, GroupXI):
 
     @property
     def _valences_exceptions(self):
-        return ((2, False, 0, ()),
+        return ((1, False, 0, ()), (2, False, 0, ()),
                 (-1, False, 0, ((1, 'Cl'), (1, 'Cl'))),  # [CuCl2]-
                 (-3, False, 0, ((1, 'S'), (1, 'S'))))  # [CuS2]3-
 
@@ -108,6 +108,8 @@ class Au(Element, PeriodVI, GroupXI):
     def _valences_exceptions(self):
         return ((1, False, 0, ()), (3, False, 0, ()),
                 (0, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'))),
+                (0, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'O'))),
+                (0, False, 0, ((1, 'Br'), (1, 'Br'), (1, 'Br'))),
                 (-1, False, 0, ((1, 'Cl'), (1, 'Cl'), (1, 'Cl'), (1, 'Cl'))))
 
     @property

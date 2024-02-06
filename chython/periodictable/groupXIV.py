@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasyrova@gmail.com>
 #  This file is part of chython.
@@ -133,6 +133,7 @@ class Sn(Element, PeriodV, GroupXIV):
         return ((2, False, 0, ()),
                 (0, False, 0, ((2, 'O'),)), (0, False, 0, ((1, 'O'), (1, 'O'))),
                 (0, False, 0, ((2, 'S'),)),
+                (0, False, 0, ((1, 'Cl'), (1, 'Cl'))),
 
                 (1, False, 0, ((1, 'C'), (1, 'C'), (1, 'C'))),
                 (0, False, 1, ((1, 'C'), (1, 'C'), (1, 'C'))),
