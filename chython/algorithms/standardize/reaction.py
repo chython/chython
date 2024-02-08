@@ -2,6 +2,7 @@
 #
 #  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Timur Gimadiev <timur.gimadiev@gmail.com>
+#  Copyright 2024 Philippe Gantzer <p.gantzer@icredd.hokudai.ac.jp>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -262,16 +263,15 @@ class StandardizeReaction:
             products_st2 = products_st1
             reagents_st2 = reagents_st1
 
-        if keep_reagents:
-            tmp = []
-            for m in self.reagents:
-                if m in reagents_st2:
-                    tmp.append(m)
-                    reagents_st2.discard(m)
-            tmp.extend(reagents_st2)
-            reagents = tuple(tmp)
-        else:
-            reagents = ()
+        # remove reagents from reactants
+        tmp = []
+        for m in self.reagents:
+            tmp.append(m)
+            if m in reagents_st2:
+                reagents_st2.discard(m)
+        tmp.extend(reagents_st2)
+        reagents = tuple(tmp) if keep_reagents else ()
+
         self._ReactionContainer__reactants = tuple(reactants_st2)
         self._ReactionContainer__products = tuple(products_st2)
         self._ReactionContainer__reagents = reagents
@@ -296,18 +296,17 @@ class StandardizeReaction:
                     products.append(i)
                 else:
                     reagents.add(i)
-            if keep_reagents:
-                tmp = []
-                for m in self.reagents:
-                    if m in reagents:
-                        tmp.append(m)
-                        reagents.discard(m)
-                tmp.extend(reagents)
-                reagents = tuple(tmp)
-            else:
-                reagents = ()
 
-            if len(reactants) != len(self.reactants) or len(products) != len(self.products):
+            # remove reagents from reactants
+            tmp = []
+            for m in self.reagents:
+                tmp.append(m)
+                if m in reagents:
+                    reagents.discard(m)
+            tmp.extend(reagents)
+            reagents = tuple(tmp) if keep_reagents else ()
+
+            if len(reactants) != len(self.reactants) or len(products) != len(self.products) or len(reagents) != len(self.reagents):
                 self._ReactionContainer__reactants = tuple(reactants)
                 self._ReactionContainer__products = tuple(products)
                 self._ReactionContainer__reagents = reagents
