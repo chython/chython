@@ -2,6 +2,7 @@
 #
 #  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Timur Gimadiev <timur.gimadiev@gmail.com>
+#  Copyright 2024 Philippe Gantzer <p.gantzer@icredd.hokudai.ac.jp>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
