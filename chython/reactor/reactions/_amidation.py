@@ -39,6 +39,12 @@ template = {
                 '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
                 # Alk2NH
                 '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+                # N1COCCC1
+                '[N;D2;x0;z1;r5,r6,r7,r8:3]([C;z1;x2;M]-;@[O;M])[C;z1;x1;M]'
+                # CNO[R,H]
+                '[N;D2;x1;z1:3]([O;x1;z1;M])[C;z1;x1;M]'
+                # C[NH]NAc
+                '[N;D2;x1;z1:3]([N;D2;z1;x1;M][C;x2;z2;M]=[O;M])[C;z1;x1;M]'
             ],
             'product': '[A:1]-[A:3]',
             'alerts': []
