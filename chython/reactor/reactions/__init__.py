@@ -42,6 +42,7 @@ Predefined reactors for common reactions.
 
 __all__ = ['PreparedReactor', 'prepare_reactor']
 __all__.extend(k[:-9] for k, v in globals().items() if k.endswith('_template') and isinstance(v, dict) and v)
+_cache = {}
 
 
 class PreparedReactor:
@@ -75,8 +76,6 @@ class PreparedReactor:
     def __call__(self, *molecules, one_shot=True, check_alerts: bool = True,
           excess: Optional[List[int]] = None) -> Iterator[ReactionContainer]:
         """
-        %s
-
         :param molecules: Reactants molecules.
         :param one_shot: Generate only single stage products. Otherwise, all possible combinations, including products.
         :param check_alerts: Check structural alerts of reactants.
@@ -141,7 +140,6 @@ class PreparedReactor:
 
 
 prepare_reactor = PreparedReactor  # backward compatibility
-_cache = {}
 
 
 def __getattr__(name):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -129,14 +129,16 @@ class Reactor(BaseReactor):
                     yield r
 
     def __single_stage(self, chosen, ignored) -> Iterator[List[MoleculeContainer]]:
-        max_ignored_number = max(ignored, default=0)
-        united_chosen = reduce(or_, chosen)
+        max_ignored_number = united_chosen = None
         split = len(self.__products_atoms) > 1
         for match in lazy_product(*(x.get_mapping(y, automorphism_filter=self.__automorphism_filter) for x, y in
                                     zip(self.patterns, chosen))):
             mapping = match[0].copy()
             for m in match[1:]:
                 mapping.update(m)
+            if united_chosen is None:
+                united_chosen = reduce(or_, chosen)
+                max_ignored_number = max(ignored, default=0)
             for new in self._patcher(united_chosen, mapping):
                 collision = set(new).intersection(ignored)
                 if collision:
@@ -149,6 +151,8 @@ class Reactor(BaseReactor):
 
 
 def fix_mapping_overlap(structures) -> List[MoleculeContainer]:
+    if len(structures) == 1:
+        return list(structures)
     checked = []
     checked_atoms = set()
     for structure in structures:
