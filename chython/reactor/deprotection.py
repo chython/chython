@@ -328,14 +328,19 @@ _amine_nosyl = (  # NS. With SH-CH2-CH2-OH
 
 _amine_boc = (
     # Ar-NH2
-    ('[C;a:1][N;D2:2]-C(=O)OC([C;D1])([C;D1])[C;D1]', '[A:1][A:2]',
+    ('[C;a;M][N;D2;x0;z1:1]-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]',
      'c1ccccc1NC(=O)OC(C)(C)C', 'c1ccccc1N'),
     # Alk-NH2
-    ('[C;D2,D3,D4;z1;x1:1][N;D2:2]-C(=O)OC([C;D1])([C;D1])[C;D1]', '[A:1][A:2]'),
+    ('[C;D2,D3,D4;z1;x1;M][N;D2;x0;z1:1]-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]'),
     # Alk-NH-Ar
-    ('[C;a:1][N:2]([C;z1;x1:3])-C(=O)OC([C;D1])([C;D1])[C;D1]', '[A:1][A:2][A:3]'),
+    ('[C;a;M][N;D3;x0;z1:1]([C;z1;x1;M])-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]'),
     # Alk2NH
-    ('[C;D2,D3,D4;z1;x1:1][N:2]([C;z1;x1:3])-C(=O)OC([C;D1])([C;D1])[C;D1]', '[A:1][A:2][A:3]'),
+    ('[C;D2,D3,D4;z1;x1;M][N;D3;x0;z1:1]([C;z1;x1;M])-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]'),
+    # Alk[NH]-O-Alk
+    ('[C;D2,D3,D4;z1;x1;M][N;D3;x1;z1:1]([O;D2;x1;z1;M][C;z1;x1;M])-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]'),
+    # Alk-[NH]-COC
+    ('[C;D2,D3,D4;z1;x1;r5;M]1-;@[N;D3;x0;z1:1](-;@[C;z1;x2;M]-;@[O,S;D2;x0;z1;M][C;z1;x1;M]1)-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]'),
+    ('[C;D2,D3,D4;z1;x1;r6,r7,r8,r9;M]-;@[N;D3;x0;z1:1](-;@[C;z1;x2;M]-;@[O,S;D2;x0;z1;M][C;z1;x1;M])-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]'),
 )
 
 _amine_tfa = (
@@ -446,6 +451,11 @@ _amine_bhoc = (
 _amide_tritil = (
     ('[C;D3;x2;M](=[O;M])[N;D2:1]-C(C:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(C:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)C:3:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:3',  # noqa
      '[A:1]'),
+)
+
+_amide_boc = (
+    ('[N;D2,D3;x0;z1:1]([C;D3;x2;z2;M]=[O;M])-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'CC(=O)NC(=O)OC(C)(C)C', 'CC(N)=O'),
 )
 
 _thiol_tritil = (
