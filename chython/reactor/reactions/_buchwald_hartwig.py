@@ -20,7 +20,7 @@
 
 
 template = {
-    'name': 'Buchwald-Hartwig reaction ',
+    'name': 'Buchwald-Hartwig reaction',
     'description': 'Buchwald-Hartwig amination reaction, C-N coupling reaction',
     'templates': [
         {

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
-#  Copyright 2023 Timur Gimadiev <timur.gimadiev@gmail.com>
+#  Copyright 2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,27 +19,22 @@
 
 
 template = {
-    'name': 'Sonogashira reaction',
-    'description': 'Sonogashira reaction, C-C coupling reaction. It employs a palladium catalyst as well as copper'
-                   'co-catalyst',
+    'name': 'Macmillan',
+    'description': 'Deoxygenative C-C coupling reaction',
     'templates': [
         {
             'A': [
-                # HC#C-R
-                '[C;D1;x0;z3:1]#[C;D2;x0;M]'
+                # Hal-Ar
+                '[Cl,Br,I;D1:1]-[C;a:2]'
             ],
             'B': [
-                # Ar-Hal
-                '[Cl,Br,I;D1:3]-[C;a:2]',
-                # C=C-Hal
-                '[Cl,Br,I;D1:3]-[C;x1;z2:2]=[C;x0;z2;M]',
-                # R-C(=O)-Hal
-                '[Cl,Br,I;D1:3]-[C;x2;z2:2]=[O;M]'
+                # CO
+                '[O;D1;x0;z1:3]-[C;x1;z1:4]'
             ],
-            'product': '[A:1]-[A:2]',
+            'product': '[A:2]-[A:4]',
             'alerts': [],
             'ufe': {
-                'A': '[A:1][U;M]',
+                'A': 1,
                 'B': 3
             }
         }

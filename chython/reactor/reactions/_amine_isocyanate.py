@@ -20,7 +20,7 @@
 
 
 template = {
-    'name': 'Amine with isocyanate reaction ',
+    'name': 'Amine with isocyanate reaction',
     'description': 'Amine with isocyanate reaction, C-N coupling reaction',
     'templates': [
         {

@@ -20,7 +20,7 @@
 
 
 template = {
-    'name': 'Sulfoamination reaction ',
+    'name': 'Sulfoamination reaction',
     'description': 'Sulfoamination reaction, S-N coupling reaction',
     'templates': [
         {
