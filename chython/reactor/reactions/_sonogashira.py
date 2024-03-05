@@ -38,8 +38,12 @@ template = {
                 '[Cl,Br,I;D1:3]-[C;x2;z2:2]=[O;M]'
             ],
             'product': '[A:1]-[A:2]',
-            'alerts': []
-        },
+            'alerts': [],
+            'ufe': {
+                'A': '[A:1][U;M]',
+                'B': 3
+            }
+        }
     ],
     'alerts': []
 }

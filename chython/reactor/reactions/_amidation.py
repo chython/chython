@@ -47,8 +47,12 @@ template = {
                 '[N;D2;x1;z1:3]([N;D2;z1;x1;M][C;x2;z2;M]=[O;M])[C;z1;x1;M]'
             ],
             'product': '[A:1]-[A:3]',
-            'alerts': []
-        },
+            'alerts': [],
+            'ufe': {
+                'A': 2,  # use existing terminal atom
+                'B': '[A:3][U;M]'  # add temporary terminal atom
+            }
+        }
     ],
     'alerts': ['[O;D1;x0;z1][C;z1;x1]', '[O;D1;z1][C,N;a]']  # global untolerant groups
 }

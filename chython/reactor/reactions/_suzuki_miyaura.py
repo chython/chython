@@ -39,7 +39,11 @@ template = {
                 '[B;D3;x2;z1:4]([O:5])([O:6])-[C;x1,x2;z1:3]'
             ],
             'product': '[A:2]-[A:3]',
-            'alerts': []
+            'alerts': [],
+            'ufe': {
+                'A': 1,
+                'B': '[A:3][U;M]'
+            }
         },
         {
             'A': [
@@ -55,7 +59,11 @@ template = {
                 '[B;D3;x2;z1:4]([O:5])([O:6])-[C;x1,x2;z1:3]'
             ],
             'product': '[A:2]-[A:3]',
-            'alerts': []
+            'alerts': [],
+            'ufe': {
+                'A': 1,
+                'B': '[A:3][U;M]'
+            }
         },
         {
             'A': [
@@ -69,7 +77,11 @@ template = {
                 '[B;D3;x2;z1:4]([O:5])([O:6])-[C;x1,x2;z2:3]=[C;x0,x1;z2;M]'
             ],
             'product': '[A:2]-[A:3]',
-            'alerts': []
+            'alerts': [],
+            'ufe': {
+                'A': 1,
+                'B': '[A:3][U;M]'
+            }
         }
     ],
     'alerts': []

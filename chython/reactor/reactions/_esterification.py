@@ -38,7 +38,11 @@ template = {
             'alerts': [
                 '[S;D1;x0;z1][C;x1;z1]',  # thiol
                 '[O,S;D1;z1][A;a]'  # [thia]phenol
-            ]
+            ],
+            'ufe': {
+                'A': 2,
+                'B': '[A:3][U;M]'
+            }
         }
     ],
     'alerts': []  # global untolerant groups

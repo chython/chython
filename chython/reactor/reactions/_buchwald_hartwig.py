@@ -39,8 +39,12 @@ template = {
                 '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
             ],
             'product': '[A:2]-[A:3]',
-            'alerts': []
-        },
+            'alerts': [],
+            'ufe': {
+                'A': 1,
+                'B': '[A:3][U;M]'
+            }
+        }
     ],
     'alerts': []
 }
