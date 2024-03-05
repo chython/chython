@@ -67,7 +67,7 @@ _groups = {
 
     'Carboxylic Acid Ester': '[O;z2;x0]=[C;D3;x2;z2][O;D2;x0]',
 
-    'Carboxylic Acid Halide' : '[F,Cl,Br,I;D1][C;D3;x2;z2]=O',
+    'Carboxylic Acid Halide': '[F,Cl,Br,I;D1][C;D3;x2;z2]=O',
 
     'Amine primary': '[N;D1;x0;z1][C;z1,z4;x1]',
     'Amine primary aliphatic': '[N;D1;x0;z1][C;z1;x1]',

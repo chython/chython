@@ -29,7 +29,7 @@ from ._sonogashira import template as songashira_template
 from ._sulfonamidation import template as sulfonamidation_template
 from ._suzuki_miyaura import template as suzuki_miyaura_template
 from ..reactor import Reactor, fix_mapping_overlap
-from ... import smarts, ReactionContainer
+from ... import smarts, ReactionContainer, MoleculeContainer
 
 """
 Predefined reactors for common reactions.
@@ -73,7 +73,7 @@ class PreparedReactor:
     def __str__(self):
         return f'Reactor<{self.rules["name"]}>'
 
-    def __call__(self, *molecules, one_shot=True, check_alerts: bool = True,
+    def __call__(self, *molecules: MoleculeContainer, one_shot=True, check_alerts: bool = True,
           excess: Optional[List[int]] = None) -> Iterator[ReactionContainer]:
         """
         :param molecules: Reactants molecules.

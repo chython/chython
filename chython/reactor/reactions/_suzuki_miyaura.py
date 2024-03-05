@@ -44,7 +44,7 @@ template = {
         {
             'A': [
                 # X-C=C
-                '[Cl,Br,I;D1:2]-[C;x1,x2;z2:1]=[C;x0,x1;z2;M]'
+                '[Cl,Br,I;D1:1]-[C;x1,x2;z2:2]=[C;x0,x1;z2;M]'
             ],
             'B': [
                 # Ar-B
@@ -60,7 +60,7 @@ template = {
         {
             'A': [
                 # X-C(alk)
-                '[Cl,Br;D1:2]-[C;x1,x2;z1:1]'
+                '[Cl,Br;D1:1]-[C;x1,x2;z1:2]'
             ],
             'B': [
                 # Ar-B
