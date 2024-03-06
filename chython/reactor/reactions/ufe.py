@@ -37,7 +37,7 @@ _cache = {}
 class TransformerWrapper:
     def __init__(self, query, transformation, name):
         if isinstance(transformation, str):
-            self.transformer = Transformer(smarts(query), smarts(transformation),
+            self.transformer = Transformer(smarts(query), smarts(transformation), copy_metadata=True,
                                            fix_aromatic_rings=False, fix_tautomers=False)
         else:
             self.query = smarts(query)
@@ -53,7 +53,6 @@ class TransformerWrapper:
                 yield copy
         else:
             for copy in self.transformer(molecule):
-                copy.meta.update(molecule.meta)
                 copy.meta[self.name] = max(copy)
                 yield copy
 

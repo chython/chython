@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -30,7 +30,7 @@ class Transformer(BaseReactor):
     """
     def __init__(self, pattern: QueryContainer, replacement: Union[MoleculeContainer, QueryContainer],
                  delete_atoms: bool = True, automorphism_filter: bool = True, fix_aromatic_rings: bool = True,
-                 fix_tautomers: bool = True):
+                 fix_tautomers: bool = True, copy_metadata: bool = False):
         """
         :param pattern: Search pattern.
         :param replacement: Resulted structure.
@@ -38,6 +38,7 @@ class Transformer(BaseReactor):
         :param fix_aromatic_rings: Proceed kekule and thiele on products.
         :param fix_tautomers: See `thiele()` docs.
         :param automorphism_filter: Skip matches to same atoms.
+        :param copy_metadata: Copy metadata from structure to transformed
         """
         if not isinstance(pattern, QueryContainer) or not isinstance(replacement, (MoleculeContainer, QueryContainer)):
             raise TypeError('invalid params')
@@ -45,6 +46,7 @@ class Transformer(BaseReactor):
         self.pattern = pattern
         self.replacement = replacement
         self.__automorphism_filter = automorphism_filter
+        self.__copy_metadata = copy_metadata
         super().__init__({n for n, h in pattern._masked.items() if not h}, replacement, delete_atoms,
                          fix_aromatic_rings, fix_tautomers)
 
@@ -53,7 +55,10 @@ class Transformer(BaseReactor):
             raise TypeError('only Molecules possible')
 
         for mapping in self.pattern.get_mapping(structure, automorphism_filter=self.__automorphism_filter):
-            yield from self._patcher(structure, mapping)
+            for transformed in self._patcher(structure, mapping):
+                if self.__copy_metadata:
+                    transformed.meta.update(structure.meta)
+                yield transformed
 
 
 __all__ = ['Transformer']
