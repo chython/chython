@@ -23,11 +23,12 @@ from ._buchwald_hartwig import template as buchwald_hartwig_template
 from ._esterification import template as esterification_template
 from ._macmillan import template as macmillan_template
 from ._reductive_amination import template as reductive_amination_template
-from ._sonogashira import template as songashira_template
+from ._sonogashira import template as sonogashira_template
 from ._sulfonamidation import template as sulfonamidation_template
 from ._suzuki_miyaura import template as suzuki_miyaura_template
 from ..transformer import Transformer
 from ... import MoleculeContainer, smarts
+from ...periodictable import U
 
 
 __all__ = ['PreparedUFE']
@@ -49,8 +50,10 @@ class TransformerWrapper:
     def __call__(self, molecule: MoleculeContainer) -> Iterator[MoleculeContainer]:
         if self.transformer is None:
             for mapping in self.query.get_mapping(molecule):
+                n = mapping[self.mapping]
                 copy = molecule.copy()
-                copy.meta[self.name] = mapping[self.mapping]
+                copy.atom(n).__class__ = U  # ad-hoc for masking leaving group
+                copy.meta[self.name] = n
                 yield copy
         else:
             for copy in self.transformer(molecule):
