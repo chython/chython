@@ -42,7 +42,7 @@ template = {
             'alerts': [],
             'ufe': {
                 'A': 1,
-                'B': '[A:3][U;M]'
+                'B': '[A:3][At;M]'
             }
         }
     ],

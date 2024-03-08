@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -52,7 +52,7 @@ _alkene_translate = {(0, 1): False, (1, 0): False, (0, 3): True, (3, 0): True,
                      (2, 3): False, (3, 2): False, (2, 1): True, (1, 2): True}
 
 # allowed atoms. these atoms have stable covalent bonds.
-_organic_subset = {1, 5, 6, 7, 8, 9, 14, 15, 16, 17, 33, 34, 35, 52, 53}
+_organic_subset = {1, 5, 6, 7, 8, 9, 14, 15, 16, 17, 33, 34, 35, 52, 53, 85}
 
 
 class Stereo:

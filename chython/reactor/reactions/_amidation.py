@@ -50,7 +50,7 @@ template = {
             'alerts': [],
             'ufe': {
                 'A': 2,  # use existing terminal atom
-                'B': '[A:3][U;M]'  # add temporary terminal atom
+                'B': '[A:3][At;M]'  # add temporary terminal atom
             }
         }
     ],

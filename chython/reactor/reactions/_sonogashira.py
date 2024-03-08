@@ -40,7 +40,7 @@ template = {
             'product': '[A:1]-[A:2]',
             'alerts': [],
             'ufe': {
-                'A': '[A:1][U;M]',
+                'A': '[A:1][At;M]',
                 'B': 3
             }
         }

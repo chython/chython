@@ -28,7 +28,7 @@ from ._sulfonamidation import template as sulfonamidation_template
 from ._suzuki_miyaura import template as suzuki_miyaura_template
 from ..transformer import Transformer
 from ... import MoleculeContainer, smarts
-from ...periodictable import U
+from ...periodictable import At
 
 
 __all__ = ['PreparedUFE']
@@ -52,7 +52,8 @@ class TransformerWrapper:
             for mapping in self.query.get_mapping(molecule):
                 n = mapping[self.mapping]
                 copy = molecule.copy()
-                copy.atom(n).__class__ = U  # ad-hoc for masking leaving group
+                copy._atoms[n].__class__ = At  # ad-hoc for masking leaving group
+                copy._hydrogens[n] = 0
                 copy.meta[self.name] = n
                 yield copy
         else:
