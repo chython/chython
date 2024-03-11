@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Dmitrij Zanadvornykh <zandmitrij@gmail.com>
 #  Copyright 2018 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
@@ -55,6 +55,8 @@ class Standardize:
             bonds = [(b, b.order) for _, _, b in self.bonds()]
 
         t = self.thiele(fix_tautomers=fix_tautomers)
+        if not t and fix_tautomers:  # after standardizations keto-enols stereo should be fixed
+            self.fix_stereo()
         c = self.standardize_charges(prepare_molecule=False, logging=True)
 
         if keep_kekule and t:  # restore
