@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -349,9 +349,9 @@ class QueryIsomorphism(Isomorphism):
             masks4 = []
             for *_, a, b in c:
                 if isinstance(a, AnyMetal):  # isotope, radical, charge, hydrogens and heteroatoms states ignored
-                    # elements except 1, 2, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 32, 33, 34, 35, 36, 51, 52, 53, 54
+                    # except 1, 2, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 32, 33, 34, 35, 36, 51, 52, 53, 54, 85
                     v1 = 0x0060707ffc1fff87
-                    v2 = 0xfffffffffffffff0
+                    v2 = 0xfffffff7fffffff0
                     v3 = 0xffffffffc0007fff
                     v4 = 0xffffffffffffffff
                 else:

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Dmitrij Zanadvornykh <zandmitrij@gmail.com>
 #  This file is part of chython.
 #
@@ -25,7 +25,7 @@ from ...exceptions import IsNotConnectedAtom
 
 
 _inorganic = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'F', 'Cl', 'Br', 'I', 'B', 'C', 'N', 'O',
-              'H', 'Si', 'P', 'S', 'Se', 'Ge', 'As', 'Sb', 'Te'}
+              'H', 'Si', 'P', 'S', 'Se', 'Ge', 'As', 'Sb', 'Te', 'At'}
 
 
 class Query(Core, ABC):
