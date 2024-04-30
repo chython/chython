@@ -21,6 +21,7 @@ from typing import Iterator
 from ._amidation import template as amidation_template
 from ._aryl_amination import template as aryl_amination_template
 from ._mitsunobu import template as mitsunobu_template
+from ._sonogashira import template as sonogashira_template
 from ._suzuki_miyaura import template as suzuki_miyaura_template
 
 

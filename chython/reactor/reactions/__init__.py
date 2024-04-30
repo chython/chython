@@ -24,6 +24,7 @@ from ._amidation import template as amidation_template
 from ._amine_isocyanate import template as amine_isocyanate_template
 from ._buchwald_hartwig import template as buchwald_hartwig_template
 from ._esterification import template as esterification_template
+from ._macmillan import template as macmillan_template
 from ._reductive_amination import template as reductive_amination_template
 from ._sonogashira import template as songashira_template
 from ._sulfonamidation import template as sulfonamidation_template
