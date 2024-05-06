@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -46,7 +46,9 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
     :param ignore_carbon_radicals: fill carbon radicals with hydrogen (X[C](X)X case).
     :param ignore_aromatic_radicals: don't treat aromatic tokens like c[c]c as radicals.
     """
-    if not data:
+    if not isinstance(data, str):
+        raise TypeError('Must be a SMILES string')
+    elif not data:
         raise ValueError('Empty string')
 
     contract: Optional[List[List[int]]]  # typing

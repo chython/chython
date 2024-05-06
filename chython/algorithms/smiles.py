@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
@@ -52,6 +52,13 @@ dyn_radical_str = {(True, True): '*', (True, False): '*>^', (False, True): '^>*'
 
 class Smiles(ABC):
     __slots__ = ()
+
+    @property
+    def smiles(self):
+        """
+        Generate SMILES string of the molecule.
+        """
+        return str(self)
 
     @cached_method
     def __str__(self):

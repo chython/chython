@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -67,6 +67,8 @@ def smarts(data: str):
     In multiprocess mode has potential bugs in reaction enumeration task then used templates prepared from components
     from different processes. For avoiding, prepare templates on single process and then share it.
     """
+    if not isinstance(data, str):
+        raise TypeError('Must be a SMARTS string')
     smr, *cx = data.split()
 
     hyb = {}
