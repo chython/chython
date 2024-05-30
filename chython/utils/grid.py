@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2024 Philippe Gantzer <p.gantzer@icredd.hokudai.ac.jp>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -60,15 +61,15 @@ def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] 
                     m.clean2d()
 
     for ms in zip_longest(*[iter(molecules)] * cols):
-        height = 0.
+        row_height = 0.
         for m in ms:
             if m is None:
                 break
             min_y = min(y for x, y in m._plane.values())
             max_y = max(y for x, y in m._plane.values())
             h = max_y - min_y
-            if height < h:  # get height of row
-                height = h
+            if row_height < h:  # get height of row
+                row_height = h
             planes.append(m._plane.copy())
 
         max_x = 0.
@@ -77,14 +78,14 @@ def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] 
                 break
             if labels is not None:
                 render_labels.append(f'    <text x="{max_x:.2f}" y="{-shift_y:.2f}">{next(labels)}</text>')
-                y = shift_y - height / 2. - font125  # blank
+                y = shift_y - row_height / 2. - font125  # blank
             else:
-                y = shift_y - height / 2.
+                y = shift_y - row_height / 2.
             max_x = m._fix_plane_mean(max_x, y) + 4. * font_size
             render.append(m.depict(_embedding=True)[:5])
             if max_x > shift_x:  # get total width
                 shift_x = max_x
-        shift_y -= height + 4. * font_size
+        shift_y -= row_height + 4. * font_size
 
     # restore planes
     for p, m in zip(planes, molecules):
