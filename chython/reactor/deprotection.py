@@ -548,7 +548,6 @@ def apply_all(molecule: MoleculeContainer, /) -> MoleculeContainer:
     return molecule
 
 
-
 def __getattr__(name):
     try:
         return _cache[name]

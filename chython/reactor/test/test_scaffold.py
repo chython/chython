@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,17 +17,17 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from chython import smiles, smarts, Transformer
-from chython.reactor import deprotection
+from chython.reactor import scaffold
 from itertools import product
 
 
-def test_deprotection():
+def test_scaffold():
     qs = set()
     ts = set()
-    for x in dir(deprotection):
+    for x in dir(scaffold):
         if x == 'apply_all':
             continue
-        for r in getattr(deprotection, '_' + x):
+        for r in getattr(scaffold, '_' + x):
             if len(r) > 2:  # has test
                 q, p, t, a, *bs = r
                 t = smiles(t)
