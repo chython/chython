@@ -341,6 +341,9 @@ _amine_boc = (
     # Alk-[NH]-COC
     ('[C;D2,D3,D4;z1;x1;r5;M]1-;@[N;D3;x0;z1:1](-;@[C;z1;x2;M]-;@[O,S;D2;x0;z1;M][C;z1;x1;M]1)-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]'),
     ('[C;D2,D3,D4;z1;x1;r6,r7,r8,r9;M]-;@[N;D3;x0;z1:1](-;@[C;z1;x2;M]-;@[O,S;D2;x0;z1;M][C;z1;x1;M])-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]'),
+    # amino-pyrrolidine
+    ('[C;D3;z1;x2;r5;M](-;@[N;M])[N;D2;x0;z1:1]-[C;x3;z2](=O)[O;x0;z1][C;D4;x1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'CC(C)(C)OC(=O)NC1CCCN1', 'NC1CCCN1'),
 )
 
 _amine_tfa = (
