@@ -66,7 +66,6 @@ _groups = {
     'Carboxylic Acid aromatic': '[O;D1;z1;x0][C;D3;x2;z2](=O)[C;a]',
 
     'Carboxylic Acid Ester': '[O;z2;x0]=[C;D3;x2;z2][O;D2;x0]',
-
     'Carboxylic Acid Halide': '[F,Cl,Br,I;D1][C;D3;x2;z2]=O',
 
     'Amine primary': '[N;D1;x0;z1][C;z1,z4;x1]',
@@ -76,6 +75,18 @@ _groups = {
     'Amine secondary aliphatic': '[N;D2;x0;z1]([C;z1;x1])[C;z1;x1]',
     'Amine secondary aromatic': '[N;D2;x0;z1]([C;a])[C;z1,z4;x1]',
     'Amine cyclic': '[N;D2;x0;z1;r4,r5,r6,r7,r8]([C;z1;x1])[C;z1;x1]',
+
+    'Alpha-aminoacid': '[N;D1;x0;z1][C;z1;x1][C;D3;z2;x2](=O)[O;D1]',
+    'Beta-aminoacid': '[N;D1;x0;z1][C;z1;x1][C;z1][C;D3;z2;x2](=O)[O;D1]',
+    'Gamma-aminoacid': '[N;D1;x0;z1][C;z1;x1][C;z1][C;z1][C;D3;z2;x2](=O)[O;D1]',
+
+    'Alpha-aminoacid N-protected': '[N;D2;x0;z1]([C;z1;x1][C;D3;z2;x2](=O)[O;D1])[C;D3;z2;x3](=O)[O;D2;x0]C',
+    'Beta-aminoacid N-protected': '[N;D2;x0;z1]([C;z1;x1][C;z1][C;D3;z2;x2](=O)[O;D1])[C;D3;z2;x3](=O)[O;D2;x0]C',
+    'Gamma-aminoacid N-protected': '[N;D2;x0;z1]([C;z1;x1][C;z1][C;z1][C;D3;z2;x2](=O)[O;D1])[C;D3;z2;x3](=O)[O;D2;x0]C',
+
+    'Alpha-aminoacid O-protected': '[N;D1;x0;z1][C;z1;x1][C;D3;z2;x2](=O)[O;D2;x0][C;z1;x1]',
+    'Beta-aminoacid O-protected': '[N;D1;x0;z1][C;z1;x1][C;z1][C;D3;z2;x2](=O)[O;D2;x0][C;z1;x1]',
+    'Gamma-aminoacid O-protected': '[N;D1;x0;z1][C;z1;x1][C;z1][C;z1][C;D3;z2;x2](=O)[O;D2;x0][C;z1;x1]',
 
     'Aryl Sulfone': '[S;D4;z3;x2](=O)(=O)(-[C;a])-[C;x1]',
     'Azide': '[N-;D1;x1;z2]=[N+;D2;x2;z3]=[N;D2;x1;z2]',
@@ -90,6 +101,7 @@ _groups = {
     'Thiol aromatic': '[S;D1;x0;z1][C;a]',
 
     'Hydrazine aromatic': '[N;D1;x1;z1][N;D2;x1;z1][C;a]',
+    'Hydrazine aliphatic': '[N;D1;x1;z1][N;D2;x1;z1][C;x1;z1]',
 
     'Isocyanate': '[O;D1;z2;x0]=[C;D2;x2;z3]=[N;D2;x0;z2]',
     'Isothiocyanate': '[S;D1;z2;x0]=[C;D2;x2;z3]=[N;D2;x0;z2]',
