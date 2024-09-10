@@ -22,6 +22,8 @@ from .core import *
 from .element import *
 from .query import *
 from .dynamic import *
+from .markushi_substituent import *
 
 
-__all__ = ['Core', 'Element', 'DynamicElement', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']
+__all__ = ['Core', 'Element', 'DynamicElement', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement',
+           'MarkushiElement']

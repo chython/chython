@@ -57,7 +57,10 @@ str_re = compile(r'@[@?]?')
 
 replace_dict = {'-': 1, '=': 2, '#': 3, ':': 4, '~': 8}
 not_dict = {'-': [2, 3, 4], '=': [1, 3, 4], '#': [1, 2, 4], ':': [1, 2, 3]}
-atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,4})?')
+atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,'
+                  r'4})?')
+# markushi_re = compile(r'([1-9][0-9]{0,2})?([R]{1}[0-9]{1,2})(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,'r'4})?')
+markushi_re =  compile(r'([R][1-9][0-9]?)')
 charge_dict = {'+': 1, '+1': 1, '++': 2, '+2': 2, '+3': 3, '+++': 3, '+4': 4, '++++': 4,
                '-': -1, '-1': -1, '--': -2, '-2': -2, '-3': -3, '---': -3, '-4': -4, '----': -4}
 
@@ -93,9 +96,15 @@ def _tokenize(smiles):
                 raise IncorrectSmiles(']..]')
             elif not token:
                 raise IncorrectSmiles('empty [] brackets')
-            tokens.append((5, ''.join(token)))
+            # check for R tokens
+            if fullmatch(markushi_re, ''.join(token)):
+                tokens.append((99, ''.join(token)))
+            else:
+                tokens.append((5, ''.join(token)))
             token = None
             token_type = 0  # mark as atom
+            # if fullmatch(markushi_re, token):
+            #     token_type = 99
         elif token_type == 5:  # grow token with brackets. skip validation
             token.append(s)
         # closure parser
@@ -237,6 +246,9 @@ def _tokenize(smiles):
         else:
             raise IncorrectSmiles('invalid %closure')
     elif token:
+        print(token)
+        if fullmatch(markushi_re, token):
+            token_type = 99
         tokens.append((token_type, token))  # C or B
     return tokens
 
@@ -244,6 +256,8 @@ def _tokenize(smiles):
 def _atom_parse(token):
     # [isotope]Element[element][@[@]][H[n]][+-charge][:mapping]
     _match = fullmatch(atom_re, token)
+    # if _match is None:
+    #     _match = fullmatch(markushi_re, token)
     if _match is None:
         raise IncorrectSmiles(f'atom token invalid {token}')
     isotope, element, stereo, hydrogen, charge, mapping = _match.groups()
@@ -378,6 +392,9 @@ def smiles_tokenize(smi):
             out.append(_atom_parse(token))
         elif token_type == 10:
             raise IncorrectSmiles('SMARTS detected')
+        elif token_type == 99:
+            out.append((99, {'element': token, 'mapping': 0, 'x': 0., 'y': 0., 'z': 0., 'isotope': None,
+                             'charge': 0, 'is_radical': False, 'hydrogen': None, 'stereo': None}))
         else:
             out.append((token_type, token))
     return out

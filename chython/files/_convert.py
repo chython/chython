@@ -20,6 +20,7 @@ from ..containers import MoleculeContainer, ReactionContainer
 from ..containers.bonds import Bond
 from ..exceptions import AtomNotFound
 from ..periodictable import Element
+from ..periodictable.element.markushi_substituent import MarkushiElement
 
 
 def create_molecule(data, *, skip_calc_implicit=False, ignore_bad_isotopes=False, _cls=MoleculeContainer):
@@ -33,7 +34,10 @@ def create_molecule(data, *, skip_calc_implicit=False, ignore_bad_isotopes=False
     mapping = data['mapping']
     for n, atom in enumerate(data['atoms']):
         n = mapping[n]
-        e = Element.from_symbol(atom['element'])
+        try:
+            e = Element.from_symbol(atom['element'])
+        except ValueError:
+            e = MarkushiElement.from_symbol(atom['element'])
         try:
             atoms[n] = e(atom['isotope'])
         except ValueError:
@@ -100,6 +104,61 @@ def create_reaction(data, *, ignore=True, skip_calc_implicit=False, ignore_bad_i
             data['meta'] = {}
         data['meta']['chython_parsing_log'] = data['log']
     return _r_cls(rc, pr, rg, meta=data['meta'], name=data['title'])
+
+def create_markushi(data, *, skip_calc_implicit=False, ignore_bad_isotopes=False, _cls=MoleculeContainer):
+    g = object.__new__(_cls)
+    pm = {}
+    atoms = {}
+    plane = {}
+    charges = {}
+    radicals = {}
+    bonds = {}
+    mapping = data['mapping']
+    for n, atom in enumerate(data['atoms']):
+        n = mapping[n]
+        try:
+            e = Element.from_symbol(atom['element'])
+        except ValueError:
+            e = MarkushiElement.from_symbol(atom['element'])
+        try:
+            atoms[n] = e(atom['isotope'])
+        except ValueError:
+            if not ignore_bad_isotopes:
+                raise
+            atoms[n] = e()  # reset isotope mark on errors.
+        bonds[n] = {}
+        if (charge := atom['charge']) > 4 or charge < -4:
+            raise ValueError('formal charge should be in range [-4, 4]')
+        charges[n] = charge
+        radicals[n] = atom['is_radical']
+        plane[n] = (atom['x'], atom['y'])
+        pm[n] = atom['mapping']
+    for n, m, b in data['bonds']:
+        n, m = mapping[n], mapping[m]
+        if n == m:
+            raise ValueError('atom loops impossible')
+        if n not in bonds or m not in bonds:
+            raise AtomNotFound('atoms not found')
+        if n in bonds[m]:
+            raise ValueError('atoms already bonded')
+        bonds[n][m] = bonds[m][n] = Bond(b)
+    if any(a['z'] for a in data['atoms']):
+        conformers = [{mapping[n]: (a['x'], a['y'], a['z']) for n, a in enumerate(data['atoms'])}]
+    else:
+        conformers = []
+
+    if data['log']:  # store log to the meta
+        if data['meta'] is None:
+            data['meta'] = {}
+        data['meta']['chython_parsing_log'] = data['log']
+
+    g.__setstate__({'atoms': atoms, 'bonds': bonds, 'meta': data['meta'], 'plane': plane, 'parsed_mapping': pm,
+                    'charges': charges, 'radicals': radicals, 'name': data['title'], 'conformers': conformers,
+                    'atoms_stereo': {}, 'allenes_stereo': {}, 'cis_trans_stereo': {}, 'hydrogens': {}})
+    if not skip_calc_implicit:
+        for n in atoms:
+            g._calc_implicit(n)
+    return g
 
 
 __all__ = ['create_molecule']

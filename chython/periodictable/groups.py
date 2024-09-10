@@ -88,3 +88,7 @@ class GroupXVII:
 
 class GroupXVIII:
     __slots__ = ()
+
+
+class Rgroup:
+    __slots__ = ()

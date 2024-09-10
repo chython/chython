@@ -20,10 +20,10 @@ from itertools import chain
 from re import compile, findall, search
 from typing import List, Union, Optional
 from .parser import parser
-from .tokenize import smiles_tokenize
+from .tokenize import smiles_tokenize, markushi_re
 from .._convert import create_molecule, create_reaction
 from .._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
-from ...containers import MoleculeContainer, ReactionContainer
+from ...containers import MoleculeContainer, ReactionContainer, MarkushiContainer
 from ...exceptions import IsChiral, NotChiral, ValenceError
 
 
@@ -150,13 +150,19 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
                                  ignore_aromatic_radicals=ignore_aromatic_radicals)
         return rxn
     else:
-        record = parser(smiles_tokenize(smi), not ignore)
+        tokens = smiles_tokenize(smi)
+        markushi = False
+        if 99 in [x for x, _ in tokens]:
+            markushi=True
+        record = parser(tokens, not ignore)
         for x in radicals:
             record['atoms'][x]['is_radical'] = True
         record['log'].extend(log)
-
         postprocess_parsed_molecule(record, remap=remap, ignore=ignore)
-        mol = create_molecule(record, ignore_bad_isotopes=ignore_bad_isotopes, _cls=_m_cls)
+        if markushi:
+            mol = create_molecule(record, ignore_bad_isotopes=ignore_bad_isotopes, _cls=MarkushiContainer)
+        else:
+            mol = create_molecule(record, ignore_bad_isotopes=ignore_bad_isotopes, _cls=_m_cls)
         postprocess_molecule(mol, record, ignore=ignore, ignore_stereo=ignore_stereo,
                              ignore_carbon_radicals=ignore_carbon_radicals, keep_implicit=keep_implicit,
                              ignore_aromatic_radicals=ignore_aromatic_radicals)
