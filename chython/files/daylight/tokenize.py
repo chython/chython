@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -47,6 +48,7 @@ from ...periodictable.element import ListElement
 # 10: query OR bond
 # 11: query NOT bond
 # 12: in ring bond
+# 99: R group
 
 
 atomic_numbers = dict(enumerate(common_isotopes, 1))
@@ -59,8 +61,7 @@ replace_dict = {'-': 1, '=': 2, '#': 3, ':': 4, '~': 8}
 not_dict = {'-': [2, 3, 4], '=': [1, 3, 4], '#': [1, 2, 4], ':': [1, 2, 3]}
 atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,'
                   r'4})?')
-# markushi_re = compile(r'([1-9][0-9]{0,2})?([R]{1}[0-9]{1,2})(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,'r'4})?')
-markushi_re =  compile(r'([R][1-9][0-9]?)')
+markushi_re = compile(r'([R][1-9][0-9]?)')
 charge_dict = {'+': 1, '+1': 1, '++': 2, '+2': 2, '+3': 3, '+++': 3, '+4': 4, '++++': 4,
                '-': -1, '-1': -1, '--': -2, '-2': -2, '-3': -3, '---': -3, '-4': -4, '----': -4}
 

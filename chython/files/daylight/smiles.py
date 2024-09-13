@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,7 +21,7 @@ from itertools import chain
 from re import compile, findall, search
 from typing import List, Union, Optional
 from .parser import parser
-from .tokenize import smiles_tokenize, markushi_re
+from .tokenize import smiles_tokenize
 from .._convert import create_molecule, create_reaction
 from .._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
 from ...containers import MoleculeContainer, ReactionContainer, MarkushiContainer

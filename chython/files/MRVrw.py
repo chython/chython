@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -22,16 +23,17 @@ from itertools import count, islice, chain
 from lxml.etree import iterparse, QName, tostring
 from pathlib import Path
 from typing import Union, List, Iterator, Dict, Optional
-from ._convert import create_molecule, create_reaction
+from ._convert import create_molecule, create_reaction, create_markushi
 from ._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
 from ._mdl import postprocess_molecule
-from ..containers import MoleculeContainer, ReactionContainer
+from ..containers import MoleculeContainer, ReactionContainer, MarkushiContainer
 from ..exceptions import EmptyMolecule, EmptyReaction
+from .daylight.tokenize import markushi_re, match
 
 
 organic_set = {'B', 'C', 'N', 'O', 'P', 'S', 'Se', 'F', 'Cl', 'Br', 'I'}
 bond_map = {8: '1" queryType="Any', 4: 'A', 1: '1', 2: '2', 3: '3',
-            'Any': 8, 'any': 8, 'A': 4, 'a': 4, '1': 1, '2': 2, '3': 3}
+            'Any': 8, 'any': 8, 'A': 4, 'a': 4, '1': 1, '2': 2, '3': 3, 'SA': 1}
 
 
 def xml_dict(parent_element, stop_list=None):
@@ -82,6 +84,7 @@ class MRVRead:
     """
     molecule_cls = MoleculeContainer
     reaction_cls = ReactionContainer
+    markushi_cls = MarkushiContainer
 
     def __init__(self, file, *, ignore: bool = True, remap: bool = False,
                  calc_cis_trans: bool = False, ignore_stereo: bool = False, ignore_bad_isotopes: bool = False):
@@ -112,7 +115,7 @@ class MRVRead:
         self.__xml = iterparse(self.__file, tag='{*}MChemicalStruct')
         self.__buffer = None
 
-    def read(self, amount: Optional[int] = None) -> List[Union[ReactionContainer, MoleculeContainer]]:
+    def read(self, amount: Optional[int] = None) -> List[Union[ReactionContainer, MoleculeContainer, MarkushiContainer]]:
         """
         Parse whole file
 
@@ -137,8 +140,17 @@ class MRVRead:
             tmp = parse_molecule(data)
             postprocess_parsed_molecule(tmp, remap=self.__remap, ignore=self.__ignore)
             parse_sgroup(data, tmp)
-            mol = create_molecule(tmp, ignore_bad_isotopes=self.__ignore_bad_isotopes, _cls=self.molecule_cls)
-            postprocess_molecule(mol, tmp, ignore=self.__ignore, ignore_stereo=self.__ignore_stereo,
+            if tmp['markushi']:
+                mol = create_markushi(tmp, ignore_bad_isotopes=self.__ignore_bad_isotopes, _cls=self.markushi_cls)
+                postprocess_molecule(mol, tmp, ignore=self.__ignore, ignore_stereo=self.__ignore_stereo,
+                                     calc_cis_trans=self.__calc_cis_trans)
+                core = mol.substructure(mol.connected_components[0])
+                subs = [str(mol.substructure(x)) for x in mol.connected_components[1:]]
+                mol = core
+                mol.substituents = subs
+            else:
+                mol = create_molecule(tmp, ignore_bad_isotopes=self.__ignore_bad_isotopes, _cls=self.molecule_cls)
+                postprocess_molecule(mol, tmp, ignore=self.__ignore, ignore_stereo=self.__ignore_stereo,
                                  calc_cis_trans=self.__calc_cis_trans)
             mol.meta.update(meta)
             return mol
@@ -265,6 +277,7 @@ def parse_molecule(data):
     log = []
     hydrogens = {}
     atom_map = {}
+    markushi = False
     if 'atom' in data['atomArray']:
         da = data['atomArray']['atom']
         if isinstance(da, dict):
@@ -281,7 +294,14 @@ def parse_molecule(data):
             else:
                 atoms[-1].update(x=float(atom['@x2']) / 2, y=float(atom['@y2']) / 2, z=0.)
             if '@mrvQueryProps' in atom:
-                raise ValueError('queries unsupported')
+                if extras := atom.get('@mrvQueryProps', 0):
+                    if isinstance(extras, str) and extras.startswith("A:"):
+                        r_atom = extras.split(":")[1]
+                        if match(markushi_re,  r_atom):
+                            atoms[-1].update(element=r_atom)
+                            markushi = True
+                else:
+                    raise ValueError('queries unsupported')
             if '@hydrogenCount' in atom:
                 hydrogens[n] = int(atom['@hydrogenCount'])
     else:
@@ -316,7 +336,14 @@ def parse_molecule(data):
                 if x != '0':
                     a['is_radical'] = True
         if '@mrvQueryProps' in atom:
-            raise ValueError('queries unsupported')
+            if extras := atom.get('@mrvQueryProps', 0):
+                if isinstance(extras, str) and extras.startswith("A:"):
+                    r_atom = extras.split(":")[1]
+                    if match(markushi_re, r_atom):
+                        atoms[-1].update(element=r_atom)
+                        markushi = True
+            else:
+                raise ValueError('queries unsupported')
     if not atoms:
         raise EmptyMolecule
 
@@ -341,7 +368,7 @@ def parse_molecule(data):
             bonds.append((atom_map[a1], atom_map[a2], order))
 
     return {'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'hydrogens': hydrogens,
-            'meta': None, 'title': data.get('@title'), 'log': log, 'atom_map': atom_map}
+            'meta': None, 'title': data.get('@title'), 'log': log, 'atom_map': atom_map, 'markushi': markushi}
 
 
 def parse_sgroup(data, molecule):
