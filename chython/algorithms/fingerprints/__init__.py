@@ -20,13 +20,14 @@
 from typing import TYPE_CHECKING
 from .linear import *
 from .morgan import *
+from .circus import *
 
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer, CGRContainer
 
 
-class Fingerprints(LinearFingerprint, MorganFingerprint):
+class Fingerprints(LinearFingerprint, CircusFingerprint, MorganFingerprint):
     __slots__ = ()
 
     @property
@@ -35,7 +36,7 @@ class Fingerprints(LinearFingerprint, MorganFingerprint):
                 for idx, atom in self._atoms.items()}
 
 
-class FingerprintsCGR(LinearFingerprint, MorganFingerprint):
+class FingerprintsCGR(LinearFingerprint, CircusFingerprint, MorganFingerprint):
     __slots__ = ()
 
     @property
