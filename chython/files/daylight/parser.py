@@ -26,7 +26,7 @@ def parser(tokens, strong_cycle):
     if t1 == 2:
         if tokens[1][0] not in (0, 8):
             raise IncorrectSmiles('not atom started')
-    elif t1 not in (0, 8, 99):
+    elif t1 not in (0, 8):
         raise IncorrectSmiles('not atom started')
 
     atoms = []

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
-#  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -88,11 +87,4 @@ class GroupXVII:
 
 
 class GroupXVIII:
-    __slots__ = ()
-
-
-class Rgroup:
-    __slots__ = ()
-
-class Xgroup:
     __slots__ = ()

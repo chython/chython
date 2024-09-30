@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
-#  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -24,8 +23,9 @@ from .parser import parser
 from .tokenize import smiles_tokenize
 from .._convert import create_molecule, create_reaction
 from .._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
-from ...containers import MoleculeContainer, ReactionContainer, MarkushiContainer
+from ...containers import MoleculeContainer, ReactionContainer, MarkushContainer
 from ...exceptions import IsChiral, NotChiral, ValenceError
+from ...periodictable import R, X
 
 
 cx_fragments = compile(r'f:(?:[0-9]+(?:\.[0-9]+)+)(?:,(?:[0-9]+(?:\.[0-9]+)+))*')
@@ -34,8 +34,8 @@ cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
 
 def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: bool = False,
            ignore_bad_isotopes: bool = False, keep_implicit: bool = False, ignore_carbon_radicals: bool = False,
-           ignore_aromatic_radicals: bool = True,
-           _r_cls=ReactionContainer, _m_cls=MoleculeContainer) -> Union[MoleculeContainer, ReactionContainer]:
+           ignore_aromatic_radicals: bool = True, _r_cls=ReactionContainer, _m_cls=MoleculeContainer,
+           _mk_cls=MarkushContainer) -> Union[MoleculeContainer, ReactionContainer, MarkushContainer]:
     """
     SMILES string parser
 
@@ -151,22 +151,18 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
                                  ignore_aromatic_radicals=ignore_aromatic_radicals)
         return rxn
     else:
-        tokens = smiles_tokenize(smi)
-        markushi = False
-        if 99 in [x for x, _ in tokens]:
-            markushi=True
-        record = parser(tokens, not ignore)
+        record = parser(smiles_tokenize(smi), not ignore)
         for x in radicals:
             record['atoms'][x]['is_radical'] = True
         record['log'].extend(log)
+
         postprocess_parsed_molecule(record, remap=remap, ignore=ignore)
-        if markushi:
-            mol = create_molecule(record, ignore_bad_isotopes=ignore_bad_isotopes, _cls=MarkushiContainer)
-        else:
-            mol = create_molecule(record, ignore_bad_isotopes=ignore_bad_isotopes, _cls=_m_cls)
+        mol = create_molecule(record, ignore_bad_isotopes=ignore_bad_isotopes, _cls=_m_cls)
         postprocess_molecule(mol, record, ignore=ignore, ignore_stereo=ignore_stereo,
                              ignore_carbon_radicals=ignore_carbon_radicals, keep_implicit=keep_implicit,
                              ignore_aromatic_radicals=ignore_aromatic_radicals)
+        # if any(isinstance(a, (R, X)) for _, a in mol.atoms()):
+        #     return MarkushContainer.from_molecule(mol)
         return mol
 
 

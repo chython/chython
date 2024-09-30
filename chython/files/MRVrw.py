@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
@@ -23,12 +23,12 @@ from itertools import count, islice, chain
 from lxml.etree import iterparse, QName, tostring
 from pathlib import Path
 from typing import Union, List, Iterator, Dict, Optional
-from ._convert import create_molecule, create_reaction, create_markushi
+from ._convert import create_molecule, create_reaction
 from ._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
 from ._mdl import postprocess_molecule
-from ..containers import MoleculeContainer, ReactionContainer, MarkushiContainer
+from ..containers import MoleculeContainer, ReactionContainer, MarkushContainer
 from ..exceptions import EmptyMolecule, EmptyReaction
-from .daylight.tokenize import markushi_re, match
+from .daylight.tokenize import markush_re, match
 
 
 organic_set = {'B', 'C', 'N', 'O', 'P', 'S', 'Se', 'F', 'Cl', 'Br', 'I'}
@@ -84,7 +84,7 @@ class MRVRead:
     """
     molecule_cls = MoleculeContainer
     reaction_cls = ReactionContainer
-    markushi_cls = MarkushiContainer
+    markush_cls = MarkushContainer
 
     def __init__(self, file, *, ignore: bool = True, remap: bool = False,
                  calc_cis_trans: bool = False, ignore_stereo: bool = False, ignore_bad_isotopes: bool = False):
@@ -115,7 +115,7 @@ class MRVRead:
         self.__xml = iterparse(self.__file, tag='{*}MChemicalStruct')
         self.__buffer = None
 
-    def read(self, amount: Optional[int] = None) -> List[Union[ReactionContainer, MoleculeContainer, MarkushiContainer]]:
+    def read(self, amount: Optional[int] = None) -> List[Union[ReactionContainer, MoleculeContainer, MarkushContainer]]:
         """
         Parse whole file
 

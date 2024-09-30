@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
+#  Copyright 2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,26 +17,23 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from abc import ABC
-
-from .element.markushi_substituent import MarkushiElement
-from .groups import Rgroup, Xgroup
+from .element import Element
 
 
-class CoreR(MarkushiElement, Rgroup, ABC):
+class R(Element):
     __slots__ = ()
 
     @property
     def atomic_number(self):
-        return 0
+        return 6  # same as carbon for proper stereo treatment
 
     @property
     def isotopes_distribution(self):
-        return {}
+        return {n: 0. for n in range(1, 100)}
 
     @property
     def isotopes_masses(self):
-        return {}
+        return {n: 0. for n in range(1, 100)}
 
     @property
     def _common_valences(self):
@@ -47,23 +45,23 @@ class CoreR(MarkushiElement, Rgroup, ABC):
 
     @property
     def atomic_radius(self):
-        return None
+        return 1.
 
 
-class CoreX(MarkushiElement, Xgroup, ABC):
+class X(Element):
     __slots__ = ()
 
     @property
     def atomic_number(self):
-        return 0
+        return 6  # same as carbon for proper stereo treatment
 
     @property
     def isotopes_distribution(self):
-        return {}
+        return {n: 0. for n in range(1, 100)}
 
     @property
     def isotopes_masses(self):
-        return {}
+        return {n: 0. for n in range(1, 100)}
 
     @property
     def _common_valences(self):
@@ -75,14 +73,7 @@ class CoreX(MarkushiElement, Xgroup, ABC):
 
     @property
     def atomic_radius(self):
-        return None
+        return 1.
 
 
-for num in range(1, 100):  # generate 99 classes of R
-    locals()[f'R{num}'] = type(f'R{num}', (CoreR, MarkushiElement,), {"__qualname__": f'MarkushiElement.R{num}'})  #
-
-for num in range(1, 100):  # generate 99 classes of X
-    locals()[f'X{num}'] = type(f'X{num}', (CoreX, MarkushiElement,), {"__qualname__": f'MarkushiElement.X{num}'})
-
-
-__all__ = [*[f'R{num}' for num in range(1, 100)], *[f'R{num}' for num in range(1, 100)]]
+__all__ = ['R', 'X']
