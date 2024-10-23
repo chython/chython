@@ -74,6 +74,7 @@ _groups = {
     'Amine secondary': '[N;D2;x0;z1]([C;z1,z4;x1])[C;z1,z4;x1]',
     'Amine secondary aliphatic': '[N;D2;x0;z1]([C;z1;x1])[C;z1;x1]',
     'Amine secondary aromatic': '[N;D2;x0;z1]([C;a])[C;z1,z4;x1]',
+    'Amine tertiary': '[N;D3;x0;z1]([C;z1,z4;x1])([C;z1,z4;x1])[C;z1,z4;x1]',
     'Amine cyclic': '[N;D2;x0;z1;r4,r5,r6,r7,r8]([C;z1;x1])[C;z1;x1]',
 
     'Alpha-aminoacid': '[N;D1;x0;z1][C;z1;x1][C;D3;z2;x2](=O)[O;D1]',
