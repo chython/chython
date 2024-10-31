@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -58,6 +59,7 @@ str_re = compile(r'@[@?]?')
 replace_dict = {'-': 1, '=': 2, '#': 3, ':': 4, '~': 8}
 not_dict = {'-': [2, 3, 4], '=': [1, 3, 4], '#': [1, 2, 4], ':': [1, 2, 3]}
 atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,4})?')
+markush_re = compile(r'([RX])([1-9][0-9]?)?')
 charge_dict = {'+': 1, '+1': 1, '++': 2, '+2': 2, '+3': 3, '+++': 3, '+4': 4, '++++': 4,
                '-': -1, '-1': -1, '--': -2, '-2': -2, '-3': -3, '---': -3, '-4': -4, '----': -4}
 
@@ -375,7 +377,14 @@ def smiles_tokenize(smi):
             out.append((token_type, {'element': token, 'isotope': None, 'mapping': 0, 'charge': 0, 'is_radical': False,
                                      'x': 0., 'y': 0., 'z': 0., 'hydrogen': None, 'stereo': None}))
         elif token_type == 5:
-            out.append(_atom_parse(token))
+            if (_match := fullmatch(markush_re, token)) is None:
+                out.append(_atom_parse(token))
+            else:  # Markush detected
+                atom, idx = _match.groups()
+                if idx:
+                    idx = int(idx)
+                out.append((0, {'element': atom, 'isotope': idx, 'mapping': 0, 'charge': 0, 'is_radical': False,
+                                'x': 0., 'y': 0., 'z': 0., 'hydrogen': None, 'stereo': None}))
         elif token_type == 10:
             raise IncorrectSmiles('SMARTS detected')
         else:
