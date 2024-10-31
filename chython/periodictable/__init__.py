@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,9 +17,9 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import ABCMeta
-from .element import *
-from .groups import *
-from .periods import *
+from .base import *
+from .base.groups import *
+from .base.periods import *
 from .groupI import *
 from .groupII import *
 from .groupIII import *
@@ -51,9 +51,9 @@ __all__.extend(elements)
 for _class in (DynamicElement, QueryElement):
     for k, v in elements.items():
         name = f'{_class.__name__[:-7]}{k}'
-        globals()[name] = cls = type(name, (_class, *v.__mro__[-3:-1]),
-                                     {'__module__': v.__module__, '__slots__': (), 'atomic_number': v.atomic_number,
-                                      'atomic_radius': v.atomic_radius})
+        globals()[name] = cls = type(name,
+                                     (_class, *v.__mro__[-3:-1]),
+                                     {'__module__': v.__module__, '__slots__': (), 'atomic_number': v.atomic_number})
         setattr(modules[v.__module__], name, cls)
         modules[v.__module__].__all__.append(name)
         __all__.append(name)

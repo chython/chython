@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
-#  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
-#  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,10 +16,75 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .core import *
-from .element import *
-from .query import *
-from .dynamic import *
 
 
-__all__ = ['Core', 'Element', 'DynamicElement', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']
+class GroupI:
+    __slots__ = ()
+
+
+class GroupII:
+    __slots__ = ()
+
+
+class GroupIII:
+    __slots__ = ()
+
+
+class GroupIV:
+    __slots__ = ()
+
+
+class GroupV:
+    __slots__ = ()
+
+
+class GroupVI:
+    __slots__ = ()
+
+
+class GroupVII:
+    __slots__ = ()
+
+
+class GroupVIII:
+    __slots__ = ()
+
+
+class GroupIX:
+    __slots__ = ()
+
+
+class GroupX:
+    __slots__ = ()
+
+
+class GroupXI:
+    __slots__ = ()
+
+
+class GroupXII:
+    __slots__ = ()
+
+
+class GroupXIII:
+    __slots__ = ()
+
+
+class GroupXIV:
+    __slots__ = ()
+
+
+class GroupXV:
+    __slots__ = ()
+
+
+class GroupXVI:
+    __slots__ = ()
+
+
+class GroupXVII:
+    __slots__ = ()
+
+
+class GroupXVIII:
+    __slots__ = ()

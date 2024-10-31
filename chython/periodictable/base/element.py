@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,12 +20,11 @@ from abc import ABC, abstractmethod
 from CachedMethods import class_cached_property
 from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple, Type
-from .core import Core
 from ...exceptions import IsNotConnectedAtom, ValenceError
 
 
-class Element(Core, ABC):
-    __slots__ = ()
+class Element(ABC):
+    __slots__ = ('_isotope', '_charge', '_is_radical', '_x', '_y', '_implicit_hydrogens')
     __class_cache__ = {}
 
     def __init__(self, isotope: Optional[int] = None):
@@ -39,11 +38,34 @@ class Element(Core, ABC):
                 raise ValueError(f'isotope number {isotope} impossible or not stable for {self.atomic_symbol}')
         elif isotope is not None:
             raise TypeError('integer isotope number required')
-        super().__init__(isotope)
+        self._isotope = isotope
+        self._charge = 0
+        self._is_radical = False
+        self._x = self._y = 0
+        self._implicit_hydrogens = None
+
+    def __repr__(self):
+        if self._isotope:
+            return f'{self.__class__.__name__}({self._isotope})'
+        return f'{self.__class__.__name__}()'
 
     @property
     def atomic_symbol(self) -> str:
         return self.__class__.__name__
+
+    @property
+    @abstractmethod
+    def atomic_number(self) -> int:
+        """
+        Element number
+        """
+
+    @property
+    def isotope(self) -> Optional[int]:
+        """
+        Isotope number
+        """
+        return self._isotope
 
     @property
     def atomic_mass(self) -> float:
@@ -73,72 +95,103 @@ class Element(Core, ABC):
         Valence radius of atom
         """
 
-    @Core.charge.setter
-    def charge(self, charge: int):
-        if not isinstance(charge, int):
-            raise TypeError('formal charge should be int in range [-4, 4]')
-        elif charge > 4 or charge < -4:
-            raise ValueError('formal charge should be in range [-4, 4]')
-        try:
-            g = self._graph()
-            g._charges[self._n] = charge
-        except AttributeError:
-            raise IsNotConnectedAtom
-        else:
-            g._calc_implicit(self._n)
-            g.flush_cache()
-            g.fix_stereo()
+    @property
+    def charge(self) -> int:
+        """
+        Charge of atom
+        """
+        return self._charge
 
-    @Core.is_radical.setter
-    def is_radical(self, is_radical: bool):
-        if not isinstance(is_radical, bool):
+    @charge.setter
+    def charge(self, value: int):
+        """
+        Update charge of atom. Make sure to flush cache and recalculate hydrogens count and stereo.
+        Or use context manager on molecule:
+
+            with mol:
+                mol.atom(1).charge = 1
+        """
+        if not isinstance(value, int):
+            raise TypeError('formal charge should be int in range [-4, 4]')
+        elif value > 4 or value < -4:
+            raise ValueError('formal charge should be in range [-4, 4]')
+        self._charge = value
+
+    @property
+    def is_radical(self) -> bool:
+        """
+        Radical state of atoms
+        """
+        return self._is_radical
+
+    @is_radical.setter
+    def is_radical(self, value: bool):
+        """
+        Update radical state of atom. Make sure to flush cache and recalculate hydrogens count and stereo.
+        Or use context manager on molecule:
+
+            with mol:
+                mol.atom(1).is_radical = True
+        """
+        if not isinstance(value, bool):
             raise TypeError('bool expected')
-        try:
-            g = self._graph()
-            g._radicals[self._n] = is_radical
-        except AttributeError:
-            raise IsNotConnectedAtom
-        else:
-            g._calc_implicit(self._n)
-            g.flush_cache()
-            g.fix_stereo()
+        self._is_radical = value
 
     @property
     def x(self) -> float:
         """
         X coordinate of atom on 2D plane
         """
-        try:
-            return self._graph()._plane[self._n][0]
-        except AttributeError:
-            raise IsNotConnectedAtom
+        return self._x
+
+    @x.setter
+    def x(self, value: float):
+        if not isinstance(value, float):
+            raise TypeError('float expected')
+        self._x = value
 
     @property
     def y(self) -> float:
         """
         Y coordinate of atom on 2D plane
         """
-        try:
-            return self._graph()._plane[self._n][1]
-        except AttributeError:
-            raise IsNotConnectedAtom
+        return self._y
+
+    @y.setter
+    def y(self, value: float):
+        if not isinstance(value, float):
+            raise TypeError('float expected')
+        self._y = value
 
     @property
     def xy(self) -> Tuple[float, float]:
         """
         (X, Y) coordinates of atom on 2D plane
         """
-        try:
-            return self._graph()._plane[self._n]
-        except AttributeError:
-            raise IsNotConnectedAtom
+        return self._x, self._y
+
+    @xy.setter
+    def xy(self, value: Tuple[float, float]):
+        if (not isinstance(value, (tuple, list))
+                or len(value) != 2
+                or not isinstance(value[0], float)
+                or not isinstance(value[1], float)):
+            raise TypeError('tuple of 2 floats expected')
+        self._x, self._y = value
 
     @property
     def implicit_hydrogens(self) -> Optional[int]:
-        try:
-            return self._graph()._hydrogens[self._n]
-        except AttributeError:
-            raise IsNotConnectedAtom
+        return self._implicit_hydrogens
+
+    def copy(self):
+        copy = object.__new__(self.__class__)
+        copy._isotope = self.isotope
+        copy._charge = self.charge
+        copy._is_radical = self.is_radical
+        return copy
+
+    def __copy__(self):
+        return self.copy()
 
     @property
     def explicit_hydrogens(self) -> int:
@@ -149,10 +202,9 @@ class Element(Core, ABC):
 
     @property
     def total_hydrogens(self) -> int:
-        try:
-            return self._graph().total_hydrogens(self._n)
-        except AttributeError:
-            raise IsNotConnectedAtom
+        if self._implicit_hydrogens is None:
+            raise ValenceError
+        return self._implicit_hydrogens + self.explicit_hydrogens
 
     @property
     def heteroatoms(self) -> int:

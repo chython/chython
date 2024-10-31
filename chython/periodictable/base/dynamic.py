@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,19 +16,31 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from abc import ABC
-from typing import Type, Union
-from .core import Core
+from abc import ABC, abstractmethod
+from typing import Type, Union, Optional
 from .element import Element
-from ...exceptions import IsNotConnectedAtom
 
 
-class DynamicElement(Core, ABC):
-    __slots__ = ('__p_charge', '__p_is_radical')
+class DynamicElement(ABC):
+    __slots__ = ('_charge', '_is_radical', '_p_charge', '_p_is_radical', '_isotope')
+
+    def __init__(self, isotope: Optional[int]):
+        self._isotope = isotope
+
+    @property
+    def isotope(self):
+        return self._isotope
 
     @property
     def atomic_symbol(self) -> str:
         return self.__class__.__name__[7:]
+
+    @property
+    @abstractmethod
+    def atomic_number(self) -> int:
+        """
+        Element number
+        """
 
     @classmethod
     def from_symbol(cls, symbol: str) -> Type['DynamicElement']:
@@ -64,18 +76,20 @@ class DynamicElement(Core, ABC):
         return atom.copy()
 
     @property
+    def charge(self) -> int:
+        return self._charge
+
+    @property
+    def is_radical(self) -> bool:
+        return self._is_radical
+
+    @property
     def p_charge(self) -> int:
-        try:
-            return self._graph()._p_charges[self._n]
-        except AttributeError:
-            raise IsNotConnectedAtom
+        return self._p_charge
 
     @property
     def p_is_radical(self) -> bool:
-        try:
-            return self._graph()._p_radicals[self._n]
-        except AttributeError:
-            raise IsNotConnectedAtom
+        return self._p_is_radical
 
     def __eq__(self, other):
         """
@@ -95,6 +109,18 @@ class DynamicElement(Core, ABC):
         Atom has dynamic features
         """
         return self.charge != self.p_charge or self.is_radical != self.p_is_radical
+
+    def copy(self):
+        copy = object.__new__(self.__class__)
+        copy._isotope = self.isotope
+        copy._charge = self.charge
+        copy._is_radical = self.is_radical
+        copy._p_is_radical = self.p_is_radical
+        copy._p_charge = self.p_charge
+        return copy
+
+    def __copy__(self):
+        return self.copy()
 
 
 __all__ = ['DynamicElement']
