@@ -24,7 +24,9 @@ from ...exceptions import IsNotConnectedAtom, ValenceError
 
 
 class Element(ABC):
-    __slots__ = ('_isotope', '_charge', '_is_radical', '_x', '_y', '_implicit_hydrogens')
+    __slots__ = ('_isotope', '_charge', '_is_radical', '_x', '_y', '_implicit_hydrogens',
+                 '_explicit_hydrogens', '_stereo', '_parsed_mapping', '_xyz',
+                 '_neighbors', '_heteroatoms', '_hybridization')
     __class_cache__ = {}
 
     def __init__(self, isotope: Optional[int] = None):
@@ -43,6 +45,11 @@ class Element(ABC):
         self._is_radical = False
         self._x = self._y = 0
         self._implicit_hydrogens = None
+        self._explicit_hydrogens = 0
+        self._neighbors = 0
+        self._heteroatoms = 0
+        self._hybridization = 1
+        self._stereo = None
 
     def __repr__(self):
         if self._isotope:
@@ -183,45 +190,33 @@ class Element(ABC):
     def implicit_hydrogens(self) -> Optional[int]:
         return self._implicit_hydrogens
 
-    def copy(self):
-        copy = object.__new__(self.__class__)
-        copy._isotope = self.isotope
-        copy._charge = self.charge
-        copy._is_radical = self.is_radical
-        return copy
-
-    def __copy__(self):
-        return self.copy()
-
     @property
     def explicit_hydrogens(self) -> int:
-        try:
-            return self._graph().explicit_hydrogens(self._n)
-        except AttributeError:
-            raise IsNotConnectedAtom
+        return self._explicit_hydrogens
 
     @property
     def total_hydrogens(self) -> int:
-        if self._implicit_hydrogens is None:
+        if self.implicit_hydrogens is None:
             raise ValenceError
-        return self._implicit_hydrogens + self.explicit_hydrogens
+        return self.implicit_hydrogens + self.explicit_hydrogens
+
+    @property
+    def stereo(self):
+        """
+        Tetrahedron or allene stereo label
+        """
+        return self._stereo
 
     @property
     def heteroatoms(self) -> int:
-        try:
-            return self._graph().heteroatoms(self._n)
-        except AttributeError:
-            raise IsNotConnectedAtom
+        return self._heteroatoms
 
     @property
     def neighbors(self) -> int:
         """
         Neighbors count of atom
         """
-        try:
-            return self._graph().neighbors(self._n)
-        except AttributeError:
-            raise IsNotConnectedAtom
+        return self._neighbors
 
     @property
     def hybridization(self):
@@ -230,10 +225,26 @@ class Element(ABC):
         of single bonded, 3 - if has one triple bonded and any amount of double and single bonded neighbors or
         two double bonded and any amount of single bonded neighbors, 4 - if atom in aromatic ring.
         """
-        try:
-            return self._graph().hybridization(self._n)
-        except AttributeError:
-            raise IsNotConnectedAtom
+        return self._hybridization
+
+    def copy(self, full=False):
+        copy = object.__new__(self.__class__)
+        copy._isotope = self.isotope
+        copy._charge = self.charge
+        copy._is_radical = self.is_radical
+        if full:
+            copy._x = self.x
+            copy._y = self.y
+            copy._implicit_hydrogens = self.implicit_hydrogens
+            copy._explicit_hydrogens = self.explicit_hydrogens
+            copy._stereo = self.stereo
+            copy._neighbors = self.neighbors
+            copy._heteroatoms = self.heteroatoms
+            copy._hybridization = self.hybridization
+        return copy
+
+    def __copy__(self):
+        return self.copy()
 
     @property
     def ring_sizes(self) -> Tuple[int, ...]:
@@ -302,13 +313,13 @@ class Element(ABC):
     def __hash__(self):
         return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.implicit_hydrogens or 0))
 
-    def valence_rules(self, charge: int, is_radical: bool, valence: int) -> \
+    def valence_rules(self, valence: int) -> \
             List[Tuple[Set[Tuple[int, 'Element']], Dict[Tuple[int, 'Element'], int], int]]:
         """
         valence rules for element with specific charge/radical state
         """
         try:
-            return self._compiled_valence_rules[(charge, is_radical, valence)]
+            return self._compiled_valence_rules[(self.charge, self.is_radical, valence)]
         except KeyError:
             raise ValenceError
 

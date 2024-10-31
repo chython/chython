@@ -24,157 +24,35 @@ from ..algorithms.isomorphism import QueryIsomorphism
 from ..algorithms.smiles import QuerySmiles
 from ..algorithms.stereo import Stereo
 from ..periodictable import Element, ListElement, QueryElement
-from ..periodictable.element import Query
-
-
-def _validate_neighbors(neighbors):
-    if neighbors is None:
-        neighbors = ()
-    elif isinstance(neighbors, int):
-        if neighbors < 0 or neighbors > 14:
-            raise ValueError('neighbors should be in range [0, 14]')
-        neighbors = (neighbors,)
-    elif isinstance(neighbors, (tuple, list)):
-        if not all(isinstance(n, int) for n in neighbors):
-            raise TypeError('neighbors should be list or tuple of ints')
-        if any(n < 0 or n > 14 for n in neighbors):
-            raise ValueError('neighbors should be in range [0, 14]')
-        if len(set(neighbors)) != len(neighbors):
-            raise ValueError('neighbors should be unique')
-        neighbors = tuple(sorted(neighbors))
-    else:
-        raise TypeError('neighbors should be int or list or tuple of ints')
-    return neighbors
+from ..periodictable.base import Query
 
 
 class QueryContainer(Stereo, Graph[Query, QueryBond], QueryIsomorphism, QuerySmiles):
-    __slots__ = ('_neighbors', '_hybridizations', '_hydrogens', '_rings_sizes', '_heteroatoms', '_masked')
+    __slots__ = ()
 
-    _neighbors: Dict[int, Tuple[int, ...]]
-    _hybridizations: Dict[int, Tuple[int, ...]]
-    _hydrogens: Dict[int, Tuple[int, ...]]
-    _rings_sizes: Dict[int, Tuple[int, ...]]
-    _heteroatoms: Dict[int, Tuple[int, ...]]
-    _masked: Dict[int, bool]
-
-    def __init__(self):
-        super().__init__()
-        self._neighbors = {}
-        self._hybridizations = {}
-        self._hydrogens = {}
-        self._rings_sizes = {}
-        self._heteroatoms = {}
-        self._masked = {}
-
-    def add_atom(self, atom: Union[Query, Element, int, str], *args,
-                 neighbors: Union[int, List[int], Tuple[int, ...], None] = None,
-                 hybridization: Union[int, List[int], Tuple[int, ...], None] = None,
-                 hydrogens: Union[int, List[int], Tuple[int, ...], None] = None,
-                 rings_sizes: Union[int, List[int], Tuple[int, ...], None] = None,
-                 heteroatoms: Union[int, List[int], Tuple[int, ...], None] = None,
-                 masked: bool = False, **kwargs):
-        if hybridization is None:
-            hybridization = ()
-        elif isinstance(hybridization, int):
-            if hybridization < 1 or hybridization > 4:
-                raise ValueError('hybridization should be in range [1, 4]')
-            hybridization = (hybridization,)
-        elif isinstance(hybridization, (tuple, list)):
-            if not all(isinstance(h, int) for h in hybridization):
-                raise TypeError('hybridizations should be list or tuple of ints')
-            if any(h < 1 or h > 4 for h in hybridization):
-                raise ValueError('hybridizations should be in range [1, 4]')
-            if len(set(hybridization)) != len(hybridization):
-                raise ValueError('hybridizations should be unique')
-            hybridization = tuple(sorted(hybridization))
-        else:
-            raise TypeError('hybridization should be int or list or tuple of ints')
-
-        if rings_sizes is None:
-            rings_sizes = ()
-        elif isinstance(rings_sizes, int):
-            if rings_sizes < 3 and rings_sizes != 0:
-                raise ValueError('rings should be greater or equal 3. ring equal to zero is no ring atom mark')
-            rings_sizes = (rings_sizes,)
-        elif isinstance(rings_sizes, (tuple, list)):
-            if not all(isinstance(n, int) for n in rings_sizes):
-                raise TypeError('rings should be list or tuple of ints')
-            if any(n < 3 for n in rings_sizes):
-                raise ValueError('rings should be greater or equal 3')
-            if len(set(rings_sizes)) != len(rings_sizes):
-                raise ValueError('rings should be unique')
-            rings_sizes = tuple(sorted(rings_sizes))
-        else:
-            raise TypeError('rings should be int or list or tuple of ints')
-
-        neighbors = _validate_neighbors(neighbors)
-        hydrogens = _validate_neighbors(hydrogens)
-        heteroatoms = _validate_neighbors(heteroatoms)
-
+    def add_atom(self, atom: Union[Query, Element, int, str], *args, **kwargs):
         if not isinstance(atom, Query):
+            # set only basic labels: charge, radical, isotope. use Query object directly for the full control.
             if isinstance(atom, Element):
-                atom = QueryElement.from_atomic_number(atom.atomic_number)(atom.isotope)
+                atom = QueryElement.from_atom(atom)
             elif isinstance(atom, str):
                 atom = QueryElement.from_symbol(atom)()
             elif isinstance(atom, int):
                 atom = QueryElement.from_atomic_number(atom)()
             else:
                 raise TypeError('QueryElement object expected')
-
-        n = super().add_atom(atom, *args, **kwargs)
-        self._neighbors[n] = neighbors
-        self._hybridizations[n] = hybridization
-        self._hydrogens[n] = hydrogens
-        self._rings_sizes[n] = rings_sizes
-        self._heteroatoms[n] = heteroatoms
-        self._masked[n] = masked
-        return n
+        return super().add_atom(atom, *args, **kwargs)
 
     def add_bond(self, n, m, bond: Union[QueryBond, Bond, int, Tuple[int, ...]]):
         if isinstance(bond, Bond):
             bond = QueryBond.from_bond(bond)
         elif not isinstance(bond, QueryBond):
             bond = QueryBond(bond)
-
-        sct = self._stereo_cis_trans_paths  # save
-        sa = self._stereo_allenes_paths
-
         super().add_bond(n, m, bond)
-        # remove stereo marks on bonded atoms and all its bonds
-        if n in self._atoms_stereo:
-            del self._atoms_stereo[n]
-        if m in self._atoms_stereo:
-            del self._atoms_stereo[m]
-        if self._cis_trans_stereo:
-            for nm, path in sct.items():
-                if (n in path or m in path) and nm in self._cis_trans_stereo:
-                    del self._cis_trans_stereo[nm]
-        if self._allenes_stereo:
-            for c, path in sa.items():
-                if (n in path or m in path) and c in self._allenes_stereo:
-                    del self._allenes_stereo[c]
 
     def copy(self) -> 'QueryContainer':
         copy = super().copy()
-
-        copy._bonds = cb = {}
-        for n, m_bond in self._bonds.items():
-            cb[n] = cbn = {}
-            for m, bond in m_bond.items():
-                if m in cb:  # bond partially exists. need back-connection.
-                    cbn[m] = cb[m][n]
-                else:
-                    cbn[m] = bond.copy()
-
-        copy._neighbors = self._neighbors.copy()
-        copy._hybridizations = self._hybridizations.copy()
-        copy._hydrogens = self._hydrogens.copy()
-        copy._heteroatoms = self._heteroatoms.copy()
-        copy._rings_sizes = self._rings_sizes.copy()
-        copy._atoms_stereo = self._atoms_stereo.copy()
-        copy._allenes_stereo = self._allenes_stereo.copy()
         copy._cis_trans_stereo = self._cis_trans_stereo.copy()
-        copy._masked = self._masked.copy()
         return copy
 
     def union(self, other: 'QueryContainer', *, remap: bool = False, copy: bool = True) -> 'QueryContainer':

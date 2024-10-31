@@ -21,4 +21,4 @@ from .element import *
 from .query import *
 
 
-__all__ = ['Element', 'DynamicElement', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']
+__all__ = ['Element', 'DynamicElement', 'Query', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']

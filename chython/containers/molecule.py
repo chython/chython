@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,7 +19,6 @@
 from CachedMethods import cached_args_method
 from collections import Counter, defaultdict
 from functools import cached_property
-from numpy import uint, zeros
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 from weakref import ref
 from zlib import compress, decompress
@@ -45,37 +44,29 @@ from ..periodictable import DynamicElement, Element, QueryElement, H
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphism, Aromatize, StandardizeMolecule,
                         MoleculeSmiles, DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS,
                         X3domMolecule):
-    __slots__ = ('_plane', '_conformers', '_hydrogens', '_parsed_mapping', '_backup', '__meta', '__name')
-
-    _conformers: List[Dict[int, Tuple[float, float, float]]]
-    _hydrogens: Dict[int, Optional[int]]
-    _parsed_mapping: Dict[int, int]
-    _plane: Dict[int, Tuple[float, float]]
+    __slots__ = ('_backup', '_meta', '_name', '_changed')
 
     def __init__(self):
         super().__init__()
-        self._conformers = []
-        self._hydrogens = {}
-        self._parsed_mapping = {}
-        self._plane = {}
-        self.__meta = None
-        self.__name = None
+        self._meta = None
+        self._name = None
+        self._changed = None
 
     @property
     def meta(self) -> Dict:
-        if self.__meta is None:
-            self.__meta = {}  # lazy
-        return self.__meta
+        if self._meta is None:
+            self._meta = {}  # lazy
+        return self._meta
 
     @property
     def name(self) -> str:
-        return self.__name or ''
+        return self._name or ''
 
     @name.setter
     def name(self, name):
         if not isinstance(name, str):
-            raise TypeError('name should be string up to 80 symbols')
-        self.__name = name
+            raise TypeError('name should be a string preferably up to 80 symbols')
+        self._name = name
 
     def environment(self, atom: int, include_bond: bool = True, include_atom: bool = True) -> \
             Tuple[Union[Tuple[int, Bond, Element],
@@ -101,10 +92,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             return tuple(self._bonds[atom].items())
         return tuple(self._bonds[atom])
 
-    @cached_args_method
     def neighbors(self, n: int) -> int:
         """number of neighbors atoms excluding any-bonded"""
-        return sum(b.order != 8 for b in self._bonds[n].values())
+        return self._atoms[n].neighbors
 
     @cached_args_method
     def hybridization(self, n: int) -> int:
@@ -135,8 +125,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         """
         Number of neighbored heteroatoms (not carbon or hydrogen) except any-bond connected.
         """
-        atoms = self._atoms
-        return sum(atoms[m].atomic_number not in (1, 6) for m, b in self._bonds[n].items() if b.order != 8)
+        return self._atoms[n].heteroatoms
 
     def implicit_hydrogens(self, n: int) -> Optional[int]:
         """
@@ -144,26 +133,23 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
 
         Returns None if count are ambiguous.
         """
-        return self._hydrogens[n]
+        return self._atoms[n].implicit_hydrogens
 
-    @cached_args_method
     def explicit_hydrogens(self, n: int) -> int:
         """
         Number of explicit hydrogen atoms connected to atom.
 
         Take into account any type of bonds with hydrogen atoms.
         """
-        atoms = self._atoms
-        return sum(atoms[m].atomic_number == 1 for m in self._bonds[n])
+        return self._atoms[n].explicit_hydrogens
 
-    @cached_args_method
     def total_hydrogens(self, n: int) -> int:
         """
         Number of hydrogen atoms connected to atom.
 
         Take into account any type of bonds with hydrogen atoms.
         """
-        return self._hydrogens[n] + self.explicit_hydrogens(n)
+        return self._atoms[n].total_hydrogens
 
     @cached_args_method
     def adjacency_matrix(self, set_bonds=False, /):
@@ -172,6 +158,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
 
         :param set_bonds: if True set bond orders instead of 1.
         """
+        from numpy import uint, zeros
+
         adj = zeros((len(self), len(self)), dtype=uint)
         mapping = {n: x for x, n in enumerate(self._atoms)}
         if set_bonds:
@@ -191,24 +179,25 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         """
         Total charge of molecule
         """
-        return sum(self._charges.values())
+        return sum(a.charge for a in self._atoms.values())
 
     @cached_property
     def is_radical(self) -> bool:
         """
         True if at least one atom is radical
         """
-        return any(self._radicals.values())
+        return any(a.is_radical for a in self._atoms.values())
 
     @cached_property
     def molecular_mass(self) -> float:
-        return sum(x.atomic_mass for x in self._atoms.values()) + sum(self._hydrogens.values()) * H().atomic_mass
+        h = H().atomic_mass
+        return sum(a.atomic_mass + a.implicit_hydrogens * h for a in self._atoms.values())
 
     @cached_property
     def brutto(self) -> Dict[str, int]:
         """Counted atoms dict"""
-        c = Counter(x.atomic_symbol for x in self._atoms.values())
-        c['H'] += sum(self._hydrogens.values())
+        c = Counter(a.atomic_symbol for a in self._atoms.values())
+        c['H'] += sum(a.implicit_hydrogens for a in self._atoms.values())
         return dict(c)
 
     @cached_property
@@ -220,8 +209,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         return tuple(ring for ring in self.sssr if bonds[ring[0]][ring[-1]] == 4
                      and all(bonds[n][m] == 4 for n, m in zip(ring, ring[1:])))
 
-    def add_atom(self, atom: Union[Element, int, str], *args, charge=0, is_radical=False,
-                 xy: Tuple[float, float] = (0., 0.), _skip_hydrogen_calculation=False, **kwargs):
+    def add_atom(self, atom: Union[Element, int, str], *args, _skip_calculation=False, **kwargs):
         """
         Add new atom.
         """
@@ -232,27 +220,17 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                 atom = Element.from_atomic_number(atom)()
             else:
                 raise TypeError('Element object expected')
-        if not isinstance(xy, tuple) or len(xy) != 2 or not isinstance(xy[0], float) or not isinstance(xy[1], float):
-            raise TypeError('XY should be tuple with 2 float')
 
-        n = super().add_atom(atom, *args, charge=charge, is_radical=is_radical, **kwargs)
-        self._plane[n] = xy
-        self._conformers.clear()  # clean conformers. need full recalculation for new system
-
-        if _skip_hydrogen_calculation:
-            self._hydrogens[n] = None
-        elif atom.atomic_number != 1:
-            try:
-                rules = atom.valence_rules(charge, is_radical, 0)
-            except ValenceError:
-                self._hydrogens[n] = None
-            else:
-                self._hydrogens[n] = rules[0][2]  # first rule without neighbors
+        n = super().add_atom(atom, *args, **kwargs)
+        if self._changed is None:
+            self._changed = [n]
         else:
-            self._hydrogens[n] = 0
+            self._changed.append(n)
+        if not _skip_calculation:
+            self.fix_labels()
         return n
 
-    def add_bond(self, n, m, bond: Union[Bond, int], *, _skip_hydrogen_calculation=False):
+    def add_bond(self, n, m, bond: Union[Bond, int], *, _skip_calculation=False):
         """
         Connect atoms with bonds.
 
@@ -263,21 +241,18 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         if not isinstance(bond, Bond):
             bond = Bond(bond)
 
-        bond._attach_graph(self, n, m)
         super().add_bond(n, m, bond)
-        self._conformers.clear()  # clean conformers. need full recalculation for new system
+        if bond.order == 8:
+            return  # any bond doesn't change anything
+        if self._changed is None:
+            self._changed = [n, n]
+        else:
+            self._changed.append(n)
+            self._changed.append(m)
+        if not _skip_calculation:
+            self.fix_labels()
 
-        if _skip_hydrogen_calculation:  # skip stereo fixing too
-            return
-
-        self._calc_implicit(n)
-        self._calc_implicit(m)
-
-        if self._atoms[n].atomic_number != 1 and self._atoms[m].atomic_number != 1:  # not hydrogen
-            # fix stereo if formed not to hydrogen bond
-            self.fix_stereo()
-
-    def delete_atom(self, n: int, *, _skip_hydrogen_calculation=False):
+    def delete_atom(self, n: int, *, _skip_calculation=False):
         """
         Remove atom.
 
@@ -285,24 +260,24 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         Implicit hydrogens marks will not be set if atoms in aromatic rings.
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
+        atoms = self._atoms
         ngb = self._bonds.pop(n)
-        fix = self._atoms.pop(n).atomic_number != 1 and ngb and not _skip_hydrogen_calculation
+        atom_n = atoms.pop(n)
 
-        del self._charges[n]
-        del self._radicals[n]
-        del self._hydrogens[n]
-        del self._plane[n]
-
-        for m in ngb:
+        for m, bond in self._bonds.pop(n).items():
             del self._bonds[m][n]
-            if not _skip_hydrogen_calculation:
+            if bond.order == 8:
+                continue
+            if self._changed is None:
+                self._changed = [m]
+            else:
+                self._changed.append(m)
+            atom_m = atoms[m]
+            atom_m._neighbors -= 1
+            if atom_n.atomic_number not in (1, 6):
+                atom_m._heteroatoms -= 1
+            if not _skip_calculation:
                 self._calc_implicit(m)
-
-        self._conformers.clear()  # clean conformers. need full recalculation for new system
-        try:
-            del self._parsed_mapping[n]
-        except KeyError:
-            pass
 
         if fix:  # hydrogen atom not used for stereo coding
             self.fix_stereo()
@@ -396,28 +371,13 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
 
     def copy(self) -> 'MoleculeContainer':
         copy = super().copy()
-
-        copy._bonds = cb = {}
-        for n, m_bond in self._bonds.items():
-            cb[n] = cbn = {}
-            for m, bond in m_bond.items():
-                if m in cb:  # bond partially exists. need back-connection.
-                    cbn[m] = cb[m][n]
-                else:
-                    cbn[m] = bond = bond.copy()
-                    bond._attach_graph(copy, n, m)
-
-        copy._MoleculeContainer__name = self.__name
-        if self.__meta is None:
-            copy._MoleculeContainer__meta = None
+        copy._name = self._name
+        if self._meta is None:
+            copy._meta = None
         else:
-            copy._MoleculeContainer__meta = self.__meta.copy()
-        copy._plane = self._plane.copy()
-        copy._hydrogens = self._hydrogens.copy()
+            copy._meta = self._meta.copy()
         copy._parsed_mapping = self._parsed_mapping.copy()
         copy._conformers = [c.copy() for c in self._conformers]
-        copy._atoms_stereo = self._atoms_stereo.copy()
-        copy._allenes_stereo = self._allenes_stereo.copy()
         copy._cis_trans_stereo = self._cis_trans_stereo.copy()
         return copy
 
@@ -951,7 +911,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
     def _augmented_substructure(self, atoms: Iterable[int], deep: int):
         atoms = set(atoms)
         bonds = self._bonds
-        if atoms - self._atoms.keys():
+        if atoms - bonds.keys():
             raise ValueError('invalid atom numbers')
         nodes = [atoms]
         for _ in range(deep):
@@ -967,22 +927,20 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         """
         atoms = self._atoms
         atom = atoms[n]
-        if (an := atom.atomic_number) == 1:  # hydrogen nether has implicit H
-            self._hydrogens[n] = 0
+        if atom.atomic_number == 1:  # hydrogen nether has implicit H
+            atom._implicit_hydrogens = 0
             return
 
-        charge: int = self._charges[n]
-        is_radical = self._radicals[n]
         explicit_sum = 0
         explicit_dict = defaultdict(int)
         aroma = 0
         for m, bond in self._bonds[n].items():
             order = bond.order
             if order == 4:  # only neutral carbon aromatic rings supported
-                if not charge and not is_radical and an == 6:
+                if not atom.charge and not atom.is_radical and atom.atomic_number == 6:
                     aroma += 1
                 else:  # use `kekule()` to calculate proper implicit hydrogens count
-                    self._hydrogens[n] = None
+                    atom._implicit_hydrogens = None
                     return
             elif order != 8:  # any bond used for complexes
                 explicit_sum += order
@@ -990,32 +948,32 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
 
         if aroma == 2:
             if explicit_sum == 0:  # H-Ar
-                self._hydrogens[n] = 1
+                atom._implicit_hydrogens = 1
             elif explicit_sum == 1:  # R-Ar
-                self._hydrogens[n] = 0
+                atom._implicit_hydrogens = 0
             else:  # invalid aromaticity
-                self._hydrogens[n] = None
+                atom._implicit_hydrogens = None
             return
         elif aroma == 3:  # condensed rings
             if explicit_sum:  # invalid aromaticity
-                self._hydrogens[n] = None
+                atom._implicit_hydrogens = None
             else:
-                self._hydrogens[n] = 0
+                atom._implicit_hydrogens = 0
             return
         elif aroma:
-            self._hydrogens[n] = None
+            atom._implicit_hydrogens = None
             return
 
         try:
-            rules = atom.valence_rules(charge, is_radical, explicit_sum)
+            rules = atom.valence_rules(explicit_sum)
         except ValenceError:
-            self._hydrogens[n] = None
+            atom._implicit_hydrogens = None
             return
         for s, d, h in rules:
             if s.issubset(explicit_dict) and all(explicit_dict[k] >= c for k, c in d.items()):
-                self._hydrogens[n] = h
+                atom._implicit_hydrogens = h
                 return
-        self._hydrogens[n] = None  # rule not found
+        atom._implicit_hydrogens = None  # rule not found
 
     def _check_implicit(self, n: int, h: int) -> bool:
         atoms = self._atoms
@@ -1035,7 +993,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                 explicit_dict[(order, atoms[m].atomic_number)] += 1
 
         try:
-            rules = atom.valence_rules(self._charges[n], self._radicals[n], explicit_sum)
+            rules = atom.valence_rules(explicit_sum)
         except ValenceError:
             return False
         for s, d, _h in rules:

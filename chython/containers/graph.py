@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -29,25 +29,16 @@ Bond = TypeVar('Bond')
 
 
 class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
-    __slots__ = ('_atoms', '_bonds', '_charges', '_radicals', '_atoms_stereo', '_cis_trans_stereo', '_allenes_stereo',
-                 '__dict__', '__weakref__')
+    __slots__ = ('_atoms', '_bonds', '_cis_trans_stereo', '__dict__', '__weakref__')
     __class_cache__ = {}
 
     _atoms: Dict[int, Atom]
     _bonds: Dict[int, Dict[int, Bond]]
-    _charges: Dict[int, int]
-    _radicals: Dict[int, bool]
-    _atoms_stereo: Dict[int, bool]
-    _allenes_stereo: Dict[int, bool]
     _cis_trans_stereo: Dict[Tuple[int, int], bool]
 
     def __init__(self):
         self._atoms = {}
         self._bonds = {}
-        self._charges = {}
-        self._radicals = {}
-        self._atoms_stereo = {}
-        self._allenes_stereo = {}
         self._cis_trans_stereo = {}
 
     def atom(self, n: int) -> Atom:
@@ -99,7 +90,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
         return sum(len(x) for x in self._bonds.values()) // 2
 
     @abstractmethod
-    def add_atom(self, atom: Atom, n: Optional[int] = None, *, charge: int = 0, is_radical: bool = False) -> int:
+    def add_atom(self, atom: Atom, n: Optional[int] = None) -> int:
         """
         new atom addition
         """
@@ -109,19 +100,10 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
             raise TypeError('mapping should be integer')
         elif n in self._atoms:
             raise MappingError('atom with same number exists')
-        elif not isinstance(is_radical, bool):
-            raise TypeError('bool expected')
-        elif not isinstance(charge, int):
-            raise TypeError('formal charge should be int in range [-4, 4]')
-        elif charge > 4 or charge < -4:
-            raise ValueError('formal charge should be in range [-4, 4]')
 
-        atom._attach_graph(self, n)
         self._atoms[n] = atom
-        self._charges[n] = charge
-        self._radicals[n] = is_radical
         self._bonds[n] = {}
-        self.__dict__.clear()
+        self.flush_cache()
         return n
 
     @abstractmethod
@@ -137,7 +119,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
             raise MappingError('atoms already bonded')
 
         self._bonds[n][m] = self._bonds[m][n] = bond
-        self.__dict__.clear()
+        self.flush_cache()
 
     @abstractmethod
     def copy(self):
@@ -145,14 +127,16 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
         copy of graph
         """
         copy = object.__new__(self.__class__)
-        copy._charges = self._charges.copy()
-        copy._radicals = self._radicals.copy()
+        copy._atoms = {n: atom.copy(full=True) for n, atom in self._atoms.items()}
 
-        copy._atoms = ca = {}
-        for n, atom in self._atoms.items():
-            atom = atom.copy()
-            ca[n] = atom
-            atom._attach_graph(copy, n)
+        copy._bonds = cb = {}
+        for n, m_bond in self._bonds.items():
+            cb[n] = cbn = {}
+            for m, bond in m_bond.items():
+                if m in cb:  # bond partially exists. need back-connection.
+                    cbn[m] = cb[m][n]
+                else:
+                    cbn[m] = bond.copy()
         return copy
 
     @abstractmethod
@@ -168,56 +152,19 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
             raise ValueError('mapping overlap')
 
         mg = mapping.get
-        sc = self._charges
-        sr = self._radicals
-
         if copy:
             h = self.__class__()
-            ha = h._atoms
-            hc = h._charges
-            hr = h._radicals
-            has = h._atoms_stereo
-            hal = h._allenes_stereo
+            h._atoms = {mg(n, n): atom.copy(full=True) for n, atom in self._atoms.items()}
             hcs = h._cis_trans_stereo
-
-            for n, atom in self._atoms.items():
-                m = mg(n, n)
-                atom = atom.copy()
-                ha[m] = atom
-                atom._attach_graph(h, m)
         else:
-            ha = {}
-            hc = {}
-            hr = {}
-            has = {}
-            hal = {}
+            self._atoms = {mg(n, n): atom for n, atom in self._atoms.items()}
             hcs = {}
 
-            for n, atom in self._atoms.items():
-                m = mg(n, n)
-                ha[m] = atom
-                atom._change_map(m)  # change mapping number
-
-        for n in self._atoms:
-            m = mg(n, n)
-            hc[m] = sc[n]
-            hr[m] = sr[n]
-
-        for n, stereo in self._atoms_stereo.items():
-            has[mg(n, n)] = stereo
-        for n, stereo in self._allenes_stereo.items():
-            hal[mg(n, n)] = stereo
         for (n, m), stereo in self._cis_trans_stereo.items():
             hcs[(mg(n, n), mg(m, m))] = stereo
 
         if copy:
             return h  # noqa
-
-        self._atoms = ha
-        self._charges = hc
-        self._radicals = hr
-        self._atoms_stereo = has
-        self._allenes_stereo = hal
         self._cis_trans_stereo = hcs
         self.flush_cache()
         return self

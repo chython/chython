@@ -47,12 +47,13 @@ def _validate(value, prop):
 
 
 class Query(ABC):
-    __slots__ = ('_neighbors', '_hybridization', '_masked')
+    __slots__ = ('_neighbors', '_hybridization', '_masked', '_stereo')
 
     def __init__(self):
         self._neighbors = ()
         self._hybridization = ()
         self._masked = False
+        self._stereo = None
 
     @property
     def neighbors(self) -> Tuple[int, ...]:
@@ -95,11 +96,17 @@ class Query(ABC):
             raise TypeError('masked should be bool')
         self._masked = value
 
-    def copy(self):
+    @property
+    def stereo(self):
+        return self._stereo
+
+    def copy(self, full=False):
         copy = object.__new__(self.__class__)
         copy._neighbors = self.neighbors
         copy._hybridization = self.hybridization
-        copy._masked = self.masked
+        if full:
+            copy._masked = self.masked
+            copy._stereo = self.stereo
         return copy
 
     def __copy__(self):
@@ -190,8 +197,8 @@ class ExtendedQuery(Query, ABC):
         else:
             raise TypeError('rings should be int or list or tuple of ints')
 
-    def copy(self):
-        copy = super().copy()
+    def copy(self, full=False):
+        copy = super().copy(full=full)
         copy._charge = self.charge
         copy._is_radical = self.is_radical
         copy._heteroatoms = self.heteroatoms
@@ -296,8 +303,8 @@ class ListElement(ExtendedQuery):
     def atomic_numbers(self):
         return tuple(x.atomic_number.fget(None) for x in Element.__subclasses__() if x.__name__ in self._elements)
 
-    def copy(self):
-        copy = super().copy()
+    def copy(self, full=False):
+        copy = super().copy(full=full)
         copy._elements = self._elements
         return copy
 
@@ -353,7 +360,7 @@ class ListElement(ExtendedQuery):
 class QueryElement(ExtendedQuery, ABC):
     __slots__ = ('_isotope',)
 
-    def __init__(self, isotope: Optional[int]):
+    def __init__(self, isotope: Optional[int] = None):
         if isotope is not None and not isinstance(isotope, int):
             raise TypeError('isotope must be an int')
         super().__init__()
@@ -420,8 +427,8 @@ class QueryElement(ExtendedQuery, ABC):
             raise TypeError('Element or Query expected')
         return atom.copy()
 
-    def copy(self):
-        copy = super().copy()
+    def copy(self, full=False):
+        copy = super().copy(full=full)
         copy._isotope = self.isotope
         return copy
 
