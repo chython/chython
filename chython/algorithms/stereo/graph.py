@@ -72,12 +72,10 @@ class Stereo:
         """
         atoms = self._atoms
         bonds = self._bonds
-        charges = self._charges
-        radicals = self._radicals
 
         tetra = []
         for n, atom in atoms.items():
-            if atom.atomic_number == 6 and not charges[n] and not radicals[n]:
+            if atom.atomic_number == 6 and not atom.charge and not atom.is_radical:
                 env = bonds[n]
                 if all(int(x) == 1 for x in env.values()):
                     if sum(int(x) for x in env.values()) > 4:
@@ -89,9 +87,11 @@ class Stereo:
         """
         Remove stereo data.
         """
-        self._atoms_stereo.clear()
-        self._allenes_stereo.clear()
-        self._cis_trans_stereo.clear()
+        for a in self._atoms.values():
+            a._stereo = None
+        for _, bs in self._bonds:
+            for b in bs.values():
+                b._stereo = None  # flush twice, but it should be still faster
         self.flush_cache()
 
     def get_mapping(self: 'Container', other: 'Container', **kwargs):
@@ -156,7 +156,7 @@ class Stereo:
         :param s: if None, use existing sign else translate given to molecule
         """
         if s is None:
-            s = self._atoms_stereo[n]
+            s = self._atoms[n].stereo
 
         order = self._stereo_tetrahedrons[n]
         if len(order) == 3:

@@ -47,13 +47,17 @@ def _validate(value, prop):
 
 
 class Query(ABC):
-    __slots__ = ('_neighbors', '_hybridization', '_masked', '_stereo')
+    __slots__ = ('_neighbors', '_hybridization', '_masked')
 
     def __init__(self):
         self._neighbors = ()
         self._hybridization = ()
         self._masked = False
-        self._stereo = None
+
+    @property
+    @abstractmethod
+    def atomic_symbol(self) -> str:
+        ...
 
     @property
     def neighbors(self) -> Tuple[int, ...]:
@@ -96,20 +100,12 @@ class Query(ABC):
             raise TypeError('masked should be bool')
         self._masked = value
 
-    @property
-    def stereo(self):
-        return self._stereo
-
     def copy(self, full=False):
         copy = object.__new__(self.__class__)
         copy._neighbors = self.neighbors
         copy._hybridization = self.hybridization
-        if full:
-            copy._masked = self.masked
-            copy._stereo = self.stereo
-        else:
-            copy._masked = False
-            copy._stereo = None
+
+        copy._masked = self.masked if full else False
         return copy
 
     def __copy__(self):
@@ -120,7 +116,7 @@ class Query(ABC):
 
 
 class ExtendedQuery(Query, ABC):
-    __slots__ = ('_charge', '_is_radical', '_heteroatoms', '_ring_sizes', '_implicit_hydrogens')
+    __slots__ = ('_charge', '_is_radical', '_heteroatoms', '_ring_sizes', '_implicit_hydrogens', '_stereo')
 
     def __init__(self):
         super().__init__()
@@ -129,6 +125,7 @@ class ExtendedQuery(Query, ABC):
         self._heteroatoms = ()
         self._ring_sizes = ()
         self._implicit_hydrogens = ()
+        self._stereo = None
 
     @property
     def charge(self) -> int:
@@ -200,6 +197,10 @@ class ExtendedQuery(Query, ABC):
         else:
             raise TypeError('rings should be int or list or tuple of ints')
 
+    @property
+    def stereo(self):
+        return self._stereo
+
     def copy(self, full=False):
         copy = super().copy(full=full)
         copy._charge = self.charge
@@ -207,6 +208,8 @@ class ExtendedQuery(Query, ABC):
         copy._heteroatoms = self.heteroatoms
         copy._implicit_hydrogens = self.implicit_hydrogens
         copy._ring_sizes = self.ring_sizes
+
+        copy._stereo = self.stereo if full else None
         return copy
 
 
@@ -499,4 +502,4 @@ class QueryElement(ExtendedQuery, ABC):
                      self.hybridization, self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
 
 
-__all__ = ['Query', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']
+__all__ = ['Query', 'ExtendedQuery', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']

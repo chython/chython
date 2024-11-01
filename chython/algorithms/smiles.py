@@ -26,6 +26,7 @@ from heapq import heappop, heappush
 from itertools import product
 from random import random
 from typing import Callable, Optional, Tuple, TYPE_CHECKING, Union
+from ..periodictable import ExtendedQuery, QueryElement
 
 
 if TYPE_CHECKING:
@@ -382,15 +383,11 @@ class MoleculeSmiles(Smiles):
 
     def _format_cxsmiles(self: 'MoleculeContainer', order):
         if self.is_radical:
-            radical = self._radicals
-            return f'|^1:{",".join(str(n) for n, m in enumerate(order) if radical[m])}|'
+            return f'|^1:{",".join(str(n) for n, m in enumerate(order) if self._atoms[m].is_radical)}|'
         return
 
     def _format_atom(self: 'MoleculeContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
-        charge = self._charges[n]
-        ih = self._hydrogens[n]
-        hyb = self.hybridization(n)
 
         smi = ['',  # [
                str(atom.isotope) if atom.isotope else '',  # isotope
@@ -401,50 +398,51 @@ class MoleculeSmiles(Smiles):
                f':{n}' if kwargs.get('mapping', False) else '',  # mapping
                '']  # ]
 
-        if kwargs.get('stereo', True):
-            if n in self._atoms_stereo:
-                if ih and next(x for x in adjacency) == n:  # first atom in smiles has reversed chiral mark
-                    smi[3] = '@@' if self._translate_tetrahedron_sign(n, adjacency[n]) else '@'
-                else:
-                    smi[3] = '@' if self._translate_tetrahedron_sign(n, adjacency[n]) else '@@'
-            elif n in self._allenes_stereo:
+        if atom.stereo is not None and kwargs.get('stereo', True):
+            # allene
+            if n in self._stereo_allenes_terminals:
                 t1, t2 = self._stereo_allenes_terminals[n]
                 env = self._stereo_allenes[n]
                 n1 = next(x for x in adjacency[t1] if x in env)
                 n2 = next(x for x in adjacency[t2] if x in env)
                 smi[3] = '@' if self._translate_allene_sign(n, n1, n2) else '@@'
-            elif charge and kwargs.get('charges', True):
-                smi[5] = charge_str[charge]
-        elif charge and kwargs.get('charges', True):
-            smi[5] = charge_str[charge]
+            # tetrahedron
+            elif atom.implicit_hydrogens and next(x for x in adjacency) == n:
+                # first atom in smiles has reversed chiral mark
+                smi[3] = '@@' if self._translate_tetrahedron_sign(n, adjacency[n]) else '@'
+            else:
+                smi[3] = '@' if self._translate_tetrahedron_sign(n, adjacency[n]) else '@@'
 
-        if any(smi) or atom.atomic_symbol not in organic_set or self._radicals[n] or kwargs.get('hydrogens', False):
+        if atom.charge and kwargs.get('charges', True):
+            smi[5] = charge_str[atom.charge]
+
+        if any(smi) or atom.atomic_symbol not in organic_set or atom.is_radical or kwargs.get('hydrogens', False):
             smi[0] = '['
             smi[-1] = ']'
-            if ih == 1:
+            if atom.implicit_hydrogens == 1:
                 smi[4] = 'H'
-            elif ih:
-                smi[4] = f'H{ih}'
-        elif hyb == 4 and ih and atom.atomic_number in (5, 7, 15):  # pyrrole
+            elif atom.implicit_hydrogens:
+                smi[4] = f'H{atom.implicit_hydrogens}'
+        elif atom.hybridization == 4 and atom.implicit_hydrogens and atom.atomic_number in (5, 7, 15):  # pyrrole
             smi[0] = '['
             smi[-1] = ']'
-            if ih == 1:
+            if atom.implicit_hydrogens == 1:
                 smi[4] = 'H'
             else:
-                smi[4] = f'H{ih}'
-        elif not ih and atom.atomic_number in (5, 6, 15, 16) and not self.not_special_connectivity[n]:
+                smi[4] = f'H{atom.implicit_hydrogens}'
+        elif not atom.implicit_hydrogens and atom.atomic_number in (5, 6, 15, 16) and not self.not_special_connectivity[n]:
             # elemental B, C, P, S
             smi[0] = '['
             smi[-1] = ']'
-        elif ih and atom.atomic_number == 15 and hyb != 1:
+        elif atom.implicit_hydrogens and atom.atomic_number == 15 and atom.hybridization != 1:
             smi[0] = '['
             smi[-1] = ']'
-            if ih == 1:
+            if atom.implicit_hydrogens == 1:
                 smi[4] = 'H'
             else:
-                smi[4] = f'H{ih}'
+                smi[4] = f'H{atom.implicit_hydrogens}'
 
-        if kwargs.get('aromatic', True) and hyb == 4:
+        if kwargs.get('aromatic', True) and atom.hybridization == 4:
             smi[2] = atom.atomic_symbol.lower()
         else:
             smi[2] = atom.atomic_symbol
@@ -453,14 +451,13 @@ class MoleculeSmiles(Smiles):
     def _format_bond(self: 'MoleculeContainer', n, m, adjacency, **kwargs):
         if not kwargs.get('bonds', True):
             return ''
-        bonds = self._bonds
-        order = bonds[n][m].order
+        order = self._bonds[n][m].order
         if order == 4:
             if kwargs.get('aromatic', True):
                 return ''
             return ':'
         elif order == 1:  # cis-trans /\
-            if kwargs.get('aromatic', True) and self.hybridization(n) == self.hybridization(m) == 4:
+            if kwargs.get('aromatic', True) and self._atoms[n].hybridization == self._atoms[m].hybridization == 4:
                 return '-'
             if kwargs.get('stereo', True):
                 if 'cache' in adjacency:
@@ -531,19 +528,15 @@ class CGRSmiles(Smiles):
 
     def _format_atom(self: 'CGRContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
-        charge = self._charges[n]
-        is_radical = self._radicals[n]
-        p_charge = self._p_charges[n]
-        p_is_radical = self._p_radicals[n]
         if atom.isotope:
             smi = [str(atom.isotope), atom.atomic_symbol]
         else:
             smi = [atom.atomic_symbol]
 
-        if charge or p_charge:
-            smi.append(dyn_charge_str[(charge, p_charge)])
-        if is_radical or p_is_radical:
-            smi.append(dyn_radical_str[(is_radical, p_is_radical)])
+        if atom.charge or atom.p_charge:
+            smi.append(dyn_charge_str[(atom.charge, atom.p_charge)])
+        if atom.is_radical or atom.p_is_radical:
+            smi.append(dyn_radical_str[(atom.is_radical, atom.p_is_radical)])
 
         if len(smi) != 1 or atom.atomic_symbol not in organic_set:
             smi.insert(0, '[')
@@ -559,22 +552,19 @@ class QuerySmiles(Smiles):
     __slots__ = ()
 
     def _format_cxsmiles(self: 'QueryContainer', order):
-        hybridization = self._hybridizations
-        heteroatoms = self._heteroatoms
-        masked = self._masked
-        radical = self._radicals
-
         hh = ['atomProp']
         cx = []
-        if any(radical.values()):
-            cx.append(f'^1:{",".join(str(n) for n, m in enumerate(order) if radical[m])}')
+        rad = [str(n) for n, m in enumerate(order) if isinstance(a:=self._atoms[m], ExtendedQuery) and a.is_radical]
+        if rad:
+            cx.append('^1:' + ','.join(rad))
 
         for n, m in enumerate(order):
-            if len(hb := hybridization[m]) > 1 or (hb and hb[0] != 4):
-                hh.append(f'{n}.hyb.{"".join(hybridization_str[x] for x in hb)}')
-            if ha := heteroatoms[m]:
-                hh.append(f'{n}.het.{"".join(str(x) for x in ha)}')
-            if masked[m]:
+            atom = self._atoms[m]
+            if len(hb := atom.hybridization) > 1 or (hb and hb[0] != 4):
+                hh.append(f'{n}.hyb.' + ''.join(hybridization_str[x] for x in hb))
+            if isinstance(atom, ExtendedQuery) and (ha := atom.heteroatoms):
+                hh.append(f'{n}.het.' + ''.join(str(x) for x in ha))
+            if atom.masked:
                 hh.append(f'{n}.msk.1')
         if len(hh) > 1:
             cx.append(':'.join(hh))
@@ -583,42 +573,36 @@ class QuerySmiles(Smiles):
 
     def _format_atom(self: 'QueryContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
-        charge = self._charges[n]
-        hybridization = self._hybridizations[n]
-        neighbors = self._neighbors[n]
-        hydrogens = self._hydrogens[n]
-        rings = self._rings_sizes[n]
-
-        if atom.isotope:
+        if isinstance(atom, QueryElement) and atom.isotope:
             smi = ['[', str(atom.isotope), atom.atomic_symbol]
         else:
             smi = ['[', atom.atomic_symbol]
 
-        if n in self._atoms_stereo:  # mark atom as chiral. it's too difficult to set correct sign
-            smi.append(';@?')
-        if n in self._allenes_stereo:
-            smi.append(';@?')
+        if isinstance(atom, ExtendedQuery):
+            if atom.stereo is not None:
+                # mark atom as chiral. it's too difficult to set correct sign
+                smi.append(';@?')
 
-        if charge:
-            smi.append(';')
-            smi.append(charge_str[charge])
+            if atom.charge:
+                smi.append(';')
+                smi.append(charge_str[atom.charge])
 
-        if hydrogens:  # h<n> 	implicit-H-count 	<n> implicit hydrogens
-            smi.append(';')
-            smi.append(','.join(f'h{x}' for x in hydrogens))
+            if atom.implicit_hydrogens:  # h<n> implicit-H-count <n> implicit hydrogens
+                smi.append(';')
+                smi.append(','.join(f'h{x}' for x in atom.implicit_hydrogens))
 
-        if neighbors:  # D<n> 	degree 	<n> explicit connections
+        if atom.neighbors:  # D<n> 	degree 	<n> explicit connections
             smi.append(';')
-            smi.append(','.join(f'D{x}' for x in neighbors))
+            smi.append(','.join(f'D{x}' for x in atom.neighbors))
 
-        if rings:
+        if isinstance(atom, ExtendedQuery) and atom.ring_sizes:
             smi.append(';')
-            if rings[0]:
-                smi.append(','.join(f'r{x}' for x in rings))
+            if atom.ring_sizes[0]:
+                smi.append(','.join(f'r{x}' for x in atom.ring_sizes))
             else:
                 smi.append('!R')
 
-        if len(hybridization) == 1 and hybridization[0] == 4:  # only aromatic. other marks in cx extension
+        if len(atom.hybridization) == 1 and atom.hybridization[0] == 4:  # only aromatic. other marks in cx extension
             smi.append(';a')
 
         smi.append(']')

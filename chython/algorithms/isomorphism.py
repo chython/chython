@@ -22,7 +22,7 @@ from functools import cached_property, partial
 from itertools import permutations
 from typing import Any, Collection, Dict, Iterator, Optional, TYPE_CHECKING, Union
 from .._functions import lazy_product
-from ..periodictable.element import Element, Query, AnyElement, AnyMetal, ListElement
+from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement
 
 
 if TYPE_CHECKING:
