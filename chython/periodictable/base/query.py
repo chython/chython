@@ -354,7 +354,7 @@ class ListElement(ExtendedQuery):
                      self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
 
     def __repr__(self):
-        return f'{self.__class__.__name__}([{",".join(self._elements)}])'
+        return f'{self.__class__.__name__}([{self.atomic_symbol}])'
 
 
 class QueryElement(ExtendedQuery, ABC):
@@ -367,8 +367,8 @@ class QueryElement(ExtendedQuery, ABC):
         self._isotope = isotope
 
     def __repr__(self):
-        if self._isotope:
-            return f'{self.__class__.__name__}({self._isotope})'
+        if self.isotope:
+            return f'{self.__class__.__name__}({self.isotope})'
         return f'{self.__class__.__name__}()'
 
     @property

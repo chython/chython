@@ -20,13 +20,13 @@ from abc import ABC, abstractmethod
 from CachedMethods import class_cached_property
 from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple, Type
-from ...exceptions import IsNotConnectedAtom, ValenceError
+from ...exceptions import ValenceError
 
 
 class Element(ABC):
     __slots__ = ('_isotope', '_charge', '_is_radical', '_x', '_y', '_implicit_hydrogens',
                  '_explicit_hydrogens', '_stereo', '_parsed_mapping', '_xyz',
-                 '_neighbors', '_heteroatoms', '_hybridization')
+                 '_neighbors', '_heteroatoms', '_hybridization', '_ring_sizes', '_in_ring')
     __class_cache__ = {}
 
     def __init__(self, isotope: Optional[int] = None):
@@ -50,10 +50,12 @@ class Element(ABC):
         self._heteroatoms = 0
         self._hybridization = 1
         self._stereo = None
+        self._ring_sizes = ()
+        self._in_ring = False
 
     def __repr__(self):
-        if self._isotope:
-            return f'{self.__class__.__name__}({self._isotope})'
+        if self.isotope:
+            return f'{self.__class__.__name__}({self.isotope})'
         return f'{self.__class__.__name__}()'
 
     @property
@@ -201,7 +203,7 @@ class Element(ABC):
         return self.implicit_hydrogens + self.explicit_hydrogens
 
     @property
-    def stereo(self):
+    def stereo(self) -> Optional[bool]:
         """
         Tetrahedron or allene stereo label
         """
@@ -227,6 +229,20 @@ class Element(ABC):
         """
         return self._hybridization
 
+    @property
+    def ring_sizes(self) -> Tuple[int, ...]:
+        """
+        Atom rings sizes.
+        """
+        return self._ring_sizes
+
+    @property
+    def in_ring(self) -> bool:
+        """
+        Atom in any ring.
+        """
+        return self._in_ring
+
     def copy(self, full=False):
         copy = object.__new__(self.__class__)
         copy._isotope = self.isotope
@@ -241,32 +257,12 @@ class Element(ABC):
             copy._neighbors = self.neighbors
             copy._heteroatoms = self.heteroatoms
             copy._hybridization = self.hybridization
+            copy._ring_sizes = self.ring_sizes
+            copy._in_ring = self.in_ring
         return copy
 
     def __copy__(self):
         return self.copy()
-
-    @property
-    def ring_sizes(self) -> Tuple[int, ...]:
-        """
-        Atom rings sizes.
-        """
-        try:
-            return self._graph().atoms_rings_sizes[self._n]
-        except AttributeError:
-            raise IsNotConnectedAtom
-        except KeyError:
-            return ()
-
-    @property
-    def in_ring(self) -> bool:
-        """
-        Atom in any ring.
-        """
-        try:
-            return self._n in self._graph().ring_atoms
-        except AttributeError:
-            raise IsNotConnectedAtom
 
     @classmethod
     def from_symbol(cls, symbol: str) -> Type['Element']:

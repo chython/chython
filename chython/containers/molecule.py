@@ -105,20 +105,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         of single bonded, 3 - if has one triple bonded and any amount of double and single bonded neighbors or
         two and more double bonded and any amount of single bonded neighbors, 4 - if atom in aromatic ring.
         """
-        hybridization = 1
-        for bond in self._bonds[n].values():
-            order = bond.order
-            if order == 4:
-                return 4
-            elif order == 3:
-                if hybridization != 3:
-                    hybridization = 3
-            elif order == 2:
-                if hybridization == 1:
-                    hybridization = 2
-                elif hybridization == 2:
-                    hybridization = 3
-        return hybridization
+        return self._atoms[n].hybridization
 
     @cached_args_method
     def heteroatoms(self, n: int) -> int:
@@ -223,9 +210,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
 
         n = super().add_atom(atom, *args, **kwargs)
         if self._changed is None:
-            self._changed = [n]
+            self._changed = {n}
         else:
-            self._changed.append(n)
+            self._changed.add(n)
         if not _skip_calculation:
             self.fix_labels()
         return n
@@ -245,10 +232,10 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         if bond.order == 8:
             return  # any bond doesn't change anything
         if self._changed is None:
-            self._changed = [n, n]
+            self._changed = {n, m}
         else:
-            self._changed.append(n)
-            self._changed.append(m)
+            self._changed.add(n)
+            self._changed.add(m)
         if not _skip_calculation:
             self.fix_labels()
 
@@ -260,30 +247,19 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         Implicit hydrogens marks will not be set if atoms in aromatic rings.
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
-        atoms = self._atoms
-        ngb = self._bonds.pop(n)
-        atom_n = atoms.pop(n)
-
+        del self._atoms[n]
         for m, bond in self._bonds.pop(n).items():
             del self._bonds[m][n]
             if bond.order == 8:
                 continue
             if self._changed is None:
-                self._changed = [m]
+                self._changed = {m}
             else:
-                self._changed.append(m)
-            atom_m = atoms[m]
-            atom_m._neighbors -= 1
-            if atom_n.atomic_number not in (1, 6):
-                atom_m._heteroatoms -= 1
-            if not _skip_calculation:
-                self._calc_implicit(m)
+                self._changed.add(m)
+        if not _skip_calculation:
+            self.fix_labels()
 
-        if fix:  # hydrogen atom not used for stereo coding
-            self.fix_stereo()
-        self.flush_cache()
-
-    def delete_bond(self, n: int, m: int, *, _skip_hydrogen_calculation=False):
+    def delete_bond(self, n: int, m: int, *, _skip_calculation=False):
         """
         Disconnect atoms.
 
@@ -292,82 +268,14 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
         del self._bonds[n][m]
-        del self._bonds[m][n]
-        self._conformers.clear()  # clean conformers. need full recalculation for new system
-
-        if not _skip_hydrogen_calculation:
-            self._calc_implicit(n)
-            self._calc_implicit(m)
-
-        if self._atoms[n].atomic_number != 1 and self._atoms[m].atomic_number != 1 and not _skip_hydrogen_calculation:
-            self.fix_stereo()
-        self.flush_cache()
-
-    def remap(self, mapping: Dict[int, int], *, copy: bool = False) -> 'MoleculeContainer':
-        atoms = self._atoms  # keep original atoms dict
-        h = super().remap(mapping, copy=copy)
-
-        mg = mapping.get
-        sp = self._plane
-        shg = self._hydrogens
-
-        if copy:
-            h._MoleculeContainer__name = self.__name
-            if self.__meta is not None:
-                h._MoleculeContainer__meta = self.__meta.copy()
-            hb = h._bonds
-            hp = h._plane
-            hhg = h._hydrogens
-            hcf = h._conformers
-            hm = h._parsed_mapping
-
-            # deep copy of bonds
-            for n, m_bond in self._bonds.items():
-                n = mg(n, n)
-                hb[n] = hbn = {}
-                for m, bond in m_bond.items():
-                    m = mg(m, m)
-                    if m in hb:  # bond partially exists. need back-connection.
-                        hbn[m] = hb[m][n]
-                    else:
-                        hbn[m] = bond = bond.copy()
-                        bond._attach_graph(h, n, m)
-        else:
-            hb = {}
-            hp = {}
-            hhg = {}
-            hcf = []
-            hm = {}
-
-            for n, m_bond in self._bonds.items():
-                n = mg(n, n)
-                hb[n] = hbn = {}
-                for m, bond in m_bond.items():
-                    m = mg(m, m)
-                    if m in hb:  # bond partially exists. need back-connection.
-                        hbn[m] = hb[m][n]
-                    else:
-                        hbn[m] = bond
-                        bond._change_map(n, m)
-
-        for n in atoms:
-            m = mg(n, n)
-            hp[m] = sp[n]
-            hhg[m] = shg[n]
-
-        hcf.extend({mg(n, n): x for n, x in c.items()} for c in self._conformers)
-        for n, m in self._parsed_mapping.items():
-            hm[mg(n, n)] = m
-
-        if copy:
-            return h
-
-        self._bonds = hb
-        self._plane = hp
-        self._hydrogens = hhg
-        self._conformers = hcf
-        self._parsed_mapping = hm
-        return self
+        if self._bonds[m].pop(n).order != 8:
+            if self._changed is None:
+                self._changed = {n, m}
+            else:
+                self._changed.add(n)
+                self._changed.add(m)
+        if not _skip_calculation:
+            self.fix_labels()
 
     def copy(self) -> 'MoleculeContainer':
         copy = super().copy()
@@ -376,32 +284,12 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             copy._meta = None
         else:
             copy._meta = self._meta.copy()
-        copy._parsed_mapping = self._parsed_mapping.copy()
-        copy._conformers = [c.copy() for c in self._conformers]
-        copy._cis_trans_stereo = self._cis_trans_stereo.copy()
         return copy
 
     def union(self, other: 'MoleculeContainer', *, remap: bool = False, copy: bool = True) -> 'MoleculeContainer':
         if not isinstance(other, MoleculeContainer):
             raise TypeError('MoleculeContainer expected')
-        u, o = super().union(other, remap=remap, copy=copy)
-
-        ub = u._bonds
-        for n, m_bond in o._bonds.items():
-            ub[n] = ubn = {}
-            for m, bond in m_bond.items():
-                if m in ub:  # bond partially exists. need back-connection.
-                    ubn[m] = ub[m][n]
-                else:
-                    ubn[m] = bond = bond.copy()
-                    bond._attach_graph(u, n, m)
-
-        u._MoleculeContainer__name = u._MoleculeContainer__meta = None
-        u._conformers.clear()
-        u._plane.update(o._plane)
-        u._hydrogens.update(o._hydrogens)
-        u._parsed_mapping.update(o._parsed_mapping)
-        return u
+        return super().union(other, remap=remap, copy=copy)
 
     def substructure(self, atoms: Iterable[int], *, as_query: bool = False, recalculate_hydrogens=True,
                      skip_neighbors_marks=False, skip_hybridizations_marks=False, skip_hydrogens_marks=False,
@@ -1077,28 +965,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             self._cis_trans_stereo = backup['cis_trans_stereo']
             self.flush_cache()
         del self._backup
-
-    def __getstate__(self):
-        return {'conformers': self._conformers, 'hydrogens': self._hydrogens, 'atoms_stereo': self._atoms_stereo,
-                'allenes_stereo': self._allenes_stereo, 'cis_trans_stereo': self._cis_trans_stereo,
-                'parsed_mapping': self._parsed_mapping, 'meta': self.__meta, 'name': self.__name,
-                'plane': self._plane, **super().__getstate__()}
-
-    def __setstate__(self, state):
-        super().__setstate__(state)
-        self._conformers = state['conformers']
-        self._atoms_stereo = state['atoms_stereo']
-        self._allenes_stereo = state['allenes_stereo']
-        self._cis_trans_stereo = state['cis_trans_stereo']
-        self._hydrogens = state['hydrogens']
-        self._parsed_mapping = state['parsed_mapping']
-        self._plane = state['plane']
-        self.__meta = state['meta']
-        self.__name = state['name']
-
-        # attach bonds to graph
-        for n, m, b in self.bonds():
-            b._attach_graph(self, n, m)
 
 
 __all__ = ['MoleculeContainer']
