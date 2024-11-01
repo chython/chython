@@ -132,7 +132,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
                 if m in cb:  # bond partially exists. need back-connection.
                     cbn[m] = cb[m][n]
                 else:
-                    cbn[m] = bond.copy()
+                    cbn[m] = bond.copy(full=True)
         return copy
 
     def remap(self, mapping: Dict[int, int]):

@@ -45,11 +45,12 @@ class Element(ABC):
         self._is_radical = False
         self._x = self._y = 0
         self._implicit_hydrogens = None
+        self._stereo = None
+
         self._explicit_hydrogens = 0
         self._neighbors = 0
         self._heteroatoms = 0
         self._hybridization = 1
-        self._stereo = None
         self._ring_sizes = ()
         self._in_ring = False
 
@@ -243,22 +244,40 @@ class Element(ABC):
         """
         return self._in_ring
 
-    def copy(self, full=False):
+    def copy(self, full=False, hydrogens=False, stereo=False) -> 'Element':
+        """
+        Get a copy of the Element object with attribute copy control.
+        """
         copy = object.__new__(self.__class__)
         copy._isotope = self.isotope
         copy._charge = self.charge
         copy._is_radical = self.is_radical
+        copy._x = self.x
+        copy._y = self.y
         if full:
-            copy._x = self.x
-            copy._y = self.y
             copy._implicit_hydrogens = self.implicit_hydrogens
-            copy._explicit_hydrogens = self.explicit_hydrogens
             copy._stereo = self.stereo
+            copy._explicit_hydrogens = self.explicit_hydrogens
             copy._neighbors = self.neighbors
             copy._heteroatoms = self.heteroatoms
             copy._hybridization = self.hybridization
             copy._ring_sizes = self.ring_sizes
             copy._in_ring = self.in_ring
+        else:
+            copy._explicit_hydrogens = 0
+            copy._neighbors = 0
+            copy._heteroatoms = 0
+            copy._hybridization = 1
+            copy._ring_sizes = ()
+            copy._in_ring = False
+            if hydrogens:
+                copy._implicit_hydrogens = self.implicit_hydrogens
+            else:
+                copy._implicit_hydrogens = None
+            if stereo:
+                copy._stereo = self.stereo
+            else:
+                copy._stereo = None
         return copy
 
     def __copy__(self):
@@ -289,15 +308,6 @@ class Element(ABC):
             return elements[number]
         except KeyError:
             raise ValueError(f'Element with number "{number}" not found')
-
-    @classmethod
-    def from_atom(cls, atom: 'Element') -> 'Element':
-        """
-        get Element copy
-        """
-        if not isinstance(atom, Element):
-            raise TypeError('Element expected')
-        return atom.copy()
 
     def __eq__(self, other):
         """

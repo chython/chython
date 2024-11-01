@@ -443,16 +443,12 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         if not isinstance(other, MoleculeContainer):
             raise TypeError('MoleculeContainer expected')
         sa = self._atoms
-        sc = self._charges
-        sr = self._radicals
         sb = self._bonds
 
         bonds = []
         adj = defaultdict(lambda: defaultdict(lambda: [None, None]))
 
         oa = other._atoms
-        oc = other._charges
-        or_ = other._radicals
         ob = other._bonds
 
         common = sa.keys() & oa.keys()
@@ -460,38 +456,27 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         h = CGRContainer()
         ha = h._atoms
         hb = h._bonds
-        hc = h._charges
-        hpc = h._p_charges
-        hr = h._radicals
-        hpr = h._p_radicals
 
         for n in sa.keys() - common:  # cleavage atoms
-            hc[n] = hpc[n] = sc[n]
-            hr[n] = hpr[n] = sr[n]
+            ha[n] = DynamicElement.from_atom(sa[n])
             hb[n] = {}
-            ha[n] = a = DynamicElement.from_atom(sa[n])
-            a._attach_graph(h, n)
-
             for m, bond in sb[n].items():
                 if m not in ha:
                     if m in common:  # bond to common atoms is broken bond
                         bond = DynamicBond(bond.order, None)
                     else:
-                        bond = DynamicBond(bond.order, bond.order)
+                        bond = DynamicBond.from_bond(bond)
                     bonds.append((n, m, bond))
         for n in oa.keys() - common:  # coupling atoms
-            hc[n] = hpc[n] = oc[n]
-            hr[n] = hpr[n] = or_[n]
+            ha[n] = DynamicElement.from_atom(oa[n])
             hb[n] = {}
-            ha[n] = a = DynamicElement.from_atom(oa[n])
-            a._attach_graph(h, n)
 
             for m, bond in ob[n].items():
                 if m not in ha:
                     if m in common:  # bond to common atoms is formed bond
                         bond = DynamicBond(None, bond.order)
                     else:
-                        bond = DynamicBond(bond.order, bond.order)
+                        bond = DynamicBond.from_bond(bond)
                     bonds.append((n, m, bond))
         for n in common:
             an = adj[n]
@@ -502,17 +487,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                 if m in common:
                     an[m][1] = bond.order
         for n in common:
-            san = sa[n]
-            if san.atomic_number != oa[n].atomic_number or san.isotope != oa[n].isotope:
-                raise MappingError(f'atoms with number {n} not equal')
-
-            hc[n] = sc[n]
-            hpc[n] = oc[n]
-            hr[n] = sr[n]
-            hpr[n] = or_[n]
+            ha[n] = DynamicElement.from_atoms(sa[n], oa[n])
             hb[n] = {}
-            ha[n] = a = DynamicElement.from_atom(san)
-            a._attach_graph(h, n)
 
             for m, (o1, o2) in adj[n].items():
                 if m not in ha:
@@ -926,44 +902,20 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         """
         Transaction of changes. Keep current state for restoring on errors.
         """
-        atoms = {}
-        for n, atom in self._atoms.items():
-            atom = atom.copy()
-            atoms[n] = atom
-            atom._attach_graph(self, n)
-
-        bonds = {}
-        for n, m_bond in self._bonds.items():
-            bonds[n] = cbn = {}
-            for m, bond in m_bond.items():
-                if m in bonds:  # bond partially exists. need back-connection.
-                    cbn[m] = bonds[m][n]
-                else:
-                    cbn[m] = bond = bond.copy()
-                    bond._attach_graph(self, n, m)
-
-        self._backup = {'atoms': atoms, 'bonds': bonds, 'parsed_mapping': self._parsed_mapping.copy(),
-                        'plane': self._plane.copy(), 'charges': self._charges.copy(), 'radicals': self._radicals.copy(),
-                        'hydrogens': self._hydrogens.copy(), 'conformers': [x.copy() for x in self._conformers],
-                        'atoms_stereo': self._atoms_stereo.copy(), 'allenes_stereo': self._allenes_stereo.copy(),
-                        'cis_trans_stereo': self._cis_trans_stereo.copy()}
+        self._backup = self.copy()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type:  # restore state
             backup = self._backup
-            self._atoms = backup['atoms']
-            self._bonds = backup['bonds']
-            self._parsed_mapping = backup['parsed_mapping']
-            self._plane = backup['plane']
-            self._charges = backup['charges']
-            self._radicals = backup['radicals']
-            self._hydrogens = backup['hydrogens']
-            self._conformers = backup['conformers']
-            self._atoms_stereo = backup['atoms_stereo']
-            self._allenes_stereo = backup['allenes_stereo']
-            self._cis_trans_stereo = backup['cis_trans_stereo']
+            self._atoms = backup._atoms
+            self._bonds = backup._bonds
+            self._meta = backup._meta
+            self._name = backup._name
             self.flush_cache()
+        else:  # update internal state
+            self.fix_labels()
+            self.fix_stereo()
         del self._backup
 
 

@@ -71,16 +71,13 @@ class Bond:
         if full:
             copy._stereo = self.stereo
             copy._in_ring = self.in_ring
+        else:
+            copy._in_ring = False
+            copy._stereo = None
         return copy
 
     def __copy__(self):
         return self.copy()
-
-    @classmethod
-    def from_bond(cls, bond):
-        if isinstance(bond, Bond):
-            return cls(bond.order)
-        raise TypeError('Bond expected')
 
 
 class DynamicBond:
@@ -146,17 +143,12 @@ class DynamicBond:
         return self.copy()
 
     @classmethod
-    def from_bond(cls, bond):
-        if isinstance(bond, Bond):
-            copy = object.__new__(cls)
-            copy._order = copy._p_order = bond.order
-            return copy
-        elif isinstance(bond, cls):
-            copy = object.__new__(cls)
-            copy._order = bond.order
-            copy._p_order = bond.p_order
-            return copy
-        raise TypeError('DynamicBond expected')
+    def from_bond(cls, bond: 'Bond') -> 'DynamicBond':
+        if not isinstance(bond, Bond):
+            raise TypeError('Bond expected')
+        copy = object.__new__(cls)
+        copy._order = copy._p_order = bond.order
+        return copy
 
 
 class QueryBond:
@@ -222,33 +214,37 @@ class QueryBond:
         return self._in_ring
 
     @property
-    def stereo(self):
+    def stereo(self) -> Optional[bool]:
         return self._stereo
 
     def copy(self, full=False) -> 'QueryBond':
         copy = object.__new__(self.__class__)
         copy._order = self.order
-        copy._in_ring = self.in_ring
         if full:
+            copy._in_ring = self.in_ring
             copy._stereo = self.stereo
+        else:
+            copy._in_ring = copy._stereo = None
         return copy
 
     def __copy__(self):
         return self.copy()
 
     @classmethod
-    def from_bond(cls, bond):
-        if isinstance(bond, Bond):
-            copy = object.__new__(cls)
-            copy._order = (bond.order,)
-            copy._in_ring = None
-            return copy
-        elif isinstance(bond, cls):
-            copy = object.__new__(cls)
-            copy._order = bond.order
+    def from_bond(cls, bond: 'Bond', stereo=False, in_ring=False) -> 'QueryBond':
+        if not isinstance(bond, Bond):
+            raise TypeError('Bond expected')
+        copy = object.__new__(cls)
+        copy._order = (bond.order,)
+        if in_ring:
             copy._in_ring = bond.in_ring
-            return copy
-        raise TypeError('QueryBond or Bond expected')
+        else:
+            copy._in_ring = None
+        if stereo:
+            copy._stereo = bond.stereo
+        else:
+            copy._stereo = None
+        return copy
 
 
 __all__ = ['Bond', 'DynamicBond', 'QueryBond']

@@ -413,19 +413,30 @@ class QueryElement(ExtendedQuery, ABC):
         return element
 
     @classmethod
-    def from_atom(cls, atom: Union['Element', 'Query']) -> 'Query':
+    def from_atom(cls, atom: 'Element', neighbors=False, hybridization=False, heteroatoms=False,
+                  hydrogens=False, ring_sizes=False) -> 'QueryElement':
         """
         get QueryElement or AnyElement object from Element object or copy of QueryElement or AnyElement
         """
-        if isinstance(atom, Element):
-            # transfer true atomic props
-            query = cls.from_atomic_number(atom.atomic_number)(atom.isotope)
-            query._charge = atom.charge
-            query._is_radical = atom.is_radical
-            return query
-        elif not isinstance(atom, Query):
+        if not isinstance(atom, Element):
             raise TypeError('Element or Query expected')
-        return atom.copy()
+
+        # transfer true atomic props
+        query = cls.from_atomic_number(atom.atomic_number)(atom.isotope)
+        query._charge = atom.charge
+        query._is_radical = atom.is_radical
+
+        if neighbors:
+            query._neighbors == (atom.neighbors,)
+        if hybridization:
+            query._hybridization == (atom.hybridization,)
+        if heteroatoms:
+            query._heteroatoms = (atom.heteroatoms,)
+        if ring_sizes:
+            query._ring_sizes = atom.ring_sizes
+        if hydrogens and atom.implicit_hydrogens is not None:
+            query._implicit_hydrogens = (atom.implicit_hydrogens,)
+        return query
 
     def copy(self, full=False):
         copy = super().copy(full=full)
