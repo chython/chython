@@ -65,7 +65,7 @@ class Bond:
     def in_ring(self) -> bool:
         return self._in_ring
 
-    def copy(self, full=False) -> 'Bond':
+    def copy(self, full=False, stereo=False) -> 'Bond':
         copy = object.__new__(self.__class__)
         copy._order = self.order
         if full:
@@ -73,7 +73,10 @@ class Bond:
             copy._in_ring = self.in_ring
         else:
             copy._in_ring = False
-            copy._stereo = None
+            if stereo:
+                copy._stereo = self.stereo
+            else:
+                copy._stereo = None
         return copy
 
     def __copy__(self):

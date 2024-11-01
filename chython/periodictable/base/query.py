@@ -107,6 +107,9 @@ class Query(ABC):
         if full:
             copy._masked = self.masked
             copy._stereo = self.stereo
+        else:
+            copy._masked = False
+            copy._stereo = None
         return copy
 
     def __copy__(self):
@@ -414,7 +417,7 @@ class QueryElement(ExtendedQuery, ABC):
 
     @classmethod
     def from_atom(cls, atom: 'Element', neighbors=False, hybridization=False, heteroatoms=False,
-                  hydrogens=False, ring_sizes=False) -> 'QueryElement':
+                  hydrogens=False, ring_sizes=False, stereo=False) -> 'QueryElement':
         """
         get QueryElement or AnyElement object from Element object or copy of QueryElement or AnyElement
         """
@@ -427,15 +430,17 @@ class QueryElement(ExtendedQuery, ABC):
         query._is_radical = atom.is_radical
 
         if neighbors:
-            query._neighbors == (atom.neighbors,)
+            query._neighbors = (atom.neighbors,)
         if hybridization:
-            query._hybridization == (atom.hybridization,)
+            query._hybridization = (atom.hybridization,)
         if heteroatoms:
             query._heteroatoms = (atom.heteroatoms,)
         if ring_sizes:
             query._ring_sizes = atom.ring_sizes
         if hydrogens and atom.implicit_hydrogens is not None:
             query._implicit_hydrogens = (atom.implicit_hydrogens,)
+        if stereo:
+            query._stereo = atom.stereo
         return query
 
     def copy(self, full=False):

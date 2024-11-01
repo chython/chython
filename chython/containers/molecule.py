@@ -37,20 +37,21 @@ from ..algorithms.standardize import StandardizeMolecule
 from ..algorithms.stereo import MoleculeStereo
 from ..algorithms.tautomers import Tautomers
 from ..algorithms.x3dom import X3domMolecule
-from ..exceptions import MappingError, ValenceError
+from ..exceptions import ValenceError
 from ..periodictable import DynamicElement, Element, QueryElement, H
 
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphism, Aromatize, StandardizeMolecule,
                         MoleculeSmiles, DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS,
                         X3domMolecule):
-    __slots__ = ('_backup', '_meta', '_name', '_changed')
+    __slots__ = ('_meta', '_name', '_changed', '_backup')
 
     def __init__(self):
         super().__init__()
         self._meta = None
         self._name = None
         self._changed = None
+        self._backup = None
 
     @property
     def meta(self) -> Dict:
@@ -213,7 +214,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             self._changed = {n}
         else:
             self._changed.add(n)
-        if not _skip_calculation:
+        if not _skip_calculation and self._backup is None:
             self.fix_labels()
         return n
 
@@ -236,8 +237,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         else:
             self._changed.add(n)
             self._changed.add(m)
-        if not _skip_calculation:
+        if not _skip_calculation and self._backup is None:
             self.fix_labels()
+            self.fix_stereo()
 
     def delete_atom(self, n: int, *, _skip_calculation=False):
         """
@@ -256,8 +258,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                 self._changed = {m}
             else:
                 self._changed.add(m)
-        if not _skip_calculation:
+        if not _skip_calculation and self._backup is None:
             self.fix_labels()
+            self.fix_stereo()
 
     def delete_bond(self, n: int, m: int, *, _skip_calculation=False):
         """
@@ -274,8 +277,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             else:
                 self._changed.add(n)
                 self._changed.add(m)
-        if not _skip_calculation:
+        if not _skip_calculation and self._backup is None:
             self.fix_labels()
+            self.fix_stereo()
 
     def copy(self) -> 'MoleculeContainer':
         copy = super().copy()
@@ -293,7 +297,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
 
     def substructure(self, atoms: Iterable[int], *, as_query: bool = False, recalculate_hydrogens=True,
                      skip_neighbors_marks=False, skip_hybridizations_marks=False, skip_hydrogens_marks=False,
-                     skip_rings_sizes_marks=False, skip_heteroatoms_marks=False) -> \
+                     skip_rings_sizes_marks=False, skip_heteroatoms_marks=False, skip_in_ring_bond_marks=False,
+                     skip_stereo_marks=False) -> \
             Union['MoleculeContainer', 'QueryContainer']:
         """
         Create substructure containing atoms from atoms list.
@@ -310,6 +315,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         :param skip_hydrogens_marks: Don't set hydrogens count marks on substructured queries
         :param skip_rings_sizes_marks: Don't set rings_sizes marks on substructured queries
         :param skip_heteroatoms_marks: Don't set heteroatoms count marks
+        :param skip_in_ring_bond_marks: Don't set in_ring bond marks
+        :param skip_stereo_marks: Don't set stereo marks on substructured queries
         """
         if not atoms:
             raise ValueError('empty atoms list not allowed')
@@ -317,97 +324,51 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             raise ValueError('invalid atom numbers')
         atoms = tuple(n for n in self._atoms if n in atoms)  # save original order
         if as_query:
-            atom_type = QueryElement
-            bond_type = QueryBond
             sub = object.__new__(QueryContainer)
-        else:
-            atom_type = Element
-            bond_type = Bond
-            sub = object.__new__(self.__class__)
-            sub._MoleculeContainer__name = sub._MoleculeContainer__meta = None
 
-        sa = self._atoms
-        sb = self._bonds
-        sc = self._charges
-        sr = self._radicals
+            lost = {n for n, a in self._atoms.items() if a.atomic_number != 1} - set(atoms)  # atoms not in substructure
+            # atoms with fully present neighbors
+            not_skin = {n for n in atoms if lost.isdisjoint(self._bonds[n])}
 
-        sub._charges = {n: sc[n] for n in atoms}
-        sub._radicals = {n: sr[n] for n in atoms}
+            # check for full presence of cumulene chains and terminal attachments
+            for p in self._stereo_cumulenes.values():
+                if not not_skin.issuperset(p):
+                    not_skin.difference_update(p)
 
-        sub._atoms = ca = {}
+            sub._atoms = {n: QueryElement.from_atom(self._atoms[n],
+                                                    neighbors=not skip_neighbors_marks,
+                                                    hybridization=not skip_hybridizations_marks,
+                                                    hydrogens=not skip_hydrogens_marks,
+                                                    ring_sizes=not skip_rings_sizes_marks,
+                                                    heteroatoms=not skip_heteroatoms_marks,
+                                                    stereo=not skip_stereo_marks and n in not_skin)
+                          for n in atoms}
+            sub._bonds = sb = {}
+            for n in atoms:
+                sb[n] = sbn = {}
+                for m, bond in self._bonds[n].items():
+                    if m in sb:  # bond partially exists. need back-connection.
+                        sbn[m] = sb[m][n]
+                    elif m in atoms:
+                        sbn[m] = QueryBond.from_bond(bond,
+                                                     in_ring=not skip_in_ring_bond_marks,
+                                                     stereo=not skip_stereo_marks and n in not_skin and m in not_skin)
+            return sub
+
+        # molecule substructure
+        sub = object.__new__(self.__class__)
+        sub._name = sub._meta = sub._changed = None
+        sub._atoms = {n: self._atoms[n].copy(hydrogens=not recalculate_hydrogens, stereo=True) for n in atoms}
+        sub._bonds = sb = {}
         for n in atoms:
-            ca[n] = atom = atom_type.from_atom(sa[n])
-            atom._attach_graph(sub, n)
-
-        sub._bonds = cb = {}
-        for n in atoms:
-            cb[n] = cbn = {}
-            for m, bond in sb[n].items():
-                if m in cb:  # bond partially exists. need back-connection.
-                    cbn[m] = cb[m][n]
+            sb[n] = sbn = {}
+            for m, bond in self._bonds[n].items():
+                if m in sb:  # bond partially exists. need back-connection.
+                    sbn[m] = sb[m][n]
                 elif m in atoms:
-                    cbn[m] = bond = bond_type.from_bond(bond)
-                    if not as_query:
-                        bond._attach_graph(sub, n, m)
-
-        if as_query:
-            lost = {n for n, a in sa.items() if a.atomic_number != 1} - set(atoms)  # atoms not in substructure
-            not_skin = {n for n in atoms if lost.isdisjoint(sb[n])}
-            sub._atoms_stereo = {n: s for n, s in self._atoms_stereo.items() if n in not_skin}
-            sub._allenes_stereo = {n: s for n, s in self._allenes_stereo.items()
-                                   if not_skin.issuperset(self._stereo_allenes_paths[n]) and
-                                      not_skin.issuperset(x for x in self._stereo_allenes[n] if x)}
-            sub._cis_trans_stereo = {nm: s for nm, s in self._cis_trans_stereo.items()
-                                     if not_skin.issuperset(self._stereo_cis_trans_paths[nm]) and
-                                        not_skin.issuperset(x for x in self._stereo_cis_trans[nm] if x)}
-
-            sub._masked = {n: False for n in atoms}
-            if skip_heteroatoms_marks:
-                sub._heteroatoms = {n: () for n in atoms}
-            else:
-                sha = self.heteroatoms
-                sub._heteroatoms = {n: (sha(n),) for n in atoms}
-
-            if skip_hybridizations_marks:
-                sub._hybridizations = {n: () for n in atoms}
-            else:
-                sh = self.hybridization
-                sub._hybridizations = {n: (sh(n),) for n in atoms}
-            if skip_neighbors_marks:
-                sub._neighbors = {n: () for n in atoms}
-            else:
-                sn = self.neighbors
-                sub._neighbors = {n: (sn(n),) for n in atoms}
-            if skip_hydrogens_marks:
-                sub._hydrogens = {n: () for n in atoms}
-            else:
-                shg = self._hydrogens
-                sub._hydrogens = {n: () if shg[n] is None else (shg[n],) for n in atoms}
-            if skip_rings_sizes_marks:
-                sub._rings_sizes = {n: () for n in atoms}
-            else:
-                rs = self.atoms_rings_sizes
-                sub._rings_sizes = {n: rs.get(n, ()) for n in atoms}
-        else:
-            sub._conformers = [{n: c[n] for n in atoms} for c in self._conformers]
-
-            if recalculate_hydrogens:
-                sub._hydrogens = {}
-                for n in atoms:
-                    sub._calc_implicit(n)
-            else:
-                hg = self._hydrogens
-                sub._hydrogens = {n: hg[n] for n in atoms}
-
-            sp = self._plane
-            sub._plane = {n: sp[n] for n in atoms}
-            sub._parsed_mapping = {n: m for n, m in self._parsed_mapping.items() if n in atoms}
-
-            # fix_stereo will repair data
-            sub._atoms_stereo = self._atoms_stereo.copy()
-            sub._allenes_stereo = self._allenes_stereo.copy()
-            sub._cis_trans_stereo = self._cis_trans_stereo.copy()
-            sub.fix_stereo()
+                    sbn[m] = bond.copy(stereo=True)
+        sub.fix_labels(recalculate_hydrogens=recalculate_hydrogens)
+        sub.fix_stereo()
         return sub
 
     def augmented_substructure(self, atoms: Iterable[int], deep: int = 1, **kwargs) -> 'MoleculeContainer':
@@ -442,36 +403,29 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         """
         if not isinstance(other, MoleculeContainer):
             raise TypeError('MoleculeContainer expected')
-        sa = self._atoms
-        sb = self._bonds
-
         bonds = []
         adj = defaultdict(lambda: defaultdict(lambda: [None, None]))
-
-        oa = other._atoms
-        ob = other._bonds
-
-        common = sa.keys() & oa.keys()
+        common = self._atoms.keys() & other._atoms.keys()
 
         h = CGRContainer()
         ha = h._atoms
         hb = h._bonds
 
-        for n in sa.keys() - common:  # cleavage atoms
-            ha[n] = DynamicElement.from_atom(sa[n])
+        for n in self._atoms.keys() - common:  # cleavage atoms
+            ha[n] = DynamicElement.from_atom(self._atoms[n])
             hb[n] = {}
-            for m, bond in sb[n].items():
+            for m, bond in self._bonds[n].items():
                 if m not in ha:
                     if m in common:  # bond to common atoms is broken bond
                         bond = DynamicBond(bond.order, None)
                     else:
                         bond = DynamicBond.from_bond(bond)
                     bonds.append((n, m, bond))
-        for n in oa.keys() - common:  # coupling atoms
-            ha[n] = DynamicElement.from_atom(oa[n])
+        for n in other._atoms.keys() - common:  # coupling atoms
+            ha[n] = DynamicElement.from_atom(other._atoms[n])
             hb[n] = {}
 
-            for m, bond in ob[n].items():
+            for m, bond in other._bonds[n].items():
                 if m not in ha:
                     if m in common:  # bond to common atoms is formed bond
                         bond = DynamicBond(None, bond.order)
@@ -480,14 +434,14 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                     bonds.append((n, m, bond))
         for n in common:
             an = adj[n]
-            for m, bond in sb[n].items():
+            for m, bond in self._bonds[n].items():
                 if m in common:
                     an[m][0] = bond.order
-            for m, bond in ob[n].items():
+            for m, bond in other._bonds[n].items():
                 if m in common:
                     an[m][1] = bond.order
         for n in common:
-            ha[n] = DynamicElement.from_atoms(sa[n], oa[n])
+            ha[n] = DynamicElement.from_atoms(self._atoms[n], other._atoms[n])
             hb[n] = {}
 
             for m, (o1, o2) in adj[n].items():
@@ -916,7 +870,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         else:  # update internal state
             self.fix_labels()
             self.fix_stereo()
-        del self._backup
+        self._backup = None  # drop backup
 
 
 __all__ = ['MoleculeContainer']
