@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from re import compile, fullmatch, match, search
+from re import compile, match, search
 from .._mdl import common_isotopes
 from ...containers.bonds import QueryBond
 from ...exceptions import IncorrectSmiles, IncorrectSmarts
@@ -243,7 +243,7 @@ def _tokenize(smiles):
 
 def _atom_parse(token):
     # [isotope]Element[element][@[@]][H[n]][+-charge][:mapping]
-    _match = fullmatch(atom_re, token)
+    _match = atom_re.fullmatch(token)
     if _match is None:
         raise IncorrectSmiles(f'atom token invalid {token}')
     isotope, element, stereo, hydrogen, charge, mapping = _match.groups()
@@ -275,16 +275,14 @@ def _atom_parse(token):
             mapping = int(mapping[1:])
         except ValueError:
             raise IncorrectSmiles('invalid mapping token')
-    else:
-        mapping = 0
 
     if element in ('c', 'n', 'o', 'p', 's', 'as', 'se', 'b', 'te'):
         _type = 8
         element = element.capitalize()
     else:
         _type = 0
-    return _type, {'element': element, 'isotope': isotope, 'mapping': mapping, 'charge': charge, 'is_radical': False,
-                   'x': 0., 'y': 0., 'z': 0., 'hydrogen': hydrogen, 'stereo': stereo}
+    return _type, {'element': element, 'isotope': isotope, 'parsed_mapping': mapping, 'charge': charge,
+                   'implicit_hydrogens': hydrogen, 'stereo': stereo}
 
 
 def _query_parse(token):
@@ -372,8 +370,7 @@ def smiles_tokenize(smi):
     out = []
     for token_type, token in tokens:
         if token_type in (0, 8):  # simple atom
-            out.append((token_type, {'element': token, 'isotope': None, 'mapping': 0, 'charge': 0, 'is_radical': False,
-                                     'x': 0., 'y': 0., 'z': 0., 'hydrogen': None, 'stereo': None}))
+            out.append((token_type, {'element': token}))
         elif token_type == 5:
             out.append(_atom_parse(token))
         elif token_type == 10:

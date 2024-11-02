@@ -44,7 +44,7 @@ from ..periodictable import DynamicElement, Element, QueryElement, H
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphism, Aromatize, StandardizeMolecule,
                         MoleculeSmiles, DepictMolecule, Calculate2DMolecule, Fingerprints, Tautomers, MCS,
                         X3domMolecule):
-    __slots__ = ('_meta', '_name', '_changed', '_backup')
+    __slots__ = ('_meta', '_name', '_conformers', '_changed', '_backup')
 
     def __init__(self):
         super().__init__()
@@ -92,52 +92,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         elif include_bond:
             return tuple(self._bonds[atom].items())
         return tuple(self._bonds[atom])
-
-    def neighbors(self, n: int) -> int:
-        """number of neighbors atoms excluding any-bonded"""
-        return self._atoms[n].neighbors
-
-    @cached_args_method
-    def hybridization(self, n: int) -> int:
-        """
-        Atom hybridization.
-
-        1 - if atom has zero or only single bonded neighbors, 2 - if has only one double bonded neighbor and any amount
-        of single bonded, 3 - if has one triple bonded and any amount of double and single bonded neighbors or
-        two and more double bonded and any amount of single bonded neighbors, 4 - if atom in aromatic ring.
-        """
-        return self._atoms[n].hybridization
-
-    @cached_args_method
-    def heteroatoms(self, n: int) -> int:
-        """
-        Number of neighbored heteroatoms (not carbon or hydrogen) except any-bond connected.
-        """
-        return self._atoms[n].heteroatoms
-
-    def implicit_hydrogens(self, n: int) -> Optional[int]:
-        """
-        Number of implicit hydrogen atoms connected to atom.
-
-        Returns None if count are ambiguous.
-        """
-        return self._atoms[n].implicit_hydrogens
-
-    def explicit_hydrogens(self, n: int) -> int:
-        """
-        Number of explicit hydrogen atoms connected to atom.
-
-        Take into account any type of bonds with hydrogen atoms.
-        """
-        return self._atoms[n].explicit_hydrogens
-
-    def total_hydrogens(self, n: int) -> int:
-        """
-        Number of hydrogen atoms connected to atom.
-
-        Take into account any type of bonds with hydrogen atoms.
-        """
-        return self._atoms[n].total_hydrogens
 
     @cached_args_method
     def adjacency_matrix(self, set_bonds=False, /):
@@ -743,8 +697,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         """
         Set firs possible hydrogens count based on rules
         """
-        atoms = self._atoms
-        atom = atoms[n]
+        atom = self._atoms[n]
         if atom.atomic_number == 1:  # hydrogen nether has implicit H
             atom._implicit_hydrogens = 0
             return
@@ -762,7 +715,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                     return
             elif order != 8:  # any bond used for complexes
                 explicit_sum += order
-                explicit_dict[(order, atoms[m].atomic_number)] += 1
+                explicit_dict[(order, self._atoms[m].atomic_number)] += 1
 
         if aroma == 2:
             if explicit_sum == 0:  # H-Ar
@@ -794,8 +747,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         atom._implicit_hydrogens = None  # rule not found
 
     def _check_implicit(self, n: int, h: int) -> bool:
-        atoms = self._atoms
-        atom = atoms[n]
+        atom = self._atoms[n]
         if atom.atomic_number == 1:  # hydrogen nether has implicit H
             return h == 0
 
@@ -808,7 +760,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                 return False
             elif order != 8:  # any bond used for complexes
                 explicit_sum += order
-                explicit_dict[(order, atoms[m].atomic_number)] += 1
+                explicit_dict[(order, self._atoms[m].atomic_number)] += 1
 
         try:
             rules = atom.valence_rules(explicit_sum)

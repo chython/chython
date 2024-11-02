@@ -143,11 +143,12 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
                 atom_map[x]['is_radical'] = True
 
         postprocess_parsed_reaction(record, remap=remap, ignore=ignore)
-        rxn = create_reaction(record, ignore_bad_isotopes=ignore_bad_isotopes, _r_cls=_r_cls, _m_cls=_m_cls)
+        rxn = create_reaction(record, ignore_bad_isotopes=ignore_bad_isotopes, keep_radicals=False,
+                              ignore_carbon_radicals=ignore_carbon_radicals, keep_implicit=keep_implicit,
+                              ignore_aromatic_radicals=ignore_aromatic_radicals, ignore=ignore,
+                              _r_cls=_r_cls, _m_cls=_m_cls)
         for mol, tmp in zip(rxn.molecules(), chain(record['reactants'], record['reagents'], record['products'])):
-            postprocess_molecule(mol, tmp, ignore=ignore, ignore_stereo=ignore_stereo,
-                                 ignore_carbon_radicals=ignore_carbon_radicals, keep_implicit=keep_implicit,
-                                 ignore_aromatic_radicals=ignore_aromatic_radicals)
+            postprocess_molecule(mol, tmp, ignore_stereo=ignore_stereo)
         return rxn
     else:
         record = parser(smiles_tokenize(smi), not ignore)
@@ -156,104 +157,17 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
         record['log'].extend(log)
 
         postprocess_parsed_molecule(record, remap=remap, ignore=ignore)
-        mol = create_molecule(record, ignore_bad_isotopes=ignore_bad_isotopes, _cls=_m_cls)
-        postprocess_molecule(mol, record, ignore=ignore, ignore_stereo=ignore_stereo,
-                             ignore_carbon_radicals=ignore_carbon_radicals, keep_implicit=keep_implicit,
-                             ignore_aromatic_radicals=ignore_aromatic_radicals)
+        mol = create_molecule(record, ignore_bad_isotopes=ignore_bad_isotopes, keep_radicals=False,
+                              ignore_carbon_radicals=ignore_carbon_radicals, keep_implicit=keep_implicit,
+                              ignore_aromatic_radicals=ignore_aromatic_radicals, ignore=ignore,
+                              _cls=_m_cls)
+        postprocess_molecule(mol, record, ignore_stereo=ignore_stereo)
         return mol
 
 
-def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, ignore_carbon_radicals=False,
-                         keep_implicit=False, ignore_aromatic_radicals=True):
+def postprocess_molecule(molecule, data, *, ignore_stereo=False):
     mapping = data['mapping']
 
-    atoms = molecule._atoms
-    bonds = molecule._bonds
-    charges = molecule._charges
-    hydrogens = molecule._hydrogens
-    radicals = molecule._radicals
-    hyb = molecule.hybridization
-    radicalized = []
-
-    implicit_mismatch = {}
-    if 'chython_parsing_log' in molecule.meta:
-        log = molecule.meta['chython_parsing_log']
-    else:
-        log = []
-
-    for n, a in enumerate(data['atoms']):
-        h = a['hydrogen']
-        if h is None:  # simple atom token
-            continue
-        # bracket token should always contain implicit hydrogens count.
-        n = mapping[n]
-        if keep_implicit:  # override any calculated hydrogens count.
-            hydrogens[n] = h
-        elif (hc := hydrogens[n]) is None:  # atom has invalid valence or aromatic ring.
-            if hyb(n) == 4:  # this is aromatic rings. just store given H count.
-                hydrogens[n] = h
-                # rare H0 case
-                if (not ignore_aromatic_radicals and not h and not charges[n] and not radicals[n] and
-                    atoms[n].atomic_number in (5, 6, 7, 15) and sum(b.order != 8 for b in bonds[n].values()) == 2):
-                    # c[c]c - aromatic B,C,N,P radical
-                    radicals[n] = True
-                    radicalized.append(n)
-            elif not radicals[n]:  # CXSMILES radical not set.
-                # SMILES doesn't code radicals. so, let's try to guess.
-                radicals[n] = True
-                if molecule._check_implicit(n, h):  # radical form is valid
-                    radicalized.append(n)
-                    hydrogens[n] = h
-                elif ignore:  # radical state also has errors.
-                    radicals[n] = False  # reset radical state
-                    implicit_mismatch[n] = h
-                    log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-                else:
-                    raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-        elif hc != h:  # H count mismatch.
-            if hyb(n) == 4:
-                if not h and not charges[n] and not radicals[n] and atoms[n].atomic_number in (5, 6, 7, 15) and \
-                        sum(b.order != 8 for b in bonds[n].values()) == 2:
-                    # c[c]c - aromatic B,C,N,P radical
-                    hydrogens[n] = 0
-                    radicals[n] = True
-                    radicalized.append(n)
-                elif ignore:
-                    implicit_mismatch[n] = h
-                    log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-                else:
-                    raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-            elif molecule._check_implicit(n, h):  # set another possible implicit state. probably Al, P
-                hydrogens[n] = h
-            elif not radicals[n]:  # CXSMILES radical is not set. try radical form
-                radicals[n] = True
-                if molecule._check_implicit(n, h):
-                    hydrogens[n] = h
-                    radicalized.append(n)
-                # radical state also has errors.
-                elif ignore:
-                    radicals[n] = False  # reset radical state
-                    implicit_mismatch[n] = h
-                    log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-                else:
-                    raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-            elif ignore:  # just ignore it
-                implicit_mismatch[n] = h
-                log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-            else:
-                raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-
-    if ignore_carbon_radicals:
-        for n in radicalized:
-            if atoms[n].atomic_number == 6:
-                radicals[n] = False
-                hydrogens[n] += 1
-                log.append(f'carbon radical {n} replaced with implicit hydrogen')
-
-    if implicit_mismatch:
-        molecule.meta['chython_implicit_mismatch'] = implicit_mismatch
-    if log and 'chython_parsing_log' not in molecule.meta:
-        molecule.meta['chython_parsing_log'] = log
     if ignore_stereo:
         return
 

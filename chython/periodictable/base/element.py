@@ -25,11 +25,14 @@ from ...exceptions import ValenceError
 
 class Element(ABC):
     __slots__ = ('_isotope', '_charge', '_is_radical', '_x', '_y', '_implicit_hydrogens',
-                 '_explicit_hydrogens', '_stereo', '_parsed_mapping', '_xyz',
+                 '_explicit_hydrogens', '_stereo', '_parsed_mapping',
                  '_neighbors', '_heteroatoms', '_hybridization', '_ring_sizes', '_in_ring')
     __class_cache__ = {}
 
-    def __init__(self, isotope: Optional[int] = None):
+    def __init__(self, isotope: Optional[int] = None, *,
+                 charge: int = 0, is_radical: bool = False, x: float = 0, y: float = 0,
+                 implicit_hydrogens: Optional[int] = None, stereo: Optional[bool] = None,
+                 parsed_mapping: Optional[int] = None):
         """
         Element object with specified isotope
 
@@ -41,11 +44,12 @@ class Element(ABC):
         elif isotope is not None:
             raise TypeError('integer isotope number required')
         self._isotope = isotope
-        self._charge = 0
-        self._is_radical = False
-        self._x = self._y = 0
-        self._implicit_hydrogens = None
-        self._stereo = None
+        self._charge = charge
+        self._is_radical = is_radical
+        self._x, self._y = x, y
+        self._implicit_hydrogens = implicit_hydrogens
+        self._stereo = stereo
+        self._parsed_mapping = parsed_mapping
 
         self._explicit_hydrogens = 0
         self._neighbors = 0

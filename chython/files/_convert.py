@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2023, 2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -22,31 +22,27 @@ from ..exceptions import AtomNotFound
 from ..periodictable import Element
 
 
-def create_molecule(data, *, skip_calc_implicit=False, ignore_bad_isotopes=False, _cls=MoleculeContainer):
-    g = object.__new__(_cls)
-    pm = {}
-    atoms = {}
-    plane = {}
-    charges = {}
-    radicals = {}
-    bonds = {}
+def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False,
+                    keep_implicit=False, keep_radicals=True, ignore_aromatic_radicals=True, ignore=True,
+                    ignore_carbon_radicals=False, _cls=MoleculeContainer):
+    g = _cls()
+    atoms = g._atoms
+    bonds = g._bonds
     mapping = data['mapping']
     for n, atom in enumerate(data['atoms']):
+        if abs(atom['charge']) > 4:
+            raise ValueError('formal charge should be in range [-4, 4]')
         n = mapping[n]
-        e = Element.from_symbol(atom['element'])
+        e = Element.from_symbol(atom.pop('element'))
         try:
-            atoms[n] = e(atom['isotope'])
+            atoms[n] = e(**atom)
         except ValueError:
             if not ignore_bad_isotopes:
                 raise
-            atoms[n] = e()  # reset isotope mark on errors.
+            del atom['isotope']  # reset isotope mark on errors.
+            atoms[n] = e(**atom)
         bonds[n] = {}
-        if (charge := atom['charge']) > 4 or charge < -4:
-            raise ValueError('formal charge should be in range [-4, 4]')
-        charges[n] = charge
-        radicals[n] = atom['is_radical']
-        plane[n] = (atom['x'], atom['y'])
-        pm[n] = atom['mapping']
+
     for n, m, b in data['bonds']:
         n, m = mapping[n], mapping[m]
         if n == m:
@@ -57,26 +53,108 @@ def create_molecule(data, *, skip_calc_implicit=False, ignore_bad_isotopes=False
             raise ValueError('atoms already bonded')
         bonds[n][m] = bonds[m][n] = Bond(b)
     if any(a['z'] for a in data['atoms']):
-        conformers = [{mapping[n]: (a['x'], a['y'], a['z']) for n, a in enumerate(data['atoms'])}]
-    else:
-        conformers = []
+        # store conformer
+        g._conformers = [{mapping[n]: (a['x'], a['y'], a['z']) for n, a in enumerate(data['atoms'])}]
 
     if data['log']:  # store log to the meta
         if data['meta'] is None:
             data['meta'] = {}
         data['meta']['chython_parsing_log'] = data['log']
+    g._meta = data['meta']
 
-    g.__setstate__({'atoms': atoms, 'bonds': bonds, 'meta': data['meta'], 'plane': plane, 'parsed_mapping': pm,
-                    'charges': charges, 'radicals': radicals, 'name': data['title'], 'conformers': conformers,
-                    'atoms_stereo': {}, 'allenes_stereo': {}, 'cis_trans_stereo': {}, 'hydrogens': {}})
-    if not skip_calc_implicit:
-        for n in atoms:
+    if skip_calc_implicit:  # don't calc Hs. e.g. INCHI
+        return g
+
+    implicit_mismatch = {}
+    radicalized = []
+    # precalculate Hs
+    for n, a in atoms.items():
+        if a.implicit_hydrogens is None:
+            # let's try to calculate. in case of errors just keep as is. radicals in smiles should be in [brackets],
+            # thus has implicit Hs value
             g._calc_implicit(n)
+        elif keep_implicit:
+            # keep given Hs count as is
+            continue
+        else:  # recheck given Hs count
+            h = a.implicit_hydrogens  # parsed Hs
+            g._calc_implicit(n)  #  recalculate
+            if a.implicit_hydrogens is None:  # atom has invalid valence or aromatic ring.
+                if a.hybridization == 4:
+                    # this is aromatic ring. just restore given H count.
+                    a._implicit_hydrogens = h
+                    # rare H0 case
+                    if (not keep_radicals and not ignore_aromatic_radicals
+                        and not h and not a.charge and not a.is_radical and a.atomic_number in (5, 6, 7, 15)
+                        and sum(b.order != 8 for b in bonds[n].values()) == 2):
+                        # c[c]c - aromatic B,C,N,P radical
+                        a._is_radical = True
+                        radicalized.append(n)
+                elif not keep_radicals and not a.is_radical:  # CXSMILES radical not set.
+                    # SMILES doesn't code radicals. so, let's try to guess.
+                    a._is_radical = True
+                    if g._check_implicit(n, h):  # radical form is valid
+                        radicalized.append(n)
+                        a._implicit_hydrogens = h
+                    elif ignore:  # radical state also has errors.
+                        a._is_radical = False  # reset radical state
+                        implicit_mismatch[n] = h
+                        data['log'].append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+                    else:
+                        raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+            elif h != a.implicit_hydrogens:  # H count mismatch.
+                if a.hybridization == 4:
+                    if (not keep_radicals
+                        and not h and not a.charge and not a.is_radical and a.atomic_number in (5, 6, 7, 15)
+                        and sum(b.order != 8 for b in bonds[n].values()) == 2):
+                        # c[c]c - aromatic B,C,N,P radical
+                        a._implicit_hydrogens = 0
+                        a._is_radical = True
+                        radicalized.append(n)
+                    elif ignore:
+                        implicit_mismatch[n] = h
+                        data['log'].append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+                    else:
+                        raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+                elif g._check_implicit(n, h):  # set another possible implicit state. probably Al, P
+                    a._implicit_hydrogens = h
+                elif not keep_radicals and not a.is_radical:  # CXSMILES radical is not set. try radical form
+                    a._is_radical = True
+                    if g._check_implicit(n, h):
+                        a._implicit_hydrogens = h
+                        radicalized.append(n)
+                    # radical state also has errors.
+                    elif ignore:
+                        a._is_radical = False  # reset radical state
+                        implicit_mismatch[n] = h
+                        data['log'].append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+                    else:
+                        raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+                elif ignore:  # just ignore it
+                    implicit_mismatch[n] = h
+                    data['log'].append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+                else:
+                    raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
+
+    if ignore_carbon_radicals:
+        for n in radicalized:
+            a = atoms[n]
+            if a.atomic_number == 6:
+                a._is_radical = False
+                a._implicit_hydrogens += 1
+                data['log'].append(f'carbon radical {n} replaced with implicit hydrogen')
+    elif radicalized:
+        g.meta['chython_radicalized_atoms'] = radicalized
+    if data['log'] and 'chython_parsing_log' not in g.meta:
+        g.meta['chython_parsing_log'] = data['log']
+    if implicit_mismatch:
+        g.meta['chython_implicit_mismatch'] = implicit_mismatch
     return g
 
 
 def create_reaction(data, *, ignore=True, skip_calc_implicit=False, ignore_bad_isotopes=False,
-                    _r_cls=ReactionContainer, _m_cls=MoleculeContainer):
+                    keep_implicit=False, keep_radicals=True, ignore_aromatic_radicals=True,
+                    ignore_carbon_radicals=False, _r_cls=ReactionContainer, _m_cls=MoleculeContainer):
     rc, pr, rg = [], [], []
     for ms, pms, gr in ((rc, data['reactants'], 'reactant'),
                         (pr, data['products'], 'products'),
@@ -85,7 +163,10 @@ def create_reaction(data, *, ignore=True, skip_calc_implicit=False, ignore_bad_i
         for n, m in enumerate(pms):
             try:
                 ms.append(create_molecule(m, skip_calc_implicit=skip_calc_implicit,
-                                          ignore_bad_isotopes=ignore_bad_isotopes, _cls=_m_cls))
+                                          ignore_bad_isotopes=ignore_bad_isotopes, keep_implicit=keep_implicit,
+                                          keep_radicals=keep_radicals,
+                                          ignore_aromatic_radicals=ignore_aromatic_radicals, ignore=ignore,
+                                          ignore_carbon_radicals=ignore_carbon_radicals, _cls=_m_cls))
             except ValueError as e:
                 if not ignore:
                     raise
