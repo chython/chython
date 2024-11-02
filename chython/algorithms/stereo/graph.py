@@ -70,13 +70,10 @@ class Stereo:
         """
         Carbon sp3 atoms numbers.
         """
-        atoms = self._atoms
-        bonds = self._bonds
-
         tetra = []
-        for n, atom in atoms.items():
+        for n, atom in self._atoms.items():
             if atom.atomic_number == 6 and not atom.charge and not atom.is_radical:
-                env = bonds[n]
+                env = self._bonds[n]
                 if all(int(x) == 1 for x in env.values()):
                     if sum(int(x) for x in env.values()) > 4:
                         continue
@@ -157,14 +154,15 @@ class Stereo:
         """
         if s is None:
             s = self._atoms[n].stereo
+            if s is None:
+                raise KeyError
 
         order = self._stereo_tetrahedrons[n]
         if len(order) == 3:
             if len(env) == 4:  # hydrogen atom passed to env
-                atoms = self._atoms
                 # hydrogen always last in order
                 try:
-                    order = (*order, next(x for x in env if atoms[x].atomic_number == 1))  # see translate scheme
+                    order = (*order, next(x for x in env if self._atoms[x].atomic_number == 1))  # see translate scheme
                 except StopIteration:
                     raise KeyError
             elif len(env) != 3:  # pyramid or tetrahedron expected
@@ -187,21 +185,24 @@ class Stereo:
         :param nm: neighbor of last atom
         :param s: if None, use existing sign else translate given to molecule
         """
-        if s is None:
-            try:
-                s = self._cis_trans_stereo[(n, m)]
-            except KeyError:
-                s = self._cis_trans_stereo[(m, n)]
-                n, m = m, n  # in alkenes sign not order depended
-                nn, nm = nm, nn
+        try:
+            n0, n1, n2, n3 = self._stereo_cis_trans[(n, m)]
+        except KeyError:
+            n0, n1, n2, n3 = self._stereo_cis_trans[(m, n)]
+            n, m = m, n  # in alkenes sign not order depended
+            nn, nm = nm, nn
 
-        atoms = self._atoms
-        n0, n1, n2, n3 = self._stereo_cis_trans[(n, m)]
+        if s is None:
+            i, j = self._stereo_cis_trans_centers[n]
+            s = self._bonds[i][j].stereo
+            if s is None:
+                raise KeyError
+
         if nn == n0:  # same start
             t0 = 0
             if nm == n1:
                 t1 = 1
-            elif nm == n3 or n3 is None and atoms[nm].atomic_number == 1:
+            elif nm == n3 or n3 is None and self._atoms[nm].atomic_number == 1:
                 t1 = 3
             else:
                 raise KeyError
@@ -209,23 +210,23 @@ class Stereo:
             t0 = 1
             if nm == n0:
                 t1 = 0
-            elif nm == n2 or n2 is None and atoms[nm].atomic_number == 1:
+            elif nm == n2 or n2 is None and self._atoms[nm].atomic_number == 1:
                 t1 = 2
             else:
                 raise KeyError
-        elif nn == n2 or n2 is None and atoms[nn].atomic_number == 1:
+        elif nn == n2 or n2 is None and self._atoms[nn].atomic_number == 1:
             t0 = 2
             if nm == n1:
                 t1 = 1
-            elif nm == n3 or n3 is None and atoms[nm].atomic_number == 1:
+            elif nm == n3 or n3 is None and self._atoms[nm].atomic_number == 1:
                 t1 = 3
             else:
                 raise KeyError
-        elif nn == n3 or n3 is None and atoms[nn].atomic_number == 1:
+        elif nn == n3 or n3 is None and self._atoms[nn].atomic_number == 1:
             t0 = 3
             if nm == n0:
                 t1 = 0
-            elif nm == n2 or n2 is None and atoms[nm].atomic_number == 1:
+            elif nm == n2 or n2 is None and self._atoms[nm].atomic_number == 1:
                 t1 = 2
             else:
                 raise KeyError
@@ -246,15 +247,16 @@ class Stereo:
         :param s: if None, use existing sign else translate given to molecule
         """
         if s is None:
-            s = self._allenes_stereo[c]
+            s = self._atoms[c].stereo
+            if s is None:
+                raise KeyError
 
-        atoms = self._atoms
         n0, n1, n2, n3 = self._stereo_allenes[c]
         if nn == n0:  # same start
             t0 = 0
             if nm == n1:
                 t1 = 1
-            elif nm == n3 or n3 is None and atoms[nm].atomic_number == 1:
+            elif nm == n3 or n3 is None and self._atoms[nm].atomic_number == 1:
                 t1 = 3
             else:
                 raise KeyError
@@ -262,23 +264,23 @@ class Stereo:
             t0 = 1
             if nm == n0:
                 t1 = 0
-            elif nm == n2 or n2 is None and atoms[nm].atomic_number == 1:
+            elif nm == n2 or n2 is None and self._atoms[nm].atomic_number == 1:
                 t1 = 2
             else:
                 raise KeyError
-        elif nn == n2 or n2 is None and atoms[nn].atomic_number == 1:
+        elif nn == n2 or n2 is None and self._atoms[nn].atomic_number == 1:
             t0 = 2
             if nm == n1:
                 t1 = 1
-            elif nm == n3 or n3 is None and atoms[nm].atomic_number == 1:
+            elif nm == n3 or n3 is None and self._atoms[nm].atomic_number == 1:
                 t1 = 3
             else:
                 raise KeyError
-        elif nn == n3 or n3 is None and atoms[nn].atomic_number == 1:
+        elif nn == n3 or n3 is None and self._atoms[nn].atomic_number == 1:
             t0 = 3
             if nm == n0:
                 t1 = 0
-            elif nm == n2 or n2 is None and atoms[nm].atomic_number == 1:
+            elif nm == n2 or n2 is None and self._atoms[nm].atomic_number == 1:
                 t1 = 2
             else:
                 raise KeyError
@@ -388,21 +390,25 @@ class Stereo:
         """
         Cis-trans bonds which contains at least one non-hydrogen neighbor on both ends
         """
-        return {(n, m): env for (n, *mid, m), env in self._stereo_cumulenes.items() if not len(mid) % 2}
+        stereo = {}
+        for path, env in self._stereo_cumulenes.items():
+            if len(path) % 2:
+                continue
+            stereo[(path[0], path[-1])] = env
+        return stereo
 
     @cached_property
-    def _stereo_cis_trans_paths(self) -> Dict[Tuple[int, int], Tuple[int, ...]]:
-        return {(path[0], path[-1]): path for path in self._stereo_cumulenes if not len(path) % 2}
-
-    @cached_property
-    def _stereo_cis_trans_terminals(self) -> Dict[int, Tuple[int, int]]:
+    def _stereo_cis_trans_centers(self) -> Dict[int, Tuple[int, int]]:
         """
-        Cis-Trans terminal atoms to cis-trans key mapping
+        Cis-Trans terminal atoms to cis-trans key mapping. Key is central double bond in a cumulene chain.
         """
         terminals = {}
-        for nm in self._stereo_cis_trans_paths:
-            n, m = nm
-            terminals[n] = terminals[m] = nm
+        for path in self._stereo_cumulenes:
+            if len(path) % 2:
+                continue
+            n, m = path[0], path[-1]
+            i = len(path) // 2
+            terminals[n] = terminals[m] = (path[i - 1], path[i])
         return terminals
 
     @cached_property
@@ -411,8 +417,10 @@ class Stereo:
         Cis-Trans terminal atoms counterparts
         """
         counterpart = {}
-        for nm in self._stereo_cis_trans_paths:
-            n, m = nm
+        for path in self._stereo_cumulenes:
+            if len(path) % 2:
+                continue
+            n, m = path[0], path[-1]
             counterpart[n] = m
             counterpart[m] = n
         return counterpart
@@ -439,11 +447,7 @@ class Stereo:
         """
         Allene center atom to terminals mapping
         """
-        return {c: (path[0], path[-1]) for c, path in self._stereo_allenes_paths.items()}
-
-    @cached_property
-    def _stereo_allenes_paths(self) -> Dict[int, Tuple[int, ...]]:
-        return {path[len(path) // 2]: path for path in self._stereo_cumulenes if len(path) % 2}
+        return {path[len(path) // 2]: (path[0], path[-1]) for path in self._stereo_cumulenes if len(path) % 2}
 
 
 __all__ = ['Stereo']

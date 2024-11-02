@@ -361,7 +361,7 @@ class QueryIsomorphism(Isomorphism):
                     else:
                         if isinstance(a, ListElement):
                             v1 = v2 = 0
-                            for n in a._numbers:
+                            for n in a.atomic_numbers:
                                 if n > 56:
                                     if n > 116:  # Ts, Og
                                         n = 116

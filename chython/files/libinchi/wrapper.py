@@ -138,7 +138,7 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
 
     st = molecule._stereo_tetrahedrons
     sa = molecule._stereo_allenes
-    ctt = molecule._stereo_cis_trans_terminals
+    ctc = molecule._stereo_cis_trans_counterpart
 
     stereo = []
     for n, ngb, s in data['stereo_atoms']:
@@ -151,7 +151,7 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
             stereo.append((molecule.add_atom_stereo, n, nn + 1, mn + 1, s))
     for n, m, nn, nm, s in data['stereo_cumulenes']:
         n += 1
-        if n in ctt:
+        if n in ctc:
             stereo.append((molecule.add_cis_trans_stereo, n, m + 1, nn + 1, nm + 1, s))
 
     while stereo:

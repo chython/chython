@@ -49,10 +49,11 @@ def _validate(value, prop):
 class Query(ABC):
     __slots__ = ('_neighbors', '_hybridization', '_masked')
 
-    def __init__(self):
-        self._neighbors = ()
-        self._hybridization = ()
-        self._masked = False
+    def __init__(self, neighbors: Union[int, Tuple[int, ...], None] = None,
+                 hybridization: Union[int, Tuple[int, ...], None] = None, masked: bool = False):
+        self.neighbors = neighbors
+        self.hybridization = hybridization
+        self.masked = masked
 
     @property
     @abstractmethod
@@ -118,14 +119,16 @@ class Query(ABC):
 class ExtendedQuery(Query, ABC):
     __slots__ = ('_charge', '_is_radical', '_heteroatoms', '_ring_sizes', '_implicit_hydrogens', '_stereo')
 
-    def __init__(self):
-        super().__init__()
-        self._charge = 0
-        self._is_radical = False
-        self._heteroatoms = ()
-        self._ring_sizes = ()
-        self._implicit_hydrogens = ()
-        self._stereo = None
+    def __init__(self, charge: int = 0, is_radical: bool = False, heteroatoms: Union[int, Tuple[int, ...], None] = None,
+                 ring_sizes: Union[int, Tuple[int, ...], None] = None,
+                 implicit_hydrogens: Union[int, Tuple[int, ...], None] = None, stereo: Optional[bool] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.charge = charge
+        self.is_radical = is_radical
+        self.heteroatoms = heteroatoms
+        self.ring_sizes = ring_sizes
+        self.implicit_hydrogens = implicit_hydrogens
+        self._stereo = stereo
 
     @property
     def charge(self) -> int:
@@ -292,14 +295,22 @@ class AnyElement(ExtendedQuery):
 class ListElement(ExtendedQuery):
     __slots__ = ('_elements', '__dict__')
 
-    def __init__(self, elements: List[str]):
+    def __init__(self, elements: List[str], **kwargs):
         """
         Elements list
         """
         if not isinstance(elements, (list, tuple)) or not elements:
             raise ValueError('invalid elements list')
-        super().__init__()
-        self._elements = tuple(elements)
+        tmp = []
+        for x in elements:
+            if isinstance(x, int):
+                tmp.append(Element.from_atomic_number(x).__name__)
+            elif isinstance(x, str):
+                tmp.append(Element.from_symbol(x).__name__)
+            else:
+                raise ValueError(f'invalid element: {x}')
+        super().__init__(**kwargs)
+        self._elements = tuple(tmp)
 
     @property
     def atomic_symbol(self) -> str:
@@ -366,11 +377,9 @@ class ListElement(ExtendedQuery):
 class QueryElement(ExtendedQuery, ABC):
     __slots__ = ('_isotope',)
 
-    def __init__(self, isotope: Optional[int] = None):
-        if isotope is not None and not isinstance(isotope, int):
-            raise TypeError('isotope must be an int')
-        super().__init__()
-        self._isotope = isotope
+    def __init__(self, isotope: Optional[int] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.isotope = isotope
 
     def __repr__(self):
         if self.isotope:
@@ -391,6 +400,12 @@ class QueryElement(ExtendedQuery, ABC):
     @property
     def isotope(self):
         return self._isotope
+
+    @isotope.setter
+    def isotope(self, value: Optional[int]):
+        if value is not None and not isinstance(value, int):
+            raise TypeError('isotope must be an int')
+        self._isotope = value
 
     @classmethod
     def from_symbol(cls, symbol: str) -> Type[Union['QueryElement', 'AnyElement', 'AnyMetal']]:

@@ -30,7 +30,7 @@ class Element(ABC):
     __class_cache__ = {}
 
     def __init__(self, isotope: Optional[int] = None, *,
-                 charge: int = 0, is_radical: bool = False, x: float = 0, y: float = 0,
+                 charge: int = 0, is_radical: bool = False, x: float = 0., y: float = 0.,
                  implicit_hydrogens: Optional[int] = None, stereo: Optional[bool] = None,
                  parsed_mapping: Optional[int] = None):
         """
@@ -38,15 +38,11 @@ class Element(ABC):
 
         :param isotope: Isotope number of element
         """
-        if isinstance(isotope, int):
-            if isotope not in self.isotopes_distribution:
-                raise ValueError(f'isotope number {isotope} impossible or not stable for {self.atomic_symbol}')
-        elif isotope is not None:
-            raise TypeError('integer isotope number required')
-        self._isotope = isotope
-        self._charge = charge
-        self._is_radical = is_radical
-        self._x, self._y = x, y
+        self.isotope = isotope
+        self.charge = charge
+        self.is_radical = is_radical
+        self.x, self.y = x, y
+
         self._implicit_hydrogens = implicit_hydrogens
         self._stereo = stereo
         self._parsed_mapping = parsed_mapping
@@ -80,6 +76,15 @@ class Element(ABC):
         Isotope number
         """
         return self._isotope
+
+    @isotope.setter
+    def isotope(self, value: Optional[int]):
+        if isinstance(value, int):
+            if value not in self.isotopes_distribution:
+                raise ValueError(f'isotope number {value} impossible or not stable for {self.atomic_symbol}')
+        elif value is not None:
+            raise TypeError('integer isotope number required')
+        self._isotope = value
 
     @property
     def atomic_mass(self) -> float:

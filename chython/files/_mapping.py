@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -24,10 +24,10 @@ def postprocess_parsed_molecule(data, *, remap=False, ignore=True):
     if remap:
         remapped = list(range(1, len(data['atoms']) + 1))
     else:
-        length = count(max(x['mapping'] for x in data['atoms']) + 1)
+        length = count(max(x.get('parsed_mapping') or 0 for x in data['atoms']) + 1)
         remapped, used = [], set()
         for n, atom in enumerate(data['atoms']):
-            m = atom['mapping']
+            m = atom.get('parsed_mapping')
             if not m:
                 remapped.append(next(length))
             elif m in used:
@@ -47,7 +47,7 @@ def postprocess_parsed_reaction(data, *, remap=False, ignore=True):
         for molecule in data[i]:
             used = set()
             for atom in molecule['atoms']:
-                m = atom['mapping']
+                m = atom.get('parsed_mapping')
                 if m:
                     if m in used:
                         if not ignore:

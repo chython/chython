@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -434,11 +434,9 @@ class MoleculeStereo(Stereo):
         return solved
 
     def __wedge_sign(self: 'MoleculeContainer', order):
-        plane = self._plane
-
         if order[-1]:  # allene
             s = self._translate_allene_sign(order[-2], *order[:2])
-            v = _allene_sign(1, plane[order[2]], plane[order[3]], plane[order[1]])
+            v = _allene_sign(1, self._atoms[order[2]].xy, self._atoms[order[3]].xy, self._atoms[order[1]].xy)
             if not v:
                 logger.info(f'need 2d clean. allenes wedge stereo ambiguous for atom {order[-2]}')
             if s:
@@ -450,11 +448,15 @@ class MoleculeStereo(Stereo):
             s = self._translate_tetrahedron_sign(n, order[:-2])
             # need recalculation if XY changed
             if len(order) == 5:
-                v = _pyramid_sign((*plane[n], 0),
-                                  (*plane[order[0]], 1), (*plane[order[1]], 0), (*plane[order[2]], 0))
+                v = _pyramid_sign((*self._atoms[n].xy, 0),
+                                  (*self._atoms[order[0]].xy, 1),
+                                  (*self._atoms[order[1]].xy, 0),
+                                  (*self._atoms[order[2]].xy, 0))
             else:
-                v = _pyramid_sign((*plane[order[3]], 0),
-                                  (*plane[order[0]], 1), (*plane[order[1]], 0), (*plane[order[2]], 0))
+                v = _pyramid_sign((*self._atoms[order[3]].xy, 0),
+                                  (*self._atoms[order[0]].xy, 1),
+                                  (*self._atoms[order[1]].xy, 0),
+                                  (*self._atoms[order[2]].xy, 0))
             if not v:
                 logger.info(f'need 2d clean. tetrahedron wedge stereo ambiguous for atom {n}')
             if s:

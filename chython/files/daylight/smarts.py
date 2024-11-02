@@ -21,7 +21,7 @@ from re import compile, findall, search
 from .parser import parser
 from .tokenize import smarts_tokenize
 from ...containers import QueryContainer
-from ...periodictable import QueryElement
+from ...periodictable import ListElement, QueryElement
 
 
 cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
@@ -104,16 +104,17 @@ def smarts(data: str):
     g = QueryContainer()
 
     mapping = {}
-    free = count(max(a['mapping'] for a in data['atoms']) + 1)
+    free = count(max(a.get('parsed_mapping', 0) for a in data['atoms']) + 1)
     for i, a in enumerate(data['atoms']):
-        mapping[i] = n = a.pop('mapping') or next(global_free_masked if a['masked'] else free)
+        mapping[i] = n = a.pop('parsed_mapping', 0) or next(global_free_masked if a.get('masked') else free)
         e = a.pop('element')
-        if it := a.pop('isotope'):
-            if isinstance(e, int):
-                e = QueryElement.from_atomic_number(e)(it)
-            else:
-                e = QueryElement.from_symbol(e)(it)
-        g.add_atom(e, n, **a)
+        if isinstance(e, int):
+            e = QueryElement.from_atomic_number(e)
+        elif isinstance(e, str):
+            e = QueryElement.from_symbol(e)
+        else:
+            e = ListElement(e)
+        g.add_atom(e(**a), n)
 
     for n, m, b in data['bonds']:
         g.add_bond(mapping[n], mapping[m], b)

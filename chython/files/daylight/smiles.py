@@ -171,14 +171,14 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
     if ignore_stereo:
         return
 
-    stereo_atoms = [(n, s) for n, a in enumerate(data['atoms']) if (s := a['stereo']) is not None]
+    stereo_atoms = [(n, s) for n, a in enumerate(data['atoms']) if (s := a.get('stereo')) is not None]
     if not stereo_atoms and not data['stereo_bonds']:
         return
 
     st = molecule._stereo_tetrahedrons
     sa = molecule._stereo_allenes
     sat = molecule._stereo_allenes_terminals
-    ctt = molecule._stereo_cis_trans_terminals
+    ctc = molecule._stereo_cis_trans_counterpart
 
     order = {mapping[n]: [mapping[m] for m in ms] for n, ms in data['order'].items()}
 
@@ -203,9 +203,8 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
     for n, ns in stereo_bonds.items():
         if n in seen:
             continue
-        if n in ctt:
-            nm = ctt[n]
-            m = nm[1] if nm[0] == n else nm[0]
+        if n in ctc:
+            m = ctc[n]
             if m in stereo_bonds:
                 seen.add(m)
                 n2, s2 = stereo_bonds[m].popitem()

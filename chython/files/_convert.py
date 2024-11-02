@@ -30,16 +30,14 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
     bonds = g._bonds
     mapping = data['mapping']
     for n, atom in enumerate(data['atoms']):
-        if abs(atom['charge']) > 4:
-            raise ValueError('formal charge should be in range [-4, 4]')
         n = mapping[n]
         e = Element.from_symbol(atom.pop('element'))
         try:
             atoms[n] = e(**atom)
-        except ValueError:
+        except (ValueError, TypeError):
             if not ignore_bad_isotopes:
                 raise
-            del atom['isotope']  # reset isotope mark on errors.
+            del atom['isotope']  # reset isotope mark on errors and try again.
             atoms[n] = e(**atom)
         bonds[n] = {}
 
@@ -52,7 +50,7 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
         if n in bonds[m]:
             raise ValueError('atoms already bonded')
         bonds[n][m] = bonds[m][n] = Bond(b)
-    if any(a['z'] for a in data['atoms']):
+    if any(a.get('z') for a in data['atoms']):
         # store conformer
         g._conformers = [{mapping[n]: (a['x'], a['y'], a['z']) for n, a in enumerate(data['atoms'])}]
 
