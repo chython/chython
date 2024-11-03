@@ -204,19 +204,19 @@ class MoleculeStereo(Stereo):
         """
         Calculate cis-trans stereo bonds from given 2d coordinates. Unusable for SMILES and INCHI.
         """
-        cis_trans_stereo = self._cis_trans_stereo
-        plane = self._plane
+        atoms = self._atoms
         flag = False
         while self._chiral_cis_trans:
-            stereo = {}
+            stereo = False
             for nm in self._chiral_cis_trans:
                 n, m = nm
                 n1, m1, *_ = self._stereo_cis_trans[nm]
-                s = _cis_trans_sign(plane[n1], plane[n], plane[m], plane[m1])
+                s = _cis_trans_sign(atoms[n1].xy, atoms[n].xy, atoms[m].xy, atoms[m1].xy)
                 if s:
-                    stereo[nm] = s > 0
+                    stereo = True
+                    i, j = self._stereo_cis_trans_centers[n]
+                    self._bonds[i][j]._stereo = s > 0
             if stereo:
-                cis_trans_stereo.update(stereo)
                 flag = True
                 self.flush_stereo_cache()
             else:
@@ -234,19 +234,21 @@ class MoleculeStereo(Stereo):
 
         See <https://www.daylight.com/dayhtml/doc/theory/theory.smiles.html> and <http://opensmiles.org/opensmiles.html>
         """
-        if n not in self._atoms:
+        try:
+            atom = self._atoms[n]
+        except KeyError:
             raise AtomNotFound
-        if n in self._atoms_stereo or n in self._allenes_stereo:
+        if atom.stereo is not None:
             raise IsChiral
         if not isinstance(mark, bool):
             raise TypeError('stereo mark should be bool')
 
         if n in self._chiral_tetrahedrons:
-            self._atoms_stereo[n] = self._translate_tetrahedron_sign(n, env, mark)
+            atom._stereo = self._translate_tetrahedron_sign(n, env, mark)
             if clean_cache:
                 self.flush_cache()
         elif n in self._chiral_allenes:
-            self._allenes_stereo[n] = self._translate_allene_sign(n, *env, mark)
+            atom._stereo = self._translate_allene_sign(n, *env, mark)
             if clean_cache:
                 self.flush_cache()
         else:  # only tetrahedrons supported
@@ -272,15 +274,19 @@ class MoleculeStereo(Stereo):
             raise AtomNotFound
         if not isinstance(mark, bool):
             raise TypeError('stereo mark should be bool')
-        if (n, m) in self._cis_trans_stereo or (m, n) in self._cis_trans_stereo:
+
+        if n not in self._stereo_cis_trans_counterpart or self._stereo_cis_trans_counterpart[n] != m:
+            raise NotChiral
+        i, j = self._stereo_cis_trans_centers[n]
+        if self._bonds[i][j].stereo is not None:
             raise IsChiral
 
         if (n, m) in self._chiral_cis_trans:
-            self._cis_trans_stereo[(n, m)] = self._translate_cis_trans_sign(n, m, n1, n2, mark)
+            self._bonds[i][j] = self._translate_cis_trans_sign(n, m, n1, n2, mark)
             if clean_cache:
                 self.flush_cache()
         elif (m, n) in self._chiral_cis_trans:
-            self._cis_trans_stereo[(m, n)] = self._translate_cis_trans_sign(m, n, n2, n1, mark)
+            self._bonds[i][j] = self._translate_cis_trans_sign(m, n, n2, n1, mark)
             if clean_cache:
                 self.flush_cache()
         else:
@@ -372,7 +378,7 @@ class MoleculeStereo(Stereo):
             if env[3]:
                 orders.append((env[3], env[0], *term[::-1], n, True))
             space.append(orders)
-        for n, s in self._atoms_stereo.items():
+        for n, s in atoms_stereo.items():
             order = list(self._stereo_tetrahedrons[n])
             orders = [(*order, n, False)]
             for _ in range(1, len(order)):
@@ -478,12 +484,18 @@ class MoleculeStereo(Stereo):
 
     @cached_property
     def _chiral_morgan(self: Union['MoleculeContainer', 'MoleculeStereo']) -> Dict[int, int]:
-        if not self._atoms_stereo and not self._allenes_stereo and not self._cis_trans_stereo:
+        stereo_atoms = {n for n, a in self._atoms.items() if a.stereo is not None}
+        stereo_bonds = {n for n, mb in self._bonds.items() if any(b.stereo is not None for m, b in mb.items())}
+        if not stereo_atoms and not stereo_bonds:
             return self.atoms_order
+
         morgan = self.atoms_order.copy()
-        atoms_stereo = set(self._atoms_stereo)
-        cis_trans_stereo = set(self._cis_trans_stereo)
-        allenes_stereo = set(self._allenes_stereo)
+        atoms_stereo = stereo_atoms.intersection(self.tetrahedrons)
+        allenes_stereo = stereo_atoms - atoms_stereo
+
+        cis_trans_terminals = self._stereo_cis_trans_terminals
+        cis_trans_stereo = {cis_trans_terminals[n] for n in stereo_bonds}
+
         while True:
             # try iteratively differentiate stereo atoms.
             morgan, atoms_stereo, cis_trans_stereo, allenes_stereo, atoms_groups, cis_trans_groups, allenes_groups = \
@@ -599,6 +611,7 @@ class MoleculeStereo(Stereo):
         cis_trans = self._stereo_cis_trans
         allenes_centers = self._stereo_allenes_centers
         cis_trans_terminals = self._stereo_cis_trans_terminals
+        cis_trans_centers = self._stereo_cis_trans_centers
         morgan = self._chiral_morgan
 
         # find new chiral atoms and bonds.
@@ -623,20 +636,22 @@ class MoleculeStereo(Stereo):
                 if len(path) % 2:
                     chiral_a.add(path[len(path) // 2])
                 else:
-                    chiral_c.add((n, m))
+                    chiral_c.add(n)
                 stereogenic.add(n)
                 stereogenic.add(m)
         # ring cumulenes always chiral. can be already added.
         for nm in self._rings_cumulenes:
             n, m = nm
             if any(len(x) < 8 for x in atoms_rings[n]):  # skip small rings.
-                if nm in chiral_c:  # remove already added small rings cumulenes.
-                    chiral_c.discard(nm)
+                if n in chiral_c:  # remove already added small rings cumulenes.
+                    chiral_c.discard(n)
+                if m in chiral_c:
+                    chiral_c.discard(m)
                 elif n in allenes_centers and (c := allenes_centers[n]) in chiral_a:
                     chiral_a.discard(c)
                 continue
             elif nm in cis_trans:
-                chiral_c.add(nm)
+                chiral_c.add(n)
             else:
                 chiral_a.add(allenes_centers[n])
             pseudo[m] = n
@@ -697,13 +712,18 @@ class MoleculeStereo(Stereo):
                 elif n in allenes_centers:
                     chiral_a.add(allenes_centers[n])
                 else:
-                    chiral_c.add(cis_trans_terminals[n])
+                    chiral_c.add(n)
 
         # skip already marked.
-        chiral_t.difference_update(self._atoms_stereo)
-        chiral_a.difference_update(self._allenes_stereo)
-        chiral_c.difference_update(self._cis_trans_stereo)
-        return chiral_t, chiral_c, chiral_a
+        stereo_atoms = {n for n, a in self._atoms.items() if a.stereo is not None}
+        chiral_t.difference_update(stereo_atoms)
+        chiral_a.difference_update(stereo_atoms)
+        diff = set()
+        for n in chiral_c:
+            i, j = cis_trans_centers[n]
+            if self._bonds[i][j].stereo is None:
+                diff.add(cis_trans_terminals[n])
+        return chiral_t, diff, chiral_a
 
     def __differentiation(self: Union['MoleculeStereo', 'MoleculeContainer'], morgan,
                           atoms_stereo, cis_trans_stereo, allenes_stereo):

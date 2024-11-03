@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from functools import partial
 from itertools import count
 from re import compile, findall, search
 from .parser import parser
@@ -113,7 +114,7 @@ def smarts(data: str):
         elif isinstance(e, str):
             e = QueryElement.from_symbol(e)
         else:
-            e = ListElement(e)
+            e = partial(ListElement, e)
         g.add_atom(e(**a), n)
 
     for n, m, b in data['bonds']:

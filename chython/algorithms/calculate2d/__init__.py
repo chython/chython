@@ -77,9 +77,11 @@ class Calculate2DMolecule:
         else:
             bond_reduce = 1.
 
-        self_plane = self._plane
+        atoms = self._atoms
         for n, (x, y) in plane.items():
-            self_plane[n] = (x / bond_reduce, y / bond_reduce)
+            a = atoms[n]
+            a._x = x / bond_reduce
+            a._y = y / bond_reduce
 
         if self.connected_components_count > 1:
             shift_x = 0.
@@ -88,27 +90,28 @@ class Calculate2DMolecule:
         self.__dict__.pop('__cached_method__repr_svg_', None)
 
     def _fix_plane_mean(self: 'MoleculeContainer', shift_x: float, shift_y=0., component=None) -> float:
-        plane = self._plane
+        atoms = self._atoms
         if component is None:
-            component = plane
+            component = atoms
 
-        left_atom = min(component, key=lambda x: plane[x][0])
-        right_atom = max(component, key=lambda x: plane[x][0])
+        left_atom = atoms[min(component, key=lambda x: atoms[x].x)]
+        right_atom = atoms[max(component, key=lambda x: atoms[x].x)]
 
-        min_x = plane[left_atom][0] - shift_x
-        if len(self._atoms[left_atom].atomic_symbol) == 2:
+        min_x = left_atom.x - shift_x
+        if len(left_atom.atomic_symbol) == 2:
             min_x -= .2
 
-        max_x = plane[right_atom][0] - min_x
-        min_y = min(plane[x][1] for x in component)
-        max_y = max(plane[x][1] for x in component)
+        max_x = right_atom.x - min_x
+        min_y = min(atoms[x].y for x in component)
+        max_y = max(atoms[x].y for x in component)
         mean_y = (max_y + min_y) / 2 - shift_y
         for n in component:
-            x, y = plane[n]
-            plane[n] = (x - min_x, y - mean_y)
+            a = atoms[n]
+            a._x -= min_x
+            a._y -= mean_y
 
-        if -.18 <= plane[right_atom][1] <= .18:
-            factor = self._hydrogens[right_atom]
+        if -.18 <= right_atom.y <= .18:
+            factor = right_atom.implicit_hydrogens
             if factor == 1:
                 max_x += .15
             elif factor:
@@ -116,21 +119,22 @@ class Calculate2DMolecule:
         return max_x
 
     def _fix_plane_min(self: 'MoleculeContainer', shift_x: float, shift_y=0., component=None) -> float:
-        plane = self._plane
+        atoms = self._atoms
         if component is None:
-            component = plane
+            component = atoms
 
-        right_atom = max(component, key=lambda x: plane[x][0])
-        min_x = min(plane[x][0] for x in component) - shift_x
-        max_x = plane[right_atom][0] - min_x
-        min_y = min(plane[x][1] for x in component) - shift_y
+        right_atom = atoms[max(component, key=lambda x: atoms[x].x)]
+        min_x = min(atoms[x].x for x in component) - shift_x
+        max_x = right_atom.x - min_x
+        min_y = min(atoms[x].y for x in component) - shift_y
 
         for n in component:
-            x, y = plane[n]
-            plane[n] = (x - min_x, y - min_y)
+            a = atoms[n]
+            a._x -= min_x
+            a._y -= min_y
 
-        if shift_y - .18 <= plane[right_atom][1] <= shift_y + .18:
-            factor = self._hydrogens[right_atom]
+        if shift_y - .18 <= right_atom.y <= shift_y + .18:
+            factor = right_atom.implicit_hydrogens
             if factor == 1:
                 max_x += .15
             elif factor:
@@ -138,21 +142,9 @@ class Calculate2DMolecule:
         return max_x
 
     def __clean2d_prepare(self: 'MoleculeContainer', entry):
-        hydrogens = self._hydrogens
-        charges = self._charges
-        allenes_stereo = self._allenes_stereo
-        atoms_stereo = self._atoms_stereo
-        self._charges = self._hydrogens = {n: 0 for n in hydrogens}
-        self._atoms_stereo = self._allenes_stereo = {}
-        w = {n: random() for n in hydrogens}
+        w = {n: random() for n in self._atoms}
         w[entry] = -1
-        try:
-            smiles, order = self._smiles(w.__getitem__, random=True, _return_order=True)
-        finally:
-            self._hydrogens = hydrogens
-            self._charges = charges
-            self._allenes_stereo = allenes_stereo
-            self._atoms_stereo = atoms_stereo
+        smiles, order = self._smiles(w.__getitem__, random=True, charges=False, stereo=False, _return_order=True)
         return ''.join(smiles).replace('~', '-'), order
 
 

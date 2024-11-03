@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -35,22 +35,17 @@ def xyz(matrix: Sequence[Tuple[str, float, float, float]], charge=0, radical=0, 
 
     atoms = mol._atoms
     bonds = mol._bonds
-    plane = mol._plane
-    hydrogens = mol._hydrogens
-    radicals = mol._radicals
     for n, (a, x, y, z) in enumerate(matrix, 1):
         atoms[n] = atom = Element.from_symbol(a)()
-        atom._attach_graph(mol, n)
         bonds[n] = {}
-        plane[n] = (x, y)
+        atom.x = x
+        atom.y = y
+        atom._implicit_hydrogens = 0
         conformer[n] = (x, y, z)
-        hydrogens[n] = 0  # implicit hydrogens not supported.
-        radicals[n] = False  # set default value
 
-    if atom_charge is None or None in atom_charge:
-        mol._charges = {n: 0 for n in atoms}  # reset charges
-    else:
-        mol._charges = dict(enumerate(atom_charge, 1))
+    if atom_charge is not None and None not in atom_charge:
+        for n, c in enumerate(atom_charge, 1):
+            atoms[n]._charge = c
         charge = sum(atom_charge)
 
     pb = possible_bonds(array(list(conformer.values())), array([a.atomic_radius for a in atoms.values()]),

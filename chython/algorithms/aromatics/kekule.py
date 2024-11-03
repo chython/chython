@@ -50,7 +50,7 @@ class Kekule:
                 atoms.add(n)
                 atoms.add(m)
             for n in atoms:
-                self._calc_implicit(n)
+                self.calc_implicit(n)
             self.flush_cache()
             return True
         return fixed
@@ -69,7 +69,7 @@ class Kekule:
                 atoms.add(n)
                 atoms.add(m)
             for n in atoms:
-                copy._calc_implicit(n)
+                copy.calc_implicit(n)
             yield copy
 
     def __fix_rings(self: 'MoleculeContainer'):

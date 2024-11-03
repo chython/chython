@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,46 +19,15 @@
 from ...exceptions import NotChiral, IsChiral, ValenceError
 
 
-def postprocess_molecule(molecule, data, *, ignore=True, ignore_stereo=False, calc_cis_trans=False,
-                         keep_implicit=False):
+def postprocess_molecule(molecule, data, *, ignore_stereo=False, calc_cis_trans=False):
+    if ignore_stereo:
+        return
     mapping = data['mapping']
-    hydrogens = molecule._hydrogens
-    hyb = molecule.hybridization
 
-    implicit_mismatch = {}
     if 'chython_parsing_log' in molecule.meta:
         log = molecule.meta['chython_parsing_log']
     else:
         log = []
-
-    for n, h in data['hydrogens'].items():
-        n = mapping[n]
-        if keep_implicit:  # override any calculated hydrogens count.
-            hydrogens[n] = h
-        if (hc := hydrogens[n]) is None:  # aromatic rings or valence errors
-            if hyb(n) == 4:  # this is aromatic rings. just store given H count.
-                hydrogens[n] = h
-        elif hc != h:
-            if hyb(n) == 4:
-                if ignore:
-                    implicit_mismatch[n] = h
-                    log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-                else:
-                    raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-            elif molecule._check_implicit(n, h):  # set another possible implicit state. probably Al, P
-                hydrogens[n] = h
-            elif ignore:  # just ignore it
-                implicit_mismatch[n] = h
-                log.append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-            else:
-                raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-
-    if implicit_mismatch:
-        molecule.meta['chython_implicit_mismatch'] = implicit_mismatch
-    if log and 'chython_parsing_log' not in molecule.meta:
-        molecule.meta['chython_parsing_log'] = log
-    if ignore_stereo:
-        return
 
     if calc_cis_trans:
         molecule.calculate_cis_trans_from_2d()

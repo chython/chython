@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019-2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -206,17 +206,17 @@ class DepictMolecule:
         :param clean2d: calculate coordinates if necessary.
         """
         uid = str(uuid4())
-        values = self._plane.values()
-        min_x = min(x for x, _ in values)
-        max_x = max(x for x, _ in values)
-        min_y = min(y for _, y in values)
-        max_y = max(y for _, y in values)
+        atoms = self._atoms.values()
+        min_x = min(a.x for a in atoms)
+        max_x = max(a.x for a in atoms)
+        min_y = min(a.y for a in atoms)
+        max_y = max(a.y for a in atoms)
         if clean2d and len(self) > 1 and max_y - min_y < .01 and max_x - min_x < 0.01:
             self.clean2d()
-            min_x = min(x for x, _ in values)
-            max_x = max(x for x, _ in values)
-            min_y = min(y for _, y in values)
-            max_y = max(y for _, y in values)
+            min_x = min(a.x for a in atoms)
+            max_x = max(a.x for a in atoms)
+            min_y = min(a.y for a in atoms)
+            max_y = max(a.y for a in atoms)
 
         bonds = self.__render_bonds()
         atoms, define, masks = self.__render_atoms(uid)
@@ -247,8 +247,8 @@ class DepictMolecule:
         return self.depict()
 
     def __render_bonds(self: Union['MoleculeContainer', 'DepictMolecule']):
+        atoms = self._atoms
         svg = []
-        plane = self._plane
         double_space = _render_config['double_space']
         triple_space = _render_config['triple_space']
         wedge_space = _render_config['wedge_space']
@@ -260,8 +260,8 @@ class DepictMolecule:
             wedge[n].add(m)
             wedge[m].add(n)
 
-            nx, ny = plane[n]
-            mx, my = plane[m]
+            nx, ny = atoms[n].xy
+            mx, my = atoms[m].xy
             ny, my = -ny, -my
             dx, dy = _rotate_vector(0, wedge_space, mx - nx, ny - my)
 
@@ -272,8 +272,8 @@ class DepictMolecule:
             if m in wedge[n]:
                 continue
             order = bond.order
-            nx, ny = plane[n]
-            mx, my = plane[m]
+            nx, ny = atoms[n].xy
+            mx, my = atoms[m].xy
             ny, my = -ny, -my
             if order in (1, 4):
                 svg.append(f'      <line x1="{nx:.2f}" y1="{ny:.2f}" x2="{mx:.2f}" y2="{my:.2f}"/>')
@@ -291,18 +291,18 @@ class DepictMolecule:
                            f'stroke-dasharray="{dash1:.2f} {dash2:.2f}"/>')
 
         for ring in self.aromatic_rings:
-            cx = sum(plane[n][0] for n in ring) / len(ring)
-            cy = sum(plane[n][1] for n in ring) / len(ring)
+            cx = sum(atoms[n].x for n in ring) / len(ring)
+            cy = sum(atoms[n].y for n in ring) / len(ring)
 
             for n, m in zip(ring, ring[1:]):
-                nx, ny = plane[n]
-                mx, my = plane[m]
+                nx, ny = atoms[n].xy
+                mx, my = atoms[m].xy
                 aromatic = _render_aromatic_bond(nx, ny, mx, my, cx, cy)
                 if aromatic:
                     svg.append(aromatic)
 
-            nx, ny = plane[ring[-1]]
-            mx, my = plane[ring[0]]
+            nx, ny = atoms[ring[-1]].xy
+            mx, my = atoms[ring[0]].xy
             aromatic = _render_aromatic_bond(nx, ny, mx, my, cx, cy)
             if aromatic:
                 svg.append(aromatic)
@@ -310,10 +310,6 @@ class DepictMolecule:
 
     def __render_atoms(self: 'MoleculeContainer', uid):
         bonds = self._bonds
-        plane = self._plane
-        charges = self._charges
-        radicals = self._radicals
-        hydrogens = self._hydrogens
 
         carbon = _render_config['carbon']
         mapping = _render_config['mapping']
@@ -360,14 +356,13 @@ class DepictMolecule:
         mask = []
 
         for n, atom in self._atoms.items():
-            x, y = plane[n]
-            y = -y
+            x, y = atom.x, -atom.y
             symbol = atom.atomic_symbol
-            if not bonds[n] or symbol != 'C' or carbon or charges[n] or radicals[n] or atom.isotope or n in cumulenes:
-                if charges[n]:
+            if not bonds[n] or symbol != 'C' or carbon or atom.charge or atom.is_radical or atom.isotope or n in cumulenes:
+                if atom.charge:
                     others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_ci:.2f}" dy="-{dy_ci:.2f}">'
-                                  f'{_render_charge[charges[n]]}{"↑" if radicals[n] else ""}</text>')
-                elif radicals[n]:
+                                  f'{_render_charge[atom.charge]}{"↑" if atom.is_radical else ""}</text>')
+                elif atom.is_radical:
                     others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_ci:.2f}" dy="-{dy_ci:.2f}">↑</text>')
                 if atom.isotope:
                     others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="-{dx_ci:.2f}" dy="-{dy_ci:.2f}" '
@@ -392,7 +387,7 @@ class DepictMolecule:
                         dx_mm = dx_m + font2
                     fill_zone.append(f'          <circle cx="{x:.2f}" cy="{y:.2f}" r="{font4:.2f}"/>')
 
-                h = hydrogens[n]
+                h = atom.implicit_hydrogens
                 if h == 1:
                     h = 'H'
                 elif h:
@@ -463,11 +458,11 @@ class DepictReaction:
             if clean2d:
                 for m in self.molecules():
                     if len(m) > 1:
-                        values = m._plane.values()  # noqa
-                        min_x = min(x for x, _ in values)
-                        max_x = max(x for x, _ in values)
-                        min_y = min(y for _, y in values)
-                        max_y = max(y for _, y in values)
+                        atoms = m._atoms.values()
+                        min_x = min(a.x for a in atoms)
+                        max_x = max(a.x for a in atoms)
+                        min_y = min(a.y for a in atoms)
+                        max_y = max(a.y for a in atoms)
                         if max_y - min_y < .01 and max_x - min_x < 0.01:
                             m.clean2d()
             self.fix_positions()

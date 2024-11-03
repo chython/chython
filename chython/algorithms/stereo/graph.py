@@ -414,14 +414,15 @@ class Stereo:
     @cached_property
     def _stereo_cis_trans_terminals(self) -> Dict[int, Tuple[int, int]]:
         """
-        Cis-Trans terminal atoms to terminal pair mapping.
+        Cis-Trans terminal and central atoms to terminal pair mapping.
         """
         terminals = {}
         for path in self._stereo_cumulenes:
             if len(path) % 2:
                 continue
             n, m = path[0], path[-1]
-            terminals[n] = terminals[m] = (n, m)
+            i = len(path) // 2
+            terminals[n] = terminals[m] = terminals[path[i]] = terminals[path[i - 1]] = (n, m)
         return terminals
 
     @cached_property

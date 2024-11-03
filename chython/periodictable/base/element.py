@@ -47,13 +47,6 @@ class Element(ABC):
         self._stereo = stereo
         self._parsed_mapping = parsed_mapping
 
-        self._explicit_hydrogens = 0
-        self._neighbors = 0
-        self._heteroatoms = 0
-        self._hybridization = 1
-        self._ring_sizes = ()
-        self._in_ring = False
-
     def __repr__(self):
         if self.isotope:
             return f'{self.__class__.__name__}({self.isotope})'
@@ -273,12 +266,6 @@ class Element(ABC):
             copy._ring_sizes = self.ring_sizes
             copy._in_ring = self.in_ring
         else:
-            copy._explicit_hydrogens = 0
-            copy._neighbors = 0
-            copy._heteroatoms = 0
-            copy._hybridization = 1
-            copy._ring_sizes = ()
-            copy._in_ring = False
             if hydrogens:
                 copy._implicit_hydrogens = self.implicit_hydrogens
             else:

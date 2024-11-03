@@ -38,7 +38,7 @@ class Resonance:
         charges = self._charges
         radicals = self._radicals
         bonds = self._bonds
-        calc_implicit = self._calc_implicit
+        calc_implicit = self.calc_implicit
         entries, exits, rads, constrains, nitrogen_cat, nitrogen_ani, sulfur_cat = self.__entries()
         hs = set()
         while len(rads) > 1:

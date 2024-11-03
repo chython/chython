@@ -693,7 +693,55 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             nodes.append(n)
         return nodes
 
-    def _calc_implicit(self, n: int):
+    def fix_labels(self, recalculate_hydrogens=True):
+        """
+        Fix molecule internal represenation
+        """
+        if not self._changed:
+            return
+
+        self.calc_labels()  # refresh all labels
+
+        if recalculate_hydrogens:
+            for n in self._changed:
+                self.calc_implicit(n)  # fix Hs count
+        self._changed = None
+
+    def calc_labels(self):
+        atoms = self._atoms
+        for n, m_bond in self._bonds.items():
+            neighbors = 0
+            heteroatoms = 0
+            hybridization = 1
+            explicit_hydrogens = 0
+            for m, bond in m_bond.items():
+                order = bond.order
+                if order == 8:
+                    continue
+                elif order == 4:
+                    hybridization = 4
+                elif hybridization != 4:
+                    if order == 3:
+                        hybridization = 3
+                    elif order == 2:
+                        if hybridization == 1:
+                            hybridization = 2
+                        elif hybridization == 2:
+                            hybridization = 3
+
+                neighbors += 1
+                an = atoms[m].atomic_number
+                if an == 1:
+                    explicit_hydrogens += 1
+                elif an != 6:
+                    heteroatoms += 1
+            atom = atoms[n]
+            atom._neighbors = neighbors
+            atom._heteroatoms = heteroatoms
+            atom._hybridization = hybridization
+            atom._explicit_hydrogens = explicit_hydrogens
+
+    def calc_implicit(self, n: int):
         """
         Set firs possible hydrogens count based on rules
         """
@@ -746,7 +794,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                 return
         atom._implicit_hydrogens = None  # rule not found
 
-    def _check_implicit(self, n: int, h: int) -> bool:
+    def check_implicit(self, n: int, h: int) -> bool:
         atom = self._atoms[n]
         if atom.atomic_number == 1:  # hydrogen nether has implicit H
             return h == 0

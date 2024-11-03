@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -74,9 +74,9 @@ class RDFRead(MDLRead):
             postprocess_parsed_reaction(tmp, remap=self._remap, ignore=self._ignore)
             rxn = create_reaction(tmp, ignore_bad_isotopes=self._ignore_bad_isotopes, _m_cls=self.molecule_cls,
                                   _r_cls=self.reaction_cls)
-            for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
-                postprocess_molecule(mol, tmp, ignore=self._ignore, ignore_stereo=self._ignore_stereo,
-                                     calc_cis_trans=self._calc_cis_trans)
+            if not self._ignore_stereo:
+                for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
+                    postprocess_molecule(mol, tmp, calc_cis_trans=self._calc_cis_trans)
             if meta:
                 rxn.meta.update(meta)
             return rxn
@@ -87,8 +87,8 @@ class RDFRead(MDLRead):
 
         postprocess_parsed_molecule(tmp)
         mol = create_molecule(tmp, ignore_bad_isotopes=self._ignore_bad_isotopes, _cls=self.molecule_cls)
-        postprocess_molecule(mol, tmp, ignore=self._ignore, ignore_stereo=self._ignore_stereo,
-                             calc_cis_trans=self._calc_cis_trans)
+        if not self._ignore_stereo:
+            postprocess_molecule(mol, tmp, calc_cis_trans=self._calc_cis_trans)
         if meta:
             mol.meta.update(meta)
         return mol
@@ -289,9 +289,9 @@ def mdl_rxn(data: str, /, *, ignore=True, calc_cis_trans=False, ignore_stereo=Fa
 
     postprocess_parsed_reaction(tmp, remap=remap, ignore=ignore)
     rxn = create_reaction(tmp, ignore_bad_isotopes=ignore_bad_isotopes, _m_cls=_m_cls, _r_cls=_r_cls)
-    for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
-        postprocess_molecule(mol, tmp, ignore=ignore, ignore_stereo=ignore_stereo,
-                             calc_cis_trans=calc_cis_trans)
+    if not ignore_stereo:
+        for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
+            postprocess_molecule(mol, tmp, calc_cis_trans=calc_cis_trans)
     return rxn
 
 

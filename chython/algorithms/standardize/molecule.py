@@ -426,7 +426,7 @@ class Standardize:
         isotopes = [x for x in atoms.values() if x.isotope]
         if isotopes:
             for i in isotopes:
-                i._Core__isotope = None
+                i._isotope = None
             self.flush_cache()
             self.fix_stereo()
             return True
@@ -436,7 +436,7 @@ class Standardize:
         bonds = self._bonds
         charges = self._charges
         radicals = self._radicals
-        calc_implicit = self._calc_implicit
+        calc_implicit = self.calc_implicit
 
         log = []
         fixed = set()

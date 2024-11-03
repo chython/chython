@@ -100,7 +100,7 @@ class BaseReactor:
                     # replace atom
                     copy._atoms[n] = a = atom.copy()  # noqa
                     a._attach_graph(copy, n)  # noqa
-                    copy._calc_implicit(n)  # noqa
+                    copy.calc_implicit(n)  # noqa
                 if self.__fix_rings:
                     copy.kekule()
                     if not copy.thiele(fix_tautomers=self.__fix_tautomers):
@@ -194,7 +194,7 @@ class BaseReactor:
         new._hydrogens.update(keep_hydrogens)  # noqa
         for n in new:
             if n not in keep_hydrogens:
-                new._calc_implicit(n)  # noqa
+                new.calc_implicit(n)  # noqa
         return new
 
     def __set_stereo(self, new, structure, mapping):

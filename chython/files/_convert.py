@@ -50,6 +50,9 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
         if n in bonds[m]:
             raise ValueError('atoms already bonded')
         bonds[n][m] = bonds[m][n] = Bond(b)
+
+    g.calc_labels()  # set all labels except rings
+
     if any(a.get('z') for a in data['atoms']):
         # store conformer
         g._conformers = [{mapping[n]: (a['x'], a['y'], a['z']) for n, a in enumerate(data['atoms'])}]
@@ -70,13 +73,13 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
         if a.implicit_hydrogens is None:
             # let's try to calculate. in case of errors just keep as is. radicals in smiles should be in [brackets],
             # thus has implicit Hs value
-            g._calc_implicit(n)
+            g.calc_implicit(n)
         elif keep_implicit:
             # keep given Hs count as is
             continue
         else:  # recheck given Hs count
             h = a.implicit_hydrogens  # parsed Hs
-            g._calc_implicit(n)  #  recalculate
+            g.calc_implicit(n)  #  recalculate
             if a.implicit_hydrogens is None:  # atom has invalid valence or aromatic ring.
                 if a.hybridization == 4:
                     # this is aromatic ring. just restore given H count.
@@ -91,7 +94,7 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
                 elif not keep_radicals and not a.is_radical:  # CXSMILES radical not set.
                     # SMILES doesn't code radicals. so, let's try to guess.
                     a._is_radical = True
-                    if g._check_implicit(n, h):  # radical form is valid
+                    if g.check_implicit(n, h):  # radical form is valid
                         radicalized.append(n)
                         a._implicit_hydrogens = h
                     elif ignore:  # radical state also has errors.
@@ -114,11 +117,11 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
                         data['log'].append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
                     else:
                         raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
-                elif g._check_implicit(n, h):  # set another possible implicit state. probably Al, P
+                elif g.check_implicit(n, h):  # set another possible implicit state. probably Al, P
                     a._implicit_hydrogens = h
                 elif not keep_radicals and not a.is_radical:  # CXSMILES radical is not set. try radical form
                     a._is_radical = True
-                    if g._check_implicit(n, h):
+                    if g.check_implicit(n, h):
                         a._implicit_hydrogens = h
                         radicalized.append(n)
                     # radical state also has errors.

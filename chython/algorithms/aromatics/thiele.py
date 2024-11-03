@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -56,9 +56,6 @@ class Thiele:
         atoms = self._atoms
         bonds = self._bonds
         nsc = self.not_special_connectivity
-        sh = self.hybridization
-        charges = self._charges
-        hydrogens = self._hydrogens
 
         rings = defaultdict(set)  # aromatic? skeleton. include quinones
         tetracycles = []
@@ -73,13 +70,13 @@ class Thiele:
             # only B C N O P S with 2-3 neighbors. detects this: C1=CC=CP12=CC=CC=C2
             if any(atoms[n].atomic_number not in (6, 7, 8, 16, 5, 15) or len(nsc[n]) > 3 for n in ring):
                 continue
-            sp2 = sum(sh(n) == 2 for n in ring)
+            sp2 = sum(atoms[n].hybridization == 2 for n in ring)
             if sp2 == lr:  # benzene like
                 if lr == 4:  # two bonds condensed aromatic rings
                     tetracycles.append(ring)
                 else:
                     if fix_tautomers and lr % 2:  # find potential pyrroles
-                        acceptors.update(n for n in ring if atoms[n].atomic_number == 7 and not charges[n])
+                        acceptors.update(n for n in ring if (a := atoms[n]).atomic_number == 7 and not a.charge)
                     n, *_, m = ring
                     rings[n].add(m)
                     rings[m].add(n)
@@ -88,11 +85,12 @@ class Thiele:
                         rings[m].add(n)
             elif 4 < lr == sp2 + 1:  # pyrroles, furanes, etc
                 try:
-                    n = next(n for n in ring if sh(n) == 1)
+                    n = next(n for n in ring if atoms[n].hybridization == 1)
                 except StopIteration:  # exotic, just skip
                     continue
-                an = atoms[n].atomic_number
-                if (c := charges[n]) == -1:
+                a = atoms[n]
+                an = a.atomic_number
+                if (c := a.charge) == -1:
                     if an != 6 or lr != 5:  # skip any but ferrocene
                         continue
                 elif c:  # skip any charged
@@ -149,8 +147,8 @@ class Thiele:
                             acceptors.discard(current)
                             pyrroles.discard(start)
                             pyrroles.add(current)
-                            hydrogens[current] = 1
-                            hydrogens[start] = 0
+                            atoms[current]._implicit_hydrogens = 1
+                            atoms[start]._implicit_hydrogens = 0
                             break
                         else:
                             continue
@@ -163,7 +161,7 @@ class Thiele:
                 else:  # path not found
                     continue
                 for n, m, o in path:
-                    bonds[n][m]._Bond__order = o  # noqa
+                    bonds[n][m]._order = o
                 if not acceptors:
                     break
 
@@ -205,24 +203,24 @@ class Thiele:
         for ring in tetracycles:
             if seen.issuperset(ring):
                 n, *_, m = ring
-                bonds[n][m]._Bond__order = 1  # noqa
+                bonds[n][m]._order = 1
                 for n, m in zip(ring, ring[1:]):
-                    bonds[n][m]._Bond__order = 1  # noqa
+                    bonds[n][m]._order = 1
 
         for ring in rings:
             n, *_, m = ring
-            bonds[n][m]._Bond__order = 4  # noqa
+            bonds[n][m]._order = 4
             for n, m in zip(ring, ring[1:]):
-                bonds[n][m]._Bond__order = 4  # noqa
+                bonds[n][m]._order = 4
 
         self.flush_cache()
         for ring in freaks:  # aromatize rule based
             for q in freak_rules:
                 if next(q.get_mapping(self, searching_scope=ring, automorphism_filter=False), None):
                     n, *_, m = ring
-                    bonds[n][m]._Bond__order = 4  # noqa
+                    bonds[n][m]._order = 4
                     for n, m in zip(ring, ring[1:]):
-                        bonds[n][m]._Bond__order = 4  # noqa
+                        bonds[n][m]._order = 4
                     break
         if freaks:
             self.flush_cache()  # flush again

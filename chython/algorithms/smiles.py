@@ -476,19 +476,20 @@ class MoleculeSmiles(Smiles):
             return '~'
 
     def __ct_map(self, adjacency):
+        stereo_bonds = {n for n, mb in self._bonds.items() if any(b.stereo is not None for m, b in mb.items())}
+        if not stereo_bonds:
+            return {}
         ct_map = {}
-        cts = self._cis_trans_stereo
-        if not cts:
-            return ct_map
+        ctc = self._stereo_cis_trans_centers
         ctt = self._stereo_cis_trans_terminals
         sct = self._stereo_cis_trans
-        ctc = self._stereo_cis_trans_counterpart
+        ctcp = self._stereo_cis_trans_counterpart
 
         seen = set()
         for k, vs in adjacency.items():
             seen.add(k)
-            if (ts := ctt.get(k)) and ts in cts:
-                env = sct[ts]
+            if (cs := ctc.get(k)) and stereo_bonds.issuperset(cs):
+                env = sct[ctt[k]]
                 for v in vs:
                     if v in env:
                         if (k, v) in ct_map:
@@ -497,11 +498,11 @@ class MoleculeSmiles(Smiles):
                             s = ct_map[(k, x)]
                             ct_map[(k, v)] = not s  # X/C(/R)=, C(\X)(/R)=, C(=C(\X)/R)=C=
                             ct_map[(v, k)] = s
-                            if y := ctt.get(v):  # =C(\X)/R=, C(\X)(/R=)=
+                            if y := ctc.get(v):  # =C(\X)/R=, C(\X)(/R=)=
                                 ct_map[v] = k
                                 seen.add(y)
-                        elif ts in seen:
-                            o = ctc[k]
+                        elif cs in seen:
+                            o = ctcp[k]
                             on = ct_map[o]
                             s = ct_map[(o, on)]
                             if not self._translate_cis_trans_sign(k, o, v, on):
@@ -509,17 +510,17 @@ class MoleculeSmiles(Smiles):
                             ct_map[(k, v)] = s
                             ct_map[k] = v
                             ct_map[(v, k)] = not s  # C/R=, R\1...C/1
-                            if y := ctt.get(v):
+                            if y := ctc.get(v):
                                 ct_map[v] = k
                                 seen.add(y)
                         else:  # left entry to double bond
-                            if y := ctt.get(v):  # 1,3-diene case
+                            if y := ctc.get(v):  # 1,3-diene case
                                 ct_map[v] = k
                                 seen.add(y)
                             ct_map[(v, k)] = True  # R/C=, C\1=...R/1, C(/R=)=, C(=C(/R=))=C=
                             ct_map[(k, v)] = False  # first DOWN
                             ct_map[k] = v
-                seen.add(ts)
+                seen.add(cs)
         return ct_map
 
 
