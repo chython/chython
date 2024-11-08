@@ -57,6 +57,10 @@ class Mn(Element, PeriodIV, GroupVII):
     def atomic_radius(self):
         return 1.61
 
+    @property
+    def mdl_isotope(self):
+        return 55
+
 
 class Tc(Element, PeriodV, GroupVII):
     __slots__ = ()
@@ -86,6 +90,10 @@ class Tc(Element, PeriodV, GroupVII):
     def atomic_radius(self):
         return 1.83
 
+    @property
+    def mdl_isotope(self):
+        return 98
+
 
 class Re(Element, PeriodVI, GroupVII):
     __slots__ = ()
@@ -114,6 +122,10 @@ class Re(Element, PeriodVI, GroupVII):
     def atomic_radius(self):
         return 1.88
 
+    @property
+    def mdl_isotope(self):
+        return 186
+
 
 class Bh(Element, PeriodVII, GroupVII):
     __slots__ = ()
@@ -141,6 +153,10 @@ class Bh(Element, PeriodVII, GroupVII):
     @property
     def atomic_radius(self):
         return 1.88  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 270
 
 
 __all__ = ['Mn', 'Tc', 'Re', 'Bh']

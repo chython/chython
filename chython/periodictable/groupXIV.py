@@ -50,6 +50,10 @@ class C(Element, PeriodII, GroupXIV):
     def atomic_radius(self):
         return .67
 
+    @property
+    def mdl_isotope(self):
+        return 12
+
 
 class Si(Element, PeriodIII, GroupXIV):
     __slots__ = ()
@@ -78,6 +82,10 @@ class Si(Element, PeriodIII, GroupXIV):
     def atomic_radius(self):
         return 1.11
 
+    @property
+    def mdl_isotope(self):
+        return 28
+
 
 class Ge(Element, PeriodIV, GroupXIV):
     __slots__ = ()
@@ -105,6 +113,10 @@ class Ge(Element, PeriodIV, GroupXIV):
     @property
     def atomic_radius(self):
         return 1.25
+
+    @property
+    def mdl_isotope(self):
+        return 73
 
 
 class Sn(Element, PeriodV, GroupXIV):
@@ -144,6 +156,10 @@ class Sn(Element, PeriodV, GroupXIV):
     def atomic_radius(self):
         return 1.45
 
+    @property
+    def mdl_isotope(self):
+        return 119
+
 
 class Pb(Element, PeriodVI, GroupXIV):
     __slots__ = ()
@@ -182,6 +198,10 @@ class Pb(Element, PeriodVI, GroupXIV):
     def atomic_radius(self):
         return 1.54
 
+    @property
+    def mdl_isotope(self):
+        return 207
+
 
 class Fl(Element, PeriodVII, GroupXIV):
     __slots__ = ()
@@ -209,6 +229,10 @@ class Fl(Element, PeriodVII, GroupXIV):
     @property
     def atomic_radius(self):
         return 1.54  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 289
 
 
 __all__ = ['C', 'Si', 'Ge', 'Sn', 'Pb', 'Fl']

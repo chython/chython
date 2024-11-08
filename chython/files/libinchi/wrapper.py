@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -21,7 +21,6 @@ from itertools import count
 from sysconfig import get_platform
 from warnings import warn
 from .._convert import create_molecule
-from .._mdl import common_isotopes
 from ...containers import MoleculeContainer
 from ...containers.bonds import Bond
 from ...exceptions import ValenceError, IsChiral, NotChiral
@@ -54,8 +53,8 @@ def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> Mo
 
         atoms.append({'element': atom.atomic_symbol, 'charge': atom.charge, 'mapping': 0, 'x': atom.x, 'y': atom.y,
                       'z': atom.z, 'isotope': atom.isotope, 'is_radical': atom.is_radical,
-                      'hydrogens': atom.implicit_hydrogens, 'p': atom.implicit_protium, 'd': atom.implicit_deuterium,
-                      't': atom.implicit_tritium})
+                      'hydrogens': atom.implicit_hydrogens, 'delta_isotope': atom.delta_isotope,
+                      'p': atom.implicit_protium, 'd': atom.implicit_deuterium, 't': atom.implicit_tritium})
 
         for k in range(atom.num_bonds):
             m = atom.neighbor[k]
@@ -200,12 +199,13 @@ class Atom(Structure):
 
     @property
     def isotope(self):
-        isotope = self.isotopic_mass
-        if not isotope:
-            isotope = None
-        elif isotope > 9000:  # OVER NINE THOUSANDS!
-            isotope += common_isotopes[self.atomic_symbol] - 10000
-        return isotope
+        if 0 < self.isotopic_mass < 9000:  # OVER NINE THOUSANDS!
+            return self.isotopic_mass
+
+    @property
+    def delta_isotope(self):
+        if self.isotope > 9000:
+            return self.isotope - 10_000
 
     @property
     def is_radical(self):

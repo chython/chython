@@ -51,6 +51,10 @@ class B(Element, PeriodII, GroupXIII):
     def atomic_radius(self):
         return .87
 
+    @property
+    def mdl_isotope(self):
+        return 11
+
 
 class Al(Element, PeriodIII, GroupXIII):
     __slots__ = ()
@@ -80,6 +84,10 @@ class Al(Element, PeriodIII, GroupXIII):
     @property
     def atomic_radius(self):
         return 1.18
+
+    @property
+    def mdl_isotope(self):
+        return 27
 
 
 class Ga(Element, PeriodIV, GroupXIII):
@@ -115,6 +123,10 @@ class Ga(Element, PeriodIV, GroupXIII):
     def atomic_radius(self):
         return 1.36
 
+    @property
+    def mdl_isotope(self):
+        return 70
+
 
 class In(Element, PeriodV, GroupXIII):
     __slots__ = ()
@@ -144,6 +156,10 @@ class In(Element, PeriodV, GroupXIII):
     @property
     def atomic_radius(self):
         return 1.56
+
+    @property
+    def mdl_isotope(self):
+        return 115
 
 
 class Tl(Element, PeriodVI, GroupXIII):
@@ -175,6 +191,10 @@ class Tl(Element, PeriodVI, GroupXIII):
     def atomic_radius(self):
         return 1.56
 
+    @property
+    def mdl_isotope(self):
+        return 204
+
 
 class Nh(Element, PeriodVII, GroupXIII):
     __slots__ = ()
@@ -202,6 +222,10 @@ class Nh(Element, PeriodVII, GroupXIII):
     @property
     def atomic_radius(self):
         return 1.56  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 278
 
 
 __all__ = ['B', 'Al', 'Ga', 'In', 'Tl', 'Nh']

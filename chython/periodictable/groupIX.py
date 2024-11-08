@@ -71,6 +71,10 @@ class Co(Element, PeriodIV, GroupIX):
     def atomic_radius(self):
         return 1.52
 
+    @property
+    def mdl_isotope(self):
+        return 59
+
 
 class Rh(Element, PeriodV, GroupIX):
     __slots__ = ()
@@ -107,6 +111,10 @@ class Rh(Element, PeriodV, GroupIX):
     @property
     def atomic_radius(self):
         return 1.73
+
+    @property
+    def mdl_isotope(self):
+        return 103
 
 
 class Ir(Element, PeriodVI, GroupIX):
@@ -148,6 +156,10 @@ class Ir(Element, PeriodVI, GroupIX):
     def atomic_radius(self):
         return 1.8
 
+    @property
+    def mdl_isotope(self):
+        return 192
+
 
 class Mt(Element, PeriodVII, GroupIX):
     __slots__ = ()
@@ -175,6 +187,10 @@ class Mt(Element, PeriodVII, GroupIX):
     @property
     def atomic_radius(self):
         return 1.8  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 278
 
 
 __all__ = ['Co', 'Rh', 'Ir', 'Mt']

@@ -49,6 +49,10 @@ class Sc(Element, PeriodIV, GroupIII):
     def atomic_radius(self):
         return 1.84
 
+    @property
+    def mdl_isotope(self):
+        return 45
+
 
 class Y(Element, PeriodV, GroupIII):
     __slots__ = ()
@@ -77,6 +81,10 @@ class Y(Element, PeriodV, GroupIII):
     def atomic_radius(self):
         return 2.12
 
+    @property
+    def mdl_isotope(self):
+        return 89
+
 
 class La(Element, PeriodVI, GroupIII):
     __slots__ = ()
@@ -104,6 +112,10 @@ class La(Element, PeriodVI, GroupIII):
     @property
     def atomic_radius(self):
         return 2.12  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 139
 
 
 class Ce(Element, PeriodVI, GroupIII):
@@ -137,6 +149,10 @@ class Ce(Element, PeriodVI, GroupIII):
     def atomic_radius(self):
         return 2.12  # unknown, taken radius of previous element in group
 
+    @property
+    def mdl_isotope(self):
+        return 140
+
 
 class Pr(Element, PeriodVI, GroupIII):
     __slots__ = ()
@@ -166,6 +182,10 @@ class Pr(Element, PeriodVI, GroupIII):
     @property
     def atomic_radius(self):
         return 2.47
+
+    @property
+    def mdl_isotope(self):
+        return 141
 
 
 class Nd(Element, PeriodVI, GroupIII):
@@ -208,6 +228,10 @@ class Nd(Element, PeriodVI, GroupIII):
     def atomic_radius(self):
         return 2.06
 
+    @property
+    def mdl_isotope(self):
+        return 144
+
 
 class Pm(Element, PeriodVI, GroupIII):
     __slots__ = ()
@@ -235,6 +259,10 @@ class Pm(Element, PeriodVI, GroupIII):
     @property
     def atomic_radius(self):
         return 2.05
+
+    @property
+    def mdl_isotope(self):
+        return 145
 
 
 class Sm(Element, PeriodVI, GroupIII):
@@ -277,6 +305,10 @@ class Sm(Element, PeriodVI, GroupIII):
     def atomic_radius(self):
         return 2.38
 
+    @property
+    def mdl_isotope(self):
+        return 150
+
 
 class Eu(Element, PeriodVI, GroupIII):
     __slots__ = ()
@@ -316,6 +348,10 @@ class Eu(Element, PeriodVI, GroupIII):
     def atomic_radius(self):
         return 2.31
 
+    @property
+    def mdl_isotope(self):
+        return 152
+
 
 class Gd(Element, PeriodVI, GroupIII):
     __slots__ = ()
@@ -344,6 +380,10 @@ class Gd(Element, PeriodVI, GroupIII):
     @property
     def atomic_radius(self):
         return 2.33
+
+    @property
+    def mdl_isotope(self):
+        return 157
 
 
 class Tb(Element, PeriodVI, GroupIII):
@@ -375,6 +415,10 @@ class Tb(Element, PeriodVI, GroupIII):
     def atomic_radius(self):
         return 2.25
 
+    @property
+    def mdl_isotope(self):
+        return 159
+
 
 class Dy(Element, PeriodVI, GroupIII):
     __slots__ = ()
@@ -405,6 +449,10 @@ class Dy(Element, PeriodVI, GroupIII):
     @property
     def atomic_radius(self):
         return 2.28
+
+    @property
+    def mdl_isotope(self):
+        return 163
 
 
 class Ho(Element, PeriodVI, GroupIII):
@@ -445,6 +493,10 @@ class Ho(Element, PeriodVI, GroupIII):
     def atomic_radius(self):
         return 2.26
 
+    @property
+    def mdl_isotope(self):
+        return 165
+
 
 class Er(Element, PeriodVI, GroupIII):
     __slots__ = ()
@@ -472,6 +524,10 @@ class Er(Element, PeriodVI, GroupIII):
     @property
     def atomic_radius(self):
         return 2.26
+
+    @property
+    def mdl_isotope(self):
+        return 167
 
 
 class Tm(Element, PeriodVI, GroupIII):
@@ -511,6 +567,10 @@ class Tm(Element, PeriodVI, GroupIII):
     @property
     def atomic_radius(self):
         return 2.22
+
+    @property
+    def mdl_isotope(self):
+        return 169
 
 
 class Yb(Element, PeriodVI, GroupIII):
@@ -552,6 +612,10 @@ class Yb(Element, PeriodVI, GroupIII):
     def atomic_radius(self):
         return 2.22
 
+    @property
+    def mdl_isotope(self):
+        return 173
+
 
 class Lu(Element, PeriodVI, GroupIII):
     __slots__ = ()
@@ -580,6 +644,10 @@ class Lu(Element, PeriodVI, GroupIII):
     def atomic_radius(self):
         return 2.17
 
+    @property
+    def mdl_isotope(self):
+        return 175
+
 
 class Ac(Element, PeriodVII, GroupIII):
     __slots__ = ()
@@ -607,6 +675,10 @@ class Ac(Element, PeriodVII, GroupIII):
     @property
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 227
 
 
 class Th(Element, PeriodVII, GroupIII):
@@ -641,6 +713,10 @@ class Th(Element, PeriodVII, GroupIII):
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
 
+    @property
+    def mdl_isotope(self):
+        return 232
+
 
 class Pa(Element, PeriodVII, GroupIII):
     __slots__ = ()
@@ -671,6 +747,10 @@ class Pa(Element, PeriodVII, GroupIII):
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
 
+    @property
+    def mdl_isotope(self):
+        return 231
+
 
 class U(Element, PeriodVII, GroupIII):
     __slots__ = ()
@@ -699,6 +779,10 @@ class U(Element, PeriodVII, GroupIII):
     @property
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 238
 
 
 class Np(Element, PeriodVII, GroupIII):
@@ -729,6 +813,10 @@ class Np(Element, PeriodVII, GroupIII):
     @property
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 237
 
 
 class Pu(Element, PeriodVII, GroupIII):
@@ -768,6 +856,10 @@ class Pu(Element, PeriodVII, GroupIII):
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
 
+    @property
+    def mdl_isotope(self):
+        return 244
+
 
 class Am(Element, PeriodVII, GroupIII):
     __slots__ = ()
@@ -795,6 +887,10 @@ class Am(Element, PeriodVII, GroupIII):
     @property
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 243
 
 
 class Cm(Element, PeriodVII, GroupIII):
@@ -824,6 +920,10 @@ class Cm(Element, PeriodVII, GroupIII):
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
 
+    @property
+    def mdl_isotope(self):
+        return 247
+
 
 class Bk(Element, PeriodVII, GroupIII):
     __slots__ = ()
@@ -851,6 +951,10 @@ class Bk(Element, PeriodVII, GroupIII):
     @property
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 247
 
 
 class Cf(Element, PeriodVII, GroupIII):
@@ -880,6 +984,10 @@ class Cf(Element, PeriodVII, GroupIII):
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
 
+    @property
+    def mdl_isotope(self):
+        return 251
+
 
 class Es(Element, PeriodVII, GroupIII):
     __slots__ = ()
@@ -907,6 +1015,10 @@ class Es(Element, PeriodVII, GroupIII):
     @property
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 252
 
 
 class Fm(Element, PeriodVII, GroupIII):
@@ -936,6 +1048,10 @@ class Fm(Element, PeriodVII, GroupIII):
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
 
+    @property
+    def mdl_isotope(self):
+        return 257
+
 
 class Md(Element, PeriodVII, GroupIII):
     __slots__ = ()
@@ -963,6 +1079,10 @@ class Md(Element, PeriodVII, GroupIII):
     @property
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 258
 
 
 class No(Element, PeriodVII, GroupIII):
@@ -992,6 +1112,10 @@ class No(Element, PeriodVII, GroupIII):
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
 
+    @property
+    def mdl_isotope(self):
+        return 259
+
 
 class Lr(Element, PeriodVII, GroupIII):
     __slots__ = ()
@@ -1019,6 +1143,10 @@ class Lr(Element, PeriodVII, GroupIII):
     @property
     def atomic_radius(self):
         return 2.17  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 260
 
 
 __all__ = ['Sc', 'Y',

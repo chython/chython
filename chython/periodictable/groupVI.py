@@ -59,6 +59,10 @@ class Cr(Element, PeriodIV, GroupVI):
     def atomic_radius(self):
         return 1.66
 
+    @property
+    def mdl_isotope(self):
+        return 52
+
 
 class Mo(Element, PeriodV, GroupVI):
     __slots__ = ()
@@ -102,6 +106,10 @@ class Mo(Element, PeriodV, GroupVI):
     def atomic_radius(self):
         return 1.90
 
+    @property
+    def mdl_isotope(self):
+        return 96
+
 
 class W(Element, PeriodVI, GroupVI):
     __slots__ = ()
@@ -135,6 +143,10 @@ class W(Element, PeriodVI, GroupVI):
     def atomic_radius(self):
         return 1.93
 
+    @property
+    def mdl_isotope(self):
+        return 184
+
 
 class Sg(Element, PeriodVII, GroupVI):
     __slots__ = ()
@@ -162,6 +174,10 @@ class Sg(Element, PeriodVII, GroupVI):
     @property
     def atomic_radius(self):
         return 1.93  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 269
 
 
 __all__ = ['Cr', 'Mo', 'W', 'Sg']

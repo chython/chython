@@ -185,15 +185,6 @@ class MoleculeIsomorphism(Isomorphism):
 
         # long IV:
         # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
-        from ..files._mdl.mol import common_isotopes
-
-        charges = self._charges
-        radicals = self._radicals
-        hydrogens = self._hydrogens
-        neighbors = self.neighbors
-        heteroatoms = self.heteroatoms
-        rings_sizes = self.atoms_rings_sizes
-        hybridization = self.hybridization
 
         mapping = {}
         numbers = []
@@ -204,7 +195,7 @@ class MoleculeIsomorphism(Isomorphism):
         for i, (n, a) in enumerate(self._atoms.items()):
             mapping[n] = i
             numbers.append(n)
-            v2 = 1 << (hybridization(n) - 1)
+            v2 = 1 << (a.hybridization - 1)
             if (an := a.atomic_number) > 56:
                 if an > 116:  # Ts, Og
                     an = 116
@@ -214,7 +205,7 @@ class MoleculeIsomorphism(Isomorphism):
                 v1 = 1 << (57 - an)
 
             if a.isotope:
-                v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 54)
+                v3 = 1 << (a.isotope - a.mdl_isotope + 54)
                 if radicals[n]:
                     v3 |= 0x200000000000
                 else:
@@ -337,7 +328,6 @@ class QueryIsomorphism(Isomorphism):
         # padding: 1 bit
         # bond: single, double, triple, aromatic, special = 5 bit
         # bond in ring: 2 bit
-        from ..files._mdl.mol import common_isotopes
 
         _components, _closures = self._compiled_query
         components = []
@@ -378,7 +368,7 @@ class QueryIsomorphism(Isomorphism):
                             v1 = 1 << (57 - n)
                             v2 = 0
                     if a.isotope:
-                        v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 54)
+                        v3 = 1 << (a.isotope - a.mdl_isotope + 54)
                         if a.is_radical:
                             v3 |= 0x200000000000
                         else:

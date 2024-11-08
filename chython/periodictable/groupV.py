@@ -68,6 +68,10 @@ class V(Element, PeriodIV, GroupV):
     def atomic_radius(self):
         return 1.71
 
+    @property
+    def mdl_isotope(self):
+        return 51
+
 
 class Nb(Element, PeriodV, GroupV):
     __slots__ = ()
@@ -111,6 +115,10 @@ class Nb(Element, PeriodV, GroupV):
     def atomic_radius(self):
         return 1.98
 
+    @property
+    def mdl_isotope(self):
+        return 93
+
 
 class Ta(Element, PeriodVI, GroupV):
     __slots__ = ()
@@ -144,6 +152,10 @@ class Ta(Element, PeriodVI, GroupV):
     def atomic_radius(self):
         return 2.0
 
+    @property
+    def mdl_isotope(self):
+        return 181
+
 
 class Db(Element, PeriodVII, GroupV):
     __slots__ = ()
@@ -171,6 +183,10 @@ class Db(Element, PeriodVII, GroupV):
     @property
     def atomic_radius(self):
         return 2.0  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 270
 
 
 __all__ = ['V', 'Nb', 'Ta', 'Db']

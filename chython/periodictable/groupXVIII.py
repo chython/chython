@@ -49,6 +49,10 @@ class He(Element, PeriodI, GroupXVIII):
     def atomic_radius(self):
         return .31
 
+    @property
+    def mdl_isotope(self):
+        return 4
+
 
 class Ne(Element, PeriodII, GroupXVIII):
     __slots__ = ()
@@ -76,6 +80,10 @@ class Ne(Element, PeriodII, GroupXVIII):
     @property
     def atomic_radius(self):
         return .38
+
+    @property
+    def mdl_isotope(self):
+        return 20
 
 
 class Ar(Element, PeriodIII, GroupXVIII):
@@ -105,6 +113,10 @@ class Ar(Element, PeriodIII, GroupXVIII):
     def atomic_radius(self):
         return .71
 
+    @property
+    def mdl_isotope(self):
+        return 40
+
 
 class Kr(Element, PeriodIV, GroupXVIII):
     __slots__ = ()
@@ -132,6 +144,10 @@ class Kr(Element, PeriodIV, GroupXVIII):
     @property
     def atomic_radius(self):
         return .87
+
+    @property
+    def mdl_isotope(self):
+        return 84
 
 
 class Xe(Element, PeriodV, GroupXVIII):
@@ -172,6 +188,10 @@ class Xe(Element, PeriodV, GroupXVIII):
     def atomic_radius(self):
         return 1.08
 
+    @property
+    def mdl_isotope(self):
+        return 131
+
 
 class Rn(Element, PeriodVI, GroupXVIII):
     __slots__ = ()
@@ -200,6 +220,10 @@ class Rn(Element, PeriodVI, GroupXVIII):
     def atomic_radius(self):
         return 1.2
 
+    @property
+    def mdl_isotope(self):
+        return 222
+
 
 class Og(Element, PeriodVII, GroupXVIII):
     __slots__ = ()
@@ -227,6 +251,10 @@ class Og(Element, PeriodVII, GroupXVIII):
     @property
     def atomic_radius(self):
         return 1.2  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 294
 
 
 __all__ = ['He', 'Ne', 'Ar', 'Kr', 'Xe', 'Rn', 'Og']

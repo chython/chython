@@ -49,6 +49,10 @@ class Fe(Element, PeriodIV, GroupVIII):
     def atomic_radius(self):
         return 1.56
 
+    @property
+    def mdl_isotope(self):
+        return 56
+
 
 class Ru(Element, PeriodV, GroupVIII):
     __slots__ = ()
@@ -80,6 +84,10 @@ class Ru(Element, PeriodV, GroupVIII):
     @property
     def atomic_radius(self):
         return 1.78
+
+    @property
+    def mdl_isotope(self):
+        return 101
 
 
 class Os(Element, PeriodVI, GroupVIII):
@@ -113,6 +121,10 @@ class Os(Element, PeriodVI, GroupVIII):
     def atomic_radius(self):
         return 1.85
 
+    @property
+    def mdl_isotope(self):
+        return 190
+
 
 class Hs(Element, PeriodVII, GroupVIII):
     __slots__ = ()
@@ -140,6 +152,10 @@ class Hs(Element, PeriodVII, GroupVIII):
     @property
     def atomic_radius(self):
         return 1.85  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 270
 
 
 __all__ = ['Fe', 'Ru', 'Os', 'Hs']

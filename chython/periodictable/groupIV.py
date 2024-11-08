@@ -80,6 +80,10 @@ class Ti(Element, PeriodIV, GroupIV):
     def atomic_radius(self):
         return 1.76
 
+    @property
+    def mdl_isotope(self):
+        return 48
+
 
 class Zr(Element, PeriodV, GroupIV):
     __slots__ = ()
@@ -127,6 +131,10 @@ class Zr(Element, PeriodV, GroupIV):
     def atomic_radius(self):
         return 2.06
 
+    @property
+    def mdl_isotope(self):
+        return 91
+
 
 class Hf(Element, PeriodVI, GroupIV):
     __slots__ = ()
@@ -162,6 +170,10 @@ class Hf(Element, PeriodVI, GroupIV):
     def atomic_radius(self):
         return 2.08
 
+    @property
+    def mdl_isotope(self):
+        return 178
+
 
 class Rf(Element, PeriodVII, GroupIV):
     __slots__ = ()
@@ -189,6 +201,10 @@ class Rf(Element, PeriodVII, GroupIV):
     @property
     def atomic_radius(self):
         return 2.08  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 261
 
 
 __all__ = ['Ti', 'Zr', 'Hf', 'Rf']

@@ -32,12 +32,16 @@ class Element(ABC):
     def __init__(self, isotope: Optional[int] = None, *,
                  charge: int = 0, is_radical: bool = False, x: float = 0., y: float = 0.,
                  implicit_hydrogens: Optional[int] = None, stereo: Optional[bool] = None,
-                 parsed_mapping: Optional[int] = None):
+                 parsed_mapping: Optional[int] = None, delta_isotope: Optional[int] = None):
         """
         Element object with specified isotope
 
         :param isotope: Isotope number of element
         """
+        if delta_isotope is not None:
+            assert isotope is None, 'isotope absolute value and delta value provided'
+            isotope = self.mdl_isotope + delta_isotope
+
         self.isotope = isotope
         self.charge = charge
         self.is_radical = is_radical
@@ -105,6 +109,13 @@ class Element(ABC):
     def atomic_radius(self) -> float:
         """
         Valence radius of atom
+        """
+
+    @property
+    @abstractmethod
+    def mdl_isotope(self) -> int:
+        """
+        MDL MOL common isotope
         """
 
     @property

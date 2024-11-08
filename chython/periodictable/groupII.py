@@ -49,6 +49,10 @@ class Be(Element, PeriodII, GroupII):
     def atomic_radius(self):
         return 1.12
 
+    @property
+    def mdl_isotope(self):
+        return 9
+
 
 class Mg(Element, PeriodIII, GroupII):
     __slots__ = ()
@@ -81,6 +85,10 @@ class Mg(Element, PeriodIII, GroupII):
     def atomic_radius(self):
         return 1.45
 
+    @property
+    def mdl_isotope(self):
+        return 24
+
 
 class Ca(Element, PeriodIV, GroupII):
     __slots__ = ()
@@ -110,6 +118,10 @@ class Ca(Element, PeriodIV, GroupII):
     def atomic_radius(self):
         return 1.94
 
+    @property
+    def mdl_isotope(self):
+        return 40
+
 
 class Sr(Element, PeriodV, GroupII):
     __slots__ = ()
@@ -137,6 +149,10 @@ class Sr(Element, PeriodV, GroupII):
     @property
     def atomic_radius(self):
         return 2.19
+
+    @property
+    def mdl_isotope(self):
+        return 88
 
 
 class Ba(Element, PeriodVI, GroupII):
@@ -167,6 +183,10 @@ class Ba(Element, PeriodVI, GroupII):
     def atomic_radius(self):
         return 2.53
 
+    @property
+    def mdl_isotope(self):
+        return 137
+
 
 class Ra(Element, PeriodVII, GroupII):
     __slots__ = ()
@@ -194,6 +214,10 @@ class Ra(Element, PeriodVII, GroupII):
     @property
     def atomic_radius(self):
         return 2.53  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 226
 
 
 __all__ = ['Be', 'Mg', 'Ca', 'Sr', 'Ba', 'Ra']

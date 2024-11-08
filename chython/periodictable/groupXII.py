@@ -50,6 +50,10 @@ class Zn(Element, PeriodIV, GroupXII):
     def atomic_radius(self):
         return 1.42
 
+    @property
+    def mdl_isotope(self):
+        return 65
+
 
 class Cd(Element, PeriodV, GroupXII):
     __slots__ = ()
@@ -79,6 +83,10 @@ class Cd(Element, PeriodV, GroupXII):
     @property
     def atomic_radius(self):
         return 1.61
+
+    @property
+    def mdl_isotope(self):
+        return 112
 
 
 class Hg(Element, PeriodVI, GroupXII):
@@ -110,6 +118,10 @@ class Hg(Element, PeriodVI, GroupXII):
     def atomic_radius(self):
         return 1.71
 
+    @property
+    def mdl_isotope(self):
+        return 201
+
 
 class Cn(Element, PeriodVII, GroupXII):
     __slots__ = ()
@@ -137,6 +149,10 @@ class Cn(Element, PeriodVII, GroupXII):
     @property
     def atomic_radius(self):
         return 1.71  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 285
 
 
 __all__ = ['Zn', 'Cd', 'Hg', 'Cn']

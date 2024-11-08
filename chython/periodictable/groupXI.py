@@ -52,6 +52,10 @@ class Cu(Element, PeriodIV, GroupXI):
     def atomic_radius(self):
         return 1.45
 
+    @property
+    def mdl_isotope(self):
+        return 64
+
 
 class Ag(Element, PeriodV, GroupXI):
     __slots__ = ()
@@ -83,6 +87,10 @@ class Ag(Element, PeriodV, GroupXI):
     @property
     def atomic_radius(self):
         return 1.65
+
+    @property
+    def mdl_isotope(self):
+        return 108
 
 
 class Au(Element, PeriodVI, GroupXI):
@@ -116,6 +124,10 @@ class Au(Element, PeriodVI, GroupXI):
     def atomic_radius(self):
         return 1.74
 
+    @property
+    def mdl_isotope(self):
+        return 197
+
 
 class Rg(Element, PeriodVII, GroupXI):
     __slots__ = ()
@@ -143,6 +155,10 @@ class Rg(Element, PeriodVII, GroupXI):
     @property
     def atomic_radius(self):
         return 1.74  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 281
 
 
 __all__ = ['Cu', 'Ag', 'Au', 'Rg']

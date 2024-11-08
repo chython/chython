@@ -52,6 +52,10 @@ class Ni(Element, PeriodIV, GroupX):
     def atomic_radius(self):
         return 1.49
 
+    @property
+    def mdl_isotope(self):
+        return 59
+
 
 class Pd(Element, PeriodV, GroupX):
     __slots__ = ()
@@ -84,6 +88,10 @@ class Pd(Element, PeriodV, GroupX):
     @property
     def atomic_radius(self):
         return 1.69
+
+    @property
+    def mdl_isotope(self):
+        return 106
 
 
 class Pt(Element, PeriodVI, GroupX):
@@ -118,6 +126,10 @@ class Pt(Element, PeriodVI, GroupX):
     def atomic_radius(self):
         return 1.77
 
+    @property
+    def mdl_isotope(self):
+        return 195
+
 
 class Ds(Element, PeriodVII, GroupX):
     __slots__ = ()
@@ -145,6 +157,10 @@ class Ds(Element, PeriodVII, GroupX):
     @property
     def atomic_radius(self):
         return 1.77  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 281
 
 
 __all__ = ['Ni', 'Pd', 'Pt', 'Ds']
