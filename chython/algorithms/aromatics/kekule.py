@@ -52,6 +52,7 @@ class Kekule:
             for n in atoms:
                 self.calc_implicit(n)
             self.flush_cache()
+            self.calc_labels()
             return True
         return fixed
 
@@ -70,6 +71,7 @@ class Kekule:
                 atoms.add(m)
             for n in atoms:
                 copy.calc_implicit(n)
+            copy.calc_labels()
             yield copy
 
     def __fix_rings(self: 'MoleculeContainer'):
@@ -92,6 +94,7 @@ class Kekule:
                     bonds[n][m]._order = b
         if seen:
             self.flush_cache()
+            self.calc_labels()
             return True
         return False
 
