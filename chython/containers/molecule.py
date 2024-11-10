@@ -169,7 +169,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         else:
             self._changed.add(n)
         if not _skip_calculation and self._backup is None:
-            self.fix_labels()
+            self.fix_structure()
         return n
 
     def add_bond(self, n, m, bond: Union[Bond, int], *, _skip_calculation=False):
@@ -192,7 +192,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             self._changed.add(n)
             self._changed.add(m)
         if not _skip_calculation and self._backup is None:
-            self.fix_labels()
+            self.fix_structure()
             self.fix_stereo()
 
     def delete_atom(self, n: int, *, _skip_calculation=False):
@@ -213,7 +213,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             else:
                 self._changed.add(m)
         if not _skip_calculation and self._backup is None:
-            self.fix_labels()
+            self.fix_structure()
             self.fix_stereo()
 
     def delete_bond(self, n: int, m: int, *, _skip_calculation=False):
@@ -232,7 +232,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                 self._changed.add(n)
                 self._changed.add(m)
         if not _skip_calculation and self._backup is None:
-            self.fix_labels()
+            self.fix_structure()
             self.fix_stereo()
 
     def copy(self) -> 'MoleculeContainer':
@@ -321,7 +321,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
                     sbn[m] = sb[m][n]
                 elif m in atoms:
                     sbn[m] = bond.copy(stereo=True)
-        sub.fix_labels(recalculate_hydrogens=recalculate_hydrogens)
+        sub.fix_structure(recalculate_hydrogens=recalculate_hydrogens)
         sub.fix_stereo()
         return sub
 
@@ -693,22 +693,21 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             nodes.append(n)
         return nodes
 
-    def fix_labels(self, recalculate_hydrogens=True):
+    def fix_structure(self, recalculate_hydrogens=True):
         """
-        Fix molecule internal represenation
+        Fix molecule internal representation
         """
-        if not self._changed:
-            return
-
         self.calc_labels()  # refresh all labels
 
         if recalculate_hydrogens:
-            for n in self._changed:
+            for n in (self._changed or self._atoms):
                 self.calc_implicit(n)  # fix Hs count
         self._changed = None
 
     def calc_labels(self):
         atoms = self._atoms
+        atoms_rings_sizes = self.atoms_rings_sizes  # expensive: sssr based
+
         for n, m_bond in self._bonds.items():
             neighbors = 0
             heteroatoms = 0
@@ -740,6 +739,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             atom._heteroatoms = heteroatoms
             atom._hybridization = hybridization
             atom._explicit_hydrogens = explicit_hydrogens
+
+            atom._in_ring = n in atoms_rings_sizes
+            atom._ring_sizes = atoms_rings_sizes.get(n) or set()
 
     def calc_implicit(self, n: int):
         """
@@ -868,7 +870,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             self._name = backup._name
             self.flush_cache()
         else:  # update internal state
-            self.fix_labels()
+            self.fix_structure()
             self.fix_stereo()
         self._backup = None  # drop backup
 

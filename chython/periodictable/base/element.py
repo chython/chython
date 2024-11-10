@@ -244,7 +244,7 @@ class Element(ABC):
         return self._hybridization
 
     @property
-    def ring_sizes(self) -> Tuple[int, ...]:
+    def ring_sizes(self) -> Set[int]:
         """
         Atom rings sizes.
         """
@@ -274,7 +274,7 @@ class Element(ABC):
             copy._neighbors = self.neighbors
             copy._heteroatoms = self.heteroatoms
             copy._hybridization = self.hybridization
-            copy._ring_sizes = self.ring_sizes
+            copy._ring_sizes = self.ring_sizes.copy()
             copy._in_ring = self.in_ring
         else:
             if hydrogens:
