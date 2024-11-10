@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  Copyright 2024 Philippe Gantzer <p.gantzer@icredd.hokudai.ac.jp>
 #  This file is part of chython.
@@ -90,7 +90,7 @@ class StandardizeReaction:
         """
         total = False
         for m in self.molecules():
-            if m.thiele(fix_tautomers=fix_tautomers) and not total:
+            if m.thiele(fix_tautomers=fix_tautomers):
                 total = True
         if total:
             self.flush_cache()
@@ -105,7 +105,7 @@ class StandardizeReaction:
         """
         total = False
         for m in self.molecules():
-            if m.kekule(buffer_size=buffer_size) and not total:
+            if m.kekule(buffer_size=buffer_size):
                 total = True
         if total:
             self.flush_cache()
@@ -118,7 +118,7 @@ class StandardizeReaction:
         """
         flag = False
         for m in self.molecules():
-            if m.clean_isotopes() and not flag:
+            if m.clean_isotopes():
                 flag = True
         if flag:
             self.flush_cache()
