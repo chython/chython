@@ -707,13 +707,17 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
     def calc_labels(self):
         atoms = self._atoms
         atoms_rings_sizes = self.atoms_rings_sizes  # expensive: sssr based
+        atoms_rings = {n: set(r) for n, r in self.atoms_rings.items()}
 
         for n, m_bond in self._bonds.items():
             neighbors = 0
             heteroatoms = 0
             hybridization = 1
             explicit_hydrogens = 0
+            ar = atoms_rings[n]
             for m, bond in m_bond.items():
+                bond._in_ring = not ar.isdisjoint(atoms_rings[m])  # have common rings
+
                 order = bond.order
                 if order == 8:
                     continue

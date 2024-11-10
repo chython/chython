@@ -106,7 +106,7 @@ class Isomorphism:
 
         seen = set()
         if len(components) == 1:
-            for candidate in other._connected_components:
+            for candidate in other.connected_components:
                 if searching_scope:
                     candidate = searching_scope.intersection(candidate)
                     if not candidate:
@@ -119,7 +119,7 @@ class Isomorphism:
                         seen.add(atoms)
                     yield mapping
         else:
-            for candidates in permutations(other._connected_components, len(components)):
+            for candidates in permutations(other.connected_components, len(components)):
                 mappers = []
                 for component, candidate in zip(components, candidates):
                     if searching_scope:
@@ -206,23 +206,23 @@ class MoleculeIsomorphism(Isomorphism):
 
             if a.isotope:
                 v3 = 1 << (a.isotope - a.mdl_isotope + 54)
-                if radicals[n]:
+                if a.is_radical:
                     v3 |= 0x200000000000
                 else:
                     v3 |= 0x100000000000
-            elif radicals[n]:
+            elif a.is_radical:
                 v3 = 0x8000200000000000
             else:
                 v3 = 0x8000100000000000
 
-            v3 |= 1 << (charges[n] + 39)
-            v3 |= 1 << ((hydrogens[n] or 0) + 30)
-            v3 |= 1 << (neighbors(n) + 15)
-            v3 |= 1 << heteroatoms(n)
+            v3 |= 1 << (a.charge + 39)
+            v3 |= 1 << ((a.implicit_hydrogens or 0) + 30)
+            v3 |= 1 << (a.neighbors + 15)
+            v3 |= 1 << a.heteroatoms
 
-            if n in rings_sizes:
+            if a.ring_sizes:
                 v4 = 0
-                for r in rings_sizes[n]:
+                for r in a.ring_sizes:
                     if r > 65:  # big rings not supported
                         continue
                     v4 |= 1 << (65 - r)

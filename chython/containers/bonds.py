@@ -28,7 +28,6 @@ class Bond:
         elif order not in (1, 4, 2, 3, 8):
             raise ValueError('order should be from [1, 2, 3, 4, 8]')
         self._order = order
-        self._in_ring = False
         self._stereo = None
 
     def __eq__(self, other):
@@ -72,7 +71,6 @@ class Bond:
             copy._stereo = self.stereo
             copy._in_ring = self.in_ring
         else:
-            copy._in_ring = False
             if stereo:
                 copy._stereo = self.stereo
             else:
