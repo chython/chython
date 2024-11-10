@@ -714,9 +714,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             heteroatoms = 0
             hybridization = 1
             explicit_hydrogens = 0
-            ar = atoms_rings[n]
+            anr = atoms_rings.get(n) or False
             for m, bond in m_bond.items():
-                bond._in_ring = not ar.isdisjoint(atoms_rings[m])  # have common rings
+                bond._in_ring = anr and (amr := atoms_rings.get(m) or False) and not anr.isdisjoint(amr)  # have common rings
 
                 order = bond.order
                 if order == 8:

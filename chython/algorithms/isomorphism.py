@@ -22,7 +22,7 @@ from functools import cached_property, partial
 from itertools import permutations
 from typing import Any, Collection, Dict, Iterator, Optional, TYPE_CHECKING, Union
 from .._functions import lazy_product
-from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement
+from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement, QueryElement
 
 
 if TYPE_CHECKING:
@@ -367,7 +367,7 @@ class QueryIsomorphism(Isomorphism):
                         else:
                             v1 = 1 << (57 - n)
                             v2 = 0
-                    if a.isotope:
+                    if isinstance(a, QueryElement) and a.isotope:
                         v3 = 1 << (a.isotope - a.mdl_isotope + 54)
                         if a.is_radical:
                             v3 |= 0x200000000000

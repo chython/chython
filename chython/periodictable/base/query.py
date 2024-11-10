@@ -268,7 +268,7 @@ class AnyElement(ExtendedQuery):
                 return False
             if self.ring_sizes:
                 if self.ring_sizes[0]:
-                    if set(self.ring_sizes).isdisjoint(other.ring_sizes):
+                    if other.ring_sizes.isdisjoint(self.ring_sizes):
                         return False
                 elif other.ring_sizes:  # not in ring expected
                     return False
@@ -342,7 +342,7 @@ class ListElement(ExtendedQuery):
                 return False
             if self.ring_sizes:
                 if self.ring_sizes[0]:
-                    if set(self.ring_sizes).isdisjoint(other.ring_sizes):
+                    if other.ring_sizes.isdisjoint(self.ring_sizes):
                         return False
                 elif other.ring_sizes:  # not in ring expected
                     return False
@@ -406,6 +406,11 @@ class QueryElement(ExtendedQuery, ABC):
         if value is not None and not isinstance(value, int):
             raise TypeError('isotope must be an int')
         self._isotope = value
+
+    @property
+    @abstractmethod
+    def mdl_isotope(self) -> int:
+        ...
 
     @classmethod
     def from_symbol(cls, symbol: str) -> Type[Union['QueryElement', 'AnyElement', 'AnyMetal']]:
@@ -485,7 +490,7 @@ class QueryElement(ExtendedQuery, ABC):
                 return False
             if self.ring_sizes:
                 if self.ring_sizes[0]:
-                    if set(self.ring_sizes).isdisjoint(other.ring_sizes):
+                    if other.ring_sizes.isdisjoint(self.ring_sizes):
                         return False
                 elif other.ring_sizes:  # not in ring expected
                     return False
