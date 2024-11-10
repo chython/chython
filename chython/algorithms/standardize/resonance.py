@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -35,21 +35,18 @@ class Resonance:
         :param logging: return list of changed atoms.
         """
         atoms = self._atoms
-        charges = self._charges
-        radicals = self._radicals
         bonds = self._bonds
-        calc_implicit = self.calc_implicit
         entries, exits, rads, constrains, nitrogen_cat, nitrogen_ani, sulfur_cat = self.__entries()
         hs = set()
         while len(rads) > 1:
             n = rads.pop()
             for path in self.__find_delocalize_path(n, rads, constrains, True):
-                radicals[n] = False
+                atoms[n]._is_radical = False
                 hs.add(n)
                 for n, m, b in path:
                     hs.add(m)
-                    bonds[n][m]._Bond__order = b  # noqa
-                radicals[m] = False  # noqa
+                    bonds[n][m]._order = b
+                atoms[m]._is_radical = False  # noqa
                 rads.discard(m)
                 break  # path found
             # path not found. atom n keep as is
@@ -60,29 +57,31 @@ class Resonance:
                 if n in nitrogen_cat and m in nitrogen_ani:
                     continue
 
-                c_m = charges[m] - 1
                 if m in sulfur_cat:  # prevent X-[S+]=X >> X=S=X
                     if b != 1:
                         continue
+                    atoms[m]._charge -= 1
                 else:  # check cations end valence.
+                    atoms[m]._charge -= 1  # reduce atom change and check valence
                     try:
-                        atoms[m].valence_rules(c_m, radicals[m], sum(int(y) for x, y in bonds[m].items() if x != l) + b)
+                        atoms[m].valence_rules(sum(int(y) for x, y in bonds[m].items() if x != l) + b)
                     except ValenceError:
+                        atoms[m]._charge += 1  # roll back
                         continue
 
-                charges[n] += 1
+                # succeed!
+                atoms[n]._charge += 1
                 hs.add(n)
                 for n, m, b in path:
                     hs.add(m)
-                    bonds[n][m]._Bond__order = b  # noqa
-                charges[m] = c_m
+                    bonds[n][m]._order = b
                 exits.discard(m)
                 break  # path from negative atom to positive atom found.
             # path not found. keep negative atom n as is
         if hs:
             for n in hs:
-                calc_implicit(n)
-            self.flush_cache()
+                self.calc_implicit(n)
+            self.flush_cache(keep_sssr=True, keep_components=True)
             if _fix_stereo:
                 self.fix_stereo()
             if logging:
@@ -121,13 +120,9 @@ class Resonance:
                          if n not in seen and n in constrains and 1 <= (bo := b.order + diff) <= 3)
 
     def __entries(self: 'MoleculeContainer'):
-        hybridization = self.hybridization
-        neighbors = self.neighbors
-        charges = self._charges
-        radicals = self._radicals
-        bonds = self._bonds
         atoms = self._atoms
-        errors = {n for n, h in self._hydrogens.items() if h is None}
+        bonds = self._bonds
+        errors = {n for n, a in atoms.items() if a.implicit_hydrogens is None}
 
         transfer = set()
         entries = set()
@@ -140,9 +135,9 @@ class Resonance:
             if a.atomic_number not in {5, 6, 7, 8, 14, 15, 16, 33, 34, 52}:
                 # filter non-organic set, halogens and aromatics
                 continue
-            elif radicals[n]:
+            elif a.is_radical:
                 rads.add(n)
-            elif charges[n] == -1:
+            elif a.charge == -1:
                 if (lb := len(bonds[n])) == 4 and a.atomic_number == 5:  # skip boron
                     continue
                 elif lb == 6 and a.atomic_number == 15:  # skip [P-]X6
@@ -150,35 +145,37 @@ class Resonance:
                 if n in errors:  # only valid anions accepted
                     continue
                 entries.add(n)
-            elif charges[n] == 1:
+            elif a.charge == 1:
                 lb = len(bonds[n])
                 if a.atomic_number == 7:
                     if lb == 4:  # skip ammonia
                         continue
-                    elif lb == 2 and hybridization(n) == 3:  # skip Azide
+                    elif lb == 2 and a.hybridization == 3:  # skip Azide
                         (n1, b1), (n2, b2) = bonds[n].items()
-                        if b1.order == b2.order == 2 and (charges[n1] == -1 and atoms[n1].atomic_number == 7 or
-                                                          charges[n2] == -1 and atoms[n2].atomic_number == 7):
+                        an1 = atoms[n1]
+                        an2 = atoms[n2]
+                        if b1.order == b2.order == 2 and (an1.charge == -1 and an1.atomic_number == 7 or
+                                                          an2.charge == -1 and an2.atomic_number == 7):
                             continue
-                    elif lb == 3 and hybridization(n) == 2:  # X=[N+](-X)-X - prevent N-N migration
+                    elif lb == 3 and a.hybridization == 2:  # X=[N+](-X)-X - prevent N-N migration
                         nitrogen_ani.add(n)
                 elif a.atomic_number == 15 and lb == 4:  # skip [P+]R4
                     continue
                 elif a.atomic_number == 16:
-                    if lb == 2 and hybridization(n) == 2:  # ad-hoc for X-[S+]=X
+                    if lb == 2 and a.hybridization == 2:  # ad-hoc for X-[S+]=X
                         sulfur_cat.add(n)
-                    elif lb == 3 and hybridization(n) == 1:  # ad-hoc for X-[S+](-X)-X
+                    elif lb == 3 and a.hybridization == 1:  # ad-hoc for X-[S+](-X)-X
                         continue
                 exits.add(n)
             transfer.add(n)
 
         if exits or entries:  # try to move cation to nitrogen. saturation fixup.
             for n, a in self._atoms.items():
-                if a.atomic_number == 7 and not charges[n]:
-                    if hybridization(n) == 1 and neighbors(n) <= 3:  # any amine - potential e-donor
+                if a.atomic_number == 7 and not a.charge:
+                    if a.hybridization == 1 and a.neighbors <= 3:  # any amine - potential e-donor
                         entries.add(n)
                         nitrogen_cat.add(n)
-                    elif hybridization(n) == 3 and neighbors(n) == 1:  # N#X-[X-] >> [N-]=X=X
+                    elif a.hybridization == 3 and a.neighbors == 1:  # N#X-[X-] >> [N-]=X=X
                         exits.add(n)
                         nitrogen_ani.add(n)
         return entries, exits, rads, transfer, nitrogen_cat, nitrogen_ani, sulfur_cat

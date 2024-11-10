@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -33,16 +33,20 @@ class Salts:
 
         :param logging: return deleted atoms list.
         """
+        atoms = self._atoms
         bonds = self._bonds
 
         metals = []
-        for n, a in self._atoms.items():
-            if a.atomic_symbol not in {7, 3, 4, 11, 12, 19, 20, 37, 38, 55, 56} and not bonds[n]:
+        for n, a in atoms.items():
+            if a.atomic_number in {7, 3, 4, 11, 12, 19, 20, 37, 38, 55, 56} and not bonds[n]:
                 metals.append(n)
 
         if 0 < len(metals) < len(self):
             for n in metals:
-                self.delete_atom(n)
+                del atoms[n]
+                del bonds[n]
+
+            self.flush_cache(keep_sssr=True)
             if logging:
                 return metals
             return True
@@ -64,27 +68,12 @@ class Salts:
                     log.extend(c)
             if 0 < len(log) < len(self):  # prevent singularity
                 atoms = self._atoms
-                charges = self._charges
-                radicals = self._radicals
-                hydrogens = self._hydrogens
-                plane = self._plane
                 bonds = self._bonds
-                parsed_mapping = self._parsed_mapping
-
-                self._conformers.clear()  # clean conformers.
 
                 for n in log:
                     del atoms[n]
-                    del charges[n]
-                    del radicals[n]
-                    del hydrogens[n]
-                    del plane[n]
                     del bonds[n]
 
-                    try:
-                        del parsed_mapping[n]
-                    except KeyError:
-                        pass
                 self.flush_cache()
                 if logging:
                     return log
@@ -99,10 +88,10 @@ class Salts:
 
         :param logging: return deleted bonds list.
         """
+        atoms = self._atoms
         bonds = self._bonds
-        charges = self._charges
 
-        metals = [n for n, a in self._atoms.items() if a.atomic_number in
+        metals = [n for n, a in atoms.items() if a.atomic_number in
                   {3, 4, 11, 12, 19, 20, 37, 38, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 87, 88,
                    89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102}]
         if metals:
@@ -114,12 +103,12 @@ class Salts:
 
             for n in metals:
                 for m in acceptors & bonds[n].keys():
-                    if charges[n] == 4:  # prevent overcharging
+                    if atoms[n].charge == 4:  # prevent overcharging
                         break
                     del bonds[n][m]
                     del bonds[m][n]
-                    charges[n] += 1
-                    charges[m] -= 1
+                    atoms[n]._charge += 1
+                    atoms[m]._charge -= 1
                     log.append((n, m))
             if log:
                 self.flush_cache()

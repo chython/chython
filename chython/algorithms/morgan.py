@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -40,13 +40,12 @@ class Morgan:
 
         :return: dict of atom-order pairs
         """
-        atoms = self._atoms
-        if not atoms:  # for empty containers
+        if not self._atoms:  # for empty containers
             return {}
-        elif len(atoms) == 1:  # optimize single atom containers
-            return dict.fromkeys(atoms, 1)
+        elif len(self._atoms) == 1:  # optimize single atom containers
+            return dict.fromkeys(self._atoms, 1)
         ring = self.ring_atoms
-        return _morgan({n: hash((hash(a), n in ring)) for n, a in atoms.items()}, self.int_adjacency)
+        return _morgan({n: hash((hash(a), n in ring)) for n, a in self._atoms.items()}, self.int_adjacency)
 
     @cached_property
     def int_adjacency(self: 'Graph') -> Dict[int, Dict[int, int]]:

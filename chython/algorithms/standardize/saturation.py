@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -72,13 +72,17 @@ class Saturation:
             raise ValenceError('only single bonded skeleton can be saturated')
         atoms = self._atoms
         if not reset_electrons:
-            expected_radicals_count = any(self._radicals.values())
+            expected_radicals_count = sum(a.is_radical for a in atoms.values())
             expected_charge = int(self)
 
+        if reset_electrons:
+            charges = {x: None for x in self._atoms}
+            radicals = {x: None for x in self._atoms}
+        else:
+            charges = {n: a.charge for n, a in self._atoms.items()}
+            radicals =  {n: a.is_radical for n, a in self._atoms.items()}
         sat, adjacency = _find_possible_valences(atoms, neighbors_distances or self._bonds,
-                                                 {x: None for x in self._atoms} if reset_electrons else self._charges,
-                                                 {x: None for x in self._atoms} if reset_electrons else self._radicals,
-                                                 neighbors_distances is not None)
+                                                 charges, radicals, neighbors_distances is not None)
         charges = {}  # new charge states
         radicals = {}  # new radical states
         bonds = {n: {} for n in atoms}  # new bonds
@@ -95,8 +99,7 @@ class Saturation:
                     radicals[n] = r
                     for m in env:
                         if m not in seen:
-                            bonds[n][m] = bonds[m][n] = b = Bond(1)
-                            b._attach_graph(self, n, m)
+                            bonds[n][m] = bonds[m][n] = Bond(1)
                 else:
                     unsaturated[n] = [(c, r, h)]
             else:
@@ -142,8 +145,7 @@ class Saturation:
                     return False
 
             for n, m, b in sb:
-                bonds[n][m] = bonds[m][n] = b = Bond(b)
-                b._attach_graph(self, n, m)
+                bonds[n][m] = bonds[m][n] = Bond(b)
             for n, c, r in sa:
                 charges[n] = c
                 radicals[n] = r
@@ -155,10 +157,14 @@ class Saturation:
                 return False
         # reset molecule
         self._bonds = bonds
-        self._radicals = radicals
-        self._charges = charges
-        self._hydrogens = {x: 0 for x in atoms}  # reset invalid hydrogens counts.
+        for n, r in radicals.items():
+            atoms[n]._is_radical = r
+        for n, c in charges.items():
+            atoms[n]._charge = c
+        for a in atoms.values():
+            a._implicit_hydrogens = 0  # reset invalid hydrogens counts.
         self.flush_cache()
+        self.calc_labels()
         if logging:
             if not log:  # check for errors
                 log.append('Saturated successfully')
