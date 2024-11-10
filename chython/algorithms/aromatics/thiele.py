@@ -164,7 +164,7 @@ class Thiele:
                     bonds[n][m]._order = o
                 if not acceptors:
                     break
-            self.flush_cache()
+            self.flush_cache(keep_sssr=True, keep_components=True)
             self.calc_labels()
 
         if double_bonded:  # delete quinones
@@ -215,7 +215,7 @@ class Thiele:
             for n, m in zip(ring, ring[1:]):
                 bonds[n][m]._order = 4
 
-        self.flush_cache()
+        self.flush_cache(keep_sssr=True, keep_components=True)
         self.calc_labels()
         for ring in freaks:  # aromatize rule based
             for q in freak_rules:
@@ -226,7 +226,7 @@ class Thiele:
                         bonds[n][m]._order = 4
                     break
         if freaks:
-            self.flush_cache()  # flush again
+            self.flush_cache(keep_sssr=True, keep_components=True)  # flush again
             self.calc_labels()
         self.fix_stereo()  # check if any stereo centers vanished.
         return True

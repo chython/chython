@@ -51,7 +51,7 @@ class Kekule:
                 atoms.add(m)
             for n in atoms:
                 self.calc_implicit(n)
-            self.flush_cache()
+            self.flush_cache(keep_sssr=True, keep_components=True)
             self.calc_labels()
             return True
         return fixed
@@ -78,6 +78,7 @@ class Kekule:
         atoms = self._atoms
         bonds = self._bonds
         seen = set()
+        keep = True
         for q, af, bf, mm in rules:
             for mapping in q.get_mapping(self, automorphism_filter=False):
                 match = set(mapping.values())
@@ -92,8 +93,11 @@ class Kekule:
                     n = mapping[n]
                     m = mapping[m]
                     bonds[n][m]._order = b
+                    if b == 8:
+                        # flush sssr and components cache
+                        keep = False
         if seen:
-            self.flush_cache()
+            self.flush_cache(keep_sssr=keep, keep_components=keep)
             self.calc_labels()
             return True
         return False
