@@ -344,9 +344,6 @@ class DepictMolecule:
         stroke_width_o = other_size * .1
         stroke_width_m = mapping_size * .1
 
-        # for cumulenes
-        cumulenes = {y for x in self._cumulenes(heteroatoms=True) if len(x) > 2 for y in x[1:-1]}
-
         svg = []
         maps = []
         symbols = []
@@ -358,7 +355,8 @@ class DepictMolecule:
         for n, atom in self._atoms.items():
             x, y = atom.x, -atom.y
             symbol = atom.atomic_symbol
-            if not bonds[n] or symbol != 'C' or carbon or atom.charge or atom.is_radical or atom.isotope or n in cumulenes:
+            if (symbol != 'C' or atom.charge or atom.is_radical or atom.isotope or carbon
+                    or not bonds[n] or sum(b == 2 for b in bonds[n].values()) == 2):
                 if atom.charge:
                     others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_ci:.2f}" dy="-{dy_ci:.2f}">'
                                   f'{_render_charge[atom.charge]}{"↑" if atom.is_radical else ""}</text>')
