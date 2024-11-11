@@ -448,7 +448,7 @@ class MoleculeSmiles(Smiles):
             smi[2] = atom.atomic_symbol
         return ''.join(smi)
 
-    def _format_bond(self: 'MoleculeContainer', n, m, adjacency, **kwargs):
+    def _format_bond(self: Union['MoleculeContainer', 'MoleculeSmiles'], n, m, adjacency, **kwargs):
         if not kwargs.get('bonds', True):
             return ''
         order = self._bonds[n][m].order
@@ -475,14 +475,14 @@ class MoleculeSmiles(Smiles):
         else:  # order == 8
             return '~'
 
-    def __ct_map(self, adjacency):
+    def __ct_map(self: 'MoleculeContainer', adjacency):
         stereo_bonds = {n for n, mb in self._bonds.items() if any(b.stereo is not None for m, b in mb.items())}
         if not stereo_bonds:
             return {}
         ct_map = {}
+        sct = self.stereogenic_cis_trans
         ctc = self._stereo_cis_trans_centers
         ctt = self._stereo_cis_trans_terminals
-        sct = self._stereo_cis_trans
         ctcp = self._stereo_cis_trans_counterpart
 
         seen = set()
