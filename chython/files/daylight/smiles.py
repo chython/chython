@@ -175,6 +175,7 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
     if not stereo_atoms and not data['stereo_bonds']:
         return
 
+    atoms = molecule._atoms
     st = molecule.stereogenic_tetrahedrons
     sa = molecule.stereogenic_allenes
     sat = molecule._stereo_allenes_terminals
@@ -182,10 +183,11 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
 
     order = {mapping[n]: [mapping[m] for m in ms] for n, ms in data['order'].items()}
 
+    log = []
     stereo = []
     for i, s in stereo_atoms:
         n = mapping[i]
-        if not i and hydrogens[n]:  # first atom in smiles has reversed chiral mark
+        if not i and atoms[n].implicit_hydrogens:  # first atom in smiles has reversed chiral mark
             s = not s
 
         if n in st:
@@ -196,6 +198,8 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
             n1 = next(x for x in order[t1] if x in env)
             n2 = next(x for x in order[t2] if x in env)
             stereo.append((molecule.add_atom_stereo, n, (n1, n2), s))
+        else:
+            log.append(f'non chiral atom {n} has stereo label in smiles')
 
     stereo_bonds = {mapping[n]: {mapping[m]: s for m, s in ms.items()}
                     for n, ms in data['stereo_bonds'].items()}
