@@ -271,9 +271,9 @@ class QueryIsomorphism(Isomorphism):
     def get_mapping(self, other: Union['MoleculeContainer', 'QueryContainer'], /, *, automorphism_filter: bool = True,
                     searching_scope: Optional[Collection[int]] = None, _cython=True):
         """
-        Get self to other Molecule or Query substructure mapping generator.
+        Get Query to Molecule substructure mapping generator.
 
-        :param other: Molecule or Query
+        :param other: Molecule
         :param automorphism_filter: Skip matches to the same atoms.
         :param searching_scope: substructure atoms list to localize isomorphism.
         """

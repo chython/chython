@@ -285,7 +285,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
             not_skin = {n for n in atoms if lost.isdisjoint(self._bonds[n])}
 
             # check for full presence of cumulene chains and terminal attachments
-            for p in self._stereo_cumulenes.values():
+            for p in self.stereogenic_cumulenes.values():
                 if not not_skin.issuperset(p):
                     not_skin.difference_update(p)
 
@@ -554,8 +554,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], MoleculeIsomorphis
         mol._allenes_stereo = allenes_stereo
         mol._cis_trans_stereo = cis_trans_stereo
 
-        mol._conformers = []
-        mol._parsed_mapping = {}
         mol._MoleculeContainer__meta = None
         mol._MoleculeContainer__name = None
         mol._atoms = atoms = {}

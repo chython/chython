@@ -21,12 +21,11 @@ from .bonds import Bond, QueryBond
 from .graph import Graph
 from ..algorithms.isomorphism import QueryIsomorphism
 from ..algorithms.smiles import QuerySmiles
-from ..algorithms.stereo import Stereo
 from ..periodictable import Element, QueryElement
 from ..periodictable.base import Query
 
 
-class QueryContainer(Stereo, Graph[Query, QueryBond], QueryIsomorphism, QuerySmiles):
+class QueryContainer(Graph[Query, QueryBond], QueryIsomorphism, QuerySmiles):
     __slots__ = ()
 
     def add_atom(self, atom: Union[Query, Element, int, str], *args, **kwargs):

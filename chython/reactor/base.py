@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -206,52 +206,52 @@ class BaseReactor:
         for n, s in products._atoms_stereo.items():
             m = mapping[n]
             new._atoms_stereo[m] = products._translate_tetrahedron_sign(n, [r_mapping[x] for x in
-                                                                            new._stereo_tetrahedrons[m]], s)
+                                                                            new.stereogenic_tetrahedrons[m]], s)
             stereo_override.add(m)
 
         for n, s in products._allenes_stereo.items():
             m = mapping[n]
-            t1, t2, *_ = new._stereo_allenes[m]
+            t1, t2, *_ = new.stereogenic_allenes[m]
             new._allenes_stereo[m] = products._translate_allene_sign(n, r_mapping[t1], r_mapping[t2], s)
             stereo_override.add(m)
 
         for (n, m), s in products._cis_trans_stereo.items():
             nm = (mapping[n], mapping[m])
             try:
-                t1, t2, *_ = new._stereo_cis_trans[nm]
+                t1, t2, *_ = new.stereogenic_cis_trans[nm]
             except KeyError:
                 nm = nm[::-1]
-                t2, t1, *_ = new._stereo_cis_trans[nm]
+                t2, t1, *_ = new.stereogenic_cis_trans[nm]
             new._cis_trans_stereo[nm] = products._translate_cis_trans_sign(n, m, r_mapping[t1], r_mapping[t2], s)
             stereo_override.update(nm)
 
         # set unmatched part stereo and not overridden by patch.
         for n, s in structure._atoms_stereo.items():
-            if n in stereo_override or n not in new._stereo_tetrahedrons or \
+            if n in stereo_override or n not in new.stereogenic_tetrahedrons or \
                     new._bonds[n].keys() != structure._bonds[n].keys():
                 # skip atoms with changed neighbors
                 continue
-            new._atoms_stereo[n] = structure._translate_tetrahedron_sign(n, new._stereo_tetrahedrons[n], s)
+            new._atoms_stereo[n] = structure._translate_tetrahedron_sign(n, new.stereogenic_tetrahedrons[n], s)
 
         for n, s in structure._allenes_stereo.items():
-            if n in stereo_override or n not in new._stereo_allenes or \
-                    set(new._stereo_allenes[n]) != set(structure._stereo_allenes[n]):
+            if n in stereo_override or n not in new.stereogenic_allenes or \
+                    set(new.stereogenic_allenes[n]) != set(structure.stereogenic_allenes[n]):
                 # skip changed allenes
                 continue
-            t1, t2, *_ = new._stereo_allenes[n]
+            t1, t2, *_ = new.stereogenic_allenes[n]
             new._allenes_stereo[n] = structure._translate_allene_sign(n, t1, t2, s)
 
         for nm, s in structure._cis_trans_stereo.items():
             n, m = nm
             if n in stereo_override or m in stereo_override:
                 continue
-            env = structure._stereo_cis_trans[nm]
+            env = structure.stereogenic_cis_trans[nm]
             try:
-                new_env = new._stereo_cis_trans[nm]
+                new_env = new.stereogenic_cis_trans[nm]
             except KeyError:
                 nm = nm[::-1]
                 try:
-                    new_env = new._stereo_cis_trans[nm]
+                    new_env = new.stereogenic_cis_trans[nm]
                 except KeyError:
                     continue
                 t2, t1, *_ = new_env

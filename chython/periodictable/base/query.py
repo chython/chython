@@ -21,10 +21,7 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import Tuple, Type, List, Union, Optional
 from .element import Element
-
-
-_inorganic = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'F', 'Cl', 'Br', 'I', 'B', 'C', 'N', 'O',
-              'H', 'Si', 'P', 'S', 'Se', 'Ge', 'As', 'Sb', 'Te', 'At'}
+from .groups import GroupXVIII
 
 
 def _validate(value, prop):
@@ -229,18 +226,15 @@ class AnyMetal(Query):
         return 'M'
 
     def __eq__(self, other):
-        if isinstance(other, Element):
-            if other.atomic_symbol in _inorganic:
-                return False
-            if self.neighbors and other.neighbors not in self.neighbors:
-                return False
-            if self.hybridization and other.hybridization not in self.hybridization:
-                return False
-            return True
-        # metal is subset of metal. only
-        return (isinstance(other, AnyMetal)
-                and self.neighbors == other.neighbors
-                and self.hybridization == other.hybridization)
+        if not isinstance(other, Element):
+            return False
+        if other.is_forming_single_bonds or isinstance(other, GroupXVIII):
+            return False
+        if self.neighbors and other.neighbors not in self.neighbors:
+            return False
+        if self.hybridization and other.hybridization not in self.hybridization:
+            return False
+        return True
 
     def __hash__(self):
         return hash((self.neighbors, self.hybridization))
@@ -257,35 +251,27 @@ class AnyElement(ExtendedQuery):
         """
         Compare attached to molecules elements and query elements
         """
-        if isinstance(other, Element):
-            if self.charge != other.charge:
-                return False
-            if self.is_radical != other.is_radical:
-                return False
-            if self.neighbors and other.neighbors not in self.neighbors:
-                return False
-            if self.hybridization and other.hybridization not in self.hybridization:
-                return False
-            if self.ring_sizes:
-                if self.ring_sizes[0]:
-                    if other.ring_sizes.isdisjoint(self.ring_sizes):
-                        return False
-                elif other.ring_sizes:  # not in ring expected
+        if not isinstance(other, Element):
+            return False
+        if self.charge != other.charge:
+            return False
+        if self.is_radical != other.is_radical:
+            return False
+        if self.neighbors and other.neighbors not in self.neighbors:
+            return False
+        if self.hybridization and other.hybridization not in self.hybridization:
+            return False
+        if self.ring_sizes:
+            if self.ring_sizes[0]:
+                if other.ring_sizes.isdisjoint(self.ring_sizes):
                     return False
-            if self.implicit_hydrogens and other.implicit_hydrogens not in self.implicit_hydrogens:
+            elif other.ring_sizes:  # not in ring expected
                 return False
-            if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
-                return False
-            return True
-        # any is subset of any. only
-        return (isinstance(other, AnyElement)
-                and self.charge == other.charge
-                and self.is_radical == other.is_radical
-                and self.neighbors == other.neighbors
-                and self.hybridization == other.hybridization
-                and self.ring_sizes == other.ring_sizes
-                and self.implicit_hydrogens == other.implicit_hydrogens
-                and self.heteroatoms == other.heteroatoms)
+        if self.implicit_hydrogens and other.implicit_hydrogens not in self.implicit_hydrogens:
+            return False
+        if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
+            return False
+        return True
 
     def __hash__(self):
         return hash((self.charge, self.is_radical, self.neighbors, self.hybridization,
@@ -329,42 +315,29 @@ class ListElement(ExtendedQuery):
         """
         Compare attached to molecules elements and query elements
         """
-        if isinstance(other, Element):
-            if other.atomic_number not in self.atomic_numbers:
-                return False
-            if self.charge != other.charge:
-                return False
-            if self.is_radical != other.is_radical:
-                return False
-            if self.neighbors and other.neighbors not in self.neighbors:
-                return False
-            if self.hybridization and other.hybridization not in self.hybridization:
-                return False
-            if self.ring_sizes:
-                if self.ring_sizes[0]:
-                    if other.ring_sizes.isdisjoint(self.ring_sizes):
-                        return False
-                elif other.ring_sizes:  # not in ring expected
+        if not isinstance(other, Element):
+            return False
+        if other.atomic_number not in self.atomic_numbers:
+            return False
+        if self.charge != other.charge:
+            return False
+        if self.is_radical != other.is_radical:
+            return False
+        if self.neighbors and other.neighbors not in self.neighbors:
+            return False
+        if self.hybridization and other.hybridization not in self.hybridization:
+            return False
+        if self.ring_sizes:
+            if self.ring_sizes[0]:
+                if other.ring_sizes.isdisjoint(self.ring_sizes):
                     return False
-            if self.implicit_hydrogens and other.implicit_hydrogens not in self.implicit_hydrogens:
+            elif other.ring_sizes:  # not in ring expected
                 return False
-            if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
-                return False
-            return True
-        # List is subset of Any and List
-        elif (isinstance(other, (ListElement, AnyElement))
-              and self.charge == other.charge
-              and self.is_radical == other.is_radical
-              and self.neighbors == other.neighbors
-              and self.hybridization == other.hybridization
-              and self.ring_sizes == other.ring_sizes
-              and self.implicit_hydrogens == other.implicit_hydrogens
-              and self.heteroatoms == other.heteroatoms):
-            # list should contain all elements of other list
-            if isinstance(other, ListElement):
-                return set(self.atomic_numbers).issubset(other.atomic_numbers)
-            return True
-        return False
+        if self.implicit_hydrogens and other.implicit_hydrogens not in self.implicit_hydrogens:
+            return False
+        if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
+            return False
+        return True
 
     def __hash__(self):
         return hash((self.atomic_numbers, self.charge, self.is_radical, self.neighbors, self.hybridization,
@@ -475,47 +448,31 @@ class QueryElement(ExtendedQuery, ABC):
         """
         compare attached to molecules elements and query elements
         """
-        if isinstance(other, Element):
-            if self.atomic_number != other.atomic_number:
-                return False
-            if self.charge != other.charge:
-                return False
-            if self.is_radical != other.is_radical:
-                return False
-            if self.isotope and self.isotope != other.isotope:
-                return False
-            if self.neighbors and other.neighbors not in self.neighbors:
-                return False
-            if self.hybridization and other.hybridization not in self.hybridization:
-                return False
-            if self.ring_sizes:
-                if self.ring_sizes[0]:
-                    if other.ring_sizes.isdisjoint(self.ring_sizes):
-                        return False
-                elif other.ring_sizes:  # not in ring expected
+        if not isinstance(other, Element):
+            return False
+        if self.atomic_number != other.atomic_number:
+            return False
+        if self.charge != other.charge:
+            return False
+        if self.is_radical != other.is_radical:
+            return False
+        if self.isotope and self.isotope != other.isotope:
+            return False
+        if self.neighbors and other.neighbors not in self.neighbors:
+            return False
+        if self.hybridization and other.hybridization not in self.hybridization:
+            return False
+        if self.ring_sizes:
+            if self.ring_sizes[0]:
+                if other.ring_sizes.isdisjoint(self.ring_sizes):
                     return False
-            if self.implicit_hydrogens and other.implicit_hydrogens not in self.implicit_hydrogens:
+            elif other.ring_sizes:  # not in ring expected
                 return False
-            if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
-                return False
-            return True
-        elif (isinstance(other, ExtendedQuery)
-              and self.charge == other.charge
-              and self.is_radical == other.is_radical
-              and self.neighbors == other.neighbors
-              and self.hybridization == other.hybridization
-              and self.ring_sizes == other.ring_sizes
-              and self.implicit_hydrogens == other.implicit_hydrogens
-              and self.heteroatoms == other.heteroatoms):
-            # query element should fully match other query element
-            if isinstance(other, QueryElement):
-                return self.atomic_number == other.atomic_number and self.isotope == other.isotope
-            # query element is subset of any element
-            elif isinstance(other, AnyElement):
-                return True
-            # query element should be in list
-            return isinstance(other, ListElement) and self.atomic_number in other.atomic_numbers
-        return False
+        if self.implicit_hydrogens and other.implicit_hydrogens not in self.implicit_hydrogens:
+            return False
+        if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
+            return False
+        return True
 
     def __hash__(self):
         return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.neighbors,

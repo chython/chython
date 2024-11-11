@@ -175,8 +175,8 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
     if not stereo_atoms and not data['stereo_bonds']:
         return
 
-    st = molecule._stereo_tetrahedrons
-    sa = molecule._stereo_allenes
+    st = molecule.stereogenic_tetrahedrons
+    sa = molecule.stereogenic_allenes
     sat = molecule._stereo_allenes_terminals
     ctc = molecule._stereo_cis_trans_counterpart
 

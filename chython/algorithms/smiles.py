@@ -402,7 +402,7 @@ class MoleculeSmiles(Smiles):
             # allene
             if n in self._stereo_allenes_terminals:
                 t1, t2 = self._stereo_allenes_terminals[n]
-                env = self._stereo_allenes[n]
+                env = self.stereogenic_allenes[n]
                 n1 = next(x for x in adjacency[t1] if x in env)
                 n2 = next(x for x in adjacency[t2] if x in env)
                 smi[3] = '@' if self._translate_allene_sign(n, n1, n2) else '@@'
