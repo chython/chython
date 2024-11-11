@@ -280,25 +280,25 @@ class QueryIsomorphism(Isomorphism):
         # _cython - by default cython implementation enabled.
         # disable it by overriding method if Query Atoms or Containers logic changed.
         # Lv, Ts and Og in cython optimized mode treated as equal.
-        if isinstance(other, QueryIsomorphism):
-            return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope)
-        elif isinstance(other, MoleculeIsomorphism):
-            if _cython:
-                try:  # windows? ;)
-                    from ._isomorphism import get_mapping as _cython_get_mapping
-                except ImportError:
-                    components = get_mapping = None
-                else:
-                    components = self._cython_compiled_query  # override to cython data
+        if not isinstance(other, MoleculeIsomorphism):
+            raise TypeError('MoleculeContainer expected')
 
-                    def get_mapping(query, scope):
-                        return _cython_get_mapping(*query, *other._cython_compiled_structure,
-                                                   array('I', [n in scope for n in other]))
-            else:
+        if _cython:
+            try:  # windows? ;)
+                from ._isomorphism import get_mapping as _cython_get_mapping
+            except ImportError:
                 components = get_mapping = None
-            return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope,
-                                     components=components, get_mapping=get_mapping)
-        raise TypeError('MoleculeContainer or QueryContainer expected')
+            else:
+                components = self._cython_compiled_query  # override to cython data
+
+                def get_mapping(query, scope):
+                    return _cython_get_mapping(*query, *other._cython_compiled_structure,
+                                               array('I', [n in scope for n in other]))
+        else:
+            components = get_mapping = None
+        # todo: implement stereo
+        return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope,
+                                 components=components, get_mapping=get_mapping)
 
     @cached_property
     def _cython_compiled_query(self):
