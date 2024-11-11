@@ -119,6 +119,20 @@ class Element(ABC):
         """
 
     @property
+    def is_forming_single_bonds(self) -> bool:
+        """
+        Atom can form stable covalent single bonds in molecules
+        """
+        return False
+
+    @property
+    def is_forming_double_bonds(self) -> bool:
+        """
+        Atom can form stable covalent double bonds in molecules
+        """
+        return False
+
+    @property
     def charge(self) -> int:
         """
         Charge of atom

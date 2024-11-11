@@ -52,6 +52,10 @@ class H(Element, PeriodI, GroupI):
     def mdl_isotope(self):
         return 1
 
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
 
 class Li(Element, PeriodII, GroupI):
     __slots__ = ()

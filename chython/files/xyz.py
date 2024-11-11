@@ -31,16 +31,13 @@ def xyz(matrix: Sequence[Tuple[str, float, float, float]], charge=0, radical=0, 
 
     mol = _cls()
     conformer = {}
-    mol._conformers.append(conformer)
+    mol._conformers = [conformer]
 
     atoms = mol._atoms
     bonds = mol._bonds
     for n, (a, x, y, z) in enumerate(matrix, 1):
-        atoms[n] = atom = Element.from_symbol(a)()
+        atoms[n] = Element.from_symbol(a)(x=x, y=y, implicit_hydrogens=0)
         bonds[n] = {}
-        atom.x = x
-        atom.y = y
-        atom._implicit_hydrogens = 0
         conformer[n] = (x, y, z)
 
     if atom_charge is not None and None not in atom_charge:
@@ -48,6 +45,7 @@ def xyz(matrix: Sequence[Tuple[str, float, float, float]], charge=0, radical=0, 
             atoms[n]._charge = c
         charge = sum(atom_charge)
 
+    mol.calc_labels()
     pb = possible_bonds(array(list(conformer.values())), array([a.atomic_radius for a in atoms.values()]),
                         radius_multiplier)
 

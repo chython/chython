@@ -54,6 +54,14 @@ class C(Element, PeriodII, GroupXIV):
     def mdl_isotope(self):
         return 12
 
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class Si(Element, PeriodIII, GroupXIV):
     __slots__ = ()
@@ -86,6 +94,14 @@ class Si(Element, PeriodIII, GroupXIV):
     def mdl_isotope(self):
         return 28
 
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class Ge(Element, PeriodIV, GroupXIV):
     __slots__ = ()
@@ -117,6 +133,14 @@ class Ge(Element, PeriodIV, GroupXIV):
     @property
     def mdl_isotope(self):
         return 73
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
 
 
 class Sn(Element, PeriodV, GroupXIV):

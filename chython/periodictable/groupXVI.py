@@ -55,6 +55,14 @@ class O(Element, PeriodII, GroupXVI):
     def mdl_isotope(self):
         return 16
 
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class S(Element, PeriodIII, GroupXVI):
     __slots__ = ()
@@ -235,6 +243,14 @@ class S(Element, PeriodIII, GroupXVI):
     def mdl_isotope(self):
         return 32
 
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class Se(Element, PeriodIV, GroupXVI):
     __slots__ = ()
@@ -298,6 +314,14 @@ class Se(Element, PeriodIV, GroupXVI):
     def mdl_isotope(self):
         return 79
 
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class Te(Element, PeriodV, GroupXVI):
     __slots__ = ()
@@ -351,6 +375,14 @@ class Te(Element, PeriodV, GroupXVI):
     @property
     def mdl_isotope(self):
         return 128
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
 
 
 class Po(Element, PeriodVI, GroupXVI):

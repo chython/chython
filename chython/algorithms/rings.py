@@ -51,7 +51,7 @@ class Rings:
     @cached_property
     def atoms_rings(self) -> Dict[int, List[Tuple[int, ...]]]:
         """
-        Dict of atoms rings which contains it.
+        A dictionary with atom numbers as keys and a list of tuples (representing rings) as values.
         """
         rings = defaultdict(list)
         for r in self.sssr:

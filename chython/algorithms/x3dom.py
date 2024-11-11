@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -141,7 +141,13 @@ class X3domMolecule:
 
         :param index: index of conformer
         """
-        xyz = self._conformers[index]
+        if not hasattr(self, '_conformers'):
+            raise ValueError('No conformers stored within structure')
+        try:
+            xyz = self._conformers[index]
+        except IndexError:
+            raise IndexError('Invalid conformer index')
+
         mx = sum(x for x, _, _ in xyz.values()) / len(xyz)
         my = sum(y for _, y, _ in xyz.values()) / len(xyz)
         mz = sum(z for _, _, z in xyz.values()) / len(xyz)

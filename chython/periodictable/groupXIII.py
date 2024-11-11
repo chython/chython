@@ -55,6 +55,14 @@ class B(Element, PeriodII, GroupXIII):
     def mdl_isotope(self):
         return 11
 
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class Al(Element, PeriodIII, GroupXIII):
     __slots__ = ()

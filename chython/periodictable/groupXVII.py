@@ -54,6 +54,10 @@ class F(Element, PeriodII, GroupXVII):
     def mdl_isotope(self):
         return 19
 
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
 
 class Cl(Element, PeriodIII, GroupXVII):
     __slots__ = ()
@@ -96,6 +100,14 @@ class Cl(Element, PeriodIII, GroupXVII):
     @property
     def mdl_isotope(self):
         return 35
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
 
 
 class Br(Element, PeriodIV, GroupXVII):
@@ -146,6 +158,14 @@ class Br(Element, PeriodIV, GroupXVII):
     @property
     def mdl_isotope(self):
         return 80
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
 
 
 class I(Element, PeriodV, GroupXVII):
@@ -219,6 +239,14 @@ class I(Element, PeriodV, GroupXVII):
     def mdl_isotope(self):
         return 127
 
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class At(Element, PeriodVI, GroupXVII):
     __slots__ = ()
@@ -251,6 +279,14 @@ class At(Element, PeriodVI, GroupXVII):
     @property
     def mdl_isotope(self):
         return 210
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
 
 
 class Ts(Element, PeriodVII, GroupXVII):
