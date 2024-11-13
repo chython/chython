@@ -27,14 +27,14 @@ logger = getLogger('chython.morgan')
 
 
 if TYPE_CHECKING:
-    from chython.containers.graph import Graph
+    from chython.containers import MoleculeContainer
 
 
 class Morgan:
     __slots__ = ()
 
     @cached_property
-    def atoms_order(self: 'Graph') -> Dict[int, int]:
+    def atoms_order(self: 'MoleculeContainer') -> Dict[int, int]:
         """
         Morgan like algorithm for graph nodes ordering
 
@@ -48,7 +48,7 @@ class Morgan:
         return _morgan({n: hash((hash(a), n in ring)) for n, a in self._atoms.items()}, self.int_adjacency)
 
     @cached_property
-    def int_adjacency(self: 'Graph') -> Dict[int, Dict[int, int]]:
+    def int_adjacency(self: 'MoleculeContainer') -> Dict[int, Dict[int, int]]:
         """
         Adjacency with integer-coded bonds.
         """

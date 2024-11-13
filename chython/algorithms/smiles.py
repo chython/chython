@@ -322,8 +322,9 @@ class Smiles(ABC):
     def _format_bond(self, n, m, adjacency, **kwargs):
         ...
 
-    def _smiles_order(self: 'Graph', stereo=True) -> Callable:
-        return self.atoms_order.__getitem__
+    @abstractmethod
+    def _smiles_order(self, stereo=True) -> Callable:
+        ...
 
     def _format_cxsmiles(self, order) -> Optional[str]:
         ...
@@ -375,7 +376,7 @@ class MoleculeSmiles(Smiles):
                 smiles = smiles[2:]
         return ''.join(smiles)
 
-    def _smiles_order(self: 'MoleculeContainer', stereo=True) -> Callable:
+    def _smiles_order(self: 'MoleculeContainer', stereo=True):
         if stereo:
             return self._chiral_morgan.__getitem__
         else:
@@ -527,6 +528,9 @@ class MoleculeSmiles(Smiles):
 class CGRSmiles(Smiles):
     __slots__ = ()
 
+    def _smiles_order(self: 'CGRContainer', stereo=True):
+        return self.atoms_order.__getitem__
+
     def _format_atom(self: 'CGRContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
         if atom.isotope:
@@ -551,6 +555,10 @@ class CGRSmiles(Smiles):
 
 class QuerySmiles(Smiles):
     __slots__ = ()
+
+    def _smiles_order(self: 'QueryContainer', stereo=True):
+        # try to keep atoms order
+        return {n: i for i, n in enumerate(self._atoms)}.__getitem__
 
     def _format_cxsmiles(self: 'QueryContainer', order):
         hh = ['atomProp']

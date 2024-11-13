@@ -27,7 +27,7 @@ from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement, Q
 
 if TYPE_CHECKING:
     from chython.containers.graph import Graph
-    from chython.containers import MoleculeContainer, QueryContainer
+    from chython.containers import MoleculeContainer
 
 
 class Isomorphism:
@@ -48,14 +48,6 @@ class Isomorphism:
 
     def __ge__(self, other):
         return other.is_substructure(self)
-
-    def __contains__(self: 'Graph', other: Union[Element, Query, str]):
-        """
-        Atom in Structure test.
-        """
-        if isinstance(other, str):
-            return any(other == x.atomic_symbol for x in self._atoms.values())
-        return any(other == x for x in self._atoms.values())
 
     def is_substructure(self, other, /) -> bool:
         """
@@ -79,23 +71,7 @@ class Isomorphism:
             return False
         return True
 
-    def is_automorphic(self):
-        """
-        Test for automorphism symmetry of graph.
-        """
-        try:
-            next(self.get_automorphism_mapping())
-        except StopIteration:
-            return False
-        return True
-
-    def get_automorphism_mapping(self: 'Graph') -> Iterator[Dict[int, int]]:
-        """
-        Iterator of all possible automorphism mappings.
-        """
-        return _get_automorphism_mapping(self.atoms_order, self._bonds)
-
-    def _get_mapping(self, other, /, *, automorphism_filter=True, searching_scope=None,
+    def _get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter=True, searching_scope=None,
                      components=None, get_mapping=None) -> Iterator[Dict[int, int]]:
         if components is None:  # ad-hoc for QueryContainer
             components, closures = self._compiled_query
@@ -141,14 +117,36 @@ class Isomorphism:
 
     @cached_property
     def _compiled_query(self: 'Graph'):
-        components, closures = _compile_query(self._atoms, self._bonds)
-        if self.connected_components_count > 1:
-            order = {x: n for n, c in enumerate(self.connected_components) for x in c}
-            components.sort(key=lambda x: order[x[0][0]])
-        return components, closures
+        return _compile_query(self._atoms, self._bonds)
 
 
 class MoleculeIsomorphism(Isomorphism):
+    __slots__ = ()
+
+    def __contains__(self: 'MoleculeContainer', other: Union[Element, Query, str]):
+        """
+        Atom in Structure test.
+        """
+        if isinstance(other, str):
+            return any(other == x.atomic_symbol for x in self._atoms.values())
+        return any(other == x for x in self._atoms.values())
+
+    def is_automorphic(self):
+        """
+        Test for automorphism symmetry of graph.
+        """
+        try:
+            next(self.get_automorphism_mapping())
+        except StopIteration:
+            return False
+        return True
+
+    def get_automorphism_mapping(self: 'MoleculeContainer') -> Iterator[Dict[int, int]]:
+        """
+        Iterator of all possible automorphism mappings.
+        """
+        return _get_automorphism_mapping(self.atoms_order, self._bonds)
+
     def get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter: bool = True,
                     searching_scope: Optional[Collection[int]] = None):
         """
@@ -163,7 +161,7 @@ class MoleculeIsomorphism(Isomorphism):
         raise TypeError('MoleculeContainer expected')
 
     @cached_property
-    def _cython_compiled_structure(self):
+    def _cython_compiled_structure(self: 'MoleculeContainer'):
         # long I:
         # bond: single, double, triple, aromatic, special = 5 bit
         # bond in ring: 2 bit
@@ -268,7 +266,9 @@ class MoleculeIsomorphism(Isomorphism):
 
 
 class QueryIsomorphism(Isomorphism):
-    def get_mapping(self, other: Union['MoleculeContainer', 'QueryContainer'], /, *, automorphism_filter: bool = True,
+    __slots__ = ()
+
+    def get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter: bool = True,
                     searching_scope: Optional[Collection[int]] = None, _cython=True):
         """
         Get Query to Molecule substructure mapping generator.

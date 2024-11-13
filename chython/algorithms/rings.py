@@ -25,7 +25,7 @@ from ..exceptions import ImplementationError
 
 
 if TYPE_CHECKING:
-    from chython.containers.graph import Graph
+    from chython.containers import MoleculeContainer
 
 
 class Rings:
@@ -111,7 +111,7 @@ class Rings:
         return sum(len(x) for x in bonds.values()) // 2 - len(bonds) + len(_connected_components(bonds))
 
     @cached_property
-    def not_special_connectivity(self: 'Graph') -> Dict[int, Set[int]]:
+    def not_special_connectivity(self: 'MoleculeContainer') -> Dict[int, Set[int]]:
         """
         Graph connectivity without special bonds.
         """
@@ -124,7 +124,7 @@ class Rings:
         return bonds
 
     @cached_property
-    def connected_components(self: 'Graph') -> List[Set[int]]:
+    def connected_components(self: 'MoleculeContainer') -> List[Set[int]]:
         """
         Isolated components of single graph. E.g. salts as ion pair.
         """
@@ -138,7 +138,7 @@ class Rings:
         return len(self.connected_components)
 
     @cached_property
-    def skin_graph(self: 'Graph') -> Dict[int, Set[int]]:
+    def skin_graph(self: 'MoleculeContainer') -> Dict[int, Set[int]]:
         """
         Graph without terminal atoms. Only rings and linkers
         """

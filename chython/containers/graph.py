@@ -19,8 +19,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import Dict, Generic, Iterator, Optional, Tuple, TypeVar
-from ..algorithms.morgan import Morgan
-from ..algorithms.rings import Rings
 from ..exceptions import AtomNotFound, MappingError, BondNotFound
 
 
@@ -28,7 +26,7 @@ Atom = TypeVar('Atom')
 Bond = TypeVar('Bond')
 
 
-class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
+class Graph(Generic[Atom, Bond], ABC):
     __slots__ = ('_atoms', '_bonds', '__dict__')
     __class_cache__ = {}
 
@@ -101,7 +99,7 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
 
         self._atoms[n] = atom
         self._bonds[n] = {}
-        self.flush_cache(keep_sssr=True)
+        self.flush_cache()
         return n
 
     @abstractmethod
@@ -169,27 +167,8 @@ class Graph(Generic[Atom, Bond], Morgan, Rings, ABC):
         u._bonds.update(other._bonds)
         return u
 
-    def flush_cache(self, *, keep_sssr=False, keep_components=False):
-        backup = {}
-        if keep_sssr:
-            # good to keep if no new bonds or bonds deletions or bonds to/from any change
-            if 'sssr' in self.__dict__:
-                backup['sssr'] = self.sssr
-            if 'atoms_rings' in self.__dict__:
-                backup['atoms_rings'] = self.atoms_rings
-            if 'atoms_rings_sizes' in self.__dict__:
-                backup['atoms_rings_sizes'] = self.atoms_rings_sizes
-            if 'ring_atoms' in self.__dict__:
-                backup['ring_atoms'] = self.ring_atoms
-            if 'not_special_connectivity' in self.__dict__:
-                backup['not_special_connectivity'] = self.not_special_connectivity
-            if 'rings_count' in self.__dict__:
-                backup['rings_count'] = self.rings_count
-        if keep_components:
-            # good to keep if no new bonds or bonds deletions
-            if 'connected_components' in self.__dict__:
-                backup['connected_components'] = self.connected_components
-        self.__dict__ = backup
+    def flush_cache(self):
+        self.__dict__.clear()
 
     def __copy__(self):
         return self.copy()
