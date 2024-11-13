@@ -44,8 +44,12 @@ class KetoEnol:
             for n, m, b in fix:
                 m_bonds[n][m]._order = b
 
-            mol._atoms[a]._implicit_hydrogens += 1
-            mol._atoms[d]._implicit_hydrogens -= 1
+            a = mol._atoms[a]
+            d = mol._atoms[d]
+            a._implicit_hydrogens += 1
+            d._implicit_hydrogens -= 1
+            a._hybridization -= 1  # -C=X>=C-X or -C=C=X>=C-C=X
+            d._hybridization += 1
             yield mol, ket
 
     @cached_property
@@ -108,17 +112,16 @@ class KetoEnol:
                     elif n in seen:  # aromatic ring destruction. pyridine double bonds shift
                         continue
                     elif n in anti:  # enol-ketone switch
-                        if current in anti[n]:
+                        if current in anti[n]:  # keton or enol bond
                             if hydrogen:
-                                if b == 2:
-                                    cp = path.copy()
-                                    cp.append((current, n, 1))
-                                    yield cp, True
-                            elif b == 1:
                                 cp = path.copy()
-                                cp.append((current, n, 2))
+                                cp.append((current, n, 1))  # double to single in keton end
+                                yield cp, True
+                            else:
+                                cp = path.copy()
+                                cp.append((current, n, 2))  # single to double in enol end
                                 yield cp, False
-                    elif b.order == bond and (a := atoms[n]).atomic_number == 6:  # classic keto-enol route
+                    elif b == bond and (a := atoms[n]).atomic_number == 6:  # classic keto-enol route
                         if a.hybridization == 2:  # grow up
                             stack.append((current, n, next_bond, depth))
                         elif hydrogen:

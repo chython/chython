@@ -37,7 +37,7 @@ class HeteroArenes:
         rings = defaultdict(list)  # aromatic skeleton
         for n, m_bond in bonds.items():
             for m, bond in m_bond.items():
-                if bond.order == 4:
+                if bond == 4:
                     rings[n].append(m)
         if not rings:
             return

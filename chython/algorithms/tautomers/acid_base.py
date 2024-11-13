@@ -44,7 +44,7 @@ class AcidBase:
                 return []
             return False
 
-        self._atoms.update(mol._atoms)
+        self._atoms = mol._atoms
         self.flush_cache(keep_sssr=True, keep_components=True)
         if _fix_stereo:
             self.fix_stereo()
