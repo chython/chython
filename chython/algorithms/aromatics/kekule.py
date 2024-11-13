@@ -62,7 +62,7 @@ class Kekule:
         """
         self.__fix_rings()  # fix bad aromatic rings
         for form in self.__kekule_full(0):
-            copy = self.copy()
+            copy = self.copy(keep_sssr=True, keep_components=True)
             bonds = copy._bonds
             atoms = set()
             for n, m, b in form:

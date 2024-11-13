@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2020 Nail Samikaev <samikaevn@yandex.ru>
 #  This file is part of chython.
 #
@@ -51,47 +51,25 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
         """
         if limit < 1:
             raise ValueError('limit should be greater or equal 1')
-
-        has_stereo = bool(self._atoms_stereo or self._allenes_stereo or self._cis_trans_stereo)
         counter = 0
 
-        copy = self.copy()
-        copy.clean_stereo()
-        # sssr, neighbors and heteroatoms are same for all tautomers.
-        # prevent recalculation by sharing cache.
-        self.__set_cache(copy)
+        copy = self.copy(keep_sssr=True, keep_components=True)
         if prepare_molecules:  # transform to kekule form without hydrogens
-            k = copy.kekule()
-            i = copy.implicify_hydrogens(_fix_stereo=False)
-            if k or i:  # reset cache after flush
-                self.__set_cache(copy)
+            copy.kekule()
+            copy.implicify_hydrogens(_fix_stereo=False)
 
-        thiele = copy.copy()  # transform to thiele to prevent duplicates and dearomatization
-        self.__set_cache(thiele)
-        if thiele.thiele(fix_tautomers=False):
-            self.__set_cache(thiele)
-
-        # return origin structure as first tautomer
-        if has_stereo:
-            yield self.__set_stereo(thiele.copy())
-        else:
-            yield thiele
+        # transform to thiele to prevent duplicates and dearomatization
+        thiele = copy.copy(keep_sssr=True, keep_components=True)
+        thiele.thiele(fix_tautomers=False)
+        yield thiele  # return original structure as first tautomer
 
         seen = {thiele: None}  # value is parent molecule - required for preventing migrations in sugars.
 
         # first try to neutralize
         if copy.neutralize(_fix_stereo=False):  # found neutral form
-            thiele = copy.copy()
-            self.__set_cache(copy)  # restore cache
-            self.__set_cache(thiele)
-            if thiele.thiele(fix_tautomers=False):
-                self.__set_cache(thiele)
-
-            # return found neutral form
-            if has_stereo:
-                yield self.__set_stereo(thiele.copy())
-            else:
-                yield thiele
+            thiele = copy.copy(keep_sssr=True, keep_components=True)
+            thiele.thiele(fix_tautomers=False)
+            yield thiele
             counter += 1
             seen[thiele] = None
 
@@ -107,11 +85,8 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
         while queue:
             current, thiele_current = queue.popleft()
             for mol, ket in current._enumerate_keto_enol_tautomers(partial):
-                thiele = mol.copy()
-                self.__set_cache(mol)
-                self.__set_cache(thiele)
-                if thiele.thiele(fix_tautomers=False):  # reset cache after flush_cache.
-                    self.__set_cache(thiele)
+                thiele = mol.copy(keep_sssr=True, keep_components=True)
+                thiele.thiele(fix_tautomers=False)
 
                 if thiele not in seen:
                     seen[thiele] = current
@@ -124,10 +99,7 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                             queue = deque([(mol, thiele)])
                             new_queue = [thiele]
                             copy = mol  # new entry point.
-                            if has_stereo:
-                                yield self.__set_stereo(thiele.copy())
-                            else:
-                                yield thiele
+                            yield thiele
                             break
                     if keep_sugars and current is not copy and ket:
                         # prevent carbonyl migration in sugars. skip entry point.
@@ -138,10 +110,7 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
 
                     queue.append((mol, thiele))
                     new_queue.append(thiele)
-                    if has_stereo:
-                        yield self.__set_stereo(thiele.copy())
-                    else:
-                        yield thiele
+                    yield thiele
                 counter += 1
                 if counter == limit:
                     return
@@ -152,15 +121,11 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
         while queue:
             current = queue.popleft()
             for mol in current._enumerate_hetero_arene_tautomers():
-                self.__set_cache(mol)
                 if mol not in seen:
                     seen[mol] = None
                     queue.append(mol)
                     new_queue.append(mol)  # new hetero-arenes also should be included to this list.
-                    if has_stereo:
-                        yield self.__set_stereo(mol.copy())
-                    else:
-                        yield mol
+                    yield mol
                 counter += 1
                 if counter == limit:
                     return
@@ -171,14 +136,10 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
         while queue:
             current = queue.popleft()
             for mol in current._enumerate_zwitter_tautomers():
-                self.__set_cache(mol)
                 if mol not in seen:
                     seen[mol] = None
                     queue.append(mol)
-                    if has_stereo:
-                        yield self.__set_stereo(mol.copy())
-                    else:
-                        yield mol
+                    yield mol
                 counter += 1
                 if counter == limit:
                     return
@@ -205,35 +166,6 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                 count += 1
                 if count == limit:
                     return
-
-    def __set_cache(self: 'MoleculeContainer', mol):
-        try:
-            neighbors = self.__dict__['__cached_args_method_neighbors']
-        except KeyError:
-            neighbors = self.__dict__['__cached_args_method_neighbors'] = {}
-        try:
-            heteroatoms = self.__dict__['__cached_args_method_heteroatoms']
-        except KeyError:
-            heteroatoms = self.__dict__['__cached_args_method_heteroatoms'] = {}
-        try:
-            is_ring_bond = self.__dict__['__cached_args_method_is_ring_bond']
-        except KeyError:
-            is_ring_bond = self.__dict__['__cached_args_method_is_ring_bond'] = {}
-
-        mol.__dict__['sssr'] = self.sssr  # thiele/kekule
-        mol.__dict__['ring_atoms'] = self.ring_atoms  # morgan
-        mol.__dict__['_connected_components'] = self._connected_components  # isomorphism
-        mol.__dict__['atoms_rings_sizes'] = self.atoms_rings_sizes  # isomorphism
-        mol.__dict__['__cached_args_method_neighbors'] = neighbors  # isomorphism
-        mol.__dict__['__cached_args_method_heteroatoms'] = heteroatoms  # isomorphism
-        mol.__dict__['__cached_args_method_is_ring_bond'] = is_ring_bond  # isomorphism
-
-    def __set_stereo(self: 'MoleculeContainer', mol):
-        mol._atoms_stereo.update(self._atoms_stereo)
-        mol._allenes_stereo.update(self._allenes_stereo)
-        mol._cis_trans_stereo.update(self._cis_trans_stereo)
-        mol.fix_stereo()
-        return mol
 
 
 __all__ = ['Tautomers']

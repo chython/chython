@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -44,9 +44,8 @@ class AcidBase:
                 return []
             return False
 
-        self._charges.update(mol._charges)
-        self._hydrogens.update(mol._hydrogens)
-        self.flush_cache()
+        self._atoms.update(mol._atoms)
+        self.flush_cache(keep_sssr=True, keep_components=True)
         if _fix_stereo:
             self.fix_stereo()
         if logging:
@@ -85,14 +84,16 @@ class AcidBase:
                         continue
                     uniq.add(dc)
                     seen_combo.add((dc, ac))
-                    mol = self.copy()
+                    mol = self.copy(keep_sssr=True, keep_components=True)
                     for n in ac:
-                        mol._hydrogens[n] += 1
-                        mol._charges[n] += 1
+                        a = mol._atoms[n]
+                        a._implicit_hydrogens += 1
+                        a._charge += 1
                     for n in dc:
                         if n is not None:
-                            mol._hydrogens[n] -= 1
-                            mol._charges[n] -= 1
+                            a = mol._atoms[n]
+                            a._implicit_hydrogens -= 1
+                            a._charge -= 1
                     if mol not in seen:
                         seen.add(mol)
                         yield mol
@@ -109,15 +110,17 @@ class AcidBase:
                     uniq.add(ac)
                     if (dc, ac) in seen_combo:
                         continue
-                    mol = self.copy()
+                    mol = self.copy(keep_sssr=True, keep_components=True)
                     for n in ac:
                         if n is not None:
-                            mol._hydrogens[n] += 1
-                            mol._charges[n] += 1
+                            a = mol._atoms[n]
+                            a._implicit_hydrogens += 1
+                            a._charge += 1
                     for n in dc:
                         if n is not None:
-                            mol._hydrogens[n] -= 1
-                            mol._charges[n] -= 1
+                            a = mol._atoms[n]
+                            a._implicit_hydrogens -= 1
+                            a._charge -= 1
                     if mol not in seen:
                         seen.add(mol)
                         yield mol
@@ -139,44 +142,52 @@ class AcidBase:
             if not donors or not acceptors:
                 return  # neutralization impossible
             elif len(donors) > len(acceptors):
-                copy = self.copy()
-                for a in acceptors:
-                    copy._hydrogens[a] += 1
-                    copy._charges[a] += 1
+                copy = self.copy(keep_sssr=True, keep_components=True)
+                for n in acceptors:
+                    a = copy._atoms[n]
+                    a._implicit_hydrogens += 1
+                    a._charge += 1
                 for c in combinations(donors, len(acceptors)):
-                    mol = copy.copy()
-                    for d in c:
-                        mol._hydrogens[d] -= 1
-                        mol._charges[d] -= 1
+                    mol = copy.copy(keep_sssr=True, keep_components=True)
+                    for n in c:
+                        a = mol._atoms[n]
+                        a._implicit_hydrogens -= 1
+                        a._charge -= 1
                     yield mol, acceptors.union(c)
             elif len(donors) < len(acceptors):
-                copy = self.copy()
-                for d in donors:
-                    copy._hydrogens[d] -= 1
-                    copy._charges[d] -= 1
+                copy = self.copy(keep_sssr=True, keep_components=True)
+                for n in donors:
+                    a = copy._atoms[n]
+                    a._implicit_hydrogens -= 1
+                    a._charge -= 1
                 for c in combinations(acceptors, len(donors)):
-                    mol = copy.copy()
-                    for a in c:
-                        mol._hydrogens[a] += 1
-                        mol._charges[a] += 1
+                    mol = copy.copy(keep_sssr=True, keep_components=True)
+                    for n in c:
+                        a = mol._atoms[n]
+                        a._implicit_hydrogens += 1
+                        a._charge += 1
                     yield mol, donors.union(c)
             else:  # balanced!
-                mol = self.copy()
-                for d in donors:
-                    mol._hydrogens[d] -= 1
-                    mol._charges[d] -= 1
-                for a in acceptors:
-                    mol._hydrogens[a] += 1
-                    mol._charges[a] += 1
+                mol = self.copy(keep_sssr=True, keep_components=True)
+                for n in donors:
+                    a = mol._atoms[n]
+                    a._implicit_hydrogens -= 1
+                    a._charge -= 1
+                for n in acceptors:
+                    a = mol._atoms[n]
+                    a._implicit_hydrogens += 1
+                    a._charge += 1
                 yield mol, donors | acceptors
         elif donors or acceptors:
-            mol = self.copy()
-            for d in donors:
-                mol._hydrogens[d] -= 1
-                mol._charges[d] -= 1
-            for a in acceptors:
-                mol._hydrogens[a] += 1
-                mol._charges[a] += 1
+            mol = self.copy(keep_sssr=True, keep_components=True)
+            for n in donors:
+                a = mol._atoms[n]
+                a._implicit_hydrogens -= 1
+                a._charge -= 1
+            for n in acceptors:
+                a = mol._atoms[n]
+                a._implicit_hydrogens += 1
+                a._charge += 1
             yield mol, donors | acceptors
 
     def _enumerate_zwitter_tautomers(self: 'MoleculeContainer'):
@@ -190,11 +201,13 @@ class AcidBase:
                 acceptors.add(mapping[1])
 
         for d, a in product(donors, acceptors):
-            mol = self.copy()
-            mol._hydrogens[d] -= 1
-            mol._hydrogens[a] += 1
-            mol._charges[d] -= 1
-            mol._charges[a] += 1
+            mol = self.copy(keep_sssr=True, keep_components=True)
+            d = mol._atoms[d]
+            a = mol._atoms[a]
+            d._implicit_hydrogens -= 1
+            a._implicit_hydrogens += 1
+            d._charge -= 1
+            a._charge += 1
             yield mol
 
 
