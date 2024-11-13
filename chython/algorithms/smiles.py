@@ -50,6 +50,13 @@ dyn_charge_str[(0, 0)] = ''
 
 dyn_radical_str = {(True, True): '*', (True, False): '*>^', (False, True): '^>*'}
 
+# atomic number constants
+B = 5
+C = 6
+N = 7
+P = 15
+S = 16
+
 
 class Smiles(ABC):
     __slots__ = ()
@@ -424,18 +431,18 @@ class MoleculeSmiles(Smiles):
                 smi[4] = 'H'
             elif atom.implicit_hydrogens:
                 smi[4] = f'H{atom.implicit_hydrogens}'
-        elif atom.hybridization == 4 and atom.implicit_hydrogens and atom.atomic_number in (5, 7, 15):  # pyrrole
+        elif atom.hybridization == 4 and atom.implicit_hydrogens and atom in (B, N, P):  # pyrrole
             smi[0] = '['
             smi[-1] = ']'
             if atom.implicit_hydrogens == 1:
                 smi[4] = 'H'
             else:
                 smi[4] = f'H{atom.implicit_hydrogens}'
-        elif not atom.implicit_hydrogens and atom.atomic_number in (5, 6, 15, 16) and not self.not_special_connectivity[n]:
+        elif not atom.implicit_hydrogens and atom in (B, C, P, S) and not self.not_special_connectivity[n]:
             # elemental B, C, P, S
             smi[0] = '['
             smi[-1] = ']'
-        elif atom.implicit_hydrogens and atom.atomic_number == 15 and atom.hybridization != 1:
+        elif atom.implicit_hydrogens and atom == P and atom.hybridization != 1:
             smi[0] = '['
             smi[-1] = ']'
             if atom.implicit_hydrogens == 1:

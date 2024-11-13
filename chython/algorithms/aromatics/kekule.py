@@ -27,6 +27,18 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
+# atomic number constants
+B = 5
+C = 6
+N = 7
+O = 8
+P = 15
+S = 16
+As = 33
+Se = 34
+Te = 52
+
+
 class Kekule:
     __slots__ = ()
 
@@ -170,16 +182,14 @@ class Kekule:
         if any(len(rings[n]) != 2 for n in double_bonded):  # double bonded never condensed
             raise InvalidAromaticRing('quinone valence error')
         for n in double_bonded:
-            atom = atoms[n]
-            if atom.atomic_number == 7:
+            if (atom := atoms[n]) == N:
                 if atom.charge != 1:
                     raise InvalidAromaticRing('quinone should be charged N atom')
-            elif atom.atomic_number not in (6, 15, 16, 33, 34, 52) or atom.charge:
+            elif atom not in (C, P, S, As, Se, Te) or atom.charge:
                 raise InvalidAromaticRing('quinone should be neutral S, Se, Te, C, P, As atom')
 
         for n in rings:
-            atom = atoms[n]
-            if atom.atomic_number == 6:  # carbon
+            if (atom := atoms[n]) == C:  # carbon
                 if atom.charge == 0:
                     if atom.neighbors not in (2, 3):
                         raise InvalidAromaticRing
@@ -197,14 +207,14 @@ class Kekule:
                         raise InvalidAromaticRing
                 else:
                     raise InvalidAromaticRing
-            elif atom.atomic_number in (7, 15, 33):
+            elif atom in (N, P, As):
                 if atom.charge == 0:  # pyrrole or pyridine. include radical pyrrole
                     if atom.is_radical:
                         if atom.neighbors != 2:  # only pyrrole radical
                             raise InvalidAromaticRing
                         double_bonded.add(n)
                     elif atom.neighbors == 3:
-                        if atom.atomic_number == 7:  # pyrrole only possible
+                        if atom == N:  # pyrrole only possible
                             double_bonded.add(n)
                         else:  # P(III) or P(V)H
                             pyrroles.add(n)
@@ -215,7 +225,7 @@ class Kekule:
                             double_bonded.add(n)
                         elif atom.implicit_hydrogens:  # too many hydrogens for aromatic rings
                             raise InvalidAromaticRing
-                    elif atom.neighbors != 4 or atom.atomic_number not in (15, 33):  # P(V) in ring [P;a](-R1)-R2
+                    elif atom.neighbors != 4 or atom not in (P, As):  # P(V) in ring [P;a](-R1)-R2
                         raise InvalidAromaticRing
                 elif atom.charge == -1:  # pyrrole only
                     if atom.neighbors != 2 or atom.is_radical:
@@ -230,7 +240,7 @@ class Kekule:
                     pyrroles.add(n)
                 elif atom.neighbors != 3:  # not pyridine oxyde
                     raise InvalidAromaticRing
-            elif atom.atomic_number == 8:  # furan
+            elif atom == O:  # furan
                 if atom.neighbors == 2:
                     if atom.charge == 0:
                         if atom.is_radical:
@@ -244,7 +254,7 @@ class Kekule:
                         raise InvalidAromaticRing('invalid oxygen charge')
                 else:
                     raise InvalidAromaticRing('Triple-bonded oxygen')
-            elif atom.atomic_number in (16, 34, 52):  # thiophene
+            elif atom in (S, Se, Te):  # thiophene
                 if n not in double_bonded:  # not sulphoxyde nor sulphone
                     if atom.neighbors == 2:
                         if atom.is_radical:
@@ -267,7 +277,7 @@ class Kekule:
                             raise InvalidAromaticRing('S, Se, Te invalid charge ring')
                     else:
                         raise InvalidAromaticRing('S, Se, Te hypervalent ring')
-            elif atom.atomic_number == 5:  # boron
+            elif atom == B:
                 if atom.charge == 0:
                     if atom.neighbors == 2:
                         if atom.is_radical:  # C=1O[B]OC=1

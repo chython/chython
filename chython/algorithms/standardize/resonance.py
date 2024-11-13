@@ -24,6 +24,19 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
+# atomic number constants
+B = 5
+C = 6
+N = 7
+O = 8
+Si = 14
+P = 15
+S = 16
+As = 33
+Se = 34
+Te = 52
+
+
 class Resonance:
     __slots__ = ()
 
@@ -132,36 +145,35 @@ class Resonance:
         nitrogen_ani = set()
         sulfur_cat = set()
         for n, a in atoms.items():
-            if a.atomic_number not in {5, 6, 7, 8, 14, 15, 16, 33, 34, 52}:
+            if a not in (B, C, N, O, Si, P, S, As, Se, Te):
                 # filter non-organic set, halogens and aromatics
                 continue
             elif a.is_radical:
                 rads.add(n)
             elif a.charge == -1:
-                if (lb := len(bonds[n])) == 4 and a.atomic_number == 5:  # skip boron
+                if (lb := len(bonds[n])) == 4 and a == B:  # skip boron
                     continue
-                elif lb == 6 and a.atomic_number == 15:  # skip [P-]X6
+                elif lb == 6 and a == P:  # skip [P-]X6
                     continue
                 if n in errors:  # only valid anions accepted
                     continue
                 entries.add(n)
             elif a.charge == 1:
                 lb = len(bonds[n])
-                if a.atomic_number == 7:
+                if a == N:
                     if lb == 4:  # skip ammonia
                         continue
                     elif lb == 2 and a.hybridization == 3:  # skip Azide
                         (n1, b1), (n2, b2) = bonds[n].items()
                         an1 = atoms[n1]
                         an2 = atoms[n2]
-                        if b1 == b2 == 2 and (an1.charge == -1 and an1.atomic_number == 7 or
-                                              an2.charge == -1 and an2.atomic_number == 7):
+                        if b1 == b2 == 2 and (an1.charge == -1 and an1 == N or an2.charge == -1 and an2 == N):
                             continue
                     elif lb == 3 and a.hybridization == 2:  # X=[N+](-X)-X - prevent N-N migration
                         nitrogen_ani.add(n)
-                elif a.atomic_number == 15 and lb == 4:  # skip [P+]R4
+                elif a == P and lb == 4:  # skip [P+]R4
                     continue
-                elif a.atomic_number == 16:
+                elif a == S:
                     if lb == 2 and a.hybridization == 2:  # ad-hoc for X-[S+]=X
                         sulfur_cat.add(n)
                     elif lb == 3 and a.hybridization == 1:  # ad-hoc for X-[S+](-X)-X
@@ -171,7 +183,7 @@ class Resonance:
 
         if exits or entries:  # try to move cation to nitrogen. saturation fixup.
             for n, a in self._atoms.items():
-                if a.atomic_number == 7 and not a.charge:
+                if a == N and not a.charge:
                     if a.hybridization == 1 and a.neighbors <= 3:  # any amine - potential e-donor
                         entries.add(n)
                         nitrogen_cat.add(n)

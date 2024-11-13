@@ -27,6 +27,10 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
+# atomic number constants
+C = 6
+
+
 class KetoEnol:
     __slots__ = ()
 
@@ -121,7 +125,7 @@ class KetoEnol:
                                 cp = path.copy()
                                 cp.append((current, n, 2))  # single to double in enol end
                                 yield cp, False
-                    elif b == bond and (a := atoms[n]).atomic_number == 6:  # classic keto-enol route
+                    elif b == bond and (a := atoms[n]) == C:  # classic keto-enol route
                         if a.hybridization == 2:  # grow up
                             stack.append((current, n, next_bond, depth))
                         elif hydrogen:

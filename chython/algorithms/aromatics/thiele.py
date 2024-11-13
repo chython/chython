@@ -41,6 +41,15 @@ def _freaks():
 
 freak_rules = Proxy(_freaks)
 
+# atomic number constants
+B = 5
+C = 6
+N = 7
+O = 8
+P = 15
+S = 16
+Se = 34
+
 
 class Thiele:
     __slots__ = ()
@@ -68,7 +77,7 @@ class Thiele:
             if not 3 < lr < 8:  # skip 3-membered and big rings
                 continue
             # only B C N O P S with 2-3 neighbors. detects this: C1=CC=CP12=CC=CC=C2
-            if any(atoms[n].atomic_number not in (6, 7, 8, 16, 5, 15) or len(nsc[n]) > 3 for n in ring):
+            if any(atoms[n] not in (C, N, O, S, B, P) or len(nsc[n]) > 3 for n in ring):
                 continue
             sp2 = sum(atoms[n].hybridization == 2 for n in ring)
             if sp2 == lr:  # benzene like
@@ -76,7 +85,7 @@ class Thiele:
                     tetracycles.append(ring)
                 else:
                     if fix_tautomers and lr % 2:  # find potential pyrroles
-                        acceptors.update(n for n in ring if (a := atoms[n]).atomic_number == 7 and not a.charge)
+                        acceptors.update(n for n in ring if (a := atoms[n]) == N and not a.charge)
                     n, *_, m = ring
                     rings[n].add(m)
                     rings[m].add(n)
@@ -88,26 +97,24 @@ class Thiele:
                     n = next(n for n in ring if atoms[n].hybridization == 1)
                 except StopIteration:  # exotic, just skip
                     continue
-                a = atoms[n]
-                an = a.atomic_number
-                if (c := a.charge) == -1:
-                    if an != 6 or lr != 5:  # skip any but ferrocene
+                if (a := atoms[n]).charge == -1:
+                    if a != C or lr != 5:  # skip any but ferrocene
                         continue
-                elif c:  # skip any charged
+                elif a.charge:  # skip any charged
                     continue
                 elif lr == 7:  # skip electron-rich 7-membered rings
-                    if an != 5:  # not B?
+                    if a != 5:  # not B?
                         continue
                 # below lr == 5 or 6 only
-                elif an in (8, 16, 34):  # O, S, Se
+                elif a in (O, S, Se):
                     if len(bonds[n]) != 2:  # like CS1(C)C=CC=C1
                         continue
-                elif an == 7:
+                elif a == N:
                     if (b := len(bonds[n])) > 3:  # extra check for invalid N(IV)
                         continue
                     elif fix_tautomers and lr == 6 and b == 2:
                         donors.append(n)
-                elif an in (5, 15):  # B, P
+                elif a in (B, P):
                     if len(bonds[n]) > 3:
                         continue
                 else:  # only B, [C-], N, O, P, S, Se

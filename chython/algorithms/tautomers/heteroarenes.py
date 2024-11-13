@@ -27,6 +27,13 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
+# atomic number constants
+B = 5
+C = 6
+N = 7
+P = 15
+
+
 class HeteroArenes:
     __slots__ = ()
 
@@ -48,7 +55,7 @@ class HeteroArenes:
         for n, ms in rings.items():
             a = atoms[n]
             if len(ms) == 2:
-                if a.atomic_number in (5, 7, 15):
+                if a in (B, N, P):
                     if not a.charge and not a.is_radical:
                         # only neutral B, N, P
                         if a.implicit_hydrogens:  # pyrrole
@@ -57,9 +64,9 @@ class HeteroArenes:
                             acceptors.add(n)
                         else:
                             single_bonded.add(n)
-                elif a.charge == -1 and a.atomic_number == 6:  # ferrocene
+                elif a.charge == -1 and a == C:  # ferrocene
                     single_bonded.add(n)
-            elif len(ms) == 3 and a.atomic_number in (5, 7, 15) and not a.charge and not a.is_radical:
+            elif len(ms) == 3 and a in (B, N, P) and not a.charge and not a.is_radical:
                 single_bonded.add(n)
         if not donors or not acceptors:
             return

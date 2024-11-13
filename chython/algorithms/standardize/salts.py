@@ -18,10 +18,16 @@
 #
 from typing import TYPE_CHECKING, List, Tuple, Union
 from ._salts import acids, rules
+from ...periodictable import GroupI, GroupII
 
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
+
+
+# atomic number constants
+H = 1
+N = 7
 
 
 class Salts:
@@ -38,7 +44,7 @@ class Salts:
 
         metals = []
         for n, a in atoms.items():
-            if a.atomic_number in {7, 3, 4, 11, 12, 19, 20, 37, 38, 55, 56} and not bonds[n]:
+            if not bonds[n] and (a == N or isinstance(a, (GroupI, GroupII)) and a != H):
                 metals.append(n)
 
         if 0 < len(metals) < len(self):
@@ -84,16 +90,14 @@ class Salts:
 
     def split_metal_salts(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List[Tuple[int, int]]]:
         """
-        Split connected S-metal/lanthanides/actinides salts to cation/anion pairs.
+        Split connected S-metal salts to cation/anion pairs.
 
         :param logging: return deleted bonds list.
         """
         atoms = self._atoms
         bonds = self._bonds
 
-        metals = [n for n, a in atoms.items() if a.atomic_number in
-                  {3, 4, 11, 12, 19, 20, 37, 38, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 87, 88,
-                   89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102}]
+        metals = [n for n, a in atoms.items() if isinstance(a, (GroupI, GroupII)) and a != H]
         if metals:
             acceptors = set()
             log = []

@@ -334,6 +334,10 @@ class Element(ABC):
         """
         compare attached to molecules elements
         """
+        if isinstance(other, int):
+            return self.atomic_number == other
+        elif isinstance(other, str):
+            return self.atomic_symbol == other
         return isinstance(other, Element) and self.atomic_number == other.atomic_number and \
             self.isotope == other.isotope and self.charge == other.charge and self.is_radical == other.is_radical
 

@@ -40,7 +40,12 @@ from ..algorithms.stereo import MoleculeStereo
 from ..algorithms.tautomers import Tautomers
 from ..algorithms.x3dom import X3domMolecule
 from ..exceptions import ValenceError
-from ..periodictable import DynamicElement, Element, QueryElement, H
+from ..periodictable import DynamicElement, Element, QueryElement, H as _H
+
+
+# atomic number constants
+H = 5
+C = 6
 
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, MoleculeIsomorphism,
@@ -134,7 +139,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
     @cached_property
     def molecular_mass(self) -> float:
-        h = H().atomic_mass
+        h = _H().atomic_mass
         return sum(a.atomic_mass + a.implicit_hydrogens * h for a in self._atoms.values())
 
     @cached_property
@@ -291,7 +296,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         if as_query:
             sub = object.__new__(QueryContainer)
 
-            lost = {n for n, a in self._atoms.items() if a.atomic_number != 1} - set(atoms)  # atoms not in substructure
+            lost = {n for n, a in self._atoms.items() if a != H} - set(atoms)  # atoms not in substructure
             # atoms with fully present neighbors
             not_skin = {n for n in atoms if lost.isdisjoint(self._bonds[n])}
 
@@ -741,10 +746,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
                             hybridization = 3
 
                 neighbors += 1
-                an = atoms[m].atomic_number
-                if an == 1:
+                if (a := atoms[m]) == H:
                     explicit_hydrogens += 1
-                elif an != 6:
+                elif a != C:
                     heteroatoms += 1
             atom = atoms[n]
             atom._neighbors = neighbors
@@ -759,8 +763,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         """
         Set firs possible hydrogens count based on rules
         """
-        atom = self._atoms[n]
-        if atom.atomic_number == 1:  # hydrogen nether has implicit H
+        if (atom := self._atoms[n]) == H:  # hydrogen nether has implicit H
             atom._implicit_hydrogens = 0
             return
 
@@ -769,7 +772,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         aroma = 0
         for m, bond in self._bonds[n].items():
             if bond == 4:  # only neutral carbon aromatic rings supported
-                if not atom.charge and not atom.is_radical and atom.atomic_number == 6:
+                if not atom.charge and not atom.is_radical and atom == C:
                     aroma += 1
                 else:  # use `kekule()` to calculate proper implicit hydrogens count
                     atom._implicit_hydrogens = None
@@ -808,8 +811,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         atom._implicit_hydrogens = None  # rule not found
 
     def check_implicit(self, n: int, h: int) -> bool:
-        atom = self._atoms[n]
-        if atom.atomic_number == 1:  # hydrogen nether has implicit H
+        if (atom := self._atoms[n]) == H:  # hydrogen nether has implicit H
             return h == 0
 
         explicit_sum = 0

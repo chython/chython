@@ -33,6 +33,10 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
+# atomic number constants
+H = 1
+C = 6
+
 # 1  2
 #  \ |
 #   \|
@@ -165,7 +169,7 @@ class MoleculeStereo:
         """
         tetra = []
         for n, atom in self._atoms.items():
-            if atom.atomic_number == 6 and not atom.charge and not atom.is_radical:
+            if atom == C and not atom.charge and not atom.is_radical:
                 env = self._bonds[n]
                 if all(b == 1 for b in env.values()):
                     if sum(int(b) for b in env.values()) > 4:
@@ -227,7 +231,7 @@ class MoleculeStereo:
         for n in self.tetrahedrons:
             if any(not atoms[x].is_forming_single_bonds for x in bonds[n]):
                 continue  # skip metal-carbon complexes
-            env = tuple(x for x in bonds[n] if atoms[x].atomic_number != 1)
+            env = tuple(x for x in bonds[n] if atoms[x] != H)
             if len(env) in (3, 4):
                 tetrahedrons[n] = env
         return tetrahedrons
@@ -255,8 +259,8 @@ class MoleculeStereo:
             if any(b == 3 or not atoms[m].is_forming_single_bonds and b != 8
                    for m, b in nl.items() if m != m1):
                 continue  # skip X=C=C structures and metal-carbon complexes
-            nn = [x for x, b in nf.items() if x != n1 and atoms[x].atomic_number != 1 and b != 8]
-            mn = [x for x, b in nl.items() if x != m1 and atoms[x].atomic_number != 1 and b != 8]
+            nn = [x for x, b in nf.items() if x != n1 and atoms[x] != H and b != 8]
+            mn = [x for x, b in nl.items() if x != m1 and atoms[x] != H and b != 8]
             if nn and mn:
                 sn = nn[1] if len(nn) == 2 else None
                 sm = mn[1] if len(mn) == 2 else None
@@ -405,7 +409,7 @@ class MoleculeStereo:
 
             t1, t2 = self._stereo_allenes_terminals[c]
             order = self.stereogenic_allenes[c]
-            if atoms[m].atomic_number == 1:
+            if atoms[m] == H:
                 if t1 == n:
                     m1 = order[1]
                 else:
@@ -436,7 +440,7 @@ class MoleculeStereo:
         elif n in self.chiral_tetrahedrons:
             th = self.stereogenic_tetrahedrons[n]
             am = atoms[m]
-            if am.atomic_number == 1:
+            if am == H:
                 order = []
                 for x in th:
                     ax = atoms[x]
@@ -704,7 +708,7 @@ class MoleculeStereo:
             if len(env) == 4:  # hydrogen atom passed to env
                 # hydrogen always last in order
                 try:
-                    order = (*order, next(x for x in env if self._atoms[x].atomic_number == 1))  # see translate scheme
+                    order = (*order, next(x for x in env if self._atoms[x] == H))  # see translate scheme
                 except StopIteration:
                     raise KeyError
             elif len(env) != 3:  # pyramid or tetrahedron expected
@@ -744,7 +748,7 @@ class MoleculeStereo:
             t0 = 0
             if nm == n1:
                 t1 = 1
-            elif nm == n3 or n3 is None and self._atoms[nm].atomic_number == 1:
+            elif nm == n3 or n3 is None and self._atoms[nm] == H:
                 t1 = 3
             else:
                 raise KeyError
@@ -752,23 +756,23 @@ class MoleculeStereo:
             t0 = 1
             if nm == n0:
                 t1 = 0
-            elif nm == n2 or n2 is None and self._atoms[nm].atomic_number == 1:
+            elif nm == n2 or n2 is None and self._atoms[nm] == H:
                 t1 = 2
             else:
                 raise KeyError
-        elif nn == n2 or n2 is None and self._atoms[nn].atomic_number == 1:
+        elif nn == n2 or n2 is None and self._atoms[nn] == H:
             t0 = 2
             if nm == n1:
                 t1 = 1
-            elif nm == n3 or n3 is None and self._atoms[nm].atomic_number == 1:
+            elif nm == n3 or n3 is None and self._atoms[nm] == H:
                 t1 = 3
             else:
                 raise KeyError
-        elif nn == n3 or n3 is None and self._atoms[nn].atomic_number == 1:
+        elif nn == n3 or n3 is None and self._atoms[nn] == H:
             t0 = 3
             if nm == n0:
                 t1 = 0
-            elif nm == n2 or n2 is None and self._atoms[nm].atomic_number == 1:
+            elif nm == n2 or n2 is None and self._atoms[nm] == H:
                 t1 = 2
             else:
                 raise KeyError
@@ -798,7 +802,7 @@ class MoleculeStereo:
             t0 = 0
             if nm == n1:
                 t1 = 1
-            elif nm == n3 or n3 is None and self._atoms[nm].atomic_number == 1:
+            elif nm == n3 or n3 is None and self._atoms[nm] == H:
                 t1 = 3
             else:
                 raise KeyError
@@ -806,23 +810,23 @@ class MoleculeStereo:
             t0 = 1
             if nm == n0:
                 t1 = 0
-            elif nm == n2 or n2 is None and self._atoms[nm].atomic_number == 1:
+            elif nm == n2 or n2 is None and self._atoms[nm] == H:
                 t1 = 2
             else:
                 raise KeyError
-        elif nn == n2 or n2 is None and self._atoms[nn].atomic_number == 1:
+        elif nn == n2 or n2 is None and self._atoms[nn] == H:
             t0 = 2
             if nm == n1:
                 t1 = 1
-            elif nm == n3 or n3 is None and self._atoms[nm].atomic_number == 1:
+            elif nm == n3 or n3 is None and self._atoms[nm] == H:
                 t1 = 3
             else:
                 raise KeyError
-        elif nn == n3 or n3 is None and self._atoms[nn].atomic_number == 1:
+        elif nn == n3 or n3 is None and self._atoms[nn] == H:
             t0 = 3
             if nm == n0:
                 t1 = 0
-            elif nm == n2 or n2 is None and self._atoms[nm].atomic_number == 1:
+            elif nm == n2 or n2 is None and self._atoms[nm] == H:
                 t1 = 2
             else:
                 raise KeyError

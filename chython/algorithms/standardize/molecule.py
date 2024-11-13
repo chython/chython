@@ -25,11 +25,16 @@ from ._groups import *
 from ._metal_organics import rules as metal_rules
 from ...containers.bonds import Bond
 from ...exceptions import ValenceError, ImplementationError
-from ...periodictable import H
+from ...periodictable import H as _H
 
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
+
+
+# atomic number constants
+H = 5
+C = 6
 
 
 class Standardize:
@@ -234,7 +239,7 @@ class Standardize:
             if len(ch) != 1 or ch[0][1] != -1:
                 continue
             ch = ch[0][0]
-            ca = [n for n in r if atoms[n].atomic_number == 6 and
+            ca = [n for n in r if atoms[n] == C and
                   (len(bs := nsc[n]) == 2 or len(bs) == 3 and any(b == 1 for b in bonds[n].values()))]
             if len(ca) < 2 or ch not in ca:
                 continue
@@ -272,7 +277,7 @@ class Standardize:
 
         if keep_to_terminal:
             skeleton = self.not_special_connectivity
-            hs = {n for n, a in self._atoms.items() if a.atomic_number == 1 and not skeleton[n]}
+            hs = {n for n, a in self._atoms.items() if a == H and not skeleton[n]}
             ab = [(n, m) for n, m in ab if n not in hs and m not in hs]
 
         for n, m in ab:
@@ -299,12 +304,12 @@ class Standardize:
 
         explicit = defaultdict(list)
         for n, atom in atoms.items():
-            if atom.atomic_number == 1 and (atom.isotope is None or atom.isotope == 1):
+            if atom == H and (atom.isotope is None or atom.isotope == 1):
                 if len(bonds[n]) > 1:
                     raise ValenceError(f'Hydrogen atom {n} has invalid valence. Try to use remove_coordinate_bonds()')
                 for m, b in bonds[n].items():
                     if b == 1:
-                        if atoms[m].atomic_number != 1:  # not H-H
+                        if atoms[m] != H:  # not H-H
                             explicit[m].append(n)
                     elif b != 8:
                         raise ValenceError(f'Hydrogen atom {n} has invalid valence {b.order}.')
@@ -374,7 +379,7 @@ class Standardize:
             bonds = self._bonds
             m = start_map if start_map is not None else max(atoms) + 1
             for n in to_add:
-                atoms[m] = H(implicit_hydrogens=0)
+                atoms[m] = _H(implicit_hydrogens=0)
                 bonds[n][m] = b = Bond(1)
                 bonds[m] = {n: b}
                 atoms[n]._implicit_hydrogens = 0

@@ -22,6 +22,13 @@ from ..exceptions import AtomNotFound
 from ..periodictable import Element
 
 
+# atomic number constants
+B = 5
+C = 6
+N = 7
+P = 15
+
+
 def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False,
                     keep_implicit=False, keep_radicals=True, ignore_aromatic_radicals=True, ignore=True,
                     ignore_carbon_radicals=False, _cls=MoleculeContainer):
@@ -86,7 +93,7 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
                     a._implicit_hydrogens = h
                     # rare H0 case
                     if (not keep_radicals and not ignore_aromatic_radicals
-                        and not h and not a.charge and not a.is_radical and a.atomic_number in (5, 6, 7, 15)
+                        and not h and not a.charge and not a.is_radical and a in (B, C, N, P)
                         and sum(b != 8 for b in bonds[n].values()) == 2):
                         # c[c]c - aromatic B,C,N,P radical
                         a._is_radical = True
@@ -106,7 +113,7 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
             elif h != a.implicit_hydrogens:  # H count mismatch.
                 if a.hybridization == 4:
                     if (not keep_radicals
-                        and not h and not a.charge and not a.is_radical and a.atomic_number in (5, 6, 7, 15)
+                        and not h and not a.charge and not a.is_radical and a in (B, C, N, P)
                         and sum(b != 8 for b in bonds[n].values()) == 2):
                         # c[c]c - aromatic B,C,N,P radical
                         a._implicit_hydrogens = 0
@@ -139,8 +146,7 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
 
     if ignore_carbon_radicals:
         for n in radicalized:
-            a = atoms[n]
-            if a.atomic_number == 6:
+            if (a := atoms[n]) == C:
                 a._is_radical = False
                 a._implicit_hydrogens += 1
                 data['log'].append(f'carbon radical {n} replaced with implicit hydrogen')
