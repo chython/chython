@@ -237,13 +237,22 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             self.fix_structure()
             self.fix_stereo()
 
-    def copy(self) -> 'MoleculeContainer':
+    def copy(self, *, keep_sssr=False, keep_components=False) -> 'MoleculeContainer':
         copy = super().copy()
         copy._name = self._name
         if self._meta is None:
             copy._meta = None
         else:
             copy._meta = self._meta.copy()
+
+        if keep_sssr:
+            for k,  v in self.__dict__.items():
+                if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes',
+                         'ring_atoms', 'not_special_connectivity', 'rings_count'):
+                    copy.__dict__[k] = v
+        if keep_components:
+            if 'connected_components' in self.__dict__:
+                copy.__dict__['connected_components'] = self.connected_components
         return copy
 
     def union(self, other: 'MoleculeContainer', *, remap: bool = False, copy: bool = True) -> 'MoleculeContainer':
@@ -829,18 +838,10 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         backup = {}
         if keep_sssr:
             # good to keep if no new bonds or bonds deletions or bonds to/from any change
-            if 'sssr' in self.__dict__:
-                backup['sssr'] = self.sssr
-            if 'atoms_rings' in self.__dict__:
-                backup['atoms_rings'] = self.atoms_rings
-            if 'atoms_rings_sizes' in self.__dict__:
-                backup['atoms_rings_sizes'] = self.atoms_rings_sizes
-            if 'ring_atoms' in self.__dict__:
-                backup['ring_atoms'] = self.ring_atoms
-            if 'not_special_connectivity' in self.__dict__:
-                backup['not_special_connectivity'] = self.not_special_connectivity
-            if 'rings_count' in self.__dict__:
-                backup['rings_count'] = self.rings_count
+            for k,  v in self.__dict__.items():
+                if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes',
+                         'ring_atoms', 'not_special_connectivity', 'rings_count'):
+                    backup[k] = v
         if keep_components:
             # good to keep if no new bonds or bonds deletions
             if 'connected_components' in self.__dict__:
@@ -884,7 +885,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         """
         Transaction of changes. Keep current state for restoring on errors.
         """
-        self._backup = self.copy()
+        self._backup = self.copy(keep_sssr=True, keep_components=True)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -894,7 +895,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             self._bonds = backup._bonds
             self._meta = backup._meta
             self._name = backup._name
-            self.flush_cache()
+            self.__dict__ = backup.__dict__
         else:  # update internal state
             self.fix_structure()
             self.fix_stereo()
