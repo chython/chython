@@ -245,15 +245,14 @@ class MoleculeIsomorphism(Isomorphism):
             for j, (m, b) in enumerate(ms.items(), start):
                 indices[j] = x = mapping[m]
                 v = bits1[x]
-                o = b.order
-                if o == 1:
+                if b == 1:
                     v |= 0x0800000000000000
-                elif o == 4:
-                    v |= 0x4000000000000000
-                elif o == 2:
+                elif b == 2:
                     v |= 0x1000000000000000
-                elif o == 3:
+                elif b == 3:
                     v |= 0x2000000000000000
+                elif b == 4:
+                    v |= 0x4000000000000000
                 else:
                     v |= 0x8000000000000000
                 v |= 0x0400000000000000 if b.in_ring else 0x0200000000000000
@@ -488,8 +487,7 @@ def _get_automorphism_mapping(atoms: Dict[int, int], bonds: Dict[int, Dict[int, 
         return  # all atoms unique
 
     components, closures = _compile_query(atoms, bonds)
-    mappers = [_get_mapping(order, closures, atoms, bonds, {x for x, *_ in order})
-               for order in components]
+    mappers = [_get_mapping(order, closures, atoms, bonds, {x for x, *_ in order}) for order in components]
     if len(mappers) == 1:
         for mapping in mappers[0]:
             if any(k != v for k, v in mapping.items()):

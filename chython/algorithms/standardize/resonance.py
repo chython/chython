@@ -154,8 +154,8 @@ class Resonance:
                         (n1, b1), (n2, b2) = bonds[n].items()
                         an1 = atoms[n1]
                         an2 = atoms[n2]
-                        if b1.order == b2.order == 2 and (an1.charge == -1 and an1.atomic_number == 7 or
-                                                          an2.charge == -1 and an2.atomic_number == 7):
+                        if b1 == b2 == 2 and (an1.charge == -1 and an1.atomic_number == 7 or
+                                              an2.charge == -1 and an2.atomic_number == 7):
                             continue
                     elif lb == 3 and a.hybridization == 2:  # X=[N+](-X)-X - prevent N-N migration
                         nitrogen_ani.add(n)

@@ -113,12 +113,11 @@ class Kekule:
         triple_bonded = set()
         for n, m_bond in bonds.items():
             for m, bond in m_bond.items():
-                bo = bond.order
-                if bo == 4:
+                if bond == 4:
                     rings[n].append(m)
-                elif bo == 2:
+                elif bond == 2:
                     double_bonded[n].append(m)
-                elif bo == 3:
+                elif bond == 3:
                     triple_bonded.add(n)
 
         if not rings:
@@ -160,7 +159,7 @@ class Kekule:
                     if m not in seen:
                         rings[n].remove(m)
                         rings[m].remove(n)
-                        bonds[n][m]._Bond__order = 1  # noqa
+                        bonds[n][m]._order = 1
 
         if any(len(ms) not in (2, 3) for ms in rings.values()):
             raise InvalidAromaticRing('not in ring aromatic bond or hypercondensed rings: '

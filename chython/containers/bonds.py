@@ -31,10 +31,10 @@ class Bond:
         self._stereo = None
 
     def __eq__(self, other):
-        if isinstance(other, Bond):
-            return self.order == other.order
-        elif isinstance(other, int):
+        if isinstance(other, int):
             return self.order == other
+        elif isinstance(other, Bond):
+            return self.order == other.order
         return False
 
     def __repr__(self):

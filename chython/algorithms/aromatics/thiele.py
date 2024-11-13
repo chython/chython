@@ -127,8 +127,7 @@ class Thiele:
             return False
 
         # check out-of-ring double bonds
-        double_bonded = {n for n in rings if any(m not in rings[n] and b.order == 2
-                                                 for m, b in bonds[n].items())}
+        double_bonded = {n for n in rings if any(m not in rings[n] and b == 2 for m, b in bonds[n].items())}
 
         # fix_tautomers
         if fix_tautomers and acceptors and donors:
@@ -157,7 +156,7 @@ class Thiele:
                     seen.add(current)
                     new_order = 1 if order == 2 else 2
                     stack.extend((current, n, depth, new_order) for n in rings[current] if
-                                 n not in seen and n not in double_bonded and bonds[current][n].order == order)
+                                 n not in seen and n not in double_bonded and bonds[current][n] == order)
                 else:  # path not found
                     continue
                 for n, m, o in path:

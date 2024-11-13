@@ -186,7 +186,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             bond = Bond(bond)
 
         super().add_bond(n, m, bond)
-        if bond.order == 8:
+        if bond == 8:
             return  # any bond doesn't change anything
         if self._changed is None:
             self._changed = {n, m}
@@ -208,7 +208,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         del self._atoms[n]
         for m, bond in self._bonds.pop(n).items():
             del self._bonds[m][n]
-            if bond.order == 8:
+            if bond == 8:
                 continue
             if self._changed is None:
                 self._changed = {m}
@@ -227,7 +227,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
         del self._bonds[n][m]
-        if self._bonds[m].pop(n).order != 8:
+        if self._bonds[m].pop(n) != 8:
             if self._changed is None:
                 self._changed = {n, m}
             else:
@@ -727,15 +727,14 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             for m, bond in m_bond.items():
                 bond._in_ring = anr and (amr := atoms_rings.get(m) or False) and not anr.isdisjoint(amr)  # have common rings
 
-                order = bond.order
-                if order == 8:
+                if bond == 8:
                     continue
-                elif order == 4:
+                elif bond == 4:
                     hybridization = 4
                 elif hybridization != 4:
-                    if order == 3:
+                    if bond == 3:
                         hybridization = 3
-                    elif order == 2:
+                    elif bond == 2:
                         if hybridization == 1:
                             hybridization = 2
                         elif hybridization == 2:
@@ -769,16 +768,15 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         explicit_dict = defaultdict(int)
         aroma = 0
         for m, bond in self._bonds[n].items():
-            order = bond.order
-            if order == 4:  # only neutral carbon aromatic rings supported
+            if bond == 4:  # only neutral carbon aromatic rings supported
                 if not atom.charge and not atom.is_radical and atom.atomic_number == 6:
                     aroma += 1
                 else:  # use `kekule()` to calculate proper implicit hydrogens count
                     atom._implicit_hydrogens = None
                     return
-            elif order != 8:  # any bond used for complexes
-                explicit_sum += order
-                explicit_dict[(order, self._atoms[m].atomic_number)] += 1
+            elif bond != 8:  # any bond used for complexes
+                explicit_sum += bond.order
+                explicit_dict[(bond.order, self._atoms[m].atomic_number)] += 1
 
         if aroma == 2:
             if explicit_sum == 0:  # H-Ar
@@ -818,12 +816,11 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         explicit_dict = defaultdict(int)
 
         for m, bond in self._bonds[n].items():
-            order = bond.order
-            if order == 4:  # can't check aromatic rings
+            if bond == 4:  # can't check aromatic rings
                 return False
-            elif order != 8:  # any bond used for complexes
-                explicit_sum += order
-                explicit_dict[(order, self._atoms[m].atomic_number)] += 1
+            elif bond != 8:  # any bond used for complexes
+                explicit_sum += bond.order
+                explicit_dict[(bond.order, self._atoms[m].atomic_number)] += 1
 
         try:
             rules = atom.valence_rules(explicit_sum)

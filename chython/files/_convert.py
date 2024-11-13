@@ -87,7 +87,7 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
                     # rare H0 case
                     if (not keep_radicals and not ignore_aromatic_radicals
                         and not h and not a.charge and not a.is_radical and a.atomic_number in (5, 6, 7, 15)
-                        and sum(b.order != 8 for b in bonds[n].values()) == 2):
+                        and sum(b != 8 for b in bonds[n].values()) == 2):
                         # c[c]c - aromatic B,C,N,P radical
                         a._is_radical = True
                         radicalized.append(n)
@@ -107,7 +107,7 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
                 if a.hybridization == 4:
                     if (not keep_radicals
                         and not h and not a.charge and not a.is_radical and a.atomic_number in (5, 6, 7, 15)
-                        and sum(b.order != 8 for b in bonds[n].values()) == 2):
+                        and sum(b != 8 for b in bonds[n].values()) == 2):
                         # c[c]c - aromatic B,C,N,P radical
                         a._implicit_hydrogens = 0
                         a._is_radical = True

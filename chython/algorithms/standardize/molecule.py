@@ -235,7 +235,7 @@ class Standardize:
                 continue
             ch = ch[0][0]
             ca = [n for n in r if atoms[n].atomic_number == 6 and
-                  (len(bs := nsc[n]) == 2 or len(bs) == 3 and any(b.order == 1 for b in bonds[n].values()))]
+                  (len(bs := nsc[n]) == 2 or len(bs) == 3 and any(b == 1 for b in bonds[n].values()))]
             if len(ca) < 2 or ch not in ca:
                 continue
             atoms[ch]._charge = 0  # reset charge for morgan recalculation
@@ -268,7 +268,7 @@ class Standardize:
         """
         bonds = self._bonds
 
-        ab = [(n, m) for n, m, b in self.bonds() if b.order == 8]
+        ab = [(n, m) for n, m, b in self.bonds() if b == 8]
 
         if keep_to_terminal:
             skeleton = self.not_special_connectivity
@@ -303,10 +303,10 @@ class Standardize:
                 if len(bonds[n]) > 1:
                     raise ValenceError(f'Hydrogen atom {n} has invalid valence. Try to use remove_coordinate_bonds()')
                 for m, b in bonds[n].items():
-                    if b.order == 1:
+                    if b == 1:
                         if atoms[m].atomic_number != 1:  # not H-H
                             explicit[m].append(n)
-                    elif b.order != 8:
+                    elif b != 8:
                         raise ValenceError(f'Hydrogen atom {n} has invalid valence {b.order}.')
 
         to_remove = set()
@@ -319,7 +319,7 @@ class Standardize:
                 explicit_sum = 0
                 explicit_dict = defaultdict(int)
                 for m, bond in bonds[n].items():
-                    if m not in hi and bond.order != 8:
+                    if m not in hi and bond != 8:
                         explicit_sum += bond.order
                         explicit_dict[(bond.order, atoms[m].atomic_number)] += 1
                 try:
@@ -454,7 +454,7 @@ class Standardize:
                         hs.add(m)
                         if m in bonds[n]:
                             b = bonds[n][m]
-                            if b.order == 8 or b == 8:
+                            if b == 8 or bo == 8:
                                 keep_sssr = False
                             b._order = bo
                         else:  # new bond

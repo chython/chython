@@ -271,17 +271,16 @@ class DepictMolecule:
         for n, m, bond in self.bonds():
             if m in wedge[n]:
                 continue
-            order = bond.order
             nx, ny = atoms[n].xy
             mx, my = atoms[m].xy
             ny, my = -ny, -my
-            if order in (1, 4):
+            if bond in (1, 4):
                 svg.append(f'      <line x1="{nx:.2f}" y1="{ny:.2f}" x2="{mx:.2f}" y2="{my:.2f}"/>')
-            elif order == 2:
+            elif bond == 2:
                 dx, dy = _rotate_vector(0, double_space, mx - nx, ny - my)
                 svg.append(f'      <line x1="{nx + dx:.2f}" y1="{ny - dy:.2f}" x2="{mx + dx:.2f}" y2="{my - dy:.2f}"/>')
                 svg.append(f'      <line x1="{nx - dx:.2f}" y1="{ny + dy:.2f}" x2="{mx - dx:.2f}" y2="{my + dy:.2f}"/>')
-            elif order == 3:
+            elif bond == 3:
                 dx, dy = _rotate_vector(0, triple_space, mx - nx, ny - my)
                 svg.append(f'      <line x1="{nx + dx:.2f}" y1="{ny - dy:.2f}" x2="{mx + dx:.2f}" y2="{my - dy:.2f}"/>')
                 svg.append(f'      <line x1="{nx:.2f}" y1="{ny:.2f}" x2="{mx:.2f}" y2="{my:.2f}"/>')

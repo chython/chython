@@ -452,12 +452,12 @@ class MoleculeSmiles(Smiles):
     def _format_bond(self: Union['MoleculeContainer', 'MoleculeSmiles'], n, m, adjacency, **kwargs):
         if not kwargs.get('bonds', True):
             return ''
-        order = self._bonds[n][m].order
-        if order == 4:
+        bond = self._bonds[n][m]
+        if bond == 4:
             if kwargs.get('aromatic', True):
                 return ''
             return ':'
-        elif order == 1:  # cis-trans /\
+        elif bond == 1:  # cis-trans /\
             if kwargs.get('aromatic', True) and self._atoms[n].hybridization == self._atoms[m].hybridization == 4:
                 return '-'
             if kwargs.get('stereo', True):
@@ -469,11 +469,11 @@ class MoleculeSmiles(Smiles):
                 if (x := ct_map.get((n, m))) is not None:
                     return '/' if x else '\\'
             return ''
-        elif order == 2:
+        elif bond == 2:
             return '='
-        elif order == 3:
+        elif bond == 3:
             return '#'
-        else:  # order == 8
+        else:  # bond == 8
             return '~'
 
     def __ct_map(self: 'MoleculeContainer', adjacency):
