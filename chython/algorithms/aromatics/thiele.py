@@ -17,29 +17,14 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import defaultdict
-from lazy_object_proxy import Proxy
 from typing import TYPE_CHECKING
+from ._rules import freak_rules
 from ..rings import _sssr, _connected_components
 
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
 
-
-def _freaks():
-    from ... import smarts
-
-    rules = []
-
-    q = smarts('[N,O,S;D2;r5;z1]1[A;r5]=,:[A;r5][A;r5]:[A;r5]1')
-    rules.append(q)
-
-    q = smarts('[N;D3;r5;z1]1[A;r5]=,:[A;r5][A;r5]:[A;r5]1')
-    rules.append(q)
-    return rules
-
-
-freak_rules = Proxy(_freaks)
 
 # atomic number constants
 B = 5

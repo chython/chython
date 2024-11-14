@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -104,7 +104,21 @@ def _rules():
     return rules
 
 
+def _freaks():
+    from ... import smarts
+
+    rules = []
+
+    q = smarts('[N,O,S;D2;r5;z1]1[A;r5]=,:[A;r5][A;r5]:[A;r5]1')
+    rules.append(q)
+
+    q = smarts('[N;D3;r5;z1]1[A;r5]=,:[A;r5][A;r5]:[A;r5]1')
+    rules.append(q)
+    return rules
+
+
 rules = Proxy(_rules)
+freak_rules = Proxy(_freaks)
 
 
-__all__ = ['rules']
+__all__ = ['rules', 'freak_rules']

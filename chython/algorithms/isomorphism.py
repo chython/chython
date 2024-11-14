@@ -156,9 +156,9 @@ class MoleculeIsomorphism(Isomorphism):
         :param automorphism_filter: Skip matches to the same atoms.
         :param searching_scope: substructure atoms list to localize isomorphism.
         """
-        if isinstance(other, MoleculeIsomorphism):
-            return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope)
-        raise TypeError('MoleculeContainer expected')
+        if not isinstance(other, MoleculeIsomorphism):
+            raise TypeError('MoleculeContainer expected')
+        return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope)
 
     @cached_property
     def _cython_compiled_structure(self: 'MoleculeContainer'):
@@ -298,6 +298,67 @@ class QueryIsomorphism(Isomorphism):
         # todo: implement stereo
         return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope,
                                  components=components, get_mapping=get_mapping)
+
+        atoms_stereo = self._atoms_stereo
+        allenes_stereo = self._allenes_stereo
+        cis_trans_stereo = self._cis_trans_stereo
+
+        other_atoms_stereo = other._atoms_stereo
+        other_allenes_stereo = other._allenes_stereo
+        other_cis_trans_stereo = other._cis_trans_stereo
+        other_translate_tetrahedron_sign = other._translate_tetrahedron_sign
+        other_translate_allene_sign = other._translate_allene_sign
+        other_translate_cis_trans_sign = other._translate_cis_trans_sign
+
+        tetrahedrons = self.stereogenic_tetrahedrons
+        cis_trans = self.stereogenic_cis_trans
+        allenes = self.stereogenic_allenes
+
+        oatoms = other._atoms
+
+        for mapping in self._get_mapping(other, automorphism_filter=automorphism_filter,
+                                         searching_scope=searching_scope):
+            for n, a in self._atoms.items():
+                if a.stereo is None:
+                    continue
+                m = mapping[n]
+                oa = oatoms[m]
+                if oa.stereo is None:  # stereo in query should match only stereo atom
+                    break
+                other._translate_tetrahedron_sign(m, [mapping[x] for x in tetrahedrons[n]])
+            for n, s in atoms_stereo.items():
+                m = mapping[n]
+                if m not in other_atoms_stereo:  # self stereo atom not stereo in other
+                    break
+                # translate stereo mark in other in order of self tetrahedron
+                if other_translate_tetrahedron_sign(m, [mapping[x] for x in tetrahedrons[n]]) != s:
+                    break
+            else:
+                for n, s in allenes_stereo.items():
+                    m = mapping[n]
+                    if m not in other_allenes_stereo:  # self stereo allene not stereo in other
+                        break
+                    # translate stereo mark in other in order of self allene
+                    nn, nm, *_ = allenes[n]
+                    if other_translate_allene_sign(m, mapping[nn], mapping[nm]) != s:
+                        break
+                else:
+                    for nm, s in cis_trans_stereo.items():
+                        n, m = nm
+                        on, om = mapping[n], mapping[m]
+                        if (on, om) not in other_cis_trans_stereo:
+                            if (om, on) not in other_cis_trans_stereo:
+                                break  # self stereo cis_trans not stereo in other
+                            else:
+                                nn, nm, *_ = cis_trans[nm]
+                                if other_translate_cis_trans_sign(om, on, mapping[nm], mapping[nn]) != s:
+                                    break
+                        else:
+                            nn, nm, *_ = cis_trans[nm]
+                            if other_translate_cis_trans_sign(on, om, mapping[nn], mapping[nm]) != s:
+                                break
+                    else:
+                        yield mapping
 
     @cached_property
     def _cython_compiled_query(self):

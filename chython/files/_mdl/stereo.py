@@ -30,7 +30,7 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False, calc_cis_trans=
         log = []
 
     if calc_cis_trans:
-        molecule.calculate_cis_trans_from_2d()
+        molecule.calculate_cis_trans_from_2d(clean_cache=False)
 
     stereo = [(mapping[n], mapping[m], s) for n, m, s in data['stereo']]
     while stereo:

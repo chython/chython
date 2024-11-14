@@ -53,7 +53,7 @@ def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> Mo
 
         atoms.append({'element': atom.atomic_symbol, 'charge': atom.charge, 'mapping': 0, 'x': atom.x, 'y': atom.y,
                       'z': atom.z, 'isotope': atom.isotope, 'is_radical': atom.is_radical,
-                      'hydrogens': atom.implicit_hydrogens, 'delta_isotope': atom.delta_isotope,
+                      'implicit_hydrogens': atom.implicit_hydrogens, 'delta_isotope': atom.delta_isotope,
                       'p': atom.implicit_protium, 'd': atom.implicit_deuterium, 't': atom.implicit_tritium})
 
         for k in range(atom.num_bonds):
@@ -92,16 +92,12 @@ def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> Mo
 def postprocess_molecule(molecule, data, *, ignore_stereo=False):
     atoms = molecule._atoms
     bonds = molecule._bonds
-    charges = molecule._charges
-    radicals = molecule._radicals
-    hydrogens = molecule._hydrogens
-    plane = molecule._plane
 
     # set hydrogen atoms. INCHI designed for hydrogens handling. hope correctly.
     free = count(len(atoms) + 1)
     for n, atom in enumerate(data['atoms'], 1):
         if atom['element'] != 'H':
-            hydrogens[n] = atom['hydrogens']
+            atoms[n]._implicit_hydrogens = atom['hydrogens']
         # in chython hydrogens never have implicit H.
         elif atom['hydrogens']:  # >[xH]-H case
             m = next(free)
