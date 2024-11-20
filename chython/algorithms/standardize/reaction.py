@@ -272,10 +272,9 @@ class StandardizeReaction:
         tmp.extend(reagents_st2)
         reagents = tuple(tmp) if keep_reagents else ()
 
-        self._ReactionContainer__reactants = tuple(reactants_st2)
-        self._ReactionContainer__products = tuple(products_st2)
-        self._ReactionContainer__reagents = reagents
-        self.flush_cache()
+        self._reactants = tuple(reactants_st2)
+        self._products = tuple(products_st2)
+        self._reagents = reagents
         self.fix_positions()
         return True
 
@@ -307,10 +306,9 @@ class StandardizeReaction:
             reagents = tuple(tmp) if keep_reagents else ()
 
             if len(reactants) != len(self.reactants) or len(products) != len(self.products) or len(reagents) != len(self.reagents):
-                self._ReactionContainer__reactants = tuple(reactants)
-                self._ReactionContainer__products = tuple(products)
-                self._ReactionContainer__reagents = reagents
-                self.flush_cache()
+                self._reactants = tuple(reactants)
+                self._products = tuple(products)
+                self._reagents = reagents
                 self.fix_positions()
                 return True
             return False
@@ -327,7 +325,7 @@ class StandardizeReaction:
         salts = _contract_ions(anions, cations, total)
         if salts:
             neutral.extend(salts)
-            self._ReactionContainer__reagents = tuple(neutral)
+            self._reagents = tuple(neutral)
             changed = True
         else:
             changed = False
@@ -338,7 +336,7 @@ class StandardizeReaction:
             anions_order = {frozenset(m): n for n, m in enumerate(anions)}
             cations_order = {frozenset(m): n for n, m in enumerate(cations)}
             neutral.extend(salts)
-            self._ReactionContainer__reactants = tuple(neutral)
+            self._reactants = tuple(neutral)
             changed = True
         else:
             anions_order = cations_order = {}
@@ -350,11 +348,10 @@ class StandardizeReaction:
         salts = _contract_ions(anions, cations, total)
         if salts:
             neutral.extend(salts)
-            self._ReactionContainer__products = tuple(neutral)
+            self._products = tuple(neutral)
             changed = True
 
         if changed:
-            self.flush_cache()
             self.fix_positions()
             return True
         return False

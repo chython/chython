@@ -21,7 +21,6 @@ from abc import ABC, abstractmethod
 from CachedMethods import cached_method
 from collections import defaultdict
 from functools import cached_property
-from hashlib import sha512
 from heapq import heappop, heappush
 from itertools import product
 from random import random
@@ -147,10 +146,6 @@ class Smiles(ABC):
     @cached_method
     def __hash__(self):
         return hash(str(self))
-
-    @cached_method
-    def __bytes__(self):
-        return sha512(str(self).encode()).digest()
 
     @cached_property
     def smiles_atoms_order(self) -> Tuple[int, ...]:

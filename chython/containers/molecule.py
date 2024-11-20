@@ -527,6 +527,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             return compress(data, 9)
         return data
 
+    def pach(self, *, compressed=True, check=True, version=2, order: List[int] = None) -> bytes:
+        return self.pack(compressed=compressed, check=check, version=version, order=order)
+
     @classmethod
     def pack_len(cls, data: bytes, /, *, compressed=True) -> int:
         """
@@ -585,6 +588,16 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         if _return_pack_length:
             return mol, pack_length
         return mol
+
+    @classmethod
+    def unpach(cls, data: Union[bytes, memoryview], /, *, compressed=True) -> 'MoleculeContainer':
+        """
+        Unpack from compressed bytes.
+        """
+        return cls.unpack(data, compressed=compressed)
+
+    def __bytes__(self):
+        return self.pack()
 
     def _cpack(self, order=None, check=True):
         if order is None:

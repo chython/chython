@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,11 +18,10 @@
 #
 from CachedMethods import cached_method
 from functools import reduce
-from hashlib import sha512
 from itertools import chain
 from math import ceil
 from operator import itemgetter, or_
-from typing import Dict, Iterable, Iterator, Optional, Tuple, List
+from typing import Dict, Iterator, Optional, Tuple, List, Sequence
 from zlib import compress, decompress
 from .cgr import CGRContainer
 from .molecule import MoleculeContainer
@@ -38,11 +37,10 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
 
     Reaction storage hashable and comparable. based on reaction unique signature (SMILES).
     """
-    __slots__ = ('__reactants', '__products', '__reagents', '__meta', '__name', '_arrow', '_signs', '__dict__')
-    __class_cache__ = {}
+    __slots__ = ('_reactants', '_products', '_reagents', '_meta', '_name', '_arrow', '_signs', '__dict__')
 
-    def __init__(self, reactants: Iterable[MoleculeContainer] = (), products: Iterable[MoleculeContainer] = (),
-                 reagents: Iterable[MoleculeContainer] = (), meta: Optional[Dict] = None, name: Optional[str] = None):
+    def __init__(self, reactants: Sequence[MoleculeContainer] = (), products: Sequence[MoleculeContainer] = (),
+                 reagents: Sequence[MoleculeContainer] = (), meta: Optional[Dict] = None, name: Optional[str] = None):
         """
         New reaction object creation
 
@@ -60,15 +58,15 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         elif not all(isinstance(x, MoleculeContainer) for x in chain(reactants, products, reagents)):
             raise TypeError(f'MoleculeContainers expected')
 
-        self.__reactants = reactants
-        self.__products = products
-        self.__reagents = reagents
+        self._reactants = reactants
+        self._products = products
+        self._reagents = reagents
         if meta is None:
-            self.__meta = None
+            self._meta = None
         else:
-            self.__meta = dict(meta)
+            self._meta = dict(meta)
         if name is None:
-            self.__name = None
+            self._name = None
         else:
             self.name = name
         self._arrow = None
@@ -76,21 +74,21 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
 
     @property
     def reactants(self) -> Tuple[MoleculeContainer, ...]:
-        return self.__reactants
+        return self._reactants
 
     @property
     def reagents(self) -> Tuple[MoleculeContainer, ...]:
-        return self.__reagents
+        return self._reagents
 
     @property
     def products(self) -> Tuple[MoleculeContainer, ...]:
-        return self.__products
+        return self._products
 
     def molecules(self) -> Iterator[MoleculeContainer]:
         """
         Iterator of all reaction molecules
         """
-        return chain(self.__reactants, self.__reagents, self.__products)
+        return chain(self.reactants, self.reagents, self.products)
 
     @property
     def meta(self) -> Dict:
@@ -98,33 +96,33 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         Dictionary of metadata.
         Like DTYPE-DATUM in RDF
         """
-        if self.__meta is None:
-            self.__meta = {}  # lazy
-        return self.__meta
+        if self._meta is None:
+            self._meta = {}  # lazy
+        return self._meta
 
     @property
     def name(self) -> str:
-        return self.__name or ''
+        return self._name or ''
 
     @name.setter
     def name(self, name: str):
         if not isinstance(name, str):
             raise TypeError('name should be string up to 80 symbols')
-        self.__name = name
+        self._name = name
 
     def copy(self) -> 'ReactionContainer':
         """
         Get copy of object
         """
         copy = object.__new__(self.__class__)
-        copy._ReactionContainer__reactants = tuple(x.copy() for x in self.__reactants)
-        copy._ReactionContainer__products = tuple(x.copy() for x in self.__products)
-        copy._ReactionContainer__reagents = tuple(x.copy() for x in self.__reagents)
-        copy._ReactionContainer__name = self.__name
-        if self.__meta is None:
-            copy._ReactionContainer__meta = None
+        copy._reactants = tuple(x.copy() for x in self.reactants)
+        copy._products = tuple(x.copy() for x in self.products)
+        copy._reagents = tuple(x.copy() for x in self.reagents)
+        copy._name = self._name
+        if self._meta is None:
+            copy._meta = None
         else:
-            copy._ReactionContainer__meta = self.__meta.copy()
+            copy._meta = self._meta.copy()
         copy._arrow = self._arrow
         copy._signs = self._signs
         return copy
@@ -137,23 +135,23 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         Reagents will be presented as unchanged molecules
         :return: CGRContainer
         """
-        rr = self.__reagents + self.__reactants
+        rr = self.reagents + self.reactants
         if rr:
             r = reduce(or_, rr)
         else:
             r = MoleculeContainer()
-        if self.__products:
-            p = reduce(or_, self.__products)
+        if self.products:
+            p = reduce(or_, self.products)
         else:
             p = MoleculeContainer()
         return r ^ p
 
-    def flush_cache(self):
+    def flush_cache(self, **kwargs):
         self.__dict__.clear()
         for m in self.molecules():
-            m.flush_cache()
+            m.flush_cache(**kwargs)
 
-    def pack(self, *, compressed=True, check=True):
+    def pack(self, *, compressed=True, check=True) -> bytes:
         """
         Pack into compressed bytes.
 
@@ -172,11 +170,17 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         :param compressed: return zlib-compressed pack.
         :param check: check molecules for format restrictions.
         """
-        data = b''.join((bytearray((1, len(self.__reactants), len(self.__reagents), len(self.__products))),
+        data = b''.join((bytearray((1, len(self.reactants), len(self.reagents), len(self.products))),
                          *(m.pack(compressed=False, check=check) for m in self.molecules())))
         if compressed:
             return compress(data, 9)
         return data
+
+    def pach(self, *, compressed=True, check=True) -> bytes:
+        """
+        Pack into compressed bytes.
+        """
+        return self.pack(compressed=compressed, check=check)
 
     @classmethod
     def pack_len(cls, data: bytes, /, *, compressed=True) -> Tuple[List[int], List[int], List[int]]:
@@ -225,13 +229,23 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
             raise ValueError('invalid pack header')
 
         reactants, reagents, products = data[1], data[2], data[3]
-        molecules = []
+        molecules: List[MoleculeContainer] = []
         shift = 4
         for _ in range(reactants + reagents + products):
             m, pl = MoleculeContainer.unpack(data[shift:], compressed=False, _return_pack_length=True)
             molecules.append(m)
             shift += pl
         return cls(molecules[:reactants], molecules[-products:], molecules[reactants: -products])
+
+    @classmethod
+    def unpach(cls, data: bytes, /, *, compressed=True) -> 'ReactionContainer':
+        """
+        Unpack from compressed bytes.
+        """
+        return cls.unpack(data, compressed=compressed)
+
+    def __bytes__(self):
+        return self.pack()
 
     def __invert__(self) -> CGRContainer:
         """
@@ -246,15 +260,11 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
     def __hash__(self):
         return hash(str(self))
 
-    @cached_method
-    def __bytes__(self):
-        return sha512(str(self).encode()).digest()
-
     def __bool__(self):
         """
         Exists both reactants and products
         """
-        return bool(self.__reactants and self.__products)
+        return bool(self.reactants and self.products)
 
     @cached_method
     def __str__(self):
@@ -279,7 +289,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         contract = []
         radicals = []
 
-        for ml in (self.__reactants, self.__reagents, self.__products):
+        for ml in (self.reactants, self.reagents, self.products):
             mso = [(m, *m.__format__(format_spec, _return_order=True)) for m in ml]
             if not format_spec or '!c' not in format_spec:
                 mso.sort(key=itemgetter(1))
@@ -306,29 +316,8 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
                 return f"{'>'.join(sig)} |{','.join(cx)}|"
         return '>'.join(sig)
 
-    @cached_method
     def __len__(self):
-        return len(self.__reactants) + len(self.__products) + len(self.__reagents)
-
-    def __getstate__(self):
-        state = {'reactants': self.__reactants, 'products': self.__products, 'reagents': self.__reagents,
-                 'meta': self.__meta, 'name': self.__name, 'arrow': self._arrow, 'signs': self._signs}
-        from chython import pickle_cache
-
-        if pickle_cache:
-            state['cache'] = self.__dict__
-        return state
-
-    def __setstate__(self, state):
-        self.__reactants = state['reactants']
-        self.__products = state['products']
-        self.__reagents = state['reagents']
-        self.__meta = state['meta']
-        self.__name = state['name']
-        self._arrow = state['arrow']
-        self._signs = state['signs']
-        if 'cache' in state:
-            self.__dict__.update(state['cache'])
+        return len(self.reactants) + len(self.products) + len(self.reagents)
 
 
 __all__ = ['ReactionContainer']
