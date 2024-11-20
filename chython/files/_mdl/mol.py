@@ -122,7 +122,7 @@ def parse_mol_v2000(data):
             log.append(f'ignored line: {line}')
 
     for a in atoms:
-        if a['is_radical']:  # int to bool
+        if 'is_radical' in a:  # int to bool
             a['is_radical'] = True
     for x in dat.values():
         try:

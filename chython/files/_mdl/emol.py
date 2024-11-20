@@ -149,13 +149,13 @@ def parse_mol_v3000(data, *, _header=True):
 
     drop = True
     for line in data[3 + atom_count + bonds_count:]:
-        if line.startswith('M  V30 END CTAB'):
+        if line.startswith('END CTAB'):
             break
         elif drop:
-            if line.startswith('M  V30 BEGIN SGROUP'):
+            if line.startswith('BEGIN SGROUP'):
                 drop = False
             continue
-        elif line.startswith('M  V30 END SGROUP'):
+        elif line.startswith('END SGROUP'):
             break
 
         _, _type, i, *kvs = split(line)

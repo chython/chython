@@ -277,7 +277,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         sig = []
         count = 0
         contract = []
-        orders = []
+        radicals = []
 
         for ml in (self.__reactants, self.__reagents, self.__products):
             mso = [(m, *m.__format__(format_spec, _return_order=True)) for m in ml]
@@ -292,13 +292,13 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
                 else:
                     count += 1
 
-                orders.append((m, o))
+                radicals.extend(m.atom(n).is_radical for n in o)
                 ss.append(s)
             sig.append('.'.join(ss))
 
         if not format_spec or '!x' not in format_spec:
             cx = []
-            if r := ','.join(str(n) for n, (m, a) in enumerate((m, a) for m, o in orders for a in o) if m._radicals[a]):
+            if r := ','.join(str(n) for n, r in enumerate(radicals) if r):
                 cx.append(f'^1:{r}')
             if contract:
                 cx.append(f"f:{','.join('.'.join(x) for x in contract)}")

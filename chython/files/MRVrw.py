@@ -29,7 +29,6 @@ from ..containers import MoleculeContainer, ReactionContainer
 from ..exceptions import EmptyMolecule, EmptyReaction
 
 
-organic_set = {'B', 'C', 'N', 'O', 'P', 'S', 'Se', 'F', 'Cl', 'Br', 'I'}
 bond_map = {8: '1" queryType="Any', 4: 'A', 1: '1', 2: '2', 3: '3',
             'Any': 8, 'any': 8, 'A': 4, 'a': 4, '1': 1, '2': 2, '3': 3}
 
