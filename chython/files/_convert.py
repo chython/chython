@@ -33,12 +33,18 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
                     keep_implicit=False, keep_radicals=True, ignore_aromatic_radicals=True, ignore=True,
                     ignore_carbon_radicals=False, _cls=MoleculeContainer):
     g = _cls()
+    g._name = data.get('title')
     atoms = g._atoms
     bonds = g._bonds
     mapping = data['mapping']
-    for n, atom in enumerate(data['atoms']):
-        n = mapping[n]
+
+    if any(a.get('z') for a in data['atoms']):
+        # store conformer
+        g._conformers = [{n: (a['x'], a['y'], a['z']) for n, a in zip(mapping, data['atoms'])}]
+
+    for n, atom in zip(mapping, data['atoms']):
         e = Element.from_symbol(atom.pop('element'))
+        atom.pop('z', None)  # clean up MDL
         try:
             atoms[n] = e(**atom)
         except (ValueError, TypeError):
@@ -60,15 +66,11 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
 
     g.calc_labels()  # set all labels except rings
 
-    if any(a.get('z') for a in data['atoms']):
-        # store conformer
-        g._conformers = [{mapping[n]: (a['x'], a['y'], a['z']) for n, a in enumerate(data['atoms'])}]
-
-    if data['log']:  # store log to the meta
-        if data['meta'] is None:
+    if data.get('log'):  # store log to the meta
+        if data.get('meta') is None:
             data['meta'] = {}
         data['meta']['chython_parsing_log'] = data['log']
-    g._meta = data['meta']
+    g._meta = data.get('meta') or None
 
     if skip_calc_implicit:  # don't calc Hs. e.g. INCHI
         return g
@@ -107,6 +109,8 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
                     elif ignore:  # radical state also has errors.
                         a._is_radical = False  # reset radical state
                         implicit_mismatch[n] = h
+                        if data.get('log') is None:
+                            data['log'] = []
                         data['log'].append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
                     else:
                         raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
@@ -121,6 +125,8 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
                         radicalized.append(n)
                     elif ignore:
                         implicit_mismatch[n] = h
+                        if data.get('log') is None:
+                            data['log'] = []
                         data['log'].append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
                     else:
                         raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
@@ -135,11 +141,15 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
                     elif ignore:
                         a._is_radical = False  # reset radical state
                         implicit_mismatch[n] = h
+                        if data.get('log') is None:
+                            data['log'] = []
                         data['log'].append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
                     else:
                         raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
                 elif ignore:  # just ignore it
                     implicit_mismatch[n] = h
+                    if data.get('log') is None:
+                        data['log'] = []
                     data['log'].append(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
                 else:
                     raise ValueError(f'implicit hydrogen count ({h}) mismatch with calculated on atom {n}')
@@ -149,10 +159,12 @@ def create_molecule(data, *, ignore_bad_isotopes=False, skip_calc_implicit=False
             if (a := atoms[n]) == C:
                 a._is_radical = False
                 a._implicit_hydrogens += 1
+                if data.get('log') is None:
+                    data['log'] = []
                 data['log'].append(f'carbon radical {n} replaced with implicit hydrogen')
     elif radicalized:
         g.meta['chython_radicalized_atoms'] = radicalized
-    if data['log'] and 'chython_parsing_log' not in g.meta:
+    if data.get('log') and 'chython_parsing_log' not in g.meta:
         g.meta['chython_parsing_log'] = data['log']
     if implicit_mismatch:
         g.meta['chython_implicit_mismatch'] = implicit_mismatch
@@ -177,17 +189,19 @@ def create_reaction(data, *, ignore=True, skip_calc_implicit=False, ignore_bad_i
             except ValueError as e:
                 if not ignore:
                     raise
+                if data.get('log') is None:
+                    data['log'] = []
                 data['log'].append(f'ignored {gr} molecule {n} with {e}')
                 tdl.append(n)
         if tdl:  # ad-hoc for later postprocessing
             for n in reversed(tdl):
                 del pms[n]
 
-    if data['log']:  # store log to the meta
-        if data['meta'] is None:
+    if data.get('log'):  # store log to the meta
+        if data.get('meta') is None:
             data['meta'] = {}
         data['meta']['chython_parsing_log'] = data['log']
-    return _r_cls(rc, pr, rg, meta=data['meta'], name=data['title'])
+    return _r_cls(rc, pr, rg, meta=data.get('meta') or None, name=data.get('title'))
 
 
 __all__ = ['create_molecule']

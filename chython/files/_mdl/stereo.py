@@ -23,11 +23,7 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False, calc_cis_trans=
     if ignore_stereo:
         return
     mapping = data['mapping']
-
-    if 'chython_parsing_log' in molecule.meta:
-        log = molecule.meta['chython_parsing_log']
-    else:
-        log = []
+    log = []
 
     if calc_cis_trans:
         molecule.calculate_cis_trans_from_2d(clean_cache=False)
@@ -57,8 +53,11 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False, calc_cis_trans=
             continue
         break
 
-    if log and 'chython_parsing_log' not in molecule.meta:
-        molecule.meta['chython_parsing_log'] = log
+    if log:
+        if 'chython_parsing_log' not in molecule.meta:
+            molecule.meta['chython_parsing_log'] = log
+        else:
+            molecule.meta['chython_parsing_log'].extend(log)
 
 
 __all__ = ['postprocess_molecule']

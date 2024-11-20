@@ -147,8 +147,7 @@ def parser(tokens, strong_cycle):
     elif previous:
         raise IncorrectSmiles('bond on the end')
 
-    return {'atoms': atoms, 'bonds': bonds, 'order': order, 'stereo_bonds': stereo_bonds, 'log': log,
-            'title': None, 'meta': None}
+    return {'atoms': atoms, 'bonds': bonds, 'order': order, 'stereo_bonds': stereo_bonds, 'log': log}
 
 
 __all__ = ['parser']

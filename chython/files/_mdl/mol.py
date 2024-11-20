@@ -36,7 +36,6 @@ def parse_mol_v2000(data):
     atoms = []
     bonds = []
     stereo = []
-    hydrogens = {}
     dat = {}
 
     for line in data[4: 4 + atoms_count]:
@@ -62,8 +61,8 @@ def parse_mol_v2000(data):
             isotope = None
 
         mapping = line[60:63]
-        atoms.append({'element': element, 'charge': charge, 'isotope': isotope, 'is_radical': False,
-                      'mapping': int(mapping) if mapping else 0, 'x': float(line[0:10]), 'y': float(line[10:20]),
+        atoms.append({'element': element, 'charge': charge, 'isotope': isotope,
+                      'parsed_mapping': int(mapping) if mapping else 0, 'x': float(line[0:10]), 'y': float(line[10:20]),
                       'z': float(line[20:30]), 'delta_isotope': delta_isotope})
 
     for line in data[4 + atoms_count: 4 + atoms_count + bonds_count]:
@@ -133,14 +132,13 @@ def parse_mol_v2000(data):
                 value = x['value']
                 if len(_atoms) != 1 or _atoms[0] == -1 or not value:
                     raise InvalidV2000(f'MRV_IMPLICIT_H spec invalid {x}')
-                hydrogens[_atoms[0]] = int(value[6:])
+                atoms[_atoms[0]]['implicit_hydrogens'] = int(value[6:])
             else:
                 log.append(f'ignored data: {x}')
         except KeyError:
             raise InvalidV2000(f'Invalid SGROUP {x}')
 
-    return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'hydrogens': hydrogens,
-            'meta': None, 'log': log}
+    return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'log': log}
 
 
 __all__ = ['parse_mol_v2000']

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -61,7 +61,7 @@ def parse_rxn_v3000(data, *, ignore=True):
                 reagents_count -= 1
 
     return {'reactants': molecules[:reactants_count], 'products': molecules[reactants_count:products_count],
-            'reagents': molecules[products_count:], 'title': title, 'meta': None, 'log': log}
+            'reagents': molecules[products_count:], 'title': title, 'log': log}
 
 
 __all__ = ['parse_rxn_v3000']

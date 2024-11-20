@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -36,7 +36,6 @@ def parse_mol_v3000(data, *, _header=True):
     atoms = []
     bonds = []
     stereo = []
-    hydrogens = {}
     meta = {}
     atom_map = {}
     star_points = []
@@ -95,7 +94,7 @@ def parse_mol_v3000(data, *, _header=True):
 
         atom_map[n] = len(atoms)
         atoms.append({'element': a, 'isotope': i, 'charge': c, 'is_radical': r,
-                      'x': float(x), 'y': float(y), 'z': float(z), 'mapping': int(m)})
+                      'x': float(x), 'y': float(y), 'z': float(z), 'parsed_mapping': int(m)})
 
     for line in data[2 + atom_count: 2 + atom_count + bonds_count]:
         _, t, a1, a2, *kvs = split(line)
@@ -172,14 +171,13 @@ def parse_mol_v3000(data, *, _header=True):
                     d = v.strip('"')
             if a and f and d:
                 if f == 'MRV_IMPLICIT_H':
-                    hydrogens[a[0]] = int(d[6:])
+                    atoms[a[0]]['implicit_hydrogens'] = int(d[6:])
                 else:
                     log.append(f'ignored SGROUP DAT {i}: {a}\t{f}\t{d}')
         elif _type.startswith('SRU'):
             raise ValueError('Polymers not supported')
 
-    return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'hydrogens': hydrogens,
-            'meta': meta or None, 'log': log}
+    return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'meta': meta, 'log': log}
 
 
 def split(line):  # todo optimize

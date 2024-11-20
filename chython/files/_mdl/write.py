@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -77,10 +77,7 @@ class EMOLWrite(IO):
         else:
             z = 0
 
-        gc = g._charges
-        gr = g._radicals
-        gp = g._plane
-        gb = g._bonds
+        bonds = g._bonds
 
         file = self._file
         file.write(f'M  V30 BEGIN CTAB\nM  V30 COUNTS {g.atoms_count} {g.bonds_count} 0 0 0\nM  V30 BEGIN ATOM\n')
@@ -90,11 +87,10 @@ class EMOLWrite(IO):
                 x, y, z = xyz[m]
                 z = f'{z:.4f}'
             else:
-                x, y = gp[m]
+                x, y = a.x, a.y
 
-            c = gc[m]
-            c = f' CHG={c}' if c else ''
-            r = ' RAD=2' if gr[m] else ''
+            c = f' CHG={a.charge}' if a.charge else ''
+            r = ' RAD=2' if a.is_radical else ''
             i = f' MASS={a.isotope}' if a.isotope else ''
 
             if not self._mapping:
@@ -107,7 +103,7 @@ class EMOLWrite(IO):
         wedge = defaultdict(set)
         i = 0  # trick for empty wedge_map
         for i, (n, m, s) in enumerate(g._wedge_map, start=1):
-            file.write(f'M  V30 {i} {gb[n][m].order} {mapping[n]} {mapping[m]} CFG={s == 1 and "1" or "3"}\n')
+            file.write(f'M  V30 {i} {bonds[n][m].order} {mapping[n]} {mapping[m]} CFG={s == 1 and "1" or "3"}\n')
             wedge[n].add(m)
             wedge[m].add(n)
 
@@ -130,10 +126,7 @@ class MOLWrite(IO):
         else:
             z = 0.
 
-        gc = g._charges
-        gr = g._radicals
-        gp = g._plane
-        gb = g._bonds
+        bonds = g._bonds
 
         file = self._file
         file.write(f'{g.name}\n\n\n{g.atoms_count:3d}{g.bonds_count:3d}  0  0  0  0            999 V2000\n')
@@ -142,9 +135,9 @@ class MOLWrite(IO):
             if write3d is not None:
                 x, y, z = xyz[m]
             else:
-                x, y = gp[m]
+                x, y = a.x, a.y
 
-            c = charge_map[gc[m]]
+            c = charge_map[a.charge]
             if not self._mapping:
                 m = 0
             file.write(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} 0{c}  0  0  0  0  0  0  0{m:3d}  0  0\n')
@@ -152,21 +145,20 @@ class MOLWrite(IO):
         atoms = {m: n for n, m in enumerate(g._atoms, start=1)}
         wedge = defaultdict(set)
         for n, m, s in g._wedge_map:
-            file.write(f'{atoms[n]:3d}{atoms[m]:3d}  {gb[n][m].order}  {s == 1 and "1" or "6"}  0  0  0\n')
+            file.write(f'{atoms[n]:3d}{atoms[m]:3d}  {bonds[n][m].order}  {s == 1 and "1" or "6"}  0  0  0\n')
             wedge[n].add(m)
             wedge[m].add(n)
         for n, m, b in g.bonds():
             if m not in wedge[n]:
                 file.write(f'{atoms[n]:3d}{atoms[m]:3d}  {b.order}  0  0  0  0\n')
 
-        for n, (m, a) in enumerate(g._atoms.items(), start=1):
+        for n, a in enumerate(g._atoms.values(), start=1):
             if a.isotope:
                 file.write(f'M  ISO  1 {n:3d} {a.isotope:3d}\n')
-            if gr[m]:
+            if a.is_radical:
                 file.write(f'M  RAD  1 {n:3d}   2\n')  # invalid for carbenes
-            c = gc[m]
-            if c in (-4, 4):
-                file.write(f'M  CHG  1 {n:3d} {c:3d}\n')
+            if a.charge in (-4, 4):
+                file.write(f'M  CHG  1 {n:3d} {a.charge:3d}\n')
         file.write('M  END\n')
 
 

@@ -78,7 +78,7 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
         contract = None
 
     if '>' in smi:
-        record = {'reactants': [], 'reagents': [], 'products': [], 'log': log, 'meta': None, 'title': None}
+        record = {'reactants': [], 'reagents': [], 'products': [], 'log': log}
         try:
             reactants, reagents, products = smi.split('>')
         except ValueError as e:
@@ -237,8 +237,11 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
             continue
         break
 
-    if log and 'chython_parsing_log' not in molecule.meta:
-        molecule.meta['chython_parsing_log'] = log
+    if log:
+        if 'chython_parsing_log' not in molecule.meta:
+            molecule.meta['chython_parsing_log'] = log
+        else:
+            molecule.meta['chython_parsing_log'].extend(log)
 
 
 __all__ = ['smiles']
