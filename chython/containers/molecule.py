@@ -128,25 +128,25 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         """
         Total charge of molecule
         """
-        return sum(a.charge for a in self._atoms.values())
+        return sum(a.charge for _, a in self.atoms())
 
     @cached_property
     def is_radical(self) -> bool:
         """
         True if at least one atom is radical
         """
-        return any(a.is_radical for a in self._atoms.values())
+        return any(a.is_radical for _, a in self.atoms())
 
     @cached_property
     def molecular_mass(self) -> float:
         h = _H().atomic_mass
-        return sum(a.atomic_mass + a.implicit_hydrogens * h for a in self._atoms.values())
+        return sum(a.atomic_mass + a.implicit_hydrogens * h for _, a in self.atoms())
 
     @cached_property
     def brutto(self) -> Dict[str, int]:
         """Counted atoms dict"""
-        c = Counter(a.atomic_symbol for a in self._atoms.values())
-        c['H'] += sum(a.implicit_hydrogens for a in self._atoms.values())
+        c = Counter(a.atomic_symbol for _, a in self.atoms())
+        c['H'] += sum(a.implicit_hydrogens for _, a in self.atoms())
         return dict(c)
 
     @cached_property

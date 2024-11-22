@@ -155,11 +155,10 @@ class MoleculeStereo:
         """
         Remove stereo data.
         """
-        for a in self._atoms.values():
+        for _, a in self.atoms():
             a._stereo = None
-        for _, bs in self._bonds:
-            for b in bs.values():
-                b._stereo = None  # flush twice, but it should be still faster
+        for *_, b in self.bonds():
+            b._stereo = None
         self.flush_cache(keep_sssr=True, keep_components=True)
 
     @cached_property

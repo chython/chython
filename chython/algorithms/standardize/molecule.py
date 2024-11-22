@@ -409,7 +409,7 @@ class Standardize:
         Clean isotope marks from molecule.
         Return True if any isotope found.
         """
-        isotopes = [x for x in self._atoms.values() if x.isotope]
+        isotopes = [a for _, a in self.atoms() if a.isotope]
         if isotopes:
             for i in isotopes:
                 i._isotope = None

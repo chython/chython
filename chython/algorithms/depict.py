@@ -206,17 +206,16 @@ class DepictMolecule:
         :param clean2d: calculate coordinates if necessary.
         """
         uid = str(uuid4())
-        atoms = self._atoms.values()
-        min_x = min(a.x for a in atoms)
-        max_x = max(a.x for a in atoms)
-        min_y = min(a.y for a in atoms)
-        max_y = max(a.y for a in atoms)
+        min_x = min(a.x for _, a in self.atoms())
+        max_x = max(a.x for _, a in self.atoms())
+        min_y = min(a.y for _, a in self.atoms())
+        max_y = max(a.y for _, a in self.atoms())
         if clean2d and len(self) > 1 and max_y - min_y < .01 and max_x - min_x < 0.01:
             self.clean2d()
-            min_x = min(a.x for a in atoms)
-            max_x = max(a.x for a in atoms)
-            min_y = min(a.y for a in atoms)
-            max_y = max(a.y for a in atoms)
+            min_x = min(a.x for _, a in self.atoms())
+            max_x = max(a.x for _, a in self.atoms())
+            min_y = min(a.y for _, a in self.atoms())
+            max_y = max(a.y for _, a in self.atoms())
 
         bonds = self.__render_bonds()
         atoms, define, masks = self.__render_atoms(uid)
@@ -455,11 +454,10 @@ class DepictReaction:
             if clean2d:
                 for m in self.molecules():
                     if len(m) > 1:
-                        atoms = m._atoms.values()
-                        min_x = min(a.x for a in atoms)
-                        max_x = max(a.x for a in atoms)
-                        min_y = min(a.y for a in atoms)
-                        max_y = max(a.y for a in atoms)
+                        min_x = min(a.x for _, a in m.atoms())
+                        max_x = max(a.x for _, a in m.atoms())
+                        min_y = min(a.y for _, a in m.atoms())
+                        max_y = max(a.y for _, a in m.atoms())
                         if max_y - min_y < .01 and max_x - min_x < 0.01:
                             m.clean2d()
             self.fix_positions()

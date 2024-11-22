@@ -128,8 +128,8 @@ class MoleculeIsomorphism(Isomorphism):
         Atom in Structure test.
         """
         if isinstance(other, str):
-            return any(other == x.atomic_symbol for x in self._atoms.values())
-        return any(other == x for x in self._atoms.values())
+            return any(other == a.atomic_symbol for _, a in self.atoms())
+        return any(other == a for _, a in self.atoms())
 
     def is_automorphic(self):
         """

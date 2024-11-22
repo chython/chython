@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Alexander Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
@@ -66,22 +66,21 @@ def retro_depict(tree: Tree, *, y_gap=3., x_gap=5., width=None, height=None, cle
         if clean2d:
             for m in column:
                 if len(m) > 1:
-                    values = m._plane.values()
-                    min_x = min(x for x, _ in values)
-                    max_x = max(x for x, _ in values)
-                    min_y = min(y for _, y in values)
-                    max_y = max(y for _, y in values)
+                    min_x = min(a.x for _, a in m.atoms())
+                    max_x = max(a.x for _, a in m.atoms())
+                    min_y = min(a.y for _, a in m.atoms())
+                    max_y = max(a.y for _, a in m.atoms())
                     if max_y - min_y < .01 and max_x - min_x < 0.01:
                         m.clean2d()
 
-        heights = [max(y for _, y in m._plane.values()) - min(y for _, y in m._plane.values()) for m in column]
+        heights = [max(a.y for _, a in m.atoms()) - min(a.y for _, a in m.atoms()) for m in column]
         y_shift = sum(heights) + y_gap * (len(heights) - 1)  # column height with gaps
         if y_shift > c_max_y:
             c_max_y = y_shift
         y_shift /= 2.  # center align
 
         for m, h in zip(column, heights):
-            plane = m._plane.copy()  # backup
+            plane = [a.xy for _, a in m.atoms()]  # backup
             mx = m._fix_plane_min(x_shift, -y_shift)
             if mx > c_max_x:
                 c_max_x = mx
@@ -92,7 +91,9 @@ def retro_depict(tree: Tree, *, y_gap=3., x_gap=5., width=None, height=None, cle
                 y_shift -= h + y_gap
 
             render.append(m.depict(_embedding=True)[:5])
-            m._plane = plane  # restore
+            for (_, a), (x, y) in zip(m.atoms(), plane):  # restore
+                a.x = x
+                a.y = y
 
         x_shift = c_max_x + x_gap  # between columns gap
         last_layer = current_layer
