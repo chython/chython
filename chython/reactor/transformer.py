@@ -47,8 +47,7 @@ class Transformer(BaseReactor):
         self.replacement = replacement
         self.__automorphism_filter = automorphism_filter
         self.__copy_metadata = copy_metadata
-        super().__init__({n for n, h in pattern._masked.items() if not h}, replacement, delete_atoms,
-                         fix_aromatic_rings, fix_tautomers)
+        super().__init__(pattern, replacement, delete_atoms, fix_aromatic_rings, fix_tautomers)
 
     def __call__(self, structure: MoleculeContainer):
         if not isinstance(structure, MoleculeContainer):

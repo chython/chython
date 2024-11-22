@@ -19,189 +19,170 @@
 #
 from collections import defaultdict
 from itertools import product
+from typing import Union
 from ..containers import MoleculeContainer, QueryContainer
 from ..containers.bonds import Bond
-from ..periodictable import Element, ListElement, AnyElement, QueryElement
+from ..periodictable import Element, ListElement, AnyElement, QueryElement, AnyMetal
 
 
 class BaseReactor:
-    def __init__(self, reactants, products, delete_atoms, fix_rings, fix_tautomers):
-        self.__to_delete = reactants.difference(products) if delete_atoms else ()
-
-        # prepare atoms patch
-        self.__elements = elements = {}
-        self.__hydrogens = hydrogens = {}
-        self.__variable = variable = []
-
-        atoms = defaultdict(dict)
-        if isinstance(products, MoleculeContainer):
-            # full replacement of atoms
-            for n, atom in products.atoms():
-                elements[n] = atom.copy(hydrogens=True, stereo=True)
-        for n, atom in products.atoms():
-            atoms[n].update(charge=atom.charge, is_radical=atom.is_radical)
-            if atom.atomic_number:  # replace atom
-                elements[n] = Element.from_atomic_number(atom.atomic_number)(atom.isotope)
-                if n not in reactants and isinstance(products, MoleculeContainer):
-                    atoms[n]['xy'] = atom.xy
-                    if atom.implicit_hydrogens is not None:
-                        hydrogens[n] = atom.implicit_hydrogens  # save available H count
-            elif n not in reactants:
-                if not isinstance(atom, ListElement):
-                    raise ValueError('New atom should be defined')
-                elements[n] = [Element.from_symbol(x)() for x in atom._elements]
-                variable.append(n)
-            else:  # use atom from reactant
-                if not isinstance(atom, AnyElement):
-                    raise ValueError('Only AnyElement can be used for matched atom propagation')
-                elements[n] = None
-
-        if isinstance(products, QueryContainer):
-            bonds = []
-            for n, m, b in products.bonds():
+    def __init__(self, pattern, replacement, delete_atoms, fix_rings, fix_tautomers):
+        if isinstance(replacement, QueryContainer):
+            for n, a in replacement.atoms():
+                if not isinstance(a, (AnyElement, QueryElement)):
+                    raise TypeError('Unsupported query atom type')
+            for *_, b in replacement.bonds():
                 if len(b.order) > 1:
-                    raise ValueError('bond list in patch not supported')
-                else:
-                    bonds.append((n, m, Bond(b.order[0])))
-        else:
-            bonds = [(n, m, b.copy()) for n, m, b in products.bonds()]
+                    raise ValueError('Variable bond in replacement')
 
-        self.__bonds = bonds
-        self.__atom_attrs = dict(atoms)
-        self.__products = products
-        self.__fix_rings = fix_rings
-        self.__fix_tautomers = fix_tautomers
+        self._to_delete = {n for n, a in pattern.atoms() if not a.masked} - set(replacement) if delete_atoms else ()
+        self._replacement = replacement
+        self._fix_rings = fix_rings
+        self._fix_tautomers = fix_tautomers
 
     def _patcher(self, structure: MoleculeContainer, mapping):
-        elements = self.__elements
-        variable = self.__variable
+        new = self._prepare_skeleton(structure, mapping)
+        self._fix_stereo(new, structure, mapping)
 
-        new = self.__prepare_skeleton(structure, mapping)
-        self.__set_stereo(new, structure, mapping)
-
-        if not variable:
-            if self.__fix_rings:
-                new.kekule()  # keeps stereo as is
-                if not new.thiele(fix_tautomers=self.__fix_tautomers):  # fixes stereo if any ring aromatized
-                    new.fix_stereo()
-            else:
+        if self._fix_rings:
+            new.kekule()  # keeps stereo as is
+            if not new.thiele(fix_tautomers=self._fix_tautomers):  # fixes stereo if any ring aromatized
                 new.fix_stereo()
-            yield new
         else:
-            copy = new.copy()
-            if self.__fix_rings:
-                copy.kekule()
-                if not copy.thiele(fix_tautomers=self.__fix_tautomers):
-                    copy.fix_stereo()
-            else:
-                copy.fix_stereo()
-            yield copy
+            new.fix_stereo()
+        yield new
 
-            for atoms in product(*(elements[x][1:] for x in variable)):
-                copy = new.copy()
-                for n, atom in zip(variable, atoms):
-                    n = mapping[n]
-                    # replace atom
-                    copy._atoms[n] = a = atom.copy()  # noqa
-                    a._attach_graph(copy, n)  # noqa
-                    copy.calc_implicit(n)  # noqa
-                if self.__fix_rings:
-                    copy.kekule()
-                    if not copy.thiele(fix_tautomers=self.__fix_tautomers):
-                        copy.fix_stereo()
-                    else:
-                        copy.fix_stereo()
-                else:
-                    copy.fix_stereo()
-                yield copy
+    def _get_deleted(self, structure, mapping):
+        if not self._to_delete:
+            return set()
 
-    def __prepare_skeleton(self, structure, mapping):
-        elements = self.__elements
-        patch_hydrogens = self.__hydrogens
-        patch_bonds = self.__bonds
-        variable = self.__variable
-
-        atoms = structure._atoms
-        plane = structure._plane
         bonds = structure._bonds
-        charges = structure._charges
-        radicals = structure._radicals
-        hydrogens = structure._hydrogens
-
-        to_delete = {mapping[x] for x in self.__to_delete}
-        if to_delete:
-            # if deleted atoms have another path to remain fragment, the path is preserved
-            remain = set(mapping.values()).difference(to_delete)
-            delete, global_seen = set(), set()
-            for x in to_delete:
-                for n in bonds[x]:
-                    if n in global_seen or n in remain:
+        to_delete = {mapping[x] for x in self._to_delete}
+        # if deleted atoms have another path to remain fragment, the path is preserved
+        remain = set(mapping.values()).difference(to_delete)
+        delete, global_seen = set(), set()
+        for x in to_delete:
+            for n in bonds[x]:
+                if n in global_seen or n in remain:
+                    continue
+                seen = {n}
+                global_seen.add(n)
+                stack = [x for x in bonds[n] if x not in global_seen]
+                while stack:
+                    current = stack.pop()
+                    if current in remain:
+                        break
+                    if current in to_delete:
                         continue
-                    seen = {n}
-                    global_seen.add(n)
-                    stack = [x for x in bonds[n] if x not in global_seen]
-                    while stack:
-                        current = stack.pop()
-                        if current in remain:
-                            break
-                        if current in to_delete:
-                            continue
-                        seen.add(current)
-                        global_seen.add(current)
-                        stack.extend([x for x in bonds[current] if x not in global_seen])
-                    else:
-                        delete.update(seen)
-
-            to_delete.update(delete)
-
-        new = structure.__class__()
-        keep_hydrogens = {}
-        max_atom = max(atoms)
-        for n, atom in self.__atom_attrs.items():
-            if n in mapping:  # add matched atoms
-                m = mapping[n]
-                e = elements[n]
-                if e is None:
-                    e = atoms[m]
-                new.add_atom(e.copy(), m, xy=plane[m], _skip_hydrogen_calculation=True, **atom)
-            else:  # new atoms
-                max_atom += 1
-                if n in variable:
-                    # use first from the list
-                    mapping[n] = new.add_atom(elements[n][0].copy(), max_atom, _skip_hydrogen_calculation=True, **atom)
+                    seen.add(current)
+                    global_seen.add(current)
+                    stack.extend([x for x in bonds[current] if x not in global_seen])
                 else:
-                    mapping[n] = new.add_atom(elements[n].copy(), max_atom, _skip_hydrogen_calculation=True, **atom)
-                    if n in patch_hydrogens:  # keep patch aromatic atoms hydrogens count
-                        keep_hydrogens[max_atom] = patch_hydrogens[n]
+                    delete.update(seen)
+
+        to_delete.update(delete)
+        return to_delete
+
+    def _prepare_skeleton(self, structure, mapping):
+        atoms = structure._atoms
+        bonds = structure._bonds
+
+        to_delete = self._get_deleted(structure, mapping)
+        new = structure.__class__()
+        natoms = new._atoms
+        nbonds = new._bonds
+        max_atom = max(atoms)
+        stereo_atoms = []
+        stereo_bonds = []
+
+        for n, a in self._replacement.atoms():
+            if isinstance(a, AnyElement):
+                if n := mapping.get(n):
+                    # keep matched atom type and isotope
+                    e = atoms[n].copy(stereo=True)
+                    e.charge = a.charge
+                    e.is_radical = a.is_radical
+                    if a.stereo is not None:  # override stereo
+                        e._stereo = a.stereo
+                    elif e.stereo is not None:  # keep original stereo
+                        stereo_atoms.append(n)  # mark for stereo fix
+                    natoms[n] = e
+                    nbonds[n] = {}
+                else:
+                    raise ValueError("AnyElement doesn't match to pattern")
+            else:  # QueryElement or Element
+                a: Union[QueryElement, Element]  # typehint
+                e = Element.from_atomic_number(a.atomic_number)
+                e = e(a.isotope, charge=a.charge, is_radical=a.is_radical, stereo=a.stereo)
+                if not (m := mapping.get(n)):  # new atom
+                    m = max_atom + 1
+                    max_atom += 1
+                    mapping[n] = m
+                    if isinstance(a, Element):
+                        e._implicit_hydrogens = a.implicit_hydrogens  # keep H count from patch
+                        e.x = a.x  # keep coordinates from patch
+                        e.y = a.y
+                    elif len(a.implicit_hydrogens) == 1:
+                        e._implicit_hydrogens = a.implicit_hydrogens[0]
+                    elif a.implicit_hydrogens:
+                        raise ValueError('Query element in patch has more than one implicit hydrogen')
+                else:  # existing atoms
+                    b = atoms[m]
+                    e.x = b.x  # preserve existing coordinates
+                    e.y = b.y
+                    if a.stereo is None and b.stereo is not None:  # keep original stereo
+                        e._stereo = b.stereo
+                        stereo_atoms.append(m)
+                natoms[m] = e
+                nbonds[m] = {}
+
+        # preserve connectivity order
+        for n, bs in self._replacement._bonds.items():
+            n = mapping[n]
+            for m, b in bs.items():
+                m = mapping[m]
+                if n in nbonds[m]:
+                    nbonds[n][m] = nbonds[m][n]
+                else:
+                    nbonds[n][m] = b = Bond(int(b), stereo=b.stereo)
+                    if b.stereo is None:
+                        if not (nb := bonds.get(n)):
+                            continue
+                        if not (mb := nb.get(m)):
+                            continue
+                        if mb.stereo is None:
+                            continue
+                        # original structure has stereo bond
+                        b._stereo = mb.stereo
+                        stereo_bonds.append((n, m))
 
         patch_atoms = set(new)  # don't move!
-        for n, atom in structure.atoms():  # add unmatched atoms
+        for n, a in atoms.items():  # add unmatched or masked atoms
             if n not in patch_atoms and n not in to_delete:
-                new.add_atom(atom.copy(), n, charge=charges[n], is_radical=radicals[n], xy=plane[n],
-                             _skip_hydrogen_calculation=True)
-                keep_hydrogens[n] = hydrogens[n]  # keep hydrogens on unmatched atoms as is.
+                natoms[n] = a.copy(hydrogens=True, stereo=True)
+                nbonds[n] = {}
 
-        for n, m, bond in patch_bonds:  # add patch bonds
-            new.add_bond(mapping[n], mapping[m], bond.copy(), _skip_hydrogen_calculation=True)
-
-        for n, m_bond in bonds.items():
+        for n, bs in bonds.items():
             if n in to_delete:  # atoms for removing
                 continue
-            to_delete.add(n)  # reuse to_delete set for seen atoms
-            for m, bond in m_bond.items():
+            for m, b in bs.items():
                 # ignore deleted atoms and patch atoms
                 if m in to_delete or n in patch_atoms and m in patch_atoms:
                     continue
-                new.add_bond(n, m, bond.copy(), _skip_hydrogen_calculation=True)
+                elif n in nbonds[m]:
+                    nbonds[n][m] = nbonds[m][n]
+                else:
+                    nbonds[n][m] = b.copy(stereo=True)
+                    if b.stereo is not None and (n in patch_atoms or m in patch_atoms):
+                        stereo_bonds.append((n, m))
 
-        # fix hydrogens count.
-        new._hydrogens.update(keep_hydrogens)  # noqa
-        for n in new:
-            if n not in keep_hydrogens:
-                new.calc_implicit(n)  # noqa
+        for n, a in new.atoms():
+            if a.implicit_hydrogens is None:
+                new.calc_implicit(n)
+        new.calc_labels()
         return new
 
-    def __set_stereo(self, new, structure, mapping):
+    def _fix_stereo(self, new, structure, mapping):
         products = self.__products
         stereo_override = set()
         r_mapping = {m: n for n, m in mapping.items()}

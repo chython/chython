@@ -295,10 +295,10 @@ class QueryIsomorphism(Isomorphism):
                                                array('I', [n in scope for n in other]))
         else:
             components = get_mapping = None
+        yield from self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope,
+                                     components=components, get_mapping=get_mapping)
+        return
         # todo: implement stereo
-        return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope,
-                                 components=components, get_mapping=get_mapping)
-
         atoms_stereo = self._atoms_stereo
         allenes_stereo = self._allenes_stereo
         cis_trans_stereo = self._cis_trans_stereo
