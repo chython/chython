@@ -50,7 +50,7 @@ class StandardizeReaction:
             total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
 
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         if logging:
             return total
         return bool(total)
@@ -76,7 +76,7 @@ class StandardizeReaction:
             total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
 
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         if logging:
             return total
         return bool(total)
@@ -93,7 +93,7 @@ class StandardizeReaction:
             if m.thiele(fix_tautomers=fix_tautomers):
                 total = True
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         return total
 
     def kekule(self: 'ReactionContainer', *, buffer_size=7) -> bool:
@@ -108,7 +108,7 @@ class StandardizeReaction:
             if m.kekule(buffer_size=buffer_size):
                 total = True
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         return total
 
     def clean_isotopes(self: 'ReactionContainer') -> bool:
@@ -121,7 +121,7 @@ class StandardizeReaction:
             if m.clean_isotopes():
                 flag = True
         if flag:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         return flag
 
     def clean_stereo(self: 'ReactionContainer'):
@@ -130,7 +130,7 @@ class StandardizeReaction:
         """
         for m in self.molecules():
             m.clean_stereo()
-        self.flush_cache()
+        self.flush_cache(keep_molecule_cache=True)
 
     def check_valence(self: 'ReactionContainer') -> List[Tuple[int, Tuple[int, ...]]]:
         """
@@ -155,7 +155,7 @@ class StandardizeReaction:
         for m in self.molecules():
             total += m.implicify_hydrogens()
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         return total
 
     def explicify_hydrogens(self: 'ReactionContainer') -> int:
@@ -203,7 +203,7 @@ class StandardizeReaction:
                 m.remap(remap)
 
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         return total
 
     def remove_reagents(self, *, keep_reagents: bool = False, mapping: bool = True) -> bool:

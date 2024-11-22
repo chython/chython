@@ -146,10 +146,11 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
             p = MoleculeContainer()
         return r ^ p
 
-    def flush_cache(self, **kwargs):
+    def flush_cache(self, keep_molecule_cache=False, **kwargs):
         self.__dict__.clear()
-        for m in self.molecules():
-            m.flush_cache(**kwargs)
+        if not keep_molecule_cache:
+            for m in self.molecules():
+                m.flush_cache(**kwargs)
 
     def pack(self, *, compressed=True, check=True) -> bytes:
         """

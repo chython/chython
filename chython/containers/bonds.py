@@ -22,13 +22,13 @@ from typing import Optional, Tuple, Union, List, Set
 class Bond:
     __slots__ = ('_order', '_in_ring', '_stereo')
 
-    def __init__(self, order: int):
+    def __init__(self, order: int, *, stereo: Optional[bool] = None):
         if not isinstance(order, int):
             raise TypeError('invalid order value')
         elif order not in (1, 4, 2, 3, 8):
             raise ValueError('order should be from [1, 2, 3, 4, 8]')
         self._order = order
-        self._stereo = None
+        self._stereo = stereo
 
     def __eq__(self, other):
         if isinstance(other, int):

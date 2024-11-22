@@ -165,6 +165,8 @@ class Graph(Generic[Atom, Bond], ABC):
         u = self.copy() if copy else self
         u._atoms.update(other._atoms)
         u._bonds.update(other._bonds)
+        if not copy:
+            self.flush_cache()
         return u
 
     def flush_cache(self):
