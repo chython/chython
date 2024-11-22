@@ -21,7 +21,7 @@ from collections import defaultdict
 from itertools import product
 from ..containers import MoleculeContainer, QueryContainer
 from ..containers.bonds import Bond
-from ..periodictable import Element, ListElement, AnyElement
+from ..periodictable import Element, ListElement, AnyElement, QueryElement
 
 
 class BaseReactor:
@@ -34,6 +34,10 @@ class BaseReactor:
         self.__variable = variable = []
 
         atoms = defaultdict(dict)
+        if isinstance(products, MoleculeContainer):
+            # full replacement of atoms
+            for n, atom in products.atoms():
+                elements[n] = atom.copy(hydrogens=True, stereo=True)
         for n, atom in products.atoms():
             atoms[n].update(charge=atom.charge, is_radical=atom.is_radical)
             if atom.atomic_number:  # replace atom
