@@ -32,7 +32,7 @@ class Fingerprints(LinearFingerprint, MorganFingerprint):
     @property
     def _atom_identifiers(self: 'MoleculeContainer'):
         return {idx: hash((atom.isotope or 0, atom.atomic_number, atom.charge, atom.is_radical))
-                for idx, atom in self._atoms.items()}
+                for idx, atom in self.atoms()}
 
 
 class FingerprintsCGR(LinearFingerprint, MorganFingerprint):

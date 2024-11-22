@@ -29,7 +29,7 @@ def parse_rxn_v2000(data, *, ignore=True):
     if not reagents_count:
         raise EmptyReaction
 
-    title = data[2].strip() or None
+    title = data[1].strip() or None
     log = []
     molecules = []
 

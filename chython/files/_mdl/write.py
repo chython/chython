@@ -82,7 +82,7 @@ class EMOLWrite(IO):
         file = self._file
         file.write(f'M  V30 BEGIN CTAB\nM  V30 COUNTS {g.atoms_count} {g.bonds_count} 0 0 0\nM  V30 BEGIN ATOM\n')
 
-        for n, (m, a) in enumerate(g._atoms.items(), start=1):
+        for n, (m, a) in enumerate(g.atoms(), start=1):
             if write3d is not None:
                 x, y, z = xyz[m]
                 z = f'{z:.4f}'
@@ -131,7 +131,7 @@ class MOLWrite(IO):
         file = self._file
         file.write(f'{g.name}\n\n\n{g.atoms_count:3d}{g.bonds_count:3d}  0  0  0  0            999 V2000\n')
 
-        for n, (m, a) in enumerate(g._atoms.items(), start=1):
+        for n, (m, a) in enumerate(g.atoms(), start=1):
             if write3d is not None:
                 x, y, z = xyz[m]
             else:
@@ -142,7 +142,7 @@ class MOLWrite(IO):
                 m = 0
             file.write(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} 0{c}  0  0  0  0  0  0  0{m:3d}  0  0\n')
 
-        atoms = {m: n for n, m in enumerate(g._atoms, start=1)}
+        atoms = {m: n for n, m in enumerate(g, start=1)}
         wedge = defaultdict(set)
         for n, m, s in g._wedge_map:
             file.write(f'{atoms[n]:3d}{atoms[m]:3d}  {bonds[n][m].order}  {s == 1 and "1" or "6"}  0  0  0\n')
@@ -152,7 +152,7 @@ class MOLWrite(IO):
             if m not in wedge[n]:
                 file.write(f'{atoms[n]:3d}{atoms[m]:3d}  {b.order}  0  0  0  0\n')
 
-        for n, a in enumerate(g._atoms.values(), start=1):
+        for n, (_, a) in enumerate(g.atoms(), start=1):
             if a.isotope:
                 file.write(f'M  ISO  1 {n:3d} {a.isotope:3d}\n')
             if a.is_radical:

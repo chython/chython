@@ -76,11 +76,11 @@ class Saturation:
             expected_charge = int(self)
 
         if reset_electrons:
-            charges = {x: None for x in self._atoms}
-            radicals = {x: None for x in self._atoms}
+            charges = {x: None for x in self}
+            radicals = {x: None for x in self}
         else:
-            charges = {n: a.charge for n, a in self._atoms.items()}
-            radicals =  {n: a.is_radical for n, a in self._atoms.items()}
+            charges = {n: a.charge for n, a in self.atoms()}
+            radicals =  {n: a.is_radical for n, a in self.atoms()}
         sat, adjacency = _find_possible_valences(atoms, neighbors_distances or self._bonds,
                                                  charges, radicals, neighbors_distances is not None)
         charges = {}  # new charge states

@@ -21,7 +21,7 @@ from ...exceptions import EmptyMolecule
 
 def parse_mol_v3000(data, *, _header=True):
     if _header:
-        title = data[1].strip() or None
+        title = data[0].strip() or None
         data = data[4:]
     else:
         title = None

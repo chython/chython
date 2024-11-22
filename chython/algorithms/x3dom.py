@@ -181,7 +181,7 @@ class X3domMolecule:
 
         atoms = []
         if carbon:
-            for n, a in self._atoms.items():
+            for n, a in self.atoms():
                 r = radius or a.atomic_radius * multiplier
                 fr = r * 0.71
                 atoms.append(f"    <transform translation='{' '.join(format(x, '.2f') for x in xyz[n])}'>\n"
@@ -197,7 +197,7 @@ class X3domMolecule:
                              f"            </appearance>\n            <sphere radius='{r:.2f}'/>\n"
                              "          </shape>\n        </group>\n      </billboard>\n    </transform>\n")
         else:
-            for n, a in self._atoms.items():
+            for n, a in self.atoms():
                 r = radius or a.atomic_radius * multiplier
                 atoms.append(f"    <transform translation='{' '.join(format(x, '.2f') for x in xyz[n])}'>\n"
                              "      <shape>\n        <appearance>\n"

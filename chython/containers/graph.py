@@ -122,7 +122,7 @@ class Graph(Generic[Atom, Bond], ABC):
         copy of graph
         """
         copy = object.__new__(self.__class__)
-        copy._atoms = {n: atom.copy(full=True) for n, atom in self._atoms.items()}
+        copy._atoms = {n: atom.copy(full=True) for n, atom in self.atoms()}
         copy._bonds = cb = {}
         for n, m_bond in self._bonds.items():
             cb[n] = cbn = {}
@@ -144,7 +144,7 @@ class Graph(Generic[Atom, Bond], ABC):
             raise ValueError('mapping overlap')
 
         mg = mapping.get
-        self._atoms = {mg(n, n): atom for n, atom in self._atoms.items()}
+        self._atoms = {mg(n, n): atom for n, atom in self.atoms()}
         self._bonds = {mg(n, n): {mg(m, m): bond for m, bond in m_bond.items()} for n, m_bond in self._bonds.items()}
         self.flush_cache()
 

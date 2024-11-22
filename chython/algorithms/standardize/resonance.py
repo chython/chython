@@ -135,7 +135,7 @@ class Resonance:
     def __entries(self: 'MoleculeContainer'):
         atoms = self._atoms
         bonds = self._bonds
-        errors = {n for n, a in atoms.items() if a.implicit_hydrogens is None}
+        errors = {n for n, a in self.atoms() if a.implicit_hydrogens is None}
 
         transfer = set()
         entries = set()
@@ -144,7 +144,7 @@ class Resonance:
         nitrogen_cat = set()
         nitrogen_ani = set()
         sulfur_cat = set()
-        for n, a in atoms.items():
+        for n, a in self.atoms():
             if a not in (B, C, N, O, Si, P, S, As, Se, Te):
                 # filter non-organic set, halogens and aromatics
                 continue
@@ -182,7 +182,7 @@ class Resonance:
             transfer.add(n)
 
         if exits or entries:  # try to move cation to nitrogen. saturation fixup.
-            for n, a in self._atoms.items():
+            for n, a in self.atoms():
                 if a == N and not a.charge:
                     if a.hybridization == 1 and a.neighbors <= 3:  # any amine - potential e-donor
                         entries.add(n)

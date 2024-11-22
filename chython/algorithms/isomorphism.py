@@ -190,7 +190,7 @@ class MoleculeIsomorphism(Isomorphism):
         bits2 = []
         bits3 = []
         bits4 = []
-        for i, (n, a) in enumerate(self._atoms.items()):
+        for i, (n, a) in enumerate(self.atoms()):
             mapping[n] = i
             numbers.append(n)
             v2 = 1 << (a.hybridization - 1)
@@ -318,7 +318,7 @@ class QueryIsomorphism(Isomorphism):
 
         for mapping in self._get_mapping(other, automorphism_filter=automorphism_filter,
                                          searching_scope=searching_scope):
-            for n, a in self._atoms.items():
+            for n, a in self.atoms():
                 if a.stereo is None:
                     continue
                 m = mapping[n]

@@ -201,8 +201,8 @@ class Atom(Structure):
 
     @property
     def delta_isotope(self):
-        if self.isotope > 9000:
-            return self.isotope - 10_000
+        if self.isotopic_mass > 9000:
+            return self.isotopic_mass - 10_000
 
     @property
     def is_radical(self):

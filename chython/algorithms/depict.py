@@ -351,7 +351,7 @@ class DepictMolecule:
         define = []
         mask = []
 
-        for n, atom in self._atoms.items():
+        for n, atom in self.atoms():
             x, y = atom.x, -atom.y
             symbol = atom.atomic_symbol
             if (symbol != 'C' or atom.charge or atom.is_radical or atom.isotope or carbon

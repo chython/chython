@@ -32,7 +32,7 @@ def parse_mol_v2000(data):
         raise EmptyMolecule
 
     log = []
-    title = data[1].strip() or None
+    title = data[0].strip() or None
     atoms = []
     bonds = []
     stereo = []

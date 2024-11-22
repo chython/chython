@@ -55,7 +55,7 @@ class Standardize:
         h, changed = self.implicify_hydrogens(_fix_stereo=False, logging=True)
 
         if fix_tautomers and (logging or keep_kekule):  # thiele can change tautomeric form
-            hgs = {n: a.implicit_hydrogens for n, a in self._atoms.items()}
+            hgs = {n: a.implicit_hydrogens for n, a in self.atoms()}
         if keep_kekule:  # save bond orders
             bonds = [(b, b.order) for _, _, b in self.bonds()]
 
@@ -66,7 +66,7 @@ class Standardize:
 
         if keep_kekule and t:  # restore
             # check ring charge/hydrogen moving
-            if c or fix_tautomers and hgs != self._hydrogens:  # noqa
+            if c or fix_tautomers and any(hgs[n] != a.implicit_hydrogens for n, a in self.atoms()):
                 self.kekule()  # we need to do full kekule again
             else:
                 for b, o in bonds:  # noqa
@@ -81,12 +81,12 @@ class Standardize:
                 s.append((tuple(changed), -1, 'implicified'))
             if t:
                 s.append(((), -1, 'aromatized'))
-                if fix_tautomers and (x := tuple(n for n, a in self._atoms.items() if hgs[n] != a.implicit_hydrogens)):
+                if fix_tautomers and (x := tuple(n for n, a in self.atoms() if hgs[n] != a.implicit_hydrogens)):
                     s.append((x, -1, 'aromatic tautomer found'))
             if c:
                 s.append((tuple(c), -1, 'recharged'))
             if keep_kekule and t:
-                if c or fix_tautomers and any(hgs[n] != a.implicit_hydrogens for n, a in self._atoms.items()):
+                if c or fix_tautomers and any(hgs[n] != a.implicit_hydrogens for n, a in self.atoms()):
                     s.append(((), -1, 'kekulized again'))
                 else:
                     s.append(((), -1, 'kekule form restored'))
@@ -123,7 +123,7 @@ class Standardize:
         log.extend(l)
         fixed.update(f)
 
-        if b := fixed.intersection(n for n, a in self._atoms.items() if a.implicit_hydrogens is None):
+        if b := fixed.intersection(n for n, a in self.atoms() if a.implicit_hydrogens is None):
             if ignore:
                 log.append((tuple(b), -1, 'standardization failed'))
             else:
@@ -271,17 +271,15 @@ class Standardize:
         :param keep_to_terminal: Keep any bonds to terminal hydrogens
         :return: removed bonds count
         """
-        bonds = self._bonds
-
         ab = [(n, m) for n, m, b in self.bonds() if b == 8]
 
         if keep_to_terminal:
             skeleton = self.not_special_connectivity
-            hs = {n for n, a in self._atoms.items() if a == H and not skeleton[n]}
+            hs = {n for n, a in self.atoms() if a == H and not skeleton[n]}
             ab = [(n, m) for n, m in ab if n not in hs and m not in hs]
 
         for n, m in ab:
-            del bonds[n][m], bonds[m][n]
+            self.delete_bond(n, m, _skip_calculation=True)
 
         if ab:
             self.flush_cache(keep_sssr=True)
@@ -404,7 +402,7 @@ class Standardize:
         :return: list of invalid atoms
         """
         # only invalid atoms have None hydrogens.
-        return [n for n, a in self._atoms.items() if a.implicit_hydrogens is None]
+        return [n for n, a in self.atoms() if a.implicit_hydrogens is None]
 
     def clean_isotopes(self: 'MoleculeContainer') -> bool:
         """

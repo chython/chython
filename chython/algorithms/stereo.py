@@ -168,7 +168,7 @@ class MoleculeStereo:
         Carbon sp3 atom numbers.
         """
         tetra = []
-        for n, atom in self._atoms.items():
+        for n, atom in self.atoms():
             if atom == C and not atom.charge and not atom.is_radical:
                 env = self._bonds[n]
                 if all(b == 1 for b in env.values()):
@@ -577,7 +577,7 @@ class MoleculeStereo:
         atoms_stereo = []
         allenes_stereo = []
         cis_trans_stereo = []
-        for n, a in self._atoms.items():
+        for n, a in self.atoms():
             if a.stereo is None:
                 continue
             elif n in stereo_tetrahedrons:
@@ -960,7 +960,7 @@ class MoleculeStereo:
 
     @cached_property
     def _chiral_morgan(self: Union['MoleculeContainer', 'MoleculeStereo']) -> Dict[int, int]:
-        stereo_atoms = {n for n, a in self._atoms.items() if a.stereo is not None}
+        stereo_atoms = {n for n, a in self.atoms() if a.stereo is not None}
         stereo_bonds = {n for n, mb in self._bonds.items() if any(b.stereo is not None for m, b in mb.items())}
         if not stereo_atoms and not stereo_bonds:
             return self.atoms_order
@@ -1103,7 +1103,7 @@ class MoleculeStereo:
                     chiral_c.add(n)
 
         # skip already marked.
-        stereo_atoms = {n for n, a in self._atoms.items() if a.stereo is not None}
+        stereo_atoms = {n for n, a in self.atoms() if a.stereo is not None}
         chiral_t.difference_update(stereo_atoms)
         chiral_a.difference_update(stereo_atoms)
         diff = set()

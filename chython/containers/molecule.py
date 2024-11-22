@@ -292,11 +292,11 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             raise ValueError('empty atoms list not allowed')
         if set(atoms) - self._atoms.keys():
             raise ValueError('invalid atom numbers')
-        atoms = tuple(n for n in self._atoms if n in atoms)  # save original order
+        atoms = tuple(n for n in self if n in atoms)  # save original order
         if as_query:
             sub = object.__new__(QueryContainer)
 
-            lost = {n for n, a in self._atoms.items() if a != H} - set(atoms)  # atoms not in substructure
+            lost = {n for n, a in self.atoms() if a != H} - set(atoms)  # atoms not in substructure
             # atoms with fully present neighbors
             not_skin = {n for n in atoms if lost.isdisjoint(self._bonds[n])}
 
