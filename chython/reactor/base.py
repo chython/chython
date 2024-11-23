@@ -81,6 +81,8 @@ class BaseReactor:
         stereo_atoms = []
         stereo_bonds = []
 
+        # let's preserve connectivity order from replacement to keep stereo signs as is.
+        # stereo labels from original structure will be recalculated after full molecule construction.
         for n, ra in self._replacement.atoms():
             if isinstance(ra, AnyElement):
                 if m := mapping.get(n):
@@ -140,10 +142,17 @@ class BaseReactor:
                         stereo_bonds.append((n, m))
 
         patched_atoms = set(new)
-        for n, a in atoms.items():  # add unmatched or masked atoms
+        for n, sa in atoms.items():  # add unmatched or masked atoms
             if n not in patched_atoms and n not in to_delete:
-                natoms[n] = a.copy(hydrogens=True, stereo=True)
+                natoms[n] = a = sa.copy(hydrogens=True)
                 nbonds[n] = {}
+                if sa.stereo is not None:
+                    # in case of allenes label can disappear/change, thus, requires recalculation
+                    # for tetrahedrons label can be stored as is
+                    if len(bonds[n]) >= 3:
+                        a._stereo = sa.stereo
+                    else:
+                        stereo_atoms.append(n)
 
         for n, bs in bonds.items():  # preserve connectivity order for keeping stereo labels as is
             if n in to_delete:  # atoms for removing
@@ -154,13 +163,11 @@ class BaseReactor:
                     continue
                 elif n in nbonds[m]:  # back-link
                     nbonds[n][m] = nbonds[m][n]
-                elif b.stereo is not None and (n in patched_atoms or m in patched_atoms):
-                    # unmatched/masked atoms to patched atoms linker bonds
-                    # stereo label should be recalculated
-                    nbonds[n][m] = b.copy()
-                    stereo_bonds.append((n, m))
                 else:
-                    nbonds[n][m] = b.copy(stereo=True)
+                    nbonds[n][m] = b.copy()
+                    if b.stereo is not None:
+                        # stereo label should be recalculated
+                        stereo_bonds.append((n, m))
 
         for n, a in new.atoms():
             if a.implicit_hydrogens is None:
@@ -170,24 +177,23 @@ class BaseReactor:
         # translate stereo sign from old order to new order
         for n in stereo_atoms:
             if n in new.stereogenic_tetrahedrons:
-                if bonds[n].keys() != nbonds[n].keys():
+                if bonds[n].keys() == nbonds[n].keys():
                     # flush stereo from reaction center. should be explicitly set in replacement.
-                    continue
-                s = new._translate_tetrahedron_sign(n, structure.stereogenic_tetrahedrons[n], atoms[n].stereo)
-                natoms[n]._stereo = s
+                    s = new._translate_tetrahedron_sign(n, structure.stereogenic_tetrahedrons[n], atoms[n].stereo)
+                    natoms[n]._stereo = s
             elif n in new.stereogenic_allenes:
-                if set(new.stereogenic_allenes[n]) != set(structure.stereogenic_allenes[n]):
+                if set(new.stereogenic_allenes[n]) == set(structure.stereogenic_allenes[n]):
                     # flush stereo for changed allene substituents
-                    continue
-                s = new._translate_allene_sign(n, *structure.stereogenic_allenes[n][:2], atoms[n].stereo)
-                natoms[n]._stereo = s
+                    s = new._translate_allene_sign(n, *structure.stereogenic_allenes[n][:2], atoms[n].stereo)
+                    natoms[n]._stereo = s
             # else: ignore label
 
         for n, m in stereo_bonds:
             if (t12 := new._stereo_cis_trans_terminals.get(n, True)) == new._stereo_cis_trans_terminals.get(m, False):
-                if set(new.stereogenic_cis_trans[t12]) != set(structure.stereogenic_cis_trans[t12]):
-                    continue
-                new._translate_cis_trans_sign(*t12, *structure.stereogenic_cis_trans[t12][:2], bonds[n][m].stereo)
+                if set(new.stereogenic_cis_trans[t12]) == set(env := structure.stereogenic_cis_trans[t12]):
+                    # connected to cumulenes atoms should be the same
+                    s = new._translate_cis_trans_sign(*t12, *env[:2], bonds[n][m].stereo)
+                    nbonds[n][m]._stereo = s
             # else: ignore label
 
         if self._fix_rings:

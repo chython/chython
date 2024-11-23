@@ -136,7 +136,7 @@ def parser(tokens, strong_cycle):
                     # else bt == 4 - skip dot
                     previous = None
 
-            if 'stereo' in token:
+            if token.get('stereo') is not None:
                 stereo_atoms[atom_num] = token.pop('stereo')
             atoms.append(token)
             atoms_types.append(token_type)

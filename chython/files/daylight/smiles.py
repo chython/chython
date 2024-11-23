@@ -170,7 +170,7 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
 
     if ignore_stereo:
         return
-    elif not data['stereo_atoms'] or not data['stereo_bonds']:
+    elif not data['stereo_atoms'] and not data['stereo_bonds']:
         return
 
     atoms = molecule._atoms
