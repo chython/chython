@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Union, List, Iterator, Dict, Optional
 from ._convert import create_molecule, create_reaction
 from ._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
-from ._mdl import postprocess_molecule
+from .mdl import postprocess_molecule
 from ..containers import MoleculeContainer, ReactionContainer
 from ..exceptions import EmptyMolecule, EmptyReaction
 

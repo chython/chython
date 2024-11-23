@@ -23,7 +23,7 @@ from re import compile, match
 from subprocess import check_output
 from sys import platform
 from typing import Optional, List
-from ._mdl import MDLRead, MOLWrite, EMOLWrite, parse_mol_v2000, parse_mol_v3000, postprocess_molecule
+from .mdl import MDLRead, MOLWrite, EMOLWrite, parse_mol_v2000, parse_mol_v3000, postprocess_molecule
 from ._convert import create_molecule
 from ._mapping import postprocess_parsed_molecule
 from ..containers import MoleculeContainer

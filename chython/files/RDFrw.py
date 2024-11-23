@@ -25,8 +25,8 @@ from subprocess import check_output
 from sys import platform
 from time import strftime
 from typing import Union, Dict, List
-from ._mdl import (MDLRead, MOLWrite, EMOLWrite, parse_mol_v2000, parse_mol_v3000, parse_rxn_v2000, parse_rxn_v3000,
-                   postprocess_molecule)
+from .mdl import (MDLRead, MOLWrite, EMOLWrite, parse_mol_v2000, parse_mol_v3000, parse_rxn_v2000, parse_rxn_v3000,
+                  postprocess_molecule)
 from ._convert import create_molecule, create_reaction
 from ._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
 from ..containers import ReactionContainer, MoleculeContainer
