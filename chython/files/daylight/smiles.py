@@ -170,9 +170,7 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
 
     if ignore_stereo:
         return
-
-    stereo_atoms = [(n, s) for n, a in enumerate(data['atoms']) if (s := a.get('stereo')) is not None]
-    if not stereo_atoms and not data['stereo_bonds']:
+    elif not data['stereo_atoms'] or not data['stereo_bonds']:
         return
 
     atoms = molecule._atoms
@@ -185,7 +183,7 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
 
     log = []
     stereo = []
-    for i, s in stereo_atoms:
+    for i, s in data['stereo_atoms'].items():
         n = mapping[i]
         if not i and atoms[n].implicit_hydrogens:  # first atom in smiles has reversed chiral mark
             s = not s
