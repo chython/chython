@@ -36,7 +36,8 @@ def unpach(data: bytes, /, *, compressed=True) -> Union[MoleculeContainer, React
     return ReactionContainer.unpack(data, compressed=False)
 
 
+unpack = unpach
+
+
 __all__ = [x for x in locals() if x.endswith('Container')]
-__all__.append('Bond')
-__all__.append('QueryBond')
-__all__.append('unpach')
+__all__.extend(['Bond', 'QueryBond', 'unpack', 'unpach'])

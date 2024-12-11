@@ -631,6 +631,10 @@ class MoleculeStereo:
             self.flush_stereo_cache()
 
     @cached_property
+    def _cis_trans_count(self) -> int:
+        return sum(b.stereo is not None for *_, b in self.bonds())
+
+    @cached_property
     def _stereo_cis_trans_centers(self) -> Dict[int, Tuple[int, int]]:
         """
         Cis-Trans terminal atoms to cis-trans key mapping. Key is central double bond in a cumulene chain.

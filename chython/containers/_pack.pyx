@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -53,35 +53,26 @@ from libc.math cimport ldexp, frexp
 @cython.cdivision(True)
 @cython.wraparound(False)
 def pack(object molecule):
-    cdef bint b  # binary flag
+    cdef bint b = True # binary flag
     cdef char charge
-    cdef unsigned char atomic_number, isotope, bond, s = 0, buffer_b, buffer_o
-    cdef unsigned char *p, *data
+    cdef unsigned char atomic_number, ngb_count, isotope, bond, s = 0, buffer_b, buffer_o, stereo, hcr
+    cdef unsigned char *data
     cdef unsigned short atoms_count, bonds_count = 0, cis_trans_count, n, m
     cdef unsigned int size, atoms_shift = 4, bonds_shift, order_shift, cis_trans_shift  # can be > 2^16
-    cdef unsigned char[4096] stereo, hcr, seen
-    cdef unsigned int[4096] xy  # 2 * 16bit
+    cdef unsigned char[4096] seen
 
     cdef bytes py_pack
-    cdef dict py_ngb, py_atoms, py_bonds, py_charges, py_radicals, py_hydrogens, py_plane
-    cdef dict py_cis_trans_stereo, py_atoms_stereo, py_allenes_stereo
+    cdef dict py_ngb, py_atoms, py_bonds
     cdef tuple py_tuple
     cdef object py_atom, py_bond, py_nan_int, py_obj
 
     # map molecule to vars
     py_atoms = molecule._atoms
     py_bonds = molecule._bonds
-    py_charges = molecule._charges
-    py_radicals = molecule._radicals
-    py_hydrogens = molecule._hydrogens
-    py_cis_trans_stereo = molecule._cis_trans_stereo
-    py_atoms_stereo = molecule._atoms_stereo
-    py_allenes_stereo = molecule._allenes_stereo
-    py_plane = molecule._plane
 
     # calculate elements count
     atoms_count = len(py_atoms)
-    cis_trans_count = len(py_cis_trans_stereo)
+    cis_trans_count = molecule._cis_trans_count
 
     for py_ngb in py_bonds.values():
         bonds_count += len(py_ngb)
@@ -103,64 +94,76 @@ def pack(object molecule):
     if not data:
         raise MemoryError()
 
-    # precalculate atom attrs
-    # should be done independently, due to possible randomness in dicts order.
-    # 3 bit - hydrogens (0-7) | 4 bit - charge | 1 bit - radical
-    for n, py_nan_int in py_hydrogens.items():
-        if py_nan_int is None:
-            hcr[n] = 0xe0  # 0b11100000
-        else:
-            hcr[n] = <unsigned char> py_nan_int << 5
-    for n, charge in py_charges.items():
-        hcr[n] |= (charge + 4) << 1
-    for n, b in py_radicals.items():
-        if b:  # lazy memory access
-            hcr[n] |= 1
-
-    # 2 float16 big endian
-    for n, py_tuple in py_plane.items():
-        p = <unsigned char *> &xy[n]
-        double_to_float16(py_tuple[0], &p[0])
-        double_to_float16(py_tuple[1], &p[2])
-
-        # erase random data
-        seen[n] = 0
-        stereo[n] = 0
-
-    # 2 bit tetrahedron | 2 bit allene | 0000
-    for n, b in py_atoms_stereo.items():
-        stereo[n] = 0xc0 if b else 0x80
-    for n, b in py_allenes_stereo.items():
-        stereo[n] = 0x30 if b else 0x20
-
     # start pack collection
     data[0] = 2  # header. specification version 2
     data[1] = atoms_count >> 4  # 5-12b of atom count value
     data[2] = atoms_count << 4 | cis_trans_count >> 8  # 1-4b of atom count value, 9-12b of cis-trans count value
     data[3] = cis_trans_count  # 1-8b of cis-trans count value
 
-    b = True  # init connection table flag
     for py_obj, py_atom in py_atoms.items():
         py_ngb = py_bonds[py_obj]
+        ngb_count = len(py_ngb)
         n = py_obj  # cast to C
         seen[n] = 1
-        p = <unsigned char *> &xy[n]  # XY
         atomic_number = py_atom.atomic_number
-        py_nan_int = py_atom._Core__isotope  # direct access
+
+        py_nan_int = py_atom._isotope  # direct access
         if py_nan_int is None:
             isotope = 0
         else:
             isotope = <short> py_nan_int - common_isotopes[atomic_number]
 
+        py_nan_int = py_atom._stereo
+        if py_nan_int is None:
+            stereo = 0
+        # V2 specification
+        # 2 bit tetrahedron | 2 bit allene | 0000
+        elif py_nan_int:
+            if ngb_count == 2:
+                stereo = 0x30
+            else:
+                stereo = 0xc0
+        else:
+            if ngb_count == 2:
+                stereo = 0x20
+            else:
+                stereo = 0x80
+
+        # precalculate atom attrs
+        # should be done independently, due to possible randomness in dicts order.
+        # 3 bit - hydrogens (0-7) | 4 bit - charge | 1 bit - radical
+        py_nan_int = py_atom._implicit_hydrogens
+        if py_nan_int is None:
+            hcr = 0xe0  # 0b11100000
+        else:
+            hcr = <unsigned char> py_nan_int << 5
+
+        charge = py_atom._charge
+        hcr |= (charge + 4) << 1
+        if py_atom._is_radical:
+            hcr |= 1
+
         data[atoms_shift] = n >> 4  # 5-12b AN
-        data[atoms_shift + 1] = n << 4 | len(py_ngb)  # 1-4b AN, 4b NC
-        data[atoms_shift + 2] = stereo[n] | isotope >> 1  # TS , AS , 4b I
+        data[atoms_shift + 1] = n << 4 | ngb_count  # 1-4b AN, 4b NC
+        data[atoms_shift + 2] = stereo | isotope >> 1  # TS , AS , 4b I
         data[atoms_shift + 3] = isotope << 7 | atomic_number  # 1bI , A
+
+        # 2 float16 big endian
+        for n, py_tuple in py_plane.items():
+            p = <unsigned char *> &xy[n]
+            double_to_float16(py_tuple[0], &p[0])
+            double_to_float16(py_tuple[1], &p[2])
+
+            # erase random data
+            seen[n] = 0
+            stereo[n] = 0
+
         data[atoms_shift + 4] = p[0]
         data[atoms_shift + 5] = p[1]
         data[atoms_shift + 6] = p[2]
         data[atoms_shift + 7] = p[3]
-        data[atoms_shift + 8] = hcr[n]
+
+        data[atoms_shift + 8] = hcr
         atoms_shift += 9
 
         # collect connection table
