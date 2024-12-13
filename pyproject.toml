@@ -34,7 +34,6 @@ python = '^3.8'
 cachedmethods = '^0.1.4'
 lazy-object-proxy = '^1.6'
 lxml = '^4.1'
-py-mini-racer = '^0.6.0'
 numpy = '^1.23.3'
 chytorch-rxnmap = {version = '^1.4', optional = true}
 rdkit = {version = '^2023.9', optional = true}
