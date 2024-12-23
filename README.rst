@@ -13,7 +13,7 @@ Features:
    - Produce template based reactions and molecules
    - Atom-to-atom mapping, checking and rule-based fixing
    - Perform MCS search
-   - 2d coordinates generation (based on `SmilesDrawer <https://github.com/reymond-group/smilesDrawer>`_)
+   - 2d coordinates generation 
    - 2d/3d depiction with Jupyter support
    - SMARTS parser with restrictions
    - Protective groups remover
@@ -30,8 +30,6 @@ Install
 =======
 
 Only python 3.8+.
-
-Note: for using `clean2d` install NodeJS into system.
 
 * **stable version available through PyPI**::
 
