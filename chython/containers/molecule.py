@@ -542,7 +542,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         return int.from_bytes(data[1:3], 'big') >> 4
 
     @classmethod
-    def unpack(cls, data: Union[bytes, memoryview], /, *, compressed=True,
+    def unpack(cls, data: Union[bytes, memoryview], /, *, compressed=True, skip_labels_calculation=False,
                _return_pack_length=False) -> 'MoleculeContainer':
         """
         Unpack from compressed bytes.
@@ -555,11 +555,16 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         if compressed:
             data = decompress(data)
         if data[0] in (0, 2):
-            mol, pack_length = unpack(data)
+            mol, cis_trans, pack_length = unpack(data)
+            for n, m, s in cis_trans:
+                mol.bond(*mol._stereo_cis_trans_centers[n])._stereo = s
         elif data[0] == 3:
-            mol, pack_length = cpack(data)
+            mol, cis_trans, pack_length = cpack(data)
         else:
             raise ValueError('invalid pack header')
+
+        if not skip_labels_calculation:
+            mol.calc_labels()
 
         if _return_pack_length:
             return mol, pack_length

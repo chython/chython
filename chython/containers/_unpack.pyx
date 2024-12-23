@@ -64,18 +64,17 @@ from chython.periodictable import (H, He, Li, Be, B, C, N, O, F, Ne, Na, Mg, Al,
 @cython.cdivision(True)
 @cython.wraparound(False)
 def unpack(const unsigned char[::1] data not None):
-    cdef char *charges
     cdef unsigned char a, b, c, d, isotope, atomic_number, neighbors_count, s = 0, version, stereo, hydrogens
     cdef unsigned char *neighbors, *orders
-    cdef bint *ct_sign
     cdef unsigned short atoms_count, bonds_count = 0, cis_trans_count, order_count
     cdef unsigned short i, j, k = 0, n, m, buffer_b, shift = 0
-    cdef unsigned short *mapping, *cis_trans_1, *cis_trans_2, *connections
+    cdef unsigned short *mapping, *connections
     cdef unsigned int size, atoms_shift = 4, bonds_shift, order_shift, cis_trans_shift
     cdef unsigned char[4096] seen
 
     cdef object py_mol, py_bond, py_n, py_m, py_atom, py_nan_bool
     cdef dict py_atoms, py_bonds, py_ngb
+    cdef list py_cis_trans
 
     # read header
     version = data[0]
@@ -93,6 +92,7 @@ def unpack(const unsigned char[::1] data not None):
     py_mol = MoleculeContainer()
     py_atoms = py_mol._atoms
     py_bonds = py_mol._bonds
+    py_cis_trans = []
 
     # unpack atom block to separate attributes arrays
     for i in range(atoms_count):
@@ -135,9 +135,9 @@ def unpack(const unsigned char[::1] data not None):
         a = data[atoms_shift + 8]
         hydrogens = a >> 5
         if hydrogens == 7:
-            py_atom._hydrogens = None
+            py_atom._implicit_hydrogens = None
         else:
-            py_atom._hydrogens = hydrogens
+            py_atom._implicit_hydrogens = hydrogens
 
         py_atom._charge = ((a >> 1) & 0x0f) - 4
         if a & 0x01:
@@ -214,21 +214,6 @@ def unpack(const unsigned char[::1] data not None):
                 orders[i + 4] = b & 0x7
                 i += 5
 
-        if cis_trans_count:
-            cis_trans_1 = <unsigned short *> PyMem_Malloc(cis_trans_count * sizeof(unsigned short))
-            cis_trans_2 = <unsigned short *> PyMem_Malloc(cis_trans_count * sizeof(unsigned short))
-            ct_sign = <bint *> PyMem_Malloc(cis_trans_count * sizeof(bint))
-            if not cis_trans_1 or not cis_trans_2 or not ct_sign:
-                raise MemoryError()
-
-            for i in range(cis_trans_count):
-                a, b = data[cis_trans_shift], data[cis_trans_shift + 1]
-                c, d = data[cis_trans_shift + 2], data[cis_trans_shift + 3]
-                cis_trans_1[i] = a << 4 | b >> 4
-                cis_trans_2[i] = (b & 0x0f) << 8 | c
-                ct_sign[i] = d  # d = 0x01 or 0x00
-                cis_trans_shift += 4
-
         for i in range(atoms_count):
             n = mapping[i]
             py_n = n  # shared py int obj
@@ -243,25 +228,31 @@ def unpack(const unsigned char[::1] data not None):
                 if seen[m]:  # bond partially exists. need back-connection.
                     py_ngb[py_m] = py_bonds[py_m][py_n]
                 else:
-                    bond = object.__new__(Bond)
-                    bond._order = orders[k] + 1
-                    py_ngb[py_m] = bond
+                    py_bond = object.__new__(Bond)
+                    py_bond._order = orders[k] + 1
+                    py_bond._stereo = None
+                    py_ngb[py_m] = py_bond
                     k += 1
             shift += neighbors_count
 
-    for i in range(cis_trans_count):
-        py_cis_trans_stereo[(cis_trans_1[i], cis_trans_2[i])] = ct_sign[i]
+        PyMem_Free(orders)
+        PyMem_Free(connections)
+
+    if cis_trans_count:
+        for i in range(cis_trans_count):
+            a, b = data[cis_trans_shift], data[cis_trans_shift + 1]
+            c, d = data[cis_trans_shift + 2], data[cis_trans_shift + 3]
+            py_n = a << 4 | b >> 4
+            py_m = (b & 0x0f) << 8 | c
+            if d:
+                py_cis_trans.append((py_n, py_m, True))
+            else:
+                py_cis_trans.append((py_n, py_m, False))
+            cis_trans_shift += 4
 
     PyMem_Free(neighbors)
     PyMem_Free(mapping)
-    if bonds_count:
-        PyMem_Free(connections)
-        PyMem_Free(orders)
-        if cis_trans_count:
-            PyMem_Free(cis_trans_1)
-            PyMem_Free(cis_trans_2)
-            PyMem_Free(ct_sign)
-    return py_mol, size
+    return py_mol, py_cis_trans, size
 
 
 cdef short[119] common_isotopes
@@ -273,13 +264,12 @@ common_isotopes[:] = [0, -15, -12, -9, -7, -5, -4, -2, 0, 3, 4, 7, 8, 11, 12, 15
                       222, 221, 228, 227, 231, 231, 235, 236, 241, 242, 243, 244, 245, 254, 253, 254,
                       254, 262, 265, 265, 269, 262, 273, 273, 277, 281, 278]
 
-
-cdef object[119] elements
-elements[:] = [None, H, He, Li, Be, B, C, N, O, F, Ne, Na, Mg, Al, Si, P, S, Cl, Ar, K, Ca, Sc, Ti, V, Cr, Mn, Fe, Co,
-               Ni, Cu, Zn, Ga, Ge, As, Se, Br, Kr, Rb, Sr, Y, Zr, Nb, Mo, Tc, Ru, Rh, Pd, Ag, Cd, In, Sn, Sb, Te, I, Xe,
-               Cs, Ba, La, Ce, Pr, Nd, Pm, Sm, Eu, Gd, Tb, Dy, Ho, Er, Tm, Yb, Lu, Hf, Ta, W, Re, Os, Ir, Pt, Au, Hg,
-               Tl, Pb, Bi, Po, At, Rn, Fr, Ra, Ac, Th, Pa, U, Np, Pu, Am, Cm, Bk, Cf, Es, Fm, Md, No, Lr, Rf, Db, Sg,
-               Bh, Hs, Mt, Ds, Rg, Cn, Nh, Fl, Mc, Lv, Ts, Og]
+cdef list elements
+elements = [None, H, He, Li, Be, B, C, N, O, F, Ne, Na, Mg, Al, Si, P, S, Cl, Ar, K, Ca, Sc, Ti, V, Cr, Mn, Fe, Co,
+            Ni, Cu, Zn, Ga, Ge, As, Se, Br, Kr, Rb, Sr, Y, Zr, Nb, Mo, Tc, Ru, Rh, Pd, Ag, Cd, In, Sn, Sb, Te, I, Xe,
+            Cs, Ba, La, Ce, Pr, Nd, Pm, Sm, Eu, Gd, Tb, Dy, Ho, Er, Tm, Yb, Lu, Hf, Ta, W, Re, Os, Ir, Pt, Au, Hg,
+            Tl, Pb, Bi, Po, At, Rn, Fr, Ra, Ac, Th, Pa, U, Np, Pu, Am, Cm, Bk, Cf, Es, Fm, Md, No, Lr, Rf, Db, Sg,
+            Bh, Hs, Mt, Ds, Rg, Cn, Nh, Fl, Mc, Lv, Ts, Og]
 
 
 cdef double double_from_bytes(unsigned char a, unsigned char b):

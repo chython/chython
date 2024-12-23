@@ -19,6 +19,7 @@
 cimport cython
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.math cimport ldexp, frexp
+from libc.string cimport memset
 
 # Format V2 specification::
 #
@@ -114,7 +115,7 @@ def pack(object molecule):
     if not data:
         raise MemoryError()
 
-    seen[:] = 0  # erase random data
+    memset(seen, 0, 4096 * sizeof(unsigned char))  # erase random data
 
     # start pack collection
     data[0] = 2  # header. specification version 2
