@@ -197,7 +197,7 @@ class MoleculeStereo:
         terminals = [x for x, y in adj.items() if len(y) == 1]  # list to keep atoms order!
         cumulenes = []
         while terminals:
-            n = terminals.pop()
+            n = terminals.pop(0)
             m = adj[n].pop()
             path = [n, m]
             while m not in terminals:

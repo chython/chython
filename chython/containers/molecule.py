@@ -555,35 +555,11 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         if compressed:
             data = decompress(data)
         if data[0] in (0, 2):
-            (mapping, atom_numbers, isotopes, charges, radicals, hydrogens, plane, bonds,
-             atoms_stereo, allenes_stereo, cis_trans_stereo, pack_length, bonds_flat) = unpack(data)
+            mol, pack_length = unpack(data)
         elif data[0] == 3:
-            (mapping, atom_numbers, isotopes, charges, radicals, hydrogens, plane, bonds,
-             atoms_stereo, allenes_stereo, cis_trans_stereo, pack_length, bonds_flat) = cpack(data)
+            mol, pack_length = cpack(data)
         else:
             raise ValueError('invalid pack header')
-
-        mol = object.__new__(cls)
-        mol._bonds = bonds
-        mol._plane = plane
-        mol._charges = charges
-        mol._radicals = radicals
-        mol._hydrogens = hydrogens
-        mol._atoms_stereo = atoms_stereo
-        mol._allenes_stereo = allenes_stereo
-        mol._cis_trans_stereo = cis_trans_stereo
-
-        mol._MoleculeContainer__meta = None
-        mol._MoleculeContainer__name = None
-        mol._atoms = atoms = {}
-
-        for n, a, i in zip(mapping, atom_numbers, isotopes):
-            atoms[n] = a = object.__new__(Element.from_atomic_number(a))
-            a._Core__isotope = i
-            a._graph = ref(mol)
-            a._n = n
-        for b in bonds_flat:
-            b._Bond__graph = ref(mol)
 
         if _return_pack_length:
             return mol, pack_length
@@ -610,11 +586,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
         atoms = self._atoms
         bonds = self._bonds
-        charges = self._charges
-        radicals = self._radicals
-        hydrogens = self._hydrogens
-        atoms_stereo = self._atoms_stereo
-        allenes_stereo = self._allenes_stereo
         allenes_terminals = self._stereo_allenes_terminals
 
         cumulenes = {}
