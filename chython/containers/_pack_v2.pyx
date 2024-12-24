@@ -49,24 +49,6 @@ from libc.string cimport memset
 # 7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
 # 1 bit - sign
 
-# stereo block:
-# 0000 - no stereo
-# 0001 - not in use
-# 0010 - allene
-# 0011 - allene
-# 0100 - not in use
-# 0101 - not in use
-# 0110 - not in use
-# 0111 - not in use
-# 1000 - tetrahedron
-# 1001 - not in use
-# 1010 - not in use
-# 1011 - not in use
-# 1100 - tetrahedron
-# 1101 - not in use
-# 1110 - not in use
-# 1111 - not in use
-
 
 @cython.nonecheck(False)
 @cython.boundscheck(False)

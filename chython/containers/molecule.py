@@ -506,7 +506,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         :param version: format version
         :param order: atom order in V3
         """
-        from ._pack import pack
+        from ._pack_v2 import pack as pack_v2
 
         if check:
             bonds = self._bonds
@@ -518,9 +518,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
                 raise ValueError('To many neighbors not supported')
 
         if version == 2:
-            data = pack(self)
+            data = pack_v2(self)
         elif version == 3:
-            data = self._cpack(order, check)
+            data = self._pack_v3(order, check)
         else:
             raise ValueError('invalid specification version')
         if compressed:
@@ -549,17 +549,17 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
         :param compressed: decompress data before processing.
         """
-        from ._unpack import unpack
-        from ._cpack import unpack as cpack
+        from ._unpack_v0v2 import unpack as unpack_v0v2
+        from ._unpack_v3 import unpack as unpack_v3
 
         if compressed:
             data = decompress(data)
         if data[0] in (0, 2):
-            mol, cis_trans, pack_length = unpack(data)
+            mol, cis_trans, pack_length = unpack_v0v2(data)
             for n, m, s in cis_trans:
                 mol.bond(*mol._stereo_cis_trans_centers[n])._stereo = s
         elif data[0] == 3:
-            mol, cis_trans, pack_length = cpack(data)
+            mol, cis_trans, pack_length = unpack_v3(data)
         else:
             raise ValueError('invalid pack header')
 
@@ -580,7 +580,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
     def __bytes__(self):
         return self.pack()
 
-    def _cpack(self, order=None, check=True):
+    def _pack_v3(self, order=None, check=True):
         if order is None:
             order = list(self._atoms)
         elif check:
