@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
-#  Copyright 2024 Denis Lipatov <denis.lipatov163@gmail.com>
-#  Copyright 2024 Vyacheslav Grigorev <slavick2000@yandex.ru>
-#  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  Copyright 2019, 2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -21,10 +18,14 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from typing import TYPE_CHECKING, Union
+from ._templates import rules
 
 
 if TYPE_CHECKING:
     from chython import ReactionContainer, MoleculeContainer
+
+
+BL = .825
 
 
 class Calculate2DMolecule:
@@ -35,8 +36,44 @@ class Calculate2DMolecule:
         Calculate 2d layout of graph.
         https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation used as a reference.
         """
-        # todo: reimplement
+        shift_x = 0
+        groups = None
+        for component in self.connected_components:
+            if len(component) == 2:  # 2-atom mols always stored horizontally
+                n, m = component
+                a = self._atoms[n]
+                a._x = a._y = 0
+                a = self._atoms[m]
+                a._x, a._y = BL, 0
+            elif len(component) > 2:
+                if groups is None:
+                    # apply templates with predefined layout: rings and hard cases.
+                    groups, seen = self._apply_2d_templates()
+                    super_rings = [r for r in self.sssr if any(n not in seen for n in r)]
+
+
+
+            # else len == 1: just a dot. no need for layout calculation
+            shift_x = self._fix_plane_mean(shift_x, component=component) + .9
         self.__dict__.pop('__cached_method__repr_svg_', None)
+
+    def _apply_2d_templates(self):
+        atoms = self._atoms
+        seen = set()
+        groups = []
+        for q, layout in rules:
+            for m in q.get_mapping(self, automorphism_filter=False):
+                if not seen.isdisjoint(m.values()):  # avoid any overlap. rules preordered from complex to simple
+                    continue
+                seen.update(m.values())
+                groups.append(list(m.values()))
+                for n, xy in zip(m.values(), layout):
+                    atom = atoms[n]
+                    atom._x, atom._y = xy
+        return groups, seen
+
+    def _apply_kamada_kawai(self, group):
+        pass
 
     def _fix_plane_mean(self: 'MoleculeContainer', shift_x: float, shift_y=0., component=None) -> float:
         atoms = self._atoms
