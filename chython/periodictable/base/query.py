@@ -236,9 +236,6 @@ class AnyMetal(Query):
             return False
         return True
 
-    def __hash__(self):
-        return hash((self.neighbors, self.hybridization))
-
 
 class AnyElement(ExtendedQuery):
     __slots__ = ()
@@ -272,10 +269,6 @@ class AnyElement(ExtendedQuery):
         if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
             return False
         return True
-
-    def __hash__(self):
-        return hash((self.charge, self.is_radical, self.neighbors, self.hybridization,
-                     self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
 
 
 class ListElement(ExtendedQuery):
@@ -338,10 +331,6 @@ class ListElement(ExtendedQuery):
         if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
             return False
         return True
-
-    def __hash__(self):
-        return hash((self.atomic_numbers, self.charge, self.is_radical, self.neighbors, self.hybridization,
-                     self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
 
     def __repr__(self):
         return f'{self.__class__.__name__}([{self.atomic_symbol}])'
@@ -473,10 +462,6 @@ class QueryElement(ExtendedQuery, ABC):
         if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
             return False
         return True
-
-    def __hash__(self):
-        return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.neighbors,
-                     self.hybridization, self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
 
 
 __all__ = ['Query', 'ExtendedQuery', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']
