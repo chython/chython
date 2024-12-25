@@ -20,7 +20,6 @@ from CachedMethods import cached_args_method
 from collections import Counter, defaultdict
 from functools import cached_property
 from typing import Dict, Iterable, List, Optional, Tuple, Union
-from weakref import ref
 from zlib import compress, decompress
 from .bonds import Bond, DynamicBond, QueryBond
 from .cgr import CGRContainer
@@ -476,37 +475,12 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
             1 bit - sign
 
-        Format V3 specification::
-
-            Big endian bytes order
-            8 bit - 0x03 (format specification version)
-            Atom block 3 bytes (repeated):
-            1 bit - atom entrance flag (always 1)
-            7 bit - atomic number (<=118)
-            3 bit - hydrogens (0-7). Note: 7 == None
-            4 bit - charge (charge + 4. possible range -4 - 4)
-            1 bit - radical state
-            1 bit padding
-            3 bit tetrahedron/allene sign
-                (000 - not stereo or unknown, 001 - pure-unknown-enantiomer, 010 or 011 - has stereo)
-            4 bit - number of following bonds and CT blocks (0-15)
-
-            Bond block 2 bytes (repeated 0-15 times)
-            12 bit - negative shift from current atom to connected (e.g. 0x001 = -1 - connected to previous atom)
-            4 bit - bond order: 0000 - single, 0001 - double, 0010 - triple, 0011 - aromatic, 0111 - special
-
-            Cis-Trans 2 bytes
-            12 bit - negative shift from current atom to connected (e.g. 0x001 = -1 - connected to previous atom)
-            4 bit - CT sign: 1000 or 1001 - to avoid overlap with bond
-
-        V2 format is faster than V3. V3 format doesn't include isotopes, atom numbers and XY coordinates.
-
         :param compressed: return zlib-compressed pack.
         :param check: check molecule for format restrictions.
         :param version: format version
         :param order: atom order in V3
         """
-        from ._pack import pack
+        from ._pack_v2 import pack as pack_v2
 
         if check:
             bonds = self._bonds
@@ -518,9 +492,9 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
                 raise ValueError('To many neighbors not supported')
 
         if version == 2:
-            data = pack(self)
+            data = pack_v2(self)
         elif version == 3:
-            data = self._cpack(order, check)
+            data = self._pack_v3(order, check)
         else:
             raise ValueError('invalid specification version')
         if compressed:
@@ -542,48 +516,29 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         return int.from_bytes(data[1:3], 'big') >> 4
 
     @classmethod
-    def unpack(cls, data: Union[bytes, memoryview], /, *, compressed=True,
+    def unpack(cls, data: Union[bytes, memoryview], /, *, compressed=True, skip_labels_calculation=False,
                _return_pack_length=False) -> 'MoleculeContainer':
         """
         Unpack from compressed bytes.
 
         :param compressed: decompress data before processing.
         """
-        from ._unpack import unpack
-        from ._cpack import unpack as cpack
+        from ._unpack_v0v2 import unpack as unpack_v0v2
+        from ._unpack_v3 import unpack as unpack_v3
 
         if compressed:
             data = decompress(data)
         if data[0] in (0, 2):
-            (mapping, atom_numbers, isotopes, charges, radicals, hydrogens, plane, bonds,
-             atoms_stereo, allenes_stereo, cis_trans_stereo, pack_length, bonds_flat) = unpack(data)
+            mol, cis_trans, pack_length = unpack_v0v2(data)
+            for n, m, s in cis_trans:
+                mol.bond(*mol._stereo_cis_trans_centers[n])._stereo = s
         elif data[0] == 3:
-            (mapping, atom_numbers, isotopes, charges, radicals, hydrogens, plane, bonds,
-             atoms_stereo, allenes_stereo, cis_trans_stereo, pack_length, bonds_flat) = cpack(data)
+            mol, cis_trans, pack_length = unpack_v3(data)
         else:
             raise ValueError('invalid pack header')
 
-        mol = object.__new__(cls)
-        mol._bonds = bonds
-        mol._plane = plane
-        mol._charges = charges
-        mol._radicals = radicals
-        mol._hydrogens = hydrogens
-        mol._atoms_stereo = atoms_stereo
-        mol._allenes_stereo = allenes_stereo
-        mol._cis_trans_stereo = cis_trans_stereo
-
-        mol._MoleculeContainer__meta = None
-        mol._MoleculeContainer__name = None
-        mol._atoms = atoms = {}
-
-        for n, a, i in zip(mapping, atom_numbers, isotopes):
-            atoms[n] = a = object.__new__(Element.from_atomic_number(a))
-            a._Core__isotope = i
-            a._graph = ref(mol)
-            a._n = n
-        for b in bonds_flat:
-            b._Bond__graph = ref(mol)
+        if not skip_labels_calculation:
+            mol.calc_labels()
 
         if _return_pack_length:
             return mol, pack_length
@@ -599,7 +554,45 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
     def __bytes__(self):
         return self.pack()
 
-    def _cpack(self, order=None, check=True):
+    def _pack_v3(self, order=None, check=True):
+        """
+        Format V3 specification:
+        Big endian bytes order
+        8 bit - 0x03 (format specification version)
+        Atom block 3 bytes (repeated):
+        1 bit - atom entrance flag (always 1)
+        7 bit - atomic number (<=118)
+        3 bit - hydrogens (0-7). Note: 7 == None
+        4 bit - charge (charge + 4. possible range -4 - 4)
+        1 bit - radical state
+        4 bit - atom stereo
+            ANDx and ORx encode only sign. X value stored in the same order in Stereo group block.
+            0000 [same as V2] - no stereo or unknown
+            0001 - not used
+            0010 - absolute sign False
+            0011 - absolute sign True
+            0100 - sign False OR1 group
+            0101 - sign True OR1 group
+            0110 - sign False AND1 group
+            0111 - sign True AND1 group
+            1000 - sign False OR2 group
+            1001 - sign True OR2 group
+            1010 - sign False AND2 group
+            1011 - sign True AND2 group
+            1100 - sign False ORx group
+            1101 - sign True ORx group
+            1110 - sign False ANDx group
+            1111 - sign True ANDx group
+        4 bit - number of following bonds and CT blocks (0-15)
+
+        Bond block 2 bytes (repeated 0-15 times)
+        12 bit - negative shift from current atom to connected (e.g. 0x001 = -1 - connected to previous atom)
+        4 bit - bond order: 0000 - single, 0001 - double, 0010 - triple, 0011 - aromatic, 0111 - special
+
+        Cis-Trans 2 bytes
+        12 bit - negative shift from current atom to connected (e.g. 0x001 = -1 - connected to previous atom)
+        4 bit - CT sign: 1000 or 1001 - to avoid overlap with bond
+        """
         if order is None:
             order = list(self._atoms)
         elif check:
@@ -610,11 +603,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
         atoms = self._atoms
         bonds = self._bonds
-        charges = self._charges
-        radicals = self._radicals
-        hydrogens = self._hydrogens
-        atoms_stereo = self._atoms_stereo
-        allenes_stereo = self._allenes_stereo
         allenes_terminals = self._stereo_allenes_terminals
 
         cumulenes = {}
@@ -634,42 +622,43 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         data = [b'\x03']
         for i, n in enumerate(order):
             seen[n] = i
+            atom = atoms[n]
             env = bonds[n]
 
-            data.append((0x80 | atoms[n].atomic_number).to_bytes(1, 'big'))
+            data.append((0x80 | atom.atomic_number).to_bytes(1, 'big'))
 
             # 3 bit - hydrogens (0-6, None) | 4 bit - charge | 1 bit - radical
-            hcr = (charges[n] + 4) << 1 | radicals[n]
-            if (h := hydrogens[n]) is None:
+            hcr = (atom.charge + 4) << 1 | atom.is_radical
+            if atom.implicit_hydrogens is None:
                 hcr |= 0b11100000
             else:
-                hcr |= h << 5
+                hcr |= atom.implicit_hydrogens << 5
             data.append(hcr.to_bytes(1, 'big'))
 
-            if n in atoms_stereo:
-                if self._translate_tetrahedron_sign(n, [x for x in order if x in env]):
-                    s = 0b0011_0000
-                else:
-                    s = 0b0010_0000
-            elif n in allenes_stereo:
-                t1, t2 = allenes_terminals[n]
-                nn = None
-                for x in order:
-                    if nn is None:
-                        if x in cumulenes[t1]:
-                            nn = x
-                            flag = True
-                        elif x in cumulenes[t2]:
-                            flag = False
-                            nn = x
-                    elif flag:  # noqa
-                        if x in cumulenes[t2]:
+            if atom.stereo is not None:
+                if len(env) == 2:
+                    t1, t2 = allenes_terminals[n]
+                    nn = None
+                    for x in order:
+                        if nn is None:
+                            if x in cumulenes[t1]:
+                                nn = x
+                                flag = True
+                            elif x in cumulenes[t2]:
+                                flag = False
+                                nn = x
+                        elif flag:  # noqa
+                            if x in cumulenes[t2]:
+                                nm = x
+                                break
+                        elif x in cumulenes[t1]:
                             nm = x
                             break
-                    elif x in cumulenes[t1]:
-                        nm = x
-                        break
-                if self._translate_allene_sign(n, nn, nm):  # noqa
+                    if self._translate_allene_sign(n, nn, nm):  # noqa
+                        s = 0b0011_0000
+                    else:
+                        s = 0b0010_0000
+                elif self._translate_tetrahedron_sign(n, [x for x in order if x in env]):
                     s = 0b0011_0000
                 else:
                     s = 0b0010_0000

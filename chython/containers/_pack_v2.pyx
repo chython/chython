@@ -19,8 +19,9 @@
 cimport cython
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.math cimport ldexp, frexp
+from libc.string cimport memset
 
-# Format specification::
+# Format V2 specification::
 #
 # Big endian bytes order
 # 8 bit - 0x02 (current format specification)
@@ -48,6 +49,7 @@ from libc.math cimport ldexp, frexp
 # 7 bit - zero padding. in future can be used for extra bond-level stereo, like atropoisomers.
 # 1 bit - sign
 
+
 @cython.nonecheck(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
@@ -57,18 +59,19 @@ def pack(object molecule):
     cdef char charge
     cdef unsigned char atomic_number, ngb_count, isotope, bond, s = 0, buffer_b, buffer_o, stereo, hcr
     cdef unsigned char *data
-    cdef unsigned short atoms_count, bonds_count = 0, cis_trans_count, n, m
+    cdef unsigned short atoms_count, bonds_count = 0, cis_trans_count, n, m, tn, tm
     cdef unsigned int size, atoms_shift = 4, bonds_shift, order_shift, cis_trans_shift  # can be > 2^16
-    cdef unsigned char[4096] seen
+    cdef unsigned char[4096] seen  # atom number is 12 bit, thus, can be any value up to 4095. numbers are not continuous
 
     cdef bytes py_pack
-    cdef dict py_ngb, py_atoms, py_bonds
+    cdef dict py_ngb, py_atoms, py_bonds, py_stereo
     cdef tuple py_tuple
     cdef object py_atom, py_bond, py_nan_int, py_obj
 
     # map molecule to vars
     py_atoms = molecule._atoms
     py_bonds = molecule._bonds
+    py_stereo = molecule._stereo_cis_trans_terminals
 
     # calculate elements count
     atoms_count = len(py_atoms)
@@ -93,6 +96,8 @@ def pack(object molecule):
     data = <unsigned char *> PyMem_Malloc(size * sizeof(unsigned char))
     if not data:
         raise MemoryError()
+
+    memset(seen, 0, 4096 * sizeof(unsigned char))  # erase random data
 
     # start pack collection
     data[0] = 2  # header. specification version 2
@@ -119,12 +124,12 @@ def pack(object molecule):
         # V2 specification
         # 2 bit tetrahedron | 2 bit allene | 0000
         elif py_nan_int:
-            if ngb_count == 2:
+            if ngb_count == 2:  # allene
                 stereo = 0x30
             else:
                 stereo = 0xc0
         else:
-            if ngb_count == 2:
+            if ngb_count == 2:  # allene
                 stereo = 0x20
             else:
                 stereo = 0x80
@@ -149,19 +154,8 @@ def pack(object molecule):
         data[atoms_shift + 3] = isotope << 7 | atomic_number  # 1bI , A
 
         # 2 float16 big endian
-        for n, py_tuple in py_plane.items():
-            p = <unsigned char *> &xy[n]
-            double_to_float16(py_tuple[0], &p[0])
-            double_to_float16(py_tuple[1], &p[2])
-
-            # erase random data
-            seen[n] = 0
-            stereo[n] = 0
-
-        data[atoms_shift + 4] = p[0]
-        data[atoms_shift + 5] = p[1]
-        data[atoms_shift + 6] = p[2]
-        data[atoms_shift + 7] = p[3]
+        double_to_float16(py_atom._x, &data[atoms_shift + 4])
+        double_to_float16(py_atom._y, &data[atoms_shift + 6])
 
         data[atoms_shift + 8] = hcr
         atoms_shift += 9
@@ -181,7 +175,7 @@ def pack(object molecule):
                 b = True
 
             if not seen[m]:
-                bond = <unsigned char> py_bond._Bond__order - 1
+                bond = <unsigned char> py_bond._order - 1
                 # 3 3 2 | 1 3 3 1 | 2 3 3
                 if s == 0:
                     buffer_o = bond << 5
@@ -213,16 +207,18 @@ def pack(object molecule):
                     order_shift += 1
                     s = 0
 
+                py_nan_int = py_bond._stereo
+                if py_nan_int is not None:
+                    py_tuple = py_stereo[py_obj]
+                    tn, tm = py_tuple
+                    data[cis_trans_shift] = tn >> 4
+                    data[cis_trans_shift + 1] = tn << 4 | tm >> 8
+                    data[cis_trans_shift + 2] = tm
+                    data[cis_trans_shift + 3] = py_nan_int
+                    cis_trans_shift += 4
+
     if s:  # flush buffer
         data[order_shift] = buffer_o
-
-    for py_tuple, b in py_cis_trans_stereo.items():
-        n, m = py_tuple
-        data[cis_trans_shift] = n >> 4
-        data[cis_trans_shift + 1] = n << 4 | m >> 8
-        data[cis_trans_shift + 2] = m
-        data[cis_trans_shift + 3] = b
-        cis_trans_shift += 4
 
     try:
         py_pack = data[:size]
