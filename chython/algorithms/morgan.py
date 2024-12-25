@@ -44,8 +44,7 @@ class Morgan:
             return {}
         elif len(self) == 1:  # optimize single atom containers
             return dict.fromkeys(self, 1)
-        ring = self.ring_atoms
-        return _morgan({n: hash((hash(a), n in ring)) for n, a in self.atoms()}, self.int_adjacency)
+        return _morgan({n: hash(a) for n, a in self.atoms()}, self.int_adjacency)
 
     @cached_property
     def int_adjacency(self: 'MoleculeContainer') -> Dict[int, Dict[int, int]]:

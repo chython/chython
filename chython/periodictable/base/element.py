@@ -342,7 +342,8 @@ class Element(ABC):
             self.isotope == other.isotope and self.charge == other.charge and self.is_radical == other.is_radical
 
     def __hash__(self):
-        return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.implicit_hydrogens or 0))
+        return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical,
+                     self.implicit_hydrogens or 0, self.in_ring))
 
     def valence_rules(self, valence: int) -> \
             List[Tuple[Set[Tuple[int, 'Element']], Dict[Tuple[int, 'Element'], int], int]]:

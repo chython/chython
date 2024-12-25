@@ -251,8 +251,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
         if keep_sssr:
             for k,  v in self.__dict__.items():
-                if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes',
-                         'ring_atoms', 'not_special_connectivity', 'rings_count'):
+                if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes', 'not_special_connectivity', 'rings_count'):
                     copy.__dict__[k] = v
         if keep_components:
             if 'connected_components' in self.__dict__:
@@ -840,8 +839,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         if keep_sssr:
             # good to keep if no new bonds or bonds deletions or bonds to/from any change
             for k,  v in self.__dict__.items():
-                if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes',
-                         'ring_atoms', 'not_special_connectivity', 'rings_count'):
+                if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes', 'not_special_connectivity', 'rings_count'):
                     backup[k] = v
         if keep_components:
             # good to keep if no new bonds or bonds deletions
