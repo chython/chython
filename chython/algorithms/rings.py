@@ -108,45 +108,6 @@ class Rings:
         """
         return _skin_graph(self._bonds)
 
-    @cached_property
-    def rings_graph(self: 'MoleculeContainer'):
-        """
-        Graph of rings. Linkers are not included. Special bonds are considered.
-        """
-        bonds = self.skin_graph
-        if not bonds:
-            return bonds
-
-        in_rings = set()
-        atoms = set(bonds)
-        while atoms:
-            stack = deque([(atoms.pop(), 0, 0)])
-            path = []
-            seen = set()
-            while stack:
-                c, p, d = stack.pop()
-                if len(path) > d:
-                    path = path[:d]
-                if c in in_rings:
-                    continue
-                path.append(c)
-                seen.add(c)
-
-                d += 1
-                for n in bonds[c]:
-                    if n == p:
-                        continue
-                    elif n in seen:
-                        in_rings.update(path[path.index(n):])
-                    else:
-                        stack.append((n, c, d))
-
-            atoms.difference_update(seen)
-        for n in bonds.keys() - in_rings:
-            for m in bonds.pop(n):
-                bonds[m].discard(n)
-        return bonds
-
 
 def _sssr(bonds: Dict[int, Union[Set[int], Dict[int, Any]]], n_sssr: int) -> List[Tuple[int, ...]]:
     """

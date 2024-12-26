@@ -17,6 +17,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from math import isnan, nan
 from typing import TYPE_CHECKING, Union
 from ._templates import rules
 
@@ -36,8 +37,10 @@ class Calculate2DMolecule:
         Calculate 2d layout of graph.
         https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation used as a reference.
         """
-        shift_x = 0
-        groups = None
+        atoms = self._atoms
+        bonds = self._bonds
+        components = []
+        tail = []  # small components pushed to the right for better visuality
         for component in self.connected_components:
             if len(component) == 2:  # 2-atom mols always stored horizontally
                 n, m = component
@@ -45,15 +48,30 @@ class Calculate2DMolecule:
                 a._x = a._y = 0
                 a = self._atoms[m]
                 a._x, a._y = BL, 0
+                tail.insert(0, component)
             elif len(component) > 2:
-                if groups is None:
-                    # apply templates with predefined layout: rings and hard cases.
-                    groups, seen = self._apply_2d_templates()
-                    super_rings = [r for r in self.sssr if any(n not in seen for n in r)]
+                components.append(component)
+                # mark atoms as non-positioned
+                for n in component:
+                    a = atoms[n]
+                    a._x = a._y = nan
+            else:  # len == 1: just a dot. no need for layout calculation
+                tail.append(component)
 
+        if components:
+            # preset coordinates with templates
+            groups = self._apply_2d_templates()
+            # apply KK to fix environment or align groups or process unmatched rings
+            for kk in self._kamada_kawai_candidates(groups):
+                self._apply_kamada_kawai(kk, [g for g in groups if not g.isdisjoint(kk)])
 
+            for component in components:
+                if any(isnan(atoms[n].x) for n in component):
+                    ...  # linkers and trees
 
-            # else len == 1: just a dot. no need for layout calculation
+        components.extend(tail)
+        shift_x = 0
+        for component in components:
             shift_x = self._fix_plane_mean(shift_x, component=component) + .9
         self.__dict__.pop('__cached_method__repr_svg_', None)
 
@@ -63,17 +81,35 @@ class Calculate2DMolecule:
         groups = []
         for q, layout in rules:
             for m in q.get_mapping(self, automorphism_filter=False):
-                if not seen.isdisjoint(m.values()):  # avoid any overlap. rules preordered from complex to simple
+                if not seen.isdisjoint(m.values()):  # avoid any overlap
                     continue
                 seen.update(m.values())
-                groups.append(list(m.values()))
+                groups.append(set(m.values()))
                 for n, xy in zip(m.values(), layout):
                     atom = atoms[n]
                     atom._x, atom._y = xy
-        return groups, seen
+        return groups
 
-    def _apply_kamada_kawai(self, group):
-        pass
+    def _kamada_kawai_candidates(self, groups):
+        atoms = self._atoms
+        bonds = self._bonds
+        clusters = [{n} | bonds[n].keys() for n, a in atoms.items() if a.in_ring]
+        clusters.extend(g | {m for n in g for m in bonds[n]} for g in groups)  # add layouted groups
+        solved = []
+        while clusters:
+            c1 = clusters.pop()
+            for c2 in clusters:
+                if not c1.isdisjoint(c2):
+                    c2.update(c1)
+                    break
+            else:
+                if c1 not in groups:
+                    solved.append(c1)
+        return solved
+
+    def _apply_kamada_kawai(self, system, groups):
+        atoms = self._atoms
+        bonds = self._bonds
 
     def _fix_plane_mean(self: 'MoleculeContainer', shift_x: float, shift_y=0., component=None) -> float:
         atoms = self._atoms
