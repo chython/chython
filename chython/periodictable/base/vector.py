@@ -19,23 +19,19 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from dataclasses import dataclass
 from math import cos, sin, hypot, atan2
 from typing import List
 
 
-@dataclass(frozen=True, slots=True)
 class Vector:
-    """
-    The `Vector` class facilitates operations with coordinates, including vector arithmetic
-    (addition, subtraction, multiplication/division by scalars), normalization, rotation, and
-    distance calculations. It also supports methods for determining the angle of a vector, its
-    length, and whether it lies in a certain quadrant. Additionally, it includes functions for
-    reflecting vectors about lines, finding the closest atom or point, and rotating vectors around
-    other vectors or points.
-    """
-    x: float
-    y: float
+    __slots__ = ('x', 'y')
+
+    def __init__(self, x: float = 0., y: float = 0.):
+        self.x = x
+        self.y = y
+
+    def __repr__(self):
+        return f'Vector({self.x}, {self.y})'
 
     def __neg__(self):
         """
@@ -79,6 +75,9 @@ class Vector:
         yield self.x
         yield self.y
 
+    def __matmul__(self, vector):
+        return self.x * vector.y - self.y * vector.x
+
     def rotate(self, angle: float):
         """
         A method that rotates the vector by the angle in radians
@@ -103,7 +102,7 @@ class Vector:
         if vector is None:
             return atan2(self.y, self.x)
         else:
-            return atan2(self.y - vector.y, self.x - vector.x)
+            return atan2(vector.y - self.y, vector.x - self.x)
 
 
 

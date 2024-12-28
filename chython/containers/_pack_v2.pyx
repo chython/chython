@@ -154,8 +154,8 @@ def pack(object molecule):
         data[atoms_shift + 3] = isotope << 7 | atomic_number  # 1bI , A
 
         # 2 float16 big endian
-        double_to_float16(py_atom._x, &data[atoms_shift + 4])
-        double_to_float16(py_atom._y, &data[atoms_shift + 6])
+        double_to_float16(py_atom.x, &data[atoms_shift + 4])
+        double_to_float16(py_atom.y, &data[atoms_shift + 6])
 
         data[atoms_shift + 8] = hcr
         atoms_shift += 9
