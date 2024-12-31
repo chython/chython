@@ -75,8 +75,17 @@ class Vector:
         yield self.x
         yield self.y
 
-    def __matmul__(self, vector):
+    def __len__(self):
+        return 2
+
+    def __matmul__(self, vector: 'Vector'):
         return self.x * vector.y - self.y * vector.x
+
+    def __or__(self, vector: 'Vector'):
+        """
+        Calculate distance between two vectors
+        """
+        return hypot(vector.x - self.x, vector.y - self.y)
 
     def rotate(self, angle: float):
         """

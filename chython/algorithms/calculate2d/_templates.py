@@ -19,49 +19,19 @@
 from lazy_object_proxy import Proxy
 
 
+def aligner(xy):
+    x0, y0 = min(xy, key=lambda x: x[0])
+    return [(round(x - x0, 4), round(y - y0, 4)) for x, y in xy]
+
+
 def _rules():
     from ... import smarts
 
     rules = []
 
-
-    #   C
-    #  /  \
-    # C    C
-    # |    |
-    # C    C
-    #  \  /
-    #   C
-    q = smarts('[A;r6]!#;@1!#;@[A]!#;@[A]!#;@[A]!#;@[A]!#;@[A]1')
-    xy = [(0, 2.31), (0, 0.77), (1.3337, 0), (2.6674, 0.77), (2.6674, 2.31), (1.3337, 3.08)]
-    rules.append((q, xy))
-
-    #
-    #  C-,=C
-    # ||   ||
-    # C    C
-    #  \  /
-    #   C1
-    q = smarts('[A;r5]-,:;@1-,:;@[A]!#;@[A]!#;@[A]!#;@[A]1')
-    xy = [(1.2459, 0), (0, 0.9052), (0.4759, 2.3698), (2.0159, 2.3698), (2.4918, 0.9052)]
-    rules.append((q, xy))
-
-    #
-    # C=,-C
-    # \   /
-    #   C
-    #
-    q = smarts('[A;r3]1-,=;@[A]-;@[A]1')
-    xy = [(0, 0), (1.54, 0), (.77, -1.333)]
-    rules.append((q, xy))
-
-    #
-    # C=,-C
-    # |   |
-    # C=,-C
-    #
-    q = smarts('[A;r4]-;@1-,=;@[A]-;@[A]-,=;@[A]1')
-    xy = [(0, 0), (1.54, 0), (1.54, -1.54), (0, -1.54)]
+    # bicyclo[1.1.1]pentane
+    q = smarts('[A;r4;D2:2]-1-[A;D3,D4:1]-2-[A;r4;D2:5]-[A;D3,D4:3]-1-[A;r4;D2:4]-2')
+    xy = [(0.0, 0.0), (0.6674, 0.485), (1.3348, 0.0), (1.0799, -0.7846), (0.2549, -0.7846)]
     rules.append((q, xy))
     return rules
 

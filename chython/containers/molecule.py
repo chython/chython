@@ -19,6 +19,7 @@
 from CachedMethods import cached_args_method
 from collections import Counter, defaultdict
 from functools import cached_property
+from numpy import uint, zeros
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 from zlib import compress, decompress
 from .bonds import Bond, DynamicBond, QueryBond
@@ -106,8 +107,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
         :param set_bonds: if True set bond orders instead of 1.
         """
-        from numpy import uint, zeros
-
         adj = zeros((len(self), len(self)), dtype=uint)
         mapping = {n: x for x, n in enumerate(self._atoms)}
         if set_bonds:
