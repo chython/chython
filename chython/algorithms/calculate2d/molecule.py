@@ -24,7 +24,7 @@ from itertools import combinations
 from math import isnan, nan, radians
 from numpy import zeros, linspace, column_stack, sin, cos, sqrt, nan_to_num, argmax, errstate
 from scipy.sparse.csgraph import shortest_path
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Dict
 from ._templates import rules
 from ...exceptions import ImplementationError
 from ...periodictable.base.vector import Vector
@@ -32,6 +32,8 @@ from ...periodictable.base.vector import Vector
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
+    from chython.containers import Bond
+    from chython.periodictable import Element
 
 
 SINGLE = 1
@@ -49,6 +51,8 @@ D360 = radians(360)
 
 class Calculate2DMolecule:
     __slots__ = ()
+    _atoms: Dict[int, 'Element']
+    _bonds: Dict[int, Dict[int, 'Bond']]
 
     def clean2d(self: Union['MoleculeContainer', 'Calculate2DMolecule'], *,
                 kk_outer_iterations: int = 1000, kk_outer_threshold: float =.1,
@@ -82,8 +86,8 @@ class Calculate2DMolecule:
             #                                   kk_outer_threshold, kk_inner_threshold)
 
             for component in components:
-                if any(isnan(atoms[n].x) for n in component):
-                    self._position_atoms(component, groups)
+                if component not in groups:
+                    self._position_atoms(component, [x for x in groups if not component.isdisjoint(x)])
 
         components.extend(tail)
         shift_x = 0
@@ -91,65 +95,125 @@ class Calculate2DMolecule:
             shift_x = self._fix_plane_mean(shift_x, component=component) + .9
         self.__dict__.pop('__cached_method__repr_svg_', None)
 
-    def _set_starting_points(self: 'MoleculeContainer', component):
+    def _initialize_positioning(self, component, groups):
         """
         Prepare starting point and previous atom for angle calculation
         """
         atoms = self._atoms
         bonds = self._bonds
 
+        if not groups:
+            # nothing pre-layouted. pick any ring atom if exists or any terminal atom.
+            for n in component:
+                if atoms[n].in_ring:
+                    m = next(m for m in bonds[n] if atoms[m].in_ring)
+                    atoms[n].xy = (0., 0.)
+                    atoms[m].xy = (0., BL)  # place 1st and second ring atoms always vertical
+                    return [(m, n, D90, -1)]
+
+            # pick any terminal atom. we have tree-like molecule without rings.
+            # we for sure have at least 3 atoms in a row, thus, we have to layout at least 1 extra atom.
+            for n in component:
+                ms = bonds[n]
+                if len(ms) == 1:
+                    m = next(iter(ms))
+                    atoms[n].xy = (0., 0.)
+                    atoms[m].xy = Vector(BL, 0).rotate(D30)  # place second atom always top-right
+                    return [(m, n, D30, -1)]
+
+        # we have pre-layouted groups. let's prepare them for extention.
         stack = []
-        for n in component:
-            an = atoms[n]
-            if isnan(an.x):  # KK/template layouted
-                continue
+        layouted = set()
+        seen = set()
+        for group in groups:
+            seen.update(group)
+            for n in group:
+                env = bonds[n]
+                if env.keys() <= seen:  # neighbors already pre-layouted
+                    continue
+                an = atoms[n]
 
-            # todo: fix bond-linked prelayouted groups
+                # treat atom in group as star where layouted atoms are close to each other and non-layouted on opposite side
+                #
+                #   L   N
+                #    \ /
+                # L - L
+                #    / \
+                #   L   N
+                #
+                v, c = Vector(0, 0), -1
+                for m in env:
+                    if m in seen:
+                        v += (atoms[m].xy - an.xy).normalise()
+                        c += 1
+                delta = D360 / len(env)
+                angle = v.angle() + delta * c / 2  # ideal position of frontal layouted atom
 
-            env = bonds[n]
-            v = Vector(0, 0)
-            c = -1
-            for m in env:
-                am = atoms[m]
-                if not isnan(am.x):
-                    v += (am.xy - an.xy).normalise()
-                    c += 1
-            delta = D360 / len(env)
-            angle = v.angle() + delta * c / 2
+                for m in env:
+                    if m in seen:  # already layouted.
+                        continue
 
-            for m in env:
-                am = atoms[m]
-                if isnan(am.x):
                     angle += delta
-                    am.xy = an.xy + Vector(BL, 0).rotate(angle)
-                    stack.append((m, n, angle, -1))
-        if stack:
-            return stack
+                    xy = an.xy + Vector(BL, 0).rotate(angle)
 
-        for n in component:
-            if atoms[n].in_ring:
-                m = next(m for m in bonds[n] if atoms[m].in_ring)
-                atoms[n].xy = (0., 0.)
-                atoms[m].xy = (0., BL)  # place 1st and second ring atoms always vertical
-                return [(m, n, D90, -1)]
+                    for other in groups:
+                        if not other.isdisjoint(seen):
+                            continue
+                        elif m in other:
+                            # Ring-bond-Ring case
+                            # atom is part of another pre-layouted group.
+                            # let's reposition the whole group.
+                            am, emv = atoms[m], bonds[m]
 
-        # pick any terminal atom. we have tree-like molecule without rings.
-        # we for sure have at least 3 atoms in a row, thus, we have to layout at least 1 extra atom.
-        for n in component:
-            ms = bonds[n]
-            if len(ms) == 1:
-                m = next(iter(ms))
-                atoms[n].xy = (0., 0.)
-                atoms[m].xy = Vector(BL, 0).rotate(D30)  # place second atom always top-right
-                return [(m, n, D30, -1)]
+                            self._rotate_group(other, an.xy, angle - an.xy.angle(am.xy))  # fix angle g-n-m
+                            self._shift_group(other, xy - am.xy)  # fix position of m ang the whole group
 
-    def _position_atoms(self: 'MoleculeContainer', component, groups):
+                            # calculate opposite angle
+                            v, c = Vector(0, 0), 1
+                            for k in emv:
+                                if k in other:
+                                    v += (atoms[k].xy - am.xy).normalise()
+                                    c += 1
+                            # fix angle o-m-n
+                            self._rotate_group(other, am.xy, v.angle() + D360 / len(emv) * c / 2)
+                            break
+                        elif m in layouted:
+                            # Ring - Linker Atom - Ring case
+                            ...
+                            break
+                    else:  # non-layouted atom.
+                        layouted.add(m)
+                        atoms[m].xy = xy
+                        stack.append((m, n, angle, -1))
+                        continue
+        return stack
+
+    def _rotate_group(self, group, point: Vector, angle):
+        """
+        Rotate the whole group around given point
+        """
+        atoms = self._atoms
+
+        for n in group:
+            an = atoms[n]
+            an.xy = an.xy.rotate(angle, point)
+
+    def _shift_group(self, group, shift: Vector):
+        """
+        Shift the whole group by given vector
+        """
+        atoms = self._atoms
+
+        for n in group:
+            atoms[n].xy += shift
+
+    def _position_atoms(self, component, groups):
         atoms = self._atoms
         bonds = self._bonds
         ctc = self._stereo_cis_trans_centers
 
         seen = set()
-        stack = self._set_starting_points(component)
+        stack = self._initialize_positioning(component, groups)
         while stack:
             current, previous, angle, sign = stack.pop()
             if current in seen:
@@ -242,7 +306,7 @@ class Calculate2DMolecule:
                         else:
                             an.xy = xy
 
-    def _position_cis_trans(self: 'MoleculeContainer', current, previous, angle, s):
+    def _position_cis_trans(self, current, previous, angle, s):
         """
         cis-trans case. we came from a cumulene chain, thus, we have one layouted end
         """
@@ -441,7 +505,7 @@ class Calculate2DMolecule:
                     coordinates[mapping[n], :] = tuple(atoms[n].xy - center)
             yield cluster, length, strength, coordinates, mapping
 
-    def _fix_plane_mean(self: 'MoleculeContainer', shift_x: float, shift_y=0., component=None) -> float:
+    def _fix_plane_mean(self, shift_x: float, shift_y=0., component=None) -> float:
         atoms = self._atoms
         if component is None:
             component = atoms
@@ -470,7 +534,7 @@ class Calculate2DMolecule:
                 max_x += .25
         return max_x
 
-    def _fix_plane_min(self: 'MoleculeContainer', shift_x: float, shift_y=0., component=None) -> float:
+    def _fix_plane_min(self, shift_x: float, shift_y=0., component=None) -> float:
         atoms = self._atoms
         if component is None:
             component = atoms
