@@ -164,8 +164,6 @@ class Calculate2DMolecule:
                             # atom is part of another pre-layouted group.
                             # let's reposition the whole group.
                             am, emv = atoms[m], bonds[m]
-
-                            self._rotate_group(other, an.xy, angle - an.xy.angle(am.xy))  # fix angle g-n-m
                             self._shift_group(other, xy - am.xy)  # fix position of m ang the whole group
 
                             # calculate opposite angle
@@ -175,7 +173,7 @@ class Calculate2DMolecule:
                                     v += (atoms[k].xy - am.xy).normalise()
                                     c += 1
                             # fix angle o-m-n
-                            self._rotate_group(other, am.xy, v.angle() + D360 / len(emv) * c / 2)
+                            self._rotate_group(other, am.xy, angle + D180 - v.angle() + D360 / len(emv) * c / 2)
                             break
                         elif m in layouted:
                             # Ring - Linker Atom - Ring case
