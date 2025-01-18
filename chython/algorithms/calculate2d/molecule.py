@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2024 Denis Lipatov <denis.lipatov163@gmail.com>
 #  Copyright 2024 Vyacheslav Grigorev <slavick2000@yandex.ru>
 #  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
@@ -86,8 +86,8 @@ class Calculate2DMolecule:
             #                                   kk_outer_threshold, kk_inner_threshold)
 
             for component in components:
-                if component not in groups:
-                    self._position_atoms(component, [x for x in groups if not component.isdisjoint(x)])
+                if all(component != g.keys() for g in groups):  # check for fully layouted component
+                    self._position_atoms(component, [g for g in groups if not component.isdisjoint(g)])
 
         components.extend(tail)
         shift_x = 0
@@ -102,6 +102,7 @@ class Calculate2DMolecule:
         atoms = self._atoms
         bonds = self._bonds
 
+        directions = {}
         if not groups:
             # nothing pre-layouted. pick any ring atom if exists or any terminal atom.
             for n in component:
@@ -109,7 +110,7 @@ class Calculate2DMolecule:
                     m = next(m for m in bonds[n] if atoms[m].in_ring)
                     atoms[n].xy = (0., 0.)
                     atoms[m].xy = (0., BL)  # place 1st and second ring atoms always vertical
-                    return [(m, n, D90, -1)]
+                    return [(m, n, D90, -1)], directions
 
             # pick any terminal atom. we have tree-like molecule without rings.
             # we for sure have at least 3 atoms in a row, thus, we have to layout at least 1 extra atom.
@@ -119,72 +120,16 @@ class Calculate2DMolecule:
                     m = next(iter(ms))
                     atoms[n].xy = (0., 0.)
                     atoms[m].xy = Vector(BL, 0).rotate(D30)  # place second atom always top-right
-                    return [(m, n, D30, -1)]
+                    return [(m, n, D30, -1)], directions
 
-        # we have pre-layouted groups. let's prepare them for extention.
         stack = []
-        layouted = set()
-        seen = set()
         for group in groups:
-            seen.update(group)
-            for n in group:
-                env = bonds[n]
-                if env.keys() <= seen:  # neighbors already pre-layouted
+            for n, d in group.items():
+                if not d:
                     continue
-                an = atoms[n]
-
-                # treat atom in group as star where layouted atoms are close to each other and non-layouted on opposite side
-                #
-                #   L   N
-                #    \ /
-                # L - L
-                #    / \
-                #   L   N
-                #
-                v, c = Vector(0, 0), -1
-                for m in env:
-                    if m in seen:
-                        v += (atoms[m].xy - an.xy).normalise()
-                        c += 1
-                delta = D360 / len(env)
-                angle = v.angle() + delta * c / 2  # ideal position of frontal layouted atom
-
-                for m in env:
-                    if m in seen:  # already layouted.
-                        continue
-
-                    angle += delta
-                    xy = an.xy + Vector(BL, 0).rotate(angle)
-
-                    for other in groups:
-                        if not other.isdisjoint(seen):
-                            continue
-                        elif m in other:
-                            # Ring-bond-Ring case
-                            # atom is part of another pre-layouted group.
-                            # let's reposition the whole group.
-                            am, emv = atoms[m], bonds[m]
-                            self._shift_group(other, xy - am.xy)  # fix position of m ang the whole group
-
-                            # calculate opposite angle
-                            v, c = Vector(0, 0), 1
-                            for k in emv:
-                                if k in other:
-                                    v += (atoms[k].xy - am.xy).normalise()
-                                    c += 1
-                            # fix angle o-m-n
-                            self._rotate_group(other, am.xy, angle + D180 - v.angle() + D360 / len(emv) * c / 2)
-                            break
-                        elif m in layouted:
-                            # Ring - Linker Atom - Ring case
-                            ...
-                            break
-                    else:  # non-layouted atom.
-                        layouted.add(m)
-                        atoms[m].xy = xy
-                        stack.append((m, n, angle, -1))
-                        continue
-        return stack
+                directions[n] = d
+                stack.append((n, None, None, -1))  # directions already defined. no need for previous and angle
+        return stack, directions
 
     def _rotate_group(self, group, point: Vector, angle):
         """
@@ -205,18 +150,40 @@ class Calculate2DMolecule:
         for n in group:
             atoms[n].xy += shift
 
+    def _reset_group(self, current, n, xy, groups):
+        ac = self._atoms[current]
+        an = self._atoms[n]
+        g = next(g for g in groups if n in g)
+        angle = xy.angle() + D180 - g[n][current].angle()
+        self._shift_group(g, ac.xy + xy - an.xy)
+        self._rotate_group(g, an.xy, angle)
+        return {x: {z: a.rotate(angle) for z, a in y.items()} for x, y in g.items() if y}
+
     def _position_atoms(self, component, groups):
         atoms = self._atoms
         bonds = self._bonds
         ctc = self._stereo_cis_trans_centers
 
         seen = set()
-        stack = self._initialize_positioning(component, groups)
+        stack, directions = self._initialize_positioning(component, groups)
         while stack:
             current, previous, angle, sign = stack.pop()
             if current in seen:
                 continue
             seen.add(current)
+
+            ac = atoms[current]
+            if current in directions:
+                for n, xy in directions[current].items():
+                    an = atoms[n]
+                    if not isnan(an.x):
+                        seen.add(n)
+                        # reached layouted fragment. rotate the whole fragment.
+                        directions.update(self._reset_group(current, n, xy, groups))
+                    else:
+                        an.xy = ac.xy + xy
+                        stack.append((n, current, xy.angle(), sign))
+                continue
 
             env = bonds[current]
             if len(env) == 1:
@@ -224,23 +191,20 @@ class Calculate2DMolecule:
                 continue
 
             # chiral cis-trans case.
-            if env[previous] == DOUBLE:
+            elif env[previous] == DOUBLE:
                 if b := ctc.get(current):
                     if (s := self.bond(*b).stereo) is not None:
                         for n, current, angle, sign, xy in self._position_cis_trans(current, previous, angle, s):
                             an = atoms[n]
                             if not isnan(an.x):
                                 # reached layouted fragment. rotate the whole fragment and drop chain.
-                                ...
-                                # prevent double processing in cases of 2 KK layouted fragments linked by chain
                                 seen.add(n)
-                                raise NotImplementedError
+                                directions.update(self._reset_group(current, n, xy, groups))
                             else:
-                                an.xy = xy
+                                an.xy = ac.xy + xy
                                 stack.append((n, current, angle, sign))
                         continue
 
-            ac = atoms[current]
             # simple non-chiral cases
             if len(env) == 2:
                 n = next(n for n in env if n != previous)
@@ -250,59 +214,58 @@ class Calculate2DMolecule:
                 else:
                     angle += sign * D60
                     stack.append((n, current, angle, -sign))
-                xy = ac.xy + Vector(BL, 0).rotate(angle)
-
+                xy = Vector(BL, 0).rotate(angle)
                 an = atoms[n]
                 if not isnan(an.x):
                     # reached layouted fragment. rotate the whole fragment and drop chain.
                     stack.pop()
                     seen.add(n)  # prevent double processing in cases of 2 KK layouted fragments linked by chain
-                    raise NotImplementedError
+                    directions.update(self._reset_group(current, n, xy, groups))
                 else:
-                    an.xy = xy
+                    an.xy = ac.xy + xy
             elif len(env) == 3:
                 n, m = (n for n in env if n != previous)
                 # continue to grow to the same direction
                 angle += sign * D60
                 stack.append((n, current, angle, -sign))
-                xy = ac.xy + Vector(BL, 0).rotate(angle)
+                xy = Vector(BL, 0).rotate(angle)
                 an = atoms[n]
                 if not isnan(an.x):
                     # reached layouted fragment. rotate the whole fragment and drop chain.
                     stack.pop()
                     seen.add(n)
-                    raise NotImplementedError
+                    directions.update(self._reset_group(current, n, xy, groups))
                 else:
-                    an.xy = xy
+                    an.xy = ac.xy + xy
 
                 # make a side branch
                 angle -= sign * D120
                 stack.append((m, current, angle, sign))
-                xy = ac.xy + Vector(BL, 0).rotate(angle)
+                xy = Vector(BL, 0).rotate(angle)
                 am = atoms[m]
                 if not isnan(am.x):
                     # reached layouted fragment. rotate the whole fragment and drop chain.
                     stack.pop()
-                    seen.add(n)
-                    raise NotImplementedError
+                    seen.add(m)
+                    directions.update(self._reset_group(current, m, xy, groups))
                 else:
-                    am.xy = xy
+                    am.xy = ac.xy + xy
             else:  # 4+ neighbors. position on circle
                 delta = D360 / len(env)
                 angle += D180
                 for n in env:
                     if n != previous:
                         angle += delta
-                        xy = ac.xy + Vector(BL, 0).rotate(angle)
+                        xy = Vector(BL, 0).rotate(angle)
                         stack.append((n, current, angle, sign))  # keep sign to minimize overlaps
                         an = atoms[n]
                         if not isnan(an.x):
                             # reached layouted fragment. rotate the whole fragment and drop chain.
                             stack.pop()
                             seen.add(n)
-                            raise NotImplementedError
+                            directions.update(self._reset_group(current, n, xy, groups))
                         else:
-                            an.xy = xy
+                            an.xy = ac.xy + xy
 
     def _position_cis_trans(self, current, previous, angle, s):
         """
@@ -367,11 +330,11 @@ class Calculate2DMolecule:
             sign = -1 if s else 1
 
         angle -= sign * D60
-        xy = ac.xy + Vector(BL, 0).rotate(angle)
+        xy = Vector(BL, 0).rotate(angle)
         yield n1, current, angle, sign, xy
         if n2:
             angle += sign * D120
-            xy = ac.xy + Vector(BL, 0).rotate(angle)
+            xy = Vector(BL, 0).rotate(angle)
             yield n2, current, angle, -sign, xy
 
     def _apply_2d_templates(self):
@@ -379,16 +342,37 @@ class Calculate2DMolecule:
         Use predefined templates to layout atoms.
         """
         atoms = self._atoms
+        bonds = self._bonds
+
         seen = set()
         groups = []
-        for q, layout in rules:
-            for m in q.get_mapping(self, automorphism_filter=False):
-                if not seen.isdisjoint(m.values()):  # avoid any overlap
+        for q, layout, sub in rules:
+            for mp in q.get_mapping(self, automorphism_filter=False):
+                if not seen.isdisjoint(mp.values()):  # avoid any overlap
                     continue
-                seen.update(m.values())
-                groups.append(set(m.values()))
-                for i, n in m.items():
-                    atoms[n].xy = layout[i - 1]
+                seen.update(mp.values())
+                g = {n: None for n in mp.values()}
+                groups.append(g)
+                for i, n in mp.items():
+                    atoms[n].xy = layout[i]
+
+                for i, n in mp.items():
+                    env = bonds[n]
+                    if not (s := env.keys() - g.keys()):
+                        continue
+                    an = atoms[n]
+                    if len(s) == 1 and i in sub:
+                        xy = Vector(*sub[i])
+                        g[n] = {s.pop(): xy - an.xy}
+                        continue
+
+                    v, c = Vector(0, 0), -1
+                    for m in env.keys() & g.keys():
+                        v += (atoms[m].xy - an.xy).normalise()
+                        c += 1
+                    delta = D360 / len(env)
+                    angle = v.angle() + delta * c / 2  # ideal position of frontal layouted atom
+                    g[n] = {m: Vector(BL, 0).rotate(angle + delta * x) for x, m in enumerate(s, 1)}
         return groups
 
     def _apply_kamada_kawai(self, groups, outer_iterations, inner_iterations, outer_threshold, inner_threshold):
