@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,7 +19,9 @@
 from array import array
 from collections import defaultdict, deque
 from functools import cached_property, partial
+from io import BytesIO
 from itertools import permutations
+from struct import Struct
 from typing import Any, Collection, Dict, Iterator, Optional, TYPE_CHECKING, Union
 from .._functions import lazy_product
 from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement, QueryElement
@@ -28,6 +30,12 @@ from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement, Q
 if TYPE_CHECKING:
     from chython.containers.graph import Graph
     from chython.containers import MoleculeContainer
+
+
+header_struct = Struct('I')
+m_atom_struct = Struct('QQQQIII')
+q_atom_struct = Struct('QQQQIIIII')
+bond_struct = Struct('QI')
 
 
 class Isomorphism:
@@ -260,8 +268,13 @@ class MoleculeIsomorphism(Isomorphism):
             start += len(ms)
             o_to[i] = start
 
-        return (array('L', numbers), array('Q', bits1), array('Q', bits2), array('Q', bits3), array('Q', bits4),
-                array('Q', bonds), array('I', o_from), array('I', o_to), array('I', indices))
+        buffer = BytesIO()
+        buffer.write(header_struct.pack(len(numbers)))
+        for x in zip(bits1, bits2, bits3, bits4, o_from, o_to, numbers):
+            buffer.write(m_atom_struct.pack(*x))
+        for x in zip(bonds, indices):
+            buffer.write(bond_struct.pack(*x))
+        return buffer.getvalue()
 
 
 class QueryIsomorphism(Isomorphism):
@@ -291,7 +304,7 @@ class QueryIsomorphism(Isomorphism):
                 components = self._cython_compiled_query  # override to cython data
 
                 def get_mapping(query, scope):
-                    return _cython_get_mapping(*query, *other._cython_compiled_structure,
+                    return _cython_get_mapping(query, other._cython_compiled_structure,
                                                array('I', [n in scope for n in other]))
         else:
             components = get_mapping = None
@@ -536,10 +549,16 @@ class QueryIsomorphism(Isomorphism):
                         indices[j] = mapping[m]
                     start += len(ms)
                     q_to[i] = start
-            components.append((array('L', [n for n, *_ in c]), array('I', [0] + [mapping[x] for _, x, *_ in c[1:]]),
-                               array('Q', masks1), array('Q', masks2), array('Q', masks3), array('Q', masks4),
-                               array('I', closures), array('I', q_from), array('I', q_to),
-                               array('I', indices), array('Q', bonds)))
+
+            back = [0] + [mapping[x] for _, x, *_ in c[1:]]
+            numbers = [n for n, *_ in c]
+            buffer = BytesIO()
+            buffer.write(header_struct.pack(len(numbers)))
+            for x in zip(masks1, masks2, masks3, masks4, back, closures, q_from, q_to, numbers):
+                buffer.write(q_atom_struct.pack(*x))
+            for x in zip(bonds, indices):
+                buffer.write(bond_struct.pack(*x))
+            components.append(buffer.getvalue())
         return components
 
 
