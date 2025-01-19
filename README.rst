@@ -31,8 +31,6 @@ Install
 
 Only python 3.8+.
 
-Note: for using `clean2d` install NodeJS into system.
-
 * **stable version available through PyPI**::
 
     pip install chython

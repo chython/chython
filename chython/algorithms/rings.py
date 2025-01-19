@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -113,9 +113,9 @@ class Rings:
         """
         Graph of rings. Linkers are not included. Special bonds are considered.
         """
-        bonds = self.skin_graph
+        bonds = {n: ms.copy() for n, ms in self.skin_graph.items()}
         if not bonds:
-            return bonds
+            return {}
 
         in_rings = set()
         atoms = set(bonds)

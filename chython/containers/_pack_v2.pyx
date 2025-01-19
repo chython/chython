@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -154,8 +154,8 @@ def pack(object molecule):
         data[atoms_shift + 3] = isotope << 7 | atomic_number  # 1bI , A
 
         # 2 float16 big endian
-        double_to_float16(py_atom._x, &data[atoms_shift + 4])
-        double_to_float16(py_atom._y, &data[atoms_shift + 6])
+        double_to_float16(py_atom.x, &data[atoms_shift + 4])
+        double_to_float16(py_atom.y, &data[atoms_shift + 6])
 
         data[atoms_shift + 8] = hcr
         atoms_shift += 9

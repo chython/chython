@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # cython: language_level=3
 #
-#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -29,6 +29,7 @@ from chython.periodictable import (H, He, Li, Be, B, C, N, O, F, Ne, Na, Mg, Al,
                                    Ho, Er, Tm, Yb, Lu, Hf, Ta, W, Re, Os, Ir, Pt, Au, Hg, Tl, Pb, Bi, Po, At, Rn, Fr,
                                    Ra, Ac, Th, Pa, U, Np, Pu, Am, Cm, Bk, Cf, Es, Fm, Md, No, Lr, Rf, Db, Sg, Bh, Hs,
                                    Mt, Ds, Rg, Cn, Nh, Fl, Mc, Lv, Ts, Og)
+from chython.periodictable.base.vector import Vector
 
 
 # Format specification::
@@ -72,7 +73,7 @@ def unpack(const unsigned char[::1] data not None):
     cdef unsigned int size, atoms_shift = 4, bonds_shift, order_shift, cis_trans_shift
     cdef unsigned char[4096] seen
 
-    cdef object py_mol, py_bond, py_n, py_m, py_atom, py_nan_bool
+    cdef object py_mol, py_bond, py_n, py_m, py_atom, py_nan_bool, py_vector
     cdef dict py_atoms, py_bonds, py_ngb
     cdef list py_cis_trans
 
@@ -127,10 +128,12 @@ def unpack(const unsigned char[::1] data not None):
         else:
             py_atom._isotope = None
 
+        py_vector = object.__new__(Vector)
         a, b = data[atoms_shift + 4], data[atoms_shift + 5]
-        py_atom._x = double_from_bytes(a, b)
+        py_vector.x = double_from_bytes(a, b)
         a, b = data[atoms_shift + 6], data[atoms_shift + 7]
-        py_atom._y = double_from_bytes(a, b)
+        py_vector.y = double_from_bytes(a, b)
+        py_atom._xy = py_vector
 
         a = data[atoms_shift + 8]
         hydrogens = a >> 5

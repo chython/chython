@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,11 +20,12 @@ from abc import ABC, abstractmethod
 from CachedMethods import class_cached_property
 from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple, Type
+from .vector import Vector
 from ...exceptions import ValenceError
 
 
 class Element(ABC):
-    __slots__ = ('_isotope', '_charge', '_is_radical', '_x', '_y', '_implicit_hydrogens',
+    __slots__ = ('_isotope', '_charge', '_is_radical', '_xy', '_implicit_hydrogens',
                  '_explicit_hydrogens', '_stereo', '_parsed_mapping',
                  '_neighbors', '_heteroatoms', '_hybridization', '_ring_sizes', '_in_ring')
     __class_cache__ = {}
@@ -45,7 +46,7 @@ class Element(ABC):
         self.isotope = isotope
         self.charge = charge
         self.is_radical = is_radical
-        self.x, self.y = x, y
+        self._xy = Vector(x, y)
 
         self._implicit_hydrogens = implicit_hydrogens
         self._stereo = stereo
@@ -179,42 +180,33 @@ class Element(ABC):
         """
         X coordinate of atom on 2D plane
         """
-        return self._x
+        return self._xy.x
 
     @x.setter
     def x(self, value: float):
-        if not isinstance(value, float):
-            raise TypeError('float expected')
-        self._x = value
+        self._xy.x = value
 
     @property
     def y(self) -> float:
         """
         Y coordinate of atom on 2D plane
         """
-        return self._y
+        return self._xy.y
 
     @y.setter
     def y(self, value: float):
-        if not isinstance(value, float):
-            raise TypeError('float expected')
-        self._y = value
+        self._xy.y = value
 
     @property
-    def xy(self) -> Tuple[float, float]:
+    def xy(self) -> Vector:
         """
         (X, Y) coordinates of atom on 2D plane
         """
-        return self._x, self._y
+        return self._xy
 
     @xy.setter
     def xy(self, value: Tuple[float, float]):
-        if (not isinstance(value, (tuple, list))
-                or len(value) != 2
-                or not isinstance(value[0], float)
-                or not isinstance(value[1], float)):
-            raise TypeError('tuple of 2 floats expected')
-        self._x, self._y = value
+        self._xy = Vector(*value)
 
     @property
     def implicit_hydrogens(self) -> Optional[int]:
@@ -279,8 +271,7 @@ class Element(ABC):
         copy._isotope = self.isotope
         copy._charge = self.charge
         copy._is_radical = self.is_radical
-        copy._x = self.x
-        copy._y = self.y
+        copy._xy = self.xy
         if full:
             copy._implicit_hydrogens = self.implicit_hydrogens
             copy._stereo = self.stereo
