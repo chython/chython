@@ -23,17 +23,14 @@ from typing import TYPE_CHECKING, Union
 from ...exceptions import ImplementationError
 
 
-try:
-    from importlib.resources import files
-except ImportError:  # python3.8
-    from importlib_resources import files
+from importlib.resources import files
 
 
 if TYPE_CHECKING:
     from chython import ReactionContainer, MoleculeContainer
 
 try:
-    from py_mini_racer.py_mini_racer import MiniRacer, JSEvalException
+    from py_mini_racer import MiniRacer, JSEvalException
 
     ctx = MiniRacer()
     ctx.eval('const self = this')
