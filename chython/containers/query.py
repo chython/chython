@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,13 +20,22 @@ from typing import Tuple, Union
 from .bonds import Bond, QueryBond
 from .graph import Graph
 from ..algorithms.isomorphism import QueryIsomorphism
-from ..algorithms.smiles import QuerySmiles
 from ..periodictable import Element, QueryElement
 from ..periodictable.base import Query
 
 
-class QueryContainer(Graph[Query, QueryBond], QueryIsomorphism, QuerySmiles):
-    __slots__ = ()
+class QueryContainer(Graph[Query, QueryBond], QueryIsomorphism):
+    __slots__ = ('_smarts',)
+
+    def __init__(self, smarts: str):
+        super().__init__()
+        self._smarts = smarts
+
+    def __str__(self):
+        return self._smarts
+
+    def __repr__(self):
+        return f'smarts({self._smarts})'
 
     def add_atom(self, atom: Union[Query, Element, int, str], *args, **kwargs):
         if not isinstance(atom, Query):

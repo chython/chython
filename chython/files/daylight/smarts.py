@@ -26,8 +26,6 @@ from ...periodictable import ListElement, QueryElement
 
 
 cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
-cx_hh = compile(r'atomProp(:[0-9]+\.(?:hyb|het|msk)\.[0-9]+)+')
-hybridization = {'4': 4, '3': 1, '2': 2, '1': 3}
 
 # AD-HOC for masked atoms in SMARTS
 # not thread safe
@@ -38,27 +36,22 @@ def smarts(data: str):
     """
     Parse SMARTS string.
 
-    * stereo ignored.
     * only D, a, h, r and !R atom primitives supported.
-    * bond order list and not bond supported.
+    * bond order list (max 2) and not bond supported.
     * [not]ring bond supported only in combination with explicit bonds, not bonds and bonds orders lists.
     * mapping, charge and isotopes supported.
     * list of elements supported.
     * A - treats as any element. <A> primitive (aliphatic) ignored.
-    * M - treats as any metal..
+    * M - treats as any metal
     * <&> logic operator unsupported.
     * <;> logic operator is mandatory except (however preferable) for charge, isotope, stereo marks.
     * CXSMARTS radicals supported.
-    * hybridization and heteroatoms count in CXSMARTS atomProp notation coded as <hyb> and <het> keys.
     * masked atom - `chython.Reactor` specific mark for masking reactant atoms from deletion.
-        Coded in CXSMARTS atomProp as <msk> key with any value.
 
     For example::
 
-        [C;r5,r6;a]-;!@[C;h1,h2] |^1:1,atomProp:1.hyb.24:1.het.0| - aromatic C member of 5 or 6 atoms ring
+        [C;r5,r6;a]-;!@[C;h1,h2;z2,z4] |^1:1| - aromatic C member of 5 or 6 atoms ring
         connected with non-ring single bond to aromatic or SP2 radical C with 1 or 2 hydrogens.
-
-    Alternative hybridization, heteroatoms and masks coding:
 
     * primitive <xN> - heteroatoms (e.g. x2 - two heteroatoms)
     * primitive <zN> - hybridization (N = 1 - sp3, 2 - sp2, 3 - sp, 4 - aromatic)
@@ -72,45 +65,22 @@ def smarts(data: str):
         raise TypeError('Must be a SMARTS string')
     smr, *cx = data.split()
 
-    hyb = {}
-    het = {}
-    msk = []
+    parsed = parser(smarts_tokenize(smr), False)
+
     if cx and cx[0].startswith('|') and cx[0].endswith('|'):
-        radicals = [int(x) for x in findall(cx_radicals, cx[0]) for x in x[3:].split(',')]
+        for x in findall(cx_radicals, cx[0]):
+            for i in x[3:].split(','):
+                parsed['atoms'][int(i)]['is_radical'] = True
 
-        if hh := search(cx_hh, cx[0]):
-            for x in hh.group().split(':')[1:]:
-                i, h, v = x.split('.')
-                i = int(i)
-                if h == 'hyb':
-                    hyb[i] = [hybridization[x] for x in v]
-                elif h == 'het':
-                    het[i] = [int(y) for y in v]
-                else:
-                    msk.append(i)
-    else:
-        radicals = []
+    for i, s in parsed['stereo_atoms'].items():
+        parsed['atoms'][i]['stereo'] = s
+    stereo_bonds = parsed['stereo_bonds']
 
-    data = parser(smarts_tokenize(smr), False)
-
-    for x in radicals:
-        data['atoms'][x]['is_radical'] = True
-    for i, v in hyb.items():
-        data['atoms'][i]['hybridization'] = v
-    for i, v in het.items():
-        data['atoms'][i]['heteroatoms'] = v
-    for i in msk:
-        data['atoms'][i]['masked'] = True
-
-    for i, s in data['stereo_atoms'].items():
-        data['atoms'][i]['stereo'] = s
-    stereo_bonds = data['stereo_bonds']
-
-    g = QueryContainer()
+    g = QueryContainer(data)
 
     mapping = {}
-    free = count(max(a.get('parsed_mapping', 0) for a in data['atoms']) + 1)
-    for i, a in enumerate(data['atoms']):
+    free = count(max(a.get('parsed_mapping', 0) for a in parsed['atoms']) + 1)
+    for i, a in enumerate(parsed['atoms']):
         mapping[i] = n = a.pop('parsed_mapping', 0) or next(global_free_masked if a.get('masked') else free)
         e = a.pop('element')
         if isinstance(e, int):
@@ -121,7 +91,7 @@ def smarts(data: str):
             e = partial(ListElement, e)
         g.add_atom(e(**a), n)
 
-    for n, m, b in data['bonds']:
+    for n, m, b in parsed['bonds']:
         if n in stereo_bonds and m in stereo_bonds:
             if m not in stereo_bonds[n]:  # only simple cis-trans supported, not cumulenes
                 _, s1 = stereo_bonds[n].popitem()

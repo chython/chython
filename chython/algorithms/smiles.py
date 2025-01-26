@@ -25,17 +25,15 @@ from heapq import heappop, heappush
 from itertools import product
 from random import random
 from typing import Callable, Optional, Tuple, TYPE_CHECKING, Union
-from ..periodictable import ExtendedQuery, QueryElement
 
 
 if TYPE_CHECKING:
-    from chython import MoleculeContainer, CGRContainer, QueryContainer
+    from chython import MoleculeContainer, CGRContainer
     from chython.containers.graph import Graph
 
 charge_str = {-4: '-4', -3: '-3', -2: '-2', -1: '-', 0: '0', 1: '+', 2: '+2', 3: '+3', 4: '+4'}
 order_str = {1: '-', 2: '=', 3: '#', 4: ':', 8: '~', None: '.'}
 organic_set = {'C', 'N', 'O', 'P', 'S', 'F', 'Cl', 'Br', 'I', 'B'}
-hybridization_str = {4: '4', 3: '1', 2: '2', 1: '3', None: 'n'}
 dyn_order_str = {(None, 1): '[.>-]', (None, 2): '[.>=]', (None, 3): '[.>#]', (None, 4): '[.>:]', (None, 8): '[.>~]',
                  (1, None): '[->.]', (1, 1): '', (1, 2): '[->=]', (1, 3): '[->#]', (1, 4): '[->:]', (1, 8): '[->~]',
                  (2, None): '[=>.]', (2, 1): '[=>-]', (2, 2): '=', (2, 3): '[=>#]', (2, 4): '[=>:]', (2, 8): '[=>~]',
@@ -555,77 +553,4 @@ class CGRSmiles(Smiles):
         return dyn_order_str[(bond.order, bond.p_order)]
 
 
-class QuerySmiles(Smiles):
-    __slots__ = ()
-
-    def _smiles_order(self: 'QueryContainer', stereo=True):
-        # try to keep atoms order
-        return {n: i for i, n in enumerate(self._atoms)}.__getitem__
-
-    def _format_cxsmiles(self: 'QueryContainer', order):
-        hh = ['atomProp']
-        cx = []
-        rad = [str(n) for n, m in enumerate(order) if isinstance(a:=self._atoms[m], ExtendedQuery) and a.is_radical]
-        if rad:
-            cx.append('^1:' + ','.join(rad))
-
-        for n, m in enumerate(order):
-            atom = self._atoms[m]
-            if len(hb := atom.hybridization) > 1 or (hb and hb[0] != 4):
-                hh.append(f'{n}.hyb.' + ''.join(hybridization_str[x] for x in hb))
-            if isinstance(atom, ExtendedQuery) and (ha := atom.heteroatoms):
-                hh.append(f'{n}.het.' + ''.join(str(x) for x in ha))
-            if atom.masked:
-                hh.append(f'{n}.msk.1')
-        if len(hh) > 1:
-            cx.append(':'.join(hh))
-        if cx:
-            return f'|{",".join(cx)}|'
-
-    def _format_atom(self: 'QueryContainer', n, adjacency, **kwargs):
-        atom = self._atoms[n]
-        if isinstance(atom, QueryElement) and atom.isotope:
-            smi = ['[', str(atom.isotope), atom.atomic_symbol]
-        else:
-            smi = ['[', atom.atomic_symbol]
-
-        if isinstance(atom, ExtendedQuery):
-            if atom.stereo is not None:
-                # mark atom as chiral. it's too difficult to set correct sign
-                smi.append(';@' if atom.stereo else ';@@')
-
-            if atom.charge:
-                smi.append(';')
-                smi.append(charge_str[atom.charge])
-
-            if atom.implicit_hydrogens:  # h<n> implicit-H-count <n> implicit hydrogens
-                smi.append(';')
-                smi.append(','.join(f'h{x}' for x in atom.implicit_hydrogens))
-
-        if atom.neighbors:  # D<n> 	degree 	<n> explicit connections
-            smi.append(';')
-            smi.append(','.join(f'D{x}' for x in atom.neighbors))
-
-        if isinstance(atom, ExtendedQuery) and atom.ring_sizes:
-            smi.append(';')
-            if atom.ring_sizes[0]:
-                smi.append(','.join(f'r{x}' for x in atom.ring_sizes))
-            else:
-                smi.append('!R')
-
-        if len(atom.hybridization) == 1 and atom.hybridization[0] == 4:  # only aromatic. other marks in cx extension
-            smi.append(';a')
-
-        smi.append(']')
-        return ''.join(smi)
-
-    def _format_bond(self: 'QueryContainer', n, m, adjacency, **kwargs):
-        # bond chirality skipped. too difficult to implement.
-        b = self._bonds[n][m]
-        s = ','.join(order_str[x] for x in b.order)
-        if b.in_ring is not None:
-            s += ';@' if b.in_ring else ';!@'
-        return s
-
-
-__all__ = ['MoleculeSmiles', 'CGRSmiles', 'QuerySmiles']
+__all__ = ['MoleculeSmiles', 'CGRSmiles']

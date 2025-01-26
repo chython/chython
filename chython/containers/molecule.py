@@ -20,12 +20,11 @@ from CachedMethods import cached_args_method
 from collections import Counter, defaultdict
 from functools import cached_property
 from numpy import uint, zeros
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Tuple, Union
 from zlib import compress, decompress
-from .bonds import Bond, DynamicBond, QueryBond
+from .bonds import Bond, DynamicBond
 from .cgr import CGRContainer
 from .graph import Graph
-from .query import QueryContainer
 from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
 from ..algorithms.depict import DepictMolecule
@@ -40,7 +39,7 @@ from ..algorithms.stereo import MoleculeStereo
 from ..algorithms.tautomers import Tautomers
 from ..algorithms.x3dom import X3domMolecule
 from ..exceptions import ValenceError
-from ..periodictable import DynamicElement, Element, QueryElement, H as _H
+from ..periodictable import DynamicElement, Element, H as _H
 
 
 # atomic number constants
@@ -262,11 +261,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             raise TypeError('MoleculeContainer expected')
         return super().union(other, remap=remap, copy=copy)
 
-    def substructure(self, atoms: Iterable[int], *, as_query: bool = False, recalculate_hydrogens=True,
-                     skip_neighbors_marks=False, skip_hybridizations_marks=False, skip_hydrogens_marks=False,
-                     skip_rings_sizes_marks=False, skip_heteroatoms_marks=False, skip_in_ring_bond_marks=False,
-                     skip_stereo_marks=False) -> \
-            Union['MoleculeContainer', 'QueryContainer']:
+    def substructure(self, atoms: Iterable[int], *, recalculate_hydrogens=True) -> 'MoleculeContainer':
         """
         Create substructure containing atoms from atoms list.
 
@@ -275,54 +270,13 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         Call `kekule()` and `thiele()` in sequence to fix marks.
 
         :param atoms: list of atoms numbers of substructure
-        :param as_query: return Query object based on graph substructure
         :param recalculate_hydrogens: calculate implicit H count in substructure
-        :param skip_neighbors_marks: Don't set neighbors count marks on substructured queries
-        :param skip_hybridizations_marks: Don't set hybridizations marks on substructured queries
-        :param skip_hydrogens_marks: Don't set hydrogens count marks on substructured queries
-        :param skip_rings_sizes_marks: Don't set rings_sizes marks on substructured queries
-        :param skip_heteroatoms_marks: Don't set heteroatoms count marks
-        :param skip_in_ring_bond_marks: Don't set in_ring bond marks
-        :param skip_stereo_marks: Don't set stereo marks on substructured queries
         """
         if not atoms:
             raise ValueError('empty atoms list not allowed')
         if set(atoms) - self._atoms.keys():
             raise ValueError('invalid atom numbers')
         atoms = tuple(n for n in self if n in atoms)  # save original order
-        if as_query:
-            sub = object.__new__(QueryContainer)
-
-            lost = {n for n, a in self.atoms() if a != H} - set(atoms)  # atoms not in substructure
-            # atoms with fully present neighbors
-            not_skin = {n for n in atoms if lost.isdisjoint(self._bonds[n])}
-
-            # check for full presence of cumulene chains and terminal attachments
-            for p in self.stereogenic_cumulenes.values():
-                if not not_skin.issuperset(p):
-                    not_skin.difference_update(p)
-
-            sub._atoms = {n: QueryElement.from_atom(self._atoms[n],
-                                                    neighbors=not skip_neighbors_marks,
-                                                    hybridization=not skip_hybridizations_marks,
-                                                    hydrogens=not skip_hydrogens_marks,
-                                                    ring_sizes=not skip_rings_sizes_marks,
-                                                    heteroatoms=not skip_heteroatoms_marks,
-                                                    stereo=not skip_stereo_marks and n in not_skin)
-                          for n in atoms}
-            sub._bonds = sb = {}
-            for n in atoms:
-                sb[n] = sbn = {}
-                for m, bond in self._bonds[n].items():
-                    if m in sb:  # bond partially exists. need back-connection.
-                        sbn[m] = sb[m][n]
-                    elif m in atoms:
-                        sbn[m] = QueryBond.from_bond(bond,
-                                                     in_ring=not skip_in_ring_bond_marks,
-                                                     stereo=not skip_stereo_marks and n in not_skin and m in not_skin)
-            return sub
-
-        # molecule substructure
         sub = object.__new__(self.__class__)
         sub._name = sub._meta = sub._changed = None
         sub._atoms = {n: self._atoms[n].copy(hydrogens=not recalculate_hydrogens, stereo=True) for n in atoms}

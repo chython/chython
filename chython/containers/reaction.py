@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -56,7 +56,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         if not reactants and not products and not reagents:
             raise ValueError('At least one graph object required')
         elif not all(isinstance(x, MoleculeContainer) for x in chain(reactants, products, reagents)):
-            raise TypeError(f'MoleculeContainers expected')
+            raise TypeError('MoleculeContainers expected')
 
         self._reactants = reactants
         self._products = products
