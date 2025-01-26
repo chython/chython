@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -27,6 +27,18 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
+# atomic number constants
+B = 5
+C = 6
+N = 7
+O = 8
+P = 15
+S = 16
+As = 33
+Se = 34
+Te = 52
+
+
 class Kekule:
     __slots__ = ()
 
@@ -46,12 +58,13 @@ class Kekule:
             bonds = self._bonds
             atoms = set()
             for n, m, b in kekule:
-                bonds[n][m]._Bond__order = b  # noqa
+                bonds[n][m]._order = b
                 atoms.add(n)
                 atoms.add(m)
             for n in atoms:
-                self._calc_implicit(n)
-            self.flush_cache()
+                self.calc_implicit(n)
+            self.flush_cache(keep_sssr=True, keep_components=True)
+            self.calc_labels()
             return True
         return fixed
 
@@ -61,21 +74,23 @@ class Kekule:
         """
         self.__fix_rings()  # fix bad aromatic rings
         for form in self.__kekule_full(0):
-            copy = self.copy()
+            copy = self.copy(keep_sssr=True, keep_components=True)
             bonds = copy._bonds
             atoms = set()
             for n, m, b in form:
-                bonds[n][m]._Bond__order = b  # noqa
+                bonds[n][m]._order = b
                 atoms.add(n)
                 atoms.add(m)
             for n in atoms:
-                copy._calc_implicit(n)
+                copy.calc_implicit(n)
+            copy.calc_labels()
             yield copy
 
     def __fix_rings(self: 'MoleculeContainer'):
+        atoms = self._atoms
         bonds = self._bonds
-        charges = self._charges
         seen = set()
+        keep = True
         for q, af, bf, mm in rules:
             for mapping in q.get_mapping(self, automorphism_filter=False):
                 match = set(mapping.values())
@@ -85,23 +100,23 @@ class Kekule:
 
                 for n, c in af.items():
                     n = mapping[n]
-                    charges[n] = c
+                    atoms[n]._charge = c
                 for n, m, b in bf:
                     n = mapping[n]
                     m = mapping[m]
-                    bonds[n][m]._Bond__order = b  # noqa
+                    bonds[n][m]._order = b
+                    if b == 8:
+                        # flush sssr and components cache
+                        keep = False
         if seen:
-            self.flush_cache()
+            self.flush_cache(keep_sssr=keep, keep_components=keep)
+            self.calc_labels()
             return True
         return False
 
     def __prepare_rings(self: 'MoleculeContainer'):
         atoms = self._atoms
-        charges = self._charges
-        radicals = self._radicals
         bonds = self._bonds
-        hydrogens = self._hydrogens
-        neighbors = self.neighbors
 
         rings = defaultdict(list)  # aromatic skeleton
         pyrroles = set()
@@ -110,12 +125,11 @@ class Kekule:
         triple_bonded = set()
         for n, m_bond in bonds.items():
             for m, bond in m_bond.items():
-                bo = bond.order
-                if bo == 4:
+                if bond == 4:
                     rings[n].append(m)
-                elif bo == 2:
+                elif bond == 2:
                     double_bonded[n].append(m)
-                elif bo == 3:
+                elif bond == 3:
                     triple_bonded.add(n)
 
         if not rings:
@@ -157,7 +171,7 @@ class Kekule:
                     if m not in seen:
                         rings[n].remove(m)
                         rings[m].remove(n)
-                        bonds[n][m]._Bond__order = 1  # noqa
+                        bonds[n][m]._order = 1
 
         if any(len(ms) not in (2, 3) for ms in rings.values()):
             raise InvalidAromaticRing('not in ring aromatic bond or hypercondensed rings: '
@@ -168,133 +182,128 @@ class Kekule:
         if any(len(rings[n]) != 2 for n in double_bonded):  # double bonded never condensed
             raise InvalidAromaticRing('quinone valence error')
         for n in double_bonded:
-            if atoms[n].atomic_number == 7:
-                if charges[n] != 1:
+            if (atom := atoms[n]) == N:
+                if atom.charge != 1:
                     raise InvalidAromaticRing('quinone should be charged N atom')
-            elif atoms[n].atomic_number not in (6, 15, 16, 33, 34, 52) or charges[n]:
+            elif atom not in (C, P, S, As, Se, Te) or atom.charge:
                 raise InvalidAromaticRing('quinone should be neutral S, Se, Te, C, P, As atom')
 
         for n in rings:
-            an = atoms[n].atomic_number
-            ac = charges[n]
-            ab = neighbors(n)
-            if an == 6:  # carbon
-                if ac == 0:
-                    if ab not in (2, 3):
+            if (atom := atoms[n]) == C:  # carbon
+                if atom.charge == 0:
+                    if atom.neighbors not in (2, 3):
                         raise InvalidAromaticRing
-                elif ac in (-1, 1):
-                    if radicals[n]:
-                        if ab == 2:
+                elif atom.charge in (-1, 1):
+                    if atom.is_radical:
+                        if atom.neighbors == 2:
                             double_bonded.add(n)
                         else:
                             raise InvalidAromaticRing
-                    elif ab == 3:
+                    elif atom.neighbors == 3:
                         double_bonded.add(n)
-                    elif ab == 2:  # benzene (an|cat)ion or pyrrole
+                    elif atom.neighbors == 2:  # benzene (an|cat)ion or pyrrole
                         pyrroles.add(n)
                     else:
                         raise InvalidAromaticRing
                 else:
                     raise InvalidAromaticRing
-            elif an in (7, 15, 33):
-                if ac == 0:  # pyrrole or pyridine. include radical pyrrole
-                    if radicals[n]:
-                        if ab != 2:  # only pyrrole radical
+            elif atom in (N, P, As):
+                if atom.charge == 0:  # pyrrole or pyridine. include radical pyrrole
+                    if atom.is_radical:
+                        if atom.neighbors != 2:  # only pyrrole radical
                             raise InvalidAromaticRing
                         double_bonded.add(n)
-                    elif ab == 3:
-                        if an == 7:  # pyrrole only possible
+                    elif atom.neighbors == 3:
+                        if atom == N:  # pyrrole only possible
                             double_bonded.add(n)
                         else:  # P(III) or P(V)H
                             pyrroles.add(n)
-                    elif ab == 2:
-                        ah = hydrogens[n]
-                        if ah is None:  # pyrrole or pyridine
+                    elif atom.neighbors == 2:
+                        if atom.implicit_hydrogens is None:  # pyrrole or pyridine
                             pyrroles.add(n)
-                        elif ah == 1:  # only pyrrole
+                        elif atom.implicit_hydrogens == 1:  # only pyrrole
                             double_bonded.add(n)
-                        elif ah:  # too many hydrogens for aromatic rings
+                        elif atom.implicit_hydrogens:  # too many hydrogens for aromatic rings
                             raise InvalidAromaticRing
-                    elif ab != 4 or an not in (15, 33):  # P(V) in ring [P;a](-R1)-R2
+                    elif atom.neighbors != 4 or atom not in (P, As):  # P(V) in ring [P;a](-R1)-R2
                         raise InvalidAromaticRing
-                elif ac == -1:  # pyrrole only
-                    if ab != 2 or radicals[n]:
+                elif atom.charge == -1:  # pyrrole only
+                    if atom.neighbors != 2 or atom.is_radical:
                         raise InvalidAromaticRing
                     double_bonded.add(n)
-                elif ac != 1:
+                elif atom.charge != 1:
                     raise InvalidAromaticRing
-                elif radicals[n]:
-                    if ab != 2:  # not cation-radical pyridine
+                elif atom.is_radical:
+                    if atom.neighbors != 2:  # not cation-radical pyridine
                         raise InvalidAromaticRing
-                elif ab == 2:  # pyrrole cation or protonated pyridine
+                elif atom.neighbors == 2:  # pyrrole cation or protonated pyridine
                     pyrroles.add(n)
-                elif ab != 3:  # not pyridine oxyde
+                elif atom.neighbors != 3:  # not pyridine oxyde
                     raise InvalidAromaticRing
-            elif an == 8:  # furan
-                if ab == 2:
-                    if ac == 0:
-                        if radicals[n]:
+            elif atom == O:  # furan
+                if atom.neighbors == 2:
+                    if atom.charge == 0:
+                        if atom.is_radical:
                             raise InvalidAromaticRing('radical oxygen')
                         double_bonded.add(n)
-                    elif ac == 1:
-                        if radicals[n]:  # furan cation-radical
+                    elif atom.charge == 1:
+                        if atom.is_radical:  # furan cation-radical
                             double_bonded.add(n)
                         # pyrylium
                     else:
                         raise InvalidAromaticRing('invalid oxygen charge')
                 else:
                     raise InvalidAromaticRing('Triple-bonded oxygen')
-            elif an in (16, 34, 52):  # thiophene
+            elif atom in (S, Se, Te):  # thiophene
                 if n not in double_bonded:  # not sulphoxyde nor sulphone
-                    if ab == 2:
-                        if radicals[n]:
-                            if ac == 1:
+                    if atom.neighbors == 2:
+                        if atom.is_radical:
+                            if atom.charge == 1:
                                 double_bonded.add(n)
                             else:
                                 raise InvalidAromaticRing('S, Se, Te cation-radical expected')
-                        if ac == 0:
+                        if atom.charge == 0:
                             double_bonded.add(n)
-                        elif ac != 1:
+                        elif atom.charge != 1:
                             raise InvalidAromaticRing('S, Se, Te cation in benzene like ring expected')
-                    elif ab == 3:
-                        if radicals[n]:
-                            if ac:
+                    elif atom.neighbors == 3:
+                        if atom.is_radical:
+                            if atom.charge:
                                 raise InvalidAromaticRing('S, Se, Te ion-radical ring')
                             double_bonded.add(n)
-                        elif ac == 1:
+                        elif atom.charge == 1:
                             double_bonded.add(n)
-                        elif ac:
+                        elif atom.charge:
                             raise InvalidAromaticRing('S, Se, Te invalid charge ring')
                     else:
                         raise InvalidAromaticRing('S, Se, Te hypervalent ring')
-            elif an == 5:  # boron
-                if ac == 0:
-                    if ab == 2:
-                        if radicals[n]:  # C=1O[B]OC=1
+            elif atom == B:
+                if atom.charge == 0:
+                    if atom.neighbors == 2:
+                        if atom.is_radical:  # C=1O[B]OC=1
                             double_bonded.add(n)
                         else:
-                            ah = hydrogens[n]
-                            if ah is None:  # b1ccccc1, C=1OBOC=1 or B1C=CC=N1
+                            if atom.implicit_hydrogens is None:  # b1ccccc1, C=1OBOC=1 or B1C=CC=N1
                                 pyrroles.add(n)
-                            elif ah == 1:  # C=1O[BH]OC=1 or [BH]1C=CC=N1
+                            elif atom.implicit_hydrogens == 1:  # C=1O[BH]OC=1 or [BH]1C=CC=N1
                                 double_bonded.add(n)
-                            elif ah:
+                            elif atom.implicit_hydrogens:
                                 raise InvalidAromaticRing
-                    elif not radicals[n]:
+                    elif not atom.is_radical:
                         double_bonded.add(n)
                     else:
                         raise InvalidAromaticRing
-                elif ac == 1:
-                    if ab == 2 and not radicals[n]:
+                elif atom.charge == 1:
+                    if atom.neighbors == 2 and not atom.is_radical:
                         double_bonded.add(n)
                     else:
                         raise InvalidAromaticRing
-                elif ac == -1:
-                    if ab == 2:
-                        if not radicals[n]:  # C=1O[B-]OC=1 or [bH-]1ccccc1
+                elif atom.charge == -1:
+                    if atom.neighbors == 2:
+                        if not atom.is_radical:  # C=1O[B-]OC=1 or [bH-]1ccccc1
                             pyrroles.add(n)
                         # anion-radical is benzene like
-                    elif radicals[n]:  # C=1O[B-*](R)OC=1
+                    elif atom.is_radical:  # C=1O[B-*](R)OC=1
                         double_bonded.add(n)
                     else:
                         pyrroles.add(n)

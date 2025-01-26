@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -24,12 +24,11 @@ from pathlib import Path
 from typing import Union, List, Iterator, Dict, Optional
 from ._convert import create_molecule, create_reaction
 from ._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
-from ._mdl import postprocess_molecule
+from .mdl import postprocess_molecule
 from ..containers import MoleculeContainer, ReactionContainer
 from ..exceptions import EmptyMolecule, EmptyReaction
 
 
-organic_set = {'B', 'C', 'N', 'O', 'P', 'S', 'Se', 'F', 'Cl', 'Br', 'I'}
 bond_map = {8: '1" queryType="Any', 4: 'A', 1: '1', 2: '2', 3: '3',
             'Any': 8, 'any': 8, 'A': 4, 'a': 4, '1': 1, '2': 2, '3': 3}
 
@@ -138,14 +137,14 @@ class MRVRead:
             postprocess_parsed_molecule(tmp, remap=self.__remap, ignore=self.__ignore)
             parse_sgroup(data, tmp)
             mol = create_molecule(tmp, ignore_bad_isotopes=self.__ignore_bad_isotopes, _cls=self.molecule_cls)
-            postprocess_molecule(mol, tmp, ignore=self.__ignore, ignore_stereo=self.__ignore_stereo,
-                                 calc_cis_trans=self.__calc_cis_trans)
-            mol.meta.update(meta)
+            if not self.__ignore_stereo:
+                postprocess_molecule(mol, tmp, calc_cis_trans=self.__calc_cis_trans)
+            if meta:
+                mol.meta.update(meta)
             return mol
         elif 'reaction' in data and isinstance(data['reaction'], dict):
             data = data['reaction']
-            tmp = {'reactants': [], 'products': [], 'reagents': [],
-                   'meta': None, 'log': log, 'title': data.get('@title')}
+            tmp = {'reactants': [], 'products': [], 'reagents': [], 'log': log, 'title': data.get('@title')}
 
             n = 0
             for tag, group in (('reactantList', 'reactants'), ('productList', 'products'), ('agentList', 'reagents')):
@@ -171,10 +170,11 @@ class MRVRead:
             postprocess_parsed_reaction(tmp, remap=self.__remap, ignore=self.__ignore)
             rxn = create_reaction(tmp, ignore_bad_isotopes=self.__ignore_bad_isotopes, _m_cls=self.molecule_cls,
                                   _r_cls=self.reaction_cls)
-            for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
-                postprocess_molecule(mol, tmp, ignore=self.__ignore, ignore_stereo=self.__ignore_stereo,
-                                     calc_cis_trans=self.__calc_cis_trans)
-            rxn.meta.update(meta)
+            if not self.__ignore_stereo:
+                for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
+                    postprocess_molecule(mol, tmp, calc_cis_trans=self.__calc_cis_trans)
+            if meta:
+                rxn.meta.update(meta)
             return rxn
         else:
             raise ValueError('reaction or molecule expected')
@@ -263,7 +263,6 @@ class MRVRead:
 def parse_molecule(data):
     atoms, bonds, stereo = [], [], []
     log = []
-    hydrogens = {}
     atom_map = {}
     if 'atom' in data['atomArray']:
         da = data['atomArray']['atom']
@@ -275,20 +274,20 @@ def parse_molecule(data):
                           'isotope': int(atom['@isotope']) if '@isotope' in atom else None,
                           'charge': int(atom.get('@formalCharge', 0)),
                           'is_radical': '@radical' in atom,
-                          'mapping': int(atom.get('@mrvMap', 0))})
+                          'parsed_mapping': int(atom.get('@mrvMap', 0))})
             if '@z3' in atom:
                 atoms[-1].update(x=float(atom['@x3']), y=float(atom['@y3']), z=float(atom['@z3']))
             else:
-                atoms[-1].update(x=float(atom['@x2']) / 2, y=float(atom['@y2']) / 2, z=0.)
+                atoms[-1].update(x=float(atom['@x2']) / 2, y=float(atom['@y2']) / 2)
             if '@mrvQueryProps' in atom:
                 raise ValueError('queries unsupported')
             if '@hydrogenCount' in atom:
-                hydrogens[n] = int(atom['@hydrogenCount'])
+                atoms[-1]['implicit_hydrogens'] = int(atom['@hydrogenCount'])
     else:
         atom = data['atomArray']
         for n, (_id, e) in enumerate(zip(atom['@atomID'].split(), atom['@elementType'].split())):
             atom_map[_id] = n
-            atoms.append({'element': e, 'charge': 0, 'mapping': 0, 'isotope': None, 'is_radical': False})
+            atoms.append({'element': e})
         if '@z3' in atom:
             for a, x, y, z in zip(atoms, atom['@x3'].split(), atom['@y3'].split(), atom['@z3'].split()):
                 a['x'] = float(x)
@@ -298,7 +297,6 @@ def parse_molecule(data):
             for a, x, y in zip(atoms, atom['@x2'].split(), atom['@y2'].split()):
                 a['x'] = float(x) / 2
                 a['y'] = float(y) / 2
-                a['z'] = 0.
         if '@isotope' in atom:
             for a, x in zip(atoms, atom['@isotope'].split()):
                 if x != '0':
@@ -310,7 +308,7 @@ def parse_molecule(data):
         if '@mrvMap' in atom:
             for a, x in zip(atoms, atom['@mrvMap'].split()):
                 if x != '0':
-                    a['mapping'] = int(x)
+                    a['parsed_mapping'] = int(x)
         if '@radical' in atom:
             for a, x in zip(atoms, atom['@radical'].split()):
                 if x != '0':
@@ -340,8 +338,8 @@ def parse_molecule(data):
                     log.append('incorrect bondStereo tag')
             bonds.append((atom_map[a1], atom_map[a2], order))
 
-    return {'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'hydrogens': hydrogens,
-            'meta': None, 'title': data.get('@title'), 'log': log, 'atom_map': atom_map}
+    return {'atoms': atoms, 'bonds': bonds, 'stereo': stereo,
+            'title': data.get('@title'), 'log': log, 'atom_map': atom_map}
 
 
 def parse_sgroup(data, molecule):
@@ -486,30 +484,24 @@ class MRVWrite:
         file.write('</MChemicalStruct></MDocument>\n')
 
     def __write_molecule(self, g):
-        gp = g._plane
-        gc = g._charges
-        gr = g._radicals
         bg = g._bonds
-        hg = g._hydrogens
-        hb = g.hybridization
         mapping = self.__mapping
 
         file = self.__file
         file.write('<atomArray>')
-        for n, atom in g._atoms.items():
-            x, y = gp[n]
-            ih = hg[n]
+        for n, atom in g.atoms():
+            x, y = atom.x, atom.y
             file.write(f'<atom id="a{n}" elementType="{atom.atomic_symbol}" x2="{x * 2:.4f}" y2="{y * 2:.4f}"')
             if mapping:
                 file.write(f' mrvMap="{n}"')
-            if gc[n]:
-                file.write(f' formalCharge="{gc[n]}"')
-            if gr[n]:
+            if atom.charge:
+                file.write(f' formalCharge="{atom.charge}"')
+            if atom.is_radical:
                 file.write(' radical="monovalent"')
             if atom.isotope:
                 file.write(f' isotope="{atom.isotope}"')
-            if ih and (atom.atomic_symbol not in organic_set or hb(n) == 4 and atom.atomic_number in (5, 7, 15)):
-                file.write(f' hydrogenCount="{ih}"')
+            if atom.implicit_hydrogens is not None:
+                file.write(f' hydrogenCount="{atom.implicit_hydrogens}"')
             file.write('/>')
         file.write('</atomArray>')
 

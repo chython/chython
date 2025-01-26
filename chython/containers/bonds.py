@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,94 +17,72 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from typing import Optional, Tuple, Union, List, Set
-from weakref import ref
-from ..exceptions import IsConnectedBond, IsNotConnectedBond
 
 
 class Bond:
-    __slots__ = ('__order', '__graph', '__n', '__m')
+    __slots__ = ('_order', '_in_ring', '_stereo')
 
-    def __init__(self, order: int):
+    def __init__(self, order: int, *, stereo: Optional[bool] = None):
         if not isinstance(order, int):
             raise TypeError('invalid order value')
         elif order not in (1, 4, 2, 3, 8):
             raise ValueError('order should be from [1, 2, 3, 4, 8]')
-        self.__order = order
+        self._order = order
+        self._stereo = stereo
 
     def __eq__(self, other):
-        if isinstance(other, Bond):
-            return self.__order == other.order
-        elif isinstance(other, int):
-            return self.__order == other
+        if isinstance(other, int):
+            return self.order == other
+        elif isinstance(other, Bond):
+            return self.order == other.order
         return False
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self.__order})'
+        return f'{self.__class__.__name__}({self.order})'
 
     def __int__(self):
         """
         Bond order.
         """
-        return self.__order
+        return self.order
 
     def __hash__(self):
         """
         Bond order. Used in Morgan atoms ordering.
         """
-        return self.__order
-
-    def __getstate__(self):
-        return {'order': self.__order}
-
-    def __setstate__(self, state):
-        self.__order = state['order']
+        return self.order
 
     @property
     def order(self) -> int:
-        return self.__order
+        return self._order
+
+    @property
+    def stereo(self) -> Optional[bool]:
+        return self._stereo
 
     @property
     def in_ring(self) -> bool:
-        try:
-            return self.__graph().is_ring_bond(self.__n, self.__m)
-        except AttributeError:
-            raise IsNotConnectedBond
+        return self._in_ring
 
-    def copy(self) -> 'Bond':
+    def copy(self, full=False, stereo=False) -> 'Bond':
         copy = object.__new__(self.__class__)
-        copy._Bond__order = self.__order
+        copy._order = self.order
+        if full:
+            copy._stereo = self.stereo
+            copy._in_ring = self.in_ring
+        else:
+            if stereo:
+                copy._stereo = self.stereo
+            else:
+                copy._stereo = None
         return copy
 
-    @classmethod
-    def from_bond(cls, bond):
-        if isinstance(bond, cls):
-            copy = object.__new__(cls)
-            copy._Bond__order = bond.order
-            return copy
-        raise TypeError('Bond expected')
-
-    def _attach_graph(self, graph, n, m):
-        try:
-            self.__graph
-        except AttributeError:
-            self.__graph = ref(graph)
-            self.__n = n
-            self.__m = m
-        else:
-            raise IsConnectedBond
-
-    def _change_map(self, n, m):
-        try:
-            self.__graph
-        except AttributeError:
-            raise IsNotConnectedBond
-        else:
-            self.__n = n
-            self.__m = m
+    def __copy__(self):
+        return self.copy()
 
 
 class DynamicBond:
-    __slots__ = ('__order', '__p_order')
+    __slots__ = ('_order', '_p_order')
 
     def __init__(self, order=None, p_order=None):
         if order is None:
@@ -118,16 +96,16 @@ class DynamicBond:
         if order not in (1, 4, 2, 3, None, 8) or p_order not in (1, 4, 2, 3, None, 8):
             raise ValueError('order or p_order should be from [1, 2, 3, 4, 8]')
 
-        self.__order = order
-        self.__p_order = p_order
+        self._order = order
+        self._p_order = p_order
 
     def __eq__(self, other):
         if isinstance(other, DynamicBond):
-            return self.__order == other.order and self.__p_order == other.p_order
+            return self.order == other.order and self.p_order == other.p_order
         return False
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self.__order}, {self.__p_order})'
+        return f'{self.__class__.__name__}({self.order}, {self.p_order})'
 
     def __int__(self):
         """
@@ -139,47 +117,46 @@ class DynamicBond:
         """
         Hash of bond orders.
         """
-        return hash((self.__order or 0, self.__p_order or 0))
+        return hash((self.order or 0, self.p_order or 0))
 
     @property
     def is_dynamic(self) -> bool:
         """
         Bond has dynamic features
         """
-        return self.__order != self.__p_order
+        return self.order != self.p_order
 
     @property
     def order(self) -> Optional[int]:
-        return self.__order
+        return self._order
 
     @property
     def p_order(self) -> Optional[int]:
-        return self.__p_order
+        return self._p_order
 
     def copy(self) -> 'DynamicBond':
         copy = object.__new__(self.__class__)
-        copy._DynamicBond__order = self.__order
-        copy._DynamicBond__p_order = self.__p_order
+        copy._order = self.order
+        copy._p_order = self.p_order
         return copy
 
+    def __copy__(self):
+        return self.copy()
+
     @classmethod
-    def from_bond(cls, bond):
-        if isinstance(bond, Bond):
-            copy = object.__new__(cls)
-            copy._DynamicBond__order = copy._DynamicBond__p_order = bond.order
-            return copy
-        elif isinstance(bond, cls):
-            copy = object.__new__(cls)
-            copy._DynamicBond__order = bond.order
-            copy._DynamicBond__p_order = bond.p_order
-            return copy
-        raise TypeError('DynamicBond expected')
+    def from_bond(cls, bond: 'Bond') -> 'DynamicBond':
+        if not isinstance(bond, Bond):
+            raise TypeError('Bond expected')
+        copy = object.__new__(cls)
+        copy._order = copy._p_order = bond.order
+        return copy
 
 
 class QueryBond:
-    __slots__ = ('__order', '__in_ring')
+    __slots__ = ('_order', '_in_ring', '_stereo')
 
-    def __init__(self, order: Union[int, List[int], Set[int], Tuple[int, ...]], in_ring: Optional[bool] = None):
+    def __init__(self, order: Union[int, List[int], Set[int], Tuple[int, ...]],
+                 in_ring: Optional[bool] = None, stereo: Optional[bool] = None):
         if isinstance(order, (list, tuple, set)):
             if not all(isinstance(x, int) for x in order):
                 raise TypeError('invalid order value')
@@ -194,65 +171,85 @@ class QueryBond:
             raise TypeError('invalid order value')
         if in_ring is not None and not isinstance(in_ring, bool):
             raise TypeError('in_ring mark should be boolean or None')
-        self.__order = order
-        self.__in_ring = in_ring
+        self._order = order
+        self._in_ring = in_ring
+        self.stereo = stereo
 
     def __eq__(self, other):
         if isinstance(other, Bond):
-            if self.__in_ring is not None:
-                if self.__in_ring != other.in_ring:
+            if self.in_ring is not None:
+                if self.in_ring != other.in_ring:
                     return False
-            return other.order in self.__order
+            return other.order in self.order
         elif isinstance(other, QueryBond):
-            return self.__order == other.order and self.__in_ring == other.in_ring
+            return self.order == other.order and self.in_ring == other.in_ring
         elif isinstance(other, int):
-            return other in self.__order
+            return other in self.order
         return False
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self.__order}, {self.__in_ring})'
+        return f'{self.__class__.__name__}({self.order}, {self.in_ring})'
 
     def __int__(self):
         """
         Simple bond order or hash of sorted tuple of orders.
         """
-        if len(self.__order) == 1:
-            return self.__order[0]
-        return hash(self.__order)
+        if len(self.order) == 1:
+            return self.order[0]
+        return hash(self.order)
 
     def __hash__(self):
         """
         Hash of orders and cycle mark. Used in Morgan atoms ordering.
         """
-        return hash((self.__order, self.__in_ring))
+        return hash((self.order, self.in_ring))
 
     @property
     def order(self) -> Tuple[int, ...]:
-        return self.__order
+        return self._order
 
     @property
     def in_ring(self) -> Optional[bool]:
-        return self.__in_ring
+        return self._in_ring
 
-    def copy(self) -> 'QueryBond':
+    @property
+    def stereo(self) -> Optional[bool]:
+        return self._stereo
+
+    @stereo.setter
+    def stereo(self, value):
+        if value is not None and not isinstance(value, bool):
+            raise TypeError('stereo mark should be boolean or None')
+        self._stereo = value
+
+    def copy(self, full=False) -> 'QueryBond':
         copy = object.__new__(self.__class__)
-        copy._QueryBond__order = self.__order
-        copy._QueryBond__in_ring = self.__in_ring
+        copy._order = self.order
+        if full:
+            copy._in_ring = self.in_ring
+            copy._stereo = self.stereo
+        else:
+            copy._in_ring = copy._stereo = None
         return copy
 
+    def __copy__(self):
+        return self.copy()
+
     @classmethod
-    def from_bond(cls, bond):
-        if isinstance(bond, Bond):
-            copy = object.__new__(cls)
-            copy._QueryBond__order = (bond.order,)
-            copy._QueryBond__in_ring = None
-            return copy
-        elif isinstance(bond, cls):
-            copy = object.__new__(cls)
-            copy._QueryBond__order = bond.order
-            copy._QueryBond__in_ring = bond.in_ring
-            return copy
-        raise TypeError('QueryBond or Bond expected')
+    def from_bond(cls, bond: 'Bond', stereo=False, in_ring=False) -> 'QueryBond':
+        if not isinstance(bond, Bond):
+            raise TypeError('Bond expected')
+        copy = object.__new__(cls)
+        copy._order = (bond.order,)
+        if in_ring:
+            copy._in_ring = bond.in_ring
+        else:
+            copy._in_ring = None
+        if stereo:
+            copy._stereo = bond.stereo
+        else:
+            copy._stereo = None
+        return copy
 
 
 __all__ = ['Bond', 'DynamicBond', 'QueryBond']

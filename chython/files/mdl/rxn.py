@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,32 +16,32 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .emol import parse_mol_v3000
+from .mol import parse_mol_v2000
 from ...exceptions import EmptyMolecule, EmptyReaction, InvalidV2000
 
 
-def parse_rxn_v3000(data, *, ignore=True):
-    tmp = data[4][13:].split()
-    reactants_count = int(tmp[0])
-    products_count = int(tmp[1]) + reactants_count
-    reagents_count = (int(tmp[2]) if len(tmp) == 3 else 0) + products_count
+def parse_rxn_v2000(data, *, ignore=True):
+    line = data[4]
+    reactants_count = int(line[:3])
+    products_count = int(line[3:6]) + reactants_count
+    reagents_count = int(line[6:].rstrip() or 0) + products_count
 
     if not reagents_count:
         raise EmptyReaction
 
-    title = data[2].strip() or None
+    title = data[1].strip() or None
     log = []
     molecules = []
 
-    start = 1
+    start = -1
     for n in range(0, reagents_count):
         try:
-            start = next(n for n, x in enumerate(data[start + 5:], start + 5) if x.startswith('M  V30 BEGIN CTAB'))
+            start = next(n for n, x in enumerate(data[start + 6:], start + 7) if x.startswith('$MOL'))
         except StopIteration:
             raise InvalidV2000
 
         try:
-            molecules.append(parse_mol_v3000(data[start:], _header=False))
+            molecules.append(parse_mol_v2000(data[start:]))
         except ValueError as e:
             if isinstance(e, EmptyMolecule):
                 log.append(f'ignored empty molecule {n}')
@@ -61,7 +61,7 @@ def parse_rxn_v3000(data, *, ignore=True):
                 reagents_count -= 1
 
     return {'reactants': molecules[:reactants_count], 'products': molecules[reactants_count:products_count],
-            'reagents': molecules[products_count:], 'title': title, 'meta': None, 'log': log}
+            'reagents': molecules[products_count:], 'title': title, 'log': log}
 
 
-__all__ = ['parse_rxn_v3000']
+__all__ = ['parse_rxn_v2000']

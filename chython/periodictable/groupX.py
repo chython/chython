@@ -18,9 +18,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .element import Element
-from .groups import GroupX
-from .periods import PeriodIV, PeriodV, PeriodVI, PeriodVII
+from .base import Element
+from .base.groups import GroupX
+from .base.periods import PeriodIV, PeriodV, PeriodVI, PeriodVII
 
 
 class Ni(Element, PeriodIV, GroupX):
@@ -51,6 +51,10 @@ class Ni(Element, PeriodIV, GroupX):
     @property
     def atomic_radius(self):
         return 1.49
+
+    @property
+    def mdl_isotope(self):
+        return 59
 
 
 class Pd(Element, PeriodV, GroupX):
@@ -85,6 +89,10 @@ class Pd(Element, PeriodV, GroupX):
     def atomic_radius(self):
         return 1.69
 
+    @property
+    def mdl_isotope(self):
+        return 106
+
 
 class Pt(Element, PeriodVI, GroupX):
     __slots__ = ()
@@ -118,6 +126,10 @@ class Pt(Element, PeriodVI, GroupX):
     def atomic_radius(self):
         return 1.77
 
+    @property
+    def mdl_isotope(self):
+        return 195
+
 
 class Ds(Element, PeriodVII, GroupX):
     __slots__ = ()
@@ -145,6 +157,10 @@ class Ds(Element, PeriodVII, GroupX):
     @property
     def atomic_radius(self):
         return 1.77  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 281
 
 
 __all__ = ['Ni', 'Pd', 'Pt', 'Ds']

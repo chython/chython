@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -50,7 +50,7 @@ class FixMapper:
         free_number = count(max(cgr) + 1)
         components = [(cgr.substructure(c),
                        cgr.augmented_substructure(c, 2),  # deep DEPENDS on rules!
-                       set(c))
+                       c)
                       for c in cgr.substructure(cgr.center_atoms).connected_components]
 
         r_atoms = ChainMap(*(x._atoms for x in self.reactants))

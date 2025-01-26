@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
-#  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
-#  Copyright 2019 Dayana Bashirova <dayana.bashirova@yandex.ru>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,10 +16,10 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .core import *
+from .dynamic import *
 from .element import *
 from .query import *
-from .dynamic import *
 
 
-__all__ = ['Core', 'Element', 'DynamicElement', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']
+__all__ = ['Element', 'DynamicElement', 'Query', 'ExtendedQuery',
+           'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']

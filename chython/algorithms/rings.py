@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,7 +16,6 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_args_method
 from collections import defaultdict, deque
 from functools import cached_property
 from itertools import combinations
@@ -26,14 +25,14 @@ from ..exceptions import ImplementationError
 
 
 if TYPE_CHECKING:
-    from chython.containers.graph import Graph
+    from chython.containers import MoleculeContainer
 
 
 class Rings:
     __slots__ = ()
 
     @cached_property
-    def sssr(self) -> Tuple[Tuple[int, ...], ...]:
+    def sssr(self) -> List[Tuple[int, ...]]:
         """
         Smallest Set of Smallest Rings. Special bonds ignored.
 
@@ -47,45 +46,76 @@ class Rings:
         """
         if self.rings_count:
             return _sssr(self.not_special_connectivity, self.rings_count)
-        return ()
+        return []
 
     @cached_property
-    def atoms_rings(self) -> Dict[int, Tuple[Tuple[int, ...]]]:
+    def atoms_rings(self) -> Dict[int, List[Tuple[int, ...]]]:
         """
-        Dict of atoms rings which contains it.
+        A dictionary with atom numbers as keys and a list of tuples (representing SSSR rings) as values.
         """
         rings = defaultdict(list)
         for r in self.sssr:
             for n in r:
                 rings[n].append(r)
-        return {n: tuple(rs) for n, rs in rings.items()}
+        return dict(rings)
 
     @cached_property
-    def atoms_rings_sizes(self) -> Dict[int, Tuple[int, ...]]:
+    def atoms_rings_sizes(self) -> Dict[int, Set[int]]:
         """
-        Sizes of rings containing atom.
+        Sizes of SSSR rings containing atom.
         """
-        return {n: tuple(len(r) for r in rs) for n, rs in self.atoms_rings.items()}
-
-    @cached_args_method
-    def is_ring_bond(self: 'Graph', n: int, m: int, /) -> bool:
-        """
-        Check is bond in any ring.
-        """
-        self.bond(n, m)  # check if bond exists
-        try:
-            return not set(self.atoms_rings[n]).isdisjoint(self.atoms_rings[m])
-        except KeyError:
-            return False
+        return {n: {len(r) for r in rs} for n, rs in self.atoms_rings.items()}
 
     @cached_property
-    def ring_atoms(self):
+    def rings_count(self) -> int:
         """
-        Atoms in rings. Not SSSR based fast algorithm.
+        SSSR rings count. Ignored rings with special bonds.
         """
-        bonds = _skin_graph(self.not_special_connectivity)
+        bonds = self.not_special_connectivity
+        return sum(len(x) for x in bonds.values()) // 2 - len(bonds) + len(_connected_components(bonds))
+
+    @cached_property
+    def not_special_connectivity(self: 'MoleculeContainer') -> Dict[int, Set[int]]:
+        """
+        Graph connectivity without special bonds.
+        """
+        bonds = {}
+        for n, ms in self._bonds.items():
+            bonds[n] = ngb = set()
+            for m, b in ms.items():
+                if b != 8:
+                    ngb.add(m)
+        return bonds
+
+    @cached_property
+    def connected_components(self: 'MoleculeContainer') -> List[Set[int]]:
+        """
+        Isolated components of single graph. E.g. salts as ion pair.
+        """
+        return _connected_components(self._bonds)
+
+    @property
+    def connected_components_count(self) -> int:
+        """
+        Number of components in graph
+        """
+        return len(self.connected_components)
+
+    @cached_property
+    def skin_graph(self: 'MoleculeContainer') -> Dict[int, Set[int]]:
+        """
+        Graph without terminal atoms. Only rings and linkers
+        """
+        return _skin_graph(self._bonds)
+
+    @cached_property
+    def rings_graph(self: 'MoleculeContainer'):
+        """
+        Graph of rings. Linkers are not included. Special bonds are considered.
+        """
+        bonds = {n: ms.copy() for n, ms in self.skin_graph.items()}
         if not bonds:
-            return set()
+            return {}
 
         in_rings = set()
         atoms = set(bonds)
@@ -112,58 +142,13 @@ class Rings:
                         stack.append((n, c, d))
 
             atoms.difference_update(seen)
-        return in_rings
-
-    @cached_property
-    def rings_count(self) -> int:
-        """
-        SSSR rings count. Ignored rings with special bonds.
-        """
-        bonds = self.not_special_connectivity
-        return sum(len(x) for x in bonds.values()) // 2 - len(bonds) + len(_connected_components(bonds))
-
-    @cached_property
-    def not_special_connectivity(self: 'Graph') -> Dict[int, Set[int]]:
-        """
-        Graph connectivity without special bonds.
-        """
-        bonds = {}
-        for n, ms in self._bonds.items():
-            bonds[n] = ngb = set()
-            for m, b in ms.items():
-                if b != 8:
-                    ngb.add(m)
+        for n in bonds.keys() - in_rings:
+            for m in bonds.pop(n):
+                bonds[m].discard(n)
         return bonds
 
-    @cached_property
-    def connected_components(self: 'Graph') -> Tuple[Tuple[int, ...], ...]:
-        """
-        Isolated components of single graph. E.g. salts as ion pair.
-        """
-        if not self._atoms:
-            return ()
-        return tuple(tuple(x) for x in self._connected_components)
 
-    @property
-    def connected_components_count(self) -> int:
-        """
-        Number of components in graph
-        """
-        return len(self.connected_components)
-
-    @cached_property
-    def skin_graph(self: 'Graph') -> Dict[int, Set[int]]:
-        """
-        Graph without terminal atoms. Only rings and linkers
-        """
-        return _skin_graph(self._bonds)
-
-    @cached_property
-    def _connected_components(self: 'Graph') -> List[Set[int]]:
-        return _connected_components(self._bonds)
-
-
-def _sssr(bonds: Dict[int, Union[Set[int], Dict[int, Any]]], n_sssr: int) -> Tuple[Tuple[int, ...], ...]:
+def _sssr(bonds: Dict[int, Union[Set[int], Dict[int, Any]]], n_sssr: int) -> List[Tuple[int, ...]]:
     """
     Smallest Set of Smallest Rings of any adjacency matrix.
     Number of rings required.
@@ -529,7 +514,7 @@ def _connected_rings(rings, seen_rings):
 def _rings_filter(rings, n_sssr):
     c = next(rings)
     if n_sssr == 1:
-        return c,
+        return [c]
 
     seen_rings = {c}
     sssr_atoms = set(c)
@@ -545,7 +530,7 @@ def _rings_filter(rings, n_sssr):
         sssr_atoms.update(c)
         sssr.append(c)
         if len(sssr) == n_sssr:
-            return tuple(sssr)
+            return sssr
 
     # now we have set of plug rings (cuban fullerene), besiege rings and condensed trash
     seen_rings = {c: _ring_adjacency(c) for c in seen_rings}  # prepare adjacency
@@ -558,7 +543,7 @@ def _rings_filter(rings, n_sssr):
         condensed_rings = _connected_rings(condensed_rings, seen_rings)
         sssr.append(c)
         if len(sssr) == n_sssr:
-            return tuple(sorted(sssr, key=len))
+            return sorted(sssr, key=len)
 
     raise ImplementationError('SSSR count not reached')
 

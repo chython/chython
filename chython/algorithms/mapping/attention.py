@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2024 Philippe Gantzer <p.gantzer@icredd.hokudai.ac.jp>
 #  This file is part of chython.
 #
@@ -33,6 +33,7 @@ logger.setLevel(INFO)
 
 class Attention:
     __slots__ = ()
+    __class_cache__ = {}
 
     def reset_mapping(self: Union['ReactionContainer', 'Attention'], *, return_score: bool = False, multiplier=1.75,
                       keep_reactants_numbering=False) -> Union[bool, float]:

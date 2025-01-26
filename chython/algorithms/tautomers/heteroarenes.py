@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -27,20 +27,24 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
+# atomic number constants
+B = 5
+C = 6
+N = 7
+P = 15
+
+
 class HeteroArenes:
     __slots__ = ()
 
     def _enumerate_hetero_arene_tautomers(self: 'MoleculeContainer'):
         atoms = self._atoms
         bonds = self._bonds
-        hydrogens = self._hydrogens
-        charges = self._charges
-        radicals = self._radicals
 
         rings = defaultdict(list)  # aromatic skeleton
         for n, m_bond in bonds.items():
             for m, bond in m_bond.items():
-                if bond.order == 4:
+                if bond == 4:
                     rings[n].append(m)
         if not rings:
             return
@@ -49,19 +53,20 @@ class HeteroArenes:
         donors = set()
         single_bonded = set()
         for n, ms in rings.items():
+            a = atoms[n]
             if len(ms) == 2:
-                if atoms[n].atomic_number in (5, 7, 15):
-                    if not charges[n] and not radicals[n]:
+                if a in (B, N, P):
+                    if not a.charge and not a.is_radical:
                         # only neutral B, N, P
-                        if hydrogens[n]:  # pyrrole
+                        if a.implicit_hydrogens:  # pyrrole
                             donors.add(n)
                         elif len(bonds[n]) == 2:  # pyridine
                             acceptors.add(n)
                         else:
                             single_bonded.add(n)
-                elif charges[n] == -1 and atoms[n].atomic_number == 6:  # ferrocene
+                elif a.charge == -1 and a == C:  # ferrocene
                     single_bonded.add(n)
-            elif len(ms) == 3 and atoms[n].atomic_number in (5, 7, 15) and not charges[n] and not radicals[n]:
+            elif len(ms) == 3 and a in (B, N, P) and not a.charge and not a.is_radical:
                 single_bonded.add(n)
         if not donors or not acceptors:
             return
@@ -94,9 +99,9 @@ class HeteroArenes:
                     next(_kekule_component(component, sb, (), 0))
                 except InvalidAromaticRing:
                     continue
-                mol = self.copy()
-                mol._hydrogens[d] = 0
-                mol._hydrogens[a] = 1
+                mol = self.copy(keep_sssr=True, keep_components=True)
+                mol._atoms[d]._implicit_hydrogens = 0
+                mol._atoms[a]._implicit_hydrogens = 1
                 yield mol
 
 

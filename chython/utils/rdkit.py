@@ -152,7 +152,7 @@ def to_rdkit_molecule(data: MoleculeContainer, *, keep_mapping=True):
     for nm, s in data._cis_trans_stereo.items():
         n, m = nm
         if m in bonds[n]:  # cumulenes unsupported
-            nn, nm, *_ = data._stereo_cis_trans[nm]
+            nn, nm, *_ = data.stereogenic_cis_trans[nm]
             b = mol.GetBondBetweenAtoms(mapping[n], mapping[m])
             b.SetStereoAtoms(mapping[nn], mapping[nm])
             b.SetStereo(_cis if s else _trans)

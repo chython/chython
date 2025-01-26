@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2014-2019 Timur Madzhidov tmadzhidov@gmail.com features and API discussion
 #  Copyright 2014-2019 Alexandre Varnek <varnek@unistra.fr> base idea of CGR approach
 #  This file is part of chython.
@@ -25,7 +25,7 @@ from .reactor import *
 from .utils import *
 
 
-pickle_cache = False  # store cached attributes in pickle
 torch_device = 'cpu'  # AAM model device. Change before first `reset_mapping` call!
+
 
 __all__ = []

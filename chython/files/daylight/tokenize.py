@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022, 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,11 +16,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from re import compile, fullmatch, match, search
-from .._mdl import common_isotopes
+from re import compile, match, search
 from ...containers.bonds import QueryBond
 from ...exceptions import IncorrectSmiles, IncorrectSmarts
-from ...periodictable.element import ListElement
 
 
 # -,= OR bonds supported
@@ -49,7 +47,6 @@ from ...periodictable.element import ListElement
 # 12: in ring bond
 
 
-atomic_numbers = dict(enumerate(common_isotopes, 1))
 iso_re = compile(r'^[0-9]+')
 chg_re = compile(r'[+-][1-4+-]?')
 mpp_re = compile(r':[1-9][0-9]*$')
@@ -243,7 +240,7 @@ def _tokenize(smiles):
 
 def _atom_parse(token):
     # [isotope]Element[element][@[@]][H[n]][+-charge][:mapping]
-    _match = fullmatch(atom_re, token)
+    _match = atom_re.fullmatch(token)
     if _match is None:
         raise IncorrectSmiles(f'atom token invalid {token}')
     isotope, element, stereo, hydrogen, charge, mapping = _match.groups()
@@ -275,34 +272,32 @@ def _atom_parse(token):
             mapping = int(mapping[1:])
         except ValueError:
             raise IncorrectSmiles('invalid mapping token')
-    else:
-        mapping = 0
 
     if element in ('c', 'n', 'o', 'p', 's', 'as', 'se', 'b', 'te'):
         _type = 8
         element = element.capitalize()
     else:
         _type = 0
-    return _type, {'element': element, 'isotope': isotope, 'mapping': mapping, 'charge': charge, 'is_radical': False,
-                   'x': 0., 'y': 0., 'z': 0., 'hydrogen': hydrogen, 'stereo': stereo}
+    return _type, {'element': element, 'isotope': isotope, 'parsed_mapping': mapping, 'charge': charge,
+                   'implicit_hydrogens': hydrogen, 'stereo': stereo}
 
 
 def _query_parse(token):
+    out = {}
     if isotope := match(iso_re, token):
         token = token[isotope.end():]  # remove isotope substring
-        isotope = int(isotope.group())
+        out['isotope'] = int(isotope.group())
     if charge := search(chg_re, token):
         token = token[:charge.start()] + token[charge.end():]  # remove charge substring
-        charge = charge_dict[charge.group()]
-    else:
-        charge = 0
+        out['charge'] = charge_dict[charge.group()]
+
     if mapping := search(mpp_re, token):
         token = token[:mapping.start()]
-        mapping = int(mapping.group()[1:])
-    else:
-        mapping = 0
+        out['parsed_mapping'] = int(mapping.group()[1:])
+
     if stereo := search(str_re, token):  # drop stereo mark. unsupported
         token = token[:stereo.start()] + token[stereo.end():]
+        out['stereo'] = stereo.group() == '@'
 
     # supported only <;> and <,> logic. <&> and silent <&> not supported!
     primitives = token.split(';')
@@ -310,35 +305,21 @@ def _query_parse(token):
         element = [int(x[1:]) if x.startswith('#') else x for x in element.split(',')]
         if len(element) == 1:
             element = element[0]
-        else:  # only atoms supported
-            tmp = []
-            for x in element:
-                if isinstance(x, int):
-                    try:
-                        tmp.append(atomic_numbers[x])
-                    except KeyError as e:
-                        raise IncorrectSmiles('Invalid atomic number') from e
-                elif x in common_isotopes:
-                    tmp.append(x)
-                else:
-                    raise IncorrectSmarts('Invalid element symbol')
-            element = ListElement(tmp)
     else:
         raise IncorrectSmarts('Empty element')
+    out['element'] = element
 
-    hybridization = rings_sizes = neighbors = hydrogens = heteroatoms = None
-    masked = False
     for p in primitives[1:]:  # parse hydrogens (h), neighbors (D), rings_sizes (r or !R), hybridization == 4 (a)
         if not p:
             continue
         elif p == 'a':  # aromatic atom
-            hybridization = 4
+            out['hybridization'] = 4
         elif p == 'A':  # ignore aliphatic mark. Ad-Hoc for Marwin.
             continue
         elif p == '!R':
-            rings_sizes = 0
+            out['ring_sizes'] = 0
         elif p == 'M':
-            masked = True
+            out['masked'] = True
         else:
             p = p.split(',')
             if len(p) != 1 and len({x[0] for x in p}) > 1:
@@ -352,19 +333,16 @@ def _query_parse(token):
                 raise IncorrectSmarts('Unsupported SMARTS primitive')
 
             if t == 'D':
-                neighbors = p
+                out['neighbors'] = p
             elif t == 'h':
-                hydrogens = p
+                out['implicit_hydrogens'] = p
             elif t == 'r':  # r
-                rings_sizes = p
+                out['ring_sizes'] = p
             elif t == 'x':
-                heteroatoms = p
+                out['heteroatoms'] = p
             else:  # z
-                hybridization = p
-
-    return 0, {'element': element, 'isotope': isotope, 'mapping': mapping, 'charge': charge, 'is_radical': False,
-               'heteroatoms': heteroatoms, 'hydrogens': hydrogens, 'neighbors': neighbors,
-               'rings_sizes': rings_sizes, 'hybridization': hybridization, 'masked': masked}
+                out['hybridization'] = p
+    return 0, out
 
 
 def smiles_tokenize(smi):
@@ -372,8 +350,7 @@ def smiles_tokenize(smi):
     out = []
     for token_type, token in tokens:
         if token_type in (0, 8):  # simple atom
-            out.append((token_type, {'element': token, 'isotope': None, 'mapping': 0, 'charge': 0, 'is_radical': False,
-                                     'x': 0., 'y': 0., 'z': 0., 'hydrogen': None, 'stereo': None}))
+            out.append((token_type, {'element': token}))
         elif token_type == 5:
             out.append(_atom_parse(token))
         elif token_type == 10:
@@ -388,9 +365,7 @@ def smarts_tokenize(smi):
     out = []
     for token_type, token in tokens:
         if token_type in (0, 8):  # simple atom
-            out.append((0, {'element': token, 'isotope': None, 'mapping': 0, 'charge': 0, 'is_radical': False,
-                            'heteroatoms': None, 'hydrogens': None, 'neighbors': None,
-                            'rings_sizes': None, 'hybridization': None, 'masked': False}))
+            out.append((0, {'element': token}))
         elif token_type == 5:
             out.append(_query_parse(token))
         else:

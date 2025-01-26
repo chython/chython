@@ -37,6 +37,7 @@ def parser(tokens, strong_cycle):
     last_num = 0
     stack = []
     cycles = {}
+    stereo_atoms = {}
     stereo_bonds = defaultdict(dict)
     previous = None
 
@@ -135,6 +136,8 @@ def parser(tokens, strong_cycle):
                     # else bt == 4 - skip dot
                     previous = None
 
+            if token.get('stereo') is not None:
+                stereo_atoms[atom_num] = token.pop('stereo')
             atoms.append(token)
             atoms_types.append(token_type)
             last_num = atom_num
@@ -147,8 +150,8 @@ def parser(tokens, strong_cycle):
     elif previous:
         raise IncorrectSmiles('bond on the end')
 
-    return {'atoms': atoms, 'bonds': bonds, 'order': order, 'stereo_bonds': stereo_bonds, 'log': log,
-            'title': None, 'meta': None}
+    return {'atoms': atoms, 'bonds': bonds, 'order': order, 'stereo_atoms': stereo_atoms,
+            'stereo_bonds': stereo_bonds, 'log': log}
 
 
 __all__ = ['parser']

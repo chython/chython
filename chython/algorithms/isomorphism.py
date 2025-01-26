@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,15 +19,23 @@
 from array import array
 from collections import defaultdict, deque
 from functools import cached_property, partial
+from io import BytesIO
 from itertools import permutations
+from struct import Struct
 from typing import Any, Collection, Dict, Iterator, Optional, TYPE_CHECKING, Union
 from .._functions import lazy_product
-from ..periodictable.element import Element, Query, AnyElement, AnyMetal, ListElement
+from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement, QueryElement, ExtendedQuery
 
 
 if TYPE_CHECKING:
     from chython.containers.graph import Graph
-    from chython.containers import MoleculeContainer, QueryContainer
+    from chython.containers import MoleculeContainer
+
+
+header_struct = Struct('I')
+m_atom_struct = Struct('QQQQIII')
+q_atom_struct = Struct('QQQQIIIII')
+bond_struct = Struct('QI')
 
 
 class Isomorphism:
@@ -48,14 +56,6 @@ class Isomorphism:
 
     def __ge__(self, other):
         return other.is_substructure(self)
-
-    def __contains__(self: 'Graph', other: Union[Element, Query, str]):
-        """
-        Atom in Structure test.
-        """
-        if isinstance(other, str):
-            return any(other == x.atomic_symbol for x in self._atoms.values())
-        return any(other == x for x in self._atoms.values())
 
     def is_substructure(self, other, /) -> bool:
         """
@@ -79,23 +79,7 @@ class Isomorphism:
             return False
         return True
 
-    def is_automorphic(self):
-        """
-        Test for automorphism symmetry of graph.
-        """
-        try:
-            next(self.get_automorphism_mapping())
-        except StopIteration:
-            return False
-        return True
-
-    def get_automorphism_mapping(self: 'Graph') -> Iterator[Dict[int, int]]:
-        """
-        Iterator of all possible automorphism mappings.
-        """
-        return _get_automorphism_mapping(self.atoms_order, self._bonds)
-
-    def _get_mapping(self, other, /, *, automorphism_filter=True, searching_scope=None,
+    def _get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter=True, searching_scope=None,
                      components=None, get_mapping=None) -> Iterator[Dict[int, int]]:
         if components is None:  # ad-hoc for QueryContainer
             components, closures = self._compiled_query
@@ -106,7 +90,7 @@ class Isomorphism:
 
         seen = set()
         if len(components) == 1:
-            for candidate in other._connected_components:
+            for candidate in other.connected_components:
                 if searching_scope:
                     candidate = searching_scope.intersection(candidate)
                     if not candidate:
@@ -119,7 +103,7 @@ class Isomorphism:
                         seen.add(atoms)
                     yield mapping
         else:
-            for candidates in permutations(other._connected_components, len(components)):
+            for candidates in permutations(other.connected_components, len(components)):
                 mappers = []
                 for component, candidate in zip(components, candidates):
                     if searching_scope:
@@ -141,29 +125,81 @@ class Isomorphism:
 
     @cached_property
     def _compiled_query(self: 'Graph'):
-        components, closures = _compile_query(self._atoms, self._bonds)
-        if self.connected_components_count > 1:
-            order = {x: n for n, c in enumerate(self.connected_components) for x in c}
-            components.sort(key=lambda x: order[x[0][0]])
-        return components, closures
+        return _compile_query(self._atoms, self._bonds)
 
 
 class MoleculeIsomorphism(Isomorphism):
+    __slots__ = ()
+
+    def __contains__(self: 'MoleculeContainer', other: Union[Element, Query, str]):
+        """
+        Atom in Structure test.
+        """
+        if isinstance(other, str):
+            return any(other == a.atomic_symbol for _, a in self.atoms())
+        return any(other == a for _, a in self.atoms())
+
+    def is_automorphic(self):
+        """
+        Test for automorphism symmetry of graph.
+        """
+        try:
+            next(self.get_automorphism_mapping())
+        except StopIteration:
+            return False
+        return True
+
+    def get_automorphism_mapping(self: 'MoleculeContainer') -> Iterator[Dict[int, int]]:
+        """
+        Iterator of all possible automorphism mappings.
+        """
+        return _get_automorphism_mapping(self._chiral_morgan, self._bonds)
+
     def get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter: bool = True,
-                    searching_scope: Optional[Collection[int]] = None):
+                    searching_scope: Optional[Collection[int]] = None, match_stereo: bool = False):
         """
         Get self to other Molecule substructure mapping generator.
 
         :param other: Molecule
         :param automorphism_filter: Skip matches to the same atoms.
         :param searching_scope: substructure atoms list to localize isomorphism.
+        :param match_stereo: test stereo labels matches. slow algorithm, thus disabled by default.
+        """
+        if not isinstance(other, MoleculeIsomorphism):
+            raise TypeError('MoleculeContainer expected')
+
+        for mapping in self._get_mapping(other, automorphism_filter=automorphism_filter or match_stereo,
+                                         searching_scope=searching_scope):
+            if match_stereo:
+                sub = other.substructure(mapping.values())  # extract matched subgraph
+                fm = self.get_fast_mapping(sub)
+                if not fm:  # check mor matching with stereo labels too
+                    continue
+                yield fm
+                if not automorphism_filter:
+                    for auto in sub.get_automorphism_mapping():  # enumerate all possible automorphisms
+                        yield {n: auto[m] for n, m in fm.items()}
+            else:
+                yield mapping
+
+    def get_fast_mapping(self, other: 'MoleculeContainer') -> Optional[Dict[int, int]]:
+        """
+        Get self to other fast (suboptimal) structure mapping.
+        Only one possible atoms mapping returned.
+        Effective only for big molecules.
         """
         if isinstance(other, MoleculeIsomorphism):
-            return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope)
+            if len(self) != len(other):
+                return
+            so = self.smiles_atoms_order
+            oo = other.smiles_atoms_order
+            if self != other:
+                return
+            return dict(zip(so, oo))
         raise TypeError('MoleculeContainer expected')
 
     @cached_property
-    def _cython_compiled_structure(self):
+    def _cython_compiled_structure(self: 'MoleculeContainer'):
         # long I:
         # bond: single, double, triple, aromatic, special = 5 bit
         # bond in ring: 2 bit
@@ -185,15 +221,6 @@ class MoleculeIsomorphism(Isomorphism):
 
         # long IV:
         # ring_sizes: not-in-ring bit, 3-atom ring, 4-...., 65-atom ring
-        from ..files._mdl.mol import common_isotopes
-
-        charges = self._charges
-        radicals = self._radicals
-        hydrogens = self._hydrogens
-        neighbors = self.neighbors
-        heteroatoms = self.heteroatoms
-        rings_sizes = self.atoms_rings_sizes
-        hybridization = self.hybridization
 
         mapping = {}
         numbers = []
@@ -201,10 +228,10 @@ class MoleculeIsomorphism(Isomorphism):
         bits2 = []
         bits3 = []
         bits4 = []
-        for i, (n, a) in enumerate(self._atoms.items()):
+        for i, (n, a) in enumerate(self.atoms()):
             mapping[n] = i
             numbers.append(n)
-            v2 = 1 << (hybridization(n) - 1)
+            v2 = 1 << (a.hybridization - 1)
             if (an := a.atomic_number) > 56:
                 if an > 116:  # Ts, Og
                     an = 116
@@ -214,24 +241,24 @@ class MoleculeIsomorphism(Isomorphism):
                 v1 = 1 << (57 - an)
 
             if a.isotope:
-                v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 54)
-                if radicals[n]:
+                v3 = 1 << (a.isotope - a.mdl_isotope + 54)
+                if a.is_radical:
                     v3 |= 0x200000000000
                 else:
                     v3 |= 0x100000000000
-            elif radicals[n]:
+            elif a.is_radical:
                 v3 = 0x8000200000000000
             else:
                 v3 = 0x8000100000000000
 
-            v3 |= 1 << (charges[n] + 39)
-            v3 |= 1 << ((hydrogens[n] or 0) + 30)
-            v3 |= 1 << (neighbors(n) + 15)
-            v3 |= 1 << heteroatoms(n)
+            v3 |= 1 << (a.charge + 39)
+            v3 |= 1 << ((a.implicit_hydrogens or 0) + 30)
+            v3 |= 1 << (a.neighbors + 15)
+            v3 |= 1 << a.heteroatoms
 
-            if n in rings_sizes:
+            if a.ring_sizes:
                 v4 = 0
-                for r in rings_sizes[n]:
+                for r in a.ring_sizes:
                     if r > 65:  # big rings not supported
                         continue
                     v4 |= 1 << (65 - r)
@@ -256,15 +283,14 @@ class MoleculeIsomorphism(Isomorphism):
             for j, (m, b) in enumerate(ms.items(), start):
                 indices[j] = x = mapping[m]
                 v = bits1[x]
-                o = b.order
-                if o == 1:
+                if b == 1:
                     v |= 0x0800000000000000
-                elif o == 4:
-                    v |= 0x4000000000000000
-                elif o == 2:
+                elif b == 2:
                     v |= 0x1000000000000000
-                elif o == 3:
+                elif b == 3:
                     v |= 0x2000000000000000
+                elif b == 4:
+                    v |= 0x4000000000000000
                 else:
                     v |= 0x8000000000000000
                 v |= 0x0400000000000000 if b.in_ring else 0x0200000000000000
@@ -272,42 +298,92 @@ class MoleculeIsomorphism(Isomorphism):
             start += len(ms)
             o_to[i] = start
 
-        return (array('L', numbers), array('Q', bits1), array('Q', bits2), array('Q', bits3), array('Q', bits4),
-                array('Q', bonds), array('I', o_from), array('I', o_to), array('I', indices))
+        buffer = BytesIO()
+        buffer.write(header_struct.pack(len(numbers)))
+        for x in zip(bits1, bits2, bits3, bits4, o_from, o_to, numbers):
+            buffer.write(m_atom_struct.pack(*x))
+        for x in zip(bonds, indices):
+            buffer.write(bond_struct.pack(*x))
+        return buffer.getvalue()
 
 
 class QueryIsomorphism(Isomorphism):
-    def get_mapping(self, other: Union['MoleculeContainer', 'QueryContainer'], /, *, automorphism_filter: bool = True,
+    __slots__ = ()
+
+    def get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter: bool = True,
                     searching_scope: Optional[Collection[int]] = None, _cython=True):
         """
-        Get self to other Molecule or Query substructure mapping generator.
+        Get Query to Molecule substructure mapping generator.
 
-        :param other: Molecule or Query
+        :param other: Molecule
         :param automorphism_filter: Skip matches to the same atoms.
         :param searching_scope: substructure atoms list to localize isomorphism.
         """
         # _cython - by default cython implementation enabled.
         # disable it by overriding method if Query Atoms or Containers logic changed.
         # Lv, Ts and Og in cython optimized mode treated as equal.
-        if isinstance(other, QueryIsomorphism):
-            return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope)
-        elif isinstance(other, MoleculeIsomorphism):
-            if _cython:
-                try:  # windows? ;)
-                    from ._isomorphism import get_mapping as _cython_get_mapping
-                except ImportError:
-                    components = get_mapping = None
-                else:
-                    components = self._cython_compiled_query  # override to cython data
+        if not isinstance(other, MoleculeIsomorphism):
+            raise TypeError('MoleculeContainer expected')
 
-                    def get_mapping(query, scope):
-                        return _cython_get_mapping(*query, *other._cython_compiled_structure,
-                                                   array('I', [n in scope for n in other]))
-            else:
+        if _cython:
+            try:  # windows? ;)
+                from ._isomorphism import get_mapping as _cython_get_mapping
+            except ImportError:
                 components = get_mapping = None
-            return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope,
-                                     components=components, get_mapping=get_mapping)
-        raise TypeError('MoleculeContainer or QueryContainer expected')
+            else:
+                components = self._cython_compiled_query  # override to cython data
+
+                def get_mapping(query, scope):
+                    return _cython_get_mapping(query, other._cython_compiled_structure,
+                                               array('I', [n in scope for n in other]))
+        else:
+            components = get_mapping = None
+
+        for mapping in self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope,
+                                         components=components, get_mapping=get_mapping):
+            reverse = None
+            # test stereo labels matches
+            for n, a in self.atoms():
+                if not isinstance(a, ExtendedQuery) or a.stereo is None:
+                    continue  # non-chiral atom matches any atom. no need for checks
+                m = mapping[n]
+                if other.atom(m).stereo is None:  # stereo in query should match only stereo atom
+                    break  # reject mapping
+
+                if m in other.stereogenic_tetrahedrons:
+                    if other._translate_tetrahedron_sign(m, [mapping[x] for x in self._bonds[n]]) != a.stereo:
+                        break  # stereo sign doesn't match
+                else:  # allene case
+                    if reverse is None:
+                        reverse = {m: n for n, m in mapping.items()}
+                    ot1, ot2 = other._stereo_allenes_terminals[m]  # get terminal atoms
+                    on1, om1, on2, om2 = other.stereogenic_allenes[m]  # get neighbors
+                    t1, t2 = reverse[ot1], reverse[ot2]
+                    env = (reverse.get(on1), reverse.get(om1), reverse.get(on2), reverse.get(om2))
+                    n1 = mapping[next(x for x in self._bonds[t1] if x in env)]
+                    m1 = mapping[next(x for x in self._bonds[t2] if x in env)]
+                    if other._translate_allene_sign(m, n1, m1) != a.stereo:
+                        break
+            else:
+                for n, m, b in self.bonds():
+                    if b.stereo is None:
+                        continue
+                    on, om = mapping[n], mapping[m]
+                    if other.bond(on, om).stereo is None:  # chiral query bond matches only chiral molecule bond
+                        break
+                    if reverse is None:
+                        reverse = {m: n for n, m in mapping.items()}
+
+                    ot1, ot2 = ots = other._stereo_cis_trans_terminals[on]  # get terminal atoms
+                    on1, om1, on2, om2 = other.stereogenic_cis_trans[ots]  # get neighbors
+                    t1, t2 = reverse[ot1], reverse[ot2]
+                    env = (reverse.get(on1), reverse.get(om1), reverse.get(on2), reverse.get(om2))
+                    n1 = mapping[next(x for x in self._bonds[t1] if x in env)]
+                    m1 = mapping[next(x for x in self._bonds[t2] if x in env)]
+                    if other._translate_cis_trans_sign(ot1, ot2, n1, m1) != b.stereo:
+                        break
+                else:
+                    yield mapping
 
     @cached_property
     def _cython_compiled_query(self):
@@ -337,7 +413,6 @@ class QueryIsomorphism(Isomorphism):
         # padding: 1 bit
         # bond: single, double, triple, aromatic, special = 5 bit
         # bond in ring: 2 bit
-        from ..files._mdl.mol import common_isotopes
 
         _components, _closures = self._compiled_query
         components = []
@@ -361,7 +436,7 @@ class QueryIsomorphism(Isomorphism):
                     else:
                         if isinstance(a, ListElement):
                             v1 = v2 = 0
-                            for n in a._numbers:
+                            for n in a.atomic_numbers:
                                 if n > 56:
                                     if n > 116:  # Ts, Og
                                         n = 116
@@ -377,8 +452,8 @@ class QueryIsomorphism(Isomorphism):
                         else:
                             v1 = 1 << (57 - n)
                             v2 = 0
-                    if a.isotope:
-                        v3 = 1 << (a.isotope - common_isotopes[a.atomic_symbol] + 54)
+                    if isinstance(a, QueryElement) and a.isotope:
+                        v3 = 1 << (a.isotope - a.mdl_isotope + 54)
                         if a.is_radical:
                             v3 |= 0x200000000000
                         else:
@@ -486,10 +561,16 @@ class QueryIsomorphism(Isomorphism):
                         indices[j] = mapping[m]
                     start += len(ms)
                     q_to[i] = start
-            components.append((array('L', [n for n, *_ in c]), array('I', [0] + [mapping[x] for _, x, *_ in c[1:]]),
-                               array('Q', masks1), array('Q', masks2), array('Q', masks3), array('Q', masks4),
-                               array('I', closures), array('I', q_from), array('I', q_to),
-                               array('I', indices), array('Q', bonds)))
+
+            back = [0] + [mapping[x] for _, x, *_ in c[1:]]
+            numbers = [n for n, *_ in c]
+            buffer = BytesIO()
+            buffer.write(header_struct.pack(len(numbers)))
+            for x in zip(masks1, masks2, masks3, masks4, back, closures, q_from, q_to, numbers):
+                buffer.write(q_atom_struct.pack(*x))
+            for x in zip(bonds, indices):
+                buffer.write(bond_struct.pack(*x))
+            components.append(buffer.getvalue())
         return components
 
 
@@ -498,8 +579,7 @@ def _get_automorphism_mapping(atoms: Dict[int, int], bonds: Dict[int, Dict[int, 
         return  # all atoms unique
 
     components, closures = _compile_query(atoms, bonds)
-    mappers = [_get_mapping(order, closures, atoms, bonds, {x for x, *_ in order})
-               for order in components]
+    mappers = [_get_mapping(order, closures, atoms, bonds, {x for x, *_ in order}) for order in components]
     if len(mappers) == 1:
         for mapping in mappers[0]:
             if any(k != v for k, v in mapping.items()):

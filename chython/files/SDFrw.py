@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -23,7 +23,7 @@ from re import compile, match
 from subprocess import check_output
 from sys import platform
 from typing import Optional, List
-from ._mdl import MDLRead, MOLWrite, EMOLWrite, parse_mol_v2000, parse_mol_v3000, postprocess_molecule
+from .mdl import MDLRead, MOLWrite, EMOLWrite, parse_mol_v2000, parse_mol_v3000, postprocess_molecule
 from ._convert import create_molecule
 from ._mapping import postprocess_parsed_molecule
 from ..containers import MoleculeContainer
@@ -71,8 +71,8 @@ class SDFRead(MDLRead):
 
         postprocess_parsed_molecule(tmp, remap=self._remap, ignore=self._ignore)
         mol = create_molecule(tmp, ignore_bad_isotopes=self._ignore_bad_isotopes, _cls=self.molecule_cls)
-        postprocess_molecule(mol, tmp, ignore=self._ignore, ignore_stereo=self._ignore_stereo,
-                             calc_cis_trans=self._calc_cis_trans)
+        if not self._ignore_stereo:
+            postprocess_molecule(mol, tmp, calc_cis_trans=self._calc_cis_trans)
         meta = self.read_metadata()
         if meta:
             mol.meta.update(meta)
@@ -213,8 +213,8 @@ def mdl_mol(data: str, /, *, ignore=True, calc_cis_trans=False, ignore_stereo=Fa
 
     postprocess_parsed_molecule(tmp, remap=remap, ignore=ignore)
     mol = create_molecule(tmp, ignore_bad_isotopes=ignore_bad_isotopes, _cls=_cls)
-    postprocess_molecule(mol, tmp, ignore=ignore, ignore_stereo=ignore_stereo,
-                         calc_cis_trans=calc_cis_trans)
+    if not ignore_stereo:
+        postprocess_molecule(mol, tmp, calc_cis_trans=calc_cis_trans)
     return mol
 
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -178,6 +178,8 @@ class PDBRead:
                       atom_charge=charges, _cls=self.molecule_cls)
 
             mol.meta['RESIDUE'] = dict(enumerate(res, 1))
+            if log:
+                mol.meta['chython_parsing_log'] = log
             if self.__parse_as_single:
                 self.__parsed_first = mol.copy()
             return mol
@@ -191,6 +193,11 @@ class PDBRead:
                 c[n] = (x, y, z)
             mol = self.__parsed_first.copy()
             mol._conformers[0] = c
+            if log:
+                if 'chython_parsing_log' in mol.meta:
+                    mol.meta['chython_parsing_log'] = mol.meta['chython_parsing_log'] + log
+                else:
+                    mol.meta['chython_parsing_log'] = log
             return mol
 
     def close(self, force: bool = False):

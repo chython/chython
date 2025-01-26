@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -42,31 +42,31 @@ def fw_prepare_groups(core: Union[MoleculeContainer, QueryContainer], molecule: 
     cs = set(core_map.values())
     groups = molecule.substructure(molecule._atoms.keys() - cs, recalculate_hydrogens=False)
     gs = set(groups)
-    hs = molecule._hydrogens
-    hgs = groups._hydrogens
-    plane = molecule._plane
 
     cf = molecule.substructure(cs, recalculate_hydrogens=False)
-    chs = cf._hydrogens
 
     for n, m, b in molecule.bonds():
         if n in cs:
             if m in gs:
-                h = H()
-                h._Core__isotope = reverse[n]  # mark mapping to isotope
-                groups.add_bond(groups.add_atom(h, xy=plane[n]), m, b.copy())
-                hgs[m] = hs[m]  # restore H count
+                a = molecule.atom(n)
+                h = H(x=a.x, y=a.y)
+                h._isotope = reverse[n]  # mark mapping to isotope
+                groups.add_bond(groups.add_atom(h, _skip_calculation=True), m, b.copy(), _skip_calculation=True)
 
-                cf.add_bond(cf.add_atom(h.copy(), xy=plane[m]), n, b.copy())
-                chs[n] = hs[n]
+                a = molecule.atom(m)
+                h = H(x=a.x, y=a.y)
+                h._isotope = reverse[n]  # mark mapping to isotope
+                cf.add_bond(cf.add_atom(h, _skip_calculation=True), n, b.copy(), _skip_calculation=True)
         elif m in cs and n in gs:
-            h = H()
-            h._Core__isotope = reverse[m]
-            groups.add_bond(groups.add_atom(h, xy=plane[m]), n, b.copy())
-            hgs[n] = hs[n]
+            a = molecule.atom(m)
+            h = H(x=a.x, y=a.y)
+            h._isotope = reverse[m]
+            groups.add_bond(groups.add_atom(h, _skip_calculation=True), n, b.copy(), _skip_calculation=True)
 
-            cf.add_bond(cf.add_atom(h.copy(), xy=plane[n]), m, b.copy())
-            chs[m] = hs[m]
+            a = molecule.atom(n)
+            h = H(x=a.x, y=a.y)
+            h._isotope = reverse[m]  # mark mapping to isotope
+            cf.add_bond(cf.add_atom(h.copy(), _skip_calculation=True), n, b.copy(), _skip_calculation=True)
     groups = groups.split()
     groups.insert(0, cf)
     return groups

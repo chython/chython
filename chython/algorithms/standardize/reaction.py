@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  Copyright 2024 Philippe Gantzer <p.gantzer@icredd.hokudai.ac.jp>
 #  This file is part of chython.
@@ -50,7 +50,7 @@ class StandardizeReaction:
             total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
 
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         if logging:
             return total
         return bool(total)
@@ -76,7 +76,7 @@ class StandardizeReaction:
             total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
 
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         if logging:
             return total
         return bool(total)
@@ -90,10 +90,10 @@ class StandardizeReaction:
         """
         total = False
         for m in self.molecules():
-            if m.thiele(fix_tautomers=fix_tautomers) and not total:
+            if m.thiele(fix_tautomers=fix_tautomers):
                 total = True
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         return total
 
     def kekule(self: 'ReactionContainer', *, buffer_size=7) -> bool:
@@ -105,10 +105,10 @@ class StandardizeReaction:
         """
         total = False
         for m in self.molecules():
-            if m.kekule(buffer_size=buffer_size) and not total:
+            if m.kekule(buffer_size=buffer_size):
                 total = True
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         return total
 
     def clean_isotopes(self: 'ReactionContainer') -> bool:
@@ -118,10 +118,10 @@ class StandardizeReaction:
         """
         flag = False
         for m in self.molecules():
-            if m.clean_isotopes() and not flag:
+            if m.clean_isotopes():
                 flag = True
         if flag:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         return flag
 
     def clean_stereo(self: 'ReactionContainer'):
@@ -130,7 +130,7 @@ class StandardizeReaction:
         """
         for m in self.molecules():
             m.clean_stereo()
-        self.flush_cache()
+        self.flush_cache(keep_molecule_cache=True)
 
     def check_valence(self: 'ReactionContainer') -> List[Tuple[int, Tuple[int, ...]]]:
         """
@@ -155,7 +155,7 @@ class StandardizeReaction:
         for m in self.molecules():
             total += m.implicify_hydrogens()
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         return total
 
     def explicify_hydrogens(self: 'ReactionContainer') -> int:
@@ -203,7 +203,7 @@ class StandardizeReaction:
                 m.remap(remap)
 
         if total:
-            self.flush_cache()
+            self.flush_cache(keep_molecule_cache=True)
         return total
 
     def remove_reagents(self, *, keep_reagents: bool = False, mapping: bool = True) -> bool:
@@ -272,10 +272,9 @@ class StandardizeReaction:
         tmp.extend(reagents_st2)
         reagents = tuple(tmp) if keep_reagents else ()
 
-        self._ReactionContainer__reactants = tuple(reactants_st2)
-        self._ReactionContainer__products = tuple(products_st2)
-        self._ReactionContainer__reagents = reagents
-        self.flush_cache()
+        self._reactants = tuple(reactants_st2)
+        self._products = tuple(products_st2)
+        self._reagents = reagents
         self.fix_positions()
         return True
 
@@ -307,10 +306,9 @@ class StandardizeReaction:
             reagents = tuple(tmp) if keep_reagents else ()
 
             if len(reactants) != len(self.reactants) or len(products) != len(self.products) or len(reagents) != len(self.reagents):
-                self._ReactionContainer__reactants = tuple(reactants)
-                self._ReactionContainer__products = tuple(products)
-                self._ReactionContainer__reagents = reagents
-                self.flush_cache()
+                self._reactants = tuple(reactants)
+                self._products = tuple(products)
+                self._reagents = reagents
                 self.fix_positions()
                 return True
             return False
@@ -327,7 +325,7 @@ class StandardizeReaction:
         salts = _contract_ions(anions, cations, total)
         if salts:
             neutral.extend(salts)
-            self._ReactionContainer__reagents = tuple(neutral)
+            self._reagents = tuple(neutral)
             changed = True
         else:
             changed = False
@@ -338,7 +336,7 @@ class StandardizeReaction:
             anions_order = {frozenset(m): n for n, m in enumerate(anions)}
             cations_order = {frozenset(m): n for n, m in enumerate(cations)}
             neutral.extend(salts)
-            self._ReactionContainer__reactants = tuple(neutral)
+            self._reactants = tuple(neutral)
             changed = True
         else:
             anions_order = cations_order = {}
@@ -350,11 +348,10 @@ class StandardizeReaction:
         salts = _contract_ions(anions, cations, total)
         if salts:
             neutral.extend(salts)
-            self._ReactionContainer__products = tuple(neutral)
+            self._products = tuple(neutral)
             changed = True
 
         if changed:
-            self.flush_cache()
             self.fix_positions()
             return True
         return False

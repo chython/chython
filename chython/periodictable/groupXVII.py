@@ -18,9 +18,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .element import Element
-from .groups import GroupXVII
-from .periods import PeriodII, PeriodIII, PeriodIV, PeriodV, PeriodVI, PeriodVII
+from .base import Element
+from .base.groups import GroupXVII
+from .base.periods import PeriodII, PeriodIII, PeriodIV, PeriodV, PeriodVI, PeriodVII
 
 
 class F(Element, PeriodII, GroupXVII):
@@ -49,6 +49,14 @@ class F(Element, PeriodII, GroupXVII):
     @property
     def atomic_radius(self):
         return .42
+
+    @property
+    def mdl_isotope(self):
+        return 19
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
 
 
 class Cl(Element, PeriodIII, GroupXVII):
@@ -88,6 +96,18 @@ class Cl(Element, PeriodIII, GroupXVII):
     @property
     def atomic_radius(self):
         return .79
+
+    @property
+    def mdl_isotope(self):
+        return 35
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
 
 
 class Br(Element, PeriodIV, GroupXVII):
@@ -134,6 +154,18 @@ class Br(Element, PeriodIV, GroupXVII):
     @property
     def atomic_radius(self):
         return 0.94
+
+    @property
+    def mdl_isotope(self):
+        return 80
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
 
 
 class I(Element, PeriodV, GroupXVII):
@@ -203,6 +235,18 @@ class I(Element, PeriodV, GroupXVII):
     def atomic_radius(self):
         return 1.15
 
+    @property
+    def mdl_isotope(self):
+        return 127
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class At(Element, PeriodVI, GroupXVII):
     __slots__ = ()
@@ -232,6 +276,18 @@ class At(Element, PeriodVI, GroupXVII):
     def atomic_radius(self):
         return 1.27
 
+    @property
+    def mdl_isotope(self):
+        return 210
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class Ts(Element, PeriodVII, GroupXVII):
     __slots__ = ()
@@ -259,6 +315,10 @@ class Ts(Element, PeriodVII, GroupXVII):
     @property
     def atomic_radius(self):
         return 1.27  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 297
 
 
 __all__ = ['F', 'Cl', 'Br', 'I', 'At', 'Ts']
