@@ -419,22 +419,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             hb[n][m] = hb[m][n] = bond
         return h
 
-    def get_fast_mapping(self, other: 'MoleculeContainer') -> Optional[Dict[int, int]]:
-        """
-        Get self to other fast (suboptimal) structure mapping.
-        Only one possible atoms mapping returned.
-        Effective only for big molecules.
-        """
-        if isinstance(other, MoleculeContainer):
-            if len(self) != len(other):
-                return
-            so = self.smiles_atoms_order
-            oo = other.smiles_atoms_order
-            if self != other:
-                return
-            return dict(zip(so, oo))
-        raise TypeError('MoleculeContainer expected')
-
     def pack(self, *, compressed=True, check=True, version=2, order: List[int] = None) -> bytes:
         """
         Pack into compressed bytes.
@@ -475,7 +459,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
         :param compressed: return zlib-compressed pack.
         :param check: check molecule for format restrictions.
-        :param version: format version
+        :param version: format version. Only V2 is supported.
         :param order: atom order in V3
         """
         from ._pack_v2 import pack as pack_v2
@@ -491,8 +475,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
         if version == 2:
             data = pack_v2(self)
-        elif version == 3:
-            data = self._pack_v3(order, check)
         else:
             raise ValueError('invalid specification version')
         if compressed:
@@ -522,7 +504,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         :param compressed: decompress data before processing.
         """
         from ._unpack_v0v2 import unpack as unpack_v0v2
-        from ._unpack_v3 import unpack as unpack_v3
 
         if compressed:
             data = decompress(data)
@@ -530,8 +511,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             mol, cis_trans, pack_length = unpack_v0v2(data)
             for n, m, s in cis_trans:
                 mol.bond(*mol._stereo_cis_trans_centers[n])._stereo = s
-        elif data[0] == 3:
-            mol, cis_trans, pack_length = unpack_v3(data)
         else:
             raise ValueError('invalid pack header')
 
@@ -551,148 +530,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
     def __bytes__(self):
         return self.pack()
-
-    def _pack_v3(self, order=None, check=True):
-        """
-        Format V3 specification:
-        Big endian bytes order
-        8 bit - 0x03 (format specification version)
-        Atom block 3 bytes (repeated):
-        1 bit - atom entrance flag (always 1)
-        7 bit - atomic number (<=118)
-        3 bit - hydrogens (0-7). Note: 7 == None
-        4 bit - charge (charge + 4. possible range -4 - 4)
-        1 bit - radical state
-        4 bit - atom stereo
-            ANDx and ORx encode only sign. X value stored in the same order in Stereo group block.
-            0000 [same as V2] - no stereo or unknown
-            0001 - not used
-            0010 - absolute sign False
-            0011 - absolute sign True
-            0100 - sign False OR1 group
-            0101 - sign True OR1 group
-            0110 - sign False AND1 group
-            0111 - sign True AND1 group
-            1000 - sign False OR2 group
-            1001 - sign True OR2 group
-            1010 - sign False AND2 group
-            1011 - sign True AND2 group
-            1100 - sign False ORx group
-            1101 - sign True ORx group
-            1110 - sign False ANDx group
-            1111 - sign True ANDx group
-        4 bit - number of following bonds and CT blocks (0-15)
-
-        Bond block 2 bytes (repeated 0-15 times)
-        12 bit - negative shift from current atom to connected (e.g. 0x001 = -1 - connected to previous atom)
-        4 bit - bond order: 0000 - single, 0001 - double, 0010 - triple, 0011 - aromatic, 0111 - special
-
-        Cis-Trans 2 bytes
-        12 bit - negative shift from current atom to connected (e.g. 0x001 = -1 - connected to previous atom)
-        4 bit - CT sign: 1000 or 1001 - to avoid overlap with bond
-        """
-        if order is None:
-            order = list(self._atoms)
-        elif check:
-            if not isinstance(order, (list, tuple)):
-                raise TypeError('invalid atoms order')
-            elif len(so := set(order)) != len(order) or not so.issubset(self._atoms):
-                raise ValueError('invalid atoms order')
-
-        atoms = self._atoms
-        bonds = self._bonds
-        allenes_terminals = self._stereo_allenes_terminals
-
-        cumulenes = {}
-        ct_map = {}
-        for n, m in self._cis_trans_stereo:
-            ct_map[n] = m
-            ct_map[m] = n
-            cumulenes[n] = [x for x, b in bonds[n].items() if b.order in (1, 4)]
-            cumulenes[m] = [x for x, b in bonds[m].items() if b.order in (1, 4)]
-
-        for c in self._allenes_stereo:
-            n, m = allenes_terminals[c]
-            cumulenes[n] = [x for x, b in bonds[n].items() if b.order in (1, 4)]
-            cumulenes[m] = [x for x, b in bonds[m].items() if b.order in (1, 4)]
-
-        seen = {}
-        data = [b'\x03']
-        for i, n in enumerate(order):
-            seen[n] = i
-            atom = atoms[n]
-            env = bonds[n]
-
-            data.append((0x80 | atom.atomic_number).to_bytes(1, 'big'))
-
-            # 3 bit - hydrogens (0-6, None) | 4 bit - charge | 1 bit - radical
-            hcr = (atom.charge + 4) << 1 | atom.is_radical
-            if atom.implicit_hydrogens is None:
-                hcr |= 0b11100000
-            else:
-                hcr |= atom.implicit_hydrogens << 5
-            data.append(hcr.to_bytes(1, 'big'))
-
-            if atom.stereo is not None:
-                if len(env) == 2:
-                    t1, t2 = allenes_terminals[n]
-                    nn = None
-                    for x in order:
-                        if nn is None:
-                            if x in cumulenes[t1]:
-                                nn = x
-                                flag = True
-                            elif x in cumulenes[t2]:
-                                flag = False
-                                nn = x
-                        elif flag:  # noqa
-                            if x in cumulenes[t2]:
-                                nm = x
-                                break
-                        elif x in cumulenes[t1]:
-                            nm = x
-                            break
-                    if self._translate_allene_sign(n, nn, nm):  # noqa
-                        s = 0b0011_0000
-                    else:
-                        s = 0b0010_0000
-                elif self._translate_tetrahedron_sign(n, [x for x in order if x in env]):
-                    s = 0b0011_0000
-                else:
-                    s = 0b0010_0000
-            else:
-                s = 0
-
-            tmp = []
-            for m in order[:i]:
-                if (b := env.get(m)) is not None:
-                    tmp.append(((i - seen[m]) << 4 | b.order - 1).to_bytes(2, 'big'))
-            if n in ct_map and (m := ct_map[n]) in seen:  # only right atom codes stereo sign
-                nm = None
-                for x in order:
-                    if nm is None:
-                        if x in cumulenes[n]:
-                            nm = x
-                            flag = True
-                        elif x in cumulenes[m]:
-                            nm = x
-                            flag = False
-                    elif flag:  # noqa
-                        if x in cumulenes[m]:
-                            nn = x
-                            break
-                    elif x in cumulenes[n]:
-                        nn = x
-                        break
-                if self._translate_cis_trans_sign(m, n, nm, nn):  # noqa
-                    cs = 0b1001
-                else:
-                    cs = 0b1000
-                tmp.append(((i - seen[m]) << 4 | cs).to_bytes(2, 'big'))
-
-            data.append((s | len(tmp)).to_bytes(1, 'big'))
-            data.extend(tmp)
-        return b''.join(data)
 
     def _augmented_substructure(self, atoms: Iterable[int], deep: int):
         atoms = set(atoms)

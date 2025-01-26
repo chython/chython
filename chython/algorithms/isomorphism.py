@@ -24,7 +24,7 @@ from itertools import permutations
 from struct import Struct
 from typing import Any, Collection, Dict, Iterator, Optional, TYPE_CHECKING, Union
 from .._functions import lazy_product
-from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement, QueryElement
+from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement, QueryElement, ExtendedQuery
 
 
 if TYPE_CHECKING:
@@ -153,20 +153,50 @@ class MoleculeIsomorphism(Isomorphism):
         """
         Iterator of all possible automorphism mappings.
         """
-        return _get_automorphism_mapping(self.atoms_order, self._bonds)
+        return _get_automorphism_mapping(self._chiral_morgan, self._bonds)
 
     def get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter: bool = True,
-                    searching_scope: Optional[Collection[int]] = None):
+                    searching_scope: Optional[Collection[int]] = None, match_stereo: bool = False):
         """
         Get self to other Molecule substructure mapping generator.
 
         :param other: Molecule
         :param automorphism_filter: Skip matches to the same atoms.
         :param searching_scope: substructure atoms list to localize isomorphism.
+        :param match_stereo: test stereo labels matches. slow algorithm, thus disabled by default.
         """
         if not isinstance(other, MoleculeIsomorphism):
             raise TypeError('MoleculeContainer expected')
-        return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope)
+
+        for mapping in self._get_mapping(other, automorphism_filter=automorphism_filter or match_stereo,
+                                         searching_scope=searching_scope):
+            if match_stereo:
+                sub = other.substructure(mapping.values())  # extract matched subgraph
+                fm = self.get_fast_mapping(sub)
+                if not fm:  # check mor matching with stereo labels too
+                    continue
+                yield fm
+                if not automorphism_filter:
+                    for auto in sub.get_automorphism_mapping():  # enumerate all possible automorphisms
+                        yield {n: auto[m] for n, m in fm.items()}
+            else:
+                yield mapping
+
+    def get_fast_mapping(self, other: 'MoleculeContainer') -> Optional[Dict[int, int]]:
+        """
+        Get self to other fast (suboptimal) structure mapping.
+        Only one possible atoms mapping returned.
+        Effective only for big molecules.
+        """
+        if isinstance(other, MoleculeIsomorphism):
+            if len(self) != len(other):
+                return
+            so = self.smiles_atoms_order
+            oo = other.smiles_atoms_order
+            if self != other:
+                return
+            return dict(zip(so, oo))
+        raise TypeError('MoleculeContainer expected')
 
     @cached_property
     def _cython_compiled_structure(self: 'MoleculeContainer'):

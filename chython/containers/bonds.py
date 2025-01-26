@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -171,11 +171,9 @@ class QueryBond:
             raise TypeError('invalid order value')
         if in_ring is not None and not isinstance(in_ring, bool):
             raise TypeError('in_ring mark should be boolean or None')
-        if stereo is not None and not isinstance(stereo, bool):
-            raise TypeError('stereo mark should be boolean or None')
         self._order = order
         self._in_ring = in_ring
-        self._stereo = stereo
+        self.stereo = stereo
 
     def __eq__(self, other):
         if isinstance(other, Bond):
@@ -217,6 +215,12 @@ class QueryBond:
     @property
     def stereo(self) -> Optional[bool]:
         return self._stereo
+
+    @stereo.setter
+    def stereo(self, value):
+        if value is not None and not isinstance(value, bool):
+            raise TypeError('stereo mark should be boolean or None')
+        self._stereo = value
 
     def copy(self, full=False) -> 'QueryBond':
         copy = object.__new__(self.__class__)

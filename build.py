@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2023, 2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2023-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -53,9 +53,6 @@ extensions = [
               extra_compile_args=extra_compile_args),
     Extension('chython.containers._unpack_v0v2',
               ['chython/containers/_unpack_v0v2.pyx'],
-              extra_compile_args=extra_compile_args),
-    Extension('chython.containers._unpack_v3',
-              ['chython/containers/_unpack_v3.pyx'],
               extra_compile_args=extra_compile_args),
     Extension('chython.files._xyz',
               ['chython/files/_xyz.pyx'],
