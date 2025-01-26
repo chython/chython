@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -21,7 +21,7 @@ from itertools import count
 from re import compile, findall, search
 from .parser import parser
 from .tokenize import smarts_tokenize
-from ...containers import QueryContainer
+from ...containers import QueryContainer, QueryBond
 from ...periodictable import ListElement, QueryElement
 
 
@@ -102,6 +102,10 @@ def smarts(data: str):
     for i in msk:
         data['atoms'][i]['masked'] = True
 
+    for i, s in data['stereo_atoms'].items():
+        data['atoms'][i]['stereo'] = s
+    stereo_bonds = data['stereo_bonds']
+
     g = QueryContainer()
 
     mapping = {}
@@ -118,6 +122,14 @@ def smarts(data: str):
         g.add_atom(e(**a), n)
 
     for n, m, b in data['bonds']:
+        if n in stereo_bonds and m in stereo_bonds:
+            if m not in stereo_bonds[n]:  # only simple cis-trans supported, not cumulenes
+                _, s1 = stereo_bonds[n].popitem()
+                _, s2 = stereo_bonds[m].popitem()
+                if isinstance(b, int):
+                    b = QueryBond(b, stereo=s1 == s2)
+                else:
+                    b.stereo = s1 == s2
         g.add_bond(mapping[n], mapping[m], b)
     return g
 

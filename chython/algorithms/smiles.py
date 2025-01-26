@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
@@ -592,7 +592,7 @@ class QuerySmiles(Smiles):
         if isinstance(atom, ExtendedQuery):
             if atom.stereo is not None:
                 # mark atom as chiral. it's too difficult to set correct sign
-                smi.append(';@?')
+                smi.append(';@' if atom.stereo else ';@@')
 
             if atom.charge:
                 smi.append(';')
@@ -623,8 +623,8 @@ class QuerySmiles(Smiles):
         # bond chirality skipped. too difficult to implement.
         b = self._bonds[n][m]
         s = ','.join(order_str[x] for x in b.order)
-        if (c := b.in_ring) is not None:
-            s += ';@' if c else ';!@'
+        if b.in_ring is not None:
+            s += ';@' if b.in_ring else ';!@'
         return s
 
 
