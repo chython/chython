@@ -126,6 +126,11 @@ jobs:
     - name: Force Cython recompilation
       run: poetry run pip install -e . --no-deps --force-reinstall
     
+    - name: Install test dependencies
+      run: |
+        poetry run pip install pytest-html pytest-cov
+      shell: bash
+
     - name: Run tests
       run: |
         mkdir -p test-results
