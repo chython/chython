@@ -240,7 +240,7 @@ def test_complex_charged_systems():
     # Complex charged systems that are not yet supported
     # N-methylpyridinium (currently not aromatized properly)
     mol = smiles('C[N+]1=CC=CC=C1')  # N-methylpyridinium in Kekule form
-    assert not mol.thiele()  # currently not supported
+    assert mol.thiele()
 
 
 def test_complex_heterocycles():

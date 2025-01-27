@@ -30,14 +30,14 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = '^3.10'
+python = ">=3.8,<3.12"
 cachedmethods = '^0.1.4'
 lazy-object-proxy = '^1.6'
 lxml = '>=4.1'
 mini-racer = '^0.12.4'
 chytorch-rxnmap = {version = '^1.4', optional = true}
 rdkit = {version = '^2023.9', optional = true}
-numpy = "^2.2.2"
+numpy = ">=1.21.0,<2.0.0"
 
 [tool.poetry.extras]
 mapping = ['chytorch-rxnmap']
