@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,7 +18,6 @@
 #
 from importlib.util import find_spec
 from .free_wilson import *
-from .functional_groups import *
 from .grid import *
 from .retro import *
 from .svg import *
@@ -49,7 +48,7 @@ def patch_pandas():
     printing.is_sequence = w
 
 
-__all__ = ['functional_groups', 'fw_prepare_groups', 'fw_decomposition_tree',
+__all__ = ['fw_prepare_groups', 'fw_decomposition_tree',
            'grid_depict', 'GridDepict', 'retro_depict', 'RetroDepict', 'svg2png', 'patch_pandas']
 
 

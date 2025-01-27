@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Dmitrij Zanadvornykh <zandmitrij@gmail.com>
 #  This file is part of chython.
 #
@@ -125,7 +125,7 @@ class ExtendedQuery(Query, ABC):
         self.heteroatoms = heteroatoms
         self.ring_sizes = ring_sizes
         self.implicit_hydrogens = implicit_hydrogens
-        self._stereo = stereo
+        self.stereo = stereo
 
     @property
     def charge(self) -> int:
@@ -201,6 +201,12 @@ class ExtendedQuery(Query, ABC):
     def stereo(self):
         return self._stereo
 
+    @stereo.setter
+    def stereo(self, value: Optional[bool]):
+        if value is not None and not isinstance(value, bool):
+            raise TypeError('stereo should be bool')
+        self._stereo = value
+
     def copy(self, full=False):
         copy = super().copy(full=full)
         copy._charge = self.charge
@@ -236,9 +242,6 @@ class AnyMetal(Query):
             return False
         return True
 
-    def __hash__(self):
-        return hash((self.neighbors, self.hybridization))
-
 
 class AnyElement(ExtendedQuery):
     __slots__ = ()
@@ -272,10 +275,6 @@ class AnyElement(ExtendedQuery):
         if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
             return False
         return True
-
-    def __hash__(self):
-        return hash((self.charge, self.is_radical, self.neighbors, self.hybridization,
-                     self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
 
 
 class ListElement(ExtendedQuery):
@@ -338,10 +337,6 @@ class ListElement(ExtendedQuery):
         if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
             return False
         return True
-
-    def __hash__(self):
-        return hash((self.atomic_numbers, self.charge, self.is_radical, self.neighbors, self.hybridization,
-                     self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
 
     def __repr__(self):
         return f'{self.__class__.__name__}([{self.atomic_symbol}])'
@@ -473,10 +468,6 @@ class QueryElement(ExtendedQuery, ABC):
         if self.heteroatoms and other.heteroatoms not in self.heteroatoms:
             return False
         return True
-
-    def __hash__(self):
-        return hash((self.isotope or 0, self.atomic_number, self.charge, self.is_radical, self.neighbors,
-                     self.hybridization, self.ring_sizes, self.implicit_hydrogens, self.heteroatoms))
 
 
 __all__ = ['Query', 'ExtendedQuery', 'QueryElement', 'AnyElement', 'AnyMetal', 'ListElement']

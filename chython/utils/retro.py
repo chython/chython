@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Alexander Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
@@ -91,9 +91,8 @@ def retro_depict(tree: Tree, *, y_gap=3., x_gap=5., width=None, height=None, cle
                 y_shift -= h + y_gap
 
             render.append(m.depict(_embedding=True)[:5])
-            for (_, a), (x, y) in zip(m.atoms(), plane):  # restore
-                a.x = x
-                a.y = y
+            for (_, a), xy in zip(m.atoms(), plane):  # restore
+                a.xy = xy
 
         x_shift = c_max_x + x_gap  # between columns gap
         last_layer = current_layer

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -51,7 +51,7 @@ class Rings:
     @cached_property
     def atoms_rings(self) -> Dict[int, List[Tuple[int, ...]]]:
         """
-        A dictionary with atom numbers as keys and a list of tuples (representing rings) as values.
+        A dictionary with atom numbers as keys and a list of tuples (representing SSSR rings) as values.
         """
         rings = defaultdict(list)
         for r in self.sssr:
@@ -62,45 +62,9 @@ class Rings:
     @cached_property
     def atoms_rings_sizes(self) -> Dict[int, Set[int]]:
         """
-        Sizes of rings containing atom.
+        Sizes of SSSR rings containing atom.
         """
         return {n: {len(r) for r in rs} for n, rs in self.atoms_rings.items()}
-
-    @cached_property
-    def ring_atoms(self) -> Set[int]:
-        """
-        Atoms in rings. Not SSSR based fast algorithm.
-        """
-        bonds = _skin_graph(self.not_special_connectivity)
-        if not bonds:
-            return set()
-
-        in_rings = set()
-        atoms = set(bonds)
-        while atoms:
-            stack = deque([(atoms.pop(), 0, 0)])
-            path = []
-            seen = set()
-            while stack:
-                c, p, d = stack.pop()
-                if len(path) > d:
-                    path = path[:d]
-                if c in in_rings:
-                    continue
-                path.append(c)
-                seen.add(c)
-
-                d += 1
-                for n in bonds[c]:
-                    if n == p:
-                        continue
-                    elif n in seen:
-                        in_rings.update(path[path.index(n):])
-                    else:
-                        stack.append((n, c, d))
-
-            atoms.difference_update(seen)
-        return in_rings
 
     @cached_property
     def rings_count(self) -> int:
@@ -143,6 +107,45 @@ class Rings:
         Graph without terminal atoms. Only rings and linkers
         """
         return _skin_graph(self._bonds)
+
+    @cached_property
+    def rings_graph(self: 'MoleculeContainer'):
+        """
+        Graph of rings. Linkers are not included. Special bonds are considered.
+        """
+        bonds = {n: ms.copy() for n, ms in self.skin_graph.items()}
+        if not bonds:
+            return {}
+
+        in_rings = set()
+        atoms = set(bonds)
+        while atoms:
+            stack = deque([(atoms.pop(), 0, 0)])
+            path = []
+            seen = set()
+            while stack:
+                c, p, d = stack.pop()
+                if len(path) > d:
+                    path = path[:d]
+                if c in in_rings:
+                    continue
+                path.append(c)
+                seen.add(c)
+
+                d += 1
+                for n in bonds[c]:
+                    if n == p:
+                        continue
+                    elif n in seen:
+                        in_rings.update(path[path.index(n):])
+                    else:
+                        stack.append((n, c, d))
+
+            atoms.difference_update(seen)
+        for n in bonds.keys() - in_rings:
+            for m in bonds.pop(n):
+                bonds[m].discard(n)
+        return bonds
 
 
 def _sssr(bonds: Dict[int, Union[Set[int], Dict[int, Any]]], n_sssr: int) -> List[Tuple[int, ...]]:
