@@ -63,7 +63,8 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential
+        sudo apt-get install -y build-essential gcc g++ gfortran
+        gcc --version  # Print version for debugging
     
     - name: Install system dependencies (Windows)
       if: runner.os == 'Windows'
