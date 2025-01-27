@@ -23,7 +23,10 @@ from typing import TYPE_CHECKING, Union
 from ...exceptions import ImplementationError
 
 
-from importlib.resources import files
+try:
+    from importlib.resources import files
+except ImportError:  # python3.8
+    from importlib_resources import files
 
 
 if TYPE_CHECKING:
