@@ -8,10 +8,13 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
     strategy:
+      fail-fast: false  # Continue with other jobs even if one fails
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v3
@@ -20,11 +23,18 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
+        cache: 'pip'  # Cache pip dependencies
     
-    - name: Install system dependencies
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux'
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential
+    
+    - name: Install system dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
     
     - name: Install Cython
       run: |
@@ -44,22 +54,35 @@ jobs:
       with:
         path: .venv
         key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}-${{ hashFiles('**/*.pyx') }}
+        restore-keys: |
+          venv-${{ runner.os }}-${{ matrix.python-version }}-
     
     - name: Install dependencies
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: |
         poetry config installer.max-workers 4
-        poetry install --no-interaction --verbose --with dev
+        poetry install --no-interaction --with dev
       timeout-minutes: 15
     
     - name: Clean Cython build
+      shell: bash
       run: |
         rm -rf build/
         rm -rf *.so
-        find . -name "*.c" -delete
+        find . -name "*.c" -delete || true
     
     - name: Force Cython recompilation
       run: poetry run pip install -e . --no-deps --force-reinstall
     
     - name: Run tests
-      run: poetry run pytest tests/ -v 
+      run: poetry run pytest tests/ -v --durations=10 --cache-clear
+
+    - name: Upload test results
+      if: always()  # Upload even if tests fail
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results-${{ matrix.os }}-py${{ matrix.python-version }}
+        path: |
+          .pytest_cache
+          test-results.xml
+        retention-days: 7 
