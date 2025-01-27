@@ -1,3 +1,0 @@
-# for rebuilding clean2d blob type:
-npm init
-npm run build
