@@ -44,8 +44,11 @@ jobs:
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: |
         poetry config installer.max-workers 4
-        poetry install --no-interaction --verbose
+        poetry install --no-interaction --verbose --with dev
       timeout-minutes: 15
+    
+    - name: Install pytest
+      run: poetry run pip install pytest
     
     - name: Run tests
       run: poetry run pytest tests/ -v 
