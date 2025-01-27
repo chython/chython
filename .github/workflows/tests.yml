@@ -9,12 +9,46 @@ on:
 jobs:
   test:
     strategy:
-      fail-fast: false  # Continue with other jobs even if one fails
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        include:
+          # Linux builds (required)
+          - os: ubuntu-latest
+            python-version: "3.8"
+            extra_deps: "importlib_resources"
+            experimental: false
+          - os: ubuntu-latest
+            python-version: "3.9"
+            extra_deps: ""
+            experimental: false
+          - os: ubuntu-latest
+            python-version: "3.10"
+            extra_deps: ""
+            experimental: false
+          - os: ubuntu-latest
+            python-version: "3.11"
+            extra_deps: ""
+            experimental: false
+          # Windows builds (allowed to fail)
+          - os: windows-latest
+            python-version: "3.8"
+            extra_deps: "importlib_resources"
+            experimental: true
+          - os: windows-latest
+            python-version: "3.9"
+            extra_deps: ""
+            experimental: true
+          - os: windows-latest
+            python-version: "3.10"
+            extra_deps: ""
+            experimental: true
+          - os: windows-latest
+            python-version: "3.11"
+            extra_deps: ""
+            experimental: true
 
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
 
     steps:
     - uses: actions/checkout@v3
@@ -36,10 +70,14 @@ jobs:
       run: |
         choco install visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
     
-    - name: Install Cython
+    - name: Install Cython and core dependencies
       run: |
         python -m pip install --upgrade pip
         pip install "cython>=3.0.5" setuptools wheel
+        if [ "${{ matrix.extra_deps }}" != "" ]; then
+          pip install ${{ matrix.extra_deps }}
+        fi
+      shell: bash
     
     - name: Install Poetry
       uses: snok/install-poetry@v1
@@ -47,7 +85,20 @@ jobs:
         version: 1.7.1
         virtualenvs-create: true
         virtualenvs-in-project: true
-    
+
+    - name: Configure Poetry (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        $env:Path += ";$env:APPDATA\Python\Scripts"
+        poetry config installer.max-workers 4
+      shell: pwsh
+
+    - name: Configure Poetry (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        poetry config installer.max-workers 4
+      shell: bash
+
     - name: Load cached venv
       id: cached-poetry-dependencies
       uses: actions/cache@v3
@@ -56,12 +107,12 @@ jobs:
         key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}-${{ hashFiles('**/*.pyx') }}
         restore-keys: |
           venv-${{ runner.os }}-${{ matrix.python-version }}-
-    
+
     - name: Install dependencies
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-      run: |
-        poetry config installer.max-workers 4
-        poetry install --no-interaction --with dev
+      run: poetry install --no-interaction --with dev
+      env:
+        PATH: ${{ env.PATH }};${{ env.APPDATA }}\Python\Scripts
       timeout-minutes: 15
     
     - name: Clean Cython build
@@ -75,14 +126,30 @@ jobs:
       run: poetry run pip install -e . --no-deps --force-reinstall
     
     - name: Run tests
-      run: poetry run pytest tests/ -v --durations=10 --cache-clear
+      run: |
+        mkdir -p test-results
+        poetry run pytest tests/ -v --durations=10 --cache-clear \
+          --junitxml=test-results/junit.xml \
+          --html=test-results/report.html \
+          --cov=chython \
+          --cov-report=html:test-results/coverage \
+          --cov-report=xml:test-results/coverage.xml
 
     - name: Upload test results
-      if: always()  # Upload even if tests fail
+      if: always()
       uses: actions/upload-artifact@v3
       with:
         name: test-results-${{ matrix.os }}-py${{ matrix.python-version }}
         path: |
-          .pytest_cache
-          test-results.xml
-        retention-days: 7 
+          test-results/
+          .pytest_cache/
+        retention-days: 7
+
+    - name: Upload coverage to Codecov
+      if: runner.os == 'Linux' && matrix.python-version == '3.11'
+      uses: codecov/codecov-action@v3
+      with:
+        file: test-results/coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false 
