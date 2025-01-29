@@ -17,75 +17,61 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-import pytest
-from chython.exceptions import IncorrectSmiles
-from chython.files.daylight.parser import parser
 from chython.files.daylight.tokenize import smiles_tokenize, smarts_tokenize
+from chython.containers import QueryBond
+from chython.exceptions import IncorrectSmiles
+from pytest import raises
 
 
-def test_smiles_tokenize_atoms():
-    # Test basic atom tokenization
-    tokens = list(smiles_tokenize('C'))
-    assert len(tokens) == 1
-    assert isinstance(tokens[0], tuple)
-    assert len(tokens[0]) == 2
-    assert isinstance(tokens[0][1], dict)
-    assert tokens[0][1].get('element') == 'C'
+def test_smiles_tokenize():
+    assert smiles_tokenize('C') == [(0, {'element': 'C'})]
+    assert smiles_tokenize('CC') == [(0, {'element': 'C'}), (0, {'element': 'C'})]
+    assert smiles_tokenize('C=O') == [(0, {'element': 'C'}), (1, 2), (0, {'element': 'O'})]
+    assert smiles_tokenize('C(O)N') == [(0, {'element': 'C'}), (2, None), (0, {'element': 'O'}),
+                                        (3, None), (0, {'element': 'N'})]
+    assert smiles_tokenize('C2CC2') == [(0, {'element': 'C'}), (6, 2), (0, {'element': 'C'}),
+                                        (0, {'element': 'C'}), (6, 2)]
 
 
-def test_smiles_tokenize_bonds():
-    # Test bond tokenization
-    tokens = list(smiles_tokenize('C=O'))
-    assert len(tokens) == 3
-    assert tokens[1][0] == 1  # bond index
-    assert tokens[1][1] == 2  # double bond
+def test_smiles_tokenize_atom():
+    assert smiles_tokenize('[NH4+]') == [(0, {'element': 'N', 'isotope': None, 'parsed_mapping': None, 'charge': 1,
+                                              'implicit_hydrogens': 4, 'stereo': None})]
+    assert smiles_tokenize('[14N]') == [(0, {'element': 'N', 'isotope': 14, 'parsed_mapping': None, 'charge': 0,
+                                              'implicit_hydrogens': 0, 'stereo': None})]
+    assert smiles_tokenize('[N@H]') == [(0, {'element': 'N', 'isotope': None, 'parsed_mapping': None, 'charge': 0,
+                                             'implicit_hydrogens': 1, 'stereo': True})]
+    assert smiles_tokenize('[N@@H--]') == [(0, {'element': 'N', 'isotope': None, 'parsed_mapping': None, 'charge': -2,
+                                                'implicit_hydrogens': 1, 'stereo': False})]
+    assert smiles_tokenize('[N@+3]') == [(0, {'element': 'N', 'isotope': None, 'parsed_mapping': None, 'charge': 3,
+                                              'implicit_hydrogens': 0, 'stereo': True})]
+    assert smiles_tokenize('[CH2:2]') == [(0, {'element': 'C', 'isotope': None, 'parsed_mapping': 2, 'charge': 0,
+                                               'implicit_hydrogens': 2, 'stereo': None})]
+    with raises(IncorrectSmiles):
+        smiles_tokenize('[@N]')
 
 
-def test_smiles_tokenize_branches():
-    # Test branch tokenization
-    tokens = list(smiles_tokenize('C(O)N'))
-    assert len(tokens) == 5
-    assert tokens[1][0] == 2  # branch start index
-    assert tokens[3][0] == 3  # branch end index
-
-
-def test_smiles_tokenize_cycles():
-    # Test cycle tokenization
-    tokens = list(smiles_tokenize('C1CCC1'))
-    assert len(tokens) == 6
-    assert tokens[1][0] == 6  # cycle number
-
-
-def test_smiles_tokenize_charges():
-    # Test charge tokenization
-    tokens = list(smiles_tokenize('[NH4+]'))
-    assert len(tokens) == 1  # NH4+ as a single token
-    assert tokens[0][1].get('charge') == 1  # positive charge
-    assert tokens[0][1].get('element') == 'N'  # nitrogen
-    assert tokens[0][1].get('hydrogen') == 4  # 4 hydrogens
-
-
-def test_smarts_tokenize_basic():
+def test_smarts_tokenize_atom():
     # Test basic SMARTS tokenization
-    tokens = list(smarts_tokenize('[C]'))
-    assert len(tokens) == 1  # just C
-    assert tokens[0][1].get('element') == 'C'
+    assert smarts_tokenize('[C]') == [(0, {'element': 'C'})]
+    assert smarts_tokenize('[C,N]') == [(0, {'element': ['C', 'N']})]
+    assert smarts_tokenize('[C+]') == [(0, {'charge': 1, 'element': 'C'})]
+    assert smarts_tokenize('[#1]') == [(0, {'element': 1})]
+    assert smarts_tokenize('[C;h1;@]') == [(0, {'element': 'C', 'implicit_hydrogens': [1], 'stereo': True})]
+    assert smarts_tokenize('[O;z1,z2;x1]') == [(0, {'element': 'O', 'heteroatoms': [1], 'hybridization': [1, 2]})]
+    assert smarts_tokenize('[Se;a;D1,D2;r4,r7:3]') == [(0, {'parsed_mapping': 3, 'element': 'Se', 'hybridization': 4, 'neighbors': [1, 2], 'ring_sizes': [4, 7]})]
+    assert smarts_tokenize('[Cl;M]') == [(0, {'element': 'Cl', 'masked': True})]
+    assert smarts_tokenize('[A:1]') == [(0, {'parsed_mapping': 1, 'element': 'A'})]
+    assert smarts_tokenize('[M]') == [(0, {'element': 'M'})]
 
 
 def test_smarts_tokenize_bonds():
-    # Test bond primitives
-    tokens = list(smarts_tokenize('CC'))
-    assert len(tokens) == 2  # C, C
-    assert tokens[0][1].get('element') == 'C'
-    assert tokens[1][1].get('element') == 'C'
-
-
-# Special cases test commented out due to unpredictable behavior
-# def test_tokenize_special_cases():
-#     # Test empty string
-#     with pytest.raises(IncorrectSmiles, match='invalid smiles'):
-#         list(smiles_tokenize(''))  # empty string should raise IncorrectSmiles
-#     
-#     # Test whitespace
-#     with pytest.raises(IncorrectSmiles, match='invalid smiles'):
-#         list(smiles_tokenize(' '))  # whitespace should raise IncorrectSmiles
+    assert smarts_tokenize('[C][C]') == [(0, {'element': 'C'}), (0, {'element': 'C'})]
+    assert smarts_tokenize('[C]-[C]') == [(0, {'element': 'C'}), (1, 1), (0, {'element': 'C'})]
+    assert smarts_tokenize('[C]~[C]') == [(0, {'element': 'C'}), (1, 8), (0, {'element': 'C'})]
+    assert smarts_tokenize('[C]!:[C]') == [(0, {'element': 'C'}), (10, [1, 2, 3]), (0, {'element': 'C'})]
+    assert smarts_tokenize('[C]-,=[C]') == [(0, {'element': 'C'}), (10, [1, 2]), (0, {'element': 'C'})]
+    assert smarts_tokenize('[C]-;@[C]') == [(0, {'element': 'C'}), (12, QueryBond(1, True)), (0, {'element': 'C'})]
+    assert smarts_tokenize('[C]!-;!@[C]') == [(0, {'element': 'C'}), (12, QueryBond((2, 3, 4), False)),
+                                              (0, {'element': 'C'})]
+    assert smarts_tokenize('[C]-,=;!@[C]') == [(0, {'element': 'C'}), (12, QueryBond((1, 2), False)),
+                                               (0, {'element': 'C'})]
