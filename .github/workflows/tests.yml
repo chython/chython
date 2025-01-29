@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ main, master, tests_update ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main, master, tests_update ]
+    branches: [ main, master ]
 
 jobs:
   test:
@@ -52,25 +52,25 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'  # Cache pip dependencies
-    
+
     - name: Install system dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential gcc g++ gfortran
         gcc --version  # Print version for debugging
-    
+
     - name: Install system dependencies (Windows)
       if: runner.os == 'Windows'
       run: |
         choco install visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
-    
+
     - name: Install Cython and core dependencies
       run: |
         python -m pip install --upgrade pip
@@ -79,7 +79,7 @@ jobs:
           pip install ${{ matrix.extra_deps }}
         fi
       shell: bash
-    
+
     - name: Install Poetry
       uses: snok/install-poetry@v1
       with:
@@ -115,17 +115,17 @@ jobs:
       env:
         PATH: ${{ env.PATH }};${{ env.APPDATA }}\Python\Scripts
       timeout-minutes: 15
-    
+
     - name: Clean Cython build
       shell: bash
       run: |
         rm -rf build/
         rm -rf *.so
         find . -name "*.c" -delete || true
-    
+
     - name: Force Cython recompilation
       run: poetry run pip install -e . --no-deps --force-reinstall
-    
+
     - name: Install test dependencies
       run: |
         poetry run pip install pytest-html pytest-cov
@@ -158,4 +158,4 @@ jobs:
         file: test-results/coverage.xml
         flags: unittests
         name: codecov-umbrella
-        fail_ci_if_error: false 
+        fail_ci_if_error: false

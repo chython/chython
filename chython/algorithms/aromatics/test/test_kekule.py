@@ -18,8 +18,8 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from chython import smiles
-import pytest
 from chython.exceptions import InvalidAromaticRing
+from pytest import raises
 
 
 def test_kekule_basic():
@@ -96,15 +96,15 @@ def test_kekule_enumeration():
 
 def test_kekule_invalid_structures():
     # Test invalid aromatic structures
-    with pytest.raises(InvalidAromaticRing):
+    with raises(InvalidAromaticRing):
         mol = smiles('c1cccc1')  # 5-membered carbon ring (invalid aromatic)
         mol.kekule()
 
-    with pytest.raises(InvalidAromaticRing):
+    with raises(InvalidAromaticRing):
         mol = smiles('c1ccc2c1c3ccccc3cc2')  # acenaphthalene (invalid aromatic form)
         mol.kekule()
 
-    with pytest.raises(InvalidAromaticRing):
+    with raises(InvalidAromaticRing):
         mol = smiles('c1cccc1C(=O)c1cccc1')  # cyclopentadiene with carbonyl (invalid aromatic)
         mol.kekule()
 
