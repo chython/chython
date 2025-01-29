@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from chython import ReactionContainer, MoleculeContainer
 
 try:
-    from py_mini_racer.py_mini_racer import MiniRacer, JSEvalException
+    from py_mini_racer import MiniRacer, JSEvalException
 
     ctx = MiniRacer()
     ctx.eval('const self = this')
