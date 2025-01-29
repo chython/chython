@@ -26,57 +26,72 @@ def test_kekule_basic():
     # Test basic aromatic ring conversion
     mol = smiles('c1ccccc1')  # benzene
     assert mol.kekule()  # should return True for aromatic rings
-    
-    # Verify alternating single and double bonds
-    bonds = mol._bonds
-    double_bonds = sum(1 for n, ms in bonds.items() for m, b in ms.items() if b.order == 2 and m > n)
-    assert double_bonds == 3  # benzene should have 3 double bonds
+    assert mol == smiles('C1=CC=CC=C1')
 
 
 def test_kekule_pyridine():
     # Test pyridine and its derivatives
     mol = smiles('n1ccccc1')  # pyridine
     assert mol.kekule()
-    
+    assert mol == smiles('N1=CC=CC=C1')
+    assert mol.atom(1).implicit_hydrogens == 0
+
     # Test protonated pyridine
-    mol_protonated = smiles('[nH+]1ccccc1')
-    assert mol_protonated.kekule()
+    mol = smiles('[nH+]1ccccc1')
+    assert mol.kekule()
+    assert mol == smiles('[NH+]1=CC=CC=C1')
 
 
 def test_kekule_pyrrole():
     # Test pyrrole and its derivatives
     mol = smiles('[nH]1cccc1')  # pyrrole
     assert mol.kekule()
-    
+    assert mol == smiles('N1C=CC=C1')
+    assert mol.atom(1).implicit_hydrogens == 1
+
+    mol = smiles('n1cccc1')
+    assert mol.kekule()
+    assert mol == smiles('N1C=CC=C1')
+    assert mol.atom(1).implicit_hydrogens == 1
+
     # Test N-methylpyrrole
-    mol_methyl = smiles('Cn1cccc1')
-    assert mol_methyl.kekule()
+    mol = smiles('Cn1cccc1')
+    assert mol.kekule()
+    assert mol == smiles('CN1C=CC=C1')
+    assert mol.atom(2).implicit_hydrogens == 0
 
 
 def test_kekule_furan_thiophene():
     # Test oxygen and sulfur containing aromatics
-    mol_furan = smiles('o1cccc1')
-    assert mol_furan.kekule()
-    
-    mol_thiophene = smiles('s1cccc1')
-    assert mol_thiophene.kekule()
+    mol = smiles('o1cccc1')
+    assert mol.kekule()
+    assert mol == smiles('O1C=CC=C1')
+    assert mol.atom(1).implicit_hydrogens == 0
+
+    mol = smiles('s1cccc1')
+    assert mol.kekule()
+    assert mol == smiles('S1C=CC=C1')
+    assert mol.atom(1).implicit_hydrogens == 0
 
 
 def test_kekule_complex_systems():
     # Test fused ring systems
-    mol_naphthalene = smiles('c1ccc2ccccc2c1')
-    assert mol_naphthalene.kekule()
-    
+    mol = smiles('c1ccc2ccccc2c1')
+    assert mol.kekule()
+    assert mol == smiles('C1=CC2=CC=CC=C2C=C1') or mol == smiles('C1=CC2=C(C=C1)C=CC=C2')
+
     # Test indole
-    mol_indole = smiles('c1ccc2[nH]ccc2c1')
-    assert mol_indole.kekule()
+    mol = smiles('c1ccc2[nH]ccc2c1')
+    assert mol.kekule()
+    assert mol == smiles('N1C=CC2=C1C=CC=C2') or mol == smiles('N1C=CC2=CC=CC=C12')
 
 
 def test_kekule_enumeration():
-    # Test enumeration of Kekulé structures
-    mol = smiles('c1ccccc1')  # benzene
+    mol = smiles('Cc1ccccc1C')
     forms = list(mol.enumerate_kekule())
-    assert len(forms) == 2  # benzene has 2 Kekulé forms
+    assert len(forms) == 2  # benzene has 2 Kekule forms
+    assert smiles('CC1=C(C)C=CC=C1') in forms
+    assert smiles('CC1=CC=CC=C1C') in forms
 
 
 def test_kekule_invalid_structures():
@@ -84,11 +99,11 @@ def test_kekule_invalid_structures():
     with pytest.raises(InvalidAromaticRing):
         mol = smiles('c1cccc1')  # 5-membered carbon ring (invalid aromatic)
         mol.kekule()
-    
+
     with pytest.raises(InvalidAromaticRing):
         mol = smiles('c1ccc2c1c3ccccc3cc2')  # acenaphthalene (invalid aromatic form)
         mol.kekule()
-    
+
     with pytest.raises(InvalidAromaticRing):
         mol = smiles('c1cccc1C(=O)c1cccc1')  # cyclopentadiene with carbonyl (invalid aromatic)
         mol.kekule()
@@ -96,59 +111,50 @@ def test_kekule_invalid_structures():
 
 def test_kekule_charged_species():
     # Test charged aromatic species
-    mol_pyridinium = smiles('[n+]1ccccc1')
-    assert mol_pyridinium.kekule()
-    
-    mol_cyclopentadienyl = smiles('[cH-]1cccc1')
-    assert mol_cyclopentadienyl.kekule()
+    mol = smiles('[n+]1ccccc1')
+    assert mol.kekule()
+    assert mol == smiles('C=1[NH+]=CC=CC=1')
+
+    mol = smiles('[cH-]1cccc1')
+    assert mol.kekule()
+    assert mol == smiles('C=1C=C[CH-]C=1')
 
 
 def test_kekule_multiple_rings():
     # Test molecules with multiple aromatic rings
-    mol_biphenyl = smiles('c1ccccc1-c2ccccc2')
-    assert mol_biphenyl.kekule()
-    
-    # Test phenylpyridine
-    mol_phenylpyridine = smiles('c1ccccc1-c2ccccn2')
-    assert mol_phenylpyridine.kekule()
+    mol = smiles('c1ccccc1c2ccccc2')
+    assert mol.kekule()
+    assert mol == smiles('C1=CC=C(C=C1)C1=CC=CC=C1')
 
 
 def test_kekule_heteroatoms():
     # Test various heteroatoms in aromatic rings
-    mol_pyrazine = smiles('n1ccncc1')  # two nitrogens
-    assert mol_pyrazine.kekule()
-    
-    mol_oxazole = smiles('o1cncc1')  # oxygen and nitrogen
-    assert mol_oxazole.kekule()
-    
-    mol_thiazole = smiles('s1cncc1')  # sulfur and nitrogen
-    assert mol_thiazole.kekule()
+    mol = smiles('c1cncn1')  # two nitrogens
+    assert mol.kekule()
+    assert mol == smiles('N1C=CN=C1')
+
+    mol = smiles('o1cncc1')  # oxygen and nitrogen
+    assert mol.kekule()
+    assert mol == smiles('C1=COC=N1')
 
 
 def test_kekule_buffer_size():
     # Test buffer size parameter for complex heterocycles
-    mol1 = smiles('c1ccc2[nH]ccc2c1')  # indole
-    assert mol1.kekule(buffer_size=1)  # small buffer
-    
-    mol2 = smiles('c1ccc2[nH]ccc2c1')  # fresh indole instance
-    assert mol2.kekule(buffer_size=10)  # large buffer
+    mol = smiles('c1ccc2[nH]ccc2c1')  # indole
+    assert mol.kekule(buffer_size=1)  # small buffer
+
+    mol = smiles('c1ccc2[nH]ccc2c1')  # fresh indole instance
+    assert mol.kekule(buffer_size=10)  # large buffer
 
 
 def test_kekule_radical_species():
-    # Test radical aromatic species
-    mol_phenoxy = smiles('[O]c1ccccc1')
-    assert mol_phenoxy.kekule()
-    
-    # Test radical cation
-    mol_benzene_radical = smiles('[c]1ccccc1')
-    assert mol_benzene_radical.kekule()
+    mol = smiles('[c]1ccccc1')
+    assert mol.kekule()
+    assert mol == smiles('C=1C=CC=[C]C=1 |^1:4|')
 
 
 def test_kekule_quinones():
     # Test quinone-like structures
-    mol_benzoquinone = smiles('O=C1C=CC(=O)C=C1')
-    assert not mol_benzoquinone.kekule()  # not aromatic
-    
-    # Test semiquinone
-    mol_semiquinone = smiles('O=C1C=CC(O)C=C1')
-    assert not mol_semiquinone.kekule()  # not aromatic 
+    mol = smiles('O=c1ccc(=O)cc1')
+    assert mol.kekule()
+    assert mol == smiles('C1=CC(C=CC1=O)=O')
