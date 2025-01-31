@@ -2,6 +2,9 @@
 #
 #  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019, 2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
+#  Copyright 2024, 2025 Denis Lipatov <denis.lipatov163@gmail.com>
+#  Copyright 2024, 2025 Vyacheslav Grigorev <slavick2000@yandex.ru>
+#  Copyright 2024, 2025 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,12 +20,12 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+
 from math import sqrt
 from random import random
-from typing import TYPE_CHECKING, Union, Dict
-from ...exceptions import ImplementationError
+from typing import TYPE_CHECKING, Union, Dict, TypeVar, List
 from ...periodictable.base.vector import Vector
-
+from .Calculate2d import calculate2d_coord
 
 try:
     from importlib.resources import files
@@ -31,17 +34,11 @@ except ImportError:  # python3.8
 
 
 if TYPE_CHECKING:
-    from chython import MoleculeContainer
-
-try:
-    from py_mini_racer import MiniRacer, JSEvalException
-
-    ctx = MiniRacer()
-    ctx.eval('const self = this')
-    ctx.eval(files(__package__).joinpath('clean2d.js').read_text())
-except RuntimeError:
-    ctx = None
-
+    from ...containers import MoleculeContainer
+    Element = TypeVar('Element')
+    Bond = TypeVar('Bond')
+    Coords = Vector[float, float]
+    
 
 class Calculate2DMolecule:
     __slots__ = ()
@@ -52,20 +49,10 @@ class Calculate2DMolecule:
         """
         Calculate 2d layout of graph. https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation used.
         """
-        if ctx is None:
-            raise ImportError('py_mini_racer is not installed or broken')
         plane = {}
         entry = iter(sorted(self, key=lambda n: len(self._bonds[n])))
-        for _ in range(min(5, len(self))):
-            smiles, order = self.__clean2d_prepare(next(entry))
-            try:
-                xy = ctx.call('$.clean2d', smiles)
-            except JSEvalException:
-                continue
-            break
-        else:
-            raise ImplementationError
-
+        smiles, order = self.__clean2d_prepare(next(entry))
+        xy: List[Coords] = calculate2d_coord(order, self)
         shift_x, shift_y = xy[0]
         for n, (x, y) in zip(order, xy):
             plane[n] = (x - shift_x, shift_y - y)
@@ -144,6 +131,6 @@ class Calculate2DMolecule:
         w[entry] = -1
         smiles, order = self._smiles(w.__getitem__, random=True, charges=False, stereo=False, _return_order=True)
         return ''.join(smiles).replace('~', '-'), order
-
-
+    
+    
 __all__ = ['Calculate2DMolecule']

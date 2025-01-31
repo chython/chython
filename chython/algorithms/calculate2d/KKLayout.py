@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2024 Denis Lipatov <denis.lipatov163@gmail.com>
-#  Copyright 2024 Vyacheslav Grigorev <slavick2000@yandex.ru>
-#  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
+#  Copyright 2024, 2025 Denis Lipatov <denis.lipatov163@gmail.com>
+#  Copyright 2024, 2025 Vyacheslav Grigorev <slavick2000@yandex.ru>
+#  Copyright 2024, 2025 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,6 +18,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+
 """
 Defines the KKLayout class, utilized for arranging molecular structures using the Kamada-Kawai 
 algorithm.
@@ -40,8 +41,10 @@ only reflects the underlying chemistry but also simplifies the visual analysis o
 architecture, making it invaluable for scientific and educational purposes.
 """
 from typing import Dict, List, TYPE_CHECKING, Tuple
-from .MathHelper import Vector, Polygon
+from ...periodictable.base.vector import Vector
+from .polygon import Polygon
 import math
+
 if TYPE_CHECKING:
     from .Calculate2d import Calculate2d
     from .Properties import *
@@ -51,8 +54,9 @@ class KKLayout:
     Class for calculating the optimal arrangement of atoms in a molecular structure
     using the Kamada-Kawai algorithm.
     """
+
     def __init__(self, structure: 'Calculate2d', atoms: List['AtomProperties'], \
-                 center: 'Vector', start_atom: 'AtomProperties', bond_length: float, \
+                 center: Vector, start_atom: 'AtomProperties', bond_length: float, \
                  threshold: float=0.1, inner_threshold: float=0.1, max_iteration: int=2000,
                  max_inner_iteration: int=50, max_energy: int=1e9):
         """
@@ -117,7 +121,7 @@ class KKLayout:
         """
         self.structure: 'Calculate2d' = structure
         self.atoms: List['AtomProperties'] = atoms
-        self.center: 'Vector' = center
+        self.center: Vector = center
         self.start_atom: 'AtomProperties' = start_atom
         self.edge_strength: int = bond_length
         self.threshold: float = threshold
@@ -168,11 +172,11 @@ class KKLayout:
         a: float = 0.0
         for atom in self.atoms:
             if not atom.positioned:
-                self.x_positions[atom] = self.center.x + math.cos(a) * radius
-                self.y_positions[atom] = self.center.y + math.sin(a) * radius
+                self.x_positions[atom] = self.center[0] + math.cos(a) * radius
+                self.y_positions[atom] = self.center[1] + math.sin(a) * radius
             else:
-                self.x_positions[atom] = atom.position.x
-                self.y_positions[atom] = atom.position.y
+                self.x_positions[atom] = atom.position[0]
+                self.y_positions[atom] = atom.position[1]
             self.positioned[atom] = atom.positioned
             a += angle
         for atom_1 in self.atoms:
@@ -256,8 +260,8 @@ class KKLayout:
                 self.update(max_energy_atom, d_ex, d_ey)
                 delta, d_ex, d_ey = self.energy(max_energy_atom)
         for atom in self.atoms:
-            atom.position.x = self.x_positions[atom]
-            atom.position.y = self.y_positions[atom]
+            atom.position[0] = self.x_positions[atom]
+            atom.position[1] = self.y_positions[atom]
             atom.positioned = True
             atom.force_positioned = True
    

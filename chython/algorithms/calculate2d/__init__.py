@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2024 Denis Lipatov <denis.lipatov163@gmail.com>
-#  Copyright 2024 Vyacheslav Grigorev <slavick2000@yandex.ru>
-#  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
+#  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2024, 2025 Denis Lipatov <denis.lipatov163@gmail.com>
+#  Copyright 2024, 2025 Vyacheslav Grigorev <slavick2000@yandex.ru>
+#  Copyright 2024, 2025 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,4 +19,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .clean2d import Calculate2DMolecule, Calculate2DReaction
+from .molecule import *
+from .reaction import *
+
+__all__ = ['Calculate2DMolecule', 'Calculate2DReaction']
