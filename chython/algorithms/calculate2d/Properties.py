@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2024 Denis Lipatov <denis.lipatov163@gmail.com>
-#  Copyright 2024 Vyacheslav Grigorev <slavick2000@yandex.ru>
-#  Copyright 2024 Timur Gimadiev <timur.gimadiev@gmail.com>
+#  Copyright 2024, 2025 Denis Lipatov <denis.lipatov163@gmail.com>
+#  Copyright 2024, 2025 Vyacheslav Grigorev <slavick2000@yandex.ru>
+#  Copyright 2024, 2025 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,6 +18,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+
 """
 This module defines classes that extend the properties of rings, atoms, and bonds within the 
 Kaiton structure, focusing on attributes and methods necessary for coordinate calculations.
@@ -27,7 +28,7 @@ additional functionalities tailored for computational chemistry applications. Th
 to facilitate the calculation of molecular geometries by providing detailed attributes and 
 methods specific to rings, atoms, and bonds, thereby enhancing the structure's utility in 
 algorithms that require precise spatial information. These classes include RingProperties, 
-AtomProperties, BondProperties, and RingOverlap, each tailored to represent different aspects of 
+AtomProperties, and RingOverlap, each tailored to represent different aspects of 
 molecular structures with attributes and methods that aid in determining spatial relationships 
 and characteristics inherent to chemical compounds.
 
@@ -37,8 +38,6 @@ Classes:
     (e.g., bridged, spiro, fused).
 - AtomProperties: Encapsulates atomic properties crucial for molecular geometry calculations, 
     such as atomic symbols, positions, and connectivity.
-- BondProperties: Details the computational parameters of chemical bonds, including atom 
-    references and bond types.
 - RingOverlap: Handles overlaps between rings, identifying shared atoms and determining 
     structural characteristics like bridging.
 
@@ -48,15 +47,15 @@ structures programmatically. They facilitate the representation of complex molec
 such as ring systems, atomic configurations, and bond characteristics, making them indispensable 
 for cheminformatics and computational chemistry applications.
 """
-
-from typing import List, Optional, Tuple
-from .MathHelper import Vector
+from typing import List, Optional
+from ...periodictable.base.vector import Vector
 import math
 
 class RingProperties:
     """
     A class on computing parameters of rings
     """
+    
     def __init__(self: 'RingProperties', ring: List['AtomProperties']) -> None:
         """
         Constructor of the class that complements information about rings in the Kaiton 
@@ -79,9 +78,6 @@ class RingProperties:
         - center 'Vector': The center of the ring in coordinates.
         - subrings List: A boolean value indicating whether the ring contains subrings.
         - bridged bool: A boolean value indicating whether the ring is a bridge ring.
-        - spiro bool: A boolean value indicating whether the ring is a spirocycle.
-        - fused bool: A boolean value indicating whether it is part of a condensed cyclic system.
-        - subring_of_bridged bool: A boolean value indicating whether the subrings are bridged.
         - central_angle float: The central angle of the ring.
         - neighbouring_rings List[int]: A list of identifiers of neighboring rings to the 
             current one.
@@ -90,16 +86,12 @@ class RingProperties:
         self.members: List['AtomProperties'] = ring
         self.members_id: List[int] = [atom.id for atom in self.members]
         self.positioned: bool = False
-        self.center: 'Vector' = Vector(0, 0)
+        self.center: Vector = Vector(0, 0)
         self.subrings: List = []
         self.bridged = False
-        self.spiro: bool = False
-        self.fused: bool = False
-        self.subring_of_bridged = False
         self.central_angle: float = 0.0
-        self.neighbouring_rings: List[int] = [] 
+        self.neighbouring_rings: List[int] = []
 
-        # добавляем в свойства атомов то что они находятся в этом кольце
         for atom in self.members:
             atom.ring_indexes.append(self.id)
             atom.rings.append(self)
@@ -121,9 +113,12 @@ class RingProperties:
             True if the identifiers of the two instances are equal, indicating they represent 
             the same ring. False otherwise.
         """
-        return False if other is None else self.id == other.id
-    
-    
+        if other is None:
+            return False
+        else:
+            return self.id == other.id
+
+
     def __hash__(self) -> int:
         """
         Returns the hash value of the current object, which is the unique identifier of the ring.
@@ -138,8 +133,8 @@ class RingProperties:
             The unique identifier of the current object of the class, used as the hash value.
         """
         return self.id
-    
-    
+
+
     def get_angle(self) -> float:
         """
         Calculates the exterior angle of the polygon formed by the ring in radians.
@@ -154,8 +149,8 @@ class RingProperties:
             The exterior angle of the polygon formed by the ring in radians.
         """
         return math.pi - self.central_angle
-    
-    
+
+
     def __repr__(self) -> str:
         """
         Provides a human-readable representation of the RingProperties object, primarily 
@@ -204,135 +199,24 @@ class RingProperties:
         for subring in self.subrings:
             new_ring.subrings.append(subring)
         new_ring.bridged = self.bridged
-        new_ring.subring_of_bridged = self.subring_of_bridged
-        new_ring.spiro = self.spiro
-        new_ring.fused = self.fused
         new_ring.central_angle = self.central_angle
         return new_ring
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class BondProperties:
-    """
-    A class about computational parameters of links
-    """
-    def __init__(self: 'BondProperties', atom1: 'AtomProperties', \
-                 atom2: 'AtomProperties', bond) -> None:
-        """
-        Constructor of the class that complements information about bonds in the Kaiton 
-        structure, creating new properties or converting existing ones into a more 
-        convenient form for use in coordinate calculation algorithms.
-
-        Parameters:
-        :param atom1 'AtomProperties': 
-            Reference to the object of the class of the first atom forming this bond.
-        :param atom2 'AtomProperties': 
-            Reference to the object of the class of the second atom forming this bond.
-        :param bond: 
-            Reference to the original Kaiton bond class.
-
-        Attributes:
-        - id Tuple['AtomProperties']: Identifier of the current bond, which is a tuple of 
-            atom identifiers between which this bond exists.
-        - n int: Identifier of the first atom of this bond.
-        - m int: Identifier of the second atom of this bond.
-        - atom1 'AtomProperties': Reference to the object of the class of the first atom of 
-            this bond.
-        - atom2 'AtomProperties': Reference to the object of the class of the second atom of 
-            this bond.
-        - type str: String that characterizes the type of bond, primary, secondary, or 
-            tertiary.
-
-        # center (bool): Placeholder for future expansion.
-        # chiral (bool): Placeholder for future expansion.
-        # chiral_symbol (Optional[str]): Placeholder for future expansion.
-
-        The constructor initializes the bond properties based on the provided atoms and 
-        determines its type (single, double, triple) based on the order of the bond.
-        
-        """
-        self.id: Tuple['AtomProperties'] = (atom1.id, atom2.id)
-        self.n: int = atom1.id #atom1 index
-        self.m: int = atom2.id #atom2 index
-
-        self.atom1: 'AtomProperties' = atom1
-        self.atom2: 'AtomProperties' = atom2
-
-        # self.center: bool = False # рудименты кода
-        # self.chiral: bool = False # рудименты кода
-        # self.chiral_symbol: Optional[str] = None # # рудименты кода
-
-        self.type = Optional[None]
-        if bond.order == 1:
-            self.type = 'single'
-        elif bond.order == 2:
-            self.type = 'double'
-        elif bond.order == 3:
-            self.type = 'triple'
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 class AtomProperties:
     """
     A class about computing parameters of atoms
     """
-    def __init__(self: 'AtomProperties', atom_index: int, symbol: str) -> None:
+    def __init__(self: 'AtomProperties', atom_index: int) -> None:
         """
         Initializes an instance of the AtomProperties class with data about an atom.
 
         Parameters:
         :param atom_index int: 
             The index of the current atom within the molecular structure.
-        :param symbol str: 
-            Symbol representing the element according to the periodic table.
 
         Attributes:
         - id int: Unique identifier for the atom.
-        - symbol str: String characterizing the name of the element according to the periodic 
         table.
         - ring_indexes List[int]: List of identifiers for rings in which the atom is a 
         participant.
@@ -356,13 +240,10 @@ class AtomProperties:
         - previous_atom Optional['AtomProperties']: Reference to an AtomProperties object 
         representing the preceding atom in the chain.
         """
-
         self.id: int = atom_index
-        self.symbol: str = symbol
         self.ring_indexes: List[int] = []
         self.rings: List['RingProperties'] = []
 
-        # self.original_rings: List['RingProperties'] = []
         self.anchored_rings: List['RingProperties'] = []
         self.is_bridge_atom: bool = False
         self.is_bridge: bool = False
@@ -370,8 +251,9 @@ class AtomProperties:
         self.bridged_ring = None
         self.positioned: bool = False
 
-        self.previous_position: 'Vector' = Vector(0, 0)
-        self.position: 'Vector' = Vector(0, 0)
+        self.previous_position: Vector = Vector(0, 0)
+        self.position: Vector = Vector(0, 0)
+        
         self.angle: Optional[float] = None
         self.force_positioned: bool = False
         self.connected_to_ring: bool = False
@@ -379,7 +261,7 @@ class AtomProperties:
         self.neighbours: List['AtomProperties'] = []
         self.previous_atom: Optional['AtomProperties'] = None
 
-    
+
     def __eq__(self, other: 'AtomProperties') -> bool:
         """
         Compares two AtomProperties instances for equality based on their identifiers.
@@ -391,10 +273,13 @@ class AtomProperties:
         Returns bool:
             True if both instances represent atoms with the same identifier, otherwise False.
         """
-        return False if other is None else self.id == other.id
-    
-    
-    def set_position(self, vector: 'Vector') -> None:
+        if other is None:
+            return False 
+        else:
+            return self.id == other.id
+
+
+    def set_position(self, vector: Vector) -> None:
         """
         Sets the position of the current atom to the specified vector.
 
@@ -402,9 +287,9 @@ class AtomProperties:
         :param vector 'Vector': 
             An instance of the Vector class, whose coordinates are assigned as the position of the current atom.
         """
-        self.position: 'Vector' = vector
+        self.position: Vector = vector
 
-    
+
     def __hash__(self) -> int:
         """
         Returns the hash value of the current object, which is the unique identifier of the atom.
@@ -416,8 +301,8 @@ class AtomProperties:
             The unique identifier of the current object of the class, used as the hash value.
         """
         return self.id
-    
-    
+
+
     def __repr__(self) -> str:
         """
         Provides a human-readable representation of the AtomProperties object, primarily 
@@ -431,9 +316,9 @@ class AtomProperties:
             A string combining the atomic symbol and the adjusted atomic index.
         """
         return f'{self.symbol}_{self.id - 1}'
-    
-    
-    def get_angle(self, reference_vector: Optional['Vector']=None) -> float:
+
+
+    def get_angle(self, reference_vector: Optional['Vector'] = None) -> float:
         """
         Calculates the angle between the current atom and either the previous atom or a 
         specified reference vector.
@@ -454,10 +339,9 @@ class AtomProperties:
         """
         vector_1: float = self.position
         vector_2: float = self.previous_position if not reference_vector else reference_vector
-        vector = Vector.subtract_vectors(vector_1, vector_2)
-        return vector.angle()
+        vector = vector_1 - vector_2
+        return Vector.angle(vector)
 
-    
     def copy(self) -> 'AtomProperties':
         """
         Creates a deep copy of the current AtomProperties instance and returns it as a new 
@@ -471,10 +355,9 @@ class AtomProperties:
             A new instance of the AtomProperties class with identical properties to the original 
             atom, but as a separate object in memory.
         """
-        new_atom = AtomProperties(self.id, self.symbol)
-        new_atom.ring_indexes =self.ring_indexes
+        new_atom = AtomProperties(self.id)
+        new_atom.ring_indexes = self.ring_indexes
         new_atom.rings = self.rings
-        # new_atom.original_rings = self.original_rings
         new_atom.anchored_rings = self.anchored_rings
         new_atom.is_bridge_atom = self.is_bridge_atom
         new_atom.is_bridge = self.is_bridge
@@ -488,11 +371,11 @@ class AtomProperties:
         new_atom.neighbours = self.neighbours
         new_atom.previous_atom = self.previous_atom
         return new_atom
-    
 
     def is_terminal(self) -> bool:
         "Returns boolean whether a given atom is terminal (has no more than one bond)."
         return len(self.neighbours) <= 1
+
 
     def set_previous_position(self, previous_atom: 'AtomProperties') -> None:
         "Set previous position atom"
@@ -500,22 +383,12 @@ class AtomProperties:
         self.previous_atom = previous_atom
 
 
-
-
-
-
-
-
-
-
-
-
-
 class RingOverlap:
     """
     Initializes an instance of the RingOverlap class, which represents the overlap between 
     two rings.
     """
+    
     def __init__(self, ring_1: 'RingProperties', ring_2: 'RingProperties') -> None:
         """
         This class is designed to handle situations where two rings share common atoms, 
@@ -578,14 +451,8 @@ class RingOverlap:
             exceeds two or if any atom in the overlap belongs to more than two rings, suggesting 
             a complex bridging configuration.
         """
-        return len(self.atoms) > 2 or any(len(atom.rings) > 2 for atom in self.atoms)
-        # ниже старая версия функции
-        # if len(self.atoms) > 2:
-        #     return True
-        # for atom in self.atoms:
-        #     if len(atom.rings) > 2:
-        #         return True
-        # return False
+        return len(self.atoms) > 2 or any(len(atom.rings) > 2
+                                          for atom in self.atoms)
 
 
     def involves_ring(self, ring_id: int) -> bool:
@@ -604,7 +471,7 @@ class RingOverlap:
             indicating that the ring is part of the current overlap. False otherwise.
         """
         return self.ring_id_1 == ring_id or self.ring_id_2 == ring_id
-    
+
 
     def update_other(self, ring_id: int, other_ring_id: int) -> None:
         """
