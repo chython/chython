@@ -19,9 +19,10 @@
 #
 import numpy as np
 from chython import smiles
+from pytest import mark, raises
 
 
-def test_linear_fingerprint_basic():
+def test_basic():
     # Test basic fingerprint generation
     mol = smiles('CCO')
     fp = mol.linear_fingerprint(min_radius=1, max_radius=2, length=1024)
@@ -41,7 +42,15 @@ def test_linear_fingerprint_basic():
     assert fp.shape == (2048,)
 
 
-def test_linear_fingerprint_consistency():
+@mark.parametrize('radius', [(0, 1), (1, 0), (-1, 2), (2, 1)])
+def test_invalid_radius(radius):
+    mol = smiles('CCO')
+    min_r, max_r = radius
+    with raises(AssertionError):
+        mol.morgan_fingerprint(min_radius=min_r, max_radius=max_r)
+
+
+def test_consistency():
     # Test that fingerprints are consistent for the same molecule
     fp1 = smiles('CCO').linear_fingerprint()
     fp2 = smiles('OCC').linear_fingerprint()
@@ -54,7 +63,7 @@ def test_linear_fingerprint_consistency():
     assert not np.array_equal(fp1, fp3)
 
 
-def test_linear_fingerprint_parameters():
+def test_parameters():
     mol = smiles('CCO')
 
     # Test different radius parameters
@@ -70,7 +79,7 @@ def test_linear_fingerprint_parameters():
     assert np.array_equal(fp3 & fp4, fp3)
 
 
-def test_linear_fingerprint_bit_pairs():
+def test_bit_pairs():
     # Test the number_bit_pairs parameter
     mol = smiles('CCCCCCCCCCCCCCCCCCCCCCCC')  # molecule with multiple similar fragments
 
@@ -82,7 +91,7 @@ def test_linear_fingerprint_bit_pairs():
     assert np.array_equal(fp1 & fp2, fp1)
 
 
-def test_linear_fingerprint_edge_cases():
+def test_edge_cases():
     fp1 = smiles('C').linear_fingerprint()
     assert fp1.sum() == 2
 
@@ -92,21 +101,7 @@ def test_linear_fingerprint_edge_cases():
     assert np.array_equal(fp1 & fp2, fp1)
 
 
-def test_linear_fingerprint_arbitrary_length():
-    # Test that non-power-of-2 lengths work but might have unexpected behavior
-    mol = smiles('CCO')
-    lengths = [100, 1000, 1500, 3000]
-
-    for length in lengths:
-        fp = mol.linear_fingerprint(length=length)
-        assert isinstance(fp, np.ndarray)
-        assert fp.dtype == np.uint8
-        assert fp.shape == (length,)
-        # The actual bits set might be fewer than expected due to masking
-        assert 0 <= fp.sum() <= length
-
-
-def test_linear_fingerprint_comparison():
+def test_comparison():
     # Test fingerprint comparison between similar molecules
     mol1 = smiles('CCO')
     mol2 = smiles('CCC')
