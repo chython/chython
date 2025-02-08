@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -138,24 +138,35 @@ def to_rdkit_molecule(data: MoleculeContainer, *, keep_mapping=True):
             ra.SetNumRadicalElectrons(1)
         mapping[n] = mol.AddAtom(ra)
 
+    inverted = {v: k for k, v in mapping.items()}
+
     for n, m, b in data.bonds():
         if atoms[n].atomic_symbol not in _inorganic:
             n, m = m, n  # fix direction of dative bond
         mol.AddBond(mapping[n], mapping[m], _bond_map[b.order])
 
-    for n in data._atoms_stereo:
+    for n, a in data.atoms():
+        if a.stereo is None:
+            continue
+        if n not in data.stereogenic_tetrahedrons:
+            continue  # allenes are not supported
         ra = mol.GetAtomWithIdx(mapping[n])
-        env = bonds[n]
-        s = data._translate_tetrahedron_sign(n, [x for x in mapping if x in env])
+        env = [inverted[x.GetIdx()] for x in ra.GetNeighbors()]
+        s = data._translate_tetrahedron_sign(n, env)
         ra.SetChiralTag(_chiral_ccw if s else _chiral_cw)
 
-    for nm, s in data._cis_trans_stereo.items():
-        n, m = nm
-        if m in bonds[n]:  # cumulenes unsupported
-            nn, nm, *_ = data.stereogenic_cis_trans[nm]
-            b = mol.GetBondBetweenAtoms(mapping[n], mapping[m])
-            b.SetStereoAtoms(mapping[nn], mapping[nm])
-            b.SetStereo(_cis if s else _trans)
+    for n, m, b in data.bonds():
+        if b.stereo is None:
+            continue
+        # check for simple cis-trans
+        nm = data._stereo_cis_trans_centers.get(n)
+        if nm is None or n not in nm or m not in nm:
+            continue
+
+        n1, m1, *_ = data.stereogenic_cis_trans[nm]
+        rb = mol.GetBondBetweenAtoms(mapping[n], mapping[m])
+        rb.SetStereoAtoms(mapping[n1], mapping[m1])
+        rb.SetStereo(_cis if b.stereo else _trans)
 
     conf = Conformer()
     for n, a in data.atoms():
@@ -163,11 +174,12 @@ def to_rdkit_molecule(data: MoleculeContainer, *, keep_mapping=True):
     conf.Set3D(False)
     mol.AddConformer(conf, assignId=True)
 
-    for c in data._conformers:
-        conf = Conformer()
-        for n, xyz in c.items():
-            conf.SetAtomPosition(mapping[n], xyz)
-        mol.AddConformer(conf, assignId=True)
+    if hasattr(data, '_conformers'):
+        for c in data._conformers:
+            conf = Conformer()
+            for n, xyz in c.items():
+                conf.SetAtomPosition(mapping[n], xyz)
+            mol.AddConformer(conf, assignId=True)
 
     SanitizeMol(mol)
     AssignStereochemistry(mol, flagPossibleStereoCenters=True, force=True)
