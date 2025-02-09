@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -29,6 +29,8 @@ class BaseReactor:
             for n, a in replacement.atoms():
                 if not isinstance(a, (AnyElement, QueryElement)):
                     raise TypeError('Unsupported query atom type')
+                elif len(a.implicit_hydrogens) > 1:
+                    raise ValueError('Query element in patch has more than one implicit hydrogen clause')
             for *_, b in replacement.bonds():
                 if len(b.order) > 1:
                     raise ValueError('Variable bond in replacement')
@@ -70,14 +72,14 @@ class BaseReactor:
         return to_delete
 
     def _patcher(self, structure: MoleculeContainer, mapping):
-        atoms = structure._atoms
-        bonds = structure._bonds
+        satoms = structure._atoms
+        sbonds = structure._bonds
 
         to_delete = self._get_deleted(structure, mapping)
         new = structure.__class__()
         natoms = new._atoms
         nbonds = new._bonds
-        max_atom = max(atoms)
+        max_atom = max(satoms)
         stereo_atoms = []
         stereo_bonds = []
 
@@ -87,7 +89,7 @@ class BaseReactor:
             if isinstance(ra, AnyElement):
                 if m := mapping.get(n):
                     # keep matched atom type and isotope
-                    sa = atoms[m]
+                    sa = satoms[m]
                     a = sa.copy()
                     a.charge = ra.charge
                     a.is_radical = ra.is_radical
@@ -103,21 +105,16 @@ class BaseReactor:
                 a = e(ra.isotope, charge=ra.charge, is_radical=ra.is_radical)
                 if not (m := mapping.get(n)):  # new atom
                     m = max_atom + 1
-                    max_atom += 1
-                    mapping[n] = m
+                    mapping[n] = max_atom = m
                     a._stereo = ra.stereo  # keep stereo from patch for new atoms
                     if isinstance(ra, Element):
                         a._implicit_hydrogens = ra.implicit_hydrogens  # keep H count from patch
-                        a.x = ra.x  # keep coordinates from patch
-                        a.y = ra.y
-                    elif len(ra.implicit_hydrogens) == 1:  # keep H count from patch
+                        a.xy = ra.xy  # keep coordinates from patch
+                    elif ra.implicit_hydrogens:  # keep H count from patch
                         a._implicit_hydrogens = ra.implicit_hydrogens[0]
-                    elif ra.implicit_hydrogens:
-                        raise ValueError('Query element in patch has more than one implicit hydrogen')
                 else:  # existing atoms
-                    sa = atoms[m]
-                    a.x = sa.x  # preserve existing coordinates
-                    a.y = sa.y
+                    sa = satoms[m]
+                    a.xy = sa.xy  # preserve existing coordinates
                     if ra.stereo is not None:
                         a._stereo = ra.stereo
                     elif sa.stereo is not None:  # keep original stereo
@@ -136,25 +133,26 @@ class BaseReactor:
                     nbonds[n][m] = b = Bond(int(rb))
                     if rb.stereo is not None:  # override stereo
                         b._stereo = rb.stereo
-                    elif (sbn := bonds.get(n)) is None or (sb := sbn.get(m)) is None or sb.stereo is None:
+                    # check bond exists in source and has stereo label and the same order
+                    elif (sbn := sbonds.get(n)) is None or (sb := sbn.get(m)) is None or sb.stereo is None or sb != b:
                         continue
                     else:  # original structure has stereo bond
                         stereo_bonds.append((n, m))
 
         patched_atoms = set(new)
-        for n, sa in atoms.items():  # add unmatched or masked atoms
+        for n, sa in satoms.items():  # add unmatched or masked atoms
             if n not in patched_atoms and n not in to_delete:
                 natoms[n] = a = sa.copy(hydrogens=True)
                 nbonds[n] = {}
                 if sa.stereo is not None:
                     # in case of allenes label can disappear/change, thus, requires recalculation
                     # for tetrahedrons label can be stored as is
-                    if len(bonds[n]) >= 3:
+                    if n in structure.stereogenic_tetrahedrons:
                         a._stereo = sa.stereo
                     else:
                         stereo_atoms.append(n)
 
-        for n, bs in bonds.items():  # preserve connectivity order for keeping stereo labels as is
+        for n, bs in sbonds.items():  # preserve connectivity order for keeping stereo labels as is
             if n in to_delete:  # atoms for removing
                 continue
             for m, b in bs.items():
@@ -177,23 +175,29 @@ class BaseReactor:
         # translate stereo sign from old order to new order
         for n in stereo_atoms:
             if n in new.stereogenic_tetrahedrons:
-                if bonds[n].keys() == nbonds[n].keys():
+                if sbonds[n].keys() == nbonds[n].keys():
                     # flush stereo from reaction center. should be explicitly set in replacement.
-                    s = new._translate_tetrahedron_sign(n, structure.stereogenic_tetrahedrons[n], atoms[n].stereo)
+                    s = new._translate_tetrahedron_sign(n, structure.stereogenic_tetrahedrons[n], satoms[n].stereo)
                     natoms[n]._stereo = s
             elif n in new.stereogenic_allenes:
                 if set(new.stereogenic_allenes[n]) == set(structure.stereogenic_allenes[n]):
                     # flush stereo for changed allene substituents
-                    s = new._translate_allene_sign(n, *structure.stereogenic_allenes[n][:2], atoms[n].stereo)
+                    s = new._translate_allene_sign(n, *structure.stereogenic_allenes[n][:2], satoms[n].stereo)
                     natoms[n]._stereo = s
             # else: ignore label
 
         for n, m in stereo_bonds:
-            if (t12 := new._stereo_cis_trans_terminals.get(n, True)) == new._stereo_cis_trans_terminals.get(m, False):
-                if set(new.stereogenic_cis_trans[t12]) == set(env := structure.stereogenic_cis_trans[t12]):
-                    # connected to cumulenes atoms should be the same
-                    s = new._translate_cis_trans_sign(*t12, *env[:2], bonds[n][m].stereo)
-                    nbonds[n][m]._stereo = s
+            # check if bond is center of cumulene
+            if (n12 := new._stereo_cis_trans_terminals.get(n, True)) != new._stereo_cis_trans_terminals.get(m, False):
+                continue
+            s12 = structure._stereo_cis_trans_terminals[n]
+            # check if cumulene terminals are the same
+            if set(n12) != set(s12):
+                continue
+            if set(new.stereogenic_cis_trans[n12]) == set(env := structure.stereogenic_cis_trans[s12]):
+                # connected to cumulenes atoms should be the same
+                s = new._translate_cis_trans_sign(*n12, *env[:2], sbonds[n][m].stereo)
+                nbonds[n][m]._stereo = s
             # else: ignore label
 
         if self._fix_rings:

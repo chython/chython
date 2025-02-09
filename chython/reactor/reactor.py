@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -62,29 +62,28 @@ class Reactor(BaseReactor):
             raise TypeError('invalid params')
         elif not all(isinstance(x, (QueryContainer, MoleculeContainer)) for x in products):
             raise TypeError('invalid params')
-        self.patterns = patterns
-        self.products = products
+        self._patterns = patterns
+        self._products = products
 
-        self.__one_shot = one_shot
-        self.__polymerise_limit = polymerise_limit
-        self.__products_atoms = tuple(set(m) for m in products)
-        self.__automorphism_filter = automorphism_filter
-        super().__init__({n for x in patterns for n, a in x.atoms() if not a.masked}, reduce(or_, products),
-                         delete_atoms, fix_aromatic_rings, fix_tautomers)
+        self._one_shot = one_shot
+        self._polymerise_limit = polymerise_limit
+        self._products_atoms = tuple(set(m) for m in products)
+        self._automorphism_filter = automorphism_filter
+        super().__init__(reduce(or_, patterns), reduce(or_, products), delete_atoms, fix_aromatic_rings, fix_tautomers)
 
     def __call__(self, *structures: MoleculeContainer):
         if any(not isinstance(structure, MoleculeContainer) for structure in structures):
             raise TypeError('only list of Molecules possible')
 
-        len_patterns = len(self.patterns)
+        len_patterns = len(self._patterns)
         structures = fix_mapping_overlap(structures)
         s_nums = set(range(len(structures)))
         seen = set()
-        if self.__one_shot:
+        if self._one_shot:
             for chosen in permutations(s_nums, len_patterns):
                 ignored = [structures[x] for x in s_nums.difference(chosen)]
                 chosen = [structures[x] for x in chosen]
-                for new in self.__single_stage(chosen, {x for x in ignored for x in x}):
+                for new in self._single_stage(chosen, {x for x in ignored for x in x}):
                     # store reacted molecules in same order as matched pattern
                     r = ReactionContainer([x.copy() for x in chosen] + [x.copy() for x in ignored],
                                           new + [x.copy() for x in ignored])
@@ -100,14 +99,14 @@ class Reactor(BaseReactor):
             while queue:
                 chosen, ignored, depth = queue.popleft()
                 depth += 1
-                for new in self.__single_stage(chosen, {x for x in ignored for x in x}):
+                for new in self._single_stage(chosen, {x for x in ignored for x in x}):
                     r = ReactionContainer([x.copy() for x in structures], new + [x.copy() for x in ignored])
                     if len(new) > 1:
                         r.contract_ions()  # try to keep salts
                         if str(r) in seen:
                             continue
                         seen.add(str(r))
-                        if len(r.products) != len(ignored) + len(self.__products_atoms):
+                        if len(r.products) != len(ignored) + len(self._products_atoms):
                             logger.info('ambiguous multicomponent structures. skip multistage processing')
                             yield r
                             continue
@@ -116,7 +115,7 @@ class Reactor(BaseReactor):
                     else:
                         seen.add(str(r))
 
-                    if depth < self.__polymerise_limit:
+                    if depth < self._polymerise_limit:
                         prod = r.products
                         if len_patterns == 1:  # simple case. only products or ignored can be transformed.
                             for i in range(len(prod)):
@@ -128,26 +127,26 @@ class Reactor(BaseReactor):
                                         queue.append((ch, [*prod[:i], *prod[i + 1:]], depth))
                     yield r
 
-    def __single_stage(self, chosen, ignored) -> Iterator[List[MoleculeContainer]]:
+    def _single_stage(self, chosen, ignored) -> Iterator[List[MoleculeContainer]]:
         max_ignored_number = united_chosen = None
-        split = len(self.__products_atoms) > 1
-        for match in lazy_product(*(x.get_mapping(y, automorphism_filter=self.__automorphism_filter) for x, y in
-                                    zip(self.patterns, chosen))):
+        split = len(self._products_atoms) > 1
+        for match in lazy_product(*(x.get_mapping(y, automorphism_filter=self._automorphism_filter) for x, y in
+                                    zip(self._patterns, chosen))):
             mapping = match[0].copy()
             for m in match[1:]:
                 mapping.update(m)
             if united_chosen is None:
                 united_chosen = reduce(or_, chosen)
                 max_ignored_number = max(ignored, default=0)
-            for new in self._patcher(united_chosen, mapping):
-                collision = set(new).intersection(ignored)
-                if collision:
-                    new.remap(dict(zip(collision, count(max(max_ignored_number, max(new)) + 1))))
+            new = self._patcher(united_chosen, mapping)
+            collision = set(new).intersection(ignored)
+            if collision:
+                new.remap(dict(zip(collision, count(max(max_ignored_number, max(new)) + 1))))
 
-                if split:
-                    yield new.split()
-                else:
-                    yield [new]
+            if split:
+                yield new.split()
+            else:
+                yield [new]
 
 
 def fix_mapping_overlap(structures) -> List[MoleculeContainer]:
@@ -159,7 +158,8 @@ def fix_mapping_overlap(structures) -> List[MoleculeContainer]:
         intersection = set(structure).intersection(checked_atoms)
         if intersection:
             mapping = dict(zip(intersection, count(max(max(checked_atoms), max(structure)) + 1)))
-            structure = structure.remap(mapping, copy=True)
+            structure = structure.copy()
+            structure.remap(mapping)
             logger.info('some atoms in input structures had the same numbers.\n'
                         f'atoms {list(mapping)} were remapped to {list(mapping.values())}')
         checked_atoms.update(structure)
