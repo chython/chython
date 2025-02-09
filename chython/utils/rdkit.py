@@ -18,7 +18,6 @@
 #
 from rdkit.Chem import AssignStereochemistry, Atom, BondStereo, BondType, ChiralType, Conformer, RWMol, SanitizeMol
 from ..containers import MoleculeContainer
-from ..exceptions import IsChiral, NotChiral, ValenceError
 from ..periodictable import Element
 
 
@@ -27,89 +26,55 @@ def from_rdkit_molecule(data):
     RDKit molecule object to MoleculeContainer converter
     """
     mol = MoleculeContainer()
-    parsed_mapping = mol._parsed_mapping
-    mol_conformers = mol._conformers
-    bonds = mol._bonds
 
-    atoms, mapping = [], []
+    mapping = {}
     tetrahedron_stereo = []
-    for a in data.GetAtoms():
-        e = Element.from_symbol(a.GetSymbol())
-        isotope = a.GetIsotope()
-        if isotope:
-            e = e(isotope)
-        else:
-            e = e()
-        atom = {'atom': e, 'charge': a.GetFormalCharge()}
+    for ra in data.GetAtoms():
+        e = Element.from_symbol(ra.GetSymbol())
+        a = e(ra.GetIsotope() or None, charge=ra.GetFormalCharge(), is_radical=bool(ra.GetNumRadicalElectrons()),
+              parsed_mapping=ra.GetAtomMapNum(), implicit_hydrogens=ra.GetNumExplicitHs() + ra.GetNumImplicitHs())
+        mapping[ra.GetIdx()] = mol.add_atom(a, _skip_calculation=True)
+        s = ra.GetChiralTag()
+        if s in (_chiral_cw, _chiral_ccw):
+            tetrahedron_stereo.append((ra.GetIdx(), [x.GetIdx() for x in ra.GetNeighbors()], s == _chiral_ccw))
 
-        radical = a.GetNumRadicalElectrons()
-        if radical:
-            atom['is_radical'] = True
-
-        atoms.append(atom)
-        mapping.append(a.GetAtomMapNum())
-        tetrahedron_stereo.append(a.GetChiralTag())
-
-    conformers = []
-    c = data.GetConformers()
-    if c:
-        for atom, (x, y, _) in zip(atoms, c[0].GetPositions()):
-            atom['xy'] = (x, y)
-        for c in c:
-            if c.Is3D():
-                conformers.append(c.GetPositions())
-
-    new_map = []
-    for a, n in zip(atoms, mapping):
-        a = mol.add_atom(**a)
-        new_map.append(a)
-        parsed_mapping[a] = n
-
-    stereo = []
+    cis_trans_stereo = []
     for b in data.GetBonds():
-        n, m = new_map[b.GetBeginAtomIdx()], new_map[b.GetEndAtomIdx()]
-        mol.add_bond(n, m, _rdkit_bond_map[b.GetBondType()])
+        n, m = mapping[b.GetBeginAtomIdx()], mapping[b.GetEndAtomIdx()]
+        mol.add_bond(n, m, _rdkit_bond_map[b.GetBondType()], _skip_calculation=True)
         s = b.GetStereo()
-        if s == _cis:
+        if s in (_cis, _trans):
             nn, nm = b.GetStereoAtoms()
-            stereo.append((mol.add_cis_trans_stereo, n, m, new_map[nn], new_map[nm], True))
-        elif s == _trans:
-            nn, nm = b.GetStereoAtoms()
-            stereo.append((mol.add_cis_trans_stereo, n, m, new_map[nn], new_map[nm], False))
+            cis_trans_stereo.append((n, m, mapping[nn], mapping[nm], s == _cis))
 
-    for n, s in zip(new_map, tetrahedron_stereo):
-        if s == _chiral_cw:
-            env = bonds[n]
-            env = [x for x in new_map if x in env]
-            stereo.append((mol.add_atom_stereo, n, env, False))
-        elif s == _chiral_ccw:
-            env = bonds[n]
-            env = [x for x in new_map if x in env]
-            stereo.append((mol.add_atom_stereo, n, env, True))
+    if cs := data.GetConformers():
+        # set coordinates from the first rdkit conformer. usually it's 2d layout
+        for (_, atom), (x, y, _) in zip(mol.atoms(), cs[0].GetPositions()):
+            atom.xy = (x, y)
 
-    while stereo:
-        fail_stereo = []
-        old_stereo = len(stereo)
-        for f, *args in stereo:
-            try:
-                f(*args, clean_cache=False)
-            except NotChiral:
-                fail_stereo.append((f, *args))
-            except IsChiral:
-                pass
-            except ValenceError:
-                mol.flush_cache()
-                break
-        else:
-            stereo = fail_stereo
-            if len(stereo) == old_stereo:
-                break
-            mol.flush_stereo_cache()
-            continue
-        break
+        conformers = []
+        for c in cs:
+            if c.Is3D():
+                conformers.append({n: tuple(v) for n, v in enumerate(c.GetPositions(), 1)})
+        if conformers:
+            mol._conformers = conformers
 
-    for c in conformers:
-        mol_conformers.append({k: tuple(v) for k, v in zip(new_map, c)})
+    # move stereo labels as is
+    for n, env, s in tetrahedron_stereo:
+        n = mapping[n]
+        try:
+            mol.atom(n)._stereo = mol._translate_tetrahedron_sign(n, [mapping[x] for x in env], s)
+        except KeyError:
+            pass
+    for n, m, nn, nm, s in cis_trans_stereo:
+        try:
+            mol.bond(n, m)._stereo = mol._translate_cis_trans_sign(n, m, nn, nm, s)
+        except KeyError:
+            pass
+
+    mol.fix_structure(recalculate_hydrogens=False)
+    if tetrahedron_stereo or cis_trans_stereo:
+        mol.fix_stereo()
     return mol
 
 
@@ -123,11 +88,10 @@ def to_rdkit_molecule(data: MoleculeContainer, *, keep_mapping=True):
     """
     mol = RWMol()
     mapping = {}
-    atoms = data._atoms
-    bonds = data._bonds
 
     for n, a in data.atoms():
         ra = Atom(a.atomic_number)
+        ra.SetNumExplicitHs(a.implicit_hydrogens)
         if keep_mapping:
             ra.SetAtomMapNum(n)
         if a.charge:
@@ -141,7 +105,7 @@ def to_rdkit_molecule(data: MoleculeContainer, *, keep_mapping=True):
     inverted = {v: k for k, v in mapping.items()}
 
     for n, m, b in data.bonds():
-        if atoms[n].atomic_symbol not in _inorganic:
+        if data.atom(n).atomic_symbol not in _inorganic:
             n, m = m, n  # fix direction of dative bond
         mol.AddBond(mapping[n], mapping[m], _bond_map[b.order])
 
