@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
 #
@@ -17,9 +17,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .element import Element
-from .groups import GroupXVIII
-from .periods import *
+from .base import Element
+from .base.groups import GroupXVIII
+from .base.periods import *
 
 
 class He(Element, PeriodI, GroupXVIII):
@@ -49,6 +49,10 @@ class He(Element, PeriodI, GroupXVIII):
     def atomic_radius(self):
         return .31
 
+    @property
+    def mdl_isotope(self):
+        return 4
+
 
 class Ne(Element, PeriodII, GroupXVIII):
     __slots__ = ()
@@ -76,6 +80,10 @@ class Ne(Element, PeriodII, GroupXVIII):
     @property
     def atomic_radius(self):
         return .38
+
+    @property
+    def mdl_isotope(self):
+        return 20
 
 
 class Ar(Element, PeriodIII, GroupXVIII):
@@ -105,6 +113,10 @@ class Ar(Element, PeriodIII, GroupXVIII):
     def atomic_radius(self):
         return .71
 
+    @property
+    def mdl_isotope(self):
+        return 40
+
 
 class Kr(Element, PeriodIV, GroupXVIII):
     __slots__ = ()
@@ -132,6 +144,10 @@ class Kr(Element, PeriodIV, GroupXVIII):
     @property
     def atomic_radius(self):
         return .87
+
+    @property
+    def mdl_isotope(self):
+        return 84
 
 
 class Xe(Element, PeriodV, GroupXVIII):
@@ -172,6 +188,10 @@ class Xe(Element, PeriodV, GroupXVIII):
     def atomic_radius(self):
         return 1.08
 
+    @property
+    def mdl_isotope(self):
+        return 131
+
 
 class Rn(Element, PeriodVI, GroupXVIII):
     __slots__ = ()
@@ -200,6 +220,10 @@ class Rn(Element, PeriodVI, GroupXVIII):
     def atomic_radius(self):
         return 1.2
 
+    @property
+    def mdl_isotope(self):
+        return 222
+
 
 class Og(Element, PeriodVII, GroupXVIII):
     __slots__ = ()
@@ -227,6 +251,10 @@ class Og(Element, PeriodVII, GroupXVIII):
     @property
     def atomic_radius(self):
         return 1.2  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 294
 
 
 __all__ = ['He', 'Ne', 'Ar', 'Kr', 'Xe', 'Rn', 'Og']

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -27,29 +27,27 @@ logger = getLogger('chython.morgan')
 
 
 if TYPE_CHECKING:
-    from chython.containers.graph import Graph
+    from chython.containers import MoleculeContainer
 
 
 class Morgan:
     __slots__ = ()
 
     @cached_property
-    def atoms_order(self: 'Graph') -> Dict[int, int]:
+    def atoms_order(self: 'MoleculeContainer') -> Dict[int, int]:
         """
         Morgan like algorithm for graph nodes ordering
 
         :return: dict of atom-order pairs
         """
-        atoms = self._atoms
-        if not atoms:  # for empty containers
+        if not self:  # for empty containers
             return {}
-        elif len(atoms) == 1:  # optimize single atom containers
-            return dict.fromkeys(atoms, 1)
-        ring = self.ring_atoms
-        return _morgan({n: hash((hash(a), n in ring)) for n, a in atoms.items()}, self.int_adjacency)
+        elif len(self) == 1:  # optimize single atom containers
+            return dict.fromkeys(self, 1)
+        return _morgan({n: hash(a) for n, a in self.atoms()}, self.int_adjacency)
 
     @cached_property
-    def int_adjacency(self: 'Graph') -> Dict[int, Dict[int, int]]:
+    def int_adjacency(self: 'MoleculeContainer') -> Dict[int, Dict[int, int]]:
         """
         Adjacency with integer-coded bonds.
         """

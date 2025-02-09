@@ -43,22 +43,20 @@ class Transformer(BaseReactor):
         if not isinstance(pattern, QueryContainer) or not isinstance(replacement, (MoleculeContainer, QueryContainer)):
             raise TypeError('invalid params')
 
-        self.pattern = pattern
-        self.replacement = replacement
-        self.__automorphism_filter = automorphism_filter
-        self.__copy_metadata = copy_metadata
-        super().__init__({n for n, h in pattern._masked.items() if not h}, replacement, delete_atoms,
-                         fix_aromatic_rings, fix_tautomers)
+        self._pattern = pattern
+        self._automorphism_filter = automorphism_filter
+        self._copy_metadata = copy_metadata
+        super().__init__(pattern, replacement, delete_atoms, fix_aromatic_rings, fix_tautomers)
 
     def __call__(self, structure: MoleculeContainer):
         if not isinstance(structure, MoleculeContainer):
             raise TypeError('only Molecules possible')
 
-        for mapping in self.pattern.get_mapping(structure, automorphism_filter=self.__automorphism_filter):
-            for transformed in self._patcher(structure, mapping):
-                if self.__copy_metadata:
-                    transformed.meta.update(structure.meta)
-                yield transformed
+        for mapping in self._pattern.get_mapping(structure, automorphism_filter=self._automorphism_filter):
+            transformed = self._patcher(structure, mapping)
+            if self._copy_metadata:
+                transformed.meta.update(structure.meta)
+            yield transformed
 
 
 __all__ = ['Transformer']

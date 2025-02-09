@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -24,16 +24,18 @@ def postprocess_parsed_molecule(data, *, remap=False, ignore=True):
     if remap:
         remapped = list(range(1, len(data['atoms']) + 1))
     else:
-        length = count(max(x['mapping'] for x in data['atoms']) + 1)
+        length = count(max(x.get('parsed_mapping') or 0 for x in data['atoms']) + 1)
         remapped, used = [], set()
         for n, atom in enumerate(data['atoms']):
-            m = atom['mapping']
+            m = atom.get('parsed_mapping')
             if not m:
                 remapped.append(next(length))
             elif m in used:
                 if not ignore:
                     raise MappingError('mapping in molecules should be unique')
                 remapped.append(next(length))
+                if data.get('log') is None:
+                    data['log'] = []
                 data['log'].append(f'mapping in molecule changed from {m} to {remapped[n]}')
             else:
                 remapped.append(m)
@@ -47,7 +49,7 @@ def postprocess_parsed_reaction(data, *, remap=False, ignore=True):
         for molecule in data[i]:
             used = set()
             for atom in molecule['atoms']:
-                m = atom['mapping']
+                m = atom.get('parsed_mapping')
                 if m:
                     if m in used:
                         if not ignore:
@@ -72,6 +74,8 @@ def postprocess_parsed_reaction(data, *, remap=False, ignore=True):
                     raise MappingError('mapping in reagents or products or reactants should be unique')
                 # force remap non unique atoms in molecules.
                 _remap.append(next(length))
+                if data.get('log') is None:
+                    data['log'] = []
                 data['log'].append(f'mapping in {i} changed from {m} to {_remap[-1]}')
             else:
                 _remap.append(m)
@@ -83,6 +87,8 @@ def postprocess_parsed_reaction(data, *, remap=False, ignore=True):
             e = f'reagents has map intersection with reactants or products: {tmp}'
             if not ignore:
                 raise MappingError(e)
+            if data.get('log') is None:
+                data['log'] = []
             data['log'].append(e)
             maps['reagents'] = [x if x not in tmp else next(length) for x in maps['reagents']]
 

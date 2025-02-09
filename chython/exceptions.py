@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -63,30 +63,6 @@ class IsChiral(KeyError):
 class InvalidAromaticRing(ValueError):
     """
     Aromatic ring has impossible Kekule structure
-    """
-
-
-class IsConnectedAtom(Exception):
-    """
-    Atom is already attached to graph
-    """
-
-
-class IsNotConnectedAtom(Exception):
-    """
-    Atom is not attached to graph
-    """
-
-
-class IsConnectedBond(Exception):
-    """
-    Bond is already attached to graph
-    """
-
-
-class IsNotConnectedBond(Exception):
-    """
-    Bond is not attached to graph
     """
 
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2024 Philippe Gantzer <p.gantzer@icredd.hokudai.ac.jp>
 #  This file is part of chython.
 #
@@ -52,11 +52,10 @@ def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] 
     if clean2d:
         for m in molecules:
             if len(m) > 1:
-                values = m._plane.values()
-                min_x = min(x for x, _ in values)
-                max_x = max(x for x, _ in values)
-                min_y = min(y for _, y in values)
-                max_y = max(y for _, y in values)
+                min_x = min(a.x for _, a in m.atoms())
+                max_x = max(a.x for _, a in m.atoms())
+                min_y = min(a.y for _, a in m.atoms())
+                max_y = max(a.y for _, a in m.atoms())
                 if max_y - min_y < .01 and max_x - min_x < 0.01:
                     m.clean2d()
 
@@ -65,12 +64,12 @@ def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] 
         for m in ms:
             if m is None:
                 break
-            min_y = min(y for x, y in m._plane.values())
-            max_y = max(y for x, y in m._plane.values())
+            min_y = min(a.y for _, a in m.atoms())
+            max_y = max(a.y for _, a in m.atoms())
             h = max_y - min_y
             if row_height < h:  # get height of row
                 row_height = h
-            planes.append(m._plane.copy())
+            planes.append([a.xy for _, a in m.atoms()])
 
         max_x = 0.
         for m in ms:
@@ -88,8 +87,9 @@ def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] 
         shift_y -= row_height + 4. * font_size
 
     # restore planes
-    for p, m in zip(planes, molecules):
-        m._plane = p
+    for m, p in zip(molecules, planes):
+        for (_, a), xy in zip(m.atoms(), p):
+            a.xy = xy
 
     _width = shift_x - 1.5 * font_size
     _height = -shift_y - 1.5 * font_size

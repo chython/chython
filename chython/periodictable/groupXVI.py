@@ -19,9 +19,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .element import Element
-from .groups import GroupXVI
-from .periods import PeriodII, PeriodIII, PeriodIV, PeriodV, PeriodVI, PeriodVII
+from .base import Element
+from .base.groups import GroupXVI
+from .base.periods import PeriodII, PeriodIII, PeriodIV, PeriodV, PeriodVI, PeriodVII
 
 
 class O(Element, PeriodII, GroupXVI):
@@ -50,6 +50,18 @@ class O(Element, PeriodII, GroupXVI):
     @property
     def atomic_radius(self):
         return .48
+
+    @property
+    def mdl_isotope(self):
+        return 16
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
 
 
 class S(Element, PeriodIII, GroupXVI):
@@ -227,6 +239,18 @@ class S(Element, PeriodIII, GroupXVI):
     def atomic_radius(self):
         return .87
 
+    @property
+    def mdl_isotope(self):
+        return 32
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class Se(Element, PeriodIV, GroupXVI):
     __slots__ = ()
@@ -286,6 +310,18 @@ class Se(Element, PeriodIV, GroupXVI):
     def atomic_radius(self):
         return 1.03
 
+    @property
+    def mdl_isotope(self):
+        return 79
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class Te(Element, PeriodV, GroupXVI):
     __slots__ = ()
@@ -336,6 +372,18 @@ class Te(Element, PeriodV, GroupXVI):
     def atomic_radius(self):
         return 1.23
 
+    @property
+    def mdl_isotope(self):
+        return 128
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class Po(Element, PeriodVI, GroupXVI):
     __slots__ = ()
@@ -369,6 +417,10 @@ class Po(Element, PeriodVI, GroupXVI):
     def atomic_radius(self):
         return 1.35
 
+    @property
+    def mdl_isotope(self):
+        return 209
+
 
 class Lv(Element, PeriodVII, GroupXVI):
     __slots__ = ()
@@ -396,6 +448,10 @@ class Lv(Element, PeriodVII, GroupXVI):
     @property
     def atomic_radius(self):
         return 1.35  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 293
 
 
 __all__ = ['O', 'S', 'Se', 'Te', 'Po', 'Lv']

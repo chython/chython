@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,9 +16,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .element import Element
-from .groups import GroupI
-from .periods import *
+from .base import Element
+from .base.groups import GroupI
+from .base.periods import *
 
 
 class H(Element, PeriodI, GroupI):
@@ -48,6 +48,14 @@ class H(Element, PeriodI, GroupI):
     def atomic_radius(self):
         return 0.53
 
+    @property
+    def mdl_isotope(self):
+        return 1
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
 
 class Li(Element, PeriodII, GroupI):
     __slots__ = ()
@@ -75,6 +83,10 @@ class Li(Element, PeriodII, GroupI):
     @property
     def atomic_radius(self):
         return 167
+
+    @property
+    def mdl_isotope(self):
+        return 7
 
 
 class Na(Element, PeriodIII, GroupI):
@@ -104,6 +116,10 @@ class Na(Element, PeriodIII, GroupI):
     def atomic_radius(self):
         return 1.9
 
+    @property
+    def mdl_isotope(self):
+        return 23
+
 
 class K(Element, PeriodIV, GroupI):
     __slots__ = ()
@@ -131,6 +147,10 @@ class K(Element, PeriodIV, GroupI):
     @property
     def atomic_radius(self):
         return 2.43
+
+    @property
+    def mdl_isotope(self):
+        return 39
 
 
 class Rb(Element, PeriodV, GroupI):
@@ -160,6 +180,10 @@ class Rb(Element, PeriodV, GroupI):
     def atomic_radius(self):
         return 2.65
 
+    @property
+    def mdl_isotope(self):
+        return 85
+
 
 class Cs(Element, PeriodVI, GroupI):
     __slots__ = ()
@@ -188,6 +212,10 @@ class Cs(Element, PeriodVI, GroupI):
     def atomic_radius(self):
         return 2.98
 
+    @property
+    def mdl_isotope(self):
+        return 133
+
 
 class Fr(Element, PeriodVII, GroupI):
     __slots__ = ()
@@ -215,6 +243,10 @@ class Fr(Element, PeriodVII, GroupI):
     @property
     def atomic_radius(self):
         return 2.98  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 223
 
 
 __all__ = ['H', 'Li', 'Na', 'K', 'Rb', 'Cs', 'Fr']

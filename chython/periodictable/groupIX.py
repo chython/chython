@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasurova@gmail.com>
 #  This file is part of chython.
@@ -18,9 +18,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .element import Element
-from .groups import GroupIX
-from .periods import PeriodIV, PeriodV, PeriodVI, PeriodVII
+from .base import Element
+from .base.groups import GroupIX
+from .base.periods import PeriodIV, PeriodV, PeriodVI, PeriodVII
 
 
 class Co(Element, PeriodIV, GroupIX):
@@ -71,6 +71,10 @@ class Co(Element, PeriodIV, GroupIX):
     def atomic_radius(self):
         return 1.52
 
+    @property
+    def mdl_isotope(self):
+        return 59
+
 
 class Rh(Element, PeriodV, GroupIX):
     __slots__ = ()
@@ -107,6 +111,10 @@ class Rh(Element, PeriodV, GroupIX):
     @property
     def atomic_radius(self):
         return 1.73
+
+    @property
+    def mdl_isotope(self):
+        return 103
 
 
 class Ir(Element, PeriodVI, GroupIX):
@@ -148,6 +156,10 @@ class Ir(Element, PeriodVI, GroupIX):
     def atomic_radius(self):
         return 1.8
 
+    @property
+    def mdl_isotope(self):
+        return 192
+
 
 class Mt(Element, PeriodVII, GroupIX):
     __slots__ = ()
@@ -175,6 +187,10 @@ class Mt(Element, PeriodVII, GroupIX):
     @property
     def atomic_radius(self):
         return 1.8  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 278
 
 
 __all__ = ['Co', 'Rh', 'Ir', 'Mt']

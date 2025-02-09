@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021, 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
 #
@@ -24,52 +24,85 @@ from libc.string cimport memset
 cdef extern from "Python.h":
     dict _PyDict_NewPresized(Py_ssize_t minused)
 
+cdef packed struct atom_t:
+    unsigned long long bits1
+    unsigned long long bits2
+    unsigned long long bits3
+    unsigned long long bits4
+    unsigned int from_
+    unsigned int to_
+    unsigned int mapping
+
+cdef packed struct bond_t:
+    unsigned long long bond
+    unsigned int index
+
+cdef packed struct molecule_t:
+    unsigned int atoms_count
+    atom_t *atoms
+    bond_t *bonds
+
+cdef packed struct q_atom_t:
+    unsigned long long mask1
+    unsigned long long mask2
+    unsigned long long mask3
+    unsigned long long mask4
+    unsigned int back
+    unsigned int closure
+    unsigned int from_
+    unsigned int to_
+    unsigned int mapping
+
+cdef packed struct query_t:
+    unsigned int atoms_count
+    q_atom_t *atoms
+    bond_t *bonds
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back not None,
-                unsigned long long[::1] q_masks1 not None, unsigned long long[::1] q_masks2 not None,
-                unsigned long long[::1] q_masks3 not None, unsigned long long[::1] q_masks4 not None,
-                unsigned int[::1] q_closures not None, unsigned int[::1] q_from not None,
-                unsigned int[::1] q_to not None, unsigned int[::1] q_indices not None,
-                unsigned long long[::1] q_bonds not None, unsigned long[::1] o_numbers not None,
-                unsigned long long[::1] o_bits1 not None, unsigned long long[::1] o_bits2 not None,
-                unsigned long long[::1] o_bits3 not None, unsigned long long[::1] o_bits4 not None,
-                unsigned long long[::1] o_bonds not None, unsigned int[::1] o_from not None,
-                unsigned int[::1] o_to not None, unsigned int[::1] o_indices not None,
-                unsigned int[::1] scope not None):
+def get_mapping(const unsigned char[::1] q_buffer not None, const unsigned char[::1] m_buffer not None,
+                const unsigned int[::1] scope not None):
     # expected less than 2^16 atoms in structure.
-    cdef unsigned int stack = 0, path_size = 0, q_size, q_size_dec, o_size, depth, front, back, closures_num
-    cdef unsigned int n, m, o, i, j, closures_counter
-    cdef unsigned long long q_mask1, q_mask2, q_mask3, q_mask4, o_bond, c_bond
+    cdef unsigned int stack = 0, path_size = 0, depth, front, q_decrement
+    cdef unsigned int n, m, i, j, closures_counter
+    cdef unsigned long long c_bond
     cdef dict mapping
+    cdef query_t query
+    cdef molecule_t molecule
+    cdef q_atom_t q_atom
+    cdef atom_t n_atom, m_atom
+    cdef bond_t i_bond, j_bond
 
-    q_size = len(q_numbers)
-    q_size_dec = q_size - 1
-    o_size = len(o_numbers)
-    cdef unsigned int *path = <unsigned int *> PyMem_Malloc(q_size_dec * sizeof(unsigned int))
-    cdef unsigned int *stack_index = <unsigned int *> PyMem_Malloc(2 * o_size * sizeof(unsigned int))
-    cdef unsigned int *stack_depth = <unsigned int *> PyMem_Malloc(2 * o_size * sizeof(unsigned int))
-    cdef bint *matched = <bint *> PyMem_Malloc(o_size * sizeof(bint))
-    cdef unsigned long long *o_closures = <unsigned long long *> PyMem_Malloc(o_size * sizeof(unsigned long long))
+    query.atoms_count = (<unsigned int*> &q_buffer[0])[0]
+    query.atoms = <q_atom_t*> (&q_buffer[0] + 4)
+    query.bonds = <bond_t*> (&query.atoms[0] + query.atoms_count)
+    q_decrement = query.atoms_count - 1
 
-    if not path or not stack_index or not stack_depth or not matched or not o_closures:
+    molecule.atoms_count = (<unsigned int*> &m_buffer[0])[0]
+    molecule.atoms = <atom_t*> (&m_buffer[0] + 4)
+    molecule.bonds = <bond_t*> (&molecule.atoms[0] + molecule.atoms_count)
+
+    cdef unsigned int *path = <unsigned int *> PyMem_Malloc(q_decrement * sizeof(unsigned int))
+    cdef unsigned int *stack_index = <unsigned int *> PyMem_Malloc(2 * molecule.atoms_count * sizeof(unsigned int))
+    cdef unsigned int *stack_depth = <unsigned int *> PyMem_Malloc(2 * molecule.atoms_count * sizeof(unsigned int))
+    cdef bint *matched = <bint *> PyMem_Malloc(molecule.atoms_count * sizeof(bint))
+    cdef unsigned long long *closures = <unsigned long long *> PyMem_Malloc(molecule.atoms_count * sizeof(unsigned long long))
+
+    if not path or not stack_index or not stack_depth or not matched or not closures:
         raise MemoryError()
 
-    memset(matched, 0, o_size * sizeof(bint))
-    memset(o_closures, 0, o_size * sizeof(unsigned long long))
+    memset(matched, 0, molecule.atoms_count * sizeof(bint))
+    memset(closures, 0, molecule.atoms_count * sizeof(unsigned long long))
 
-    # find entry-points.
-    q_mask1 = q_masks1[0]
-    q_mask2 = q_masks2[0]
-    q_mask3 = q_masks3[0]
-    q_mask4 = q_masks4[0]
-    for n in range(o_size):
+    q_atom = query.atoms[0]
+    for n in range(molecule.atoms_count):
+        n_atom = molecule.atoms[n]
         if (scope[n] and
-            q_mask1 & o_bits1[n] and  # o_bits1 doesn't contain bond bits.
-            q_mask2 & o_bits2[n] == o_bits2[n] and
-            q_mask3 & o_bits3[n] == o_bits3[n] and
-            q_mask4 & o_bits4[n]):
+            q_atom.mask1 & n_atom.bits1 and  # bits1 doesn't contain bond bits.
+            q_atom.mask2 & n_atom.bits2 == n_atom.bits2 and
+            q_atom.mask3 & n_atom.bits3 == n_atom.bits3 and
+            q_atom.mask4 & n_atom.bits4):
 
             stack_index[stack] = n
             stack_depth[stack] = 0
@@ -81,11 +114,11 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
             depth = stack_depth[stack]
             n = stack_index[stack]
 
-            if depth == q_size_dec:
-                mapping = _PyDict_NewPresized(q_size)
+            if depth == q_decrement:
+                mapping = _PyDict_NewPresized(query.atoms_count)
                 for i in range(depth):
-                    mapping[q_numbers[i]] = o_numbers[path[i]]
-                mapping[q_numbers[depth]] = o_numbers[n]
+                    mapping[query.atoms[i].mapping] = molecule.atoms[path[i]].mapping
+                mapping[query.atoms[depth].mapping] = molecule.atoms[n].mapping
                 yield mapping
             else:
                 if path_size != depth:  # dead end reached
@@ -98,40 +131,37 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                 path_size += 1
 
                 front = depth + 1
-                back = q_back[front]
-                if back != depth:  # branch
-                    n = path[back]
-
                 # load next query atom
-                q_mask1 = q_masks1[front]
-                q_mask2 = q_masks2[front]
-                q_mask3 = q_masks3[front]
-                q_mask4 = q_masks4[front]
-                closures_num = q_closures[front]
+                q_atom = query.atoms[front]
+                if q_atom.back != depth:  # branch
+                    n = path[q_atom.back]
 
-                for i in range(o_from[n], o_to[n]):
-                    o_bond = o_bonds[i]
-                    m = o_indices[i]
+                n_atom = molecule.atoms[n]
+                for i in range(n_atom.from_, n_atom.to_):
+                    i_bond = molecule.bonds[i]
+                    m = i_bond.index
+                    m_atom = molecule.atoms[m]
                     if (scope[m] and not matched[m] and
-                        q_mask1 & o_bond == o_bond and  # bond order, in ring mark and atom bit should match.
-                        q_mask2 & o_bits2[m] == o_bits2[m] and
-                        q_mask3 & o_bits3[m] == o_bits3[m] and
-                        q_mask4 & o_bits4[m]):
+                        q_atom.mask1 & i_bond.bond == i_bond.bond and  # bond order, in ring mark and atom bit should match.
+                        q_atom.mask2 & m_atom.bits2 == m_atom.bits2 and
+                        q_atom.mask3 & m_atom.bits3 == m_atom.bits3 and
+                        q_atom.mask4 & m_atom.bits4):
 
-                        if closures_num:  # candidate atom should have same closures.
+                        if q_atom.closure:  # candidate atom should have same closures.
                             closures_counter = 0
                             # make a map of closures for o_n atom
                             # an index is a neighbor atom and a value is a bond between o_n and the neighbor
-                            for j in range(o_from[m], o_to[m]):
-                                o = o_indices[j]
-                                if o != n and matched[o]:
-                                    o_closures[o] = o_bonds[j]
+                            for j in range(m_atom.from_, m_atom.to_):
+                                j_bond = molecule.bonds[j]
+                                if j_bond.index != n and matched[j_bond.index]:
+                                    closures[j_bond.index] = j_bond.bond
                                     closures_counter += 1
 
-                            if closures_counter == closures_num:
-                                for j in range(q_from[front], q_to[front]):
-                                    c_bond = o_closures[path[q_indices[j]]]
-                                    if not c_bond or q_bonds[j] & c_bond != c_bond:  # compare order and ring bits
+                            if closures_counter == q_atom.closure:
+                                for j in range(q_atom.from_, q_atom.to_):
+                                    j_bond = query.bonds[j]
+                                    c_bond = closures[path[j_bond.index]]
+                                    if not c_bond or j_bond.bond & c_bond != c_bond:  # compare order and ring bits
                                         break
                                 else:
                                     stack_index[stack] = m
@@ -139,12 +169,13 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
                                     stack += 1
 
                             # fill an array with nulls
-                            for j in range(o_from[m], o_to[m]):
-                                o_closures[o_indices[j]] = 0
+                            for j in range(m_atom.from_, m_atom.to_):
+                                j_bond = molecule.bonds[j]
+                                closures[j_bond.index] = 0
                         else:  # candidate atom should not have closures.
-                            for j in range(o_from[m], o_to[m]):
-                               o = o_indices[j]
-                               if o != n and matched[o]:
+                            for j in range(m_atom.from_, m_atom.to_):
+                               j_bond = molecule.bonds[j]
+                               if j_bond.index != n and matched[j_bond.index]:
                                    break  # found closure
                             else:
                                 stack_index[stack] = m
@@ -155,4 +186,4 @@ def get_mapping(unsigned long[::1] q_numbers not None, unsigned int[::1] q_back 
         PyMem_Free(matched)
         PyMem_Free(stack_index)
         PyMem_Free(stack_depth)
-        PyMem_Free(o_closures)
+        PyMem_Free(closures)

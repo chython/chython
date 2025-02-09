@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -141,7 +141,13 @@ class X3domMolecule:
 
         :param index: index of conformer
         """
-        xyz = self._conformers[index]
+        if not hasattr(self, '_conformers'):
+            raise ValueError('No conformers stored within structure')
+        try:
+            xyz = self._conformers[index]
+        except IndexError:
+            raise IndexError('Invalid conformer index')
+
         mx = sum(x for x, _, _ in xyz.values()) / len(xyz)
         my = sum(y for _, y, _ in xyz.values()) / len(xyz)
         mz = sum(z for _, _, z in xyz.values()) / len(xyz)
@@ -175,7 +181,7 @@ class X3domMolecule:
 
         atoms = []
         if carbon:
-            for n, a in self._atoms.items():
+            for n, a in self.atoms():
                 r = radius or a.atomic_radius * multiplier
                 fr = r * 0.71
                 atoms.append(f"    <transform translation='{' '.join(format(x, '.2f') for x in xyz[n])}'>\n"
@@ -191,7 +197,7 @@ class X3domMolecule:
                              f"            </appearance>\n            <sphere radius='{r:.2f}'/>\n"
                              "          </shape>\n        </group>\n      </billboard>\n    </transform>\n")
         else:
-            for n, a in self._atoms.items():
+            for n, a in self.atoms():
                 r = radius or a.atomic_radius * multiplier
                 atoms.append(f"    <transform translation='{' '.join(format(x, '.2f') for x in xyz[n])}'>\n"
                              "      <shape>\n        <appearance>\n"
@@ -215,7 +221,6 @@ class X3domMolecule:
         doubles = {}
         half_triple = triple_space / 2
         for n, m, bond in self.bonds():
-            order = bond.order
             nx, ny, nz = xyz[n]
             mx, my, mz = xyz[m]
 
@@ -227,13 +232,13 @@ class X3domMolecule:
             rotation_angle = acos(nmy / length)
             lengths[(n, m)] = lengths[(m, n)] = (length, rotation_angle)
             x, y, z = nx + nmx / 2, ny + nmy / 2, nz + nmz / 2
-            if order in (1, 4):
+            if bond in (1, 4):
                 xml.append(f"    <transform translation='{x:.2f} {y:.2f} {z:.2f}' rotation='{nmz:.2f} 0 "
                            f"{-nmx:.2f} {rotation_angle:.2f}'>\n      <shape>\n        <appearance>\n"
                            f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
                            f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
                            "        </cylinder>\n      </shape>\n    </transform>\n")
-            elif order == 2:
+            elif bond == 2:
                 if n in doubles:
                     # normal for plane n m o
                     norm_x, norm_y, norm_z = plane_normal(nmx, nmy, nmz, *doubles[n])
@@ -280,7 +285,7 @@ class X3domMolecule:
                     f"          <material diffusecolor='{bond_color}'>\n          </material>\n"
                     f"       </appearance>\n        <cylinder radius='{bond_radius}' height='{length:.2f}'>\n"
                     "        </cylinder>\n      </shape>\n    </transform>\n")
-            elif order == 3:
+            elif bond == 3:
                 nox, noy, noz = vector_normal(nmx, nmy, nmz)
 
                 # normal for plane n m o

@@ -97,10 +97,10 @@ class MCS:
         o_bonds = other._bonds
 
         s_equal = defaultdict(list)  # equal self atoms
-        for n, atom in self._atoms.items():
+        for n, atom in self.atoms():
             s_equal[atom].append(n)
         p_equal = defaultdict(list)  # equal other atoms
-        for n, atom in other._atoms.items():
+        for n, atom in other.atoms():
             p_equal[atom].append(n)
 
         full_product = {}

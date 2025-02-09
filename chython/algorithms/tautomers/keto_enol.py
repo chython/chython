@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -27,6 +27,10 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
+# atomic number constants
+C = 6
+
+
 class KetoEnol:
     __slots__ = ()
 
@@ -39,13 +43,17 @@ class KetoEnol:
                 a = fix[0][0]
                 d = fix[-1][1]
 
-            mol = self.copy()
+            mol = self.copy(keep_sssr=True, keep_components=True)
             m_bonds = mol._bonds
             for n, m, b in fix:
-                m_bonds[n][m]._Bond__order = b
+                m_bonds[n][m]._order = b
 
-            mol._hydrogens[a] += 1
-            mol._hydrogens[d] -= 1
+            a = mol._atoms[a]
+            d = mol._atoms[d]
+            a._implicit_hydrogens += 1
+            d._implicit_hydrogens -= 1
+            a._hybridization -= 1  # -C=X>=C-X or -C=C=X>=C-C=X
+            d._hybridization += 1
             yield mol, ket
 
     @cached_property
@@ -59,8 +67,6 @@ class KetoEnol:
     def __enumerate_bonds(self: 'MoleculeContainer', partial):
         atoms = self._atoms
         bonds = self._bonds
-        hydrogens = self._hydrogens
-        hybridization = self.hybridization
         rings = self.atoms_rings_sizes
 
         # search neutral oxygen and nitrogen
@@ -83,11 +89,12 @@ class KetoEnol:
 
                 if partial and path and not len(path) % 2 and \
                         (hydrogen or  # enol > ketone
-                         hydrogens[(x := path[-1][1])] and (x not in rings or all(x > 7 for x in rings[x]))):  # ketone>
+                         atoms[(x := path[-1][1])].implicit_hydrogens and
+                         (x not in rings or all(x > 7 for x in rings[x]))):  # ketone>
                     # return partial hops. ignore allenes in small rings.
                     yield path, hydrogen
                 if len(path) > depth:  # fork found
-                    if not partial and not len(path) % 2 and (hydrogen or hydrogens[path[-1][1]]):
+                    if not partial and not len(path) % 2 and (hydrogen or atoms[path[-1][1]].implicit_hydrogens):
                         # end of path found. return it and start new one.
                         yield path, hydrogen
                     seen.difference_update(x for _, x, _ in path[depth:])
@@ -109,33 +116,32 @@ class KetoEnol:
                     elif n in seen:  # aromatic ring destruction. pyridine double bonds shift
                         continue
                     elif n in anti:  # enol-ketone switch
-                        if current in anti[n]:
-                            if hydrogens:
-                                if b.order == 2:
-                                    cp = path.copy()
-                                    cp.append((current, n, 1))
-                                    yield cp, True
-                            elif b.order == 1:
+                        if current in anti[n]:  # keton or enol bond
+                            if hydrogen:
                                 cp = path.copy()
-                                cp.append((current, n, 2))
+                                cp.append((current, n, 1))  # double to single in keton end
+                                yield cp, True
+                            else:
+                                cp = path.copy()
+                                cp.append((current, n, 2))  # single to double in enol end
                                 yield cp, False
-                    elif b.order == bond and atoms[n].atomic_number == 6:  # classic keto-enol route
-                        hb = hybridization(n)
-                        if hb == 2:  # grow up
+                    elif b == bond and (a := atoms[n]) == C:  # classic keto-enol route
+                        if a.hybridization == 2:  # grow up
                             stack.append((current, n, next_bond, depth))
                         elif hydrogen:
-                            if hb == 3:  # OC=CC=C=C case
+                            if a.hybridization == 3:  # OC=CC=C=C case
                                 cp = path.copy()
                                 cp.append((current, n, 1))
                                 yield cp, True  # ketone found
-                        elif hb == 1 and hydrogens[n]:  # ketone >> enol
+                        elif a.hybridization == 1 and a.implicit_hydrogens:  # ketone >> enol
                             cp = path.copy()
                             cp.append((current, n, 2))
                             yield cp, False
 
             if path and not len(path) % 2 and \
                     (hydrogen or  # enol > ketone
-                     hydrogens[(x := path[-1][1])] and (x not in rings or all(x > 7 for x in rings[x]))):
+                     atoms[(x := path[-1][1])].implicit_hydrogens and
+                     (x not in rings or all(x > 7 for x in rings[x]))):
                 yield path, hydrogen
 
 

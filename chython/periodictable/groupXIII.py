@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasyrova@gmail.com>
 #  This file is part of chython.
@@ -18,9 +18,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .element import Element
-from .groups import GroupXIII
-from .periods import PeriodII, PeriodIII, PeriodIV, PeriodV, PeriodVI, PeriodVII
+from .base import Element
+from .base.groups import GroupXIII
+from .base.periods import PeriodII, PeriodIII, PeriodIV, PeriodV, PeriodVI, PeriodVII
 
 
 class B(Element, PeriodII, GroupXIII):
@@ -51,6 +51,18 @@ class B(Element, PeriodII, GroupXIII):
     def atomic_radius(self):
         return .87
 
+    @property
+    def mdl_isotope(self):
+        return 11
+
+    @property
+    def is_forming_single_bonds(self):
+        return True
+
+    @property
+    def is_forming_double_bonds(self):
+        return True
+
 
 class Al(Element, PeriodIII, GroupXIII):
     __slots__ = ()
@@ -80,6 +92,10 @@ class Al(Element, PeriodIII, GroupXIII):
     @property
     def atomic_radius(self):
         return 1.18
+
+    @property
+    def mdl_isotope(self):
+        return 27
 
 
 class Ga(Element, PeriodIV, GroupXIII):
@@ -115,6 +131,10 @@ class Ga(Element, PeriodIV, GroupXIII):
     def atomic_radius(self):
         return 1.36
 
+    @property
+    def mdl_isotope(self):
+        return 70
+
 
 class In(Element, PeriodV, GroupXIII):
     __slots__ = ()
@@ -144,6 +164,10 @@ class In(Element, PeriodV, GroupXIII):
     @property
     def atomic_radius(self):
         return 1.56
+
+    @property
+    def mdl_isotope(self):
+        return 115
 
 
 class Tl(Element, PeriodVI, GroupXIII):
@@ -175,6 +199,10 @@ class Tl(Element, PeriodVI, GroupXIII):
     def atomic_radius(self):
         return 1.56
 
+    @property
+    def mdl_isotope(self):
+        return 204
+
 
 class Nh(Element, PeriodVII, GroupXIII):
     __slots__ = ()
@@ -202,6 +230,10 @@ class Nh(Element, PeriodVII, GroupXIII):
     @property
     def atomic_radius(self):
         return 1.56  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 278
 
 
 __all__ = ['B', 'Al', 'Ga', 'In', 'Tl', 'Nh']

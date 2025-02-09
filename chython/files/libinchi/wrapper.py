@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -21,17 +21,19 @@ from itertools import count
 from sysconfig import get_platform
 from warnings import warn
 from .._convert import create_molecule
-from .._mdl import common_isotopes
 from ...containers import MoleculeContainer
 from ...containers.bonds import Bond
 from ...exceptions import ValenceError, IsChiral, NotChiral
-from ...periodictable import H
+from ...periodictable import H as _H
 
 
 try:
     from importlib.resources import files, as_file
 except ImportError:  # python3.8
     from importlib_resources import files, as_file
+
+
+H = 1
 
 
 def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> MoleculeContainer:
@@ -47,15 +49,23 @@ def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> Mo
         raise ValueError('invalid INCHI')
 
     atoms, bonds = [], []
+    protium = {}
+    deuterium = {}
+    tritium = {}
     seen = set()
     for n in range(structure.num_atoms):
         seen.add(n)
         atom = structure.atom[n]
 
-        atoms.append({'element': atom.atomic_symbol, 'charge': atom.charge, 'mapping': 0, 'x': atom.x, 'y': atom.y,
+        atoms.append({'element': atom.atomic_symbol, 'charge': atom.charge, 'x': atom.x, 'y': atom.y,
                       'z': atom.z, 'isotope': atom.isotope, 'is_radical': atom.is_radical,
-                      'hydrogens': atom.implicit_hydrogens, 'p': atom.implicit_protium, 'd': atom.implicit_deuterium,
-                      't': atom.implicit_tritium})
+                      'implicit_hydrogens': atom.implicit_hydrogens, 'delta_isotope': atom.delta_isotope})
+        if atom.implicit_protium:
+            protium[n] = atom.implicit_protium
+        if atom.implicit_deuterium:
+            deuterium[n] = atom.implicit_deuterium
+        if atom.implicit_tritium:
+            tritium[n] = atom.implicit_tritium
 
         for k in range(atom.num_bonds):
             m = atom.neighbor[k]
@@ -83,8 +93,9 @@ def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> Mo
 
     lib.FreeStructFromINCHI(byref(structure))
 
-    tmp = {'atoms': atoms, 'bonds': bonds, 'stereo_atoms': stereo_atoms, 'stereo_allenes': stereo_allenes, 'log': [],
-           'stereo_cumulenes': stereo_cumulenes, 'mapping': list(range(1, len(atoms) + 1)), 'title': None, 'meta': None}
+    tmp = {'atoms': atoms, 'bonds': bonds, 'stereo_atoms': stereo_atoms, 'stereo_allenes': stereo_allenes,
+           'stereo_cumulenes': stereo_cumulenes, 'mapping': list(range(1, len(atoms) + 1)),
+           'protium': protium, 'deuterium': deuterium, 'tritium': tritium}
     mol = create_molecule(tmp, skip_calc_implicit=True, _cls=_cls)
     postprocess_molecule(mol, tmp, ignore_stereo=ignore_stereo)
     return mol
@@ -93,52 +104,37 @@ def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> Mo
 def postprocess_molecule(molecule, data, *, ignore_stereo=False):
     atoms = molecule._atoms
     bonds = molecule._bonds
-    charges = molecule._charges
-    radicals = molecule._radicals
-    hydrogens = molecule._hydrogens
-    plane = molecule._plane
 
     # set hydrogen atoms. INCHI designed for hydrogens handling. hope correctly.
     free = count(len(atoms) + 1)
-    for n, atom in enumerate(data['atoms'], 1):
-        if atom['element'] != 'H':
-            hydrogens[n] = atom['hydrogens']
-        # in chython hydrogens never have implicit H.
-        elif atom['hydrogens']:  # >[xH]-H case
-            m = next(free)
-            charges[m] = 0
-            radicals[m] = False
-            plane[m] = (0., 0.)
-            hydrogens[n] = 0
-            hydrogens[m] = 0
-            atoms[m] = a = H()
-            a._attach_graph(molecule, m)
+    to_add = []
+    for n, atom in atoms.items():
+        # in chython hydrogens never have implicit H. convert to explicit
+        if atom == H and atom.implicit_hydrogens:
+            for _ in range(atom.implicit_hydrogens):
+                to_add.append((n, next(free), _H(implicit_hydrogens=0)))
+            atom._implicit_hydrogens = 0
+
+    for n, p in data['protium'].items():
+        to_add.append((n + 1, next(free), _H(isotope=1, implicit_hydrogens=0)))
+    for n, p in data['deuterium'].items():
+        to_add.append((n + 1, next(free), _H(isotope=2, implicit_hydrogens=0)))
+    for n, p in data['tritium'].items():
+        to_add.append((n + 1, next(free), _H(isotope=3, implicit_hydrogens=0)))
+
+    if to_add:
+        for n, m, a in to_add:
+            atoms[m] = a
             bonds[n][m] = b = Bond(1)
             bonds[m] = {n: b}
-            b._attach_graph(molecule, n, m)
-        else:  # H+, H* or >H-[xH] cases
-            hydrogens[n] = 0
-        # convert isotopic implicit hydrogens to explicit
-        for i, k in enumerate(('p', 'd', 't'), 1):
-            if atom[k]:
-                for _ in range(atom[k]):
-                    m = next(free)
-                    charges[m] = 0
-                    radicals[m] = False
-                    plane[m] = (0., 0.)
-                    hydrogens[m] = 0
-                    atoms[m] = a = H(i)
-                    a._attach_graph(molecule, m)
-                    bonds[n][m] = b = Bond(1)
-                    bonds[m] = {n: b}
-                    b._attach_graph(molecule, n, m)
+        molecule.calc_labels()  # reset labels
 
     if ignore_stereo or not data['stereo_atoms'] and not data['stereo_cumulenes'] and not data['stereo_allenes']:
         return
 
-    st = molecule._stereo_tetrahedrons
-    sa = molecule._stereo_allenes
-    ctt = molecule._stereo_cis_trans_terminals
+    st = molecule.stereogenic_tetrahedrons
+    sa = molecule.stereogenic_allenes
+    ctc = molecule._stereo_cis_trans_counterpart
 
     stereo = []
     for n, ngb, s in data['stereo_atoms']:
@@ -151,7 +147,7 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False):
             stereo.append((molecule.add_atom_stereo, n, nn + 1, mn + 1, s))
     for n, m, nn, nm, s in data['stereo_cumulenes']:
         n += 1
-        if n in ctt:
+        if n in ctc:
             stereo.append((molecule.add_cis_trans_stereo, n, m + 1, nn + 1, nm + 1, s))
 
     while stereo:
@@ -200,12 +196,13 @@ class Atom(Structure):
 
     @property
     def isotope(self):
-        isotope = self.isotopic_mass
-        if not isotope:
-            isotope = None
-        elif isotope > 9000:  # OVER NINE THOUSANDS!
-            isotope += common_isotopes[self.atomic_symbol] - 10000
-        return isotope
+        if 0 < self.isotopic_mass < 9000:  # OVER NINE THOUSANDS!
+            return self.isotopic_mass
+
+    @property
+    def delta_isotope(self):
+        if self.isotopic_mass > 9000:
+            return self.isotopic_mass - 10_000
 
     @property
     def is_radical(self):

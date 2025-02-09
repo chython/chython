@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
 #
@@ -17,9 +17,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from .element import Element
-from .groups import GroupIV
-from .periods import PeriodIV, PeriodV, PeriodVI, PeriodVII
+from .base import Element
+from .base.groups import GroupIV
+from .base.periods import PeriodIV, PeriodV, PeriodVI, PeriodVII
 
 
 class Ti(Element, PeriodIV, GroupIV):
@@ -80,6 +80,10 @@ class Ti(Element, PeriodIV, GroupIV):
     def atomic_radius(self):
         return 1.76
 
+    @property
+    def mdl_isotope(self):
+        return 48
+
 
 class Zr(Element, PeriodV, GroupIV):
     __slots__ = ()
@@ -127,6 +131,10 @@ class Zr(Element, PeriodV, GroupIV):
     def atomic_radius(self):
         return 2.06
 
+    @property
+    def mdl_isotope(self):
+        return 91
+
 
 class Hf(Element, PeriodVI, GroupIV):
     __slots__ = ()
@@ -162,6 +170,10 @@ class Hf(Element, PeriodVI, GroupIV):
     def atomic_radius(self):
         return 2.08
 
+    @property
+    def mdl_isotope(self):
+        return 178
+
 
 class Rf(Element, PeriodVII, GroupIV):
     __slots__ = ()
@@ -189,6 +201,10 @@ class Rf(Element, PeriodVII, GroupIV):
     @property
     def atomic_radius(self):
         return 2.08  # unknown, taken radius of previous element in group
+
+    @property
+    def mdl_isotope(self):
+        return 261
 
 
 __all__ = ['Ti', 'Zr', 'Hf', 'Rf']

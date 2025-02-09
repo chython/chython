@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,8 +17,8 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import defaultdict
-from lazy_object_proxy import Proxy
 from typing import TYPE_CHECKING
+from ._rules import freak_rules
 from ..rings import _sssr, _connected_components
 
 
@@ -26,20 +26,14 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 
-def _freaks():
-    from ... import smarts
-
-    rules = []
-
-    q = smarts('[N,O,S;D2;r5;z1]1[A;r5]=,:[A;r5][A;r5]:[A;r5]1')
-    rules.append(q)
-
-    q = smarts('[N;D3;r5;z1]1[A;r5]=,:[A;r5][A;r5]:[A;r5]1')
-    rules.append(q)
-    return rules
-
-
-freak_rules = Proxy(_freaks)
+# atomic number constants
+B = 5
+C = 6
+N = 7
+O = 8
+P = 15
+S = 16
+Se = 34
 
 
 class Thiele:
@@ -56,9 +50,6 @@ class Thiele:
         atoms = self._atoms
         bonds = self._bonds
         nsc = self.not_special_connectivity
-        sh = self.hybridization
-        charges = self._charges
-        hydrogens = self._hydrogens
 
         rings = defaultdict(set)  # aromatic? skeleton. include quinones
         tetracycles = []
@@ -71,15 +62,15 @@ class Thiele:
             if not 3 < lr < 8:  # skip 3-membered and big rings
                 continue
             # only B C N O P S with 2-3 neighbors. detects this: C1=CC=CP12=CC=CC=C2
-            if any(atoms[n].atomic_number not in (6, 7, 8, 16, 5, 15) or len(nsc[n]) > 3 for n in ring):
+            if any(atoms[n] not in (C, N, O, S, B, P) or len(nsc[n]) > 3 for n in ring):
                 continue
-            sp2 = sum(sh(n) == 2 for n in ring)
+            sp2 = sum(atoms[n].hybridization == 2 for n in ring)
             if sp2 == lr:  # benzene like
                 if lr == 4:  # two bonds condensed aromatic rings
                     tetracycles.append(ring)
                 else:
                     if fix_tautomers and lr % 2:  # find potential pyrroles
-                        acceptors.update(n for n in ring if atoms[n].atomic_number == 7 and not charges[n])
+                        acceptors.update(n for n in ring if (a := atoms[n]) == N and not a.charge)
                     n, *_, m = ring
                     rings[n].add(m)
                     rings[m].add(n)
@@ -88,28 +79,27 @@ class Thiele:
                         rings[m].add(n)
             elif 4 < lr == sp2 + 1:  # pyrroles, furanes, etc
                 try:
-                    n = next(n for n in ring if sh(n) == 1)
+                    n = next(n for n in ring if atoms[n].hybridization == 1)
                 except StopIteration:  # exotic, just skip
                     continue
-                an = atoms[n].atomic_number
-                if (c := charges[n]) == -1:
-                    if an != 6 or lr != 5:  # skip any but ferrocene
+                if (a := atoms[n]).charge == -1:
+                    if a != C or lr != 5:  # skip any but ferrocene
                         continue
-                elif c:  # skip any charged
+                elif a.charge:  # skip any charged
                     continue
                 elif lr == 7:  # skip electron-rich 7-membered rings
-                    if an != 5:  # not B?
+                    if a != 5:  # not B?
                         continue
                 # below lr == 5 or 6 only
-                elif an in (8, 16, 34):  # O, S, Se
+                elif a in (O, S, Se):
                     if len(bonds[n]) != 2:  # like CS1(C)C=CC=C1
                         continue
-                elif an == 7:
+                elif a == N:
                     if (b := len(bonds[n])) > 3:  # extra check for invalid N(IV)
                         continue
                     elif fix_tautomers and lr == 6 and b == 2:
                         donors.append(n)
-                elif an in (5, 15):  # B, P
+                elif a in (B, P):
                     if len(bonds[n]) > 3:
                         continue
                 else:  # only B, [C-], N, O, P, S, Se
@@ -129,8 +119,7 @@ class Thiele:
             return False
 
         # check out-of-ring double bonds
-        double_bonded = {n for n in rings if any(m not in rings[n] and b.order == 2
-                                                 for m, b in bonds[n].items())}
+        double_bonded = {n for n in rings if any(m not in rings[n] and b == 2 for m, b in bonds[n].items())}
 
         # fix_tautomers
         if fix_tautomers and acceptors and donors:
@@ -149,8 +138,8 @@ class Thiele:
                             acceptors.discard(current)
                             pyrroles.discard(start)
                             pyrroles.add(current)
-                            hydrogens[current] = 1
-                            hydrogens[start] = 0
+                            atoms[current]._implicit_hydrogens = 1
+                            atoms[start]._implicit_hydrogens = 0
                             break
                         else:
                             continue
@@ -159,13 +148,15 @@ class Thiele:
                     seen.add(current)
                     new_order = 1 if order == 2 else 2
                     stack.extend((current, n, depth, new_order) for n in rings[current] if
-                                 n not in seen and n not in double_bonded and bonds[current][n].order == order)
+                                 n not in seen and n not in double_bonded and bonds[current][n] == order)
                 else:  # path not found
                     continue
                 for n, m, o in path:
-                    bonds[n][m]._Bond__order = o  # noqa
+                    bonds[n][m]._order = o
                 if not acceptors:
                     break
+            self.flush_cache(keep_sssr=True, keep_components=True)
+            self.calc_labels()
 
         if double_bonded:  # delete quinones
             for n in double_bonded:
@@ -205,27 +196,29 @@ class Thiele:
         for ring in tetracycles:
             if seen.issuperset(ring):
                 n, *_, m = ring
-                bonds[n][m]._Bond__order = 1  # noqa
+                bonds[n][m]._order = 1
                 for n, m in zip(ring, ring[1:]):
-                    bonds[n][m]._Bond__order = 1  # noqa
+                    bonds[n][m]._order = 1
 
         for ring in rings:
             n, *_, m = ring
-            bonds[n][m]._Bond__order = 4  # noqa
+            bonds[n][m]._order = 4
             for n, m in zip(ring, ring[1:]):
-                bonds[n][m]._Bond__order = 4  # noqa
+                bonds[n][m]._order = 4
 
-        self.flush_cache()
+        self.flush_cache(keep_sssr=True, keep_components=True)
+        self.calc_labels()
         for ring in freaks:  # aromatize rule based
             for q in freak_rules:
                 if next(q.get_mapping(self, searching_scope=ring, automorphism_filter=False), None):
                     n, *_, m = ring
-                    bonds[n][m]._Bond__order = 4  # noqa
+                    bonds[n][m]._order = 4
                     for n, m in zip(ring, ring[1:]):
-                        bonds[n][m]._Bond__order = 4  # noqa
+                        bonds[n][m]._order = 4
                     break
         if freaks:
-            self.flush_cache()  # flush again
+            self.flush_cache(keep_sssr=True, keep_components=True)  # flush again
+            self.calc_labels()
         self.fix_stereo()  # check if any stereo centers vanished.
         return True
 
