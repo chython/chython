@@ -464,7 +464,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         if data[0] in (0, 2):
             mol, cis_trans, pack_length = unpack_v0v2(data)
             for n, m, s in cis_trans:
-                mol.bond(*mol._stereo_cis_trans_centers[n])._stereo = s
+                if n in mol._stereo_cis_trans_centers:  # check for invalid CT data
+                    mol.bond(*mol._stereo_cis_trans_centers[n])._stereo = s
         else:
             raise ValueError('invalid pack header')
 

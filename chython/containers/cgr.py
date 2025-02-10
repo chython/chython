@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -27,7 +27,7 @@ from ..algorithms.smiles import CGRSmiles
 from ..periodictable import DynamicElement
 
 
-class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism,  FingerprintsCGR):
+class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, FingerprintsCGR):
     __slots__ = ('_atoms', '_bonds', '__dict__')
     _atoms: Dict[int, DynamicElement]
     _bonds: Dict[int, Dict[int, DynamicBond]]
@@ -35,6 +35,9 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism,  FingerprintsCGR):
     def __init__(self):
         self._atoms = {}
         self._bonds = {}
+
+    def atoms(self) -> Iterator[Tuple[int, DynamicElement]]:
+        return iter(self._atoms.items())
 
     def bonds(self) -> Iterator[Tuple[int, int, DynamicBond]]:
         """
