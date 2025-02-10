@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2024, 2025 Denis Lipatov <denis.lipatov163@gmail.com>
+#  Copyright 2024, 2025 Vyacheslav Grigorev <slavick2000@yandex.ru>
+#  Copyright 2024, 2025 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,28 +19,27 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+
 from typing import TYPE_CHECKING
 
+try:
+    from importlib.resources import files
+except ImportError:  # python3.8
+    from importlib_resources import files
 
 if TYPE_CHECKING:
-    from chython import ReactionContainer
-
-
+    from ...containers import ReactionContainer
+    
+    
 class Calculate2DReaction:
     __slots__ = ()
 
     def clean2d(self: 'ReactionContainer'):
-        """
-        Recalculate 2d coordinates
-        """
         for m in self.molecules():
             m.clean2d()
         self.fix_positions()
 
     def fix_positions(self: 'ReactionContainer'):
-        """
-        Fix coordinates of molecules in reaction
-        """
         shift_x = 0
         reactants = self.reactants
         amount = len(reactants) - 1
@@ -74,7 +76,7 @@ class Calculate2DReaction:
             shift_x = max_x + 1
         self._arrow = (arrow_min, arrow_max)
         self._signs = tuple(signs)
-        self.flush_cache(keep_molecule_cache=True)
+        self.flush_cache()
 
 
 __all__ = ['Calculate2DReaction']
