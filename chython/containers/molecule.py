@@ -43,7 +43,7 @@ from ..periodictable import DynamicElement, Element, H as _H
 
 
 # atomic number constants
-H = 5
+H = 1
 C = 6
 
 

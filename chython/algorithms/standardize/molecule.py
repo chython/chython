@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 
 # atomic number constants
-H = 5
+H = 1
 C = 6
 
 
