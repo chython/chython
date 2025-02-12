@@ -1,6 +1,6 @@
 [tool.poetry]
 name = 'chython'
-version = '2.1'
+version = '2.2'
 description = 'Library for processing molecules and reactions in python way'
 authors = ['Ramil Nugmanov <nougmanoff@protonmail.com>']
 license = 'LGPLv3'
@@ -31,13 +31,13 @@ include = [
 
 [tool.poetry.dependencies]
 python = ">=3.8,<3.12"
-cachedmethods = '^0.1.4'
-lazy-object-proxy = '^1.6'
+cachedmethods = '>=0.1.4'
+lazy-object-proxy = '>=1.6'
 lxml = '>=4.1'
-mini-racer = '^0.12.4'
-chytorch-rxnmap = {version = '^1.4', optional = true}
-rdkit = {version = '^2023.9', optional = true}
-numpy = ">=1.21.0,<2.0.0"
+mini-racer = '>=0.12.4'
+chytorch-rxnmap = {version = '>=1.4', optional = true}
+rdkit = {version = '>=2023.9', optional = true}
+numpy = ">=1.21.0"
 
 [tool.poetry.extras]
 mapping = ['chytorch-rxnmap']
@@ -47,16 +47,16 @@ rdkit = ['rdkit']
 optional = true
 
 [tool.poetry.group.dev.dependencies]
-pytest = '^7.4.3'
+pytest = '>=7.4.3'
 
 [tool.poetry.group.docs]
 optional = true
 
 [tool.poetry.group.docs.dependencies]
-nbsphinx = '^0.9.3'
-pandoc = '^2.3'
-rdkit = '^2023.9.1'
-ipython = '^8.12.1'
+nbsphinx = '>=0.9.3'
+pandoc = '>=2.3'
+rdkit = '>=2023.9.1'
+ipython = '>=8.12.1'
 
 [build-system]
 requires = ['poetry-core', 'setuptools', 'cython>=3.0.5']
