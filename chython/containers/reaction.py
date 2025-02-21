@@ -68,7 +68,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         if name is None:
             self._name = None
         else:
-            self.name = name
+            self._name = name
         self._arrow = None
         self._signs = None
 
