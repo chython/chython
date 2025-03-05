@@ -18,17 +18,71 @@
 #
 from collections import defaultdict
 from itertools import product
-from typing import Iterable, Dict
-from .molecule import MoleculeContainer
+from typing import Dict, Iterable
+
+from .molecule import Bond, MoleculeContainer
+
+var_atoms = ["X", "Y", "Z"]
+var_groups = ["R"]
 
 
 class MarkushContainer:
-    __slots__ = ('__meta', '__tree')
+    __slots__ = (
+        "__meta",
+        "__tree",
+        "__r_groups",
+        "__r_groups_map",
+        "__substituents",
+        "__initial_mol",
+    )
 
-    def __init__(self):
+    def __init__(self, substituents: list["MoleculeContainer"] = []):
         super().__init__()
         self.__tree = {}
         self.__meta = None
+        self.__r_groups = {}
+        self.__substituents = substituents
+        self.__r_groups_map = {}
+        self.__initial_mol = None
+
+    def connect_w_bond(first: MoleculeContainer, other: MoleculeContainer, variables=var_groups):
+        new: MoleculeContainer = first | other
+        self_atoms = new.connected_components[: first.connected_components_count][0]
+        first_r_groups = MarkushContainer.r_groups_search(first)
+        substituent_r_groups = MarkushContainer.r_groups_search(new, exclude=self_atoms)
+        for group, self_num in first_r_groups.items():
+            if group[0] in variables:
+                if other_num := substituent_r_groups.get(group):
+                    self_neigbour = [x for x in new.int_adjacency[self_num]][0]
+                    other_neigbour = [x for x in new.int_adjacency[other_num]][0]
+                    new.delete_atom(self_num)
+                    new.delete_atom(other_num)
+                    new.add_bond(self_neigbour, other_neigbour, 1)
+                    return new
+        return first
+
+    def connect_no_bond(first: MoleculeContainer, other: MoleculeContainer, variables=var_atoms):
+        new: MoleculeContainer = first | other
+        first_r_groups = MarkushContainer.r_groups_search(first)
+        self_atoms = new.connected_components[: first.connected_components_count][0]
+        substituent_r_groups = MarkushContainer.r_groups_search(new, exclude=self_atoms)
+        for group, self_num in first_r_groups.items():
+            if group[0] in variables:
+                if other_num := substituent_r_groups.get(group):
+                    other_neigbours = [x for x in new.int_adjacency[other_num]]
+                    if len(other_neigbours) != 1:
+                        raise ValueError("X groups should have exactly one neighbour")
+                    other_X_atom_num = other_neigbours[0]
+                    self_bonds = [
+                        (x[0], new.bond(self_num, x[0]))
+                        for x in new.int_adjacency[self_num].items()
+                    ]
+                    new.delete_atom(self_num, _skip_hydrogen_calculation=True)
+                    new.delete_atom(other_num, _skip_hydrogen_calculation=True)
+                    for atom, bond in self_bonds:
+                        new.add_bond(other_X_atom_num, atom, Bond(bond.order))
+                return new
+        return first
 
     @property
     def meta(self) -> Dict:
@@ -37,37 +91,82 @@ class MarkushContainer:
         return self.__meta
 
     @classmethod
-    def from_molecule(cls, molecule: MoleculeContainer) -> 'MarkushContainer':
+    def from_molecule(
+        cls, molecule: MoleculeContainer, substituents: list[MoleculeContainer] = None
+    ) -> "MarkushContainer":
         obj = cls()
-        ...
+        obj.__initial_mol = molecule
+        obj.r_groups = cls.r_groups_search(molecule)
+        obj.substituents = substituents
         return obj
 
-    def find_matchs(self, mol):
-        R_mapping = {}
-        for atom_num, atom in mol.atoms():
-            if matched_group := self.R_groups.get(atom.atomic_symbol):
-                R_mapping[matched_group] = atom_num
-        return R_mapping
+    @staticmethod
+    def r_groups_search(molecule, exclude: Iterable[int] = []):
+        r_groups = {}
+        for num, atom in molecule.atoms():
+            if atom.atomic_symbol in var_atoms + var_groups and num not in exclude:
+                isotope = 0 if atom.isotope is None else atom.isotope
+                if 0 <= isotope <= 99:
+                    r_groups[(atom.atomic_symbol, isotope)] = num
+        return r_groups
 
-    def generate_mapping(self, fragments: list['MarkushiContainer']):
-        R_mapping = defaultdict(list)
-        for num, fragment in enumerate(fragments):
-            for core_atom, frag_atom in self.find_matchs(fragment).items():
-                R_mapping[core_atom].append((num, frag_atom))
-        return R_mapping
+    @property
+    def r_groups(self):
+        return self.__r_groups
 
-    def sequence(self, fragments: list['MarkushiContainer']):
-        return product(*[x for x in self.generate_mapping(fragments).values()])
+    @r_groups.setter
+    def r_groups(self, rgroups: dict):
+        self.__r_groups = rgroups
 
-    def generate_molecules(self, fragments: list['MarkushiContainer']):
-        for groups in self.sequence(fragments):
-            # forming new molecule without R groups (if possible)
-            new = self.copy()
-            for _, (num_frag, _) in zip(self.R_groups.items(), groups):
-                new = new+fragments[num_frag]
+    @property
+    def subsituents(self):
+        return self.__subsituents
+
+    @property
+    def initial_mol(self):
+        return self.__initial_mol
+
+    @initial_mol.setter
+    def initial_mol(self, mol):
+        self.__initial_mol = mol
+
+    def generate_molecules(
+        self, substituents: list["MoleculeContainer"], exclude_groups: list[str] = []
+    ):
+        mapping = defaultdict(list)
+        for group in self.r_groups:
+            if group not in exclude_groups:
+                for n_sub, mol in enumerate(substituents):
+                    sub_groups = MarkushContainer.r_groups_search(mol)
+                    if n_atom := sub_groups.get(group):
+                        mapping[group].append(
+                            {"group": group, "mol_position": n_sub, "atom_position": n_atom}
+                        )
+        # forming new molecule without R groups (if possible)
+        tmp = []
+        for group in self.r_groups:
+            if groups := mapping[group]:
+                tmp.append(groups)
+        for combintaion in product(*tmp):
+            new = self.initial_mol
+            for modification in combintaion:
+                if modification and modification["group"][0] in var_groups:
+                    new = MarkushContainer.connect_w_bond(
+                        new,
+                        self.substituents[modification["mol_position"]],
+                        variables=modification["group"],
+                    )
+                elif modification and modification["group"][0] in var_atoms:
+                    new = MarkushContainer.connect_no_bond(
+                        new,
+                        self.substituents[modification["mol_position"]],
+                        variables=modification["group"],
+                    )
+                else:
+                    continue
             yield new
 
-    def copy(self) -> 'MarkushContainer':
+    def copy(self) -> "MarkushContainer":
         copy = super(MoleculeContainer, self).copy()
 
         copy._bonds = cb = {}
@@ -96,14 +195,14 @@ class MarkushContainer:
 
     @property
     def substituents(self):
-        return self._substituents
+        return self.__substituents
 
     @substituents.setter
-    def substituents(self, substituents: list['MarkushiContainer']):
-        self._substituents = [str(x) for x in substituents]
+    def substituents(self, substituents: list["MoleculeContainer"]):
+        self.__substituents = substituents
 
     def __str__(self):
-        return ".".join([self_str, *self.substituents])
+        return ".".join([str(self.initial_mol), *self.substituents])
 
 
-__all__ = ['MarkushContainer']
+__all__ = ["MarkushContainer"]
