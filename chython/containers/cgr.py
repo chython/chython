@@ -108,5 +108,8 @@ class CGRContainer(CGRSmiles, Morgan, Rings, Isomorphism, FingerprintsCGR):
     def __iter__(self):
         return iter(self._atoms)
 
+    def __len__(self):
+        return len(self._atoms)
+
 
 __all__ = ['CGRContainer']
