@@ -239,7 +239,7 @@ def _tokenize(smiles):
     return tokens
 
 
-def _atom_parse(token, markush_number):
+def _atom_parse(token):
     # [isotope]Element[element][@[@]][H[n]][+-charge][:mapping]
     _match = atom_re.fullmatch(token)
     if _match is None:
@@ -359,8 +359,7 @@ def smiles_tokenize(smi):
                 atom, idx = _match.groups()
                 if idx:
                     idx = int(idx)
-                out.append((0, {'element': atom, 'isotope': idx, 'mapping': 0, 'charge': 0, 'is_radical': False,
-                                'x': 0., 'y': 0., 'z': 0., 'hydrogen': None, 'stereo': None}))
+                out.append((0, {'element': atom, 'isotope': idx}))
         elif token_type == 10:
             raise IncorrectSmiles('SMARTS detected')
         else:

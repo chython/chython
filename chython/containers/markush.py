@@ -18,7 +18,7 @@
 #
 from collections import defaultdict
 from itertools import product
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Optional
 
 from .molecule import Bond, MoleculeContainer
 
@@ -36,7 +36,7 @@ class MarkushContainer:
         "__initial_mol",
     )
 
-    def __init__(self, substituents: list["MoleculeContainer"] = []):
+    def __init__(self, substituents: Optional[list["MoleculeContainer"]] = None):
         super().__init__()
         self.__tree = {}
         self.__meta = None
@@ -45,8 +45,13 @@ class MarkushContainer:
         self.__r_groups_map = {}
         self.__initial_mol = None
 
+    @staticmethod
     def connect_w_bond(first: MoleculeContainer, other: MoleculeContainer, variables=var_groups):
-        new: MoleculeContainer = first | other
+        new = first.union(other, remap=True, copy=True)
+        print(new)
+        new._changed = None  # dirty fix
+        new._backup = None  # dirty fix
+        first, other = new.split()  # instead of remap
         self_atoms = new.connected_components[: first.connected_components_count][0]
         first_r_groups = MarkushContainer.r_groups_search(first)
         substituent_r_groups = MarkushContainer.r_groups_search(new, exclude=self_atoms)
@@ -61,8 +66,12 @@ class MarkushContainer:
                     return new
         return first
 
+    @staticmethod
     def connect_no_bond(first: MoleculeContainer, other: MoleculeContainer, variables=var_atoms):
-        new: MoleculeContainer = first | other
+        new = first.union(other, remap=True, copy=True)
+        new._changed = None  # dirty fix
+        new._backup = None  # dirty fix
+        first, other = new.split()  # instead of remap
         first_r_groups = MarkushContainer.r_groups_search(first)
         self_atoms = new.connected_components[: first.connected_components_count][0]
         substituent_r_groups = MarkushContainer.r_groups_search(new, exclude=self_atoms)
@@ -77,8 +86,9 @@ class MarkushContainer:
                         (x[0], new.bond(self_num, x[0]))
                         for x in new.int_adjacency[self_num].items()
                     ]
-                    new.delete_atom(self_num, _skip_hydrogen_calculation=True)
-                    new.delete_atom(other_num, _skip_hydrogen_calculation=True)
+
+                    new.delete_atom(self_num)
+                    new.delete_atom(other_num)
                     for atom, bond in self_bonds:
                         new.add_bond(other_X_atom_num, atom, Bond(bond.order))
                 return new
@@ -202,7 +212,7 @@ class MarkushContainer:
         self.__substituents = substituents
 
     def __str__(self):
-        return ".".join([str(self.initial_mol), *self.substituents])
+        return ".".join([str(self.initial_mol), *[str(x) for x in self.substituents]])
 
 
 __all__ = ["MarkushContainer"]

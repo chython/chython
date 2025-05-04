@@ -21,10 +21,7 @@ from .base import Element
 
 
 class R(Element):
-    __slots__ = ('__group_number')
-
-    def __init__(self, group_number: int = 0):
-        self.__group_number = group_number
+    __slots__ = ()
 
     @property
     def atomic_number(self):
