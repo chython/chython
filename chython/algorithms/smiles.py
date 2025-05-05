@@ -447,6 +447,9 @@ class MoleculeSmiles(Smiles):
             smi[2] = atom.atomic_symbol.lower()
         else:
             smi[2] = atom.atomic_symbol
+        if atom.atomic_symbol in ('R', 'X'):
+            # fix markush representation
+            smi[1], smi[2] = smi[2], smi[1]
         return ''.join(smi)
 
     def _format_bond(self: Union['MoleculeContainer', 'MoleculeSmiles'], n, m, adjacency, **kwargs):
