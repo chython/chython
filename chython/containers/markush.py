@@ -48,7 +48,6 @@ class MarkushContainer:
     @staticmethod
     def connect_w_bond(first: MoleculeContainer, other: MoleculeContainer, variables=var_groups):
         new = first.union(other, remap=True, copy=True)
-        print(new)
         new._changed = None  # dirty fix
         new._backup = None  # dirty fix
         first, other = new.split()  # instead of remap
