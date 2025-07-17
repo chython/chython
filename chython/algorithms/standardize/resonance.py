@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -151,7 +151,9 @@ class Resonance:
             elif a.is_radical:
                 rads.add(n)
             elif a.charge == -1:
-                if (lb := len(bonds[n])) == 4 and a == B:  # skip boron
+                if a == B and a.total_hydrogens:  # skip [BHx-]
+                    continue
+                elif (lb := len(bonds[n])) == 4 and a == B:  # skip [B-]X4
                     continue
                 elif lb == 6 and a == P:  # skip [P-]X6
                     continue
