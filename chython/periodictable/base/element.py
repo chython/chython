@@ -27,13 +27,14 @@ from ...exceptions import ValenceError
 class Element(ABC):
     __slots__ = ('_isotope', '_charge', '_is_radical', '_xy', '_implicit_hydrogens',
                  '_explicit_hydrogens', '_stereo', '_parsed_mapping',
-                 '_neighbors', '_heteroatoms', '_hybridization', '_ring_sizes', '_in_ring')
+                 '_neighbors', '_heteroatoms', '_hybridization', '_ring_sizes', '_in_ring', '_extended_stereo')
     __class_cache__ = {}
 
     def __init__(self, isotope: Optional[int] = None, *,
                  charge: int = 0, is_radical: bool = False, x: float = 0., y: float = 0.,
                  implicit_hydrogens: Optional[int] = None, stereo: Optional[bool] = None,
-                 parsed_mapping: Optional[int] = None, delta_isotope: Optional[int] = None):
+                 parsed_mapping: Optional[int] = None, delta_isotope: Optional[int] = None,
+                 extended_stereo: Optional[int] = None):
         """
         Element object with specified isotope
 
@@ -51,6 +52,7 @@ class Element(ABC):
         self._implicit_hydrogens = implicit_hydrogens
         self._stereo = stereo
         self._parsed_mapping = parsed_mapping
+        self._extended_stereo = extended_stereo
 
     def __repr__(self):
         if self.isotope:
@@ -228,6 +230,15 @@ class Element(ABC):
         Tetrahedron or allene stereo label
         """
         return self._stereo
+
+    @property
+    def extended_stereo(self) -> Optional[int]:
+        """
+        Positive int for an AND group id, negative int for an OR group id
+        """
+        if self._stereo is None:
+            return None
+        return self._extended_stereo
 
     @property
     def heteroatoms(self) -> int:

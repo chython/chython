@@ -383,9 +383,29 @@ class MoleculeSmiles(Smiles):
             return self.atoms_order.__getitem__
 
     def _format_cxsmiles(self: 'MoleculeContainer', order):
-        if self.is_radical:
-            return f'|^1:{",".join(str(n) for n, m in enumerate(order) if self._atoms[m].is_radical)}|'
-        return
+        cx = []
+        rd = []
+        es = defaultdict(list)
+
+        atoms = self._atoms
+        for i, n in enumerate(order):
+            a = atoms[n]
+            if a.is_radical:
+                rd.append(str(i))
+            if (s := a.extended_stereo) is not None:
+                if s < 0:
+                    es[f'o{-s}:'].append(str(i))
+                elif s > 0:
+                    es[f'&{s}:'].append(str(i))
+
+        if rd:
+            cx.append('^1:' + ','.join(rd))
+        if es:
+            for k in sorted(es):
+                cx.append(k + ','.join(es[k]))
+        if cx:
+            return '|' + ','.join(cx) + '|'
+        return None
 
     def _format_atom(self: 'MoleculeContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
