@@ -137,14 +137,29 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
     @cached_property
     def molecular_mass(self) -> float:
         h = _H().atomic_mass
-        return sum(a.atomic_mass + a.implicit_hydrogens * h for _, a in self.atoms())
+        return sum(a.atomic_mass + (a.implicit_hydrogens or 0) * h for _, a in self.atoms())
 
     @cached_property
     def brutto(self) -> Dict[str, int]:
         """Counted atoms dict"""
-        c = Counter(a.atomic_symbol for _, a in self.atoms())
-        c['H'] += sum(a.implicit_hydrogens for _, a in self.atoms())
-        return dict(c)
+        c = Counter()
+        # make an order
+        c['C'] = 0
+        c['H'] = 0
+        c['O'] = 0
+        c['N'] = 0
+        c['B'] = 0
+        c.update(a.atomic_symbol for a in sorted((a for _, a in self.atoms()), key=lambda a: a.atomic_number))
+        c['H'] += sum(a.implicit_hydrogens or 0 for _, a in self.atoms())
+        return {k: v for k, v in c.items() if v}
+
+    @cached_property
+    def brutto_formula(self) -> str:
+        return ''.join(f'{a}{c}' if c > 1 else a for a, c in self.brutto.items())
+
+    @cached_property
+    def brutto_formula_html(self) -> str:
+        return ''.join(f'{a}<sub>{c}</sub>' if c > 1 else a for a, c in self.brutto.items())
 
     @cached_property
     def aromatic_rings(self) -> Tuple[Tuple[int, ...], ...]:
