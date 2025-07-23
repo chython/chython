@@ -54,22 +54,25 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
         raise ValueError('Empty string')
 
     contract: Optional[List[List[int]]] = None
+    radicals = []
     extended_stereo = {}
     log = []
     smi, *data = data.split()
-    if data and (cxs := data[0]).startswith('|') and cxs.endswith('|'):
-        fr = cx_fragments.search(cxs)
-        if fr is not None:
-            contract = [sorted(int(x) for x in x.split('.')) for x in fr.group()[2:].split(',')]
-            if len({x for x in contract for x in x}) < len([x for x in contract for x in x]):
-                log.append(f'collisions in cxsmiles fragments description: {cxs}')
-                contract = None
+    if data and (cxs := data[0]).startswith(('|', '{')) and cxs.endswith(('|', '}')):
+        if cxs.startswith('|'):  # cx smiles
+            fr = cx_fragments.search(cxs)
+            if fr is not None:
+                contract = [sorted(int(x) for x in x.split('.')) for x in fr.group()[2:].split(',')]
+                if len({x for x in contract for x in x}) < len([x for x in contract for x in x]):
+                    log.append(f'collisions in cxsmiles fragments description: {cxs}')
+                    contract = None
 
-        radicals = [int(x) for x in cx_radicals.findall(cxs) for x in x.split(',')]
-        if radicals and len(set(radicals)) != len(radicals):
-            log.append(f'collisions in cxsmiles radicals description: {cxs}')
-            radicals = []
+            radicals = [int(x) for x in cx_radicals.findall(cxs) for x in x.split(',')]
+            if radicals and len(set(radicals)) != len(radicals):
+                log.append(f'collisions in cxsmiles radicals description: {cxs}')
+                radicals = []
 
+        # cx smiles and jnj smiles
         for st, sg, sa in cx_stereo_rel.findall(cxs):
             sg = int(sg)
             if st == 'o':
@@ -84,8 +87,6 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
             else:
                 continue
             break
-    else:
-        radicals = []
 
     if '>' in smi:
         record = {'reactants': [], 'reagents': [], 'products': [], 'log': log}
