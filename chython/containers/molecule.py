@@ -25,6 +25,7 @@ from zlib import compress, decompress
 from .bonds import Bond, DynamicBond
 from .cgr import CGRContainer
 from .graph import Graph
+from .rdkit import RDkit
 from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
 from ..algorithms.depict import DepictMolecule
@@ -49,7 +50,7 @@ C = 6
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, MoleculeIsomorphism,
                         Aromatize, StandardizeMolecule, MoleculeSmiles, DepictMolecule, Calculate2DMolecule,
-                        Fingerprints, Tautomers, MCS, X3domMolecule):
+                        Fingerprints, Tautomers, RDkit, MCS, X3domMolecule):
     __slots__ = ('_meta', '_name', '_conformers', '_changed', '_backup')
 
     def __init__(self):

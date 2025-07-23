@@ -16,8 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from chython import smiles
-from chython.utils.rdkit import *
+from chython import smiles, from_rdkit_molecule
 from pytest import mark
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -36,8 +35,8 @@ data = [
 @mark.parametrize('source', data)
 def test_to_rdkit(source):
     mol = smiles(source)
-    rd_mol = to_rdkit_molecule(mol, keep_mapping=False)
-    rd_mol_mapping = to_rdkit_molecule(mol, keep_mapping=True)
+    rd_mol = mol.to_rdkit(keep_mapping=False)
+    rd_mol_mapping = mol.to_rdkit(keep_mapping=True)
 
     assert format(smiles(Chem.MolToSmiles(rd_mol)), 'h') == format(mol, 'h')
     assert format(smiles(Chem.MolToSmiles(rd_mol_mapping)), 'm') == format(mol, 'm')
@@ -49,7 +48,7 @@ def test_from_rdkit(source):
 
 
 def test_coordinates():
-    rd_mol = to_rdkit_molecule(smiles('CCO'), keep_mapping=False)
+    rd_mol = smiles('CCO').to_rdkit(keep_mapping=False)
 
     AllChem.Compute2DCoords(rd_mol)
     mol = from_rdkit_molecule(rd_mol)

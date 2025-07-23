@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -36,8 +36,13 @@ def unpach(data: bytes, /, *, compressed=True) -> Union[MoleculeContainer, React
     return ReactionContainer.unpack(data, compressed=False)
 
 
+def from_rdkit(mol, /):
+    return MoleculeContainer.from_rdkit(mol)
+
+
 unpack = unpach
+from_rdkit_molecule = from_rdkit
 
 
 __all__ = [x for x in locals() if x.endswith('Container')]
-__all__.extend(['Bond', 'QueryBond', 'unpack', 'unpach'])
+__all__.extend(['Bond', 'QueryBond', 'unpack', 'unpach', 'from_rdkit', 'from_rdkit_molecule'])

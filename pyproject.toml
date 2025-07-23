@@ -1,6 +1,6 @@
 [tool.poetry]
 name = 'chython'
-version = '2.5'
+version = '2.6'
 description = 'Library for processing molecules and reactions in python way'
 authors = ['Ramil Nugmanov <nougmanoff@protonmail.com>']
 license = 'LGPLv3'
