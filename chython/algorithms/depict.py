@@ -53,7 +53,7 @@ _render_config = {'carbon': False, 'dashes': (.2, .1), 'span_dy': .15, 'mapping'
                   'atoms_colors': cpk, 'triple_space': .13, 'double_space': .06, 'mapping_color': '#0305A7',
                   'aromatic_space': .14, 'aromatic_dashes': (.15, .05), 'dx_m': .05, 'dy_m': .2,
                   'other_font_style': 'monospace', 'dx_ci': .05, 'dy_ci': 0.2, 'symbols_font_style': 'sans-serif',
-                  'mapping_font_style': 'monospace', 'wedge_space': .08}
+                  'mapping_font_style': 'monospace', 'wedge_space': .08, 'arrow_color': 'black'}
 
 
 def _rotate_vector(x1, y1, x2, y2):
@@ -132,7 +132,7 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
                     triple_space: float = .13, aromatic_space: float = .14, atom_radius: float = .2, bond_radius=.02,
                     font_size: float = .5, other_size: float = .3, span_size: float = .35,  aam_size: float = .25,
                     symbols_font_style: str = 'sans-serif', other_font_style: str = 'monospace',
-                    other_color: str = 'black', mapping_font_style: str = 'monospace'):
+                    other_color: str = 'black', arrow_color: str = 'black', mapping_font_style: str = 'monospace'):
     """
     Settings for depict of chemical structures
 
@@ -146,6 +146,7 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
     :param aam_color: atom-to-atom mapping color
     :param atoms_colors: atom colors where key is atomic number - 1, value is atom color (str)
     :param other_color: color for charges, radicals, isotopes
+    :param arrow_color: color of reaction arrow and plus signs
     :param symbols_font_style: font style for atom symbols
     :param other_font_style: font style for charges, radicals, isotopes, hybridization and neighbors
     :param aam: if True, depict mapping
@@ -176,6 +177,7 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
     _render_config['bond_color'] = bond_color
     _render_config['bond_width'] = bond_width
     _render_config['other_color'] = other_color
+    _render_config['arrow_color'] = arrow_color
     _render_config['bond_radius'] = bond_radius
     _render_config['atom_radius'] = -atom_radius
     _render_config['mapping_size'] = aam_size
@@ -450,6 +452,7 @@ class DepictReaction:
         :param height: set svg height param. by default auto-calculated.
         :param clean2d: calculate coordinates if necessary.
         """
+        arrow_color = _render_config['arrow_color']
         if not self._arrow:
             if clean2d:
                 for m in self.molecules():
@@ -498,13 +501,14 @@ class DepictReaction:
                f'viewBox="{viewbox_x:.2f} {viewbox_y:.2f} {_width:.2f} {_height:.2f}" '
                'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">\n'
                '  <defs>\n    <marker id="arrow" markerWidth="10" markerHeight="10" '
-               'refX="0" refY="3" orient="auto">\n      <path d="M0,0 L0,6 L9,3"/>\n    </marker>\n  </defs>\n'
+               f'refX="0" refY="3" orient="auto">\n      <path d="M0,0 L0,6 L9,3" fill="{arrow_color}"/>\n'
+               '    </marker>\n  </defs>\n'
                f'  <line x1="{self._arrow[0]:.2f}" y1="0" x2="{self._arrow[1]:.2f}" y2="0" '
-               'fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)"/>']
+               f'fill="none" stroke="{arrow_color}" stroke-width=".04" marker-end="url(#arrow)"/>']
 
         sings_plus = self._signs
         if sings_plus:
-            svg.append(f'  <g fill="none" stroke="black" stroke-width=".04">')
+            svg.append(f'  <g fill="none" stroke="{arrow_color}" stroke-width=".04">')
             for x in sings_plus:
                 svg.append(f'    <line x1="{x + .35:.2f}" y1="0" x2="{x + .65:.2f}" y2="0"/>')
                 svg.append(f'    <line x1="{x + .5:.2f}" y1="0.15" x2="{x + .5:.2f}" y2="-0.15"/>')
