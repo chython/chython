@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019-2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -17,11 +17,15 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from asyncio import new_event_loop
 from CachedMethods import cached_method
 from collections import defaultdict
 from math import atan2, sin, cos, hypot
-from typing import Tuple, TYPE_CHECKING, Union
+from os.path import join
+from tempfile import TemporaryDirectory
+from typing import Tuple, TYPE_CHECKING, Union, Literal
 from uuid import uuid4
+from zlib import compress
 
 
 if TYPE_CHECKING:
@@ -54,6 +58,38 @@ _render_config = {'carbon': False, 'dashes': (.2, .1), 'span_dy': .15, 'mapping'
                   'aromatic_space': .14, 'aromatic_dashes': (.15, .05), 'dx_m': .05, 'dy_m': .2,
                   'other_font_style': 'monospace', 'dx_ci': .05, 'dy_ci': 0.2, 'symbols_font_style': 'sans-serif',
                   'mapping_font_style': 'monospace', 'wedge_space': .08, 'arrow_color': 'black'}
+
+loop = browser = None
+
+
+async def svg_render(s, t, width, height, scale):
+    page = await browser.newPage()
+    await page.setViewport({'deviceScaleFactor': scale, 'width': width, 'height': height})
+    await page.goto(f'file://{s}')
+    element = await page.querySelector('svg')
+    await element.screenshot({'path': t, 'omitBackground': True})
+    await page.close()
+
+
+def svg2png(svg: str, width: int = 1000, height: int = 1000, scale: float = 1.):
+    global loop, browser
+
+    if loop is None:  # lazy browser launcher
+        from pyppeteer import launch
+
+        loop = new_event_loop()
+        browser = loop.run_until_complete(launch())
+    elif browser is None:
+        raise ImportError('pyppeteer initialization failed')
+
+    with TemporaryDirectory() as tmpdir:
+        with open(s := join(tmpdir, 'input.svg'), 'w') as f:
+            f.write(svg)
+
+        loop.run_until_complete(svg_render(s, (t := join(tmpdir, 'output.png')), width, height, scale))
+
+        with open(t, 'rb') as f:
+            return f.read()
 
 
 def _rotate_vector(x1, y1, x2, y2):
@@ -199,13 +235,17 @@ class DepictMolecule:
     __slots__ = ()
 
     def depict(self: Union['MoleculeContainer', 'DepictMolecule'], *, width=None, height=None, clean2d: bool = True,
-               _embedding=False) -> str:
+               format: Literal['svg', 'png', 'svgz'] = 'svg', png_width=1000, png_heigh=1000, png_scale=1.,
+               _embedding=False) -> Union[str, bytes]:
         """
-        Depict molecule in SVG format.
+        Depict molecule in SVG or PNG format.
 
         :param width: set svg width param. by default auto-calculated.
         :param height: set svg height param. by default auto-calculated.
         :param clean2d: calculate coordinates if necessary.
+        :param format: output format - svg string, png bytes or gz compressed svg
+        :param png_width, png_heigh: viewport size for PNG rendering
+        :param png_scale: image scaling in PNG rendering
         """
         uid = str(uuid4())
         min_x = min(a.x for _, a in self.atoms())
@@ -241,7 +281,14 @@ class DepictMolecule:
                'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">']
         svg.extend(_graph_svg(atoms, bonds, define, masks, uid, viewbox_x, viewbox_y, _width, _height))
         svg.append('</svg>')
-        return '\n'.join(svg)
+        svg = '\n'.join(svg)
+        if format == 'svg':
+            return svg
+        elif format == 'png':
+            return svg2png(svg, png_width, png_heigh, png_scale)
+        elif format == 'svgz':
+            return compress(svg.encode(), 9)
+        raise ValueError(f'format must be svg, png or svgz, not {format}')
 
     @cached_method
     def _repr_svg_(self):
@@ -444,13 +491,18 @@ class DepictMolecule:
 class DepictReaction:
     __slots__ = ()
 
-    def depict(self: 'ReactionContainer', *, width=None, height=None, clean2d: bool = True) -> str:
+    def depict(self: 'ReactionContainer', *, width=None, height=None, clean2d: bool = True,
+               format: Literal['svg', 'png', 'svgz'] = 'svg',
+               png_width=1000, png_heigh=1000, png_scale=1.) -> Union[str, bytes]:
         """
         Depict reaction in SVG format.
 
         :param width: set svg width param. by default auto-calculated.
         :param height: set svg height param. by default auto-calculated.
         :param clean2d: calculate coordinates if necessary.
+        :param format: output format - svg string, png bytes or gz compressed svg
+        :param png_width, png_heigh: viewport size for PNG rendering
+        :param png_scale: image scaling in PNG rendering
         """
         arrow_color = _render_config['arrow_color']
         if not self._arrow:
@@ -517,7 +569,14 @@ class DepictReaction:
         for atoms, bonds, define, masks, uid in zip(r_atoms, r_bonds, r_defines, r_masks, r_uids):
             svg.extend(_graph_svg(atoms, bonds, define, masks, uid, viewbox_x, viewbox_y, _width, _height))
         svg.append('</svg>')
-        return '\n'.join(svg)
+        svg = '\n'.join(svg)
+        if format == 'svg':
+            return svg
+        elif format == 'png':
+            return svg2png(svg, png_width, png_heigh, png_scale)
+        elif format == 'svgz':
+            return compress(svg.encode(), 9)
+        raise ValueError(f'format must be svg, png or svgz, not {format}')
 
     @cached_method
     def _repr_svg_(self):

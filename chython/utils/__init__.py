@@ -19,7 +19,6 @@
 from .free_wilson import *
 from .grid import *
 from .retro import *
-from .svg import *
 from ..containers.graph import Graph
 
 
@@ -48,4 +47,4 @@ def patch_pandas():
 
 
 __all__ = ['fw_prepare_groups', 'fw_decomposition_tree',
-           'grid_depict', 'GridDepict', 'retro_depict', 'RetroDepict', 'svg2png', 'patch_pandas']
+           'grid_depict', 'GridDepict', 'retro_depict', 'RetroDepict', 'patch_pandas']
