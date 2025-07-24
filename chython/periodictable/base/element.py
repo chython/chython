@@ -286,6 +286,7 @@ class Element(ABC):
         if full:
             copy._implicit_hydrogens = self.implicit_hydrogens
             copy._stereo = self.stereo
+            copy._extended_stereo = self.extended_stereo
             copy._explicit_hydrogens = self.explicit_hydrogens
             copy._neighbors = self.neighbors
             copy._heteroatoms = self.heteroatoms
@@ -299,8 +300,9 @@ class Element(ABC):
                 copy._implicit_hydrogens = None
             if stereo:
                 copy._stereo = self.stereo
+                copy._extended_stereo = self.extended_stereo
             else:
-                copy._stereo = None
+                copy._stereo = copy._extended_stereo = None
         return copy
 
     def __copy__(self):
