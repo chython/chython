@@ -24,17 +24,15 @@ from ...exceptions import ImplementationError
 from ...periodictable.base.vector import Vector
 
 
-try:
-    from importlib.resources import files
-except ImportError:  # python3.8
-    from importlib_resources import files
-
-
 if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 try:
     from py_mini_racer import MiniRacer, JSEvalException
+    try:
+        from importlib.resources import files
+    except ImportError:  # python3.8
+        from importlib_resources import files
 
     ctx = MiniRacer()
     ctx.eval('const self = this')
@@ -57,7 +55,7 @@ class Calculate2DMolecule:
         if clean2d_engine == 'rdkit':
             from rdkit.Chem.AllChem import Compute2DCoords
 
-            mol = self.to_rdkit()
+            mol = self.to_rdkit(keep_mapping=False, keep_hydrogens=False)
             Compute2DCoords(mol)
             # set coordinates from the first rdkit conformer. usually it's 2d layout
             for (_, atom), (x, y, _) in zip(self.atoms(), mol.GetConformers()[0].GetPositions()):

@@ -91,11 +91,12 @@ class RDkit:
             mol.fix_stereo()
         return mol
 
-    def to_rdkit(self: 'MoleculeContainer', *, keep_mapping=True):
+    def to_rdkit(self: 'MoleculeContainer', *, keep_mapping=True, keep_hydrogens=True):
         """
-        Convert into RDKit molecule object.
+        Convert into RDKit molecule object
 
-        :param keep_mapping: set atom numbers.
+        :param keep_mapping: set atom numbers
+        :param keep_hydrogens: set implicit hydrogens
         """
         from rdkit.Chem import (AssignStereochemistry, Atom, BondStereo, BondType, ChiralType,
                                 Conformer, RWMol, SanitizeMol)
@@ -113,7 +114,8 @@ class RDkit:
 
         for n, a in self.atoms():
             ra = Atom(a.atomic_number)
-            ra.SetNumExplicitHs(a.implicit_hydrogens)
+            if keep_hydrogens:
+                ra.SetNumExplicitHs(a.implicit_hydrogens)
             if keep_mapping:
                 ra.SetAtomMapNum(n)
             if a.charge:
