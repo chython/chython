@@ -127,8 +127,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         copy._signs = self._signs
         return copy
 
-    @cached_method
-    def compose(self) -> CGRContainer:
+    def compose(self, *, dynamic=True) -> CGRContainer:
         """
         Get CGR of reaction
 
@@ -144,7 +143,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
             p = reduce(or_, self.products)
         else:
             p = MoleculeContainer()
-        return r ^ p
+        return r.compose(p, dynamic)
 
     def flush_cache(self, keep_molecule_cache=False, **kwargs):
         self.__dict__.clear()
@@ -248,6 +247,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
     def __bytes__(self):
         return self.pack()
 
+    @cached_method
     def __invert__(self) -> CGRContainer:
         """
         Get CGR of reaction

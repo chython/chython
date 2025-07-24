@@ -334,9 +334,14 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         """
         return [self.substructure(c, recalculate_hydrogens=False) for c in self.connected_components]
 
-    def compose(self, other: 'MoleculeContainer') -> 'CGRContainer':
+    def compose(self, other: 'MoleculeContainer', dynamic=True) -> Union['CGRContainer', 'MoleculeContainer']:
         """
         Compose 2 graphs to CGR.
+
+        :param dynamic: produce CGR with dynamic bonds and atoms,
+            overwise keep reactants' electronic and implicit hydrogens state and label dynamic bonds as "any".
+            This representation can't catch atom-only changes like (de)protonation, red-ox, etc;
+            or ambiguous bond changes like triple to double bond reduction.
         """
         if not isinstance(other, MoleculeContainer):
             raise TypeError('MoleculeContainer expected')
@@ -344,30 +349,41 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         adj = defaultdict(lambda: defaultdict(lambda: [None, None]))
         common = self._atoms.keys() & other._atoms.keys()
 
-        h = CGRContainer()
+        if dynamic:
+            h = CGRContainer()
+            from_atom = DynamicElement.from_atom
+            from_atoms = DynamicElement.from_atoms
+            from_bond = DynamicBond.from_bond
+            dynamic_bond = DynamicBond
+        else:
+            h = self.__class__()
+            from_atom = from_atoms = lambda x, *_: x.copy(hydrogens=True)
+            from_bond = lambda x: x.copy()
+            dynamic_bond = lambda x, y: Bond(8 if x != y else x)
+
         ha = h._atoms
         hb = h._bonds
 
         for n in self._atoms.keys() - common:  # cleavage atoms
-            ha[n] = DynamicElement.from_atom(self._atoms[n])
+            ha[n] = from_atom(self._atoms[n])
             hb[n] = {}
             for m, bond in self._bonds[n].items():
                 if m not in ha:
                     if m in common:  # bond to common atoms is broken bond
-                        bond = DynamicBond(bond.order, None)
+                        bond = dynamic_bond(bond.order, None)
                     else:
-                        bond = DynamicBond.from_bond(bond)
+                        bond = from_bond(bond)
                     bonds.append((n, m, bond))
         for n in other._atoms.keys() - common:  # coupling atoms
-            ha[n] = DynamicElement.from_atom(other._atoms[n])
+            ha[n] = from_atom(other._atoms[n])
             hb[n] = {}
 
             for m, bond in other._bonds[n].items():
                 if m not in ha:
                     if m in common:  # bond to common atoms is formed bond
-                        bond = DynamicBond(None, bond.order)
+                        bond = dynamic_bond(None, bond.order)
                     else:
-                        bond = DynamicBond.from_bond(bond)
+                        bond = from_bond(bond)
                     bonds.append((n, m, bond))
         for n in common:
             an = adj[n]
@@ -378,15 +394,18 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
                 if m in common:
                     an[m][1] = bond.order
         for n in common:
-            ha[n] = DynamicElement.from_atoms(self._atoms[n], other._atoms[n])
+            ha[n] = from_atoms(self._atoms[n], other._atoms[n])
             hb[n] = {}
 
             for m, (o1, o2) in adj[n].items():
                 if m not in ha:
-                    bonds.append((n, m, DynamicBond(o1, o2)))
+                    bonds.append((n, m, dynamic_bond(o1, o2)))
 
         for n, m, bond in bonds:
             hb[n][m] = hb[m][n] = bond
+
+        if not dynamic:
+            h.calc_labels()
         return h
 
     def pack(self, *, compressed=True, check=True, version=2, order: List[int] = None) -> bytes:
