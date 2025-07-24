@@ -55,7 +55,7 @@ class Calculate2DMolecule:
         if clean2d_engine == 'rdkit':
             from rdkit.Chem.AllChem import Compute2DCoords
 
-            mol = self.to_rdkit(keep_mapping=False, keep_hydrogens=False)
+            mol = self.to_rdkit(keep_mapping=False)
             Compute2DCoords(mol)
             # set coordinates from the first rdkit conformer. usually it's 2d layout
             for (_, atom), (x, y, _) in zip(self.atoms(), mol.GetConformers()[0].GetPositions()):

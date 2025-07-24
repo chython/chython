@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Dmitrij Zanadvornykh <zandmitrij@gmail.com>
 #  Copyright 2018 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
@@ -41,6 +41,7 @@ class Standardize:
     __slots__ = ()
 
     def canonicalize(self: 'MoleculeContainer', *, fix_tautomers=True, keep_kekule=False,
+                     ignore_pyrrole_hydrogen=False, buffer_size=7,
                      logging=False, ignore=True) -> Union[bool, List[Tuple[Tuple[int, ...], int, str]]]:
         """
         Convert molecule to canonical forms of functional groups and aromatic rings without explicit hydrogens.
@@ -49,8 +50,10 @@ class Standardize:
         :param ignore: ignore standardization bugs.
         :param fix_tautomers: convert tautomers to canonical forms.
         :param keep_kekule: return kekule form.
+        :param buffer_size: number of attempts of pyridine form searching.
+        :param ignore_pyrrole_hydrogen: ignore hydrogen on pyrrole to fix invalid rings like Cn1cc[nH]c1.
         """
-        k = self.kekule()
+        k = self.kekule(buffer_size=buffer_size, ignore_pyrrole_hydrogen=ignore_pyrrole_hydrogen)
         s = self.standardize(_fix_stereo=False, logging=True, ignore=ignore, fix_tautomers=fix_tautomers)
         h, changed = self.implicify_hydrogens(_fix_stereo=False, logging=True)
 

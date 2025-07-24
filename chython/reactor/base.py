@@ -24,7 +24,7 @@ from ..periodictable import Element, AnyElement, QueryElement
 
 
 class BaseReactor:
-    def __init__(self, pattern, replacement, delete_atoms, fix_rings, fix_tautomers):
+    def __init__(self, pattern, replacement, delete_atoms, fix_rings, fix_tautomers, fix_broken_pyrroles):
         if isinstance(replacement, QueryContainer):
             for n, a in replacement.atoms():
                 if not isinstance(a, (AnyElement, QueryElement)):
@@ -39,6 +39,7 @@ class BaseReactor:
         self._replacement = replacement
         self._fix_rings = fix_rings
         self._fix_tautomers = fix_tautomers
+        self._fix_broken_pyrroles = fix_broken_pyrroles
 
     def _get_deleted(self, structure, mapping):
         if not self._to_delete:
@@ -201,7 +202,7 @@ class BaseReactor:
             # else: ignore label
 
         if self._fix_rings:
-            new.kekule()  # keeps stereo as is
+            new.kekule(ignore_pyrrole_hydrogen=self._fix_broken_pyrroles)  # keeps stereo as is
             if not new.thiele(fix_tautomers=self._fix_tautomers):  # fixes stereo if any ring aromatized
                 new.fix_stereo()
         else:
