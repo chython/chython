@@ -333,18 +333,17 @@ class Smiles(ABC):
 class MoleculeSmiles(Smiles):
     __slots__ = ()
 
-    def sticky_smiles(self: Union['MoleculeContainer', 'MoleculeSmiles'], left: int, right: int = None, *,
+    def sticky_smiles(self: Union['MoleculeContainer', 'MoleculeSmiles'], left: int = None, right: int = None, *,
                       remove_left: bool = False, remove_right: bool = False, tries: int = 10):
         """
-        Generate smiles with fixed left and optionally right terminal atoms.
-        Note: Produce expected results only with acyclic terminal atoms.
+        Generate smiles with fixed left and/or right terminal atoms.
+        The right atom must be terminal if set. Use a temporary attached atom with remove_right=True as a workaround.
 
         :param remove_left: drop terminal atom and corresponding bond
         :param remove_right: drop terminal atom and corresponding bond
         :param tries: number of attempts to generate smiles
         """
         bonds = self._bonds
-        bonds[left]  # noqa. check left atom availability
         if right:
             assert tries > 0, 'tries count should be positive'
             assert len(bonds[right]) == 1, 'right atom should be terminal'
@@ -358,7 +357,9 @@ class MoleculeSmiles(Smiles):
                 for m in bonds[n].keys() - seen.keys():
                     queue.append((m, d - 10))
                     seen[m] = d
-            seen[left] = -1_000_000_000  # prioritize left atom
+            if left:
+                bonds[left]  # noqa. check left atom availability
+                seen[left] = -1_000_000_000  # prioritize left atom
 
             for _ in range(tries):
                 smiles, order = self._smiles(lambda x: seen[x] + random(), _return_order=True, random=True)
@@ -370,10 +371,13 @@ class MoleculeSmiles(Smiles):
                 smiles = smiles[2:]
             if remove_right:
                 smiles = smiles[:-2]
-        else:
+        elif left:
+            bonds[left]  # noqa. check left atom availability
             smiles = self._smiles(lambda x: x != left, random=True)
             if remove_left:
                 smiles = smiles[2:]
+        else:
+            raise ValueError('either left or right atom should be specified')
         return ''.join(smiles)
 
     def _smiles_order(self: 'MoleculeContainer', stereo=True):
