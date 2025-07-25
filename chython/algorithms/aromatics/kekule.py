@@ -105,7 +105,9 @@ class Kekule:
                 for n, m, b in bf:
                     n = mapping[n]
                     m = mapping[m]
-                    bonds[n][m]._order = b
+                    bond = bonds[n][m]
+                    bond._order = b
+                    bond._stereo = None  # prevent potential errors with cis-trans-labelled double-bonds
                     if b == 8:
                         # flush sssr and components cache
                         keep = False

@@ -223,20 +223,6 @@ class Standardize:
                     atoms[atom_1]._charge = 0
                 pairs.append((atom_1, atom_2, fix))
 
-        if pairs:
-            self.__dict__.pop('atoms_order', None)  # remove cached morgan
-            for atom_1, atom_2, fix in pairs:
-                if self.atoms_order[atom_1] > self.atoms_order[atom_2]:
-                    atoms[atom_2]._charge = 1
-                    changed.append(atom_2)
-                    if not fix:
-                        changed.append(atom_1)
-                else:
-                    atoms[atom_1]._charge = 1
-                    if fix:
-                        changed.append(atom_1)
-            del self.__dict__['atoms_order']  # remove invalid morgan
-
         # ferrocene
         fcr = []
         for r in self.sssr:
@@ -253,8 +239,20 @@ class Standardize:
             atoms[ch]._charge = 0  # reset charge for morgan recalculation
             fcr.append(ca)
             changed.append(ch)
-        if fcr:
+
+        if pairs or fcr:
             self.__dict__.pop('atoms_order', None)  # remove cached morgan
+            for atom_1, atom_2, fix in pairs:
+                if self.atoms_order[atom_1] > self.atoms_order[atom_2]:
+                    atoms[atom_2]._charge = 1
+                    changed.append(atom_2)
+                    if not fix:
+                        changed.append(atom_1)
+                else:
+                    atoms[atom_1]._charge = 1
+                    if fix:
+                        changed.append(atom_1)
+
             for ca in fcr:
                 n = min(ca, key=self.atoms_order.get)
                 atoms[n]._charge = -1
@@ -355,13 +353,15 @@ class Standardize:
                     else:
                         if atom_1 in protonated:
                             changed.append(atom_1)
+            del self.__dict__['atoms_order']  # remove invalid morgan
 
+        if changed:
             self.flush_cache(keep_sssr=True, keep_components=True)  # clear cache
-            if changed and _fix_stereo:
+            if _fix_stereo:
                 self.fix_stereo()
             if logging:
                 return changed
-            return bool(changed)
+            return True
         if logging:
             return []
         return False
