@@ -24,17 +24,15 @@ from ...exceptions import ImplementationError
 from ...periodictable.base.vector import Vector
 
 
-try:
-    from importlib.resources import files
-except ImportError:  # python3.8
-    from importlib_resources import files
-
-
 if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 try:
     from py_mini_racer import MiniRacer, JSEvalException
+    try:
+        from importlib.resources import files
+    except ImportError:  # python3.8
+        from importlib_resources import files
 
     ctx = MiniRacer()
     ctx.eval('const self = this')
@@ -52,37 +50,49 @@ class Calculate2DMolecule:
         """
         Calculate 2d layout of graph. https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation used.
         """
-        if ctx is None:
-            raise ImportError('py_mini_racer is not installed or broken')
-        plane = {}
-        entry = iter(sorted(self, key=lambda n: len(self._bonds[n])))
-        for _ in range(min(5, len(self))):
-            smiles, order = self.__clean2d_prepare(next(entry))
-            try:
-                xy = ctx.call('$.clean2d', smiles)
-            except JSEvalException:
-                continue
-            break
-        else:
-            raise ImplementationError
+        from chython import clean2d_engine
 
-        shift_x, shift_y = xy[0]
-        for n, (x, y) in zip(order, xy):
-            plane[n] = (x - shift_x, shift_y - y)
+        if clean2d_engine == 'rdkit':
+            from rdkit.Chem.AllChem import Compute2DCoords
 
-        bonds = []
-        for n, m, _ in self.bonds():
-            xn, yn = plane[n]
-            xm, ym = plane[m]
-            bonds.append(sqrt((xm - xn) ** 2 + (ym - yn) ** 2))
-        if bonds:
-            bond_reduce = sum(bonds) / len(bonds) / .825
-        else:
-            bond_reduce = 1.
+            mol = self.to_rdkit(keep_mapping=False)
+            Compute2DCoords(mol)
+            # set coordinates from the first rdkit conformer. usually it's 2d layout
+            for (_, atom), (x, y, _) in zip(self.atoms(), mol.GetConformers()[0].GetPositions()):
+                atom.xy = (x, y)
+        elif clean2d_engine == 'smilesdrawer':
+            if ctx is None:
+                raise ImportError('mini_racer is not installed or broken')
+            plane = {}
+            entry = iter(sorted(self, key=lambda n: len(self._bonds[n])))
+            for _ in range(min(5, len(self))):
+                smiles, order = self.__clean2d_prepare(next(entry))
+                try:
+                    xy = ctx.call('$.clean2d', smiles)
+                except JSEvalException:
+                    continue
+                break
+            else:
+                raise ImplementationError
 
-        atoms = self._atoms
-        for n, (x, y) in plane.items():
-            atoms[n].xy = (x / bond_reduce,  y / bond_reduce)
+            shift_x, shift_y = xy[0]
+            for n, (x, y) in zip(order, xy):
+                plane[n] = (x - shift_x, shift_y - y)
+
+            bonds = []
+            for n, m, _ in self.bonds():
+                xn, yn = plane[n]
+                xm, ym = plane[m]
+                bonds.append(sqrt((xm - xn) ** 2 + (ym - yn) ** 2))
+            if bonds:
+                bond_reduce = sum(bonds) / len(bonds) / .825
+            else:
+                bond_reduce = 1.
+
+            atoms = self._atoms
+            for n, (x, y) in plane.items():
+                atoms[n].xy = (x / bond_reduce,  y / bond_reduce)
+        else: raise ValueError(f'Invalid clean2d engine: {clean2d_engine}')
 
         if self.connected_components_count > 1:
             shift_x = 0.

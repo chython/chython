@@ -588,7 +588,7 @@ class MoleculeStereo:
         for n, m, b in self.bonds():
             if b.stereo is None:
                 continue
-            elif ta := stereo_cis_trans.get(n):
+            elif (ta := stereo_cis_trans.get(n)) and ta == stereo_cis_trans.get(m):
                 cis_trans_stereo.append((ta, b, b.stereo))
             b._stereo = None  # flush stereo label
         self.flush_stereo_cache()

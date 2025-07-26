@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  Copyright 2024 Philippe Gantzer <p.gantzer@icredd.hokudai.ac.jp>
 #  This file is part of chython.
@@ -96,16 +96,17 @@ class StandardizeReaction:
             self.flush_cache(keep_molecule_cache=True)
         return total
 
-    def kekule(self: 'ReactionContainer', *, buffer_size=7) -> bool:
+    def kekule(self: 'ReactionContainer', *, buffer_size=7, ignore_pyrrole_hydrogen=False) -> bool:
         """
-        Convert structures to kekule form.
+        Convert structures to a kekule form.
         Return True if in any molecule found aromatic ring
 
         :param buffer_size: number of attempts of pyridine form searching.
+        :param ignore_pyrrole_hydrogen: ignore hydrogen on pyrrole to fix invalid rings like Cn1cc[nH]c1.
         """
         total = False
         for m in self.molecules():
-            if m.kekule(buffer_size=buffer_size):
+            if m.kekule(buffer_size=buffer_size, ignore_pyrrole_hydrogen=ignore_pyrrole_hydrogen):
                 total = True
         if total:
             self.flush_cache(keep_molecule_cache=True)

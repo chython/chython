@@ -16,11 +16,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from importlib.util import find_spec
 from .free_wilson import *
 from .grid import *
 from .retro import *
-from .svg import *
 from ..containers.graph import Graph
 
 
@@ -49,9 +47,4 @@ def patch_pandas():
 
 
 __all__ = ['fw_prepare_groups', 'fw_decomposition_tree',
-           'grid_depict', 'GridDepict', 'retro_depict', 'RetroDepict', 'svg2png', 'patch_pandas']
-
-
-if find_spec('rdkit'):
-    from .rdkit import *
-    __all__.extend(['from_rdkit_molecule', 'to_rdkit_molecule'])
+           'grid_depict', 'GridDepict', 'retro_depict', 'RetroDepict', 'patch_pandas']

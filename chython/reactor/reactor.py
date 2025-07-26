@@ -44,7 +44,8 @@ class Reactor(BaseReactor):
     def __init__(self, patterns: Tuple[QueryContainer, ...],
                  products: Tuple[Union[MoleculeContainer, QueryContainer], ...], *,
                  delete_atoms: bool = True, one_shot: bool = True, polymerise_limit: int = 10,
-                 automorphism_filter: bool = True, fix_aromatic_rings: bool = True, fix_tautomers: bool = True):
+                 automorphism_filter: bool = True, fix_aromatic_rings: bool = True,
+                 fix_broken_pyrroles: bool = False, fix_tautomers: bool = True):
         """
         :param patterns: Search patterns for each reactant.
         :param products: Resulted structures.
@@ -54,6 +55,7 @@ class Reactor(BaseReactor):
         :param fix_aromatic_rings: Proceed kekule and thiele on products.
         :param fix_tautomers: See `thiele()` docs.
         :param automorphism_filter: Skip matches to same atoms.
+        :param fix_broken_pyrroles: fix invalid rings like Cn1cc[nH]c1.
         """
         if not patterns or not products:
             raise ValueError('empty template')
@@ -69,7 +71,8 @@ class Reactor(BaseReactor):
         self._polymerise_limit = polymerise_limit
         self._products_atoms = tuple(set(m) for m in products)
         self._automorphism_filter = automorphism_filter
-        super().__init__(reduce(or_, patterns), reduce(or_, products), delete_atoms, fix_aromatic_rings, fix_tautomers)
+        super().__init__(reduce(or_, patterns), reduce(or_, products), delete_atoms, fix_aromatic_rings,
+                         fix_tautomers, fix_broken_pyrroles)
 
     def __call__(self, *structures: MoleculeContainer):
         if any(not isinstance(structure, MoleculeContainer) for structure in structures):
