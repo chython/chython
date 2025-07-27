@@ -1,4 +1,11 @@
-# -*- coding: utf-8 -*-
+# cython: undeclared_check_usage=error
+# cython: warn.undeclared=True
+# cython: warn.unused=True
+# cython: warn.unused_arg=True
+# cython: warn.maybe_uninitialized=True
+# cython: boundscheck=False
+# cython: wraparound=False
+
 #
 #  Copyright 2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
@@ -16,6 +23,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from cpython.tuple cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.limits cimport UINT_MAX
 from libc.string cimport memset, memcpy
@@ -29,6 +37,12 @@ cdef unsigned int ** alloc_pid(size_t n_nodes, size_t max_paths):
     cdef unsigned int **pid = <unsigned int **> PyMem_Malloc(n_nodes * n_nodes * max_paths * sizeof(unsigned int *))
     memset(pid, 0, n_nodes * n_nodes * max_paths * sizeof(unsigned int *))
     return pid
+
+
+cdef unsigned int * alloc_dist(size_t n_nodes):
+    cdef unsigned int *dist = <unsigned int *> PyMem_Malloc(n_nodes * n_nodes * sizeof(unsigned int))
+    memset(dist, 255, n_nodes * n_nodes * sizeof(unsigned int))
+    return dist
 
 
 cdef void free_pid(unsigned int **pid, size_t n_nodes, size_t max_paths):
@@ -136,15 +150,18 @@ cdef unsigned int * build_ring(unsigned int *path1, unsigned int *path2, size_t 
     return path
 
 
-cdef unsigned long long * build_hash(unsigned int *ring, size_t ring_size, size_t hash_size):
+cdef unsigned long long * build_hash(unsigned int *path1, unsigned int *path2, size_t size1, size_t size2, size_t hash_size):
     cdef size_t i
     cdef unsigned int node
     cdef unsigned long long *hash = <unsigned long long *> PyMem_Malloc(hash_size * sizeof(unsigned long long))
 
     memset(hash, 0, hash_size * sizeof(unsigned long long))
 
-    for i in range(ring_size):
-        node = ring[i]
+    for i in range(size1):  # size is edge count; thus, the last node is dropped
+        node = path1[i]
+        hash[node // 64] |= (1 << (node % 64))
+    for i in range(size2, 0, -1):  # 1st node is dropped
+        node = path2[i]
         hash[node // 64] |= (1 << (node % 64))
     return hash
 
@@ -199,48 +216,32 @@ cdef void push_ring(unsigned int **rings, unsigned long long **ring_hashes, unsi
     ring_sizes[rank] = size
 
 
-def sssr(dict graph, size_t n_rings, size_t max_paths=10):
-    cdef size_t n_nodes = len(graph), i, j, k, sk, si, ij, kj, ik, size, rank
-    cdef size_t hash_size = (n_nodes + 63) // 64
-    cdef unsigned int d, dki, dkj, dij
-    cdef object n, m, mb
-    cdef dict reverse_mapping
-    cdef unsigned int *path
-    cdef unsigned int *path1
-    cdef unsigned int *path2
+cdef void add_ring_if_unique(unsigned int *path1, unsigned int *path2,
+                             unsigned int **rings, unsigned int *ring_sizes, unsigned long long **ring_hashes,
+                             size_t rank, size_t size, size_t size1, size_t size2, size_t hash_size, size_t n_rings):
     cdef unsigned int *ring
-    cdef unsigned long long *hash
+    cdef unsigned long long * hash = build_hash(path1, path2, size1, size2, hash_size)
 
-    cdef unsigned int *node_mapping = <unsigned int *> PyMem_Malloc(n_nodes * sizeof(unsigned int))
-    cdef unsigned int *dist = <unsigned int *> PyMem_Malloc(n_nodes * n_nodes * sizeof(unsigned int))
-    cdef unsigned int **pid0 = alloc_pid(n_nodes, max_paths)
-    cdef unsigned int **pid1 = alloc_pid(n_nodes, max_paths)
+    if check_ring_existence(hash, ring_hashes, ring_sizes, size, hash_size, n_rings) == 1:
+        ring = build_ring(path1, path2, size1, size2)
+        push_ring(rings, ring_hashes, ring_sizes, ring, hash, size, rank, n_rings)
+    else:
+        PyMem_Free(hash)
 
-    cdef unsigned int *ring_sizes = <unsigned int *> PyMem_Malloc(n_rings * sizeof(unsigned int))
-    cdef unsigned int **rings = <unsigned int **> PyMem_Malloc(n_rings * sizeof(unsigned int *))
-    cdef unsigned long long **ring_hashes = <unsigned long long **> PyMem_Malloc(n_rings * sizeof(unsigned long long *))
 
-    memset(dist, 255, n_nodes * n_nodes * sizeof(unsigned int))
-    memset(ring_sizes, 255, n_rings * sizeof(unsigned int))
-    memset(rings, 0, n_rings * sizeof(unsigned int *))
-    memset(ring_hashes, 0, n_rings * sizeof(unsigned long long *))
+cdef tuple convert_array_to_tuple(unsigned int *array, unsigned int *node_mapping, size_t size):
+    cdef size_t i
+    cdef tuple output = PyTuple_New(size)
 
-    reverse_mapping = _PyDict_NewPresized(n_nodes)
-    for i, n in enumerate(graph):
-        node_mapping[i] = n
-        reverse_mapping[n] = i
+    for i in range(size):
+        PyTuple_SET_ITEM(output, i, node_mapping[array[i]])
+    return output
 
-    for n, mb in graph.items():
-        i = reverse_mapping[n]
-        si = i * n_nodes
-        for m in mb:
-            j = reverse_mapping[m]
-            ij = si + j
-            dist[ij] = 1
-            path = <unsigned int *> PyMem_Malloc(2 * sizeof(unsigned int))
-            path[0] = i
-            path[1] = j
-            append_path(pid0, ij, max_paths, path)
+
+cdef void build_pid(unsigned int **pid0, unsigned int **pid1, unsigned int *dist, size_t n_nodes, size_t max_paths):
+    cdef size_t i, j, k, sk, si, ij, kj, ik
+    cdef unsigned int d, dki, dkj, dij
+    cdef unsigned int *path
 
     for k in range(n_nodes):
         sk = k * n_nodes
@@ -281,17 +282,19 @@ def sssr(dict graph, size_t n_rings, size_t max_paths=10):
                             path = concatenate_paths(pid0, dist, ik, kj, max_paths)
                             append_path(pid1, ij, max_paths, path)
 
-    # DEBUG
-    # for i in range(n_nodes):
-    #     for j in range(n_nodes):
-    #         if i == j: continue
-    #         for k in range((i * n_nodes + j) * max_paths, (i * n_nodes + j + 1) * max_paths):
-    #             path = pid0[k]
-    #             if path != NULL:
-    #                 print('!', node_mapping[i], node_mapping[j], [path[d] for d in range(dist[i * n_nodes + j] + 1)])
-    #             path = pid1[k]
-    #             if path != NULL:
-    #                 print('?', node_mapping[i], node_mapping[j], [path[d] for d in range(dist[i * n_nodes + j] + 2)])
+
+cdef void find_rings(unsigned int **rings, unsigned int *ring_sizes,
+                     unsigned int **pid0, unsigned int **pid1, unsigned int *dist,
+                     size_t n_nodes, size_t max_paths, size_t hash_size, size_t n_rings):
+    cdef size_t i, j, k, si, ij, size, rank
+    cdef unsigned int d, d1
+    cdef unsigned int *path1
+    cdef unsigned int *path2
+    cdef unsigned long long **ring_hashes = <unsigned long long **> PyMem_Malloc(n_rings * sizeof(unsigned long long *))
+
+    memset(ring_hashes, 0, n_rings * sizeof(unsigned long long *))
+    memset(ring_sizes, 255, n_rings * sizeof(unsigned int))
+    memset(rings, 0, n_rings * sizeof(unsigned int *))
 
     for i in range(n_nodes):
         si = i * n_nodes
@@ -304,42 +307,79 @@ def sssr(dict graph, size_t n_rings, size_t max_paths=10):
             ij *= max_paths
             path2 = pid0[ij + 1]
             if path2 == NULL:  # is odd?
-                ...
+                path2 = pid1[ij]
+                if path2 == NULL: continue  # not ring
+                size = 2 * d + 1
+                rank = get_rank(ring_sizes, size, n_rings)
+                if rank == UINT_MAX: continue
+
+                d1 = d + 1
+                path1 = pid0[ij]
+                add_ring_if_unique(path1, path2, rings, ring_sizes, ring_hashes, rank, size, d, d1, hash_size, n_rings)
+
+                for k in range(ij + 1, ij + max_paths):
+                    path2 = pid1[k]
+                    if path2 == NULL: break
+                    add_ring_if_unique(path1, path2, rings, ring_sizes, ring_hashes, rank, size, d, d1, hash_size, n_rings)
             else:  # is even
                 size = 2 * d
                 rank = get_rank(ring_sizes, size, n_rings)
                 if rank == UINT_MAX: continue  # is not smaller than we have already
 
                 path1 = pid0[ij]
-                ring = build_ring(path1, path2, d, d)
-                hash = build_hash(ring, size, hash_size)
-                if check_ring_existence(hash, ring_hashes, ring_sizes, size, hash_size, n_rings) == 1:
-                    push_ring(rings, ring_hashes, ring_sizes, ring, hash, size, rank, n_rings)
-                else:
-                    PyMem_Free(ring)
-                    PyMem_Free(hash)
+                add_ring_if_unique(path1, path2, rings, ring_sizes, ring_hashes, rank, size, d, d, hash_size, n_rings)
 
                 for k in range(ij + 2, ij + max_paths):
                     path2 = pid0[k]
                     if path2 == NULL: break
-                    ring = build_ring(path1, path2, d, d)
-                    hash = build_hash(ring, size, hash_size)
-                    if check_ring_existence(hash, ring_hashes, ring_sizes, size, hash_size, n_rings) == 1:
-                        push_ring(rings, ring_hashes, ring_sizes, ring, hash, size, rank, n_rings)
-                    else:
-                        PyMem_Free(ring)
-                        PyMem_Free(hash)
+                    add_ring_if_unique(path1, path2, rings, ring_sizes, ring_hashes, rank, size, d, d, hash_size, n_rings)
+    free_hashes(ring_hashes, n_rings)
 
-    # DEBUG
+
+def sssr(dict graph, size_t n_rings, size_t max_paths=10):
+    cdef size_t n_nodes = len(graph), i, j, si, ij
+    cdef size_t hash_size = (n_nodes + 63) // 64
+    cdef object n, m, mb
+    cdef dict reverse_mapping
+    cdef list output = []
+    cdef unsigned int *path
+
+    cdef unsigned int *node_mapping = <unsigned int *> PyMem_Malloc(n_nodes * sizeof(unsigned int))
+    cdef unsigned int *dist = alloc_dist(n_nodes)
+    cdef unsigned int **pid0 = alloc_pid(n_nodes, max_paths)
+    cdef unsigned int **pid1 = alloc_pid(n_nodes, max_paths)
+
+    cdef unsigned int *ring_sizes = <unsigned int *> PyMem_Malloc(n_rings * sizeof(unsigned int))
+    cdef unsigned int **rings = <unsigned int **> PyMem_Malloc(n_rings * sizeof(unsigned int *))
+
+    reverse_mapping = _PyDict_NewPresized(n_nodes)
+    for i, n in enumerate(graph):
+        node_mapping[i] = n
+        reverse_mapping[n] = i
+
+    for n, mb in graph.items():
+        i = reverse_mapping[n]
+        si = i * n_nodes
+        for m in mb:
+            j = reverse_mapping[m]
+            ij = si + j
+            dist[ij] = 1
+            path = <unsigned int *> PyMem_Malloc(2 * sizeof(unsigned int))
+            path[0] = i
+            path[1] = j
+            append_path(pid0, ij, max_paths, path)
+
+    build_pid(pid0, pid1, dist, n_nodes, max_paths)
+    find_rings(rings, ring_sizes, pid0, pid1, dist, n_nodes, max_paths, hash_size, n_rings)
+
     for i in range(n_rings):
-        ring = rings[i]
-        if ring == NULL: continue
-        print(':', [node_mapping[ring[d]] for d in range(ring_sizes[i])])
+        output.append(convert_array_to_tuple(rings[i], node_mapping, ring_sizes[i]))
 
     PyMem_Free(node_mapping)
     PyMem_Free(dist)
     PyMem_Free(ring_sizes)
     free_rings(rings, n_rings)
-    free_hashes(ring_hashes, n_rings)
     free_pid(pid0, n_nodes, max_paths)
     free_pid(pid1, n_nodes, max_paths)
+
+    return output
