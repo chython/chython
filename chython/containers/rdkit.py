@@ -114,7 +114,7 @@ class RDkit:
 
         for n, a in self.atoms():
             ra = Atom(a.atomic_number)
-            if keep_hydrogens:
+            if keep_hydrogens and a.implicit_hydrogens is not None:
                 ra.SetNumExplicitHs(a.implicit_hydrogens)
             if keep_mapping:
                 ra.SetAtomMapNum(n)
