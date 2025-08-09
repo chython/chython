@@ -52,18 +52,18 @@ class Calculate2DMolecule:
         """
         from chython import clean2d_engine
 
+        plane = {}
         if clean2d_engine == 'rdkit':
             from rdkit.Chem.AllChem import Compute2DCoords
 
             mol = self.to_rdkit(keep_mapping=False)
             Compute2DCoords(mol)
             # set coordinates from the first rdkit conformer. usually it's 2d layout
-            for (_, atom), (x, y, _) in zip(self.atoms(), mol.GetConformers()[0].GetPositions()):
-                atom.xy = (x, y)
+            for n, (x, y, _) in zip(self, mol.GetConformers()[0].GetPositions()):
+                plane[n] = (x, y)
         elif clean2d_engine == 'smilesdrawer':
             if ctx is None:
                 raise ImportError('mini_racer is not installed or broken')
-            plane = {}
             entry = iter(sorted(self, key=lambda n: len(self._bonds[n])))
             for _ in range(min(5, len(self))):
                 smiles, order = self.__clean2d_prepare(next(entry))
@@ -78,21 +78,21 @@ class Calculate2DMolecule:
             shift_x, shift_y = xy[0]
             for n, (x, y) in zip(order, xy):
                 plane[n] = (x - shift_x, shift_y - y)
-
-            bonds = []
-            for n, m, _ in self.bonds():
-                xn, yn = plane[n]
-                xm, ym = plane[m]
-                bonds.append(sqrt((xm - xn) ** 2 + (ym - yn) ** 2))
-            if bonds:
-                bond_reduce = sum(bonds) / len(bonds) / .825
-            else:
-                bond_reduce = 1.
-
-            atoms = self._atoms
-            for n, (x, y) in plane.items():
-                atoms[n].xy = (x / bond_reduce,  y / bond_reduce)
         else: raise ValueError(f'Invalid clean2d engine: {clean2d_engine}')
+
+        bonds = []
+        for n, m, _ in self.bonds():
+            xn, yn = plane[n]
+            xm, ym = plane[m]
+            bonds.append(sqrt((xm - xn) ** 2 + (ym - yn) ** 2))
+        if bonds:
+            bond_reduce = sum(bonds) / len(bonds) / .825
+        else:
+            bond_reduce = 1.
+
+        atoms = self._atoms
+        for n, (x, y) in plane.items():
+            atoms[n].xy = (x / bond_reduce,  y / bond_reduce)
 
         if self.connected_components_count > 1:
             shift_x = 0.
