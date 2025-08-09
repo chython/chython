@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 
 
 class RDkit:
+    __slots__ = ()
+
     @classmethod
     def from_rdkit(cls: Type['MoleculeContainer'], data):
         """

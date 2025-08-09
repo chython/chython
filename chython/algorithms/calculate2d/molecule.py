@@ -19,7 +19,7 @@
 #
 from math import sqrt
 from random import random
-from typing import TYPE_CHECKING, Union, Dict
+from typing import TYPE_CHECKING, Union, Dict, Literal
 from ...exceptions import ImplementationError
 from ...periodictable.base.vector import Vector
 
@@ -46,14 +46,21 @@ class Calculate2DMolecule:
     _atoms: Dict[int, 'Element']
     _bonds: Dict[int, Dict[int, 'Bond']]
 
-    def clean2d(self: Union['MoleculeContainer', 'Calculate2DMolecule']):
+    def clean2d(self: Union['MoleculeContainer', 'Calculate2DMolecule'],
+                *, engine: Literal['rdkit', 'smilesdrawer'] = None):
         """
-        Calculate 2d layout of graph. https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation used.
+        Calculate 2d layout of graph.
+
+        By default, https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation is used.
+        Can be changed globally with the `chython.clean2d_engine` parameter.
+
+        :param engine: override globally set engine
         """
-        from chython import clean2d_engine
+        if engine is None:
+            from chython import clean2d_engine as engine
 
         plane = {}
-        if clean2d_engine == 'rdkit':
+        if engine == 'rdkit':
             from rdkit.Chem.AllChem import Compute2DCoords
 
             mol = self.to_rdkit(keep_mapping=False)
@@ -61,7 +68,7 @@ class Calculate2DMolecule:
             # set coordinates from the first rdkit conformer. usually it's 2d layout
             for n, (x, y, _) in zip(self, mol.GetConformers()[0].GetPositions()):
                 plane[n] = (x, y)
-        elif clean2d_engine == 'smilesdrawer':
+        elif engine == 'smilesdrawer':
             if ctx is None:
                 raise ImportError('mini_racer is not installed or broken')
             entry = iter(sorted(self, key=lambda n: len(self._bonds[n])))
@@ -78,7 +85,7 @@ class Calculate2DMolecule:
             shift_x, shift_y = xy[0]
             for n, (x, y) in zip(order, xy):
                 plane[n] = (x - shift_x, shift_y - y)
-        else: raise ValueError(f'Invalid clean2d engine: {clean2d_engine}')
+        else: raise ValueError(f'Invalid clean2d engine: {engine}')
 
         bonds = []
         for n, m, _ in self.bonds():

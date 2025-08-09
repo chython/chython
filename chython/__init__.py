@@ -28,6 +28,7 @@ from .utils import *
 
 torch_device = 'cpu'  # AAM model device. Change before first `reset_mapping` call!
 clean2d_engine: Literal['smilesdrawer', 'rdkit'] = 'smilesdrawer'
+conformer_engine: Literal['rdkit'] = 'rdkit'
 
 
 __all__ = []
