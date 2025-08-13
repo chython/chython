@@ -19,7 +19,7 @@
 #
 from math import sqrt
 from random import random
-from typing import TYPE_CHECKING, Union, Dict
+from typing import TYPE_CHECKING, Union, Dict, Literal
 from ...exceptions import ImplementationError
 from ...periodictable.base.vector import Vector
 
@@ -46,24 +46,31 @@ class Calculate2DMolecule:
     _atoms: Dict[int, 'Element']
     _bonds: Dict[int, Dict[int, 'Bond']]
 
-    def clean2d(self: Union['MoleculeContainer', 'Calculate2DMolecule']):
+    def clean2d(self: Union['MoleculeContainer', 'Calculate2DMolecule'],
+                *, engine: Literal['rdkit', 'smilesdrawer'] = None):
         """
-        Calculate 2d layout of graph. https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation used.
-        """
-        from chython import clean2d_engine
+        Calculate 2d layout of graph.
 
-        if clean2d_engine == 'rdkit':
+        By default, https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation is used.
+        Can be changed globally with the `chython.clean2d_engine` parameter.
+
+        :param engine: override globally set engine
+        """
+        if engine is None:
+            from chython import clean2d_engine as engine
+
+        plane = {}
+        if engine == 'rdkit':
             from rdkit.Chem.AllChem import Compute2DCoords
 
             mol = self.to_rdkit(keep_mapping=False)
             Compute2DCoords(mol)
             # set coordinates from the first rdkit conformer. usually it's 2d layout
-            for (_, atom), (x, y, _) in zip(self.atoms(), mol.GetConformers()[0].GetPositions()):
-                atom.xy = (x, y)
-        elif clean2d_engine == 'smilesdrawer':
+            for n, (x, y, _) in zip(self, mol.GetConformers()[0].GetPositions()):
+                plane[n] = (x, y)
+        elif engine == 'smilesdrawer':
             if ctx is None:
                 raise ImportError('mini_racer is not installed or broken')
-            plane = {}
             entry = iter(sorted(self, key=lambda n: len(self._bonds[n])))
             for _ in range(min(5, len(self))):
                 smiles, order = self.__clean2d_prepare(next(entry))
@@ -78,21 +85,21 @@ class Calculate2DMolecule:
             shift_x, shift_y = xy[0]
             for n, (x, y) in zip(order, xy):
                 plane[n] = (x - shift_x, shift_y - y)
+        else: raise ValueError(f'Invalid clean2d engine: {engine}')
 
-            bonds = []
-            for n, m, _ in self.bonds():
-                xn, yn = plane[n]
-                xm, ym = plane[m]
-                bonds.append(sqrt((xm - xn) ** 2 + (ym - yn) ** 2))
-            if bonds:
-                bond_reduce = sum(bonds) / len(bonds) / .825
-            else:
-                bond_reduce = 1.
+        bonds = []
+        for n, m, _ in self.bonds():
+            xn, yn = plane[n]
+            xm, ym = plane[m]
+            bonds.append(sqrt((xm - xn) ** 2 + (ym - yn) ** 2))
+        if bonds:
+            bond_reduce = sum(bonds) / len(bonds) / .825
+        else:
+            bond_reduce = 1.
 
-            atoms = self._atoms
-            for n, (x, y) in plane.items():
-                atoms[n].xy = (x / bond_reduce,  y / bond_reduce)
-        else: raise ValueError(f'Invalid clean2d engine: {clean2d_engine}')
+        atoms = self._atoms
+        for n, (x, y) in plane.items():
+            atoms[n].xy = (x / bond_reduce,  y / bond_reduce)
 
         if self.connected_components_count > 1:
             shift_x = 0.

@@ -28,6 +28,7 @@ from .graph import Graph
 from .rdkit import RDkit
 from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
+from ..algorithms.conformers import Conformers
 from ..algorithms.depict import DepictMolecule
 from ..algorithms.isomorphism import MoleculeIsomorphism
 from ..algorithms.fingerprints import Fingerprints
@@ -50,7 +51,7 @@ C = 6
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, MoleculeIsomorphism,
                         Aromatize, StandardizeMolecule, MoleculeSmiles, DepictMolecule, Calculate2DMolecule,
-                        Fingerprints, Tautomers, RDkit, MCS, X3domMolecule):
+                        Conformers, Fingerprints, Tautomers, RDkit, MCS, X3domMolecule):
     __slots__ = ('_meta', '_name', '_conformers', '_changed', '_backup')
 
     def __init__(self):
