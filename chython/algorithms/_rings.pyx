@@ -23,27 +23,24 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from cpython.tuple cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.mem cimport PyMem_Malloc, PyMem_Free, PyMem_Realloc
 from libc.limits cimport UINT_MAX, USHRT_MAX
 from libc.string cimport memset, memcpy
 
 
-cdef extern from "Python.h":
-    dict _PyDict_NewPresized(Py_ssize_t minused)
-
-
 cdef struct paths_t:
-    unsigned short distance
-    unsigned char num_pid0
-    unsigned char num_pid1
-    unsigned short **pid0
-    unsigned short **pid1
+    # store PID units. paths store only non-terminal nodes
+    # in the case of distances equals 1 - don't store any paths
+    unsigned short distance  # bonds count on the shortest path between nodes
+    unsigned char num_pid0  # shortest paths count
+    unsigned char num_pid1  # shortest+1 paths count
+    unsigned short **pid0  # array of pointers to the shortest paths arrays
+    unsigned short **pid1  # array of pointers to the shortest+1 paths arrays
 
 
 cdef struct dist_matrix_t:
     unsigned short n_nodes
-    unsigned short *mapping
+    unsigned short *mapping  # idx to node label mapping
     paths_t *data
 
 
@@ -63,34 +60,24 @@ cdef dist_matrix_t *alloc_dist_matrix(unsigned short n_nodes):
     return matrix
 
 
-cdef void append_pid0(paths_t *paths, unsigned short *path):
-    cdef size_t i = paths.num_pid0
-    paths.num_pid0 += 1
-    PyMem_Realloc(paths.pid0, paths.num_pid0 * sizeof(unsigned short *))
-    paths.pid0[i] = path
-
-
-cdef void append_pid1(paths_t *paths, unsigned short *path):
-    cdef size_t i = paths.num_pid1
-    paths.num_pid1 += 1
-    PyMem_Realloc(paths.pid1, paths.num_pid1 * sizeof(unsigned short *))
-    paths.pid1[i] = path
-
-
 cdef void clear_pid0(paths_t *paths):
     cdef size_t i
+    if paths.num_pid0 == 0: return
     for i in range(paths.num_pid0):
         PyMem_Free(paths.pid0[i])
     PyMem_Free(paths.pid0)
     paths.num_pid0 = 0
+    paths.pid0 = NULL
 
 
 cdef void clear_pid1(paths_t *paths):
     cdef size_t i
+    if paths.num_pid1 == 0: return
     for i in range(paths.num_pid1):
         PyMem_Free(paths.pid1[i])
     PyMem_Free(paths.pid1)
     paths.num_pid1 = 0
+    paths.pid1 = NULL
 
 
 cdef void clear_pids(paths_t *paths):
@@ -107,13 +94,48 @@ cdef void free_dist_matrix(dist_matrix_t *matrix):
     PyMem_Free(matrix)
 
 
-cdef tuple array_to_tuple(unsigned short *array, unsigned short *mapping, size_t size):
-    cdef size_t i
-    cdef tuple output = PyTuple_New(size)
+cdef void move_paths(paths_t *paths):
+    clear_pid1(paths)
 
-    for i in range(size):
-        PyTuple_SET_ITEM(output, i, mapping[array[i]])
-    return output
+    paths.num_pid1 = paths.num_pid0
+    paths.pid1 = paths.pid0
+    paths.num_pid0 = 0
+    paths.pid0 = NULL
+
+
+cdef unsigned short *concatenate_paths(paths_t *paths_ik, paths_t *paths_kj, unsigned short k):
+    cdef unsigned short *path
+    cdef size_t size1, size2
+
+    path = <unsigned short *> PyMem_Malloc((paths_ik.distance + paths_kj.distance - 1) * sizeof(unsigned short))
+
+    size1 = paths_ik.distance - 1
+    size2 = paths_kj.distance - 1
+    path[size1] = k  # put node k to form continuous i-k-j path excluding i,j terminals
+    if size1:
+        memcpy(path, paths_ik.pid0[0], size1 * sizeof(unsigned short))  # copy nodes between i-k
+    if size2:
+        memcpy(path + paths_ik.distance, paths_kj.pid0[0], size2 * sizeof(unsigned short))
+    return path
+
+
+cdef void append_pid0(paths_t *paths_ij, paths_t *paths_ik, paths_t *paths_kj, unsigned short k):
+    cdef size_t i = paths_ij.num_pid0
+    paths_ij.num_pid0 += 1
+    paths_ij.pid0 = <unsigned short **> PyMem_Realloc(paths_ij.pid0, paths_ij.num_pid0 * sizeof(unsigned short *))
+    paths_ij.pid0[i] = concatenate_paths(paths_ik, paths_kj, k)
+
+
+cdef void append_pid1(paths_t *paths_ij, paths_t *paths_ik, paths_t *paths_kj, unsigned short k):
+    cdef size_t i = paths_ij.num_pid1
+    paths_ij.num_pid1 += 1
+    paths_ij.pid1 = <unsigned short **> PyMem_Realloc(paths_ij.pid1, paths_ij.num_pid1 * sizeof(unsigned short *))
+    paths_ij.pid1[i] = concatenate_paths(paths_ik, paths_kj, k)
+
+
+cdef tuple ring_to_tuple(unsigned short *ring, size_t size):
+    cdef size_t i
+    return tuple(ring[i] for i in range(size))
 
 
 cdef void free_hashes(unsigned long long **hashes, size_t size):
@@ -123,49 +145,24 @@ cdef void free_hashes(unsigned long long **hashes, size_t size):
     PyMem_Free(hashes)
 
 
-cdef void move_paths(unsigned int **pid0, unsigned int **pid1, size_t ij, size_t max_paths):
-    cdef size_t i
+cdef int has_overlap(paths_t *paths_ik, paths_t *paths_kj, paths_t *paths_ij, int test_pid1):
+    cdef size_t i, j
+    cdef unsigned short n1, n2
+    cdef unsigned short *path
 
-    ij *= max_paths
-    for i in range(ij, ij + max_paths):
-        # run max_path times to make sure all pid1 paths overridden
-        PyMem_Free(pid1[i])
-        pid1[i] = pid0[i]
-        pid0[i] = NULL
+    n1 = paths_ik.pid0[0][1]
+    n2 = paths_kj.pid0[0][paths_kj.distance - 1]
 
-
-cdef unsigned int * concatenate_paths(unsigned int **pid, unsigned int *dist, size_t i, size_t j, size_t max_paths):
-    cdef unsigned int *path
-    cdef unsigned int size1, size2
-
-    size1 = dist[i]
-    size2 = dist[j] + 1  # sizes are edges counts in a path, not nodes, thus, +1
-
-    path = <unsigned int *> PyMem_Malloc((size1 + size2) * sizeof(unsigned int))
-
-    memcpy(path, pid[i * max_paths], size1 * sizeof(unsigned int))  # dropping last node
-    memcpy(path + size1, pid[j * max_paths], size2 * sizeof(unsigned int))
-    return path
-
-
-cdef int has_overlap(unsigned int **pid0, unsigned int **pid1, unsigned int *dist,
-                     size_t i, size_t j, size_t k, size_t max_paths, size_t shift):
-    cdef size_t n
-    cdef unsigned int n1, n2
-    cdef unsigned int d
-    cdef unsigned int *path
-
-    n1 = pid0[i * max_paths][1]
-    n2 = pid0[j * max_paths][dist[j] - 1]
-
-    d = dist[k] - shift
-    k *= max_paths
-    for n in range(k, k + max_paths):
-        path = pid1[n]
-        if path == NULL:
-            return 0
-        if path[1] == n1 or path[d] == n2:
+    j = paths_ij.distance - 1
+    for i in range(paths_ij.num_pid0):
+        path = paths_ij.pid0[i]
+        if path[1] == n1 or path[j] == n2:
             return 1
+    if test_pid1:
+        for i in range(paths_ij.num_pid1):
+            path = paths_ij.pid1[i]
+            if path[1] == n1 or path[paths_ij.distance] == n2:
+                return 1
     return 0
 
 
@@ -265,48 +262,41 @@ cdef void add_ring_if_unique(unsigned int *path1, unsigned int *path2,
 
 
 cdef void build_pid(dist_matrix_t *matrix):
-    cdef size_t i, j, k, sk, si, ij, kj, ik
+    cdef size_t i, j, k, sk, si
     cdef unsigned int d
-    cdef paths_t *paths_ki
     cdef paths_t *paths_kj
     cdef paths_t *paths_ij
-    cdef unsigned int *path
+    cdef paths_t *paths_ik
 
     for k in range(matrix.n_nodes):
         sk = k * matrix.n_nodes
         for i in range(matrix.n_nodes):
             if i == k: continue
-            paths_ki = &matrix.data[sk + i]
-            if paths_ki.distance == USHRT_MAX: continue
             si = i * matrix.n_nodes
-            ik = si + k
+            paths_ik = &matrix.data[si + k]
+            if paths_ik.distance == USHRT_MAX: continue
+
             for j in range(matrix.n_nodes):
                 if j == k or j == i: continue
-                kj = sk + j
-                paths_kj = &matrix.data[kj]
-                if paths_kj.distance == UINT_MAX: continue
+                paths_kj = &matrix.data[sk + j]
+                if paths_kj.distance == USHRT_MAX: continue
 
-                ij = si + j
-                paths_ij = &matrix.data[ij]
-                d = paths_ki.distance + paths_kj.distance
+                paths_ij = &matrix.data[si + j]
+                d = paths_ik.distance + paths_kj.distance
                 if d < paths_ij.distance:  # shorter pid0 path found
-                    if d == paths_ij.distance - 1 and not has_overlap(pid0, pid0, dist, ik, kj, ij, max_paths, 1):
-                        move_paths(pid0, pid1, ij, max_paths)
-                    else:  # override old paths
+                    if d == paths_ij.distance - 1: # and not has_overlap(paths_ik, paths_kj, paths_ij, 0):
+                        move_paths(paths_ij)
+                    else:  # drop old paths
                         clear_pids(paths_ij)
-                    paths_ij.distance = d
 
-                    path = concatenate_paths(pid0, dist, ik, kj)
-                    append_path(pid0, ij, max_paths, path)
+                    paths_ij.distance = d
+                    append_pid0(paths_ij, paths_ik, paths_kj, matrix.mapping[k])
                 elif d == paths_ij.distance:  # new pid0 path
-                    if not has_overlap(pid0, pid0, dist, ik, kj, ij, max_paths, 1):
-                        path = concatenate_paths(pid0, dist, ik, kj, max_paths)
-                        append_path(pid0, ij, max_paths, path)
+                    #if not has_overlap(paths_ik, paths_kj, paths_ij, 0):
+                    append_pid0(paths_ij, paths_ik, paths_kj, matrix.mapping[k])
                 elif d == paths_ij.distance + 1:  # new pid1 path
-                    if not has_overlap(pid0, pid0, dist, ik, kj, ij, max_paths, 1):
-                        if not has_overlap(pid0, pid1, dist, ik, kj, ij, max_paths, 0):
-                            path = concatenate_paths(pid0, dist, ik, kj, max_paths)
-                            append_path(pid1, ij, max_paths, path)
+                    #if not has_overlap(paths_ik, paths_kj, paths_ij, 1):
+                    append_pid1(paths_ij, paths_ik, paths_kj, matrix.mapping[k])
 
 
 cdef void find_rings(unsigned int **rings, unsigned int *ring_sizes,
@@ -380,7 +370,7 @@ def sssr(dict graph, size_t n_rings):
         for m in mb:
             matrix.data[si + reverse_mapping[m]].distance = 1
 
-    # build_pid(matrix)
+    build_pid(matrix)
     #
     # DEBUG
     cdef paths_t p
@@ -389,11 +379,11 @@ def sssr(dict graph, size_t n_rings):
             if i == j: continue
             p = matrix.data[i * n_nodes + j]
             if p.distance == 1:
-                print('!', matrix.mapping[i], matrix.mapping[j], ())
+                print('!', matrix.mapping[i], matrix.mapping[j])
             for k in range(p.num_pid0):
-                print('!', matrix.mapping[i], matrix.mapping[j], array_to_tuple(p.pid0[k], matrix.mapping, p.distance - 1))
+                print('?', matrix.mapping[i], matrix.mapping[j], ring_to_tuple(p.pid0[k], p.distance - 1))
             for k in range(p.num_pid1):
-                print('!', matrix.mapping[i], matrix.mapping[j], array_to_tuple(p.pid1[k], matrix.mapping, p.distance))
+                print('$', matrix.mapping[i], matrix.mapping[j], ring_to_tuple(p.pid1[k], p.distance))
 
     #
     # find_rings(rings, ring_sizes, pid0, pid1, dist, n_nodes, max_paths, hash_size, n_rings)
