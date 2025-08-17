@@ -232,12 +232,37 @@ cdef unsigned long long *build_hash(unsigned short *path1, unsigned short *path2
     return hash
 
 
-cdef size_t get_rank(rings_t *rings, size_t size):
+cdef unsigned short *build_ring(unsigned short *path1, unsigned short *path2,
+                                unsigned short i, unsigned short j, size_t size1, size_t size2):
+    cdef size_t k, s = size1 + 1
+    cdef unsigned short *nodes
+
+    nodes = <unsigned short *> PyMem_Malloc((size1 + size2 + 2) * sizeof(unsigned short))
+    nodes[0] = i
+    nodes[s] = j
+    memcpy(nodes + 1, path1, size1 * sizeof(unsigned short))
+
+    # inverse second path
+    for k in range(size2 - 1, -1, -1):
+        s += 1
+        nodes[s] = path2[k]
+    return nodes
+
+
+cdef void push_ring(ring_t ring, rings_t *rings):
     cdef size_t i
-    for i in range(rings.n_rings):
-        if size < rings.rings[i].n_nodes:
-            return i
-    return USHRT_MAX
+
+    if rings.n_allocated == rings.n_rings:
+        # drop last ring
+        free_ring(&rings.rings[rings.n_rings - 1])
+    else:
+        rings.n_allocated += 1
+
+    for i in range(rings.n_allocated - 1, rank, -1):
+        rings.rings[i] = rings.rings[i - 1]
+
+    # insert the new ring at the rank position
+    rings.rings[rank] = ring
 
 
 cdef int is_unique(ring_t *ring, rings_t *rings):
@@ -258,39 +283,6 @@ cdef int is_unique(ring_t *ring, rings_t *rings):
         elif ring.n_nodes < other.n_nodes:
             return 1
     return 0
-
-
-cdef unsigned short *build_ring(unsigned short *path1, unsigned short *path2,
-                              unsigned short i, unsigned short j, size_t size1, size_t size2):
-    cdef size_t k, s = size1 + 1
-    cdef unsigned short *nodes
-
-    nodes = <unsigned short *> PyMem_Malloc((size1 + size2 + 2) * sizeof(unsigned short))
-    nodes[0] = i
-    nodes[s] = j
-    memcpy(nodes + 1, path1, size1 * sizeof(unsigned short))
-
-    # inverse second path
-    for k in range(size2 - 1, -1, -1):
-        s += 1
-        nodes[s] = path2[k]
-    return nodes
-
-
-cdef void push_ring(ring_t ring, rings_t *rings, unsigned short rank):
-    cdef size_t i
-
-    if rings.n_allocated == rings.n_rings:
-        # drop last ring
-        free_ring(&rings.rings[rings.n_rings - 1])
-    else:
-        rings.n_allocated += 1
-
-    for i in range(rings.n_allocated - 1, rank, -1):
-        rings.rings[i] = rings.rings[i - 1]
-
-    # insert the new ring at the rank position
-    rings.rings[rank] = ring
 
 
 cdef void build_pid(dist_matrix_t *matrix):
@@ -335,60 +327,51 @@ cdef void build_pid(dist_matrix_t *matrix):
 
 cdef void find_rings(dist_matrix_t *matrix, rings_t *rings):
     cdef size_t i, j, k, si
-    cdef unsigned short rank
+    cdef unsigned short ri, rj, d
     cdef ring_t ring
     cdef paths_t *path
 
     for i in range(matrix.n_nodes):
         si = i * matrix.n_nodes
+        ri = matrix.mapping[i]
         for j in range(matrix.n_nodes):
             if i == j: continue
             path = &matrix.data[si + j]
-            if path.distance == USHRT_MAX: continue  # different components
-            elif path.distance == 1:  # triangles
+            d = path.distance
+            if d == USHRT_MAX: continue  # different components
+            rj = matrix.mapping[j]
+
+            if d == 1:  # triangles
                 if not path.num_pid1: continue
-                rank = get_rank(rings, 3)
-                if rank == USHRT_MAX: continue  # ring is not in the smallest set
                 ring.n_nodes = 3
                 for k in range(path.num_pid1):
-                    ring.hash = build_hash(NULL, path.pid1[k], matrix.mapping[i], matrix.mapping[j],
-                                           0, 1, rings.hash_size)
-                    if rank == 0 or is_unique(&ring, rings):
-                        ring.nodes = <unsigned short *> PyMem_Malloc(3 * sizeof(unsigned short))
-                        ring.nodes[0] = matrix.mapping[i]
-                        ring.nodes[1] = matrix.mapping[j]
-                        ring.nodes[2] = path.pid1[k][0]
-                        push_ring(ring, rings, rank)
-                        print('$', i, j, rank, ring_to_tuple(rings.rings[rank].nodes, rings.rings[rank].n_nodes))
+                    ring.hash = build_hash(NULL, path.pid1[k], ri, rj, 0, 1, rings.hash_size)
+
+                    if is_unique(&ring, rings):
+                        ring.nodes = build_ring(path.pid1[k], NULL, ri, rj, 1, 0)
+                        push_ring(ring, rings)
                     else:
                         PyMem_Free(ring.hash)
             elif path.num_pid0 == 1:  # is odd?
                 if not path.num_pid1: continue
-                ring.n_nodes = 2 * path.distance + 1
-                rank = get_rank(rings, ring.n_nodes)
-                if rank == USHRT_MAX: continue  # ring is not in the smallest set
+                ring.n_nodes = 2 * d + 1
                 for k in range(path.num_pid1):
-                    ring.hash = build_hash(path.pid0[0], path.pid1[k], matrix.mapping[i], matrix.mapping[j],
-                                           path.distance - 1, path.distance, rings.hash_size)
-                    if rank == 0 or is_unique(&ring, rings):
-                        print('%', i, j, rank)
-                        ring.nodes = build_ring(path.pid0[0], path.pid1[k], matrix.mapping[i], matrix.mapping[j],
-                                                path.distance - 1, path.distance)
-                        push_ring(ring, rings, rank)
+                    ring.hash = build_hash(path.pid0[0], path.pid1[k], ri, rj, d - 1, d, rings.hash_size)
+
+                    if is_unique(&ring, rings):
+                        ring.nodes = build_ring(path.pid0[0], path.pid1[k], ri, rj, d - 1, d)
+                        push_ring(ring, rings)
                     else:
                         PyMem_Free(ring.hash)
             else:  # is even
-                ring.n_nodes = 2 * path.distance
-                rank = get_rank(rings, ring.n_nodes)
-                if rank == USHRT_MAX: continue
+                ring.n_nodes = 2 * d
+                d -= 1
                 for k in range(1, path.num_pid0):
-                    ring.hash = build_hash(path.pid0[k - 1], path.pid0[k], matrix.mapping[i], matrix.mapping[j],
-                                           path.distance - 1, path.distance - 1, rings.hash_size)
-                    if rank == 0 or is_unique(&ring, rings):
-                        ring.nodes = build_ring(path.pid0[k - 1], path.pid0[k], matrix.mapping[i], matrix.mapping[j],
-                                                path.distance - 1, path.distance - 1)
-                        push_ring(ring, rings, rank)
-                        print('@', i, j, rank, ring_to_tuple(rings.rings[rank].nodes, rings.rings[rank].n_nodes))
+                    ring.hash = build_hash(path.pid0[k - 1], path.pid0[k], ri, rj, d, d, rings.hash_size)
+
+                    if is_unique(&ring, rings):
+                        ring.nodes = build_ring(path.pid0[k - 1], path.pid0[k], ri, rj, d, d)
+                        push_ring(ring, rings)
                     else:
                         PyMem_Free(ring.hash)
 
@@ -433,9 +416,9 @@ def sssr(dict graph, size_t n_rings):
     #             print('$', matrix.mapping[i], matrix.mapping[j], ring_to_tuple(p.pid1[k], p.distance))
 
     find_rings(matrix, rings)
-    # for i in range(n_rings):
-    #     ring = rings.rings[i]
-    #     output.append(ring_to_tuple(ring.nodes, ring.n_nodes))
+    for i in range(n_rings):
+        ring = rings.rings[i]
+        output.append(ring_to_tuple(ring.nodes, ring.n_nodes))
 
     free_dist_matrix(matrix)
     free_rings(rings)
