@@ -145,25 +145,32 @@ cdef void free_hashes(unsigned long long **hashes, size_t size):
     PyMem_Free(hashes)
 
 
-cdef int has_overlap(paths_t *paths_ik, paths_t *paths_kj, paths_t *paths_ij, int test_pid1):
+cdef int has_not_overlap(paths_t *paths_ik, paths_t *paths_kj, paths_t *paths_ij, unsigned short k, int test_pid1):
     cdef size_t i, j
     cdef unsigned short n1, n2
     cdef unsigned short *path
 
-    n1 = paths_ik.pid0[0][1]
-    n2 = paths_kj.pid0[0][paths_kj.distance - 1]
+    if paths_ik.distance == 1:
+        n1 = k
+    else:
+        n1 = paths_ik.pid0[0][0]
+    if paths_kj.distance == 1:
+        n2 = k
+    else:
+        n2 = paths_kj.pid0[0][paths_kj.distance - 2]
 
-    j = paths_ij.distance - 1
+    j = paths_ij.distance - 2
     for i in range(paths_ij.num_pid0):
         path = paths_ij.pid0[i]
-        if path[1] == n1 or path[j] == n2:
-            return 1
+        if path[0] == n1 or path[j] == n2:
+            return 0
     if test_pid1:
+        j = paths_ij.distance - 1
         for i in range(paths_ij.num_pid1):
             path = paths_ij.pid1[i]
-            if path[1] == n1 or path[paths_ij.distance] == n2:
-                return 1
-    return 0
+            if path[0] == n1 or path[j] == n2:
+                return 0
+    return 1
 
 
 cdef unsigned int * build_ring(unsigned int *path1, unsigned int *path2, size_t size1, size_t size2):
@@ -263,6 +270,7 @@ cdef void add_ring_if_unique(unsigned int *path1, unsigned int *path2,
 
 cdef void build_pid(dist_matrix_t *matrix):
     cdef size_t i, j, k, sk, si
+    cdef unsigned short rk
     cdef unsigned int d
     cdef paths_t *paths_kj
     cdef paths_t *paths_ij
@@ -270,6 +278,7 @@ cdef void build_pid(dist_matrix_t *matrix):
 
     for k in range(matrix.n_nodes):
         sk = k * matrix.n_nodes
+        rk = matrix.mapping[k]
         for i in range(matrix.n_nodes):
             if i == k: continue
             si = i * matrix.n_nodes
@@ -284,19 +293,19 @@ cdef void build_pid(dist_matrix_t *matrix):
                 paths_ij = &matrix.data[si + j]
                 d = paths_ik.distance + paths_kj.distance
                 if d < paths_ij.distance:  # shorter pid0 path found
-                    if d == paths_ij.distance - 1: # and not has_overlap(paths_ik, paths_kj, paths_ij, 0):
+                    if d == paths_ij.distance - 1 and has_not_overlap(paths_ik, paths_kj, paths_ij, rk, 0):
                         move_paths(paths_ij)
                     else:  # drop old paths
                         clear_pids(paths_ij)
 
                     paths_ij.distance = d
-                    append_pid0(paths_ij, paths_ik, paths_kj, matrix.mapping[k])
+                    append_pid0(paths_ij, paths_ik, paths_kj, rk)
                 elif d == paths_ij.distance:  # new pid0 path
-                    #if not has_overlap(paths_ik, paths_kj, paths_ij, 0):
-                    append_pid0(paths_ij, paths_ik, paths_kj, matrix.mapping[k])
+                    if has_not_overlap(paths_ik, paths_kj, paths_ij, rk, 0):
+                        append_pid0(paths_ij, paths_ik, paths_kj, rk)
                 elif d == paths_ij.distance + 1:  # new pid1 path
-                    #if not has_overlap(paths_ik, paths_kj, paths_ij, 1):
-                    append_pid1(paths_ij, paths_ik, paths_kj, matrix.mapping[k])
+                    if has_not_overlap(paths_ik, paths_kj, paths_ij, rk, 1):
+                        append_pid1(paths_ij, paths_ik, paths_kj, rk)
 
 
 cdef void find_rings(unsigned int **rings, unsigned int *ring_sizes,
