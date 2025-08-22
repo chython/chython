@@ -92,6 +92,16 @@ cdef rings_t *alloc_rings(unsigned short n_rings, size_t hash_size):
     return rings
 
 
+cdef void realloc_rings(rings_t *rings, size_t n_rings):
+    cdef size_t i, old_n_rings = rings.n_rings
+    rings.n_rings = n_rings
+    rings.rings = <ring_t *> PyMem_Realloc(rings.rings, n_rings * sizeof(ring_t))
+    memset(rings.rings + old_n_rings, 0, (n_rings - old_n_rings) * sizeof(ring_t))
+
+    for i in range(old_n_rings, n_rings):
+        rings.rings[i].n_nodes = USHRT_MAX
+
+
 cdef void free_pid0(paths_t *paths):
     cdef size_t i
     if paths.num_pid0 == 0: return
@@ -249,40 +259,43 @@ cdef unsigned short *build_ring(unsigned short *path1, unsigned short *path2,
     return nodes
 
 
-cdef void push_ring(ring_t ring, rings_t *rings):
+cdef void push_ring(ring_t ring, rings_t *rings, unsigned short rank):
     cdef size_t i
+    cdef unsigned short ext
 
-    if rings.n_allocated == rings.n_rings:
-        # drop last ring
-        free_ring(&rings.rings[rings.n_rings - 1])
-    else:
-        rings.n_allocated += 1
+    print('@', ring_to_tuple(ring.nodes, ring.n_nodes))
 
-    for i in range(rings.n_allocated - 1, rank, -1):
+    if rings.n_allocated == rings.n_rings - 1:  # almost all slots are busy
+        ext = rings.n_rings
+        if ext > 1000: ext = 1000  # no more than 1k rings to extend
+        realloc_rings(rings, rings.n_rings + ext)
+
+    for i in range(rings.n_allocated, rank, -1):
         rings.rings[i] = rings.rings[i - 1]
 
     # insert the new ring at the rank position
     rings.rings[rank] = ring
+    rings.n_allocated += 1
 
 
-cdef int is_unique(ring_t *ring, rings_t *rings):
+cdef unsigned short get_rank(ring_t *ring, rings_t *rings):
     cdef size_t i, j
     cdef int hash_match
     cdef ring_t *other
 
-    for i in range(rings.n_rings):
+    for i in range(rings.n_allocated + 1):
         other = &rings.rings[i]
         if ring.n_nodes == other.n_nodes:
             hash_match = 1
             for j in range(rings.hash_size):
-                if ring.hash[j] ^ other.hash[j] != 0:
+                if ring.hash[j] != other.hash[j]:
                     hash_match = 0
                     break
             if hash_match:
-                return 0
+                return USHRT_MAX  # duplicate found
         elif ring.n_nodes < other.n_nodes:
-            return 1
-    return 0
+            return i
+    return i
 
 
 cdef void build_pid(dist_matrix_t *matrix):
@@ -325,11 +338,18 @@ cdef void build_pid(dist_matrix_t *matrix):
                         append_pid1(paths_ij, paths_ik, paths_kj, rk)
 
 
-cdef void find_rings(dist_matrix_t *matrix, rings_t *rings):
-    cdef size_t i, j, k, si
-    cdef unsigned short ri, rj, d
+cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
+    cdef size_t i, j, k, si, n_max = 0
+    cdef unsigned short ri, rj, d, rank
     cdef ring_t ring
     cdef paths_t *path
+    cdef rings_t *rings
+
+    for i in range(matrix.n_nodes):
+        ri = matrix.mapping[i]
+        if ri > n_max: n_max = ri
+
+    rings = alloc_rings(n_rings, (n_max + ULL_BITS - 1) // ULL_BITS)
 
     for i in range(matrix.n_nodes):
         si = i * matrix.n_nodes
@@ -347,9 +367,10 @@ cdef void find_rings(dist_matrix_t *matrix, rings_t *rings):
                 for k in range(path.num_pid1):
                     ring.hash = build_hash(NULL, path.pid1[k], ri, rj, 0, 1, rings.hash_size)
 
-                    if is_unique(&ring, rings):
+                    rank = get_rank(&ring, rings)
+                    if rank != USHRT_MAX:
                         ring.nodes = build_ring(path.pid1[k], NULL, ri, rj, 1, 0)
-                        push_ring(ring, rings)
+                        push_ring(ring, rings, rank)
                     else:
                         PyMem_Free(ring.hash)
             elif path.num_pid0 == 1:  # is odd?
@@ -358,9 +379,10 @@ cdef void find_rings(dist_matrix_t *matrix, rings_t *rings):
                 for k in range(path.num_pid1):
                     ring.hash = build_hash(path.pid0[0], path.pid1[k], ri, rj, d - 1, d, rings.hash_size)
 
-                    if is_unique(&ring, rings):
+                    rank = get_rank(&ring, rings)
+                    if rank != USHRT_MAX:
                         ring.nodes = build_ring(path.pid0[0], path.pid1[k], ri, rj, d - 1, d)
-                        push_ring(ring, rings)
+                        push_ring(ring, rings, rank)
                     else:
                         PyMem_Free(ring.hash)
             else:  # is even
@@ -369,19 +391,19 @@ cdef void find_rings(dist_matrix_t *matrix, rings_t *rings):
                 for k in range(1, path.num_pid0):
                     ring.hash = build_hash(path.pid0[k - 1], path.pid0[k], ri, rj, d, d, rings.hash_size)
 
-                    if is_unique(&ring, rings):
+                    rank = get_rank(&ring, rings)
+                    if rank != USHRT_MAX:
                         ring.nodes = build_ring(path.pid0[k - 1], path.pid0[k], ri, rj, d, d)
-                        push_ring(ring, rings)
+                        push_ring(ring, rings, rank)
                     else:
                         PyMem_Free(ring.hash)
+    return rings
 
 
 def sssr(dict graph, size_t n_rings):
     cdef size_t si
-    cdef unsigned short i, n, m, n_max = 0, n_nodes = len(graph)
+    cdef unsigned short i, n, m, n_nodes = len(graph)
     cdef unsigned short [USHRT_MAX] reverse_mapping  # 128kb
-    cdef ring_t ring
-    cdef rings_t *rings
     cdef object mb
     cdef list output = []
 
@@ -390,14 +412,11 @@ def sssr(dict graph, size_t n_rings):
     for i, n in enumerate(graph):
         matrix.mapping[i] = n
         reverse_mapping[n] = i
-        if n > n_max: n_max = n
 
     for n, mb in graph.items():
         si = n_nodes * reverse_mapping[n]
         for m in mb:
             matrix.data[si + reverse_mapping[m]].distance = 1
-
-    rings = alloc_rings(n_rings, (n_max + ULL_BITS - 1) // ULL_BITS)
 
     # run PID matrix calculation
     build_pid(matrix)
@@ -415,11 +434,13 @@ def sssr(dict graph, size_t n_rings):
     #         for k in range(p.num_pid1):
     #             print('$', matrix.mapping[i], matrix.mapping[j], ring_to_tuple(p.pid1[k], p.distance))
 
-    find_rings(matrix, rings)
-    for i in range(n_rings):
-        ring = rings.rings[i]
+    # run CSET calculation
+    cset = build_cset(matrix, n_rings)
+
+    for i in range(cset.n_rings):
+        ring = cset.rings[i]
         output.append(ring_to_tuple(ring.nodes, ring.n_nodes))
 
     free_dist_matrix(matrix)
-    free_rings(rings)
+    free_rings(cset)
     return output
