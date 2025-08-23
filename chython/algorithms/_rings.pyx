@@ -90,12 +90,11 @@ cdef rings_t *alloc_rings(unsigned short n_rings, size_t hash_size):
 
 
 cdef void realloc_rings(rings_t *rings, size_t n_rings):
-    cdef size_t i, old_n_rings = rings.n_rings
-    rings.n_rings = n_rings
+    cdef size_t i
     rings.rings = <ring_t *> PyMem_Realloc(rings.rings, n_rings * sizeof(ring_t))
-    memset(rings.rings + old_n_rings, 0, (n_rings - old_n_rings) * sizeof(ring_t))
+    memset(rings.rings + rings.n_rings, 0, (n_rings - rings.n_rings) * sizeof(ring_t))
 
-    for i in range(old_n_rings, n_rings):
+    for i in range(rings.n_rings, n_rings):
         rings.rings[i].n_nodes = USHRT_MAX
 
 
@@ -399,7 +398,42 @@ cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
 
 
 cdef void filter_rings(rings_t *rings):
-    ...
+    cdef size_t i, j, k, pc = 0
+    cdef ring_t *ring
+    cdef int is_unique
+    cdef unsigned long long *hash
+    cdef unsigned short *poplist
+
+    if rings.n_allocated == rings.n_rings: return
+
+    hash = <unsigned long long *> PyMem_Malloc(rings.hash_size * sizeof(unsigned long long))
+    poplist = <unsigned short *> PyMem_Malloc(rings.n_allocated * sizeof(unsigned short))
+    memcpy(hash, rings.rings[0].hash, rings.hash_size * sizeof(unsigned long long))
+
+    for i in range(1, rings.n_allocated):
+        is_unique = 0
+        ring = &rings.rings[i]
+        for j in range(rings.hash_size):
+            if ring.hash[j] & (~hash[j]):
+                is_unique = 1
+                break
+        if is_unique:  # extend global hash
+            for j in range(rings.hash_size):
+                hash[j] |= ring.hash[j]
+        else:
+            poplist[pc] = i
+            pc += 1
+
+    for i in range(<size_t>rings.n_allocated - 1, <size_t> rings.n_rings - 1, -1):
+        pc -= 1
+        k = poplist[pc]
+
+        free_ring(&rings.rings[k])  # drop condensed ring
+        for j in range(k, i):
+            rings.rings[j] = rings.rings[j + 1]
+
+    rings.n_allocated = rings.n_rings
+    PyMem_Free(poplist)
 
 
 def sssr(dict graph, size_t n_rings):
@@ -408,11 +442,13 @@ def sssr(dict graph, size_t n_rings):
     cdef unsigned short [USHRT_MAX] reverse_mapping  # 128kb
     cdef ring_t ring
     cdef rings_t *rings
+    cdef dist_matrix_t *matrix
     cdef object mb
     cdef list output = []
 
-    cdef dist_matrix_t *matrix = alloc_dist_matrix(n_nodes)
+    if not n_rings: return output
 
+    matrix = alloc_dist_matrix(n_nodes)
     for i, n in enumerate(graph):
         matrix.mapping[i] = n
         reverse_mapping[n] = i
