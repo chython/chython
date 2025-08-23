@@ -24,12 +24,9 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from cpython.mem cimport PyMem_Malloc, PyMem_Free, PyMem_Realloc
+from cpython.tuple cimport PyTuple_New, PyTuple_SET_ITEM
 from libc.limits cimport USHRT_MAX
 from libc.string cimport memset, memcpy
-
-
-cdef enum:
-    ULL_BITS = sizeof(unsigned long long) * 8
 
 
 cdef struct paths_t:
@@ -145,7 +142,7 @@ cdef void free_ring(ring_t *ring):
 
 cdef void free_rings(rings_t *rings):
     cdef size_t i
-    for i in range(rings.n_rings):
+    for i in range(rings.n_allocated):
         free_ring(&rings.rings[i])
     PyMem_Free(rings.rings)
     PyMem_Free(rings)
@@ -192,7 +189,11 @@ cdef void append_pid1(paths_t *paths_ij, paths_t *paths_ik, paths_t *paths_kj, u
 
 cdef tuple ring_to_tuple(unsigned short *ring, size_t size):
     cdef size_t i
-    return tuple(ring[i] for i in range(size))
+    cdef tuple result = PyTuple_New(size)
+
+    for i in range(size):
+        PyTuple_SET_ITEM(result, i, <object>ring[i])
+    return result
 
 
 cdef int has_not_overlap(paths_t *paths_ik, paths_t *paths_kj, paths_t *paths_ij, unsigned short k, int test_pid1):
@@ -230,15 +231,15 @@ cdef unsigned long long *build_hash(unsigned short *path1, unsigned short *path2
     cdef unsigned long long *hash = <unsigned long long *> PyMem_Malloc(hash_size * sizeof(unsigned long long))
 
     memset(hash, 0, hash_size * sizeof(unsigned long long))
-    hash[i // ULL_BITS] |= (1 << (i % ULL_BITS))  # add linker node
-    hash[j // ULL_BITS] |= (1 << (j % ULL_BITS))
+    hash[i // 64] |= (1 << (i % 64))  # add linker node
+    hash[j // 64] |= (1 << (j % 64))
 
     for k in range(size1):
         node = path1[k]
-        hash[node // ULL_BITS] |= (1 << (node % ULL_BITS))
+        hash[node // 64] |= (1 << (node % 64))
     for k in range(size2):
         node = path2[k]
-        hash[node // ULL_BITS] |= (1 << (node % ULL_BITS))
+        hash[node // 64] |= (1 << (node % 64))
     return hash
 
 
@@ -259,14 +260,12 @@ cdef unsigned short *build_ring(unsigned short *path1, unsigned short *path2,
     return nodes
 
 
-cdef void push_ring(ring_t ring, rings_t *rings, unsigned short rank):
+cdef void push_ring(ring_t *ring, rings_t *rings, unsigned short rank):
     cdef size_t i
     cdef unsigned short ext
 
-    print('@', ring_to_tuple(ring.nodes, ring.n_nodes))
-
     if rings.n_allocated == rings.n_rings - 1:  # almost all slots are busy
-        ext = rings.n_rings
+        ext = rings.n_rings  # double rings storage
         if ext > 1000: ext = 1000  # no more than 1k rings to extend
         realloc_rings(rings, rings.n_rings + ext)
 
@@ -274,7 +273,7 @@ cdef void push_ring(ring_t ring, rings_t *rings, unsigned short rank):
         rings.rings[i] = rings.rings[i - 1]
 
     # insert the new ring at the rank position
-    rings.rings[rank] = ring
+    rings.rings[rank] = ring[0]  # copy dereferenced struct memory
     rings.n_allocated += 1
 
 
@@ -283,7 +282,7 @@ cdef unsigned short get_rank(ring_t *ring, rings_t *rings):
     cdef int hash_match
     cdef ring_t *other
 
-    for i in range(rings.n_allocated + 1):
+    for i in range(<size_t> rings.n_allocated + 1):
         other = &rings.rings[i]
         if ring.n_nodes == other.n_nodes:
             hash_match = 1
@@ -293,9 +292,8 @@ cdef unsigned short get_rank(ring_t *ring, rings_t *rings):
                     break
             if hash_match:
                 return USHRT_MAX  # duplicate found
-        elif ring.n_nodes < other.n_nodes:
+        elif ring.n_nodes < other.n_nodes:  # always true for n_allocated+1
             return i
-    return i
 
 
 cdef void build_pid(dist_matrix_t *matrix):
@@ -349,7 +347,7 @@ cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
         ri = matrix.mapping[i]
         if ri > n_max: n_max = ri
 
-    rings = alloc_rings(n_rings, (n_max + ULL_BITS - 1) // ULL_BITS)
+    rings = alloc_rings(n_rings, (n_max + 64 - 1) // 64)
 
     for i in range(matrix.n_nodes):
         si = i * matrix.n_nodes
@@ -357,7 +355,7 @@ cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
         for j in range(matrix.n_nodes):
             if i == j: continue
             path = &matrix.data[si + j]
-            d = path.distance
+            d = path.distance  # make shortcut
             if d == USHRT_MAX: continue  # different components
             rj = matrix.mapping[j]
 
@@ -370,7 +368,7 @@ cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
                     rank = get_rank(&ring, rings)
                     if rank != USHRT_MAX:
                         ring.nodes = build_ring(path.pid1[k], NULL, ri, rj, 1, 0)
-                        push_ring(ring, rings, rank)
+                        push_ring(&ring, rings, rank)
                     else:
                         PyMem_Free(ring.hash)
             elif path.num_pid0 == 1:  # is odd?
@@ -382,7 +380,7 @@ cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
                     rank = get_rank(&ring, rings)
                     if rank != USHRT_MAX:
                         ring.nodes = build_ring(path.pid0[0], path.pid1[k], ri, rj, d - 1, d)
-                        push_ring(ring, rings, rank)
+                        push_ring(&ring, rings, rank)
                     else:
                         PyMem_Free(ring.hash)
             else:  # is even
@@ -394,16 +392,22 @@ cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
                     rank = get_rank(&ring, rings)
                     if rank != USHRT_MAX:
                         ring.nodes = build_ring(path.pid0[k - 1], path.pid0[k], ri, rj, d, d)
-                        push_ring(ring, rings, rank)
+                        push_ring(&ring, rings, rank)
                     else:
                         PyMem_Free(ring.hash)
     return rings
+
+
+cdef void filter_rings(rings_t *rings):
+    ...
 
 
 def sssr(dict graph, size_t n_rings):
     cdef size_t si
     cdef unsigned short i, n, m, n_nodes = len(graph)
     cdef unsigned short [USHRT_MAX] reverse_mapping  # 128kb
+    cdef ring_t ring
+    cdef rings_t *rings
     cdef object mb
     cdef list output = []
 
@@ -420,27 +424,15 @@ def sssr(dict graph, size_t n_rings):
 
     # run PID matrix calculation
     build_pid(matrix)
-
-    # DEBUG
-    # cdef paths_t p
-    # for i in range(n_nodes):
-    #     for j in range(n_nodes):
-    #         if i == j: continue
-    #         p = matrix.data[i * n_nodes + j]
-    #         if p.distance == 1:
-    #             print('!', matrix.mapping[i], matrix.mapping[j])
-    #         for k in range(p.num_pid0):
-    #             print('?', matrix.mapping[i], matrix.mapping[j], ring_to_tuple(p.pid0[k], p.distance - 1))
-    #         for k in range(p.num_pid1):
-    #             print('$', matrix.mapping[i], matrix.mapping[j], ring_to_tuple(p.pid1[k], p.distance))
-
     # run CSET calculation
-    cset = build_cset(matrix, n_rings)
+    rings = build_cset(matrix, n_rings)
+    # filter out condensed rings
+    filter_rings(rings)
 
-    for i in range(cset.n_rings):
-        ring = cset.rings[i]
+    for i in range(rings.n_allocated):
+        ring = rings.rings[i]
         output.append(ring_to_tuple(ring.nodes, ring.n_nodes))
 
     free_dist_matrix(matrix)
-    free_rings(cset)
+    free_rings(rings)
     return output
