@@ -76,17 +76,17 @@ cdef dist_matrix_t *alloc_dist_matrix(unsigned short n_nodes):
 
 
 cdef rings_t *alloc_rings(unsigned short n_rings, size_t hash_size):
-    cdef size_t i
+    cdef size_t i, n1 = n_rings + 1
     cdef rings_t *rings = <rings_t *> PyMem_Malloc(sizeof(rings_t))
 
     rings.n_rings = n_rings
     rings.n_allocated = 0
-    rings.n_reserved = n_rings
+    rings.n_reserved = n1
     rings.hash_size = hash_size
-    rings.rings = <ring_t *> PyMem_Malloc(n_rings * sizeof(ring_t))
-    memset(rings.rings, 0, n_rings * sizeof(ring_t))
+    rings.rings = <ring_t *> PyMem_Malloc(n1 * sizeof(ring_t))
+    memset(rings.rings, 0, n1 * sizeof(ring_t))
 
-    for i in range(n_rings):
+    for i in range(n1):
         rings.rings[i].n_nodes = USHRT_MAX
     return rings
 
@@ -189,13 +189,13 @@ cdef void append_pid1(paths_t *paths_ij, paths_t *paths_ik, paths_t *paths_kj, u
     paths_ij.pid1[i] = concatenate_paths(paths_ik, paths_kj, k)
 
 
-cdef tuple ring_to_tuple(unsigned short *ring, size_t size):
+cdef tuple ring_to_tuple(ring_t *ring):
     cdef size_t i
-    cdef tuple result = PyTuple_New(size)
+    cdef list result = []
 
-    for i in range(size):
-        PyTuple_SET_ITEM(result, i, <object>ring[i])
-    return result
+    for i in range(ring.n_nodes):
+        result.append(ring.nodes[i])
+    return tuple(result)
 
 
 cdef int has_not_overlap(paths_t *paths_ik, paths_t *paths_kj, paths_t *paths_ij, unsigned short k, int test_pid1):
@@ -229,19 +229,19 @@ cdef int has_not_overlap(paths_t *paths_ik, paths_t *paths_kj, paths_t *paths_ij
 cdef unsigned long long *build_hash(unsigned short *path1, unsigned short *path2,
                                     unsigned short i, unsigned short j, size_t size1, size_t size2, size_t hash_size):
     cdef size_t k
-    cdef unsigned int node
+    cdef unsigned short n
     cdef unsigned long long *hash = <unsigned long long *> PyMem_Malloc(hash_size * sizeof(unsigned long long))
 
     memset(hash, 0, hash_size * sizeof(unsigned long long))
-    hash[i // 64] |= (1 << (i % 64))  # add linker node
-    hash[j // 64] |= (1 << (j % 64))
+    hash[i // 64] |= (<unsigned long long> 1 << (i % 64))  # add linker node
+    hash[j // 64] |= (<unsigned long long> 1 << (j % 64))
 
     for k in range(size1):
-        node = path1[k]
-        hash[node // 64] |= (1 << (node % 64))
+        n = path1[k]
+        hash[n // 64] |= (<unsigned long long> 1 << (n % 64))
     for k in range(size2):
-        node = path2[k]
-        hash[node // 64] |= (1 << (node % 64))
+        n = path2[k]
+        hash[n // 64] |= (<unsigned long long> 1 << (n % 64))
     return hash
 
 
@@ -269,7 +269,7 @@ cdef void push_ring(ring_t *ring, rings_t *rings, unsigned short rank):
     if rings.n_allocated == rings.n_reserved - 1:  # almost all slots are used
         ext = rings.n_reserved  # double rings storage
         if ext > 1000: ext = 1000  # no more than 1k rings to extend
-        realloc_rings(rings, rings.n_rings + ext)
+        realloc_rings(rings, rings.n_reserved + ext)
 
     for i in range(rings.n_allocated, rank, -1):
         rings.rings[i] = rings.rings[i - 1]
@@ -444,7 +444,6 @@ def sssr(dict graph, size_t n_rings):
     cdef size_t si
     cdef unsigned short i, n, m, n_nodes = len(graph)
     cdef unsigned short [USHRT_MAX] reverse_mapping  # 128kb
-    cdef ring_t ring
     cdef rings_t *rings
     cdef dist_matrix_t *matrix
     cdef object mb
@@ -452,8 +451,10 @@ def sssr(dict graph, size_t n_rings):
 
     if not n_rings: return output
 
+    if n_nodes > 65500: raise ValueError('Too many atoms')
     matrix = alloc_dist_matrix(n_nodes)
     for i, n in enumerate(graph):
+        if n > 65500: raise ValueError('Atom index too large')
         matrix.mapping[i] = n
         reverse_mapping[n] = i
 
@@ -471,8 +472,7 @@ def sssr(dict graph, size_t n_rings):
     filter_rings(rings)
 
     for i in range(rings.n_rings):
-        ring = rings.rings[i]
-        output.append(ring_to_tuple(ring.nodes, ring.n_nodes))
+        output.append(ring_to_tuple(&rings.rings[i]))
 
     free_rings(rings)
     return output
