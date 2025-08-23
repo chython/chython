@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,7 +19,8 @@
 from collections import defaultdict
 from typing import TYPE_CHECKING
 from ._rules import freak_rules
-from ..rings import _sssr, _connected_components
+from .._rings import sssr
+from ..rings import _connected_components
 
 
 if TYPE_CHECKING:
@@ -186,7 +187,7 @@ class Thiele:
         n_sssr = sum(len(x) for x in rings.values()) // 2 - len(rings) + len(_connected_components(rings))
         if not n_sssr:
             return False
-        rings = _sssr(rings, n_sssr)  # search rings again
+        rings = sssr(rings, n_sssr)  # search rings again
 
         seen = set()
         for ring in rings:

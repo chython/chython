@@ -24,7 +24,6 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from cpython.mem cimport PyMem_Malloc, PyMem_Free, PyMem_Realloc
-from cpython.tuple cimport PyTuple_New, PyTuple_SET_ITEM
 from libc.limits cimport USHRT_MAX
 from libc.string cimport memset, memcpy
 
@@ -440,7 +439,7 @@ cdef void filter_rings(rings_t *rings):
     PyMem_Free(hash)
 
 
-def sssr(dict graph, size_t n_rings):
+def sssr(object graph, size_t n_rings):
     cdef size_t si
     cdef unsigned short i, n, m, n_nodes = len(graph)
     cdef unsigned short [USHRT_MAX] reverse_mapping  # 128kb
