@@ -25,11 +25,11 @@ from .query import *
 from .reaction import *
 
 
-def unpach(data: bytes, /, *, compressed=True) -> Union[MoleculeContainer, ReactionContainer]:
+def unpach(data: bytes, /, *, compressed=True, skip_labels_calculation=False) -> Union[MoleculeContainer, ReactionContainer]:
     if compressed:
         data = decompress(data)
     try:
-        return MoleculeContainer.unpack(data, compressed=False)
+        return MoleculeContainer.unpack(data, compressed=False, skip_labels_calculation=skip_labels_calculation)
     except ValueError:
         pass
     # second try
