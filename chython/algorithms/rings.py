@@ -43,7 +43,7 @@ class Rings:
         :return rings atoms numbers
         """
         if self.rings_count:
-            return sssr(self.not_special_connectivity, self.rings_count)
+            return sssr(_skin_graph(self.not_special_connectivity), self.rings_count)
         return []
 
     @cached_property
