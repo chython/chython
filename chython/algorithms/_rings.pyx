@@ -54,6 +54,7 @@ cdef struct ring_t:
 cdef struct rings_t:
     unsigned short n_rings
     unsigned short n_allocated
+    unsigned short n_reserved
     unsigned short hash_size
     ring_t *rings
 
@@ -80,6 +81,7 @@ cdef rings_t *alloc_rings(unsigned short n_rings, size_t hash_size):
 
     rings.n_rings = n_rings
     rings.n_allocated = 0
+    rings.n_reserved = n_rings
     rings.hash_size = hash_size
     rings.rings = <ring_t *> PyMem_Malloc(n_rings * sizeof(ring_t))
     memset(rings.rings, 0, n_rings * sizeof(ring_t))
@@ -92,10 +94,11 @@ cdef rings_t *alloc_rings(unsigned short n_rings, size_t hash_size):
 cdef void realloc_rings(rings_t *rings, size_t n_rings):
     cdef size_t i
     rings.rings = <ring_t *> PyMem_Realloc(rings.rings, n_rings * sizeof(ring_t))
-    memset(rings.rings + rings.n_rings, 0, (n_rings - rings.n_rings) * sizeof(ring_t))
+    memset(rings.rings + rings.n_reserved, 0, (n_rings - rings.n_reserved) * sizeof(ring_t))
 
-    for i in range(rings.n_rings, n_rings):
+    for i in range(rings.n_reserved, n_rings):
         rings.rings[i].n_nodes = USHRT_MAX
+    rings.n_reserved = n_rings
 
 
 cdef void free_pid0(paths_t *paths):
@@ -263,8 +266,8 @@ cdef void push_ring(ring_t *ring, rings_t *rings, unsigned short rank):
     cdef size_t i
     cdef unsigned short ext
 
-    if rings.n_allocated == rings.n_rings - 1:  # almost all slots are busy
-        ext = rings.n_rings  # double rings storage
+    if rings.n_allocated == rings.n_reserved - 1:  # almost all slots are used
+        ext = rings.n_reserved  # double rings storage
         if ext > 1000: ext = 1000  # no more than 1k rings to extend
         realloc_rings(rings, rings.n_rings + ext)
 
@@ -434,6 +437,7 @@ cdef void filter_rings(rings_t *rings):
 
     rings.n_allocated = rings.n_rings
     PyMem_Free(poplist)
+    PyMem_Free(hash)
 
 
 def sssr(dict graph, size_t n_rings):
@@ -462,13 +466,13 @@ def sssr(dict graph, size_t n_rings):
     build_pid(matrix)
     # run CSET calculation
     rings = build_cset(matrix, n_rings)
+    free_dist_matrix(matrix)
     # filter out condensed rings
     filter_rings(rings)
 
-    for i in range(rings.n_allocated):
+    for i in range(rings.n_rings):
         ring = rings.rings[i]
         output.append(ring_to_tuple(ring.nodes, ring.n_nodes))
 
-    free_dist_matrix(matrix)
     free_rings(rings)
     return output
