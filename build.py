@@ -56,6 +56,9 @@ extensions = [
               extra_compile_args=extra_compile_args),
     Extension('chython.files._xyz',
               ['chython/files/_xyz.pyx'],
+              extra_compile_args=extra_compile_args),
+    Extension('chython.algorithms._rings',
+              ['chython/algorithms/_rings.pyx'],
               extra_compile_args=extra_compile_args)
 ]
 
