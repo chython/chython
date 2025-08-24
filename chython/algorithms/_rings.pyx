@@ -348,7 +348,7 @@ cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
         ri = matrix.mapping[i]
         if ri > n_max: n_max = ri
 
-    rings = alloc_rings(n_rings, (n_max + 64 - 1) // 64)
+    rings = alloc_rings(n_rings, (n_max + 64) // 64)
 
     for i in range(matrix.n_nodes):
         si = i * matrix.n_nodes
