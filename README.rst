@@ -31,18 +31,12 @@ Install
 
 Only python 3.8+.
 
-* **stable version available through PyPI**::
-
-    pip install chython
-
-* Install chython library DEV version for features that are not well tested::
-
-    pip install -U git+https://github.com/chython/chython.git@master#egg=chython
+    pip install chython[racer-default]
 
 Copyright
 =========
 
-* 2014-2023 Ramil Nugmanov nougmanoff@protonmail.com main developer
+* 2014-2025 Ramil Nugmanov nougmanoff@protonmail.com main developer
 
 Contributors
 ============

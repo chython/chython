@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from chython import MoleculeContainer
 
 try:
-    from py_mini_racer import MiniRacer, JSEvalException
+    from py_mini_racer import MiniRacer
     try:
         from importlib.resources import files
     except ImportError:  # python3.8
@@ -37,7 +37,7 @@ try:
     ctx = MiniRacer()
     ctx.eval('const self = this')
     ctx.eval(files(__package__).joinpath('clean2d.js').read_text())
-except RuntimeError:
+except (ImportError, RuntimeError):
     ctx = None
 
 
@@ -76,7 +76,7 @@ class Calculate2DMolecule:
                 smiles, order = self.__clean2d_prepare(next(entry))
                 try:
                     xy = ctx.call('$.clean2d', smiles)
-                except JSEvalException:
+                except Exception:
                     continue
                 break
             else:
