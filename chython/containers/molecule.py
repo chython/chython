@@ -58,6 +58,9 @@ rotable_rules = Proxy(_rotable_rules)
 # atomic number constants
 H = 1
 C = 6
+N = 7
+O = 8
+S = 16
 
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, MoleculeIsomorphism,
@@ -153,7 +156,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         return sum(a.atomic_mass + (a.implicit_hydrogens or 0) * h for _, a in self.atoms())
 
     @cached_property
-    def number_rotatable_bonds(self) -> int:
+    def rotatable_bonds_count(self) -> int:
         """
         Number of rotatable bonds: non-ring single bonds linked to non-terminal atoms except [sulfon]amide-like C(=O)-N.
 
@@ -161,6 +164,56 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         """
         w, bs = rotable_rules
         return sum(1 for _ in w.get_mapping(self)) - sum(1 for b in bs for _ in b.get_mapping(self))
+
+    @cached_property
+    def hydrogen_bond_donors_count(self) -> int:
+        """
+        Number of hydrogen bond donors: N, O, S atoms with hydrogens and at least one neighbour
+        (not water, ammonia, hydrogen sulfide).
+        """
+        return sum(
+            1 for _, a in self.atoms()
+            if a in (N, O, S)
+            and a.neighbors and not a.is_radical
+            and (a.implicit_hydrogens or a.explicit_hydrogens)
+        )
+
+    @cached_property
+    def hydrogen_bond_acceptors_count(self) -> int:
+        """
+        Number of hydrogen bond acceptors: O, N, S atoms with at least one neighbour
+        (not water, ammonia, hydrogen sulfide), Non-positively charged, with lone pairs, except R-SH and R-S(=O)-R sulfurs.
+        """
+        hba = 0
+        for _, a in self.atoms():
+            if not a.neighbors or a.is_radical: continue
+            elif a == O:
+                if a.charge <= 0:
+                    hba += 1
+            elif a == N:
+                if a.charge > 0 or a.hybridization == 4 and (a.implicit_hydrogens or a.neighbors == 3): continue
+                hba += 1
+            elif a == S:
+                if a.charge == -1:  # R-[S-]
+                    hba += 1
+                elif a.charge == 0 and a.neighbors == 2 and a.hybridization == 1:  # R-S-R
+                    hba += 1
+        return hba
+
+    @cached_property
+    def carbon_sp3_fraction(self) -> float:
+        """
+        Fraction of carbon atoms with sp3 hybridisation among all carbon atoms.
+        """
+        return self.carbon_sp3_count / self.carbon_count
+
+    @cached_property
+    def carbon_sp3_count(self) -> int:
+        return sum(1 for _, a in self.atoms() if a == C and a.hybridization == 1)
+
+    @cached_property
+    def carbon_count(self) -> int:
+        return self.brutto.get('C', 0)
 
     @cached_property
     def brutto(self) -> Dict[str, int]:
