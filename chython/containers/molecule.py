@@ -205,6 +205,8 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         """
         Fraction of carbon atoms with sp3 hybridisation among all carbon atoms.
         """
+        if not self.carbon_count:
+            return 0.
         return self.carbon_sp3_count / self.carbon_count
 
     @cached_property
