@@ -19,6 +19,7 @@
 from CachedMethods import cached_args_method
 from collections import Counter, defaultdict
 from functools import cached_property
+from lazy_object_proxy import Proxy
 from numpy import uint, zeros
 from typing import Dict, Iterable, List, Tuple, Union
 from zlib import compress, decompress
@@ -43,6 +44,16 @@ from ..algorithms.x3dom import X3domMolecule
 from ..exceptions import ValenceError
 from ..periodictable import DynamicElement, Element, H as _H
 
+
+def _rotable_rules():
+    from .. import smarts
+
+    w = smarts('[A;D2,D3,D4]-;!@[A;D2,D3,D4]')
+    b = [smarts('[N;D2,D3]-;!@[C,S;D2,D3]=[O,N]'), smarts('[N;D2,D3]-;!@[S;D4](=[O,N])=[O,N]')]
+    return w, b
+
+
+rotable_rules = Proxy(_rotable_rules)
 
 # atomic number constants
 H = 1
@@ -140,6 +151,16 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
     def molecular_mass(self) -> float:
         h = _H().atomic_mass
         return sum(a.atomic_mass + (a.implicit_hydrogens or 0) * h for _, a in self.atoms())
+
+    @cached_property
+    def number_rotatable_bonds(self) -> int:
+        """
+        Number of rotatable bonds: non-ring single bonds linked to non-terminal atoms except [sulfon]amide-like C(=O)-N.
+
+        Charged atoms like R-NO2, R-[N+]([C,H])=C are ignored.
+        """
+        w, bs = rotable_rules
+        return sum(1 for _ in w.get_mapping(self)) - sum(1 for b in bs for _ in b.get_mapping(self))
 
     @cached_property
     def brutto(self) -> Dict[str, int]:
