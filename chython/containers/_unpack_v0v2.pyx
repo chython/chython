@@ -119,6 +119,7 @@ def unpack(const unsigned char[::1] data not None):
         atomic_number = b & 0x7f
         py_atom = object.__new__(elements[atomic_number])
         py_atom._extended_stereo = None
+        py_atom._parsed_mapping = None
         py_n = n
         py_atoms[py_n] = py_atom
         py_bonds[py_n] = {}

@@ -334,6 +334,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
     def copy(self, *, keep_sssr=False, keep_components=False) -> 'MoleculeContainer':
         copy = super().copy()
+        copy._changed = copy._backup = None
         copy._name = self._name
         if self._meta is None:
             copy._meta = None
@@ -371,7 +372,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             raise ValueError('invalid atom numbers')
         atoms = tuple(n for n in self if n in atoms)  # save original order
         sub = object.__new__(self.__class__)
-        sub._name = sub._meta = sub._changed = None
+        sub._name = sub._meta = sub._changed = sub._backup = None
         sub._atoms = {n: self._atoms[n].copy(hydrogens=not recalculate_hydrogens, stereo=True) for n in atoms}
         sub._bonds = sb = {}
         for n in atoms:
