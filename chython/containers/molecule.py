@@ -615,6 +615,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         """
         Fix molecule internal representation
         """
+        self.flush_cache()
         self.calc_labels()  # refresh all labels
 
         if recalculate_hydrogens:
