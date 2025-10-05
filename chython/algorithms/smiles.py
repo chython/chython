@@ -334,7 +334,8 @@ class MoleculeSmiles(Smiles):
     __slots__ = ()
 
     def sticky_smiles(self: Union['MoleculeContainer', 'MoleculeSmiles'], left: int = None, right: int = None, *,
-                      remove_left: bool = False, remove_right: bool = False, tries: int = 10):
+                      remove_left: bool = False, remove_right: bool = False, tries: int = 10,
+                      keep_bond_left: bool = False, keep_bond_right: bool = False, hydrogens: bool = False):
         """
         Generate smiles with fixed left and/or right terminal atoms.
         The right atom must be terminal if set. Use a temporary attached atom with remove_right=True as a workaround.
@@ -342,6 +343,9 @@ class MoleculeSmiles(Smiles):
         :param remove_left: drop terminal atom and corresponding bond
         :param remove_right: drop terminal atom and corresponding bond
         :param tries: number of attempts to generate smiles
+        :param keep_bond_left: keep bond of removed left atom
+        :param keep_bond_right: keep bond of removed right atom
+        :param hydrogens: show implicit hydrogens in smiles
         """
         bonds = self._bonds
         if right:
@@ -362,20 +366,21 @@ class MoleculeSmiles(Smiles):
                 seen[left] = -1_000_000_000  # prioritize left atom
 
             for _ in range(tries):
-                smiles, order = self._smiles(lambda x: seen[x] + random(), _return_order=True, random=True)
+                smiles, order = self._smiles(lambda x: seen[x] + random(), _return_order=True,
+                                             random=True, hydrogens=hydrogens)
                 if order[-1] == right:
                     break
             else:
                 raise Exception('generation of smiles failed')
             if remove_left:
-                smiles = smiles[2:]
+                smiles = smiles[1:] if keep_bond_left else smiles[2:]
             if remove_right:
-                smiles = smiles[:-2]
+                smiles = smiles[:-1] if keep_bond_right else smiles[:-2]
         elif left:
             bonds[left]  # noqa. check left atom availability
-            smiles = self._smiles(lambda x: x != left, random=True)
+            smiles = self._smiles(lambda x: x != left, random=True, hydrogens=hydrogens)
             if remove_left:
-                smiles = smiles[2:]
+                smiles = smiles[1:] if keep_bond_left else smiles[2:]
         else:
             raise ValueError('either left or right atom should be specified')
         return ''.join(smiles)
