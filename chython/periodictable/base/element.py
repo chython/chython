@@ -40,8 +40,8 @@ class Element(ABC):
 
         :param isotope: Isotope number of element
         """
-        if delta_isotope is not None:
-            assert isotope is None, 'isotope absolute value and delta value provided'
+        if delta_isotope is not None and isotope is None:
+            # isotope had precedence over MDL delta value
             isotope = self.mdl_isotope + delta_isotope
 
         self.isotope = isotope
