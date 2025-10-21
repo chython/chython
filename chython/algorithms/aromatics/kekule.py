@@ -64,7 +64,7 @@ class Kekule:
                 atoms.add(m)
             for n in atoms:
                 self.calc_implicit(n)
-            self.flush_cache(keep_sssr=True, keep_components=True)
+            self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)
             self.calc_labels()
             return True
         return fixed
@@ -112,7 +112,7 @@ class Kekule:
                         # flush sssr and components cache
                         keep = False
         if seen:
-            self.flush_cache(keep_sssr=keep, keep_components=keep)
+            self.flush_cache(keep_sssr=keep, keep_components=keep, keep_special_connectivity=keep)
             self.calc_labels()
             return True
         return False

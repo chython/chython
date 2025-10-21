@@ -739,13 +739,15 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
                 return True
         return False
 
-    def flush_cache(self, *, keep_sssr=False, keep_components=False):
+    def flush_cache(self, *, keep_sssr=False, keep_components=False, keep_special_connectivity=False):
         backup = {}
         if keep_sssr:
             # good to keep if no new bonds or bonds deletions or bonds to/from any change
             for k,  v in self.__dict__.items():
-                if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes', 'not_special_connectivity', 'rings_count'):
+                if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes', 'rings_count'):
                     backup[k] = v
+        if keep_special_connectivity:
+            backup['not_special_connectivity'] = self.not_special_connectivity
         if keep_components:
             # good to keep if no new bonds or bonds deletions
             if 'connected_components' in self.__dict__:

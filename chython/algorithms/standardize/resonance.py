@@ -94,7 +94,7 @@ class Resonance:
         if hs:
             for n in hs:
                 self.calc_implicit(n)
-            self.flush_cache(keep_sssr=True, keep_components=True)
+            self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)
             if _fix_stereo:
                 self.fix_stereo()
             if logging:

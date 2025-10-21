@@ -260,7 +260,7 @@ class Standardize:
             del self.__dict__['atoms_order']  # remove invalid morgan
 
         if changed:
-            self.flush_cache(keep_sssr=True, keep_components=True)  # clear cache
+            self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)  # clear cache
             if _fix_stereo:
                 self.fix_stereo()
             if logging:
@@ -356,7 +356,7 @@ class Standardize:
             del self.__dict__['atoms_order']  # remove invalid morgan
 
         if changed:
-            self.flush_cache(keep_sssr=True, keep_components=True)  # clear cache
+            self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)  # clear cache
             if _fix_stereo:
                 self.fix_stereo()
             if logging:
@@ -383,7 +383,7 @@ class Standardize:
             self.delete_bond(n, m, _skip_calculation=True)
 
         if ab:
-            self.flush_cache(keep_sssr=True)
+            self.flush_cache(keep_sssr=True, keep_special_connectivity=True)
             self.calc_labels()
             if _fix_stereo:
                 self.fix_stereo()
@@ -514,7 +514,7 @@ class Standardize:
         if isotopes:
             for i in isotopes:
                 i._isotope = None
-            self.flush_cache(keep_sssr=True, keep_components=True)
+            self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)
             self.fix_stereo()
             return True
         return False
@@ -568,7 +568,7 @@ class Standardize:
 
             if not hs:  # not matched
                 continue
-            self.flush_cache(keep_sssr=keep_sssr, keep_components=keep_components)
+            self.flush_cache(keep_sssr=keep_sssr, keep_components=keep_components, keep_special_connectivity=keep_sssr)
             # recalculate isomorphism labels
             self.calc_labels()
             for n in hs:  # hydrogens count recalculation
