@@ -172,9 +172,10 @@ _alcohol_methyl = (
      'CC(C)OC', 'CC(C)O', 'CC(C)OCC'),
 )
 
-_alcohol_amide_acetone = (  # N1CCOC1
-    ('[O:1]1[C;x1;z1;M][C;x1;z1;M][N:2]([C;M]=[O;M])-C1([C;D1])[C;D1]',
-     '[A:1].[A:2]'),
+_alcohol_amide_acetone = (
+    ('[O;D2;x0:1]1-;@[C;x1;z1;M][C;x1;z1;M][N;D3;x0:2]([C;x2;z2;M]=[O;M])-[C;D4;x2;z1]1([C;D1])[C;D1]',
+     '[A:1].[A:2]',
+     'CC1CN(C(C)=O)C(C)(C)O1', 'CC(O)CNC(C)=O'),
 )
 
 _diol12_acetone = (
@@ -558,11 +559,51 @@ _pyrrole_chloro_tritil = (
 )
 
 _phenol_tbu = (
-    ('[C;a;M][O:1]-C([C;D1])([C;D1])[C;D1]', '[A:1]'),
+    ('[O;D2;x0:1]([C;a;M])-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'c1ccccc1OC(C)(C)C', 'c1ccccc1O'),
+)
+
+_phenol_benzyl = (  # [H], ...
+    ('[O;D2;x0:1]([C;a;M])-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+     'c1ccccc1OCc1ccccc1', 'c1ccccc1O'),
+)
+
+_phenol_methyl = (
+    ('[O;D2;x0:1]([C;a;M])-;!@[C;D1]', '[A:1]',
+     'c1ccccc1OC', 'c1ccccc1O'),
+)
+
+_phenol_sem = (
+    ('[O;D2;x0:1]([C;a;M])-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][Si;D4;z1;x0]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'c1ccccc1OCOCC[Si](C)(C)C', 'c1ccccc1O'),
+)
+
+_phenol_mom = (
+    ('[O;D2;x0:1]([C;a;M])-;!@[C;D2;x2;z1][O;D2;x0][C;D1]', '[A:1]',
+     'c1ccccc1OCOC', 'c1ccccc1O'),
+)
+
+_phenol_silyl = (  # [F-] ion substitution
+    # TMS
+    ('[O;D2;x1:1]([C;a;M])-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'c1ccccc1O[Si](C)(C)C', 'c1ccccc1O'),
+    # TES
+    ('[O;D2;x1:1]([C;a;M])-;!@[Si;D4;z1;x1]([C;D2;x1;z1][C;D1])([C;D2;x1;z1][C;D1])[C;D2;x1;z1][C;D1]', '[A:1]',
+     'c1ccccc1O[Si](CC)(CC)CC', 'c1ccccc1O'),
+    # TBS / TBDMS
+    ('[O;D2;x1:1]([C;a;M])-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'c1ccccc1O[Si](C)(C)C(C)(C)C', 'c1ccccc1O'),
+    # TIPS
+    ('[O;D2;x1:1]([C;a;M])-;!@[Si;D4;z1;x1]([C;D3;z1;x1]([C;D1])[C;D1])([C;D3;z1;x1]([C;D1])[C;D1])[C;D3;z1;x1]([C;D1])[C;D1]', '[A:1]',
+     'c1ccccc1O[Si](C(C)C)(C(C)C)C(C)C', 'c1ccccc1O'),
+    # TBDPS
+    ('[O;D2;x1:1]([C;a;M])-;!@[Si;D4;z1;x1]([C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)([C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'c1ccccc1O[Si](c1ccccc1)(c1ccccc1)C(C)(C)C', 'c1ccccc1O')
 )
 
 _phenol_hydroxymethyl_acetone = (
-    ('[C;M]1:[C;M][O:1]C([C;D1])([C;D1])[O:2][C;z1;x1;M]1', '[A:1].[A:2]'),
+    ('[C;a;M]:1-;@[O;D2;x0:1]-[C;D4;x2;z1]([C;D1])([C;D1])-[O;D2;x0:2][C;z1;x1;M][C;M]:1', '[A:1].[A:2]',
+     'CC1(C)OCC2=CC=CC=C2O1', 'OCC1=CC=CC=C1O'),
 )
 
 _phosphate_benzyl = (

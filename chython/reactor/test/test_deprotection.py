@@ -53,5 +53,5 @@ def test_deprotection():
     for q, t in product(qs, ts):
         m += q < t
 
-    # test selectivity of rules
-    assert len(qs) == m
+    # test selectivity of rules. MEM and MeOR are overlapping
+    assert len(qs) == m - 4
