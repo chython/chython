@@ -23,153 +23,178 @@ from .transformer import Transformer
 Predefined transformers for most common protection groups cleavage.
 """
 
-_alcohol_thiocarbamate = (  # NaIO4 or H2O2/NaOH
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;x3;z2](=[S;D1])[N;D3;x0]([C;D1])[C;D1]', '[A:1]',  # rule
+_hydroxyl_thiocarbamate = (  # NaIO4 or H2O2/NaOH
+    ('[O;D2;x0:1]-;!@[C;x3;z2](=[S;D1])[N;D3;x0]([C;D1])[C;D1]', '[A:1]',  # rule
      'CC(C)OC(=S)N(C)C', 'CC(C)O'),  # test
 )
 
-_alcohol_fmoc = (  # Et3N pKa ~ 10
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;x1;z1][C;D3;z1;x0;r5]1[C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2-[C;a;r6]:3:[C;D2]:[C;D2]:[C;D2]:[C;D2]:C1:3',
+_hydroxyl_fmoc = (  # Et3N pKa ~ 10
+    ('[O;D2;x0:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;x1;z1][C;D3;z1;x0;r5]1[C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2-[C;a;r6]:3:[C;D2]:[C;D2]:[C;D2]:[C;D2]:C1:3',
      '[A:1]',
      'CC(C)OC(=O)OCC1C2=CC=CC=C2C2=C1C=CC=C2', 'CC(C)O'),
 )
 
-_alcohol_troc = (  # [Zn]
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2][C;D4;x3]([Cl;D1])([Cl;D1])[Cl;D1]', '[A:1]',
+_hydroxyl_troc = (  # [Zn]
+    ('[O;D2;x0:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2][C;D4;x3]([Cl;D1])([Cl;D1])[Cl;D1]', '[A:1]',
      'CC(C)OC(=O)OCC(Cl)(Cl)Cl', 'CC(C)O'),
 )
 
-_alcohol_teoc = (  # [F-]
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;z1;x1][C;D2;x1;z1][Si;D4;z1;x0]([C;D1])([C;D1])[C;D1]', '[A:1]',
+_hydroxyl_teoc = (  # [F-]
+    ('[O;D2;x0:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;z1;x1][C;D2;x1;z1][Si;D4;z1;x0]([C;D1])([C;D1])[C;D1]', '[A:1]',
      'CC(C)OC(=O)OCC[Si](C)(C)C', 'CC(C)O'),
 )
 
-_alcohol_alloc = (  # [Pd] + NuH
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]', '[A:1]',
+_hydroxyl_alloc = (  # [Pd] + NuH
+    ('[O;D2;x0:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]', '[A:1]',
      'CC(C)OC(=O)OCC=C', 'CC(C)O'),
 )
 
-_alcohol_allyl = (  # basic or Metal isomerization + hydrolysis
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]', '[A:1]',
+_hydroxyl_allyl = (  # basic or Metal isomerization + hydrolysis
+    ('[O;D2;x0:1]-;!@[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]', '[A:1]',
      'CC(C)OCC=C', 'CC(C)O'),
 )
 
-_alcohol_silyl = (  # [F-] ion substitution
-    # TMS
-    ('[O;D2;x1:1]([C;D2,D3,D4;z1;x1;M])-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+_hydroxyl_tms = (  # [F-] ion substitution
+    ('[O;D2;x1:1]-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D1]', '[A:1]',
      'CC(C)O[Si](C)(C)C', 'CC(C)O', 'CC(C)O[SiH](C)C', 'CC(C)O[Si](C)(C)OC', 'CC(C)O[Si](C)(C)CC'),
-    # TES
-    ('[O;D2;x1:1]([C;D2,D3,D4;z1;x1;M])-;!@[Si;D4;z1;x1]([C;D2;x1;z1][C;D1])([C;D2;x1;z1][C;D1])[C;D2;x1;z1][C;D1]', '[A:1]',
-     'CC(C)O[Si](CC)(CC)CC', 'CC(C)O', 'CC(C)O[SiH](C)C', 'CC(C)O[Si](C)(C)OC'),
-    # TBS / TBDMS
-    ('[O;D2;x1:1]([C;D2,D3,D4;z1;x1;M])-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
-     'CC(C)O[Si](C)(C)C(C)(C)C', 'CC(C)O', 'CC(C)O[SiH](C)C', 'CC(C)O[Si](C)(C)OC'),
-    # TIPS
-    ('[O;D2;x1:1]([C;D2,D3,D4;z1;x1;M])-;!@[Si;D4;z1;x1]([C;D3;z1;x1]([C;D1])[C;D1])([C;D3;z1;x1]([C;D1])[C;D1])[C;D3;z1;x1]([C;D1])[C;D1]', '[A:1]',
-     'CC(C)O[Si](C(C)C)(C(C)C)C(C)C', 'CC(C)O', 'CC(C)O[SiH](C)C', 'CC(C)O[Si](C)(C)OC'),
-    # TBDPS
-    ('[O;D2;x1:1]([C;D2,D3,D4;z1;x1;M])-;!@[Si;D4;z1;x1]([C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)([C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
-     'CC(C)O[Si](c1ccccc1)(c1ccccc1)C(C)(C)C', 'CC(C)O', 'CC(C)O[SiH](C)C', 'CC(C)O[Si](c1ccc(C)cc1)(c1ccccc1)C(C)(C)C')
 )
 
-_alcohol_benzyl = (  # [H], ...
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+_hydroxyl_tes = (
+    ('[O;D2;x1:1]-;!@[Si;D4;z1;x1]([C;D2;x1;z1][C;D1])([C;D2;x1;z1][C;D1])[C;D2;x1;z1][C;D1]', '[A:1]',
+     'CC(C)O[Si](CC)(CC)CC', 'CC(C)O', 'CC(C)O[SiH](C)C', 'CC(C)O[Si](C)(C)OC'),
+)
+
+_hydroxyl_tbs = (  # TBS / TBDMS
+    ('[O;D2;x1:1]-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'CC(C)O[Si](C)(C)C(C)(C)C', 'CC(C)O', 'CC(C)O[SiH](C)C', 'CC(C)O[Si](C)(C)OC'),
+)
+
+_hydroxyl_tips = (
+    ('[O;D2;x1:1]-;!@[Si;D4;z1;x1]([C;D3;z1;x1]([C;D1])[C;D1])([C;D3;z1;x1]([C;D1])[C;D1])[C;D3;z1;x1]([C;D1])[C;D1]', '[A:1]',
+     'CC(C)O[Si](C(C)C)(C(C)C)C(C)C', 'CC(C)O', 'CC(C)O[SiH](C)C', 'CC(C)O[Si](C)(C)OC'),
+)
+
+_hydroxyl_tbdps = (
+    ('[O;D2;x1:1]-;!@[Si;D4;z1;x1]([C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)([C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'CC(C)O[Si](c1ccccc1)(c1ccccc1)C(C)(C)C', 'CC(C)O', 'CC(C)O[SiH](C)C', 'CC(C)O[Si](c1ccc(C)cc1)(c1ccccc1)C(C)(C)C'),
+)
+
+_hydroxyl_benzyl = (  # [H], ...
+    ('[O;D2;x0:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
      'CC(C)OCc1ccccc1', 'CC(C)O', 'CC(C)OCc1cccc(C)c1', 'CC(C)OC(C)c1ccccc1'),  # test + decoys
 )
 
-_alcohol_o_nitrobenzyl = (  # UV-light
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+_hydroxyl_o_nitrobenzyl = (  # UV-light
+    ('[O;D2;x0:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
      'CC(C)OCc1c(N(=O)=O)cccc1', 'CC(C)O', 'CC(C)OC(OC)c1c(N(=O)=O)cccc1'),
 )
 
-_alcohol_methoxy_benzyl = (  # PMB or MPM
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1', '[A:1]',
+_hydroxyl_methoxy_benzyl = (  # PMB or MPM
+    ('[O;D2;x0:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1', '[A:1]',
      'CC(C)OCc1ccc(OC)cc1', 'CC(C)O', 'CC(C)OCc1ccc(OCC)cc1', 'CC(C)OCc1cc(OC)ccc1'),
 )
 
-_alcohol_naphthyl = (  # Nap
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D3]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2:[C;D2]:[C;D2]:1', '[A:1]',
+_hydroxyl_naphthyl = (  # Nap
+    ('[O;D2;x0:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D3]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2:[C;D2]:[C;D2]:1', '[A:1]',
      'CC(C)OCC1=CC2=C(C=CC=C2)C=C1', 'CC(C)O', 'CC(C)OCc1ccccc1'),
 )
 
-_alcohol_bom = (  # like Bn
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+_hydroxyl_bom = (  # like Bn
+    ('[O;D2;x0:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
      'CC(C)OCOCc1ccccc1', 'CC(C)O'),
 )
 
-_alcohol_piv = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;z2;x2](=O)-[C;D4;x0;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+_hydroxyl_piv = (
+    ('[O;D2;x0:1]-;!@[C;z2;x2](=O)-[C;D4;x0;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
      'CC(C)OC(=O)C(C)(C)C', 'CC(C)O'),
 )
 
-_alcohol_methoxy_benzoate = (  # pMeO-Bz
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;z2;x2](=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1', '[A:1]',
+_hydroxyl_methoxy_benzoate = (  # pMeO-Bz
+    ('[O;D2;x0:1]-;!@[C;z2;x2](=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1', '[A:1]',
      'COC1=CC=C(C=C1)C(=O)OC(C)C', 'CC(C)O', 'C1=CC=C(C=C1)C(=O)OC(C)C'),
 )
 
-_alcohol_benzoate = (  # Bz
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;z2;x2](=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+_hydroxyl_benzoate = (  # Bz
+    ('[O;D2;x0:1]-;!@[C;z2;x2](=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
      'C1=CC=C(C=C1)C(=O)OC(C)C', 'CC(C)O', 'COC1=CC=C(C=C1)C(=O)OC(C)C'),
 )
 
-_alcohol_acyl = (  # Ac
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;z2;x2](=O)-[C;D1]', '[A:1]',
+_hydroxyl_acyl = (  # Ac
+    ('[O;D2;x0:1]-;!@[C;z2;x2](=O)-[C;D1]', '[A:1]',
      'CC(C)OC(=O)C', 'CC(C)O', 'CC(C)OC(=O)CC'),
 )
 
-_alcohol_tfa = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;z2;x2](=O)-[C;D4;z1;x3](F)(F)F', '[A:1]',
+_hydroxyl_tfa = (
+    ('[O;D2;x0:1]-;!@[C;z2;x2](=O)-[C;D4;z1;x3](F)(F)F', '[A:1]',
      'CC(C)OC(=O)C(F)(F)F', 'CC(C)O'),
 )
 
-_alcohol_mom = (
-   ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D2;x2;z1][O;D2;x0][C;D1]', '[A:1]',
+_hydroxyl_mom = (
+   ('[O;D2;x0:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D1]', '[A:1]',
     'CC(C)OCOC', 'CC(C)O', 'CC(C)OC(C)OC'),
 )
 
-_alcohol_mem = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][O;D2;x0][C;D1]', '[A:1]',
+_hydroxyl_mem = (
+    ('[O;D2;x0:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][O;D2;x0][C;D1]', '[A:1]',
      'COCCOCOC(C)C', 'CC(C)O'),
 )
 
-_alcohol_thp = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D3;x2;z1;r6]1[O;D2][C;D2][C;D2][C;D2][C;D2]1', '[A:1]',
+_hydroxyl_thp = (
+    ('[O;D2;x0:1]-;!@[C;D3;x2;z1;r6]1[O;D2][C;D2][C;D2][C;D2][C;D2]1', '[A:1]',
      'CC(C)OC1CCCCO1', 'CC(C)O'),
 )
 
-_alcohol_ee = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D3;x2;z1]([O;D2;x0][C;D2;x1;z1][C;D1])[C;D1]', '[A:1]',
+_hydroxyl_ee = (
+    ('[O;D2;x0:1]-;!@[C;D3;x2;z1]([O;D2;x0][C;D2;x1;z1][C;D1])[C;D1]', '[A:1]',
      'CC(C)OC(C)OCC', 'CC(C)O', 'CC(C)OC(CC)OCC'),
 )
 
-_alcohol_mop = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])[C;D1]', '[A:1]',
+_hydroxyl_mop = (
+    ('[O;D2;x0:1]-;!@[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])[C;D1]', '[A:1]',
      'CC(C)OC(C)(C)OC', 'CC(C)O'),
 )
 
-_alcohol_sem = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][Si;D4;z1;x0]([C;D1])([C;D1])[C;D1]', '[A:1]',
+_hydroxyl_sem = (
+    ('[O;D2;x0:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][Si;D4;z1;x0]([C;D1])([C;D1])[C;D1]', '[A:1]',
      'CC(C)OCOCC[Si](C)(C)C', 'CC(C)O'),
 )
 
-_alcohol_tritil = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+_hydroxyl_tritil = (
+    ('[O;D2;x0:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
      'CC(C)OC(c1ccccc1)(c1ccccc1)c1ccccc1', 'CC(C)O', 'COc1ccc(cc1)C(OC(C)C)(c1ccccc1)c1ccc(OC)cc1'),
 )
 
-_alcohol_dimetoxy_tritil = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+_hydroxyl_dimetoxy_tritil = (
+    ('[O;D2;x0:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
      'COc1ccc(cc1)C(OC(C)C)(c1ccccc1)c1ccc(OC)cc1', 'CC(C)O', 'CC(C)OC(c1ccccc1)(c1ccccc1)c1ccccc1'),
 )
 
-_alcohol_tbu = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+_hydroxyl_tbu = (
+    ('[O;D2;x0:1]-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
      'CC(C)OC(C)(C)C', 'CC(C)O'),
 )
 
-_alcohol_methyl = (
-    ('[O;D2;x0:1]([C;D2,D3,D4;z1;x1;M])-;!@[C;D1]', '[A:1]',
+_hydroxyl_methyl = (
+    ('[O;D2;x0:1]-;!@[C;D1]', '[A:1]',
      'CC(C)OC', 'CC(C)O', 'CC(C)OCC'),
+)
+
+_hydroxyl_mpe = (
+    ('[O;D2;x0:1]-;!@[C;D4;x1;z1]([C;D1])([C;D2;x0;z1][C;D1])[C;D2;x0;z1][C;D1]', '[A:1]',
+     'CC(C)OC(CC)(CC)C', 'CC(C)O'),
+)
+
+_hydroxyl_trifluoroethyl = (
+    ('[O;D2;x0:1]-;!@[C;D2;x1;z1][C;D4;x3;z1](F)(F)F', '[A:1]',
+     'CC(C)OCC(F)(F)F', 'CC(C)O'),
+)
+
+
+_hydroxyl_dmab = (
+    ('[O;D2;x0:1]-;!@[C;D2;x1;z1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1](:[C;D2]:[C;D2]:1)-[N;D2;x0;z1]-[C;z2;x1;D3]([C;D2;x0;z1][C;D3;x0;z1]([C;D1])[C;D1])=[C;D3;r6;x0;z2]1[C;x1;z2;D3](=O)[C;D2][C;D4;x0;z1]([C;D1])([C;D1])[C;D2][C;D3;x1;z2]1=O', '[A:1]',
+     'CC(C)CC(NC1=CC=C(COC(C)=O)C=C1)=C1C(=O)CC(C)(C)CC1=O', 'CC(O)=O'),
+    ('[O;D2;x0:1]-;!@[C;D2;x1;z1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1](:[C;D2]:[C;D2]:1)-[N;D2;x0;z2]=[C;x1;D3]([C;D2;x0;z1][C;D3;x0;z1]([C;D1])[C;D1])-[C;D3;r6;x0;z1]1[C;x1;z2;D3](=O)[C;D2][C;D4;x0;z1]([C;D1])([C;D1])[C;D2][C;D3;x1;z2]1=O', '[A:1]',
+     'CC(C)CC(=NC1=CC=C(COC(C)=O)C=C1)C1C(=O)CC(C)(C)CC1=O', 'CC(O)=O'),
 )
 
 _alcohol_amide_acetone = (
@@ -258,43 +283,9 @@ _carbonyl_dimethoxy = (
     ('[C;D3,D4;z1;x2:1]([O;D2:3][C;D1])[O;D2][C;D1]', '[A:1]=O'),
 )
 
-_carboxyl_tbu = (
-    ('[C;D3;x2:1](=[O:2])[O:3]-C([C;D1])([C;D1])[C;D1]', '[A:1](=[A:2])[A:3]'),
-)
-
-_carboxyl_mpe = (
-    ('[C;D3;x2;M](=[O;M])[O:1]-C([C;D1])([C;D2][C;D1])[C;D2][C;D1]', '[A:1]'),
-)
-
-_carboxyl_methyl = (
-    ('[C;D3;x2:1](=[O:2])-[O:4]-[C;D1]', '[A:1](=[A:2])O'),  # Me
-)
-
-_carboxyl_trifluoroethyl = (
-    ('[C;D3;x2:1](=[O:2])-[O:4]-[C;D2]C(F)(F)F', '[A:1](=[A:2])O'),  # CF3-CH2-
-)
-
-_carboxyl_trioxabicyclooctane = (  # [H+]. Note! second step of basic hydrolysis required.
-    ('[C;D4;x3:1]12[O:4][C;D2]C([C;D1])([C;D2]O1)[C;D2]O2', '[A:1](=O)O',
+_carboxyl_trioxabicyclooctane = (  # [H+]. Note! a second step of basic hydrolysis is required.
+    ('[C;D4;x3:1]12[O;D2:4][C;D2;x1;z1][C;D4;x0;z1]([C;D1])([C;D2;x1;z1][O;D2]1)[C;D2;x1;z1][O;D2]2', '[A:1](=O)O',
      'CC(C)C12OCC(C)(CO1)CO2', 'CC(C)C(O)=O', 'CC(C)C12OCC(CC)(CO1)CO2', 'CC(C)C12OC(C)C(C)(CO1)CO2'),
-)
-
-_carboxyl_allyl = (  # [Pd] + NuH
-    ('[C;D3;x2:1](=[O:2])[O:3]-[C;D2][C;D2]=[C;D1]', '[A:1](=[A:2])[A:3]'),
-)
-
-_carboxyl_benzyl = (  # [H] or Li/NH3
-    ('[C;D3;x2:1](=[O:2])[O:3]-[C;D2]C:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1](=[A:2])[A:3]'),
-)
-
-_carboxyl_fm = (
-    ('[C;x2;M](=[O;M])[O:1][C;D2][C;D3]1C:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:C:2-C:3:[C;D2]:[C;D2]:[C;D2]:[C;D2]:C1:3',
-     '[A:1]'),
-)
-
-_carboxyl_dmab = (
-    ('[C;x2;M](=[O;M])[O:1]-[C;D2]-C:1:[C;D2]:[C;D2]:C(:[C;D2]:[C;D2]:1)-[N;D2]-C([C;D2][C;D3]([C;D1])[C;D1])=C1C(=O)[C;D2]C([C;D1])([C;D1])[C;D2]C1=O',
-     '[A:1]'),
 )
 
 _amine_methylcarbamate = (  # PrSLi or [OH-]
@@ -558,57 +549,6 @@ _pyrrole_chloro_tritil = (
      '[A:1]'),
 )
 
-_phenol_tbu = (
-    ('[O;D2;x0:1]([C;a;M])-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
-     'c1ccccc1OC(C)(C)C', 'c1ccccc1O'),
-)
-
-_phenol_benzyl = (  # [H], ...
-    ('[O;D2;x0:1]([C;a;M])-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
-     'c1ccccc1OCc1ccccc1', 'c1ccccc1O'),
-)
-
-_phenol_methyl = (
-    ('[O;D2;x0:1]([C;a;M])-;!@[C;D1]', '[A:1]',
-     'c1ccccc1OC', 'c1ccccc1O'),
-)
-
-_phenol_sem = (
-    ('[O;D2;x0:1]([C;a;M])-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][Si;D4;z1;x0]([C;D1])([C;D1])[C;D1]', '[A:1]',
-     'c1ccccc1OCOCC[Si](C)(C)C', 'c1ccccc1O'),
-)
-
-_phenol_mom = (
-    ('[O;D2;x0:1]([C;a;M])-;!@[C;D2;x2;z1][O;D2;x0][C;D1]', '[A:1]',
-     'c1ccccc1OCOC', 'c1ccccc1O'),
-)
-
-_phenol_silyl = (  # [F-] ion substitution
-    # TMS
-    ('[O;D2;x1:1]([C;a;M])-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D1]', '[A:1]',
-     'c1ccccc1O[Si](C)(C)C', 'c1ccccc1O'),
-    # TES
-    ('[O;D2;x1:1]([C;a;M])-;!@[Si;D4;z1;x1]([C;D2;x1;z1][C;D1])([C;D2;x1;z1][C;D1])[C;D2;x1;z1][C;D1]', '[A:1]',
-     'c1ccccc1O[Si](CC)(CC)CC', 'c1ccccc1O'),
-    # TBS / TBDMS
-    ('[O;D2;x1:1]([C;a;M])-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
-     'c1ccccc1O[Si](C)(C)C(C)(C)C', 'c1ccccc1O'),
-    # TIPS
-    ('[O;D2;x1:1]([C;a;M])-;!@[Si;D4;z1;x1]([C;D3;z1;x1]([C;D1])[C;D1])([C;D3;z1;x1]([C;D1])[C;D1])[C;D3;z1;x1]([C;D1])[C;D1]', '[A:1]',
-     'c1ccccc1O[Si](C(C)C)(C(C)C)C(C)C', 'c1ccccc1O'),
-    # TBDPS
-    ('[O;D2;x1:1]([C;a;M])-;!@[Si;D4;z1;x1]([C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)([C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
-     'c1ccccc1O[Si](c1ccccc1)(c1ccccc1)C(C)(C)C', 'c1ccccc1O')
-)
-
-_phenol_hydroxymethyl_acetone = (
-    ('[C;a;M]:1-;@[O;D2;x0:1]-[C;D4;x2;z1]([C;D1])([C;D1])-[O;D2;x0:2][C;z1;x1;M][C;M]:1', '[A:1].[A:2]',
-     'CC1(C)OCC2=CC=CC=C2O1', 'OCC1=CC=CC=C1O'),
-)
-
-_phosphate_benzyl = (
-    ('[O;M][P;M](=[O;M])([O;M])[O:1]-[C;D2]C:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]'),
-)
 
 #################
 # Magic Factory #
