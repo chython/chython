@@ -40,7 +40,7 @@ class MorganFingerprint:
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         :param length: bit string's length. Should be power of 2
-        :param number_active_bits: number of active bits for each hashed tuple
+        :param number_active_bits: number of active bits for each hashed tuple (int or 'auto'). For 'auto' option, number of bits is count of each hash + 1.
 
         :return: array(n_features)
         """
@@ -57,20 +57,30 @@ class MorganFingerprint:
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         :param length: bit string's length. Should be power of 2
-        :param number_active_bits: number of active bits for each hashed tuple
+        :param number_active_bits: number of active bits for each hashed tuple (int or 'auto'). For 'auto' option, number of bits is count of each hash + 1.
         """
         mask = length - 1
         log = int(log2(length))
 
         active_bits = set()
-        for tpl in self.morgan_hash_set(min_radius, max_radius):
-            active_bits.add(tpl & mask)
-            if number_active_bits == 2:
-                active_bits.add(tpl >> log & mask)
-            elif number_active_bits > 2:
-                for _ in range(1, number_active_bits):
-                    tpl >>= log
-                    active_bits.add(tpl & mask)
+
+        if number_active_bits == 'auto':
+            for hsh, cnt in self.morgan_hash_counts(min_radius, max_radius):
+                active_bits.add(hsh & mask)
+                active_bits.add(hsh >> log & mask)
+                for _ in range(cnt-1):
+                    hsh >>= log
+                    active_bits.add(hsh & mask)
+
+        else:
+            for tpl in self.morgan_hash_set(min_radius, max_radius):
+                active_bits.add(tpl & mask)
+                if number_active_bits == 2:
+                    active_bits.add(tpl >> log & mask)
+                elif number_active_bits > 2:
+                    for _ in range(1, number_active_bits):
+                        tpl >>= log
+                        active_bits.add(tpl & mask)
         return active_bits
 
     def morgan_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[int]:
@@ -128,6 +138,21 @@ class MorganFingerprint:
                            for idx, tpl in identifiers.items()}
             out.append(identifiers)
         return out[-(max_radius - min_radius + 1):]  # slice [min, max] radii range
+
+    def morgan_hash_counts(self, min_radius: int = 1, max_radius: int = 4) -> List[tuple]:
+        """
+        Count occurrences of each hash from _morgan_hash_dict.
+
+        :param min_radius: minimal radius of EC
+        :param max_radius: maximum radius of EC
+        :return: list of (hash, count) tuples
+        """
+        counts = defaultdict(int)
+        for hash_dict in self._morgan_hash_dict(min_radius, max_radius):
+            for h in hash_dict.values():
+                counts[h] += 1
+        return list(counts.items())
+
 
     @property
     def _atom_identifiers(self) -> Dict[int, int]:
