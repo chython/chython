@@ -153,6 +153,21 @@ class MorganFingerprint:
                 counts[h] += 1
         return list(counts.items())
 
+    def morgan_count_fingerprint(self, min_radius: int = 1, max_radius: int = 4, length: int = 256):
+        """
+        Transform structures into array of integer features, where each feature is the count of its corresponding hash.
+        Each fragment (hash) contributes only one positional bit in the fingerprint.
+
+        :param min_radius: minimal radius of EC
+        :param max_radius: maximum radius of EC
+        :param length: fingerprint length. Should be power of 2
+        :return: array(n_features) of counts
+        """
+        mask = length - 1
+        fingerprint = zeros(length, dtype=int)
+        for hsh, cnt in self.morgan_hash_counts(min_radius, max_radius):
+            fingerprint[hsh & mask] += cnt
+        return fingerprint
 
     @property
     def _atom_identifiers(self) -> Dict[int, int]:
