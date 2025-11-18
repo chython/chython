@@ -169,6 +169,8 @@ class MorganFingerprint:
             fingerprint[hsh & mask] += cnt
         return fingerprint
 
+
+
     @property
     def _atom_identifiers(self) -> Dict[int, int]:
         raise NotImplementedError
