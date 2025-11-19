@@ -29,6 +29,7 @@ from ._reductive_amination import template as reductive_amination_template
 from ._sonogashira import template as songashira_template
 from ._sulfonamidation import template as sulfonamidation_template
 from ._suzuki_miyaura import template as suzuki_miyaura_template
+from ._xec_sp2_sp3 import template as xec_sp2_sp3_template
 from ..reactor import Reactor, fix_mapping_overlap
 from ... import smarts, ReactionContainer, MoleculeContainer
 
