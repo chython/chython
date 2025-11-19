@@ -212,65 +212,62 @@ _hydroxyl_dmab = (
      'CC(C)CC(=NC1=CC=C(COC(C)=O)C=C1)C1C(=O)CC(C)(C)CC1=O', 'CC(O)=O'),
 )
 
-_alcohol_amide_acetone = (
-    ('[O;D2;x0:1]1-;@[C;x1;z1;M][C;x1;z1;M][N;D3;x0:2]([C;x2;z2;M]=[O;M])-[C;D4;x2;z1]1([C;D1])[C;D1]',
-     '[A:1].[A:2]',
+_diol_acetone = (
+    # 1,2
+    ('[O;D2;x0:1]1-;@[C;D4;x2;z1]([C;D1])([C;D1])-[O;D2;x0:2][C;M]!#[C;M]1', '[A:1].[A:2]',
+     'CC1COC(C)(C)O1', 'CC(O)CO'),
+    # 1,3
+    ('[O;D2;x0:1]1-;@[C;D4;x2;z1]([C;D1])([C;D1])-[O;D2;x0:2][C;M][C;M]!#[C;M]1', '[A:1].[A:2]',
+     'CC1CCOC(C)(C)O1', 'CC(O)CCO'),
+)
+
+_hydroxyl_amine_acetone = (
+    ('[O;D2;x0:1]1-;@[C;D4;x2;z1]([C;D1])([C;D1])-[N;z1:2][C;M]!#[C;M]1', '[A:1].[A:2]',
      'CC1CN(C(C)=O)C(C)(C)O1', 'CC(O)CNC(C)=O'),
 )
 
-_diol12_acetone = (
-    ('[C;D3,D4;z1;x1:1]1[O:2]C([C;D1])([C;D1])[O:3][C;z1;x1:4]1', '[A:3][A:4][A:1][A:2]'),  # ketone
+_diol_formalin = (
+    # 1,2
+    ('[O;D2;x0:1]1-;@[C;D2;x2;z1]-[O;D2;x0:2][C;M]!#[C;M]1', '[A:1].[A:2]',
+     'CC1COCO1', 'CC(O)CO'),
+    # 1,3
+    ('[O;D2;x0:1]1-;@[C;D2;x2;z1]-[O;D2;x0:2][C;M][C;M]!#[C;M]1', '[A:1].[A:2]',
+     'CC1CCOCO1', 'CC(O)CCO'),
 )
 
-_diol12_formalin = (
-    ('[C;D3,D4;z1;x1:1]1[O:2][C;D2][O:3][C;z1;x1:4]1', '[A:3][A:4][A:1][A:2]'),  # formaldehyde
+_diol_cyclopentanone = (
+    # 1,2
+    ('[O;D2;x0:1]1-;@[C;D4;x2;z1]2([C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1]2)-[O;D2;x0:2][C;M]!#[C;M]1', '[A:1].[A:2]',
+     'CC1COC2(CCCC2)O1', 'CC(O)CO'),
+    # 1,3
+    ('[O;D2;x0:1]1-;@[C;D4;x2;z1]2([C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1]2)-[O;D2;x0:2][C;M][C;M]!#[C;M]1', '[A:1].[A:2]',
+     'CC1CCOC2(CCCC2)O1', 'CC(O)CCO'),
 )
 
-_diol12_cyclopentanone = (
-    ('[C;D3,D4;z1;x1:1]1[O:2]C2([C;D2][C;D2][C;D2][C;D2]2)[O:3][C;z1;x1:4]1', '[A:3][A:4][A:1][A:2]'),
+_diol_cyclohexanone = (
+    # 1,2
+    ('[O;D2;x0:1]1-;@[C;D4;x2;z1]2([C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1]2)-[O;D2;x0:2][C;M]!#[C;M]1', '[A:1].[A:2]',
+     'CC1COC2(CCCCC2)O1', 'CC(O)CO'),
+    # 1,3
+    ('[O;D2;x0:1]1-;@[C;D4;x2;z1]2([C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1]2)-[O;D2;x0:2][C;M][C;M]!#[C;M]1', '[A:1].[A:2]',
+     'CC1CCOC2(CCCCC2)O1', 'CC(O)CCO'),
 )
 
-_diol12_cyclohexanone = (
-    ('[C;D3,D4;z1;x1:1]1[O:2]C2([C;D2][C;D2][C;D2][C;D2][C;D2]2)[O:3][C;z1;x1:4]1', '[A:3][A:4][A:1][A:2]'),
+_diol_diacetal = (
+    # 1,2
+    ('[O;D2;x0:1]1-;@[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])-[O;D2;x0:2][C;M]!#[C;M]1', '[A:1].[A:2]',
+     'COC1(C)OCC(C)OC1(C)OC', 'CC(O)CO'),
+    # 1,3
+    ('[O;D2;x0:1]1-;@[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])-[O;D2;x0:2][C;M][C;M]!#[C;M]1', '[A:1].[A:2]',
+     'COC1(C)OCCC(C)OC1(C)OC', 'CC(O)CCO'),
 )
 
-_diol12_diacetal = (
-    ('[C;D3,D4;z1;x1:1]1[O:2]-C([C;D1])(O[C;D1])-C([C;D1])(O[C;D1])-[O:3][C;z1;x1:4]1',
-     '[A:3][A:4][A:1][A:2]'),
-)
-
-_diol13_formalin = (
-    ('[C:5]1[C;D3,D4;z1;x1:1][O:2][C;D2][O:3][C;z1;x1:4]1', '[A:3][A:4][A:5][A:1][A:2]'),  # formaldehyde
-)
-
-_diol13_acetone = (
-    ('[C:5]1[C;D3,D4;z1;x1:1][O:2]C([C;D1])([C;D1])[O:3][C;z1;x1:4]1', '[A:3][A:4][A:5][A:1][A:2]'),
-)
-
-_diol12_benzylidene = (
-    ('[C;D3,D4;z1;x1:1]1[O:2][C;D3](C:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)[O:3][C;z1;x1:4]1',
-     '[A:3][A:4][A:1][A:2]',
+_diol_benzylidene = (
+    # 1,2
+    ('[O;D2;x0:1]1-;@[C;D3;x2;z1]([C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)-[O;D2;x0:2][C;M]!#[C;M]1', '[A:1].[A:2]',
      'CC1COC(O1)c1ccccc1', 'CC(O)CO'),
-)
-
-_diol13_cyclopentanone = (
-    ('[C:5]1[C;D3,D4;z1;x1:1][O:2]C2([C;D2][C;D2][C;D2][C;D2]2)[O:3][C;z1;x1:4]1',
-     '[A:3][A:4][A:5][A:1][A:2]'),
-)
-
-_diol13_cyclohexanone = (
-    ('[C:5]1[C;D3,D4;z1;x1:1][O:2]C2([C;D2][C;D2][C;D2][C;D2][C;D2]2)[O:3][C;z1;x1:4]1',
-     '[A:3][A:4][A:5][A:1][A:2]'),
-)
-
-_diol13_diacetal = (
-    ('[C:5]1[C;D3,D4;z1;x1:1][O:2]-C([C;D1])(O[C;D1])-C([C;D1])(O[C;D1])-[O:3][C;z1;x1:4]1',
-     '[A:3][A:4][A:5][A:1][A:2]'),
-)
-
-_diol13_benzylidene = (
-    ('[C:5]1[C;D3,D4;z1;x1:1][O:2][C;D3](C:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)[O:3][C;z1;x1:4]1',
-     '[A:3][A:4][A:5][A:1][A:2]',
+    # 1,3
+    ('[O;D2;x0:1]1-;@[C;D3;x2;z1]([C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)-[O;D2;x0:2][C;M][C;M]!#[C;M]1', '[A:1].[A:2]',
      'CC1CCOC(O1)c1ccccc1', 'CC(O)CCO'),
 )
 
