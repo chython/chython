@@ -272,11 +272,13 @@ _diol_benzylidene = (
 )
 
 _carbonyl_dithiolane = (  # MeI - S methylation + hydrolysis
-    ('[C;D3,D4;z1;x2:1]1[S;D2:3][C;D2][C;D2][S;D2]1', '[A:1]=O'),
+    ('[C;D3,D4;z1;x2:1]1[S;D2;x0;z1][C;D2;x1;z1][C;D2;x1;z1][S;D2;x0;z1]1', '[A:1]=[O;M]',
+     'CC1SCCS1', 'CC=O'),
 )
 
 _carbonyl_dithiane = (  # MeI - S methylation + hydrolysis
-    ('[C;D3,D4;z1;x2:1]1[S;D2:3][C;D2][C;D2][C;D2][S;D2]1', '[A:1]=O'),
+    ('[C;D3,D4;z1;x2:1]1[S;D2;x0;z1][C;D2;x1;z1][C;D2;x0;z1][C;D2;x1;z1][S;D2;x0;z1]1', '[A:1]=O',
+     'CC1SCCCS1', 'CC=O'),
 )
 
 _carbonyl_dimethylsulfide = (  # MeI - S methylation + hydrolysis
@@ -284,15 +286,18 @@ _carbonyl_dimethylsulfide = (  # MeI - S methylation + hydrolysis
 )
 
 _carbonyl_dioxolane = (
-    ('[C;D3,D4;z1;x2:1]1[O;D2:3][C;D2][C;D2][O;D2]1', '[A:1]=O'),
+    ('[C;D3,D4;z1;x2:1]1[O;D2;x0:2][C;D2;x1;z1][C;D2;x1;z1][O;D2;x0]1', '[A:1]=[O:2]',
+     'CC1OCCO1', 'CC=O'),
 )
 
 _carbonyl_dioxane = (
-    ('[C;D3,D4;z1;x2:1]1[O;D2:3][C;D2][C;D2][C;D2][O;D2]1', '[A:1]=O'),
+    ('[C;D3,D4;z1;x2:1]1[O;D2;x0:2][C;D2;x1;z1][C;D2;x0;z1][C;D2;x1;z1][O;D2;x0]1', '[A:1]=[O:2]',
+     'CC1OCCCO1', 'CC=O'),
 )
 
 _carbonyl_dimethoxy = (
-    ('[C;D3,D4;z1;x2:1]([O;D2:3][C;D1])[O;D2][C;D1]', '[A:1]=O'),
+    ('[C;D3,D4;z1;x2:1]([O;D2;x0:2][C;D1])[O;D2;x0][C;D1]', '[A:1]=[O:2]',
+     'COC(C)OC', 'CC=O'),
 )
 
 _carboxyl_trioxabicyclooctane = (  # [H+]. Note! a second step of basic hydrolysis is required.
