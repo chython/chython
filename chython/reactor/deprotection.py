@@ -94,6 +94,11 @@ _hydroxyl_methoxy_benzyl = (  # PMB or MPM
      'CC(C)OCc1ccc(OC)cc1', 'CC(C)O', 'CC(C)OCc1ccc(OCC)cc1', 'CC(C)OCc1cc(OC)ccc1'),
 )
 
+_hydroxyl_dimethoxybenzyl = (
+    ('[O;D2;x0:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1', '[A:1]',
+     'CC(C)OCc1c(OC)cc(OC)cc1', 'CC(C)O'),
+)
+
 _hydroxyl_naphthyl = (  # Nap
     ('[O;D2;x0:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D3]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2:[C;D2]:[C;D2]:1', '[A:1]',
      'CC(C)OCC1=CC2=C(C=CC=C2)C=C1', 'CC(C)O', 'CC(C)OCc1ccccc1'),
@@ -167,6 +172,16 @@ _hydroxyl_tritil = (
 _hydroxyl_dimetoxy_tritil = (
     ('[O;D2;x0:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
      'COc1ccc(cc1)C(OC(C)C)(c1ccccc1)c1ccc(OC)cc1', 'CC(C)O', 'CC(C)OC(c1ccccc1)(c1ccccc1)c1ccccc1'),
+)
+
+_hydroxyl_chloro_tritil = (
+    ('[O;D2;x0:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D3;x1]([Cl;D1]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+     'CC(C)OC(c1c(Cl)cccc1)(c1ccccc1)c1ccccc1', 'CC(C)O'),
+)
+
+_hydroxyl_mmt = (
+    ('[O;D2;x0:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+     'c1ccc(cc1)C(OC(C)C)(c1ccccc1)c1ccc(OC)cc1', 'CC(C)O', 'CC(C)OC(c1ccccc1)(c1ccccc1)c1ccccc1'),
 )
 
 _hydroxyl_tbu = (
@@ -510,34 +525,48 @@ _amide_boc = (
 )
 
 _thiol_tritil = (
-    ('[C;D2,D3,D4;z1;x1;M][S;D2:1]-C(C:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(C:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)C:3:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:3',  # noqa
-     '[A:1]'),
+    ('[S;D2;x0;z1:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+     'CC(C)SC(c1ccccc1)(c1ccccc1)c1ccccc1', 'CC(C)S'),
 )
 
 _thiol_mmt = (
-    ('[C;D2,D3,D4;z1;x1;M][S;D2:1]-C(C:1:[C;D2]:[C;D2]:C(-O[C;D1]):[C;D2]:[C;D2]:1)(C:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)C:3:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:3',  # noqa
-     '[A:1]'),
+    ('[S;D2;x0;z1:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+     'c1ccc(cc1)C(SC(C)C)(c1ccccc1)c1ccc(OC)cc1', 'CC(C)S'),
+)
+
+_thiol_dimetoxy_tritil = (
+    ('[S;D2;x0;z1:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+     'COc1ccc(cc1)C(SC(C)C)(c1ccccc1)c1ccc(OC)cc1', 'CC(C)S'),
+)
+
+_thiol_chloro_tritil = (
+    ('[S;D2;x0;z1:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D3;x1]([Cl;D1]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+     'CC(C)SC(c1c(Cl)cccc1)(c1ccccc1)c1ccccc1', 'CC(C)S'),
 )
 
 _thiol_benzyl = (
-    ('[C;D2,D3,D4;z1;x1;M][S;D2:1]-[C;D2]C:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]'),
+    ('[S;D2;x0;z1:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1', '[A:1]',
+     'CC(C)SCc1ccccc1', 'CC(C)S'),
 )
 
 _thiol_tbu = (
-    ('[C;D2,D3,D4;z1;x1;M][S;D2:1]-C([C;D1])([C;D1])[C;D1]', '[A:1]'),
-)
-
-_thiol_strimethoxyphenyl = (
-    ('[C;D2,D3,D4;z1;x1;M][S;D2:1]-[S;D2]-C:1:C(O[C;D1]):[C;D2]:C(O[C;D1]):[C;D2]:C:1-O[C;D1]', '[A:1]'),
+    ('[S;D2;x0;z1:1]-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'CC(C)SC(C)(C)C', 'CC(C)S'),
 )
 
 _thiol_stbu = (
-    ('[C;D2,D3,D4;z1;x1;M][S;D2:1]-[S;D2]-C([C;D1])([C;D1])[C;D1]', '[A:1]'),
+    ('[S;D2;x1;z1:1]-;!@[S;D2;z1;x1]-[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]', '[A:1]',
+     'CC(C)SSC(C)(C)C', 'CC(C)S'),
 )
 
-_thiol_amide_dimethoxybenzyl = (  # N1CCSC1
-    ('[S;D2:1]1[C;x1;z1;M][C;x1;z1;M][N:2]([C;M]=[O;M])-[C;D3]1-C:2:C(O[C;D1]):[C;D2]:C(O[C;D1]):[C;D2]:[C;D2]:2',
-     '[A:1].[A:2]'),
+_thiol_strimethoxyphenyl = (
+    ('[S;D2;x1;z1:1]-;!@[S;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]:1[O;D2;x0][C;D1]', '[A:1]',
+     'COc1cc(OC)c(SSC(C)C)c(OC)c1', 'CC(C)S'),
+)
+
+_thiol_amine_dimethoxybenzyl = (
+    ('[S;D2;r5;x0;z1:1]1[C;M][C;M][N;z1:2]-[C;D3;x2;z1]1-[C;a;r6]:1:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1', '[A:1].[A:2]',
+     'COC1=CC=C(C2NC(C)CS2)C(OC)=C1', 'NC(C)CS'),
 )
 
 _pyrrole_boc = (
