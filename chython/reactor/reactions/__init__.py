@@ -33,6 +33,8 @@ from ._xec_sp2_sp3 import template as xec_sp2_sp3_template
 from ._aromatic_C_O import template as aromatic_C_O_template
 from ._aliphatic_C_O import template as aliphatic_C_O_template
 from ._aliphatic_C_N import template as aliphatic_C_N_template
+from ._mitsunobu import template as mitsunobu_template
+
 from ._negishi import template as negishi_template
 from ..reactor import Reactor, fix_mapping_overlap
 from ... import smarts, ReactionContainer, MoleculeContainer
