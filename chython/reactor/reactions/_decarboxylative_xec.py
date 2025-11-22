@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
-#  Copyright 2023 Timur Gimadiev <timur.gimadiev@gmail.com>
+#  Copyright 2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,31 +19,25 @@
 
 
 template = {
-    'name': 'Buchwald-Hartwig reaction',
-    'description': 'Buchwald-Hartwig amination reaction, C-N coupling reaction',
+    'name': 'Macmillan',
+    'description': 'Deoxygenative C-C coupling reaction',
     'templates': [
         {
             'A': [
                 # Hal-Ar
-                '[Cl,Br,I;D1:1]-[C;a:2]',
-                # Ar triflate
-                '[C;a:2]-[O;D2;x1:1]-[S;x3;D4:10](=[O:11])(=[O:12])-[C;D4;z1:13](-[F;D1:14])(-[F;D1:15])-[F;D1:16]'
+                '[Cl,Br,I;D1:1]-[C;a:2]'
             ],
             'B': [
-                # Ar-NH2
-                '[N;D1;x0;z1:3][C;a;M]',
-                # Alk-NH2
-                '[N;D1;x0;z1:3][C;z1;x1;M]',
-                # Alk-NH-Ar
-                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
-                # Alk2NH
-                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+                # AlkCOOH
+                '[C;z1:3]-[C;x2;z2:4](=[O:5])-[O;D1;x0;z1:6]',
+                # Redox ester
+                '[C;z1:3]-[C;x2;z2:4](=[O:5])-[O;D2;x1;z1:6]-[N;z1;x1;D3:7]1-[C;x2;z2:8](=[O:9])-[C;x0;z2,z4:10]!#[C;x0;z2,z4:11]-[C;x2;z2:12](=[O:13])-1'
             ],
             'product': '[A:2]-[A:3]',
             'alerts': [],
             'ufe': {
                 'A': 1,
-                'B': '[A:3][At;M]'
+                'B': 3
             }
         }
     ],
