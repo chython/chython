@@ -27,8 +27,12 @@ template = {
             'A': [
                 # X-Ar
                 '[Cl,Br,I;D1:1]-[C;a:2]',
-                # X-C-sp2 excluding carbonyl and similar stuff
-                '[Cl,Br,I;D1:1]-[C;z2;x1:2]'
+                # X-C-sp2
+                '[Cl,Br,I;D1:1]-[C;x1,x2;z2:2]=[C;x0,x1;z2;M]',
+                # Ar triflate
+                '[C;a:2]-[O;D2;x1:1]-[S;x3;D4:10](=[O:11])(=[O:12])-[C;D4;z1:13](-[F;D1:14])(-[F;D1:15])-[F;D1:16]',
+                # Vinyl triflates
+                '[C;x0,x1;z2;M]=[C;x1;z2:2]-[O;D2;x1:1]-[S;x3;D4:10](=[O:11])(=[O:12])-[C;D4;z1:13](-[F;D1:14])(-[F;D1:15])-[F;D1:16]',
             ],
             'B': [
                 # C-Zn

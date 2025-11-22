@@ -27,7 +27,9 @@ template = {
                 # Hal-Ar
                 '[Cl,Br,I;D1:1]-[C;a:2]',
                 # Hal-pseudoaromatic, more specifically C5, C6 vinylic
-                '[Cl,Br,I;D1:1]-[C;z2;r5,r6:2]'
+                '[Cl,Br,I;D1:1]-[C;z2;r5,r6:2]',
+                # Ar triflate
+                '[C;a:2]-[O;D2;x1:1]-[S;x3;D4:10](=[O:11])(=[O:12])-[C;D4;z1:13](-[F;D1:14])(-[F;D1:15])-[F;D1:16]'
             ],
             'B': [
                 # sp3-C-X
