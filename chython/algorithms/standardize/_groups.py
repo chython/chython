@@ -545,6 +545,17 @@ def _rules_single():
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
 
+    #
+    # fix 1,3,4-triazone
+    #
+    q = smarts('[O,S;D1;z2;x0]=[C;D3;r5]1[N;D2;z1][N;z2]=[A][N;z1]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyraz-imin
+    #
     q = smarts('[N;z2;!R]=[C;D3;r5]1[N;D2;z1][N;z1][A]-,=[A]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
@@ -554,6 +565,19 @@ def _rules_single():
     # fix imidaz-imin. move double bond to the ring
     #
     q = smarts('[N;z2;!R]=[C;D3;r5]1[N;D2;z1][A]-,=[A][N;z1]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix oxazol-imin
+    #
+    q = smarts('[N;z2;!R]=[C;D3;r5]1[N;D2;z1][A]-,=[A][O,S;D2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    q = smarts('[N;z2;!R]=[C;D3;r5]1[N;D2;z1][O,S;D2][A]-,=[A]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
