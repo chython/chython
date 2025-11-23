@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2023-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -76,6 +76,10 @@ data = [
         ('C=C(O)O', 'CC(=O)O'), ('C=C(O)N', 'CC(=O)N'),
         ('OC=C', 'O=CC'), ('OC(C)=C', 'O=C(C)C'),
         ('O=C1N=CC=CC1', 'OC=1N=CC=CC=1'), ('OC=1N=CC=CC=1', 'OC=1N=CC=CC=1'), ('N=C1N=CC=CC1', 'NC=1N=CC=CC=1'),
+        ('S=C1NC=CN1', 'S=C1NC=CN1'), ('SC1=NC=CN1', 'S=C1NC=CN1'), ('S=C1NCCN1', 'S=C1NCCN1'), ('SC1=NCCN1', 'S=C1NCCN1'),
+        ('CN=C1NC=CN1', 'CNC1=NC=CN1'), ('CNC1=NC=CN1', 'CNC1=NC=CN1'), ('CN=C1NCCN1', 'CNC1=NCCN1'), ('CNC1=NCCN1', 'CNC1=NCCN1'),
+        ('S=C1NNC=C1', 'SC1=NNC=C1'), ('SC1=NNC=C1', 'SC1=NNC=C1'), ('S=C1NNCC1', 'S=C1NNCC1'), ('SC1=NNCC1', 'S=C1NNCC1'),
+        ('CN=C1NNC=C1', 'CNC1=NNC=C1'), ('CNC1=NNC=C1', 'CNC1=NNC=C1'), ('CN=C1NNCC1', 'CNC1=NNCC1'), ('CNC1=NNCC1', 'CNC1=NNCC1'),
         ('CN=C1N=CC=CC1', 'CNC=1N=CC=CC=1'),
         ('[O-][P+](C)(C)C', 'O=P(C)(C)C'),
         ('[CH2+][P-](C)(C)C', 'C=P(C)(C)C'),
