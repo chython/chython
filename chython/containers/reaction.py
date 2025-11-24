@@ -29,7 +29,7 @@ from ..algorithms.calculate2d import Calculate2DReaction
 from ..algorithms.depict import DepictReaction
 from ..algorithms.mapping import Mapping
 from ..algorithms.standardize import StandardizeReaction
-from numpy import zeros
+from numpy import zeros, uint8, concatenate
 
 
 class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, DepictReaction):
@@ -322,7 +322,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         return len(self.reactants) + len(self.products) + len(self.reagents)
 
 
-    def diff_fingerprint(self, min_radius: int = 1, max_radius: int = 4, length: int = 1024, number_active_bits: int = 2, count_fp: bool = False):
+    def diff_fingerprint(self, min_radius: int = 1, max_radius: int = 4, length: int = 1024, number_active_bits: int = 2, fp_type: str = 'concat'):
         """
         Calculate the difference fingerprint for a reaction: products minus reactants.
 
@@ -331,24 +331,41 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         :param max_radius: maximum radius of EC
         :param length: fingerprint length. Should be power of 2
         :param number_active_bits: number of active bits for each hashed tuple (int or 'auto'). For 'auto' option, number of bits is count of each hash + 1.
-
+        :param fp_type: 'concat', 'binary','pair','count' - type of fingerprint to calculate.
+            'binary' - disjoint feature bits between products and reactants. Will be same for a reverse reaction.
+            'pair' - tuple of two sets of bits: joint bits between difference fingerprints and reactants fingerprints; and between difference fingerprints and product fingerprints
+            'concat' - same set of fingerprints concatenated (reactant bits first, then product bits)
+            'count' - counts of features in products minus counts in reactants.
         :return: array(n_features) of difference counts
         """
+        if fp_type == 'concat':
+            length = length // 2
+
         reactant_fp = zeros(length, dtype=uint8)
         product_fp = zeros(length, dtype=uint8)
 
-        if count_fp:
+        if fp_type=='count':
             for mol in self.reactants:
                 reactant_fp += mol.morgan_count_fingerprint(min_radius, max_radius, length)
             for mol in self.products:
                 product_fp += mol.morgan_count_fingerprint(min_radius, max_radius, length)
             r_fp = product_fp - reactant_fp
+            return r_fp
         else:
             for mol in self.reactants:
                 reactant_fp |= mol.morgan_fingerprint(min_radius, max_radius, length, number_active_bits)
             for mol in self.products:
                 product_fp |= mol.morgan_fingerprint(min_radius, max_radius, length, number_active_bits)
-            r_fp = product_fp & ~reactant_fp
-        return r_fp
+            r_fp_reac = reactant_fp & ~product_fp
+            r_fp_prod = product_fp & ~reactant_fp
+            if fp_type=='binary':
+                return r_fp_reac | r_fp_prod
+            else:
+                if fp_type=='pair':
+                    return r_fp_reac, r_fp_prod
+                elif fp_type=='concat':
+                    return concatenate((r_fp_reac, r_fp_prod))
+                else:
+                    raise ValueError('Unknown fp_type')
 
 __all__ = ['ReactionContainer']
