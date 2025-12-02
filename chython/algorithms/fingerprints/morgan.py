@@ -22,7 +22,11 @@ from collections import defaultdict
 from math import log2
 from numpy import uint8, zeros
 from typing import Dict, List, Set, TYPE_CHECKING
+from hashlib import md5
 
+
+def hash_(x):
+    return int.from_bytes(md5(bytes(x)).digest(), byteorder='big')
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
@@ -67,8 +71,11 @@ class MorganFingerprint:
         if number_active_bits == 'auto':
             for hsh, cnt in self.morgan_hash_counts(min_radius, max_radius):
                 active_bits.add(hsh & mask)
-                active_bits.add(hsh >> log & mask)
+                hsh >>= log
+                active_bits.add(hsh & mask)
                 for _ in range(cnt-1):
+                    if hsh.bit_length() < log:
+                        break
                     hsh >>= log
                     active_bits.add(hsh & mask)
 
