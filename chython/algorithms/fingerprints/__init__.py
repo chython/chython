@@ -45,4 +45,7 @@ class FingerprintsCGR(LinearFingerprint, MorganFingerprint):
                 for idx, atom in self._atoms.items()}
 
 
+
+
+
 __all__ = ['Fingerprints', 'FingerprintsCGR']

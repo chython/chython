@@ -25,8 +25,6 @@ from typing import Dict, List, Set, TYPE_CHECKING
 from hashlib import md5
 
 
-def hash_(x):
-    return int.from_bytes(md5(bytes(x)).digest(), byteorder='big')
 
 if TYPE_CHECKING:
     from chython import MoleculeContainer
@@ -36,7 +34,7 @@ class MorganFingerprint:
     __slots__ = ()
 
     def morgan_fingerprint(self, min_radius: int = 1, max_radius: int = 4,
-                           length: int = 1024, number_active_bits: int = 2):
+                           length: int = 1024, number_active_bits: int = 2, max_count_num: int = 0):
         """
         Transform structures into array of binary features.
         Morgan fingerprints. Similar to RDkit implementation.
@@ -44,50 +42,53 @@ class MorganFingerprint:
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         :param length: bit string's length. Should be power of 2
-        :param number_active_bits: number of active bits for each hashed tuple (int or 'auto'). For 'auto' option, number of bits is count of each hash + 1.
+        :param number_active_bits: number of active bits for each hashed tuple (int)
+        :max_count_num: maximum number of counts to consider for each fragment (int). If 0, all counts are considered.
 
         :return: array(n_features)
         """
-        bits = self.morgan_bit_set(min_radius, max_radius, length, number_active_bits)
+        bits = self.morgan_bit_set(min_radius, max_radius, length, number_active_bits, max_count_num)
         fingerprints = zeros(length, dtype=uint8)
         fingerprints[list(bits)] = 1
         return fingerprints
 
     def morgan_bit_set(self, min_radius: int = 1, max_radius: int = 4,
-                       length: int = 1024, number_active_bits: int = 2) -> Set[int]:
+                       length: int = 1024, number_active_bits: int = 2, max_count_num: int = 0) -> Set[int]:
         """
         Transform structures into set of indexes of True-valued features.
 
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         :param length: bit string's length. Should be power of 2
-        :param number_active_bits: number of active bits for each hashed tuple (int or 'auto'). For 'auto' option, number of bits is count of each hash + 1.
+        :param number_active_bits: number of active bits for each hashed tuple (int)
+        :max_count_num: maximum number of counts to consider for each fragment (int). If 0, all counts are considered.
         """
         mask = length - 1
         log = int(log2(length))
 
         active_bits = set()
 
-        if number_active_bits == 'auto':
-            for hsh, cnt in self.morgan_hash_counts(min_radius, max_radius):
-                active_bits.add(hsh & mask)
-                hsh >>= log
-                active_bits.add(hsh & mask)
-                for _ in range(cnt-1):
-                    if hsh.bit_length() < log:
-                        break
-                    hsh >>= log
-                    active_bits.add(hsh & mask)
+        if max_count_num==0:
+            max_count_num = 999_999_999  # effectively unlimited
 
-        else:
-            for tpl in self.morgan_hash_set(min_radius, max_radius):
-                active_bits.add(tpl & mask)
-                if number_active_bits == 2:
-                    active_bits.add(tpl >> log & mask)
-                elif number_active_bits > 2:
-                    for _ in range(1, number_active_bits):
-                        tpl >>= log
-                        active_bits.add(tpl & mask)
+        for tpl, cnt in self.morgan_hash_counts(min_radius, max_radius):
+            hsh=tpl #save tpl for counts
+            # Activate bits based on the number of active bits specified
+            active_bits.add(tpl & mask)
+            if number_active_bits == 2:
+                active_bits.add(tpl >> log & mask)
+            elif number_active_bits > 2:
+                for _ in range(1, number_active_bits):
+                    tpl >>= log
+                    active_bits.add(tpl & mask)
+
+            #Activate bits for counts
+            for i in range(min(cnt, max_count_num)-1):
+                # Generate a new hash for each occurrence up to max_count_num
+                new_hash = hash((hsh, i))
+                active_bits.add(new_hash & mask)
+                active_bits.add(new_hash >> log & mask)
+
         return active_bits
 
     def morgan_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[int]:
