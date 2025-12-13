@@ -20,25 +20,19 @@
 
 
 template = {
-    'name': 'Buchwald-Hartwig reaction',
-    'description': 'Buchwald-Hartwig amination reaction, C-N coupling reaction',
+    'name': 'Aromatic C-O coupling reaction',
+    'description': 'Aromatic C-O coupling reaction of aryl chlorides, bromides, and iodides with with alcohols and phenols',
     'templates': [
         {
             'A': [
                 # Hal-Ar
-                '[Cl,Br,I;D1:1]-[C;a:2]',
-                # Ar triflate
-                '[C;a:2]-[O;D2;x1:1]-[S;x3;D4:10](=[O:11])(=[O:12])-[C;D4;z1:13](-[F;D1:14])(-[F;D1:15])-[F;D1:16]'
+                '[Cl,Br,I;D1:1]-[C;a:2]'
             ],
             'B': [
-                # Ar-NH2
-                '[N;D1;x0;z1:3][C;a;M]',
-                # Alk-NH2
-                '[N;D1;x0;z1:3][C;z1;x1;M]',
-                # Alk-NH-Ar
-                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
-                # Alk2NH
-                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+                # Ar-OH
+                '[O;D1;x0;z1:3][C;a;M]',
+                # Alk-OH
+                '[O;D1;x0;z1:3][C;z1;x1;M]',
             ],
             'product': '[A:2]-[A:3]',
             'alerts': [],

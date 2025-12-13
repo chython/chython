@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
-#  Copyright 2023 Timur Gimadiev <timur.gimadiev@gmail.com>
+#  Copyright 2024 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,31 +19,27 @@
 
 
 template = {
-    'name': 'Buchwald-Hartwig reaction',
-    'description': 'Buchwald-Hartwig amination reaction, C-N coupling reaction',
+    'name': 'XEC',
+    'description': 'Cross-electrophile C-sp2-X C-sp3-X coupling reaction',
     'templates': [
         {
             'A': [
                 # Hal-Ar
                 '[Cl,Br,I;D1:1]-[C;a:2]',
+                # Hal-pseudoaromatic, more specifically C5, C6 vinylic
+                '[Cl,Br,I;D1:1]-[C;z2;r5,r6:2]',
                 # Ar triflate
                 '[C;a:2]-[O;D2;x1:1]-[S;x3;D4:10](=[O:11])(=[O:12])-[C;D4;z1:13](-[F;D1:14])(-[F;D1:15])-[F;D1:16]'
             ],
             'B': [
-                # Ar-NH2
-                '[N;D1;x0;z1:3][C;a;M]',
-                # Alk-NH2
-                '[N;D1;x0;z1:3][C;z1;x1;M]',
-                # Alk-NH-Ar
-                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
-                # Alk2NH
-                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+                # sp3-C-X
+                '[Cl,Br,I;D1:3]-[C;z1:4]'
             ],
-            'product': '[A:2]-[A:3]',
+            'product': '[A:2]-[A:4]',
             'alerts': [],
             'ufe': {
                 'A': 1,
-                'B': '[A:3][At;M]'
+                'B': 3
             }
         }
     ],

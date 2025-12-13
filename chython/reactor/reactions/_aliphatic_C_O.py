@@ -20,25 +20,23 @@
 
 
 template = {
-    'name': 'Buchwald-Hartwig reaction',
-    'description': 'Buchwald-Hartwig amination reaction, C-N coupling reaction',
+    'name': 'Aliphatic C-O coupling reaction',
+    'description': 'Nucleophilic substitution of aliphatic chlorides, bromides, iodides, sulfonates and sulfates with alcohols and phenols.  Williamson ether synthesis or whatever is your preferred name for this type of reaction',
     'templates': [
         {
             'A': [
-                # Hal-Ar
-                '[Cl,Br,I;D1:1]-[C;a:2]',
-                # Ar triflate
-                '[C;a:2]-[O;D2;x1:1]-[S;x3;D4:10](=[O:11])(=[O:12])-[C;D4;z1:13](-[F;D1:14])(-[F;D1:15])-[F;D1:16]'
+                # Hal-Alk
+                '[Cl,Br,I;D1:1]-[C;z1:2]',
+                # Alk-Sulfonate, i.e. mesylates, tosylates, triflates, nosylates, brosylates, etc.
+                '[C;z1:2]-[O:1]-[S;D4:4](=[O:5])(=[O:6])-[C:7]',
+                # Dimethyl sulfate, diethyl sulfate, etc.
+                '[C;z1:2]-[O:1]-[S;D4:4](=[O:5])(=[O:6])-[O:7]-[C:8]',
             ],
             'B': [
-                # Ar-NH2
-                '[N;D1;x0;z1:3][C;a;M]',
-                # Alk-NH2
-                '[N;D1;x0;z1:3][C;z1;x1;M]',
-                # Alk-NH-Ar
-                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
-                # Alk2NH
-                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+                # Ar-OH
+                '[O;D1;x0;z1:3][C;a;M]',
+                # Alk-OH
+                '[O;D1;x0;z1:3][C;z1;x1;M]',
             ],
             'product': '[A:2]-[A:3]',
             'alerts': [],

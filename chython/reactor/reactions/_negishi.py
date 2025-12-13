@@ -20,25 +20,23 @@
 
 
 template = {
-    'name': 'Buchwald-Hartwig reaction',
-    'description': 'Buchwald-Hartwig amination reaction, C-N coupling reaction',
+    'name': 'Negishi coupling reaction',
+    'description': 'Negishi C-C coupling reaction of sp2-C halides and organozinc reagents',
     'templates': [
         {
             'A': [
-                # Hal-Ar
+                # X-Ar
                 '[Cl,Br,I;D1:1]-[C;a:2]',
+                # X-C-sp2
+                '[Cl,Br,I;D1:1]-[C;x1,x2;z2:2]=[C;x0,x1;z2;M]',
                 # Ar triflate
-                '[C;a:2]-[O;D2;x1:1]-[S;x3;D4:10](=[O:11])(=[O:12])-[C;D4;z1:13](-[F;D1:14])(-[F;D1:15])-[F;D1:16]'
+                '[C;a:2]-[O;D2;x1:1]-[S;x3;D4:10](=[O:11])(=[O:12])-[C;D4;z1:13](-[F;D1:14])(-[F;D1:15])-[F;D1:16]',
+                # Vinyl triflates
+                '[C;x0,x1;z2;M]=[C;x1;z2:2]-[O;D2;x1:1]-[S;x3;D4:10](=[O:11])(=[O:12])-[C;D4;z1:13](-[F;D1:14])(-[F;D1:15])-[F;D1:16]',
             ],
             'B': [
-                # Ar-NH2
-                '[N;D1;x0;z1:3][C;a;M]',
-                # Alk-NH2
-                '[N;D1;x0;z1:3][C;z1;x1;M]',
-                # Alk-NH-Ar
-                '[N;D2;x0;z1:3]([C;a;M])[C;z1;x1;M]',
-                # Alk2NH
-                '[N;D2;x0;z1:3]([C;z1;x1;M])[C;z1;x1;M]'
+                # C-Zn
+                '[Zn]-[C:3]',
             ],
             'product': '[A:2]-[A:3]',
             'alerts': [],

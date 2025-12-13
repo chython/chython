@@ -29,6 +29,7 @@ from ..algorithms.calculate2d import Calculate2DReaction
 from ..algorithms.depict import DepictReaction
 from ..algorithms.mapping import Mapping
 from ..algorithms.standardize import StandardizeReaction
+from numpy import zeros
 
 
 class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, DepictReaction):
@@ -320,5 +321,34 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
     def __len__(self):
         return len(self.reactants) + len(self.products) + len(self.reagents)
 
+
+    def diff_fingerprint(self, min_radius: int = 1, max_radius: int = 4, length: int = 1024, number_active_bits: int = 2, count_fp: bool = False):
+        """
+        Calculate the difference fingerprint for a reaction: products minus reactants.
+
+        :param reaction: ReactionContainer object
+        :param min_radius: minimal radius of EC
+        :param max_radius: maximum radius of EC
+        :param length: fingerprint length. Should be power of 2
+        :param number_active_bits: number of active bits for each hashed tuple (int or 'auto'). For 'auto' option, number of bits is count of each hash + 1.
+
+        :return: array(n_features) of difference counts
+        """
+        reactant_fp = zeros(length, dtype=uint8)
+        product_fp = zeros(length, dtype=uint8)
+
+        if count_fp:
+            for mol in self.reactants:
+                reactant_fp += mol.morgan_count_fingerprint(min_radius, max_radius, length)
+            for mol in self.products:
+                product_fp += mol.morgan_count_fingerprint(min_radius, max_radius, length)
+            r_fp = product_fp - reactant_fp
+        else:
+            for mol in self.reactants:
+                reactant_fp |= mol.morgan_fingerprint(min_radius, max_radius, length, number_active_bits)
+            for mol in self.products:
+                product_fp |= mol.morgan_fingerprint(min_radius, max_radius, length, number_active_bits)
+            r_fp = product_fp & ~reactant_fp
+        return r_fp
 
 __all__ = ['ReactionContainer']
