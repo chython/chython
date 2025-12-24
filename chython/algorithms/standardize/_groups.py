@@ -553,6 +553,11 @@ def _rules_single():
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
 
+    q = smarts('[O,S;D1;z2;x0]=[C;D3;r5]1[N;D2;z1][A;z2]=[N][N;z1]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
     #
     # fix pyraz-imin
     #

@@ -76,6 +76,7 @@ data = [
         ('C=C(O)O', 'CC(=O)O'), ('C=C(O)N', 'CC(=O)N'),
         ('OC=C', 'O=CC'), ('OC(C)=C', 'O=C(C)C'),
         ('O=C1N=CC=CC1', 'OC=1N=CC=CC=1'), ('OC=1N=CC=CC=1', 'OC=1N=CC=CC=1'), ('N=C1N=CC=CC1', 'NC=1N=CC=CC=1'),
+        ('CN1N=CNC1=O', 'CN1N=CN=C1O'), ('CN1N=CN=C1O', 'CN1N=CN=C1O'),
         ('S=C1NC=CN1', 'S=C1NC=CN1'), ('SC1=NC=CN1', 'S=C1NC=CN1'), ('S=C1NCCN1', 'S=C1NCCN1'), ('SC1=NCCN1', 'S=C1NCCN1'),
         ('CN=C1NC=CN1', 'CNC1=NC=CN1'), ('CNC1=NC=CN1', 'CNC1=NC=CN1'), ('CN=C1NCCN1', 'CNC1=NCCN1'), ('CNC1=NCCN1', 'CNC1=NCCN1'),
         ('S=C1NNC=C1', 'SC1=NNC=C1'), ('SC1=NNC=C1', 'SC1=NNC=C1'), ('S=C1NNCC1', 'S=C1NNCC1'), ('SC1=NNCC1', 'S=C1NNCC1'),
