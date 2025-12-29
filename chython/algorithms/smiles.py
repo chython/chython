@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
@@ -25,17 +25,15 @@ from heapq import heappop, heappush
 from itertools import product
 from random import random
 from typing import Callable, Optional, Tuple, TYPE_CHECKING, Union
-from ..periodictable import ExtendedQuery, QueryElement
 
 
 if TYPE_CHECKING:
-    from chython import MoleculeContainer, CGRContainer, QueryContainer
+    from chython import MoleculeContainer, CGRContainer
     from chython.containers.graph import Graph
 
 charge_str = {-4: '-4', -3: '-3', -2: '-2', -1: '-', 0: '0', 1: '+', 2: '+2', 3: '+3', 4: '+4'}
 order_str = {1: '-', 2: '=', 3: '#', 4: ':', 8: '~', None: '.'}
 organic_set = {'C', 'N', 'O', 'P', 'S', 'F', 'Cl', 'Br', 'I', 'B'}
-hybridization_str = {4: '4', 3: '1', 2: '2', 1: '3', None: 'n'}
 dyn_order_str = {(None, 1): '[.>-]', (None, 2): '[.>=]', (None, 3): '[.>#]', (None, 4): '[.>:]', (None, 8): '[.>~]',
                  (1, None): '[->.]', (1, 1): '', (1, 2): '[->=]', (1, 3): '[->#]', (1, 4): '[->:]', (1, 8): '[->~]',
                  (2, None): '[=>.]', (2, 1): '[=>-]', (2, 2): '=', (2, 3): '[=>#]', (2, 4): '[=>:]', (2, 8): '[=>~]',
@@ -335,23 +333,28 @@ class Smiles(ABC):
 class MoleculeSmiles(Smiles):
     __slots__ = ()
 
-    def sticky_smiles(self: Union['MoleculeContainer', 'MoleculeSmiles'], left: int, right: int = None, *,
-                      remove_left: bool = False, remove_right: bool = False, tries: int = 10):
+    def sticky_smiles(self: Union['MoleculeContainer', 'MoleculeSmiles'], left: int = None, right: int = None, *,
+                      remove_left: bool = False, remove_right: bool = False, tries: int = 10,
+                      keep_bond_left: bool = False, keep_bond_right: bool = False, hydrogens: bool = False):
         """
-        Generate smiles with fixed left and optionally right terminal atoms.
-        Note: Produce expected results only with acyclic terminal atoms.
+        Generate smiles with fixed left and/or right terminal atoms.
+        The right atom must be terminal if set. Use a temporary attached atom with remove_right=True as a workaround.
+        Removing in-ring terminal atoms can lead to invalid smiles.
 
-        :param remove_left: drop terminal atom and corresponding bond
-        :param remove_right: drop terminal atom and corresponding bond
+        :param remove_left: drop terminal atom and corresponding bond by default
+        :param remove_right: drop terminal atom and corresponding bond by default
         :param tries: number of attempts to generate smiles
+        :param keep_bond_left: keep bond of removed left atom. Sets explicit single bond
+        :param keep_bond_right: keep bond of removed right atom
+        :param hydrogens: show implicit hydrogens in smiles
         """
         bonds = self._bonds
-        bonds[left]  # noqa. check left atom availability
         if right:
             assert tries > 0, 'tries count should be positive'
             assert len(bonds[right]) == 1, 'right atom should be terminal'
             assert left != right, 'left and right atoms the same'
             assert self.connected_components_count == 1, 'only single component structures supported'
+            if remove_left: assert left, 'specify left atom to remove'
 
             seen = {right: 0}
             queue = [(right, -10)]
@@ -360,22 +363,43 @@ class MoleculeSmiles(Smiles):
                 for m in bonds[n].keys() - seen.keys():
                     queue.append((m, d - 10))
                     seen[m] = d
-            seen[left] = -1_000_000_000  # prioritize left atom
+            if left:
+                bonds[left]  # noqa. check left atom availability
+                seen[left] = -1_000_000_000  # prioritize left atom
 
             for _ in range(tries):
-                smiles, order = self._smiles(lambda x: seen[x] + random(), _return_order=True, random=True)
+                smiles, order = self._smiles(lambda x: seen[x] + random(), _return_order=True,
+                                             random=True, hydrogens=hydrogens)
                 if order[-1] == right:
                     break
             else:
                 raise Exception('generation of smiles failed')
             if remove_left:
-                smiles = smiles[2:]
+                if keep_bond_left:
+                    smiles = smiles[1:]
+                    if not smiles[0]:
+                        smiles[0] = '-'
+                else:
+                    smiles = smiles[2:]
             if remove_right:
-                smiles = smiles[:-2]
-        else:
-            smiles = self._smiles(lambda x: x != left, random=True)
+                if keep_bond_right:
+                    smiles = smiles[:-1]
+                    if not smiles[-1]:
+                        smiles[-1] = '-'
+                else:
+                    smiles = smiles[:-2]
+        elif left:
+            bonds[left]  # noqa. check left atom availability
+            smiles = self._smiles(lambda x: x != left, random=True, hydrogens=hydrogens)
             if remove_left:
-                smiles = smiles[2:]
+                if keep_bond_left:
+                    smiles = smiles[1:]
+                    if not smiles[0]:
+                        smiles[0] = '-'  # assuming nobody will try to remove atom from an aromatic ring
+                else:
+                    smiles = smiles[2:]
+        else:
+            raise ValueError('either left or right atom should be specified')
         return ''.join(smiles)
 
     def _smiles_order(self: 'MoleculeContainer', stereo=True):
@@ -385,9 +409,29 @@ class MoleculeSmiles(Smiles):
             return self.atoms_order.__getitem__
 
     def _format_cxsmiles(self: 'MoleculeContainer', order):
-        if self.is_radical:
-            return f'|^1:{",".join(str(n) for n, m in enumerate(order) if self._atoms[m].is_radical)}|'
-        return
+        cx = []
+        rd = []
+        es = defaultdict(list)
+
+        atoms = self._atoms
+        for i, n in enumerate(order):
+            a = atoms[n]
+            if a.is_radical:
+                rd.append(str(i))
+            if (s := a.extended_stereo) is not None:
+                if s < 0:
+                    es[f'o{-s}:'].append(str(i))
+                elif s > 0:
+                    es[f'&{s}:'].append(str(i))
+
+        if rd:
+            cx.append('^1:' + ','.join(rd))
+        if es:
+            for k in sorted(es):
+                cx.append(k + ','.join(es[k]))
+        if cx:
+            return '|' + ','.join(cx) + '|'
+        return None
 
     def _format_atom(self: 'MoleculeContainer', n, adjacency, **kwargs):
         atom = self._atoms[n]
@@ -555,77 +599,4 @@ class CGRSmiles(Smiles):
         return dyn_order_str[(bond.order, bond.p_order)]
 
 
-class QuerySmiles(Smiles):
-    __slots__ = ()
-
-    def _smiles_order(self: 'QueryContainer', stereo=True):
-        # try to keep atoms order
-        return {n: i for i, n in enumerate(self._atoms)}.__getitem__
-
-    def _format_cxsmiles(self: 'QueryContainer', order):
-        hh = ['atomProp']
-        cx = []
-        rad = [str(n) for n, m in enumerate(order) if isinstance(a:=self._atoms[m], ExtendedQuery) and a.is_radical]
-        if rad:
-            cx.append('^1:' + ','.join(rad))
-
-        for n, m in enumerate(order):
-            atom = self._atoms[m]
-            if len(hb := atom.hybridization) > 1 or (hb and hb[0] != 4):
-                hh.append(f'{n}.hyb.' + ''.join(hybridization_str[x] for x in hb))
-            if isinstance(atom, ExtendedQuery) and (ha := atom.heteroatoms):
-                hh.append(f'{n}.het.' + ''.join(str(x) for x in ha))
-            if atom.masked:
-                hh.append(f'{n}.msk.1')
-        if len(hh) > 1:
-            cx.append(':'.join(hh))
-        if cx:
-            return f'|{",".join(cx)}|'
-
-    def _format_atom(self: 'QueryContainer', n, adjacency, **kwargs):
-        atom = self._atoms[n]
-        if isinstance(atom, QueryElement) and atom.isotope:
-            smi = ['[', str(atom.isotope), atom.atomic_symbol]
-        else:
-            smi = ['[', atom.atomic_symbol]
-
-        if isinstance(atom, ExtendedQuery):
-            if atom.stereo is not None:
-                # mark atom as chiral. it's too difficult to set correct sign
-                smi.append(';@?')
-
-            if atom.charge:
-                smi.append(';')
-                smi.append(charge_str[atom.charge])
-
-            if atom.implicit_hydrogens:  # h<n> implicit-H-count <n> implicit hydrogens
-                smi.append(';')
-                smi.append(','.join(f'h{x}' for x in atom.implicit_hydrogens))
-
-        if atom.neighbors:  # D<n> 	degree 	<n> explicit connections
-            smi.append(';')
-            smi.append(','.join(f'D{x}' for x in atom.neighbors))
-
-        if isinstance(atom, ExtendedQuery) and atom.ring_sizes:
-            smi.append(';')
-            if atom.ring_sizes[0]:
-                smi.append(','.join(f'r{x}' for x in atom.ring_sizes))
-            else:
-                smi.append('!R')
-
-        if len(atom.hybridization) == 1 and atom.hybridization[0] == 4:  # only aromatic. other marks in cx extension
-            smi.append(';a')
-
-        smi.append(']')
-        return ''.join(smi)
-
-    def _format_bond(self: 'QueryContainer', n, m, adjacency, **kwargs):
-        # bond chirality skipped. too difficult to implement.
-        b = self._bonds[n][m]
-        s = ','.join(order_str[x] for x in b.order)
-        if (c := b.in_ring) is not None:
-            s += ';@' if c else ';!@'
-        return s
-
-
-__all__ = ['MoleculeSmiles', 'CGRSmiles', 'QuerySmiles']
+__all__ = ['MoleculeSmiles', 'CGRSmiles']

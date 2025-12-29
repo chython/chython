@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # cython: language_level=3
 #
-#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -118,7 +118,11 @@ def unpack(const unsigned char[::1] data not None):
 
         atomic_number = b & 0x7f
         py_atom = object.__new__(elements[atomic_number])
-        py_atoms[n] = py_atom
+        py_atom._extended_stereo = None
+        py_atom._parsed_mapping = None
+        py_n = n
+        py_atoms[py_n] = py_atom
+        py_bonds[py_n] = {}
 
         py_atom._stereo = py_nan_bool
 
@@ -221,7 +225,7 @@ def unpack(const unsigned char[::1] data not None):
             n = mapping[i]
             py_n = n  # shared py int obj
 
-            py_bonds[py_n] = py_ngb = {}
+            py_ngb = py_bonds[py_n]
             seen[n] = 1
 
             neighbors_count = neighbors[i]

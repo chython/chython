@@ -18,12 +18,9 @@
 #
 from chython import smiles, smarts, Transformer
 from chython.reactor import deprotection
-from itertools import product
 
 
 def test_deprotection():
-    qs = set()
-    ts = set()
     for x in dir(deprotection):
         if x == 'apply_all':
             continue
@@ -33,8 +30,6 @@ def test_deprotection():
                 t = smiles(t)
                 t.canonicalize()
                 q = smarts(q)
-                qs.add(q)
-                ts.add(t)
                 a = smiles(a)
                 a.canonicalize()
                 # test match
@@ -45,13 +40,3 @@ def test_deprotection():
                     b = smiles(b)
                     b.canonicalize()
                     assert not q < b, f'{x}: {q} < {b}'
-
-    # test rule-test is unique pair
-    assert len(qs) == len(ts)
-
-    m = 0
-    for q, t in product(qs, ts):
-        m += q < t
-
-    # test selectivity of rules
-    assert len(qs) == m

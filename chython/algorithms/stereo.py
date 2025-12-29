@@ -159,7 +159,7 @@ class MoleculeStereo:
             a._stereo = None
         for *_, b in self.bonds():
             b._stereo = None
-        self.flush_cache(keep_sssr=True, keep_components=True)
+        self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)
 
     @cached_property
     def tetrahedrons(self: 'MoleculeContainer') -> Tuple[int, ...]:
@@ -434,7 +434,7 @@ class MoleculeStereo:
             if s := _allene_sign(mark, atoms[t1].xy, atoms[t2].xy, atoms[m1].xy):
                 atoms[c]._stereo = s < 0 if r else s > 0
                 if clean_cache:
-                    self.flush_cache(keep_sssr=True, keep_components=True)
+                    self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)
         # tetrahedrons
         elif n in self.chiral_tetrahedrons:
             th = self.stereogenic_tetrahedrons[n]
@@ -463,7 +463,7 @@ class MoleculeStereo:
             if s:
                 atoms[n]._stereo = s > 0
                 if clean_cache:
-                    self.flush_cache(keep_components=True, keep_sssr=True)
+                    self.flush_cache(keep_components=True, keep_sssr=True, keep_special_connectivity=True)
         else:
             raise NotChiral
 
@@ -489,7 +489,7 @@ class MoleculeStereo:
             else:
                 break
         if flag and clean_cache:
-            self.flush_cache(keep_components=True, keep_sssr=True)
+            self.flush_cache(keep_components=True, keep_sssr=True, keep_special_connectivity=True)
 
     def add_atom_stereo(self: 'MoleculeContainer', n: int, env: Tuple[int, ...], mark: bool, *, clean_cache=True):
         """
@@ -513,11 +513,11 @@ class MoleculeStereo:
         if n in self.chiral_tetrahedrons:
             atom._stereo = self._translate_tetrahedron_sign(n, env, mark)
             if clean_cache:
-                self.flush_cache(keep_components=True, keep_sssr=True)
+                self.flush_cache(keep_components=True, keep_sssr=True, keep_special_connectivity=True)
         elif n in self.chiral_allenes:
             atom._stereo = self._translate_allene_sign(n, *env, mark)
             if clean_cache:
-                self.flush_cache(keep_components=True, keep_sssr=True)
+                self.flush_cache(keep_components=True, keep_sssr=True, keep_special_connectivity=True)
         else:  # only tetrahedrons supported
             raise NotChiral
 
@@ -551,11 +551,11 @@ class MoleculeStereo:
         if (n, m) in self.chiral_cis_trans:
             self._bonds[i][j]._stereo = self._translate_cis_trans_sign(n, m, n1, n2, mark)
             if clean_cache:
-                self.flush_cache(keep_components=True, keep_sssr=True)
+                self.flush_cache(keep_components=True, keep_sssr=True, keep_special_connectivity=True)
         elif (m, n) in self.chiral_cis_trans:
             self._bonds[i][j]._stereo = self._translate_cis_trans_sign(m, n, n2, n1, mark)
             if clean_cache:
-                self.flush_cache(keep_components=True, keep_sssr=True)
+                self.flush_cache(keep_components=True, keep_sssr=True, keep_special_connectivity=True)
         else:
             raise NotChiral
 
@@ -588,7 +588,7 @@ class MoleculeStereo:
         for n, m, b in self.bonds():
             if b.stereo is None:
                 continue
-            elif ta := stereo_cis_trans.get(n):
+            elif (ta := stereo_cis_trans.get(n)) and ta == stereo_cis_trans.get(m):
                 cis_trans_stereo.append((ta, b, b.stereo))
             b._stereo = None  # flush stereo label
         self.flush_stereo_cache()

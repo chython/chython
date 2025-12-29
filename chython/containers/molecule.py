@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,15 +19,17 @@
 from CachedMethods import cached_args_method
 from collections import Counter, defaultdict
 from functools import cached_property
+from lazy_object_proxy import Proxy
 from numpy import uint, zeros
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Tuple, Union
 from zlib import compress, decompress
-from .bonds import Bond, DynamicBond, QueryBond
+from .bonds import Bond, DynamicBond
 from .cgr import CGRContainer
 from .graph import Graph
-from .query import QueryContainer
+from .rdkit import RDkit
 from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
+from ..algorithms.conformers import Conformers
 from ..algorithms.depict import DepictMolecule
 from ..algorithms.isomorphism import MoleculeIsomorphism
 from ..algorithms.fingerprints import Fingerprints
@@ -40,17 +42,30 @@ from ..algorithms.stereo import MoleculeStereo
 from ..algorithms.tautomers import Tautomers
 from ..algorithms.x3dom import X3domMolecule
 from ..exceptions import ValenceError
-from ..periodictable import DynamicElement, Element, QueryElement, H as _H
+from ..periodictable import DynamicElement, Element, H as _H
 
+
+def _rotable_rules():
+    from .. import smarts
+
+    w = smarts('[A;D2,D3,D4]-;!@[A;D2,D3,D4]')
+    b = [smarts('[N;D2,D3]-;!@[C,S;D2,D3]=[O,N]'), smarts('[N;D2,D3]-;!@[S;D4](=[O,N])=[O,N]')]
+    return w, b
+
+
+rotable_rules = Proxy(_rotable_rules)
 
 # atomic number constants
-H = 5
+H = 1
 C = 6
+N = 7
+O = 8
+S = 16
 
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, MoleculeIsomorphism,
                         Aromatize, StandardizeMolecule, MoleculeSmiles, DepictMolecule, Calculate2DMolecule,
-                        Fingerprints, Tautomers, MCS, X3domMolecule):
+                        Conformers, Fingerprints, Tautomers, RDkit, MCS, X3domMolecule):
     __slots__ = ('_meta', '_name', '_conformers', '_changed', '_backup')
 
     def __init__(self):
@@ -138,14 +153,91 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
     @cached_property
     def molecular_mass(self) -> float:
         h = _H().atomic_mass
-        return sum(a.atomic_mass + a.implicit_hydrogens * h for _, a in self.atoms())
+        return sum(a.atomic_mass + (a.implicit_hydrogens or 0) * h for _, a in self.atoms())
+
+    @cached_property
+    def rotatable_bonds_count(self) -> int:
+        """
+        Number of rotatable bonds: non-ring single bonds linked to non-terminal atoms except [sulfon]amide-like C(=O)-N.
+
+        Charged atoms like R-NO2, R-[N+]([C,H])=C are ignored.
+        """
+        w, bs = rotable_rules
+        return sum(1 for _ in w.get_mapping(self)) - sum(1 for b in bs for _ in b.get_mapping(self))
+
+    @cached_property
+    def hydrogen_bond_donors_count(self) -> int:
+        """
+        Number of hydrogen bond donors: N, O, S atoms with hydrogens and at least one neighbour
+        (not water, ammonia, hydrogen sulfide).
+        """
+        return sum(
+            1 for _, a in self.atoms()
+            if a in (N, O, S)
+            and a.neighbors and not a.is_radical
+            and (a.implicit_hydrogens or a.explicit_hydrogens)
+        )
+
+    @cached_property
+    def hydrogen_bond_acceptors_count(self) -> int:
+        """
+        Number of hydrogen bond acceptors: O, N, S atoms with at least one neighbour
+        (not water, ammonia, hydrogen sulfide), Non-positively charged, with lone pairs, except R-SH and R-S(=O)-R sulfurs.
+        """
+        hba = 0
+        for _, a in self.atoms():
+            if not a.neighbors or a.is_radical: continue
+            elif a == O:
+                if a.charge <= 0:
+                    hba += 1
+            elif a == N:
+                if a.charge > 0 or a.hybridization == 4 and (a.implicit_hydrogens or a.neighbors == 3): continue
+                hba += 1
+            elif a == S:
+                if a.charge == -1:  # R-[S-]
+                    hba += 1
+                elif a.charge == 0 and a.neighbors == 2 and a.hybridization == 1:  # R-S-R
+                    hba += 1
+        return hba
+
+    @cached_property
+    def carbon_sp3_fraction(self) -> float:
+        """
+        Fraction of carbon atoms with sp3 hybridisation among all carbon atoms.
+        """
+        if not self.carbon_count:
+            return 0.
+        return self.carbon_sp3_count / self.carbon_count
+
+    @cached_property
+    def carbon_sp3_count(self) -> int:
+        return sum(1 for _, a in self.atoms() if a == C and a.hybridization == 1)
+
+    @cached_property
+    def carbon_count(self) -> int:
+        return self.brutto.get('C', 0)
 
     @cached_property
     def brutto(self) -> Dict[str, int]:
         """Counted atoms dict"""
-        c = Counter(a.atomic_symbol for _, a in self.atoms())
-        c['H'] += sum(a.implicit_hydrogens for _, a in self.atoms())
-        return dict(c)
+        c = Counter()
+        # make an order
+        c['C'] = 0
+        c['H'] = 0
+        c['O'] = 0
+        c['N'] = 0
+        c['B'] = 0
+        c.update(a.atomic_symbol for a in sorted((a for _, a in self.atoms()), key=lambda a: a.atomic_number))
+        c['H'] += sum(a.implicit_hydrogens or 0 for _, a in self.atoms())
+        return {k: v for k, v in c.items() if v}
+
+    @cached_property
+    def brutto_formula(self) -> str:
+        return ''.join(f'{a}{c}' if c > 1 else a for a, c in self.brutto.items())
+
+    @cached_property
+    def brutto_formula_html(self) -> str:
+        return ''.join(f'{a}<sub>{c}</sub>' if c > 1 else a for a, c in self.brutto.items())
 
     @cached_property
     def aromatic_rings(self) -> Tuple[Tuple[int, ...], ...]:
@@ -242,6 +334,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
     def copy(self, *, keep_sssr=False, keep_components=False) -> 'MoleculeContainer':
         copy = super().copy()
+        copy._changed = copy._backup = None
         copy._name = self._name
         if self._meta is None:
             copy._meta = None
@@ -262,11 +355,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             raise TypeError('MoleculeContainer expected')
         return super().union(other, remap=remap, copy=copy)
 
-    def substructure(self, atoms: Iterable[int], *, as_query: bool = False, recalculate_hydrogens=True,
-                     skip_neighbors_marks=False, skip_hybridizations_marks=False, skip_hydrogens_marks=False,
-                     skip_rings_sizes_marks=False, skip_heteroatoms_marks=False, skip_in_ring_bond_marks=False,
-                     skip_stereo_marks=False) -> \
-            Union['MoleculeContainer', 'QueryContainer']:
+    def substructure(self, atoms: Iterable[int], *, recalculate_hydrogens=True) -> 'MoleculeContainer':
         """
         Create substructure containing atoms from atoms list.
 
@@ -275,56 +364,15 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         Call `kekule()` and `thiele()` in sequence to fix marks.
 
         :param atoms: list of atoms numbers of substructure
-        :param as_query: return Query object based on graph substructure
         :param recalculate_hydrogens: calculate implicit H count in substructure
-        :param skip_neighbors_marks: Don't set neighbors count marks on substructured queries
-        :param skip_hybridizations_marks: Don't set hybridizations marks on substructured queries
-        :param skip_hydrogens_marks: Don't set hydrogens count marks on substructured queries
-        :param skip_rings_sizes_marks: Don't set rings_sizes marks on substructured queries
-        :param skip_heteroatoms_marks: Don't set heteroatoms count marks
-        :param skip_in_ring_bond_marks: Don't set in_ring bond marks
-        :param skip_stereo_marks: Don't set stereo marks on substructured queries
         """
         if not atoms:
             raise ValueError('empty atoms list not allowed')
         if set(atoms) - self._atoms.keys():
             raise ValueError('invalid atom numbers')
         atoms = tuple(n for n in self if n in atoms)  # save original order
-        if as_query:
-            sub = object.__new__(QueryContainer)
-
-            lost = {n for n, a in self.atoms() if a != H} - set(atoms)  # atoms not in substructure
-            # atoms with fully present neighbors
-            not_skin = {n for n in atoms if lost.isdisjoint(self._bonds[n])}
-
-            # check for full presence of cumulene chains and terminal attachments
-            for p in self.stereogenic_cumulenes.values():
-                if not not_skin.issuperset(p):
-                    not_skin.difference_update(p)
-
-            sub._atoms = {n: QueryElement.from_atom(self._atoms[n],
-                                                    neighbors=not skip_neighbors_marks,
-                                                    hybridization=not skip_hybridizations_marks,
-                                                    hydrogens=not skip_hydrogens_marks,
-                                                    ring_sizes=not skip_rings_sizes_marks,
-                                                    heteroatoms=not skip_heteroatoms_marks,
-                                                    stereo=not skip_stereo_marks and n in not_skin)
-                          for n in atoms}
-            sub._bonds = sb = {}
-            for n in atoms:
-                sb[n] = sbn = {}
-                for m, bond in self._bonds[n].items():
-                    if m in sb:  # bond partially exists. need back-connection.
-                        sbn[m] = sb[m][n]
-                    elif m in atoms:
-                        sbn[m] = QueryBond.from_bond(bond,
-                                                     in_ring=not skip_in_ring_bond_marks,
-                                                     stereo=not skip_stereo_marks and n in not_skin and m in not_skin)
-            return sub
-
-        # molecule substructure
         sub = object.__new__(self.__class__)
-        sub._name = sub._meta = sub._changed = None
+        sub._name = sub._meta = sub._changed = sub._backup = None
         sub._atoms = {n: self._atoms[n].copy(hydrogens=not recalculate_hydrogens, stereo=True) for n in atoms}
         sub._bonds = sb = {}
         for n in atoms:
@@ -364,9 +412,14 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         """
         return [self.substructure(c, recalculate_hydrogens=False) for c in self.connected_components]
 
-    def compose(self, other: 'MoleculeContainer') -> 'CGRContainer':
+    def compose(self, other: 'MoleculeContainer', dynamic=True) -> Union['CGRContainer', 'MoleculeContainer']:
         """
         Compose 2 graphs to CGR.
+
+        :param dynamic: produce CGR with dynamic bonds and atoms,
+            overwise keep reactants' electronic and implicit hydrogens state and label dynamic bonds as "any".
+            This representation can't catch atom-only changes like (de)protonation, red-ox, etc;
+            or ambiguous bond changes like triple to double bond reduction.
         """
         if not isinstance(other, MoleculeContainer):
             raise TypeError('MoleculeContainer expected')
@@ -374,30 +427,41 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         adj = defaultdict(lambda: defaultdict(lambda: [None, None]))
         common = self._atoms.keys() & other._atoms.keys()
 
-        h = CGRContainer()
+        if dynamic:
+            h = CGRContainer()
+            from_atom = DynamicElement.from_atom
+            from_atoms = DynamicElement.from_atoms
+            from_bond = DynamicBond.from_bond
+            dynamic_bond = DynamicBond
+        else:
+            h = self.__class__()
+            from_atom = from_atoms = lambda x, *_: x.copy(hydrogens=True)
+            from_bond = lambda x: x.copy()
+            dynamic_bond = lambda x, y: Bond(8 if x != y else x)
+
         ha = h._atoms
         hb = h._bonds
 
         for n in self._atoms.keys() - common:  # cleavage atoms
-            ha[n] = DynamicElement.from_atom(self._atoms[n])
+            ha[n] = from_atom(self._atoms[n])
             hb[n] = {}
             for m, bond in self._bonds[n].items():
                 if m not in ha:
                     if m in common:  # bond to common atoms is broken bond
-                        bond = DynamicBond(bond.order, None)
+                        bond = dynamic_bond(bond.order, None)
                     else:
-                        bond = DynamicBond.from_bond(bond)
+                        bond = from_bond(bond)
                     bonds.append((n, m, bond))
         for n in other._atoms.keys() - common:  # coupling atoms
-            ha[n] = DynamicElement.from_atom(other._atoms[n])
+            ha[n] = from_atom(other._atoms[n])
             hb[n] = {}
 
             for m, bond in other._bonds[n].items():
                 if m not in ha:
                     if m in common:  # bond to common atoms is formed bond
-                        bond = DynamicBond(None, bond.order)
+                        bond = dynamic_bond(None, bond.order)
                     else:
-                        bond = DynamicBond.from_bond(bond)
+                        bond = from_bond(bond)
                     bonds.append((n, m, bond))
         for n in common:
             an = adj[n]
@@ -408,32 +472,19 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
                 if m in common:
                     an[m][1] = bond.order
         for n in common:
-            ha[n] = DynamicElement.from_atoms(self._atoms[n], other._atoms[n])
+            ha[n] = from_atoms(self._atoms[n], other._atoms[n])
             hb[n] = {}
 
             for m, (o1, o2) in adj[n].items():
                 if m not in ha:
-                    bonds.append((n, m, DynamicBond(o1, o2)))
+                    bonds.append((n, m, dynamic_bond(o1, o2)))
 
         for n, m, bond in bonds:
             hb[n][m] = hb[m][n] = bond
-        return h
 
-    def get_fast_mapping(self, other: 'MoleculeContainer') -> Optional[Dict[int, int]]:
-        """
-        Get self to other fast (suboptimal) structure mapping.
-        Only one possible atoms mapping returned.
-        Effective only for big molecules.
-        """
-        if isinstance(other, MoleculeContainer):
-            if len(self) != len(other):
-                return
-            so = self.smiles_atoms_order
-            oo = other.smiles_atoms_order
-            if self != other:
-                return
-            return dict(zip(so, oo))
-        raise TypeError('MoleculeContainer expected')
+        if not dynamic:
+            h.calc_labels()
+        return h
 
     def pack(self, *, compressed=True, check=True, version=2, order: List[int] = None) -> bytes:
         """
@@ -475,7 +526,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
         :param compressed: return zlib-compressed pack.
         :param check: check molecule for format restrictions.
-        :param version: format version
+        :param version: format version. Only V2 is supported.
         :param order: atom order in V3
         """
         from ._pack_v2 import pack as pack_v2
@@ -491,8 +542,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
 
         if version == 2:
             data = pack_v2(self)
-        elif version == 3:
-            data = self._pack_v3(order, check)
         else:
             raise ValueError('invalid specification version')
         if compressed:
@@ -522,16 +571,14 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         :param compressed: decompress data before processing.
         """
         from ._unpack_v0v2 import unpack as unpack_v0v2
-        from ._unpack_v3 import unpack as unpack_v3
 
         if compressed:
             data = decompress(data)
         if data[0] in (0, 2):
             mol, cis_trans, pack_length = unpack_v0v2(data)
             for n, m, s in cis_trans:
-                mol.bond(*mol._stereo_cis_trans_centers[n])._stereo = s
-        elif data[0] == 3:
-            mol, cis_trans, pack_length = unpack_v3(data)
+                if n in mol._stereo_cis_trans_centers:  # check for invalid CT data
+                    mol.bond(*mol._stereo_cis_trans_centers[n])._stereo = s
         else:
             raise ValueError('invalid pack header')
 
@@ -552,148 +599,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
     def __bytes__(self):
         return self.pack()
 
-    def _pack_v3(self, order=None, check=True):
-        """
-        Format V3 specification:
-        Big endian bytes order
-        8 bit - 0x03 (format specification version)
-        Atom block 3 bytes (repeated):
-        1 bit - atom entrance flag (always 1)
-        7 bit - atomic number (<=118)
-        3 bit - hydrogens (0-7). Note: 7 == None
-        4 bit - charge (charge + 4. possible range -4 - 4)
-        1 bit - radical state
-        4 bit - atom stereo
-            ANDx and ORx encode only sign. X value stored in the same order in Stereo group block.
-            0000 [same as V2] - no stereo or unknown
-            0001 - not used
-            0010 - absolute sign False
-            0011 - absolute sign True
-            0100 - sign False OR1 group
-            0101 - sign True OR1 group
-            0110 - sign False AND1 group
-            0111 - sign True AND1 group
-            1000 - sign False OR2 group
-            1001 - sign True OR2 group
-            1010 - sign False AND2 group
-            1011 - sign True AND2 group
-            1100 - sign False ORx group
-            1101 - sign True ORx group
-            1110 - sign False ANDx group
-            1111 - sign True ANDx group
-        4 bit - number of following bonds and CT blocks (0-15)
-
-        Bond block 2 bytes (repeated 0-15 times)
-        12 bit - negative shift from current atom to connected (e.g. 0x001 = -1 - connected to previous atom)
-        4 bit - bond order: 0000 - single, 0001 - double, 0010 - triple, 0011 - aromatic, 0111 - special
-
-        Cis-Trans 2 bytes
-        12 bit - negative shift from current atom to connected (e.g. 0x001 = -1 - connected to previous atom)
-        4 bit - CT sign: 1000 or 1001 - to avoid overlap with bond
-        """
-        if order is None:
-            order = list(self._atoms)
-        elif check:
-            if not isinstance(order, (list, tuple)):
-                raise TypeError('invalid atoms order')
-            elif len(so := set(order)) != len(order) or not so.issubset(self._atoms):
-                raise ValueError('invalid atoms order')
-
-        atoms = self._atoms
-        bonds = self._bonds
-        allenes_terminals = self._stereo_allenes_terminals
-
-        cumulenes = {}
-        ct_map = {}
-        for n, m in self._cis_trans_stereo:
-            ct_map[n] = m
-            ct_map[m] = n
-            cumulenes[n] = [x for x, b in bonds[n].items() if b.order in (1, 4)]
-            cumulenes[m] = [x for x, b in bonds[m].items() if b.order in (1, 4)]
-
-        for c in self._allenes_stereo:
-            n, m = allenes_terminals[c]
-            cumulenes[n] = [x for x, b in bonds[n].items() if b.order in (1, 4)]
-            cumulenes[m] = [x for x, b in bonds[m].items() if b.order in (1, 4)]
-
-        seen = {}
-        data = [b'\x03']
-        for i, n in enumerate(order):
-            seen[n] = i
-            atom = atoms[n]
-            env = bonds[n]
-
-            data.append((0x80 | atom.atomic_number).to_bytes(1, 'big'))
-
-            # 3 bit - hydrogens (0-6, None) | 4 bit - charge | 1 bit - radical
-            hcr = (atom.charge + 4) << 1 | atom.is_radical
-            if atom.implicit_hydrogens is None:
-                hcr |= 0b11100000
-            else:
-                hcr |= atom.implicit_hydrogens << 5
-            data.append(hcr.to_bytes(1, 'big'))
-
-            if atom.stereo is not None:
-                if len(env) == 2:
-                    t1, t2 = allenes_terminals[n]
-                    nn = None
-                    for x in order:
-                        if nn is None:
-                            if x in cumulenes[t1]:
-                                nn = x
-                                flag = True
-                            elif x in cumulenes[t2]:
-                                flag = False
-                                nn = x
-                        elif flag:  # noqa
-                            if x in cumulenes[t2]:
-                                nm = x
-                                break
-                        elif x in cumulenes[t1]:
-                            nm = x
-                            break
-                    if self._translate_allene_sign(n, nn, nm):  # noqa
-                        s = 0b0011_0000
-                    else:
-                        s = 0b0010_0000
-                elif self._translate_tetrahedron_sign(n, [x for x in order if x in env]):
-                    s = 0b0011_0000
-                else:
-                    s = 0b0010_0000
-            else:
-                s = 0
-
-            tmp = []
-            for m in order[:i]:
-                if (b := env.get(m)) is not None:
-                    tmp.append(((i - seen[m]) << 4 | b.order - 1).to_bytes(2, 'big'))
-            if n in ct_map and (m := ct_map[n]) in seen:  # only right atom codes stereo sign
-                nm = None
-                for x in order:
-                    if nm is None:
-                        if x in cumulenes[n]:
-                            nm = x
-                            flag = True
-                        elif x in cumulenes[m]:
-                            nm = x
-                            flag = False
-                    elif flag:  # noqa
-                        if x in cumulenes[m]:
-                            nn = x
-                            break
-                    elif x in cumulenes[n]:
-                        nn = x
-                        break
-                if self._translate_cis_trans_sign(m, n, nm, nn):  # noqa
-                    cs = 0b1001
-                else:
-                    cs = 0b1000
-                tmp.append(((i - seen[m]) << 4 | cs).to_bytes(2, 'big'))
-
-            data.append((s | len(tmp)).to_bytes(1, 'big'))
-            data.extend(tmp)
-        return b''.join(data)
-
     def _augmented_substructure(self, atoms: Iterable[int], deep: int):
         atoms = set(atoms)
         bonds = self._bonds
@@ -711,6 +616,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         """
         Fix molecule internal representation
         """
+        self.flush_cache()
         self.calc_labels()  # refresh all labels
 
         if recalculate_hydrogens:
@@ -833,13 +739,15 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
                 return True
         return False
 
-    def flush_cache(self, *, keep_sssr=False, keep_components=False):
+    def flush_cache(self, *, keep_sssr=False, keep_components=False, keep_special_connectivity=False):
         backup = {}
         if keep_sssr:
             # good to keep if no new bonds or bonds deletions or bonds to/from any change
             for k,  v in self.__dict__.items():
-                if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes', 'not_special_connectivity', 'rings_count'):
+                if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes', 'rings_count'):
                     backup[k] = v
+        if keep_special_connectivity:
+            backup['not_special_connectivity'] = self.not_special_connectivity
         if keep_components:
             # good to keep if no new bonds or bonds deletions
             if 'connected_components' in self.__dict__:

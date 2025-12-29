@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2024 Philippe Gantzer <p.gantzer@icredd.hokudai.ac.jp>
 #  This file is part of chython.
 #
@@ -88,9 +88,8 @@ def grid_depict(molecules: List[MoleculeContainer], labels: Optional[List[str]] 
 
     # restore planes
     for m, p in zip(molecules, planes):
-        for (_, a), (x, y) in zip(m.atoms(), p):
-            a.x = x
-            a.y = y
+        for (_, a), xy in zip(m.atoms(), p):
+            a.xy = xy
 
     _width = shift_x - 1.5 * font_size
     _height = -shift_y - 1.5 * font_size

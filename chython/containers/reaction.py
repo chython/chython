@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -56,7 +56,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         if not reactants and not products and not reagents:
             raise ValueError('At least one graph object required')
         elif not all(isinstance(x, MoleculeContainer) for x in chain(reactants, products, reagents)):
-            raise TypeError(f'MoleculeContainers expected')
+            raise TypeError('MoleculeContainers expected')
 
         self._reactants = reactants
         self._products = products
@@ -68,7 +68,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         if name is None:
             self._name = None
         else:
-            self.name = name
+            self._name = name
         self._arrow = None
         self._signs = None
 
@@ -127,8 +127,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         copy._signs = self._signs
         return copy
 
-    @cached_method
-    def compose(self) -> CGRContainer:
+    def compose(self, *, dynamic=True) -> CGRContainer:
         """
         Get CGR of reaction
 
@@ -144,7 +143,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
             p = reduce(or_, self.products)
         else:
             p = MoleculeContainer()
-        return r ^ p
+        return r.compose(p, dynamic)
 
     def flush_cache(self, keep_molecule_cache=False, **kwargs):
         self.__dict__.clear()
@@ -248,6 +247,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
     def __bytes__(self):
         return self.pack()
 
+    @cached_method
     def __invert__(self) -> CGRContainer:
         """
         Get CGR of reaction

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019-2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -17,11 +17,15 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from asyncio import new_event_loop
 from CachedMethods import cached_method
 from collections import defaultdict
 from math import atan2, sin, cos, hypot
-from typing import Tuple, TYPE_CHECKING, Union
+from os.path import join
+from tempfile import TemporaryDirectory
+from typing import Tuple, TYPE_CHECKING, Union, Literal
 from uuid import uuid4
+from zlib import compress
 
 
 if TYPE_CHECKING:
@@ -51,9 +55,41 @@ _render_config = {'carbon': False, 'dashes': (.2, .1), 'span_dy': .15, 'mapping'
                   'span_size': .35, 'other_size': 0.3, 'monochrome': False, 'bond_color': 'black', 'bond_width': .04,
                   'other_color': 'black', 'bond_radius': .02, 'atom_radius': -.2, 'mapping_size': .25,
                   'atoms_colors': cpk, 'triple_space': .13, 'double_space': .06, 'mapping_color': '#0305A7',
-                  'aromatic_space': .14, 'aromatic_dashes': (.15, .05), 'dx_m': .05, 'dy_m': .2,
+                  'aromatic_space': .14, 'aromatic_dashes': (.15, .05), 'dx_m': .05, 'dy_m': .2, 'dx_s': .05, 'dy_s': .1,
                   'other_font_style': 'monospace', 'dx_ci': .05, 'dy_ci': 0.2, 'symbols_font_style': 'sans-serif',
-                  'mapping_font_style': 'monospace', 'wedge_space': .08}
+                  'mapping_font_style': 'monospace', 'wedge_space': .08, 'arrow_color': 'black'}
+
+loop = browser = None
+
+
+async def svg_render(s, t, width, height, scale):
+    page = await browser.newPage()
+    await page.setViewport({'deviceScaleFactor': scale, 'width': width, 'height': height})
+    await page.goto(f'file://{s}')
+    element = await page.querySelector('svg')
+    await element.screenshot({'path': t, 'omitBackground': True})
+    await page.close()
+
+
+def svg2png(svg: str, width: int = 1000, height: int = 1000, scale: float = 1.):
+    global loop, browser
+
+    if loop is None:  # lazy browser launcher
+        from pyppeteer import launch
+
+        loop = new_event_loop()
+        browser = loop.run_until_complete(launch())
+    elif browser is None:
+        raise ImportError('pyppeteer initialization failed')
+
+    with TemporaryDirectory() as tmpdir:
+        with open(s := join(tmpdir, 'input.svg'), 'w') as f:
+            f.write(svg)
+
+        loop.run_until_complete(svg_render(s, (t := join(tmpdir, 'output.png')), width, height, scale))
+
+        with open(t, 'rb') as f:
+            return f.read()
 
 
 def _rotate_vector(x1, y1, x2, y2):
@@ -128,11 +164,12 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
                     bond_color: str = 'black', aam_color: str = '#0305A7', atoms_colors: tuple = cpk,
                     bond_width: float = .04, wedge_space: float = .08, dashes: Tuple[float, float] = (.2, .1),
                     aromatic_dashes: Tuple[float, float] = (.15, .05), dx_ci: float = .05, dy_ci: float = .2,
-                    dx_m: float = .05, dy_m: float = .2, span_dy: float = .15, double_space: float = .06,
-                    triple_space: float = .13, aromatic_space: float = .14, atom_radius: float = .2, bond_radius=.02,
-                    font_size: float = .5, other_size: float = .3, span_size: float = .35,  aam_size: float = .25,
-                    symbols_font_style: str = 'sans-serif', other_font_style: str = 'monospace',
-                    other_color: str = 'black', mapping_font_style: str = 'monospace'):
+                    dx_m: float = .05, dy_m: float = .2, dx_s: float = .05, dy_s: float = .1, span_dy: float = .15,
+                    double_space: float = .06, triple_space: float = .13, aromatic_space: float = .14,
+                    atom_radius: float = .2, bond_radius=.02, font_size: float = .5, other_size: float = .3,
+                    span_size: float = .35,  aam_size: float = .25, symbols_font_style: str = 'sans-serif',
+                    other_font_style: str = 'monospace', other_color: str = 'black', arrow_color: str = 'black',
+                    mapping_font_style: str = 'monospace'):
     """
     Settings for depict of chemical structures
 
@@ -146,6 +183,7 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
     :param aam_color: atom-to-atom mapping color
     :param atoms_colors: atom colors where key is atomic number - 1, value is atom color (str)
     :param other_color: color for charges, radicals, isotopes
+    :param arrow_color: color of reaction arrow and plus signs
     :param symbols_font_style: font style for atom symbols
     :param other_font_style: font style for charges, radicals, isotopes, hybridization and neighbors
     :param aam: if True, depict mapping
@@ -161,6 +199,8 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
     :param dy_ci: y-axis offset relative to the center of the atom symbol for radical, charges, isotope
     :param dx_m: x-axis offset relative to the center of the atom symbol for atom-to-atom mapping
     :param dy_m: y-axis offset relative to the center of the atom symbol for atom-to-atom mapping
+    :param dx_s: x-axis offset relative to the center of the atom symbol for extended stereo label
+    :param dy_s: y-axis offset relative to the center of the atom symbol for extended stereo label
     :param span_dy: y-axis offset relative to the center of the atom symbol for hydrogen count
     :param mapping_font_style: font style for mapping
     :param wedge_space: wedge bond width
@@ -176,6 +216,7 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
     _render_config['bond_color'] = bond_color
     _render_config['bond_width'] = bond_width
     _render_config['other_color'] = other_color
+    _render_config['arrow_color'] = arrow_color
     _render_config['bond_radius'] = bond_radius
     _render_config['atom_radius'] = -atom_radius
     _render_config['mapping_size'] = aam_size
@@ -188,6 +229,7 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
     _render_config['dx_m'], _render_config['dy_m'] = dx_m, dy_m
     _render_config['other_font_style'] = other_font_style
     _render_config['dx_ci'], _render_config['dy_ci'] = dx_ci, dy_ci
+    _render_config['dx_s'], _render_config['dy_s'] = dx_s, dy_s
     _render_config['symbols_font_style'] = symbols_font_style
     _render_config['mapping_font_style'] = mapping_font_style
     _render_config['wedge_space'] = wedge_space
@@ -197,13 +239,17 @@ class DepictMolecule:
     __slots__ = ()
 
     def depict(self: Union['MoleculeContainer', 'DepictMolecule'], *, width=None, height=None, clean2d: bool = True,
-               _embedding=False) -> str:
+               format: Literal['svg', 'png', 'svgz'] = 'svg', png_width=1000, png_heigh=1000, png_scale=1.,
+               _embedding=False) -> Union[str, bytes]:
         """
-        Depict molecule in SVG format.
+        Depict molecule in SVG or PNG format.
 
         :param width: set svg width param. by default auto-calculated.
         :param height: set svg height param. by default auto-calculated.
         :param clean2d: calculate coordinates if necessary.
+        :param format: output format - svg string, png bytes or gz compressed svg
+        :param png_width, png_heigh: viewport size for PNG rendering
+        :param png_scale: image scaling in PNG rendering
         """
         uid = str(uuid4())
         min_x = min(a.x for _, a in self.atoms())
@@ -239,7 +285,14 @@ class DepictMolecule:
                'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">']
         svg.extend(_graph_svg(atoms, bonds, define, masks, uid, viewbox_x, viewbox_y, _width, _height))
         svg.append('</svg>')
-        return '\n'.join(svg)
+        svg = '\n'.join(svg)
+        if format == 'svg':
+            return svg
+        elif format == 'png':
+            return svg2png(svg, png_width, png_heigh, png_scale)
+        elif format == 'svgz':
+            return compress(svg.encode(), 9)
+        raise ValueError(f'format must be svg, png or svgz, not {format}')
 
     @cached_method
     def _repr_svg_(self):
@@ -262,7 +315,7 @@ class DepictMolecule:
             nx, ny = atoms[n].xy
             mx, my = atoms[m].xy
             ny, my = -ny, -my
-            dx, dy = _rotate_vector(0, wedge_space, mx - nx, ny - my)
+            dx, dy = _rotate_vector(0, wedge_space, mx - nx, my - ny)
 
             svg.append(f'      <path d="M{nx:.2f} {ny:.2f} L{mx + dx:.2f} {my + dy:.2f} '
                        f'L{mx - dx:.2f} {my - dy:.2f} Z"{s == 1 and color or ""}/>')
@@ -319,6 +372,7 @@ class DepictMolecule:
         mapping_size = _render_config['mapping_size']
         dx_m, dy_m = _render_config['dx_m'], _render_config['dy_m']
         dx_ci, dy_ci = _render_config['dx_ci'], _render_config['dy_ci']
+        dx_s, dy_s = _render_config['dx_s'], _render_config['dy_s']
         symbols_font_style = _render_config['symbols_font_style']
         span_dy = _render_config['span_dy']
         other_font_style = _render_config['other_font_style']
@@ -363,6 +417,10 @@ class DepictMolecule:
                 if atom.isotope:
                     others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="-{dx_ci:.2f}" dy="-{dy_ci:.2f}" '
                                   f'text-anchor="end">{atom.isotope}</text>')
+                if atom.stereo is not None and atom.extended_stereo:
+                    label = f'&amp;{atom.extended_stereo}' if atom.extended_stereo > 0 else f'o{-atom.extended_stereo}'
+                    others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_s:.2f}" dy="-{dy_s + font3:.2f}">'
+                                  f'{label}</text>')
 
                 if len(symbol) > 1:
                     dx = font7
@@ -399,8 +457,13 @@ class DepictMolecule:
                 if mapping:
                     maps.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="-{dx_mm:.2f}" '
                                 f'dy="{dy_m + font3:.2f}">{n}</text>')
-            elif mapping:
-                maps.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="-{dx_m:.2f}" dy="{dy_m:.2f}">{n}</text>')
+            else:
+                if mapping:
+                    maps.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="-{dx_m:.2f}" dy="{dy_m:.2f}">{n}</text>')
+                if atom.stereo is not None and atom.extended_stereo:
+                    label = f'&amp;{atom.extended_stereo}' if atom.extended_stereo > 0 else f'o{-atom.extended_stereo}'
+                    others.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{dx_s:.2f}" dy="-{dy_s:.2f}">'
+                                  f'{label}</text>')
 
         if svg:  # group atoms symbols
             if fill_zone:
@@ -442,14 +505,20 @@ class DepictMolecule:
 class DepictReaction:
     __slots__ = ()
 
-    def depict(self: 'ReactionContainer', *, width=None, height=None, clean2d: bool = True) -> str:
+    def depict(self: 'ReactionContainer', *, width=None, height=None, clean2d: bool = True,
+               format: Literal['svg', 'png', 'svgz'] = 'svg',
+               png_width=1000, png_heigh=1000, png_scale=1.) -> Union[str, bytes]:
         """
         Depict reaction in SVG format.
 
         :param width: set svg width param. by default auto-calculated.
         :param height: set svg height param. by default auto-calculated.
         :param clean2d: calculate coordinates if necessary.
+        :param format: output format - svg string, png bytes or gz compressed svg
+        :param png_width, png_heigh: viewport size for PNG rendering
+        :param png_scale: image scaling in PNG rendering
         """
+        arrow_color = _render_config['arrow_color']
         if not self._arrow:
             if clean2d:
                 for m in self.molecules():
@@ -498,13 +567,14 @@ class DepictReaction:
                f'viewBox="{viewbox_x:.2f} {viewbox_y:.2f} {_width:.2f} {_height:.2f}" '
                'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">\n'
                '  <defs>\n    <marker id="arrow" markerWidth="10" markerHeight="10" '
-               'refX="0" refY="3" orient="auto">\n      <path d="M0,0 L0,6 L9,3"/>\n    </marker>\n  </defs>\n'
+               f'refX="0" refY="3" orient="auto">\n      <path d="M0,0 L0,6 L9,3" fill="{arrow_color}"/>\n'
+               '    </marker>\n  </defs>\n'
                f'  <line x1="{self._arrow[0]:.2f}" y1="0" x2="{self._arrow[1]:.2f}" y2="0" '
-               'fill="none" stroke="black" stroke-width=".04" marker-end="url(#arrow)"/>']
+               f'fill="none" stroke="{arrow_color}" stroke-width=".04" marker-end="url(#arrow)"/>']
 
         sings_plus = self._signs
         if sings_plus:
-            svg.append(f'  <g fill="none" stroke="black" stroke-width=".04">')
+            svg.append(f'  <g fill="none" stroke="{arrow_color}" stroke-width=".04">')
             for x in sings_plus:
                 svg.append(f'    <line x1="{x + .35:.2f}" y1="0" x2="{x + .65:.2f}" y2="0"/>')
                 svg.append(f'    <line x1="{x + .5:.2f}" y1="0.15" x2="{x + .5:.2f}" y2="-0.15"/>')
@@ -513,7 +583,14 @@ class DepictReaction:
         for atoms, bonds, define, masks, uid in zip(r_atoms, r_bonds, r_defines, r_masks, r_uids):
             svg.extend(_graph_svg(atoms, bonds, define, masks, uid, viewbox_x, viewbox_y, _width, _height))
         svg.append('</svg>')
-        return '\n'.join(svg)
+        svg = '\n'.join(svg)
+        if format == 'svg':
+            return svg
+        elif format == 'png':
+            return svg2png(svg, png_width, png_heigh, png_scale)
+        elif format == 'svgz':
+            return compress(svg.encode(), 9)
+        raise ValueError(f'format must be svg, png or svgz, not {format}')
 
     @cached_method
     def _repr_svg_(self):

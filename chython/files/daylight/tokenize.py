@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -297,6 +297,7 @@ def _query_parse(token):
 
     if stereo := search(str_re, token):  # drop stereo mark. unsupported
         token = token[:stereo.start()] + token[stereo.end():]
+        out['stereo'] = stereo.group() == '@'
 
     # supported only <;> and <,> logic. <&> and silent <&> not supported!
     primitives = token.split(';')

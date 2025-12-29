@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -42,7 +42,7 @@ Te = 52
 class Kekule:
     __slots__ = ()
 
-    def kekule(self: Union['Kekule', 'MoleculeContainer'], *, buffer_size=7) -> bool:
+    def kekule(self: Union['Kekule', 'MoleculeContainer'], *, buffer_size=7, ignore_pyrrole_hydrogen=False) -> bool:
         """
         Convert structure to kekule form. Return True if found any aromatic ring. Set implicit hydrogen count and
         hybridization marks on atoms.
@@ -51,9 +51,10 @@ class Kekule:
         For enumerate bonds positions use `enumerate_kekule`.
 
         :param buffer_size: number of attempts of pyridine form searching.
+        :param ignore_pyrrole_hydrogen: ignore hydrogen on pyrrole to fix invalid rings like Cn1cc[nH]c1.
         """
         fixed = self.__fix_rings()  # fix bad aromatic rings
-        kekule = next(self.__kekule_full(buffer_size), None)
+        kekule = next(self.__kekule_full(buffer_size, ignore_pyrrole_hydrogen), None)
         if kekule:
             bonds = self._bonds
             atoms = set()
@@ -63,17 +64,17 @@ class Kekule:
                 atoms.add(m)
             for n in atoms:
                 self.calc_implicit(n)
-            self.flush_cache(keep_sssr=True, keep_components=True)
+            self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)
             self.calc_labels()
             return True
         return fixed
 
-    def enumerate_kekule(self: Union['Kekule', 'MoleculeContainer']):
+    def enumerate_kekule(self: Union['Kekule', 'MoleculeContainer'], ignore_pyrrole_hydrogen=False):
         """
         Enumerate all possible kekule forms of molecule.
         """
         self.__fix_rings()  # fix bad aromatic rings
-        for form in self.__kekule_full(0):
+        for form in self.__kekule_full(0, ignore_pyrrole_hydrogen):
             copy = self.copy(keep_sssr=True, keep_components=True)
             bonds = copy._bonds
             atoms = set()
@@ -104,17 +105,19 @@ class Kekule:
                 for n, m, b in bf:
                     n = mapping[n]
                     m = mapping[m]
-                    bonds[n][m]._order = b
+                    bond = bonds[n][m]
+                    bond._order = b
+                    bond._stereo = None  # prevent potential errors with cis-trans-labelled double-bonds
                     if b == 8:
                         # flush sssr and components cache
                         keep = False
         if seen:
-            self.flush_cache(keep_sssr=keep, keep_components=keep)
+            self.flush_cache(keep_sssr=keep, keep_components=keep, keep_special_connectivity=keep)
             self.calc_labels()
             return True
         return False
 
-    def __prepare_rings(self: 'MoleculeContainer'):
+    def __prepare_rings(self: 'MoleculeContainer', ignore_pyrrole_hydrogen):
         atoms = self._atoms
         bonds = self._bonds
 
@@ -222,7 +225,10 @@ class Kekule:
                         if atom.implicit_hydrogens is None:  # pyrrole or pyridine
                             pyrroles.add(n)
                         elif atom.implicit_hydrogens == 1:  # only pyrrole
-                            double_bonded.add(n)
+                            if ignore_pyrrole_hydrogen:
+                                pyrroles.add(n)
+                            else:
+                                double_bonded.add(n)
                         elif atom.implicit_hydrogens:  # too many hydrogens for aromatic rings
                             raise InvalidAromaticRing
                     elif atom.neighbors != 4 or atom not in (P, As):  # P(V) in ring [P;a](-R1)-R2
@@ -313,8 +319,8 @@ class Kekule:
                 raise InvalidAromaticRing(f'only B, C, N, P, O, S, Se, Te possible, not: {atoms[n].atomic_symbol}')
         return rings, pyrroles, double_bonded
 
-    def __kekule_full(self, buffer_size):
-        rings, pyrroles, double_bonded = self.__prepare_rings()
+    def __kekule_full(self, buffer_size, ignore_pyrrole_hydrogen):
+        rings, pyrroles, double_bonded = self.__prepare_rings(ignore_pyrrole_hydrogen)
         atoms = set(rings)
         components = []
         while atoms:

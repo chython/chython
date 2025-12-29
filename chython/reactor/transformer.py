@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Adelia Fatykhova <adelik21979@gmail.com>
 #  This file is part of chython.
 #
@@ -30,7 +30,7 @@ class Transformer(BaseReactor):
     """
     def __init__(self, pattern: QueryContainer, replacement: Union[MoleculeContainer, QueryContainer],
                  delete_atoms: bool = True, automorphism_filter: bool = True, fix_aromatic_rings: bool = True,
-                 fix_tautomers: bool = True, copy_metadata: bool = False):
+                 fix_broken_pyrroles: bool = False, fix_tautomers: bool = True, copy_metadata: bool = False):
         """
         :param pattern: Search pattern.
         :param replacement: Resulted structure.
@@ -38,7 +38,8 @@ class Transformer(BaseReactor):
         :param fix_aromatic_rings: Proceed kekule and thiele on products.
         :param fix_tautomers: See `thiele()` docs.
         :param automorphism_filter: Skip matches to same atoms.
-        :param copy_metadata: Copy metadata from structure to transformed
+        :param copy_metadata: Copy metadata from structure to transformed.
+        :param fix_broken_pyrroles: fix invalid rings like Cn1cc[nH]c1.
         """
         if not isinstance(pattern, QueryContainer) or not isinstance(replacement, (MoleculeContainer, QueryContainer)):
             raise TypeError('invalid params')
@@ -46,7 +47,7 @@ class Transformer(BaseReactor):
         self._pattern = pattern
         self._automorphism_filter = automorphism_filter
         self._copy_metadata = copy_metadata
-        super().__init__(pattern, replacement, delete_atoms, fix_aromatic_rings, fix_tautomers)
+        super().__init__(pattern, replacement, delete_atoms, fix_aromatic_rings, fix_tautomers, fix_broken_pyrroles)
 
     def __call__(self, structure: MoleculeContainer):
         if not isinstance(structure, MoleculeContainer):

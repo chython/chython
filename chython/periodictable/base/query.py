@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Dmitrij Zanadvornykh <zandmitrij@gmail.com>
 #  This file is part of chython.
 #
@@ -125,7 +125,7 @@ class ExtendedQuery(Query, ABC):
         self.heteroatoms = heteroatoms
         self.ring_sizes = ring_sizes
         self.implicit_hydrogens = implicit_hydrogens
-        self._stereo = stereo
+        self.stereo = stereo
 
     @property
     def charge(self) -> int:
@@ -200,6 +200,12 @@ class ExtendedQuery(Query, ABC):
     @property
     def stereo(self):
         return self._stereo
+
+    @stereo.setter
+    def stereo(self, value: Optional[bool]):
+        if value is not None and not isinstance(value, bool):
+            raise TypeError('stereo should be bool')
+        self._stereo = value
 
     def copy(self, full=False):
         copy = super().copy(full=full)

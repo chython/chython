@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from itertools import chain
-from re import compile, findall, search
+from re import compile
 from typing import List, Union, Optional
 from .parser import parser
 from .tokenize import smiles_tokenize
@@ -28,7 +28,9 @@ from ...exceptions import IsChiral, NotChiral, ValenceError
 
 
 cx_fragments = compile(r'f:(?:[0-9]+(?:\.[0-9]+)+)(?:,(?:[0-9]+(?:\.[0-9]+)+))*')
-cx_radicals = compile(r'\^[1-7]:[0-9]+(?:,[0-9]+)*')
+cx_radicals = compile(r'\^[1-7]:(\d+(?:,\d+)*)')
+cx_stereo_rel = compile(r'([o&])(\d+):(\d+(?:,\d+)*)')
+cx_stereo_abs = compile(r'a:(\d+(?:,\d+)*)')
 
 
 def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: bool = False,
@@ -51,31 +53,40 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
     elif not data:
         raise ValueError('Empty string')
 
-    contract: Optional[List[List[int]]]  # typing
+    contract: Optional[List[List[int]]] = None
+    radicals = []
+    extended_stereo = {}
     log = []
     smi, *data = data.split()
-    if data and (cxs := data[0]).startswith('|') and cxs.endswith('|'):
-        fr = search(cx_fragments, cxs)
-        if fr is not None:
-            contract = [sorted(int(x) for x in x.split('.')) for x in fr.group()[2:].split(',')]
-            if len({x for x in contract for x in x}) < len([x for x in contract for x in x]):
-                log.append(f'collisions in cxsmiles fragments description: {cxs}')
-                contract = None
+    if data and (cxs := data[0]).startswith(('|', '{')) and cxs.endswith(('|', '}')):
+        if cxs.startswith('|'):  # cx smiles
+            fr = cx_fragments.search(cxs)
+            if fr is not None:
+                contract = [sorted(int(x) for x in x.split('.')) for x in fr.group()[2:].split(',')]
+                if len({x for x in contract for x in x}) < len([x for x in contract for x in x]):
+                    log.append(f'collisions in cxsmiles fragments description: {cxs}')
+                    contract = None
 
-            radicals = [int(x) for x in findall(cx_radicals, cxs) for x in x[3:].split(',')]
+            radicals = [int(x) for x in cx_radicals.findall(cxs) for x in x.split(',')]
             if radicals and len(set(radicals)) != len(radicals):
                 log.append(f'collisions in cxsmiles radicals description: {cxs}')
                 radicals = []
-        else:
-            radicals = [int(x) for x in findall(cx_radicals, cxs) for x in x[3:].split(',')]
-            if radicals:
-                if len(set(radicals)) != len(radicals):
-                    log.append(f'collisions in cxsmiles radicals description: {cxs}')
-                    radicals = []
-            contract = None
-    else:
-        radicals = []
-        contract = None
+
+        # cx smiles and jnj smiles
+        for st, sg, sa in cx_stereo_rel.findall(cxs):
+            sg = int(sg)
+            if st == 'o':
+                sg = -sg
+            for x in sa.split(','):
+                x = int(x)
+                if x in extended_stereo:
+                    log.append(f'enhanced stereo description collision: {cxs}')
+                    extended_stereo = {}  # ignore bad notation
+                    break
+                extended_stereo[x] = sg
+            else:
+                continue
+            break
 
     if '>' in smi:
         record = {'reactants': [], 'reagents': [], 'products': [], 'log': log}
@@ -136,11 +147,13 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
                 tmp.append(parser(smiles_tokenize(x), not ignore))
             record[k] = tmp
 
-        if radicals:
+        if radicals or extended_stereo:
             atom_map = dict(enumerate(a for m in chain(record['reactants'], record['reagents'], record['products'])
                                       for a in m['atoms']))
             for x in radicals:
                 atom_map[x]['is_radical'] = True
+            for x, y in extended_stereo.items():
+                atom_map[x]['extended_stereo'] = y
 
         postprocess_parsed_reaction(record, remap=remap, ignore=ignore)
         rxn = create_reaction(record, ignore_bad_isotopes=ignore_bad_isotopes, keep_radicals=False,
@@ -154,6 +167,8 @@ def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: 
         record = parser(smiles_tokenize(smi), not ignore)
         for x in radicals:
             record['atoms'][x]['is_radical'] = True
+        for x, y in extended_stereo.items():
+            record['atoms'][x]['extended_stereo'] = y
         record['log'].extend(log)
 
         postprocess_parsed_molecule(record, remap=remap, ignore=ignore)

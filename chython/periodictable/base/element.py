@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -27,20 +27,21 @@ from ...exceptions import ValenceError
 class Element(ABC):
     __slots__ = ('_isotope', '_charge', '_is_radical', '_xy', '_implicit_hydrogens',
                  '_explicit_hydrogens', '_stereo', '_parsed_mapping',
-                 '_neighbors', '_heteroatoms', '_hybridization', '_ring_sizes', '_in_ring')
+                 '_neighbors', '_heteroatoms', '_hybridization', '_ring_sizes', '_in_ring', '_extended_stereo')
     __class_cache__ = {}
 
     def __init__(self, isotope: Optional[int] = None, *,
                  charge: int = 0, is_radical: bool = False, x: float = 0., y: float = 0.,
                  implicit_hydrogens: Optional[int] = None, stereo: Optional[bool] = None,
-                 parsed_mapping: Optional[int] = None, delta_isotope: Optional[int] = None):
+                 parsed_mapping: Optional[int] = None, delta_isotope: Optional[int] = None,
+                 extended_stereo: Optional[int] = None):
         """
         Element object with specified isotope
 
         :param isotope: Isotope number of element
         """
-        if delta_isotope is not None:
-            assert isotope is None, 'isotope absolute value and delta value provided'
+        if delta_isotope is not None and isotope is None:
+            # isotope had precedence over MDL delta value
             isotope = self.mdl_isotope + delta_isotope
 
         self.isotope = isotope
@@ -51,6 +52,7 @@ class Element(ABC):
         self._implicit_hydrogens = implicit_hydrogens
         self._stereo = stereo
         self._parsed_mapping = parsed_mapping
+        self._extended_stereo = extended_stereo
 
     def __repr__(self):
         if self.isotope:
@@ -230,6 +232,15 @@ class Element(ABC):
         return self._stereo
 
     @property
+    def extended_stereo(self) -> Optional[int]:
+        """
+        Positive int for an AND group id, negative int for an OR group id
+        """
+        if self._stereo is None:
+            return None
+        return self._extended_stereo
+
+    @property
     def heteroatoms(self) -> int:
         return self._heteroatoms
 
@@ -271,11 +282,11 @@ class Element(ABC):
         copy._isotope = self.isotope
         copy._charge = self.charge
         copy._is_radical = self.is_radical
-        copy._x = self.x
-        copy._y = self.y
+        copy._xy = self.xy
         if full:
             copy._implicit_hydrogens = self.implicit_hydrogens
             copy._stereo = self.stereo
+            copy._extended_stereo = self.extended_stereo
             copy._explicit_hydrogens = self.explicit_hydrogens
             copy._neighbors = self.neighbors
             copy._heteroatoms = self.heteroatoms
@@ -289,8 +300,9 @@ class Element(ABC):
                 copy._implicit_hydrogens = None
             if stereo:
                 copy._stereo = self.stereo
+                copy._extended_stereo = self.extended_stereo
             else:
-                copy._stereo = None
+                copy._stereo = copy._extended_stereo = None
         return copy
 
     def __copy__(self):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,15 +19,23 @@
 from array import array
 from collections import defaultdict, deque
 from functools import cached_property, partial
+from io import BytesIO
 from itertools import permutations
+from struct import Struct
 from typing import Any, Collection, Dict, Iterator, Optional, TYPE_CHECKING, Union
 from .._functions import lazy_product
-from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement, QueryElement
+from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement, QueryElement, ExtendedQuery
 
 
 if TYPE_CHECKING:
     from chython.containers.graph import Graph
     from chython.containers import MoleculeContainer
+
+
+header_struct = Struct('I')
+m_atom_struct = Struct('QQQQIII')
+q_atom_struct = Struct('QQQQIIIII')
+bond_struct = Struct('QI')
 
 
 class Isomorphism:
@@ -145,20 +153,50 @@ class MoleculeIsomorphism(Isomorphism):
         """
         Iterator of all possible automorphism mappings.
         """
-        return _get_automorphism_mapping(self.atoms_order, self._bonds)
+        return _get_automorphism_mapping(self._chiral_morgan, self._bonds)
 
     def get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter: bool = True,
-                    searching_scope: Optional[Collection[int]] = None):
+                    searching_scope: Optional[Collection[int]] = None, match_stereo: bool = False):
         """
         Get self to other Molecule substructure mapping generator.
 
         :param other: Molecule
         :param automorphism_filter: Skip matches to the same atoms.
         :param searching_scope: substructure atoms list to localize isomorphism.
+        :param match_stereo: test stereo labels matches. slow algorithm, thus disabled by default.
         """
         if not isinstance(other, MoleculeIsomorphism):
             raise TypeError('MoleculeContainer expected')
-        return self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope)
+
+        for mapping in self._get_mapping(other, automorphism_filter=automorphism_filter or match_stereo,
+                                         searching_scope=searching_scope):
+            if match_stereo:
+                sub = other.substructure(mapping.values())  # extract matched subgraph
+                fm = self.get_fast_mapping(sub)
+                if not fm:  # check mor matching with stereo labels too
+                    continue
+                yield fm
+                if not automorphism_filter:
+                    for auto in sub.get_automorphism_mapping():  # enumerate all possible automorphisms
+                        yield {n: auto[m] for n, m in fm.items()}
+            else:
+                yield mapping
+
+    def get_fast_mapping(self, other: 'MoleculeContainer') -> Optional[Dict[int, int]]:
+        """
+        Get self to other fast (suboptimal) structure mapping.
+        Only one possible atoms mapping returned.
+        Effective only for big molecules.
+        """
+        if isinstance(other, MoleculeIsomorphism):
+            if len(self) != len(other):
+                return
+            so = self.smiles_atoms_order
+            oo = other.smiles_atoms_order
+            if self != other:
+                return
+            return dict(zip(so, oo))
+        raise TypeError('MoleculeContainer expected')
 
     @cached_property
     def _cython_compiled_structure(self: 'MoleculeContainer'):
@@ -260,8 +298,13 @@ class MoleculeIsomorphism(Isomorphism):
             start += len(ms)
             o_to[i] = start
 
-        return (array('L', numbers), array('Q', bits1), array('Q', bits2), array('Q', bits3), array('Q', bits4),
-                array('Q', bonds), array('I', o_from), array('I', o_to), array('I', indices))
+        buffer = BytesIO()
+        buffer.write(header_struct.pack(len(numbers)))
+        for x in zip(bits1, bits2, bits3, bits4, o_from, o_to, numbers):
+            buffer.write(m_atom_struct.pack(*x))
+        for x in zip(bonds, indices):
+            buffer.write(bond_struct.pack(*x))
+        return buffer.getvalue()
 
 
 class QueryIsomorphism(Isomorphism):
@@ -291,74 +334,56 @@ class QueryIsomorphism(Isomorphism):
                 components = self._cython_compiled_query  # override to cython data
 
                 def get_mapping(query, scope):
-                    return _cython_get_mapping(*query, *other._cython_compiled_structure,
+                    return _cython_get_mapping(query, other._cython_compiled_structure,
                                                array('I', [n in scope for n in other]))
         else:
             components = get_mapping = None
-        yield from self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope,
-                                     components=components, get_mapping=get_mapping)
-        return
-        # todo: implement stereo
-        atoms_stereo = self._atoms_stereo
-        allenes_stereo = self._allenes_stereo
-        cis_trans_stereo = self._cis_trans_stereo
 
-        other_atoms_stereo = other._atoms_stereo
-        other_allenes_stereo = other._allenes_stereo
-        other_cis_trans_stereo = other._cis_trans_stereo
-        other_translate_tetrahedron_sign = other._translate_tetrahedron_sign
-        other_translate_allene_sign = other._translate_allene_sign
-        other_translate_cis_trans_sign = other._translate_cis_trans_sign
-
-        tetrahedrons = self.stereogenic_tetrahedrons
-        cis_trans = self.stereogenic_cis_trans
-        allenes = self.stereogenic_allenes
-
-        oatoms = other._atoms
-
-        for mapping in self._get_mapping(other, automorphism_filter=automorphism_filter,
-                                         searching_scope=searching_scope):
+        for mapping in self._get_mapping(other, automorphism_filter=automorphism_filter, searching_scope=searching_scope,
+                                         components=components, get_mapping=get_mapping):
+            reverse = None
+            # test stereo labels matches
             for n, a in self.atoms():
-                if a.stereo is None:
-                    continue
+                if not isinstance(a, ExtendedQuery) or a.stereo is None:
+                    continue  # non-chiral atom matches any atom. no need for checks
                 m = mapping[n]
-                oa = oatoms[m]
-                if oa.stereo is None:  # stereo in query should match only stereo atom
-                    break
-                other._translate_tetrahedron_sign(m, [mapping[x] for x in tetrahedrons[n]])
-            for n, s in atoms_stereo.items():
-                m = mapping[n]
-                if m not in other_atoms_stereo:  # self stereo atom not stereo in other
-                    break
-                # translate stereo mark in other in order of self tetrahedron
-                if other_translate_tetrahedron_sign(m, [mapping[x] for x in tetrahedrons[n]]) != s:
-                    break
-            else:
-                for n, s in allenes_stereo.items():
-                    m = mapping[n]
-                    if m not in other_allenes_stereo:  # self stereo allene not stereo in other
+                if other.atom(m).stereo is None:  # stereo in query should match only stereo atom
+                    break  # reject mapping
+
+                if m in other.stereogenic_tetrahedrons:
+                    if other._translate_tetrahedron_sign(m, [mapping[x] for x in self._bonds[n]]) != a.stereo:
+                        break  # stereo sign doesn't match
+                else:  # allene case
+                    if reverse is None:
+                        reverse = {m: n for n, m in mapping.items()}
+                    ot1, ot2 = other._stereo_allenes_terminals[m]  # get terminal atoms
+                    on1, om1, on2, om2 = other.stereogenic_allenes[m]  # get neighbors
+                    t1, t2 = reverse[ot1], reverse[ot2]
+                    env = (reverse.get(on1), reverse.get(om1), reverse.get(on2), reverse.get(om2))
+                    n1 = mapping[next(x for x in self._bonds[t1] if x in env)]
+                    m1 = mapping[next(x for x in self._bonds[t2] if x in env)]
+                    if other._translate_allene_sign(m, n1, m1) != a.stereo:
                         break
-                    # translate stereo mark in other in order of self allene
-                    nn, nm, *_ = allenes[n]
-                    if other_translate_allene_sign(m, mapping[nn], mapping[nm]) != s:
+            else:
+                for n, m, b in self.bonds():
+                    if b.stereo is None:
+                        continue
+                    on, om = mapping[n], mapping[m]
+                    if other.bond(on, om).stereo is None:  # chiral query bond matches only chiral molecule bond
+                        break
+                    if reverse is None:
+                        reverse = {m: n for n, m in mapping.items()}
+
+                    ot1, ot2 = ots = other._stereo_cis_trans_terminals[on]  # get terminal atoms
+                    on1, om1, on2, om2 = other.stereogenic_cis_trans[ots]  # get neighbors
+                    t1, t2 = reverse[ot1], reverse[ot2]
+                    env = (reverse.get(on1), reverse.get(om1), reverse.get(on2), reverse.get(om2))
+                    n1 = mapping[next(x for x in self._bonds[t1] if x in env)]
+                    m1 = mapping[next(x for x in self._bonds[t2] if x in env)]
+                    if other._translate_cis_trans_sign(ot1, ot2, n1, m1) != b.stereo:
                         break
                 else:
-                    for nm, s in cis_trans_stereo.items():
-                        n, m = nm
-                        on, om = mapping[n], mapping[m]
-                        if (on, om) not in other_cis_trans_stereo:
-                            if (om, on) not in other_cis_trans_stereo:
-                                break  # self stereo cis_trans not stereo in other
-                            else:
-                                nn, nm, *_ = cis_trans[nm]
-                                if other_translate_cis_trans_sign(om, on, mapping[nm], mapping[nn]) != s:
-                                    break
-                        else:
-                            nn, nm, *_ = cis_trans[nm]
-                            if other_translate_cis_trans_sign(on, om, mapping[nn], mapping[nm]) != s:
-                                break
-                    else:
-                        yield mapping
+                    yield mapping
 
     @cached_property
     def _cython_compiled_query(self):
@@ -536,10 +561,16 @@ class QueryIsomorphism(Isomorphism):
                         indices[j] = mapping[m]
                     start += len(ms)
                     q_to[i] = start
-            components.append((array('L', [n for n, *_ in c]), array('I', [0] + [mapping[x] for _, x, *_ in c[1:]]),
-                               array('Q', masks1), array('Q', masks2), array('Q', masks3), array('Q', masks4),
-                               array('I', closures), array('I', q_from), array('I', q_to),
-                               array('I', indices), array('Q', bonds)))
+
+            back = [0] + [mapping[x] for _, x, *_ in c[1:]]
+            numbers = [n for n, *_ in c]
+            buffer = BytesIO()
+            buffer.write(header_struct.pack(len(numbers)))
+            for x in zip(masks1, masks2, masks3, masks4, back, closures, q_from, q_to, numbers):
+                buffer.write(q_atom_struct.pack(*x))
+            for x in zip(bonds, indices):
+                buffer.write(bond_struct.pack(*x))
+            components.append(buffer.getvalue())
         return components
 
 

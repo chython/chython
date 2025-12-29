@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,7 +17,6 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from lazy_object_proxy import Proxy
-from ...periodictable import ListElement
 
 
 def _rules_single():
@@ -538,9 +537,55 @@ def _rules_single():
     bonds_fix = ((1, 2, 1), (2, 3, 2), (3, 4, 1), (4, 5, 2))
     rules.append((q, atom_fix, bonds_fix, True))
 
-    # todo:
-    # [C;a:10][N;H:2][N:3]=[C:4]1[C:5]=,:[C:6][C:7](=[O:1])[C:8]=,:[C:9]1
-    # [C;a:10][N;H:2][N:3]=[C:4]1[C:5](=[O:1])[C:6]=,:[C:7]-,:[C:8]=,:[C:9]1
+    #
+    # fix pyraz-one
+    #
+    q = smarts('[O,S;D1;z2;x0]=[C;D3;r5]1[N;D2;z1][N;z1][A;z2]-,=[A;z2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix 1,3,4-triazone
+    #
+    q = smarts('[O,S;D1;z2;x0]=[C;D3;r5]1[N;D2;z1][N;z2]=[A][N;z1]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    q = smarts('[O,S;D1;z2;x0]=[C;D3;r5]1[N;D2;z1][A;z2]=[N][N;z1]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyraz-imin
+    #
+    q = smarts('[N;z2;!R]=[C;D3;r5]1[N;D2;z1][N;z1][A]-,=[A]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix imidaz-imin. move double bond to the ring
+    #
+    q = smarts('[N;z2;!R]=[C;D3;r5]1[N;D2;z1][A]-,=[A][N;z1]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix oxazol-imin
+    #
+    q = smarts('[N;z2;!R]=[C;D3;r5]1[N;D2;z1][A]-,=[A][O,S;D2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    q = smarts('[N;z2;!R]=[C;D3;r5]1[N;D2;z1][O,S;D2][A]-,=[A]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
 
     #
     #       OH          O

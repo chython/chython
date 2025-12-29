@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -57,7 +57,9 @@ def postprocess_parsed_reaction(data, *, remap=False, ignore=True):
                         molecule['log'].append(f'non-unique mapping in molecule: {m}')
                     else:
                         used.add(m)
-                tmp.append(m)
+                    tmp.append(m)
+                else:
+                    tmp.append(0)
 
     length = count(max(max(maps['products'], default=0), max(maps['reactants'], default=0),
                        max(maps['reagents'], default=0)) + 1)

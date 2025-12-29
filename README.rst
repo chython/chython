@@ -13,7 +13,7 @@ Features:
    - Produce template based reactions and molecules
    - Atom-to-atom mapping, checking and rule-based fixing
    - Perform MCS search
-   - 2d coordinates generation 
+   - 2d coordinates generation (based on `SmilesDrawer <https://github.com/reymond-group/smilesDrawer>`_)
    - 2d/3d depiction with Jupyter support
    - SMARTS parser with restrictions
    - Protective groups remover
@@ -31,18 +31,12 @@ Install
 
 Only python 3.8+.
 
-* **stable version available through PyPI**::
-
-    pip install chython
-
-* Install chython library DEV version for features that are not well tested::
-
-    pip install -U git+https://github.com/chython/chython.git@master#egg=chython
+    pip install chython[racer-default]
 
 Copyright
 =========
 
-* 2014-2023 Ramil Nugmanov nougmanoff@protonmail.com main developer
+* 2014-2025 Ramil Nugmanov nougmanoff@protonmail.com main developer
 
 Contributors
 ============
