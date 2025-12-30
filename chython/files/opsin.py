@@ -43,4 +43,7 @@ def opsin(string):
     return smiles(str(result.getSmiles()))
 
 
-__all__ = ['opsin']
+iupac = opsin
+
+
+__all__ = ['opsin', 'iupac']
