@@ -18,6 +18,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from os import getenv
 from typing import Literal
 from .algorithms.depict import depict_settings
 from .containers import *
@@ -27,8 +28,9 @@ from .utils import *
 
 
 torch_device = 'cpu'  # AAM model device. Change before first `reset_mapping` call!
-clean2d_engine: Literal['smilesdrawer', 'rdkit'] = 'smilesdrawer'
+clean2d_engine: Literal['rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo'] = 'smilesdrawer'
 conformer_engine: Literal['rdkit', 'cdpkit'] = 'rdkit'
+class_paths = [getenv('CDK_PATH', 'cdk.jar'), getenv('OPSIN_PATH', 'opsin.jar')]
 
 
 __all__ = []

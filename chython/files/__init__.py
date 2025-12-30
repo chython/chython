@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,11 +19,12 @@
 from .daylight import *
 from .libinchi import *
 from .MRVrw import *
+from .opsin import *
 from .PDBrw import *
 from .RDFrw import *
 from .SDFrw import *
 from .xyz import *
 
 
-__all__ = ['smiles', 'smarts', 'mdl_mol', 'mdl_rxn', 'xyz', 'xyz_file', 'inchi']
+__all__ = ['smiles', 'smarts', 'mdl_mol', 'mdl_rxn', 'xyz', 'xyz_file', 'inchi', 'opsin']
 __all__.extend(x for x in locals() if x.endswith(('Read', 'Write')))
