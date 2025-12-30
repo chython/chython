@@ -16,7 +16,6 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from jpype import JPackage, isJVMStarted, startJVM
 from .daylight import smiles
 
 
@@ -29,6 +28,8 @@ def opsin(string):
     global _opsin, _nametostruct
 
     if _opsin is None:
+        from jpype import JPackage, isJVMStarted, startJVM
+
         if not isJVMStarted():
             from chython import class_paths
 
