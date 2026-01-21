@@ -23,6 +23,7 @@ from .cgr import *
 from .molecule import *
 from .query import *
 from .reaction import *
+from .markush import *
 
 
 def unpach(data: bytes, /, *, compressed=True, skip_labels_calculation=False) -> Union[MoleculeContainer, ReactionContainer]:
