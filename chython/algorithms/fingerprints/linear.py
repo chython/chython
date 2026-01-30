@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  Copyright 2023 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
@@ -34,17 +34,17 @@ class LinearFingerprint:
     Linear fragments fingerprints.
     Transform structures into fingerprints based on linear fragments descriptors.
     Also count of fragments takes into account by activating multiple bits,
-    but less or equal to `max_count_num`.To take into account
-    all repeating fragments put 0 as a value of `max_count_num` parameter.
+    but less or equal to `max_count`.To take into account
+    all repeating fragments put 0 as a value of `max_count` parameter.
 
-    For example `CC` fragment found 4 times and `max_count_num` is set to 3.
+    For example `CC` fragment found 4 times and `max_count` is set to 3.
     In this case will be activated 3 bits: for count 1, for count 2 and for count 3.
     This gives intersection in bits with another structure with only 2 `CC` fragments.
     """
 
     def linear_fingerprint(self, min_radius: int = 1, max_radius: int = 4,
                            length: int = 1024, number_active_bits: int = 2,
-                           max_count_num: int = 4):
+                           number_bit_pairs: int = 4, max_count: int = 4):
         """
         Transform structures into array of binary features.
 
@@ -52,20 +52,22 @@ class LinearFingerprint:
         :param max_radius: maximum length of fragments
         :param length: bit string's length. Should be power of 2
         :param number_active_bits: number of active bits for each hashed tuple
-        :param max_count_num: describe how much repeating fragments we can count in hashable fingerprint (if
+        :param number_bit_pairs: deprecated name, use max_count
+        :param max_count: describe how much repeating fragments we can count in hashable fingerprint (if
             number of fragment in molecule greater or equal this number, we will activate only this number of
             fragments). To take into account all repeating fragments put 0 as a value.
 
         :return: array(n_features)
         """
-        bits = self.linear_bit_set(min_radius, max_radius, length, number_active_bits,
-                                   max_count_num)
+        if number_bit_pairs != 4:
+            max_count = number_bit_pairs
+        bits = self.linear_bit_set(min_radius, max_radius, length, number_active_bits, max_count)
         fingerprints = zeros(length, dtype=uint8)
         fingerprints[list(bits)] = 1
         return fingerprints
 
     def linear_bit_set(self, min_radius: int = 1, max_radius: int = 4, length: int = 1024, number_active_bits: int = 2,
-                       max_count_num: int = 4) -> Set[int]:
+                       number_bit_pairs: int = 4, max_count: int = 4) -> Set[int]:
         """
         Transform structure into set of indexes of True-valued features.
 
@@ -73,14 +75,17 @@ class LinearFingerprint:
         :param max_radius: maximum length of fragments
         :param length: bit string's length. Should be power of 2
         :param number_active_bits: number of active bits for each hashed tuple
-        :param max_count_num: describe how much repeating fragments we can count in hashable fingerprint (if
+        :param number_bit_pairs: deprecated name, use max_count
+        :param max_count: describe how much repeating fragments we can count in hashable fingerprint (if
             number of fragment in molecule greater or equal this number, we will activate only this number of
             fragments). To take into account all repeating fragments put 0 as a value.
         """
+        if number_bit_pairs != 4:
+            max_count = number_bit_pairs
         mask = length - 1
         log = int(log2(length))
 
-        hashes = self.linear_hash_set(min_radius, max_radius, max_count_num)
+        hashes = self.linear_hash_set(min_radius, max_radius, max_count)
         active_bits = set()
         for tpl in hashes:
             active_bits.add(tpl & mask)
@@ -92,37 +97,44 @@ class LinearFingerprint:
                     active_bits.add(tpl & mask)
         return active_bits
 
-    def linear_hash_set(self, min_radius: int = 1, max_radius: int = 4, max_count_num: int = 4) -> Set[int]:
+    def linear_hash_set(self, min_radius: int = 1, max_radius: int = 4,
+                        number_bit_pairs: int = 4, max_count: int = 4) -> Set[int]:
         """
         Transform structure into set of integer hashes of fragments with count information.
 
         :param min_radius: minimal length of fragments
         :param max_radius: maximum length of fragments
-        :param max_count_num: describe how much repeating fragments we can count in hashable fingerprint (if
+        :param number_bit_pairs: deprecated name, use max_count
+        :param max_count: describe how much repeating fragments we can count in hashable fingerprint (if
             number of fragment in molecule greater or equal this number, we will activate only this number of
             fragments). To take into account all repeating fragments put 0 as a value.
         """
-        if not max_count_num:
-            max_count_num = 999_999_999  # unreachable count
+        if number_bit_pairs != 4:
+            max_count = number_bit_pairs
+        if not max_count:
+            max_count = 999_999_999  # unreachable count
 
         return {hash((*tpl, cnt)) for tpl, count in
                 self._fragments(min_radius, max_radius).items()
-                for cnt in range(min(len(count), max_count_num))}
+                for cnt in range(min(len(count), max_count))}
 
     def linear_hash_smiles(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4,
-                           max_count_num: int = 4) -> Dict[int, List[str]]:
+                           number_bit_pairs: int = 4, max_count: int = 4) -> Dict[int, List[str]]:
         """
         Transform structure into dict of integer hashes of fragments with count information and
             corresponding fragment SMILES.
 
         :param min_radius: minimal length of fragments
         :param max_radius: maximum length of fragments
-        :param max_count_num: describe how much repeating fragments we can count in hashable fingerprint (if
+        :param number_bit_pairs: deprecated name, use max_count
+        :param max_count: describe how much repeating fragments we can count in hashable fingerprint (if
             number of fragment in molecule greater or equal this number, we will activate only this number of
             fragments). To take into account all repeating fragments put 0 as a value.
         """
-        if not max_count_num:
-            max_count_num = 999_999_999  # unreachable count
+        if number_bit_pairs != 4:
+            max_count = number_bit_pairs
+        if not max_count:
+            max_count = 999_999_999  # unreachable count
 
         out = defaultdict(set)
         for frg, chains in self._fragments(min_radius, max_radius).items():
@@ -133,23 +145,26 @@ class LinearFingerprint:
                 smiles.append(self._format_atom(y, None, stereo=False))
             smiles = ''.join(smiles)
 
-            for cnt in range(min(len(chains), max_count_num)):
+            for cnt in range(min(len(chains), max_count)):
                 out[hash((*frg, cnt))].add(smiles)  # collisions possible
         return {k: list(v) for k, v in out.items()}
 
     def linear_smiles_hash(self, min_radius: int = 1, max_radius: int = 4,
-                           max_count_num: int = 4) -> Dict[str, List[int]]:
+                           number_bit_pairs: int = 4, max_count: int = 4) -> Dict[str, List[int]]:
         """
         Transform structure into dict of fragment SMILES and list of corresponding integer hashes of fragments.
 
         :param min_radius: minimal length of fragments
         :param max_radius: maximum length of fragments
-        :param max_count_num: describe how much repeating fragments we can count in hashable fingerprint (if
+        :param number_bit_pairs: deprecated name, use max_count
+        :param max_count: describe how much repeating fragments we can count in hashable fingerprint (if
             number of fragment in molecule greater or equal this number, we will activate only this number of
             fragments). To take into account all repeating fragments put 0 as a value.
         """
+        if number_bit_pairs != 4:
+            max_count = number_bit_pairs
         out = defaultdict(list)
-        for k, sl in self.linear_hash_smiles(min_radius, max_radius, max_count_num).items():
+        for k, sl in self.linear_hash_smiles(min_radius, max_radius, max_count).items():
             for s in sl:
                 out[s].append(k)
         return dict(out)
