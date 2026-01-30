@@ -325,6 +325,7 @@ class Standardize:
 
         if pairs or carbons:
             self.__dict__.pop('atoms_order', None)  # remove cached morgan
+            self.__dict__.pop('int_adjacency', None)
             for atom_1, atom_2, fix in pairs:
                 if self.atoms_order[atom_1] >= self.atoms_order[atom_2]:
                     # keep as is
@@ -354,6 +355,7 @@ class Standardize:
                         if atom_1 in protonated:
                             changed.append(atom_1)
             del self.__dict__['atoms_order']  # remove invalid morgan
+            del self.__dict__['int_adjacency']
 
         if changed:
             self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)  # clear cache

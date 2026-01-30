@@ -25,6 +25,7 @@ from typing import Dict, Iterable, List, Tuple, Union
 from zlib import compress, decompress
 from .bonds import Bond, DynamicBond
 from .cgr import CGRContainer
+from .chimera import Chimera
 from .graph import Graph
 from .rdkit import RDkit
 from ..algorithms.aromatics import Aromatize
@@ -65,7 +66,7 @@ S = 16
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, MoleculeIsomorphism,
                         Aromatize, StandardizeMolecule, MoleculeSmiles, DepictMolecule, Calculate2DMolecule,
-                        Conformers, Fingerprints, Tautomers, RDkit, MCS, X3domMolecule):
+                        Conformers, Fingerprints, Tautomers, RDkit, Chimera, MCS, X3domMolecule):
     __slots__ = ('_meta', '_name', '_conformers', '_changed', '_backup')
 
     def __init__(self):

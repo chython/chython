@@ -47,7 +47,7 @@ class Calculate2DMolecule:
     _bonds: Dict[int, Dict[int, 'Bond']]
 
     def clean2d(self: Union['MoleculeContainer', 'Calculate2DMolecule'],
-                *, engine: Literal['rdkit', 'smilesdrawer'] = None):
+                *, engine: Literal['rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo'] = None):
         """
         Calculate 2d layout of graph.
 
@@ -85,6 +85,31 @@ class Calculate2DMolecule:
             shift_x, shift_y = xy[0]
             for n, (x, y) in zip(order, xy):
                 plane[n] = (x - shift_x, shift_y - y)
+        elif engine == 'cdk':
+            sdg = self._cdk_engine.layout.StructureDiagramGenerator()
+            sdg.setUseTemplates(False)
+            sdg.setMolecule(self.to_cdk())
+            sdg.generateCoordinates()
+            mol = sdg.getMolecule()
+
+            for i, n in enumerate(self.smiles_atoms_order):
+                xy = mol.getAtom(i).getPoint2d()
+                plane[n] = (xy.x, xy.y)
+        elif engine == 'obabel':
+            mol = self.to_openbabel()
+            assert self._obgen2d(mol), 'OpenBabel failed to generate 2d layout'
+            assert mol.NumAtoms() == len(self), 'OpenBabel modified molecule'
+
+            for i, n in enumerate(self.smiles_atoms_order, 1):
+                xy = mol.GetAtom(i).GetVector()
+                plane[n] = (xy.GetX(), xy.GetY())
+        elif engine == 'indigo':
+            mol = self.to_indigo()
+            assert not mol.layout(), 'Indigo failed to generate 2d layout'
+
+            for n, a in zip(self.smiles_atoms_order, mol.iterateAtoms()):
+                x, y, _ = a.xyz()
+                plane[n] = (x, y)
         else: raise ValueError(f'Invalid clean2d engine: {engine}')
 
         bonds = []
