@@ -5,6 +5,7 @@ from .graph import Graph
 from ..algorithms.calculate2d import Calculate2DCGR
 from ..algorithms.depict import DepictQueryCGR
 from ..algorithms.smiles import QueryCGRSmiles
+from ..exceptions import IsConnectedAtom
 from ..periodictable import (Element, DynamicElement, QueryElement, DynamicQueryElement, AnyElement, DynamicAnyElement,
                              AnyAtom)
 
@@ -161,9 +162,13 @@ class QueryCGRContainer(Graph, QueryCGRSmiles, DepictQueryCGR, Calculate2DCGR):
         copy._plane = self._plane.copy()
         copy._charges = self._charges.copy()
         copy._radicals = self._radicals.copy()
-        for n, xy in copy._plane.items():
-            if n in copy._atoms and hasattr(copy._atoms[n], 'xy'):
-                copy._atoms[n].xy = xy
+        for n, atom in copy._atoms.items():
+            try:
+                atom._attach_to_graph(copy, n)
+            except (AttributeError, IsConnectedAtom):
+                pass
+            if n in copy._plane and hasattr(atom, 'xy'):
+                atom.xy = copy._plane[n]
         return copy
 
     def substructure(self, atoms, **kwargs) -> 'QueryCGRContainer':

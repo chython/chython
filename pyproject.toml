@@ -1,6 +1,6 @@
 [tool.poetry]
 name = 'chython-synplan'
-version = '1.93'
+version = '1.94'
 description = 'Library for processing molecules and reactions in python way'
 authors = ['Ramil Nugmanov <nougmanoff@protonmail.com>']
 license = 'LGPLv3'

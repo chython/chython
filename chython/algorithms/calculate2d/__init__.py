@@ -130,7 +130,7 @@ class Calculate2DQuery(Calculate2D):
         for n in mol._atoms:
             mol._atoms[n]._implicit_hydrogens = 0
         smiles, order = mol._smiles(lambda x: random(), _return_order=True)
-        return ''.join(smiles), order
+        return ''.join(smiles).replace('~', '-'), order
 
 
 class Calculate2DCGR(Calculate2D):
@@ -147,7 +147,7 @@ class Calculate2DCGR(Calculate2D):
         for n in mol._atoms:
             mol._atoms[n]._implicit_hydrogens = 0
         smiles, order = mol._smiles(lambda x: random(), _return_order=True)
-        return ''.join(smiles), order
+        return ''.join(smiles).replace('~', '-'), order
 
 
 ctx = None

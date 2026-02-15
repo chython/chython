@@ -574,3 +574,80 @@ def test_recursive_smarts_element_constraint():
     # Amide: N-C=O → O in {O,S,P,N} → should NOT match
     acetamide = smiles('NC(=O)C')
     assert not pattern2.is_substructure(acetamide)
+
+
+def test_reaction_smarts_basic():
+    """Parse reaction SMARTS and verify structure."""
+    from chython.containers import ReactionContainer
+
+    rxn = smarts('[C;D2:1]-[Br;D1:2]>>[C;D2:1]-[O;D1:3]')
+    assert isinstance(rxn, ReactionContainer)
+    assert len(rxn.reactants) == 1
+    assert len(rxn.products) == 1
+
+
+def test_reaction_smarts_multi_component():
+    """Parse reaction SMARTS with multiple reactants/products."""
+    from chython.containers import ReactionContainer
+
+    rxn = smarts('[C;D3:1]-[C;D3:2](=[O;D1:3])-[Cl;D1:4]>>[C;D3:1]-[C;D3:2](=[O;D1:3])-[N;D2:5].[Cl;D0:4]')
+    assert isinstance(rxn, ReactionContainer)
+    assert len(rxn.reactants) == 1
+    assert len(rxn.products) == 2
+
+
+def test_reaction_smarts_roundtrip():
+    """Parse reaction SMARTS, format back, parse again — strings must match."""
+    rxn1 = smarts('[C;D2:1]-[Br;D1:2]>>[C;D2:1]-[O;D1:3]')
+    s1 = str(rxn1)
+    rxn2 = smarts(s1)
+    s2 = str(rxn2)
+    assert s1 == s2
+
+
+def test_reaction_smarts_equality():
+    """Two parses of the same reaction SMARTS are equal."""
+    rxn1 = smarts('[C;D2:1]-[Br;D1:2]>>[C;D2:1]-[O;D1:3]')
+    rxn2 = smarts('[C;D2:1]-[Br;D1:2]>>[C;D2:1]-[O;D1:3]')
+    assert rxn1 == rxn2
+
+
+def test_reaction_smarts_hashing():
+    """Identical reaction SMARTS produce same hash; can be used in sets."""
+    rxn1 = smarts('[C;D2:1]-[Br;D1:2]>>[C;D2:1]-[O;D1:3]')
+    rxn2 = smarts('[C;D2:1]-[Br;D1:2]>>[C;D2:1]-[O;D1:3]')
+    assert hash(rxn1) == hash(rxn2)
+    assert len({rxn1, rxn2}) == 1
+
+
+def test_reaction_smarts_inequality():
+    """Different reaction SMARTS are not equal."""
+    rxn1 = smarts('[C;D2:1]-[Br;D1:2]>>[C;D2:1]-[O;D1:3]')
+    rxn2 = smarts('[C;D2:1]-[Cl;D1:2]>>[C;D2:1]-[O;D1:3]')
+    assert rxn1 != rxn2
+
+
+def test_reaction_smarts_to_reactor():
+    """Convert reaction SMARTS to Reactor and apply it."""
+    from chython.reactor import Reactor
+
+    rxn = smarts('[C;D2:1]-[Br;D1:2]>>[C;D2:1]-[O;D1:3]')
+    reactor = rxn.to_reactor()
+    assert isinstance(reactor, Reactor)
+
+
+def test_reaction_smarts_compose():
+    """compose() on QueryContainer reaction returns QueryCGRContainer."""
+    from chython.containers import QueryCGRContainer
+
+    rxn = smarts('[C;D2:1]-[Br;D1:2]>>[C;D2:1]-[O;D1:3]')
+    cgr = rxn.compose()
+    assert isinstance(cgr, QueryCGRContainer)
+
+
+def test_molecule_smarts_regression():
+    """Molecule SMARTS (no >>) still returns QueryContainer."""
+    from chython.containers import QueryContainer
+
+    q = smarts('[C;D2:1]-[Br;D1:2]')
+    assert isinstance(q, QueryContainer)

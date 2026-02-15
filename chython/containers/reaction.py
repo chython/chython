@@ -17,6 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from CachedMethods import cached_method
+from collections import defaultdict
 from functools import reduce
 from itertools import chain
 from math import ceil
@@ -24,10 +25,13 @@ from operator import itemgetter, or_
 from typing import Optional, Union
 from collections.abc import Iterator, Sequence
 from zlib import compress, decompress
+from .bonds import DynamicBond
 from .cgr import CGRContainer
 from .cgr_query import QueryCGRContainer
 from .molecule import MoleculeContainer
 from .query import QueryContainer
+from ..periodictable import DynamicQueryElement, DynamicAnyElement
+from ..periodictable.base.query import AnyElement
 from ..algorithms.calculate2d import Calculate2DReaction
 from ..algorithms.depict import DepictReaction
 from ..algorithms.mapping import Mapping
@@ -175,16 +179,20 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         reaction._signs = None
         return reaction
 
-    def compose(self, *, dynamic=True) -> CGRContainer:
+    def compose(self, *, dynamic=True) -> Union[CGRContainer, QueryCGRContainer]:
         """
         Get CGR of reaction
 
         Reagents will be presented as unchanged molecules
-        :return: CGRContainer
+        :return: CGRContainer for MoleculeContainer reactions, QueryCGRContainer for QueryContainer reactions
         """
         graph_cls = self._get_graph_cls()
+        if issubclass(graph_cls, QueryContainer):
+            return self._compose_query()
+        if issubclass(graph_cls, (CGRContainer, QueryCGRContainer)):
+            raise TypeError('CGR-based reactions are not composable')
         if not issubclass(graph_cls, MoleculeContainer):
-            raise TypeError('Only MoleculeContainer reactions are composable')
+            raise TypeError('Only MoleculeContainer or QueryContainer reactions are composable')
 
         rr = self.reagents + self.reactants
         if rr:
@@ -196,6 +204,148 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         else:
             p = MoleculeContainer()
         return r.compose(p, dynamic)
+
+    def _compose_query(self) -> QueryCGRContainer:
+        """
+        Compose QueryContainer reaction into QueryCGRContainer.
+
+        Maps atoms by their atom mapping numbers between reactants and products.
+        """
+        rr = self.reagents + self.reactants
+        if rr:
+            r = reduce(or_, rr)
+        else:
+            r = QueryContainer('')
+        if self.products:
+            p = reduce(or_, self.products)
+        else:
+            p = QueryContainer('')
+
+        h = QueryCGRContainer()
+        ha = h._atoms
+        hb = h._bonds
+
+        common = r._atoms.keys() & p._atoms.keys()
+        bonds = []
+        adj = defaultdict(lambda: defaultdict(lambda: [None, None]))
+
+        def _qb_order(qbond):
+            orders = qbond.order
+            if len(orders) == 1:
+                return orders[0]
+            return 8  # any bond
+
+        def _make_dqe(atom):
+            if isinstance(atom, AnyElement):
+                return DynamicAnyElement(isotope=getattr(atom, 'isotope', None))
+            return DynamicQueryElement.from_atom(atom)
+
+        def _get_charge(atom):
+            return getattr(atom, '_charge', getattr(atom, 'charge', 0))
+
+        def _get_radical(atom):
+            return getattr(atom, '_is_radical', getattr(atom, 'is_radical', False))
+
+        # Cleavage atoms (only in reactant)
+        for n in r._atoms.keys() - common:
+            ra = r._atoms[n]
+            ha[n] = _make_dqe(ra)
+            ha[n]._attach_to_graph(h, n)
+            hb[n] = {}
+            h._plane[n] = r._plane.get(n, (0., 0.))
+            charge = _get_charge(ra)
+            radical = _get_radical(ra)
+            h._charges[n] = charge
+            h._radicals[n] = radical
+            h._p_charges[n] = charge
+            h._p_radicals[n] = radical
+            h._neighbors[n] = ra.neighbors
+            h._hybridizations[n] = ra.hybridization
+            h._p_neighbors[n] = ra.neighbors
+            h._p_hybridizations[n] = ra.hybridization
+
+            for m, bond in r._bonds[n].items():
+                if m not in ha:
+                    order = _qb_order(bond)
+                    if m in common:
+                        bonds.append((n, m, DynamicBond(order, None)))
+                    else:
+                        bonds.append((n, m, DynamicBond(order, order)))
+
+        # Coupling atoms (only in product)
+        for n in p._atoms.keys() - common:
+            pa = p._atoms[n]
+            ha[n] = _make_dqe(pa)
+            ha[n]._attach_to_graph(h, n)
+            hb[n] = {}
+            h._plane[n] = p._plane.get(n, (0., 0.))
+            charge = _get_charge(pa)
+            radical = _get_radical(pa)
+            h._charges[n] = charge
+            h._radicals[n] = radical
+            h._p_charges[n] = charge
+            h._p_radicals[n] = radical
+            h._neighbors[n] = pa.neighbors
+            h._hybridizations[n] = pa.hybridization
+            h._p_neighbors[n] = pa.neighbors
+            h._p_hybridizations[n] = pa.hybridization
+
+            for m, bond in p._bonds[n].items():
+                if m not in ha:
+                    order = _qb_order(bond)
+                    if m in common:
+                        bonds.append((n, m, DynamicBond(None, order)))
+                    else:
+                        bonds.append((n, m, DynamicBond(order, order)))
+
+        # Common atoms bond orders
+        for n in common:
+            an = adj[n]
+            for m, bond in r._bonds[n].items():
+                if m in common:
+                    an[m][0] = _qb_order(bond)
+            for m, bond in p._bonds[n].items():
+                if m in common:
+                    an[m][1] = _qb_order(bond)
+
+        # Common atoms
+        for n in common:
+            ra = r._atoms[n]
+            pa = p._atoms[n]
+            ha[n] = _make_dqe(ra)
+            ha[n]._attach_to_graph(h, n)
+            hb[n] = {}
+            h._plane[n] = r._plane.get(n, (0., 0.))
+            h._charges[n] = _get_charge(ra)
+            h._radicals[n] = _get_radical(ra)
+            h._p_charges[n] = _get_charge(pa)
+            h._p_radicals[n] = _get_radical(pa)
+            h._neighbors[n] = ra.neighbors
+            h._hybridizations[n] = ra.hybridization
+            h._p_neighbors[n] = pa.neighbors
+            h._p_hybridizations[n] = pa.hybridization
+
+            for m, (o1, o2) in adj[n].items():
+                if m not in ha:
+                    bonds.append((n, m, DynamicBond(o1, o2)))
+
+        for n, m, bond in bonds:
+            hb[n][m] = hb[m][n] = bond
+
+        return h
+
+    def to_reactor(self, **kwargs) -> 'Reactor':
+        """Convert query reaction to Reactor.
+
+        Only works for reactions composed of QueryContainers.
+
+        :param kwargs: Extra keyword arguments passed to Reactor.__init__
+            (delete_atoms, one_shot, etc.).
+        """
+        if not issubclass(self._graph_cls, QueryContainer):
+            raise TypeError('Only QueryContainer reactions can be converted to Reactor')
+        from ..reactor import Reactor
+        return Reactor(patterns=self.reactants, products=self.products, **kwargs)
 
     def flush_cache(self, keep_molecule_cache=False, **kwargs):
         self.__dict__.clear()
@@ -303,7 +453,7 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         return self.pack()
 
     @cached_method
-    def __invert__(self) -> CGRContainer:
+    def __invert__(self) -> Union[CGRContainer, QueryCGRContainer]:
         """
         Get CGR of reaction
         """
