@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,7 +18,6 @@
 #
 from typing import TYPE_CHECKING, List, Tuple, Union
 from ._salts import acids, rules
-from ...periodictable import GroupI, GroupII
 
 
 if TYPE_CHECKING:
@@ -28,23 +27,28 @@ if TYPE_CHECKING:
 # atomic number constants
 H = 1
 N = 7
+s_metals = {3, 4, 11, 12, 19, 20, 37, 38, 55, 56, 87, 88}
+s_metals_ammonia = {3, 4, 7, 11, 12, 19, 20, 37, 38, 55, 56, 87, 88}
 
 
 class Salts:
     __slots__ = ()
 
-    def remove_metals(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List]:
+    def remove_metals(self: 'MoleculeContainer', *,
+                      skip_elements: List[int] = None, logging=False) -> Union[bool, List]:
         """
         Remove disconnected S-metals and ammonia.
 
         :param logging: return deleted atoms list.
+        :param skip_elements: skip elements from removing.
         """
         atoms = self._atoms
         bonds = self._bonds
+        filters = s_metals_ammonia.difference(skip_elements) if skip_elements else s_metals_ammonia
 
         metals = []
         for n, a in atoms.items():
-            if not bonds[n] and (a == N or isinstance(a, (GroupI, GroupII)) and a != H):
+            if not bonds[n] and a.atomic_number in filters:
                 metals.append(n)
 
         if 0 < len(metals) < len(self):
@@ -88,16 +92,20 @@ class Salts:
             return []
         return False
 
-    def split_metal_salts(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List[Tuple[int, int]]]:
+    def split_metal_salts(self: 'MoleculeContainer', *,
+                          skip_elements: List[int] = None,
+                          logging=False) -> Union[bool, List[Tuple[int, int]]]:
         """
         Split connected S-metal salts to cation/anion pairs.
 
         :param logging: return deleted bonds list.
+        :param skip_elements: skip elements from splitting.
         """
         atoms = self._atoms
         bonds = self._bonds
+        filters = s_metals.difference(skip_elements) if skip_elements else s_metals
 
-        metals = [n for n, a in atoms.items() if isinstance(a, (GroupI, GroupII)) and a != H]
+        metals = [n for n, a in atoms.items() if a.atomic_number in filters]
         if metals:
             acceptors = set()
             log = []

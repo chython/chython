@@ -36,7 +36,7 @@ Only python 3.8+.
 Copyright
 =========
 
-* 2014-2025 Ramil Nugmanov nougmanoff@protonmail.com main developer
+* 2014-2026 Ramil Nugmanov nougmanoff@protonmail.com main developer
 
 Contributors
 ============

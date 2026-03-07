@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019, 2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -17,7 +17,6 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from math import sqrt
 from random import random
 from typing import TYPE_CHECKING, Union, Dict, Literal
 from ...exceptions import ImplementationError
@@ -112,25 +111,32 @@ class Calculate2DMolecule:
                 plane[n] = (x, y)
         else: raise ValueError(f'Invalid clean2d engine: {engine}')
 
-        bonds = []
-        for n, m, _ in self.bonds():
-            xn, yn = plane[n]
-            xm, ym = plane[m]
-            bonds.append(sqrt((xm - xn) ** 2 + (ym - yn) ** 2))
-        if bonds:
-            bond_reduce = sum(bonds) / len(bonds) / .825
-        else:
-            bond_reduce = 1.
-
         atoms = self._atoms
-        for n, (x, y) in plane.items():
-            atoms[n].xy = (x / bond_reduce,  y / bond_reduce)
+        for n, xy in plane.items():
+            atoms[n].xy = xy
+        self.rescale2d()
 
         if self.connected_components_count > 1:
             shift_x = 0.
             for c in self.connected_components:
                 shift_x = self._fix_plane_mean(shift_x, component=c) + .9
         self.__dict__.pop('__cached_method__repr_svg_', None)
+
+    def rescale2d(self: 'MoleculeContainer'):
+        """
+        Rescale coordinates to average bond length 0.825.
+        """
+        bonds = []
+        atoms = self._atoms
+        for n, m, _ in self.bonds():
+            bonds.append(float(atoms[n].xy - atoms[m].xy))
+        if bonds:
+            bond_reduce = sum(bonds) / len(bonds) / .825
+            if bond_reduce > .5:  # check for singularity
+                for a in atoms.values():
+                    a.xy /= bond_reduce
+                return True
+        return False
 
     def _fix_plane_mean(self, shift_x: float, shift_y=0., component=None) -> float:
         atoms = self._atoms
