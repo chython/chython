@@ -21,7 +21,7 @@
 from collections import defaultdict, deque
 from math import log2
 from numpy import uint8, zeros
-from typing import Deque, Dict, List, Set, Tuple, TYPE_CHECKING
+from typing import Deque, Dict, Set, Tuple, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -59,9 +59,7 @@ class LinearFingerprint:
 
         :return: array(n_features)
         """
-        if number_bit_pairs != 4:
-            max_count = number_bit_pairs
-        bits = self.linear_bit_set(min_radius, max_radius, length, number_active_bits, max_count)
+        bits = self.linear_bit_set(min_radius, max_radius, length, number_active_bits, number_bit_pairs, max_count)
         fingerprints = zeros(length, dtype=uint8)
         fingerprints[list(bits)] = 1
         return fingerprints
@@ -80,12 +78,10 @@ class LinearFingerprint:
             number of fragment in molecule greater or equal this number, we will activate only this number of
             fragments). To take into account all repeating fragments put 0 as a value.
         """
-        if number_bit_pairs != 4:
-            max_count = number_bit_pairs
         mask = length - 1
         log = int(log2(length))
 
-        hashes = self.linear_hash_set(min_radius, max_radius, max_count)
+        hashes = self.linear_hash_set(min_radius, max_radius, number_bit_pairs, max_count)
         active_bits = set()
         for tpl in hashes:
             active_bits.add(tpl & mask)
@@ -116,60 +112,11 @@ class LinearFingerprint:
 
         return {hash((*tpl, cnt)) for tpl, count in
                 self._fragments(min_radius, max_radius).items()
-                for cnt in range(min(len(count), max_count))}
-
-    def linear_hash_smiles(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4,
-                           number_bit_pairs: int = 4, max_count: int = 4) -> Dict[int, List[str]]:
-        """
-        Transform structure into dict of integer hashes of fragments with count information and
-            corresponding fragment SMILES.
-
-        :param min_radius: minimal length of fragments
-        :param max_radius: maximum length of fragments
-        :param number_bit_pairs: deprecated name, use max_count
-        :param max_count: describe how much repeating fragments we can count in hashable fingerprint (if
-            number of fragment in molecule greater or equal this number, we will activate only this number of
-            fragments). To take into account all repeating fragments put 0 as a value.
-        """
-        if number_bit_pairs != 4:
-            max_count = number_bit_pairs
-        if not max_count:
-            max_count = 999_999_999  # unreachable count
-
-        out = defaultdict(set)
-        for frg, chains in self._fragments(min_radius, max_radius).items():
-            chain = chains[0]
-            smiles = [self._format_atom(chain[0], None, stereo=False)]
-            for x, y in zip(chain, chain[1:]):
-                smiles.append(self._format_bond(x, y, None, stereo=False, aromatic=False))
-                smiles.append(self._format_atom(y, None, stereo=False))
-            smiles = ''.join(smiles)
-
-            for cnt in range(min(len(chains), max_count)):
-                out[hash((*frg, cnt))].add(smiles)  # collisions possible
-        return {k: list(v) for k, v in out.items()}
-
-    def linear_smiles_hash(self, min_radius: int = 1, max_radius: int = 4,
-                           number_bit_pairs: int = 4, max_count: int = 4) -> Dict[str, List[int]]:
-        """
-        Transform structure into dict of fragment SMILES and list of corresponding integer hashes of fragments.
-
-        :param min_radius: minimal length of fragments
-        :param max_radius: maximum length of fragments
-        :param number_bit_pairs: deprecated name, use max_count
-        :param max_count: describe how much repeating fragments we can count in hashable fingerprint (if
-            number of fragment in molecule greater or equal this number, we will activate only this number of
-            fragments). To take into account all repeating fragments put 0 as a value.
-        """
-        if number_bit_pairs != 4:
-            max_count = number_bit_pairs
-        out = defaultdict(list)
-        for k, sl in self.linear_hash_smiles(min_radius, max_radius, max_count).items():
-            for s in sl:
-                out[s].append(k)
-        return dict(out)
+                for cnt in range(min(count, max_count))}
 
     def _chains(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[Tuple[int, ...]]:
+        assert min_radius >= 1, 'min_radius should be positive'
+        assert max_radius >= min_radius, 'max_radius should be greater or equal to min_radius'
         queue: Deque[Tuple[int, ...]]  # typing
         atoms = self._atoms
         bonds = self._bonds
@@ -197,10 +144,10 @@ class LinearFingerprint:
         return arr
 
     def _fragments(self: 'MoleculeContainer', min_radius: int = 1,
-                   max_radius: int = 4) -> Dict[Tuple[int, ...], List[Tuple[int, ...]]]:
+                   max_radius: int = 4) -> Dict[Tuple[int, ...], int]:
         atoms = self._atom_identifiers
         bonds = self._bonds
-        out = defaultdict(list)
+        out = defaultdict(int)
 
         for frag in self._chains(min_radius, max_radius):
             var = [atoms[frag[0]]]
@@ -210,9 +157,9 @@ class LinearFingerprint:
             var = tuple(var)
             rev_var = var[::-1]
             if var > rev_var:
-                out[var].append(frag)
+                out[var] += 1
             else:
-                out[rev_var].append(frag[::-1])
+                out[rev_var] += 1
         return dict(out)
 
     @property
