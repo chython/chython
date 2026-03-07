@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -20,6 +20,7 @@ from CachedMethods import cached_method
 from functools import reduce
 from itertools import chain
 from math import ceil
+from numpy import zeros, uint8, concatenate
 from operator import itemgetter, or_
 from typing import Dict, Iterator, Optional, Tuple, List, Sequence
 from zlib import compress, decompress
@@ -29,7 +30,6 @@ from ..algorithms.calculate2d import Calculate2DReaction
 from ..algorithms.depict import DepictReaction
 from ..algorithms.mapping import Mapping
 from ..algorithms.standardize import StandardizeReaction
-from numpy import zeros, uint8, concatenate
 
 
 class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, DepictReaction):
@@ -321,28 +321,27 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
     def __len__(self):
         return len(self.reactants) + len(self.products) + len(self.reagents)
 
-
-    def diff_fingerprint(self, min_radius: int = 1, max_radius: int = 4, length: int = 1024, number_active_bits: int = 2, max_count_num: int = 0, fp_type: str = 'concat', implicit_hydrogens: str = 'count') -> 'numpy.ndarray':
+    def diff_fingerprint(self, min_radius: int = 1, max_radius: int = 4, length: int = 1024,
+                         number_active_bits: int = 2, max_count: int = 0,
+                         fp_type: str = 'concat', implicit_hydrogens: str = 'count'):
         """
-        Calculate the difference fingerprint for a reaction: products minus reactants.
-        Reactions should be preferably canonicalized.
+        Calculate the difference fingerprint for a reaction.
 
-        :param reaction: ReactionContainer object
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         :param length: fingerprint length. Should be power of 2
         :param number_active_bits: number of active bits for each hashed tuple.
-        :max_count_num: maximum number of counts to consider for each fragment (int). If 0, all counts are considered.
-        :param fp_type: 'concat', 'binary','pair','count' - type of fingerprint to calculate.
+        :param max_count: maximum number of counts to consider for each fragment.
+          If 0, all counts are considered. If -1, counting is disabled.
+        :param fp_type: type of fingerprint to calculate.
             'binary' - disjoint feature bits between products and reactants. Will be same for a reverse reaction.
-            'pair' - tuple of two sets of bits: joint bits between difference fingerprints and reactants fingerprints; and between difference fingerprints and product fingerprints
             'concat' - same set of fingerprints concatenated (reactant bits first, then product bits)
-            'count' - counts of features in products minus counts in reactants.
-        :param implicit_hydrogens: 'count', 'any', 'ignore' - how to treat implicit hydrogens in atom identifiers
+        :param implicit_hydrogens: how to treat implicit hydrogens in atom identifiers
             'count' to include implicit hydrogens counts for non-carbon atoms in atom identifiers. Default value;
-            'any' to account for implicit hydrogens for non-carbon atoms in atom identifiers. Thus all non-zero counts will be treated equally;
+            'any' to account for implicit hydrogens for non-carbon atoms in atom identifiers.
+                Thus all non-zero counts will be treated equally;
             'ignore' to not include implicit hydrogens;
-        :return: array(n_features) of difference counts
+        :return: array(n_features)
         """
         if fp_type == 'concat':
             length = length // 2
@@ -350,65 +349,42 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         reactant_fp = zeros(length, dtype=uint8)
         product_fp = zeros(length, dtype=uint8)
 
-        if fp_type=='count':
-            for mol in self.reactants:
-                reactant_fp += ReactingMolecule(mol, implicit_hydrogens).morgan_count_fingerprint(min_radius, max_radius, length)
-            for mol in self.products:
-                product_fp += ReactingMolecule(mol, implicit_hydrogens).morgan_count_fingerprint(min_radius, max_radius, length)
-            r_fp = product_fp - reactant_fp
-            return r_fp
+        for mol in self.reactants:
+            fp = _Molecule(mol, implicit_hydrogens).morgan_fingerprint(min_radius, max_radius, length, max_count=max_count)
+            reactant_fp |= fp
+        for mol in self.products:
+            fp = _Molecule(mol, implicit_hydrogens).morgan_fingerprint(min_radius, max_radius, length, max_count=max_count)
+            product_fp |= fp
+
+        r_fp_reac = reactant_fp & ~product_fp
+        r_fp_prod = product_fp & ~reactant_fp
+        if fp_type == 'binary':
+            return r_fp_reac | r_fp_prod
+        elif fp_type == 'concat':
+            return concatenate((r_fp_reac, r_fp_prod))
         else:
-            for mol in self.reactants:
-                reactant_fp |= ReactingMolecule(mol, implicit_hydrogens).morgan_fingerprint(min_radius, max_radius, length, number_active_bits, max_count_num)
-                #print(mol._atom_identifiers)
-            for mol in self.products:
-                product_fp |= ReactingMolecule(mol, implicit_hydrogens).morgan_fingerprint(min_radius, max_radius, length, number_active_bits, max_count_num)
-            r_fp_reac = reactant_fp & ~product_fp
-            r_fp_prod = product_fp & ~reactant_fp
-            if fp_type=='binary':
-                return r_fp_reac | r_fp_prod
-            else:
-                if fp_type=='pair':
-                    return r_fp_reac, r_fp_prod
-                elif fp_type=='concat':
-                    return concatenate((r_fp_reac, r_fp_prod))
-                else:
-                    raise ValueError('Unknown fp_type')
+            raise ValueError('Unknown fp_type')
 
-class ReactingMolecule(MoleculeContainer):
-    """
-    A custom MoleculeContainer for molecules involved in reactions. Provides customized atom identifiers
 
-    :param molecule: MoleculeContainer object
-    :param implicit_hydrogens:
-        'count' to include implicit hydrogens counts for non-carbon atoms in atom identifiers. Default value;
-        'any' to account for implicit hydrogens for non-carbon atoms in atom identifiers. Thus all non-zero counts will be treated equally;
-        'ignore' to not include implicit hydrogens;
-
-    """
+class _Molecule(MoleculeContainer):
     __slots__ = ()
 
     def __init__(self, molecule: MoleculeContainer, implicit_hydrogens: str = 'count'):
         super().__init__()
-        self._atoms = molecule._atoms.copy()
-        self._bonds = molecule._bonds.copy()
-        self._meta = molecule._meta.copy() if molecule._meta is not None else None
-        self._name = molecule._name
-        self._changed = None
-        self._backup = None
+        self._atoms = molecule._atoms
+        self._bonds = molecule._bonds
         self._implicit_hydrogens = implicit_hydrogens
 
     @property
-    def _atom_identifiers(self: 'ReactingMolecule'):
-        # Custom logic for atom identifiers
+    def _atom_identifiers(self):
         if self._implicit_hydrogens == 'count':
             return {idx: hash((atom.isotope or 0, atom.atomic_number, atom.hybridization,
-                               atom.implicit_hydrogens if atom.atomic_number!=6 else 0,
+                               atom.atomic_number != 6 and atom.implicit_hydrogens or 0,
                                atom.charge, atom.is_radical))
                     for idx, atom in self._atoms.items()}
         elif self._implicit_hydrogens == 'any':
             return {idx: hash((atom.isotope or 0, atom.atomic_number, atom.hybridization,
-                               1 if (atom.implicit_hydrogens and atom.atomic_number!=6 and atom.implicit_hydrogens>0) else 0,
+                               bool(atom.atomic_number != 6 and atom.implicit_hydrogens),
                                atom.charge, atom.is_radical))
                     for idx, atom in self._atoms.items()}
         elif self._implicit_hydrogens == 'ignore':
@@ -419,4 +395,4 @@ class ReactingMolecule(MoleculeContainer):
             raise ValueError('Unknown implicit_hydrogens option')
 
 
-__all__ = ['ReactionContainer', 'ReactingMolecule']
+__all__ = ['ReactionContainer']
