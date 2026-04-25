@@ -63,10 +63,8 @@ pytest = '>=7.4.3'
 optional = true
 
 [tool.poetry.group.docs.dependencies]
-nbsphinx = '>=0.9.3'
-pandoc = '>=2.3'
-rdkit = '>=2023.9.1'
-ipython = '>=8.12.1'
+sphinx = '>=7.0'
+furo = '>=2024.1'
 
 [build-system]
 requires = ['poetry-core', 'setuptools', 'cython>=3.0.5']

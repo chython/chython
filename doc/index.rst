@@ -1,34 +1,45 @@
-.. include:: ../README.rst
+Chython
+=======
 
-Chython package API
-===================
+Library for processing molecules and reactions in Python.
 
-chython. **pickle_cache** = True - Store cached attributes in pickle. Effective for multiprocessing.
+.. code-block:: bash
 
-chython. **torch_device** = 'cpu' - Atom-to-Atom mapping model device in torch notation. Change before first `reset_mapping` call!
+   pip install chython
 
-.. automodule:: chython
-    :members: smiles, inchi, xyz, mdl_mol, smarts, depict_settings
-    :undoc-members:
-    :show-inheritance:
+**Key capabilities:**
 
-Subpackages
------------
+- Parse and write SMILES, InChI, IUPAC, MDL (SDF/RDF/MOL), MRV, XYZ, PDB
+- Substructure and MCS search with SMARTS support
+- Standardize, canonicalize, and enumerate tautomers
+- Morgan and linear fingerprints with Tanimoto similarity
+- Atom-to-atom mapping (neural + rule-based)
+- Template-based reaction application and deprotection
+- Stereo handling (tetrahedral, allene, cis-trans)
+- 2D/3D depiction with Jupyter support
+- RDKit interoperability
 
-.. toctree::
-    :maxdepth: 4
 
-    containers
-    files
-    reactor
-    utils
-    periodictable
-
-Notebooks
-=========
+Cookbook
+--------
 
 .. toctree::
-    :caption: Tutorial
-    :maxdepth: 1
+   :maxdepth: 2
 
-    tutorial/notebook.ipynb
+   io
+   molecule
+   standardize
+   substructure
+   reactions
+   depiction
+   config
+
+
+Links
+------
+
+- `Source code <https://github.com/chython/chython>`_
+- `PyPI <https://pypi.org/project/chython/>`_
+- `Issues <https://github.com/chython/chython/issues>`_
+
+Chython is a fork of `CGRtools <https://github.com/stsouko/CGRtools>`_.
