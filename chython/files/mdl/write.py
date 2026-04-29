@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -111,7 +111,28 @@ class EMOLWrite(IO):
             if m not in wedge[n]:
                 i += 1
                 file.write(f'M  V30 {i} {b.order} {mapping[n]} {mapping[m]}\n')
-        file.write('M  V30 END BOND\nM  V30 END CTAB\n')
+        file.write('M  V30 END BOND\n')
+
+        # enhanced stereo collection
+        rac = defaultdict(list)  # AND groups: positive extended_stereo
+        rel = defaultdict(list)  # OR groups: negative extended_stereo
+        for m, a in g.atoms():
+            if (es := a.extended_stereo) is not None:
+                if es > 0:
+                    rac[es].append(mapping[m])
+                elif es < 0:
+                    rel[-es].append(mapping[m])
+        if rac or rel:
+            file.write('M  V30 BEGIN COLLECTION\n')
+            for gid in sorted(rac):
+                al = rac[gid]
+                file.write(f'M  V30 MDLV30/STERAC{gid} ATOMS=({len(al)} {" ".join(str(x) for x in al)})\n')
+            for gid in sorted(rel):
+                al = rel[gid]
+                file.write(f'M  V30 MDLV30/STEREL{gid} ATOMS=({len(al)} {" ".join(str(x) for x in al)})\n')
+            file.write('M  V30 END COLLECTION\n')
+
+        file.write('M  V30 END CTAB\n')
 
 
 class MOLWrite(IO):

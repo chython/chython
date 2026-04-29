@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,7 +16,11 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from re import compile
 from ...exceptions import EmptyMolecule
+
+
+_stereo_collection = compile(r'MDLV30/STE(ABS|RAC|REL)(\d*)\s+ATOMS=\((.+)\)')
 
 
 def parse_mol_v3000(data, *, _header=True):
@@ -147,35 +151,59 @@ def parse_mol_v3000(data, *, _header=True):
             else:
                 log.append('Bond ignored. Star atom not allowed as endpoint')
 
-    drop = True
+    in_sgroup = False
+    in_collection = False
     for line in data[3 + atom_count + bonds_count:]:
         if line.startswith('END CTAB'):
             break
-        elif drop:
-            if line.startswith('BEGIN SGROUP'):
-                drop = False
-            continue
+        elif line.startswith('BEGIN SGROUP'):
+            in_sgroup = True
         elif line.startswith('END SGROUP'):
-            break
-
-        _, _type, i, *kvs = split(line)
-        if _type.startswith('DAT'):
-            a = f = d = None
-            for kv in kvs:
-                k, v = kv.split('=', 1)
-                if k == 'ATOMS':
-                    a = tuple(atom_map[x] for x in v[1:-1].split()[1:] if x not in star_points)
-                elif k == 'FIELDNAME':
-                    f = v.strip('"')
-                if k == 'FIELDDATA':
-                    d = v.strip('"')
-            if a and f and d:
-                if f == 'MRV_IMPLICIT_H':
-                    atoms[a[0]]['implicit_hydrogens'] = int(d[6:])
-                else:
-                    log.append(f'ignored SGROUP DAT {i}: {a}\t{f}\t{d}')
-        elif _type.startswith('SRU'):
-            raise ValueError('Polymers not supported')
+            in_sgroup = False
+        elif line.startswith('BEGIN COLLECTION'):
+            in_collection = True
+        elif line.startswith('END COLLECTION'):
+            in_collection = False
+        elif in_sgroup:
+            _, _type, i, *kvs = split(line)
+            if _type.startswith('DAT'):
+                a = f = d = None
+                for kv in kvs:
+                    k, v = kv.split('=', 1)
+                    if k == 'ATOMS':
+                        a = tuple(atom_map[x] for x in v[1:-1].split()[1:] if x not in star_points)
+                    elif k == 'FIELDNAME':
+                        f = v.strip('"')
+                    if k == 'FIELDDATA':
+                        d = v.strip('"')
+                if a and f and d:
+                    if f == 'MRV_IMPLICIT_H':
+                        atoms[a[0]]['implicit_hydrogens'] = int(d[6:])
+                    else:
+                        log.append(f'ignored SGROUP DAT {i}: {a}\t{f}\t{d}')
+            elif _type.startswith('SRU'):
+                raise ValueError('Polymers not supported')
+        elif in_collection:
+            m = _stereo_collection.search(line)
+            if m:
+                stype, gid, atom_list = m.group(1), m.group(2), m.group(3)
+                atom_indices = atom_list.split()
+                atom_indices = atom_indices[1:]  # skip count
+                if stype == 'RAC':  # AND group = positive
+                    sg = int(gid) if gid else 1
+                    for a in atom_indices:
+                        try:
+                            atoms[atom_map[a]]['extended_stereo'] = sg
+                        except KeyError:
+                            log.append(f'invalid atom in STERAC collection: {a}')
+                elif stype == 'REL':  # OR group = negative
+                    sg = -(int(gid) if gid else 1)
+                    for a in atom_indices:
+                        try:
+                            atoms[atom_map[a]]['extended_stereo'] = sg
+                        except KeyError:
+                            log.append(f'invalid atom in STEREL collection: {a}')
+                # STEABS is the default (no extended_stereo needed)
 
     return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'meta': meta, 'log': log}
 
