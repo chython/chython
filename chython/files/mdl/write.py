@@ -17,7 +17,6 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import defaultdict
-from io import StringIO, TextIOWrapper
 from pathlib import Path
 from ...containers import MoleculeContainer
 
@@ -39,11 +38,11 @@ class IO:
         elif isinstance(file, Path):
             self._file = file.open('a' if append else 'w')
             self._is_buffer = False
-        elif isinstance(file, (TextIOWrapper, StringIO)):
+        elif hasattr(file, 'write'):
             self._file = file
             self._is_buffer = True
         else:
-            raise TypeError('invalid file. TextIOWrapper, StringIO subclasses or path to file expected')
+            raise TypeError('invalid file. file-like object or path to file expected')
 
     def close(self, force=False):
         """

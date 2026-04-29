@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,7 +17,6 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import defaultdict
-from io import StringIO, BytesIO, TextIOWrapper, BufferedIOBase, BufferedReader
 from itertools import count, islice, chain
 from lxml.etree import iterparse, QName, tostring
 from pathlib import Path
@@ -97,11 +96,11 @@ class MRVRead:
         elif isinstance(file, Path):
             self.__file = file.open('rb')
             self.__is_buffer = False
-        elif isinstance(file, (BytesIO, BufferedReader, BufferedIOBase)):
+        elif hasattr(file, 'read'):
             self.__file = file
             self.__is_buffer = True
         else:
-            raise TypeError('invalid file. BytesIO, BufferedReader and BufferedIOBase subclasses expected')
+            raise TypeError('invalid file. file-like object or path to file expected')
         self.__ignore = ignore
         self.__remap = remap
         self.__calc_cis_trans = calc_cis_trans
@@ -171,8 +170,8 @@ class MRVRead:
             rxn = create_reaction(tmp, ignore_bad_isotopes=self.__ignore_bad_isotopes, _m_cls=self.molecule_cls,
                                   _r_cls=self.reaction_cls)
             if not self.__ignore_stereo:
-                for mol, tmp in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
-                    postprocess_molecule(mol, tmp, calc_cis_trans=self.__calc_cis_trans)
+                for mol, parsed in zip(rxn.molecules(), chain(tmp['reactants'], tmp['reagents'], tmp['products'])):
+                    postprocess_molecule(mol, parsed, calc_cis_trans=self.__calc_cis_trans)
             if meta:
                 rxn.meta.update(meta)
             return rxn
@@ -211,6 +210,7 @@ class MRVRead:
                         if 'chython_unparsed_metadata' not in meta:
                             meta['chython_unparsed_metadata'] = []
                         meta['chython_unparsed_metadata'].append(x)
+            return meta
         else:
             return {}
 
@@ -383,12 +383,11 @@ class MRVWrite:
         elif isinstance(file, Path):
             self.__file = file.open('w')
             self.__is_buffer = False
-        elif isinstance(file, (TextIOWrapper, StringIO)):
+        elif hasattr(file, 'write'):
             self.__file = file
             self.__is_buffer = True
         else:
-            raise TypeError('invalid file. '
-                            'TextIOWrapper, StringIO, BytesIO, BufferedReader and BufferedIOBase subclasses possible')
+            raise TypeError('invalid file. file-like object or path to file expected')
         self.__writable = True
         self.__finalized = False
         self.__mapping = mapping

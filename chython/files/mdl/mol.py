@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -26,10 +26,24 @@ _charge_map = {'  0': 0, '  1': 3, '  2': 2, '  3': 1, '  4': 0, '  5': -1, '  6
 def parse_mol_v2000(data):
     line = data[3]
 
-    atoms_count = int(line[0:3])
-    bonds_count = int(line[3:6])
+    try:
+        atoms_count = int(line[0:3])
+    except (ValueError, IndexError):
+        raise InvalidV2000(f'V2000 counts line: cannot parse atom count from {line!r:.80}')
+    try:
+        bonds_count = int(line[3:6])
+    except (ValueError, IndexError):
+        raise InvalidV2000(f'V2000 counts line: cannot parse bond count from {line!r:.80}')
+
     if not atoms_count:
         raise EmptyMolecule
+
+    available_lines = len(data) - 4
+    if available_lines < atoms_count:
+        raise InvalidV2000(f'V2000: expected {atoms_count} atom lines but only {available_lines} lines available')
+    if available_lines < atoms_count + bonds_count:
+        raise InvalidV2000(f'V2000: expected {bonds_count} bond lines but only {available_lines - atoms_count} '
+                           f'lines available after atom block')
 
     log = []
     title = data[0].strip() or None
@@ -38,35 +52,54 @@ def parse_mol_v2000(data):
     stereo = []
     dat = {}
 
-    for line in data[4: 4 + atoms_count]:
+    # parse atom block
+    _cm = _charge_map
+    for i, line in enumerate(data[4: 4 + atoms_count], 1):
         try:
-            charge = _charge_map[line[36:39]]
+            charge = _cm[line[36:39]]
         except KeyError:
-            raise InvalidCharge
+            raise InvalidCharge(f'V2000 atom line {i}: invalid charge field {line[36:39]!r} in: {line!r:.80}')
+
         element = line[31:34].strip()
         isotope = line[34:36]
-        delta_isotope = None
 
         if element in 'AL':
-            raise ValueError('queries not supported')
+            raise ValueError(f'V2000 atom line {i}: queries not supported')
         elif element == 'D':
             element = 'H'
             if isotope != ' 0':
-                raise ValueError('isotope on deuterium atom')
+                raise ValueError(f'V2000 atom line {i}: isotope on deuterium atom')
             isotope = 2
+            delta_isotope = None
         elif isotope != ' 0':
             delta_isotope = int(isotope)
             isotope = None
         else:
             isotope = None
+            delta_isotope = None
+
+        try:
+            x = float(line[0:10])
+            y = float(line[10:20])
+            z = float(line[20:30])
+        except ValueError:
+            raise InvalidV2000(f'V2000 atom line {i}: cannot parse coordinates from {line[0:30]!r}')
 
         mapping = line[60:63]
         atoms.append({'element': element, 'charge': charge, 'isotope': isotope,
-                      'parsed_mapping': int(mapping) if mapping else 0, 'x': float(line[0:10]), 'y': float(line[10:20]),
-                      'z': float(line[20:30]), 'delta_isotope': delta_isotope})
+                      'parsed_mapping': int(mapping) if mapping.strip() else 0,
+                      'x': x, 'y': y, 'z': z, 'delta_isotope': delta_isotope})
 
-    for line in data[4 + atoms_count: 4 + atoms_count + bonds_count]:
-        a1, a2 = int(line[0:3]) - 1, int(line[3:6]) - 1
+    # parse bond block
+    for i, line in enumerate(data[4 + atoms_count: 4 + atoms_count + bonds_count], 1):
+        try:
+            a1 = int(line[0:3]) - 1
+            a2 = int(line[3:6]) - 1
+        except ValueError:
+            raise InvalidV2000(f'V2000 bond line {i}: cannot parse atom indices from {line[0:6]!r}')
+        if a1 < 0 or a1 >= atoms_count or a2 < 0 or a2 >= atoms_count:
+            raise InvalidV2000(f'V2000 bond line {i}: atom index out of range '
+                               f'(a1={a1 + 1}, a2={a2 + 1}, atoms={atoms_count})')
         s = line[9:12]
         if s == '  1':
             stereo.append((a1, a2, 1))
@@ -75,11 +108,12 @@ def parse_mol_v2000(data):
         elif s != '  0':
             log.append(f'unsupported or invalid stereo: {line}')
         b = int(line[6:9])
-        if b == 9:  # added ad-hoc for bond type 9
+        if b == 9:
             b = 8
             log.append(f'coordinate bond replaced with special: {line}')
         bonds.append((a1, a2, b))
 
+    # parse properties block
     for line in data[4 + atoms_count + bonds_count:]:
         if line.startswith('M  END'):
             break
@@ -87,11 +121,19 @@ def parse_mol_v2000(data):
             raise ValueError('list of atoms not supported')
         elif line.startswith(('M  ISO', 'M  RAD', 'M  CHG')):
             _type = _ctf_data[line[3]]
-            for i in range(int(line[6:9])):
+            try:
+                count = int(line[6:9])
+            except ValueError:
+                raise InvalidV2000(f'V2000 properties: cannot parse entry count from {line!r:.80}')
+            for i in range(count):
                 i8 = i * 8
-                atom = int(line[10 + i8:13 + i8])
-                if not atom or atom > len(atoms):
-                    raise InvalidV2000('invalid atoms number')
+                try:
+                    atom = int(line[10 + i8:13 + i8])
+                except ValueError:
+                    raise InvalidV2000(f'V2000 properties: cannot parse atom number in {line!r:.80}')
+                if not atom or atom > atoms_count:
+                    raise InvalidV2000(f'V2000 properties: atom number {atom} out of range [1, {atoms_count}] '
+                                       f'in: {line!r:.80}')
                 atom = atoms[atom - 1]
                 atom[_type] = int(line[14 + i8:17 + i8])
 
@@ -122,7 +164,7 @@ def parse_mol_v2000(data):
             log.append(f'ignored line: {line}')
 
     for a in atoms:
-        if 'is_radical' in a:  # int to bool
+        if 'is_radical' in a:
             a['is_radical'] = True
     for x in dat.values():
         try:

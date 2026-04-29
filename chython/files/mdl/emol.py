@@ -21,6 +21,7 @@ from ...exceptions import EmptyMolecule
 
 
 _stereo_collection = compile(r'MDLV30/STE(ABS|RAC|REL)(\d*)\s+ATOMS=\((.+)\)')
+_v3000_token_re = compile(r'(?:[^\s"(]|"[^"]*"|\([^)]*\))+')
 
 
 def parse_mol_v3000(data, *, _header=True):
@@ -30,11 +31,17 @@ def parse_mol_v3000(data, *, _header=True):
     else:
         title = None
 
-    atom_count, bonds_count, *kvs = data[1][13:].split()
-    atom_count = int(atom_count)
+    try:
+        counts_tokens = data[1][13:].split()
+        atom_count = int(counts_tokens[0])
+    except (IndexError, ValueError):
+        raise ValueError(f'V3000: cannot parse counts line: {data[1]!r:.80}')
     if not atom_count:
         raise EmptyMolecule
-    bonds_count = int(bonds_count)
+    try:
+        bonds_count = int(counts_tokens[1])
+    except (IndexError, ValueError):
+        raise ValueError(f'V3000: cannot parse bond count from counts line: {data[1]!r:.80}')
 
     log = []
     atoms = []
@@ -42,66 +49,89 @@ def parse_mol_v3000(data, *, _header=True):
     stereo = []
     meta = {}
     atom_map = {}
-    star_points = []
+    star_points = set()
 
-    for kv in kvs:
+    for kv in counts_tokens[2:]:
         if '=' in kv:
             k, v = kv.split('=', 1)
             if k and v:
                 meta[k] = v
 
-    # concatenate line breaks
+    # concatenate line continuations using list+join
     tmp = []
-    keep = None
+    parts = []
     for line in data[3:]:
         if line.endswith('-\n'):
-            line = line[7:-2]  # skip `M  V30 ` and `-\n`
-            if keep:
-                keep += line
-            else:
-                keep = line.lstrip()
+            parts.append(line[7:-2])  # skip `M  V30 ` prefix and `-\n` suffix
         else:
-            line = line[7:]  # skip `M  V30 `
-            if keep:
-                tmp.append(keep + line.rstrip())
-                keep = None
+            content = line[7:].rstrip()
+            if parts:
+                parts.append(content)
+                tmp.append(''.join(parts))
+                parts = []
             else:
-                tmp.append(line.strip())
+                tmp.append(content.lstrip())
     data = tmp
+    if len(data) < atom_count:
+        raise ValueError(f'V3000: expected {atom_count} atom lines but only {len(data)} lines available')
 
-    for line in data[:atom_count]:
-        n, a, x, y, z, m, *kvs = split(line)
+    # parse atom block
+    _split = _v3000_token_re.findall
+    for i, line in enumerate(data[:atom_count], 1):
+        try:
+            tokens = _split(line)
+            n, a, x, y, z, m = tokens[0], tokens[1], tokens[2], tokens[3], tokens[4], tokens[5]
+            kvs = tokens[6:]
+        except (IndexError, ValueError):
+            raise ValueError(f'V3000 atom line {i}: cannot parse: {line!r:.80}')
+
         if a.startswith(('[', 'NOT')):
-            raise ValueError('list of atoms not supported')
+            raise ValueError(f'V3000 atom line {i}: list of atoms not supported')
         elif a == '*':
-            star_points.append(n)
+            star_points.add(n)
             continue
         elif a == 'R#':
-            raise ValueError('R-groups not supported')
+            raise ValueError(f'V3000 atom line {i}: R-groups not supported')
 
-        i = None
-        c = 0
-        r = False
+        isotope = None
+        charge = 0
+        is_radical = False
         for kv in kvs:
             k, v = kv.split('=', 1)
             if k == 'CHG':
-                c = int(v)
+                charge = int(v)
             elif k == 'MASS':
-                i = int(v)
+                isotope = int(v)
             elif k == 'RAD':
-                r = True
+                is_radical = True
         if a == 'D':
-            if i:
-                raise ValueError('isotope on deuterium atom')
+            if isotope:
+                raise ValueError(f'V3000 atom line {i}: isotope on deuterium atom')
             a = 'H'
-            i = 2
+            isotope = 2
+
+        try:
+            fx, fy, fz = float(x), float(y), float(z)
+        except ValueError:
+            raise ValueError(f'V3000 atom line {i}: cannot parse coordinates from {x!r}, {y!r}, {z!r}')
 
         atom_map[n] = len(atoms)
-        atoms.append({'element': a, 'isotope': i, 'charge': c, 'is_radical': r,
-                      'x': float(x), 'y': float(y), 'z': float(z), 'parsed_mapping': int(m)})
+        atoms.append({'element': a, 'isotope': isotope, 'charge': charge, 'is_radical': is_radical,
+                      'x': fx, 'y': fy, 'z': fz, 'parsed_mapping': int(m)})
 
-    for line in data[2 + atom_count: 2 + atom_count + bonds_count]:
-        _, t, a1, a2, *kvs = split(line)
+    # parse bond block
+    bond_start = 2 + atom_count
+    bond_end = bond_start + bonds_count
+    if bond_end > len(data):
+        raise ValueError(f'V3000: expected {bonds_count} bond lines but only {len(data) - bond_start} available')
+    for i, line in enumerate(data[bond_start:bond_end], 1):
+        try:
+            tokens = _split(line)
+            _, t, a1, a2 = tokens[0], tokens[1], tokens[2], tokens[3]
+            kvs = tokens[4:]
+        except (IndexError, ValueError):
+            raise ValueError(f'V3000 bond line {i}: cannot parse: {line!r:.80}')
+
         if a1 in star_points:
             if a2 in star_points:
                 log.append('invalid bond ignored: star-point to star-point')
@@ -109,24 +139,26 @@ def parse_mol_v3000(data, *, _header=True):
             try:
                 star = atom_map[a2]
             except KeyError:
-                raise ValueError('invalid atoms number')
+                raise ValueError(f'V3000 bond line {i}: invalid atom number {a2}')
             endpoints = None
         elif a2 in star_points:
             try:
                 star = atom_map[a1]
             except KeyError:
-                raise ValueError('invalid atoms number')
+                raise ValueError(f'V3000 bond line {i}: invalid atom number {a1}')
             endpoints = None
         else:
             star = None
             try:
-                t = int(t)
-                if t in (9, 10):  # added ad-hoc for bond type 9
-                    t = 8
+                bt = int(t)
+                if bt in (9, 10):
+                    bt = 8
                     log.append('coordinate bond replaced to special')
-                bonds.append((atom_map[a1], atom_map[a2], t))
+                bonds.append((atom_map[a1], atom_map[a2], bt))
             except KeyError:
-                raise ValueError('invalid atoms numbers')
+                raise ValueError(f'V3000 bond line {i}: invalid atom numbers {a1}, {a2}')
+            except ValueError:
+                raise ValueError(f'V3000 bond line {i}: invalid bond type {t!r}')
 
         for kv in kvs:
             k, v = kv.split('=')
@@ -140,20 +172,22 @@ def parse_mol_v3000(data, *, _header=True):
             elif k == 'ENDPTS':
                 endpoints = v[1:-1].split()
                 if len(endpoints) != int(endpoints[0]) + 1:
-                    raise ValueError('invalid ENDPTS block')
+                    raise ValueError(f'V3000 bond line {i}: invalid ENDPTS block')
         if star is not None:
             if endpoints:  # noqa
-                for m in endpoints[1:]:  # noqa
+                for ep in endpoints[1:]:  # noqa
                     try:
-                        bonds.append((star, atom_map[m], 8))
+                        bonds.append((star, atom_map[ep], 8))
                     except KeyError:
-                        raise ValueError('invalid atoms numbers in ENDPTS block')
+                        raise ValueError(f'V3000 bond line {i}: invalid atom number {ep} in ENDPTS block')
             else:
                 log.append('Bond ignored. Star atom not allowed as endpoint')
 
+    # parse remaining blocks (SGROUP, COLLECTION, etc.)
     in_sgroup = False
     in_collection = False
-    for line in data[3 + atom_count + bonds_count:]:
+    remaining_start = 3 + atom_count + bonds_count
+    for line in data[remaining_start:]:
         if line.startswith('END CTAB'):
             break
         elif line.startswith('BEGIN SGROUP'):
@@ -165,7 +199,13 @@ def parse_mol_v3000(data, *, _header=True):
         elif line.startswith('END COLLECTION'):
             in_collection = False
         elif in_sgroup:
-            _, _type, i, *kvs = split(line)
+            tokens = _split(line)
+            try:
+                _, _type, idx = tokens[0], tokens[1], tokens[2]
+                kvs = tokens[3:]
+            except IndexError:
+                log.append(f'V3000 SGROUP: cannot parse line: {line!r:.80}')
+                continue
             if _type.startswith('DAT'):
                 a = f = d = None
                 for kv in kvs:
@@ -180,7 +220,7 @@ def parse_mol_v3000(data, *, _header=True):
                     if f == 'MRV_IMPLICIT_H':
                         atoms[a[0]]['implicit_hydrogens'] = int(d[6:])
                     else:
-                        log.append(f'ignored SGROUP DAT {i}: {a}\t{f}\t{d}')
+                        log.append(f'ignored SGROUP DAT {idx}: {a}\t{f}\t{d}')
             elif _type.startswith('SRU'):
                 raise ValueError('Polymers not supported')
         elif in_collection:
@@ -206,32 +246,6 @@ def parse_mol_v3000(data, *, _header=True):
                 # STEABS is the default (no extended_stereo needed)
 
     return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'meta': meta, 'log': log}
-
-
-def split(line):  # todo optimize
-    collect = []
-    tmp = []
-    until = None
-    for s in line:
-        if until:
-            tmp.append(s)
-            if s == until:
-                until = None
-        elif s == '(':
-            tmp.append('(')
-            until = ')'
-        elif s == '"':
-            tmp.append(s)
-            until = '"'
-        elif s == ' ':
-            if tmp:
-                collect.append(''.join(tmp))
-                tmp = []
-        else:
-            tmp.append(s)
-    if tmp:
-        collect.append(''.join(tmp))
-    return collect
 
 
 __all__ = ['parse_mol_v3000']

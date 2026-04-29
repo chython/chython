@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,8 +16,6 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from fileinput import FileInput
-from io import StringIO, TextIOWrapper
 from itertools import islice
 from pathlib import Path
 from typing import Optional, Sequence, Iterator, List
@@ -64,11 +62,11 @@ class PDBRead:
         elif isinstance(file, Path):
             self.__file = file.open()
             self.__is_buffer = False
-        elif isinstance(file, (TextIOWrapper, StringIO, FileInput)):
+        elif hasattr(file, '__iter__') and hasattr(file, 'read'):
             self.__file = file
             self.__is_buffer = True
         else:
-            raise TypeError('invalid file. TextIOWrapper, StringIO subclasses expected')
+            raise TypeError('invalid file. file-like object or path to file expected')
 
         self.__radius_multiplier = radius_multiplier
         self.__ignore = ignore
