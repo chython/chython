@@ -1,7 +1,7 @@
 Reactions & Templates
 =====================
 
-Parsing, CGR, atom-atom mapping, reaction templates, and deprotection.
+Parsing, CGR, atom-atom mapping, reaction templates, functional groups, and deprotection.
 
 
 Parsing Reactions
@@ -186,20 +186,41 @@ Transformer applies a pattern replacement to a single molecule:
         print(str(result))
 
 
-Deprotection
-------------
+Functional & Protective Groups
+-------------------------------
 
-Built-in templates for ~50+ protective group removals:
+Detect functional groups and their counts:
 
 .. code-block:: python
 
-    from chython.reactor.deprotection import apply_all, hydroxyl_benzyl, amine_boc
+    mol = smiles('Clc1ccc(Br)cc1O')
+    mol.canonicalize()
 
-    mol = smiles('...')  # protected molecule
+    mol.functional_groups
+    # {'aryl_chloride': 1, 'aryl_bromide': 1, 'phenol': 1}
 
-    # Remove specific protection group
-    for result in hydroxyl_benzyl(mol):
-        print(str(result))
+Detect protective groups:
 
-    # Remove all known protection groups iteratively
-    result = apply_all(mol)
+.. code-block:: python
+
+    mol = smiles('CC(NC(=O)OC(C)(C)C)CNC(=O)OC(C)(C)C')
+    mol.canonicalize()
+
+    mol.protective_groups
+    # {'amine_boc': 2}
+
+Remove protective groups (in-place):
+
+.. code-block:: python
+
+    mol = smiles('c1ccccc1NC(=O)OC(C)(C)C')
+    mol.canonicalize()
+
+    # Remove specific protective group
+    mol.remove_protection('amine_boc')  # returns True if changed
+    str(mol)  # 'c1ccccc1N'
+
+    # Remove all known protective groups
+    mol2 = smiles('CC(NC(=O)OC(C)(C)C)COC(=O)OCC=C')
+    mol2.canonicalize()
+    mol2.remove_protection()  # removes all found PGs

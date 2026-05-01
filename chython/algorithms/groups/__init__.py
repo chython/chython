@@ -17,6 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from functools import cached_property
+from ._functional import rules as functional_rules
 from ._protective import rules as protective_rules
 
 
@@ -24,18 +25,33 @@ class FunctionalGroups:
     __slots__ = ()
 
     @cached_property
-    def protective_groups(self) -> list[str]:
+    def functional_groups(self) -> dict[str, int]:
         """
-        List of protective group found in the molecule.
+        Dict of functional group names to their count in the molecule.
         """
+        found = {}
+        for name, q in functional_rules.items():
+            c = sum(1 for _ in q.get_mapping(self))
+            if c:
+                found[name] = c
+        return found
 
-        return sorted({pg for pg, (q, *_) in protective_rules.items() if q < self})
+    @cached_property
+    def protective_groups(self) -> dict[str, int]:
+        """
+        Dict of protective group names to their count in the molecule.
+        """
+        found = {}
+        for name, (q, *_) in protective_rules.items():
+            c = sum(1 for _ in q.get_mapping(self))
+            if c:
+                found[name] = c
+        return found
 
     def remove_protection(self, name=None) -> bool:
         """
         Remove protective groups from the given molecule if applicable.
         """
-        seen = set()
         to_delete = set()
         to_add = []
         if name is None:
@@ -47,12 +63,10 @@ class FunctionalGroups:
 
         for q, keep, add, *_ in rules:
             for mp in q.get_mapping(self, automorphism_filter=False):
-                if not seen.isdisjoint(mp.values()):
+                delete = {m for n, m in mp.items() if n not in keep}
+                if not to_delete.isdisjoint(delete):
                     continue
-                seen.update(mp.values())
-                for n, m in mp.items():
-                    if n not in keep:
-                        to_delete.add(m)
+                to_delete.update(delete)
                 for n, a, b in add:
                     to_add.append((mp[n], a, b))
 

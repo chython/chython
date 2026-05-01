@@ -14,7 +14,8 @@ Library for processing molecules and reactions in Python.
 - Standardize, canonicalize, and enumerate tautomers
 - Morgan and linear fingerprints with Tanimoto similarity
 - Atom-to-atom mapping (neural + rule-based)
-- Template-based reaction application and deprotection
+- Template-based reaction application
+- Functional and protective group detection and deprotection
 - Stereo handling (tetrahedral, allene, cis-trans)
 - 2D/3D depiction with Jupyter support
 - RDKit interoperability
