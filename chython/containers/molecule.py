@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -32,6 +32,7 @@ from ..algorithms.aromatics import Aromatize
 from ..algorithms.calculate2d import Calculate2DMolecule
 from ..algorithms.conformers import Conformers
 from ..algorithms.depict import DepictMolecule
+from ..algorithms.groups import FunctionalGroups
 from ..algorithms.isomorphism import MoleculeIsomorphism
 from ..algorithms.fingerprints import Fingerprints
 from ..algorithms.mcs import MCS
@@ -66,7 +67,7 @@ S = 16
 
 class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, MoleculeIsomorphism,
                         Aromatize, StandardizeMolecule, MoleculeSmiles, DepictMolecule, Calculate2DMolecule,
-                        Conformers, Fingerprints, Tautomers, RDkit, Chimera, MCS, X3domMolecule):
+                        Conformers, Fingerprints, Tautomers, RDkit, Chimera, MCS, X3domMolecule, FunctionalGroups):
     __slots__ = ('_meta', '_name', '_conformers', '_changed', '_backup')
 
     def __init__(self):
