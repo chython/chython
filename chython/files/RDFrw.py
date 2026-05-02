@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -196,7 +196,12 @@ class RDFRead(MDLRead):
         return data[self.__m_start:]
 
 
-class _RDFWrite:
+class RDFWrite(MOLWrite):
+    """
+    MDL RDF files writer. works similar to opened for writing file object. support `with` context manager.
+    on initialization accept opened for writing in text mode file, string path to file,
+    pathlib.Path object or another buffered writer object
+    """
     def __init__(self, file, *, append: bool = False, mapping: bool = True):
         """
         :param append: append to existing file (True) or rewrite it (False). For buffered writer object append = False
@@ -208,20 +213,10 @@ class _RDFWrite:
             self.write = self.__write
 
     def __write(self, data):
-        """
-        write single molecule or reaction into file
-        """
         del self.write
         self._file.write(strftime('$RDFILE 1\n$DATM    %m/%d/%y %H:%M\n'))
         self.write(data)
 
-
-class RDFWrite(_RDFWrite, MOLWrite):
-    """
-    MDL RDF files writer. works similar to opened for writing file object. support `with` context manager.
-    on initialization accept opened for writing in text mode file, string path to file,
-    pathlib.Path object or another buffered writer object
-    """
     def write(self, data: Union[ReactionContainer, MoleculeContainer]):
         file = self._file
         if isinstance(data, ReactionContainer):
@@ -240,12 +235,28 @@ class RDFWrite(_RDFWrite, MOLWrite):
             file.write(f'$DTYPE {k}\n$DATUM {v}\n')
 
 
-class ERDFWrite(_RDFWrite, EMOLWrite):
+class ERDFWrite(EMOLWrite):
     """
     MDL V3000 RDF files writer. works similar to opened for writing file object. support `with` context manager.
     on initialization accept opened for writing in text mode file, string path to file,
     pathlib.Path object or another buffered writer object
     """
+    def __init__(self, file, *, append: bool = False, mapping: bool = True, absolute: bool = False):
+        """
+        :param append: append to existing file (True) or rewrite it (False). For buffered writer object append = False
+            will write RDF header and append = True will omit the header.
+        :param mapping: write atom mapping.
+        :param absolute: explicitly write MDLV30/STEABS collection for stereocenters without extended stereo groups.
+        """
+        super().__init__(file, append=append, mapping=mapping, absolute=absolute)
+        if not append or not (self._is_buffer or self._file.tell() != 0):
+            self.write = self.__write
+
+    def __write(self, data):
+        del self.write
+        self._file.write(strftime('$RDFILE 1\n$DATM    %m/%d/%y %H:%M\n'))
+        self.write(data)
+
     def write(self, data: Union[ReactionContainer, MoleculeContainer]):
         file = self._file
         if isinstance(data, ReactionContainer):

@@ -67,6 +67,17 @@ class IO:
 
 
 class EMOLWrite(IO):
+    def __init__(self, file, *, mapping: bool = True, append: bool = False, absolute: bool = False):
+        """
+        :param mapping: write atom mapping.
+        :param append: open file path in append mode.
+        :param absolute: explicitly write MDLV30/STEABS collection for stereocenters without extended stereo groups.
+            By default chython treats any set chirality flag as absolute if not in an AND/OR group,
+            but some tools require the ABS collection to be explicitly present in the file.
+        """
+        self._absolute = absolute
+        super().__init__(file, mapping=mapping, append=append)
+
     def _write_molecule(self, g, write3d=None):
         if not isinstance(g, MoleculeContainer):
             raise TypeError('MoleculeContainer expected')
@@ -115,14 +126,19 @@ class EMOLWrite(IO):
         # enhanced stereo collection
         rac = defaultdict(list)  # AND groups: positive extended_stereo
         rel = defaultdict(list)  # OR groups: negative extended_stereo
+        ast = []  # absolute stereo
         for m, a in g.atoms():
             if (es := a.extended_stereo) is not None:
                 if es > 0:
                     rac[es].append(mapping[m])
                 elif es < 0:
                     rel[-es].append(mapping[m])
-        if rac or rel:
+            elif a.stereo is not None:
+                ast.append(mapping[m])
+        if rac or rel or (self._absolute and ast):
             file.write('M  V30 BEGIN COLLECTION\n')
+            if self._absolute and ast:
+                file.write(f'M  V30 MDLV30/STEABS ATOMS=({len(ast)} {" ".join(str(x) for x in ast)})\n')
             for gid in sorted(rac):
                 al = rac[gid]
                 file.write(f'M  V30 MDLV30/STERAC{gid} ATOMS=({len(al)} {" ".join(str(x) for x in al)})\n')
