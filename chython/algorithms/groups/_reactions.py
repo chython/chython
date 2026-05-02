@@ -222,7 +222,19 @@ def _rules():
                                     (amine, {1: 3, 2: 4, 3: 5})],
                                    '[A:1](=[A:2])-[A:3](-[A:4])-[A:5]'))
 
-    # grignard: RX + RCHO/R2CO -> alcohol
+    # grignard: RMgX + RCHO/R2CO -> alcohol
+    for grignard in ('alkyl_grignard', 'aryl_grignard'):
+        for carbonyl in ('aldehyde', 'ketone'):
+            rules.append(_make_reactor('grignard',
+                                       [(grignard, None),
+                                        (carbonyl, {1: 3, 2: 4})],
+                                       '[A:1]-[A:3]-[A:4]'))
+    for carbonyl in ('aldehyde', 'ketone'):
+        rules.append(_make_reactor('grignard',
+                                   [('alkenyl_grignard', None),
+                                    (carbonyl, {1: 3, 2: 4})],
+                                   '[A:1]=[A:2]-[A:3]-[A:4]'))
+    # grignard from halide surrogates
     for alkyl_halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
         for carbonyl in ('aldehyde', 'ketone'):
             rules.append(_make_reactor('grignard',
@@ -328,6 +340,104 @@ def _rules():
                                [('azide', None),
                                 ('nitrile', {1: 4, 2: 5})],
                                '[A:1]:1:[A:2]:[A:3]:[A:4]:[A:5]:1'))
+
+    # wittig: phosphonium_ylide + aldehyde/ketone -> alkene
+    for carbonyl in ('aldehyde', 'ketone'):
+        rules.append(_make_reactor('wittig',
+                                   [('phosphonium_ylide', None),
+                                    (carbonyl, {1: 2, 2: 3})],
+                                   '[A:1]=[A:2]'))
+
+    # hwe: phosphonate + aldehyde/ketone -> alkene (E-selective)
+    for carbonyl in ('aldehyde', 'ketone'):
+        rules.append(_make_reactor('hwe',
+                                   [('phosphonate', None),
+                                    (carbonyl, {1: 2, 2: 3})],
+                                   '[A:1]=[A:2]'))
+
+    # weinreb: weinreb_amide + grignard -> ketone
+    for grignard in ('alkyl_grignard', 'aryl_grignard'):
+        rules.append(_make_reactor('weinreb',
+                                   [('weinreb_amide', None),
+                                    (grignard, {100: 200, 101: 201, 1: 3})],
+                                   '[A:2]=[A:1]-[A:3]'))
+    # weinreb from ester surrogate: ester + grignard -> ketone
+    for grignard in ('alkyl_grignard', 'aryl_grignard'):
+        rules.append(_make_reactor('weinreb',
+                                   [('ester', None),
+                                    (grignard, {100: 200, 101: 201, 1: 3})],
+                                   '[A:2]=[A:1]-[A:3]'))
+    # weinreb from acyl_chloride surrogate: acyl_chloride + grignard -> ketone
+    for grignard in ('alkyl_grignard', 'aryl_grignard'):
+        rules.append(_make_reactor('weinreb',
+                                   [('acyl_chloride', None),
+                                    (grignard, {100: 200, 101: 201, 1: 3})],
+                                   '[A:2]=[A:1]-[A:3]'))
+
+    # friedel-crafts acylation: acyl_chloride + arene -> Ar-COR
+    rules.append(_make_reactor('friedel_crafts',
+                               [('acyl_chloride', None),
+                                ('arene_ch', {1: 3})],
+                               '[A:1](=[A:2])-[A:3]'))
+
+    # heck: ArX + terminal_alkene -> Ar-CH=CH-R
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+        rules.append(_make_reactor('heck',
+                                   [(halide, None),
+                                    ('terminal_alkene', {1: 2, 2: 3})],
+                                   '[A:1]-[A:2]=[A:3]'))
+
+    # cross metathesis: terminal_alkene + terminal_alkene -> internal alkene
+    rules.append(_make_reactor('cross_metathesis',
+                               [('terminal_alkene', None),
+                                ('terminal_alkene', {1: 3, 2: 4})],
+                               '[A:2]=[A:4]'))
+
+    # kumada: ArX + RMgX -> Ar-R
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+        for grignard in ('alkyl_grignard', 'aryl_grignard'):
+            rules.append(_make_reactor('kumada',
+                                       [(halide, None),
+                                        (grignard, {100: 200, 101: 201, 1: 2})],
+                                       '[A:1]-[A:2]'))
+        rules.append(_make_reactor('kumada',
+                                   [(halide, None),
+                                    ('alkenyl_grignard', {100: 200, 101: 201, 1: 2, 2: 3})],
+                                   '[A:1]-[A:2]=[A:3]'))
+
+    # negishi: ArX + RZnX -> Ar-R
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+        for zinc in ('alkyl_zinc', 'aryl_zinc'):
+            rules.append(_make_reactor('negishi',
+                                       [(halide, None),
+                                        (zinc, {100: 200, 101: 201, 1: 2})],
+                                       '[A:1]-[A:2]'))
+        rules.append(_make_reactor('negishi',
+                                   [(halide, None),
+                                    ('alkenyl_zinc', {100: 200, 101: 201, 1: 2, 2: 3})],
+                                   '[A:1]-[A:2]=[A:3]'))
+
+    # stille: ArX + R-SnR3 -> Ar-R
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+        rules.append(_make_reactor('stille',
+                                   [(halide, None),
+                                    ('aryl_stannane', {100: 200, 1: 2})],
+                                   '[A:1]-[A:2]'))
+        rules.append(_make_reactor('stille',
+                                   [(halide, None),
+                                    ('alkenyl_stannane', {100: 200, 1: 2, 2: 3})],
+                                   '[A:1]-[A:2]=[A:3]'))
+
+    # hiyama: ArX + R-SiR3 -> Ar-R
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+        rules.append(_make_reactor('hiyama',
+                                   [(halide, None),
+                                    ('aryl_silane', {100: 200, 1: 2})],
+                                   '[A:1]-[A:2]'))
+        rules.append(_make_reactor('hiyama',
+                                   [(halide, None),
+                                    ('alkenyl_silane', {100: 200, 1: 2, 2: 3})],
+                                   '[A:1]-[A:2]=[A:3]'))
 
     return rules
 

@@ -122,6 +122,34 @@ def _rules():
     rules['guanidine'] = smarts('[N;z1;x0:1][C;!R:2]([N;z1;x0:3])=[N;x0:4]')
     rules['nitro'] = smarts('[N;D3;x2;+:1]([O;-:2])=[O:3]')
 
+    # grignard reagents (RMgX)
+    rules['alkyl_grignard'] = smarts('[Mg;D2:100](-[F,Cl,Br,I])-[C;z1:1]')
+    rules['aryl_grignard'] = smarts('[Mg;D2:100](-[F,Cl,Br,I])-[C;a:1]')
+    rules['alkenyl_grignard'] = smarts('[Mg;D2:100](-[F,Cl,Br,I])-[C;z2:1]=[C:2]')
+
+    # organozinc reagents (RZnX)
+    rules['alkyl_zinc'] = smarts('[Zn;D2:100](-[F,Cl,Br,I])-[C;z1:1]')
+    rules['aryl_zinc'] = smarts('[Zn;D2:100](-[F,Cl,Br,I])-[C;a:1]')
+    rules['alkenyl_zinc'] = smarts('[Zn;D2:100](-[F,Cl,Br,I])-[C;z2:1]=[C:2]')
+
+    # stannanes (R-SnR3)
+    rules['aryl_stannane'] = smarts('[Sn;D4;z1:100]-;!@[C;a:1]')
+    rules['alkenyl_stannane'] = smarts('[Sn;D4;z1:100]-;!@[C;z2:1]=[C:2]')
+
+    # silanes (R-SiR3, for Hiyama coupling)
+    rules['aryl_silane'] = smarts('[Si;D4:100]-;!@[C;a:1]')
+    rules['alkenyl_silane'] = smarts('[Si;D4:100]-;!@[C;z2:1]=[C:2]')
+
+    # phosphorus ylides and phosphonates
+    rules['phosphonium_ylide'] = smarts('[P;D4;z2;x0:100]=[C:1]')
+    rules['phosphonate'] = smarts('[P;D4;x3:100](=O)([O;D2;x1])([O;D2;x1])-[C:1]')
+
+    # weinreb amide
+    rules['weinreb_amide'] = smarts('[O:2]=[C;D3;x2:1]-[N;D3;x1:100][O;D2;x1]')
+
+    # arene C-H (for electrophilic aromatic substitution)
+    rules['arene_ch'] = smarts('[C;a;D2:1]')
+
     # sulfur
     rules['thiol'] = smarts('[S;x0;D1;z1:1][C;z1:2]')
 
