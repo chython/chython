@@ -25,6 +25,8 @@ def _rules():
     rules = {}
 
     # carbohydrides
+    rules['terminal_alkene'] = smarts('[C;z2;x0;D1:1]=[C;z2;x0;D2,D3:2]')
+    rules['alkene'] = smarts('[C;z2;x0;D2,D3:1]=[C;z2;x0;D2,D3:2]')
     rules['terminal_alkyne'] = smarts('[C;z3;x0;D1:1]#[C;x0;D2:2]')
     rules['alkyne'] = smarts('[C;z3;x0;D2:1]#[C;x0;D2:2]')
 

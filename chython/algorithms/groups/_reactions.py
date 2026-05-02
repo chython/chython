@@ -55,9 +55,24 @@ def _rules():
                                         (amine, {1: 3, 2: 4, 3: 5})],
                                        '[A:1](=[A:2])-[A:3](-[A:4])-[A:5]'))
 
-    # suzuki: ArX + ArB(OH)2 -> Ar-Ar
+    # suzuki
+    # aryl: ArX + ArB(OH)2 -> Ar-Ar
+    # alkenyl: ArX + alkenyl_boronic -> Ar-CH=CH-R
+    # alkyl: ArX + alkyl_boronic -> Ar-R
     for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
         for boron in ('aryl_boronic_acid', 'aryl_boronic_ester', 'aryl_molander_salt'):
+            rules.append(_make_reactor('suzuki',
+                                       [(halide, {100: 200}),
+                                        (boron, {1: 2})],
+                                       '[A:1]-[A:2]'))
+
+        for boron in ('alkenyl_boronic_acid', 'alkenyl_boronic_ester', 'alkenyl_molander_salt'):
+            rules.append(_make_reactor('suzuki',
+                                       [(halide, {100: 200}),
+                                        (boron, {1: 2, 2: 3})],
+                                       '[A:1]-[A:2]=[A:3]'))
+
+        for boron in ('alkyl_boronic_acid', 'alkyl_boronic_ester', 'alkyl_molander_salt'):
             rules.append(_make_reactor('suzuki',
                                        [(halide, {100: 200}),
                                         (boron, {1: 2})],
@@ -239,6 +254,80 @@ def _rules():
                                [('azide', None),
                                 ('terminal_alkyne', {1: 4, 2: 5})],
                                '[A:1]:1:[A:2]:[A:3]:[A:5]:[A:4]:1'))
+
+    # SNAr: ArF + amine -> Ar-NR2 (nucleophilic aromatic substitution)
+    for amine in ('primary_amine', 'primary_aniline'):
+        rules.append(_make_reactor('snar',
+                                   [('aryl_fluoride', None),
+                                    (amine, {1: 3, 2: 4})],
+                                   '[A:1]-[A:3]-[A:4]'))
+    for amine in ('secondary_amine', 'secondary_aniline'):
+        rules.append(_make_reactor('snar',
+                                   [('aryl_fluoride', None),
+                                    (amine, {1: 3, 2: 4, 3: 5})],
+                                   '[A:1]-[A:3](-[A:4])-[A:5]'))
+
+    # SNAr: ArF + phenol -> Ar-O-Ar
+    rules.append(_make_reactor('snar',
+                               [('aryl_fluoride', None),
+                                ('phenol', {1: 3, 2: 4})],
+                               '[A:1]-[A:3]-[A:4]'))
+
+    # SNAr: ArF + thiol -> Ar-S-R
+    rules.append(_make_reactor('snar',
+                               [('aryl_fluoride', None),
+                                ('thiol', {1: 3, 2: 4})],
+                               '[A:1]-[A:3]-[A:4]'))
+
+    # Williamson ether:
+    # alkyl_halide + phenol -> R-O-Ar
+    # alkyl_halide + primary_alcohol -> R-O-R'
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
+        rules.append(_make_reactor('williamson',
+                                   [(halide, None),
+                                    ('phenol', {1: 3, 2: 4})],
+                                   '[A:1]-[A:3]-[A:4]'))
+
+        for alcohol in ('primary_alcohol', 'secondary_alcohol'):
+            rules.append(_make_reactor('williamson',
+                                       [(halide, None),
+                                        (alcohol, {1: 3, 2: 4})],
+                                       '[A:1]-[A:3]-[A:4]'))
+
+    # acylation (ester): acyl_chloride + alcohol -> ester
+    for alcohol in ('primary_alcohol', 'secondary_alcohol'):
+        rules.append(_make_reactor('acylation',
+                                   [('acyl_chloride', None),
+                                    (alcohol, {1: 3, 2: 4})],
+                                   '[A:1](=[A:2])-[A:3]-[A:4]'))
+    rules.append(_make_reactor('acylation',
+                               [('acyl_chloride', None),
+                                ('phenol', {1: 3, 2: 4})],
+                               '[A:1](=[A:2])-[A:3]-[A:4]'))
+
+    # thioether: thiol + alkyl_halide -> R-S-R'
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
+        rules.append(_make_reactor('thioether',
+                                   [('thiol', None),
+                                    (halide, {100: 200, 1: 3})],
+                                   '[A:1](-[A:2])-[A:3]'))
+
+    # carbamate: isocyanate + alcohol -> R-NH-C(=O)-OR'
+    for alcohol in ('primary_alcohol', 'secondary_alcohol'):
+        rules.append(_make_reactor('carbamate',
+                                   [('isocyanate', None),
+                                    (alcohol, {1: 4, 2: 5})],
+                                   '[A:1]-[A:2](=[A:3])-[A:4]-[A:5]'))
+    rules.append(_make_reactor('carbamate',
+                               [('isocyanate', None),
+                                ('phenol', {1: 4, 2: 5})],
+                               '[A:1]-[A:2](=[A:3])-[A:4]-[A:5]'))
+
+    # tetrazole: azide + nitrile -> 2,5-disubstituted tetrazole (ring formation)
+    rules.append(_make_reactor('tetrazole',
+                               [('azide', None),
+                                ('nitrile', {1: 4, 2: 5})],
+                               '[A:1]:1:[A:2]:[A:3]:[A:4]:[A:5]:1'))
 
     return rules
 

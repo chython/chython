@@ -19,8 +19,10 @@
 from functools import cached_property
 from itertools import permutations
 from ._functional import rules as functional_rules
+from ._oxidations import rules as oxidation_rules
 from ._protective import rules as protective_rules
 from ._reactions import rules as reaction_rules
+from ._reductions import rules as reduction_rules
 
 
 class FunctionalGroups:
@@ -84,20 +86,16 @@ class FunctionalGroups:
             return True
         return False
 
-    def __matmul__(self, other):
+    def react(self, *others):
         """
         Enumerate possible reaction products between molecules.
 
-        mol1 @ mol2 -> [(reaction_name, ReactionContainer), ...]
-        mol1 @ [mol2, mol3] -> [(reaction_name, ReactionContainer), ...]  # multi-component
+        mol1.react(mol2) -> [(reaction_name, ReactionContainer), ...]
+        mol1.react(mol2, mol3) -> [(reaction_name, ReactionContainer), ...]  # multi-component
 
         Reactor internally handles permutations of input molecules.
         """
-        mols = [self]
-        if isinstance(other, (list, tuple)):
-            mols.extend(other)
-        else:
-            mols.append(other)
+        mols = [self, *others]
 
         for name, fg_names, reactor in reaction_rules:
             if len(fg_names) != len(mols):
@@ -107,6 +105,51 @@ class FunctionalGroups:
                     for rxn in reactor(*perm):
                         yield name, rxn
                     break
+
+    def oxidize(self):
+        """
+        Enumerate possible single-step oxidation products.
+
+        mol.oxidize() -> [(reaction_name, ReactionContainer), ...]
+        """
+        fgs = self.functional_groups
+        for name, fg_name, reactor in oxidation_rules:
+            if fg_name in fgs:
+                for rxn in reactor(self):
+                    yield name, rxn
+
+    def reduce(self):
+        """
+        Enumerate possible single-step reduction products.
+
+        mol.reduce() -> [(reaction_name, ReactionContainer), ...]
+        """
+        fgs = self.functional_groups
+        for name, fg_name, reactor in reduction_rules:
+            if fg_name in fgs:
+                for rxn in reactor(self):
+                    yield name, rxn
+
+    def __invert__(self):
+        """
+        Enumerate all possible single-step molecular transformations
+        (oxidations, reductions, and functional group interconversions).
+
+        ~mol -> [(reaction_name, ReactionContainer), ...]
+        """
+        yield from self.oxidize()
+        yield from self.reduce()
+
+    def __matmul__(self, other):
+        """
+        Enumerate possible reaction products between molecules.
+
+        mol1 @ mol2 -> [(reaction_name, ReactionContainer), ...]
+        mol1 @ [mol2, mol3] -> [(reaction_name, ReactionContainer), ...]  # multi-component
+        """
+        if isinstance(other, (list, tuple)):
+            return self.react(*other)
+        return self.react(other)
 
 
 __all__ = ['FunctionalGroups']
