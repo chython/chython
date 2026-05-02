@@ -10,12 +10,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, macos-latest, macos-12, ubuntu-22.04]
+        os: [windows-latest, macos-latest, macos-13, ubuntu-22.04]
         python-version: ["3.10", "3.11", "3.12"]
         include:
           - os: macos-latest
             architecture: aarch64-apple-darwin
-          - os: macos-12
+          - os: macos-13
             architecture: x86_64-apple-darwin
     steps:
     - uses: actions/checkout@v3
