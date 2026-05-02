@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -61,6 +61,11 @@ class QueryContainer(Graph[Query, QueryBond], QueryIsomorphism):
         if not isinstance(other, QueryContainer):
             raise TypeError('QueryContainer expected')
         return super().union(other, remap=remap, copy=copy)
+
+    def copy(self):
+        copy = super().copy()
+        copy._smarts = self._smarts
+        return copy
 
 
 __all__ = ['QueryContainer']
