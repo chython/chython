@@ -39,6 +39,18 @@ def _rules():
     # 1,4-diketone → pyridazine (+ hydrazine, implicit)
     rules.append(_make_reactor('pyridazine', '1_4_diketone', '[A:1]:1:[N:20]:[N:21]:[A:3]:[A:6]:[A:5]:1'))
 
+    # Appel: alcohol → alkyl halide (CCl4/CBr4 + PPh3)
+    rules.append(_make_reactor('appel', 'primary_alcohol', '[Br:20]-[A:2]'))
+    rules.append(_make_reactor('appel', 'secondary_alcohol', '[Br:20]-[A:2]'))
+
+    # Miyaura borylation: ArX → ArBpin (Pd, B2pin2)
+    rules.append(_make_reactor('borylation', 'aryl_bromide', '[A:1]-[B:20](-[O:21])-[O:22]'))
+    rules.append(_make_reactor('borylation', 'aryl_iodide', '[A:1]-[B:20](-[O:21])-[O:22]'))
+    rules.append(_make_reactor('borylation', 'aryl_chloride', '[A:1]-[B:20](-[O:21])-[O:22]'))
+
+    # Nitrile hydrolysis: R-C≡N → R-C(=O)-NH2 (partial, to amide)
+    rules.append(_make_reactor('nitrile_hydrolysis', 'nitrile', '[A:2]-[A:1]=[O:20]'))
+
     return rules
 
 

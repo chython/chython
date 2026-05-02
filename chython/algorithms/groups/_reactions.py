@@ -380,12 +380,13 @@ def _rules():
                                 ('arene_ch', {1: 3})],
                                '[A:1](=[A:2])-[A:3]'))
 
-    # heck: ArX + terminal_alkene -> Ar-CH=CH-R
+    # heck: ArX + alkene -> Ar-CH=CH-R
     for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
-        rules.append(_make_reactor('heck',
-                                   [(halide, None),
-                                    ('terminal_alkene', {1: 2, 2: 3})],
-                                   '[A:1]-[A:2]=[A:3]'))
+        for alkene in ('terminal_alkene', 'alkene'):
+            rules.append(_make_reactor('heck',
+                                       [(halide, None),
+                                        (alkene, {1: 2, 2: 3})],
+                                       '[A:1]-[A:2]=[A:3]'))
 
     # cross metathesis: terminal_alkene + terminal_alkene -> internal alkene
     rules.append(_make_reactor('cross_metathesis',

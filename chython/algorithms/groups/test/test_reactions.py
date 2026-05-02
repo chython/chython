@@ -111,6 +111,8 @@ _two_component = [
      'grignard', 'CC[Mg]Br.O=Cc1ccccc1>>c1ccccc1C(CC)O', 1),
     ('heck_aryl_bromide_terminal_alkene',
      'heck', 'Brc1ccc(cc1)C.C=CC>>c1cc(ccc1C=CC)C', 1),
+    ('heck_aryl_bromide_internal_alkene',
+     'heck', 'Brc1ccccc1.CC=CC>>c1ccccc1C(C)=CC', 1),
     ('cross_metathesis_two_terminal_alkenes',
      'cross_metathesis', 'C=CC.C=CCCC>>CC=CCCC', 1),
     ('wittig_ylide_aldehyde',
@@ -184,6 +186,10 @@ _four_component = [
 _transformations = [
     ('isoxazole_from_diketone', 'isoxazole', 'O=C(C)CC(=O)C>>c1(onc(C)c1)C', 1),
     ('pyridazine_from_diketone', 'pyridazine', 'O=C(C)CCC(=O)C>>c1(C)nnc(C)cc1', 1),
+    ('appel_primary_alcohol', 'appel', 'OCC>>BrCC', 1),
+    ('appel_secondary_alcohol', 'appel', 'OC(C)c1ccccc1>>c1ccccc1C(C)Br', 1),
+    ('borylation_aryl_bromide', 'borylation', 'Brc1ccc(cc1)C>>OB(O)c1ccc(cc1)C', 1),
+    ('nitrile_hydrolysis_benzonitrile', 'nitrile_hydrolysis', 'N#Cc1ccccc1>>NC(=O)c1ccccc1', 1),
 ]
 
 _oxidations = [
