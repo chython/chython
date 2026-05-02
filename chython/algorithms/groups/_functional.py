@@ -110,6 +110,7 @@ def _rules():
     rules['sulfonyl_chloride'] = smarts('[S;x3;D4:1](=[O:2])(=[O:3])[Cl;D1:100]')
     rules['sulfonyl_fluoride'] = smarts('[S;x3;D4:1](=[O:2])(=[O:3])[F;D1:100]')
     rules['sulfonamide'] = smarts('[S;x3;D4:1](=[O:2])(=[O:3])-[N;z1:100]')
+    rules['sulfonyl_anhydride'] = smarts('[S;x3;D4:1](=[O:2])(=[O:3])-[O:100]-[S;x3;D4](=O)(=O)')
 
     # nitrogen functional groups
     rules['nitrile'] = smarts('[N;D1;z3;x0:2]#[C;D2;x1:1]')
@@ -121,6 +122,11 @@ def _rules():
 
     # sulfur
     rules['thiol'] = smarts('[S;x0;D1;z1:1][C;z1:2]')
+
+    # pyrrole. for tautomerism handling H not in template.
+    rules['pyrrole'] = smarts('[N;h1;D2;a;r5:1]')
+    rules['pyrazole'] = smarts('[N;h1;D2;a;r5:1]:[N;h0;D2;r5:2]')
+    rules['imidazole'] = smarts('[N;h1;D2;a;r5:1]:[A:2]:[N;h0;D2;r5:3]')
 
     return rules
 
