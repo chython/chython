@@ -226,6 +226,64 @@ Multi-component reactions use a list:
 Each molecule's ``functional_groups`` property is used as a pre-filter to select
 applicable Reactor templates. Only matching combinations are attempted.
 
+Selective reaction application with the ``reaction`` keyword:
+
+.. code-block:: python
+
+    arx = smiles('Brc1ccccc1')
+    boronic = smiles('OB(O)c1ccccc1')
+
+    # Only Suzuki coupling (skip other possible reactions)
+    for name, rxn in arx.react(boronic, reaction='suzuki'):
+        print(name, rxn)
+
+
+Oxidation, Reduction & Transformation
+---------------------------------------
+
+Single-molecule transformations are available via dedicated methods:
+
+.. code-block:: python
+
+    mol = smiles('OCC')
+    mol.canonicalize()
+
+    # Oxidation products
+    for name, rxn in mol.oxidize():
+        print(name, rxn)
+    # alcohol_to_aldehyde  CCO>>C=O
+
+    # Reduction products
+    ketone = smiles('CC(=O)c1ccccc1')
+    ketone.canonicalize()
+    for name, rxn in ketone.reduce():
+        print(name, rxn)
+    # ketone_to_alcohol  c1ccccc1C(C)=O>>OC(C)c1ccccc1
+
+    # Functional group interconversions (Appel, borylation, ring closures, etc.)
+    for name, rxn in mol.transform():
+        print(name, rxn)
+    # appel  CCO>>CCBr
+
+    # All single-molecule transformations at once (~ operator)
+    for name, rxn in ~mol:
+        print(name, rxn)
+
+All methods accept an optional ``reaction`` keyword to apply selectively:
+
+.. code-block:: python
+
+    mol = smiles('OC(C)c1ccccc1')
+    mol.canonicalize()
+
+    # Only oxidize to ketone (skip other possible transformations)
+    for name, rxn in mol.oxidize(reaction='alcohol_to_ketone'):
+        print(name, rxn)
+
+    # Only Appel (alcohol → bromide)
+    for name, rxn in mol.transform(reaction='appel'):
+        print(name, rxn)
+
 
 Functional & Protective Groups
 -------------------------------

@@ -87,18 +87,21 @@ class FunctionalGroups:
             return True
         return False
 
-    def react(self, *others):
+    def react(self, *others, reaction=None):
         """
         Enumerate possible reaction products between molecules.
 
         mol1.react(mol2) -> [(reaction_name, ReactionContainer), ...]
         mol1.react(mol2, mol3) -> [(reaction_name, ReactionContainer), ...]  # multi-component
+        mol1.react(mol2, reaction='suzuki') -> only suzuki coupling
 
-        Reactor internally handles permutations of input molecules.
+        :param reaction: optional reaction name to apply selectively.
         """
         mols = [self, *others]
 
         for name, fg_names, reactor in reaction_rules:
+            if reaction is not None and name != reaction:
+                continue
             if len(fg_names) != len(mols):
                 continue
             for perm in permutations(mols):
@@ -107,39 +110,54 @@ class FunctionalGroups:
                         yield name, rxn
                     break
 
-    def oxidize(self):
+    def oxidize(self, reaction=None):
         """
         Enumerate possible single-step oxidation products.
 
         mol.oxidize() -> [(reaction_name, ReactionContainer), ...]
+        mol.oxidize(reaction='alcohol_to_aldehyde') -> only this oxidation
+
+        :param reaction: optional reaction name to apply selectively.
         """
         fgs = self.functional_groups
         for name, fg_name, reactor in oxidation_rules:
+            if reaction is not None and name != reaction:
+                continue
             if fg_name in fgs:
                 for rxn in reactor(self):
                     yield name, rxn
 
-    def reduce(self):
+    def reduce(self, reaction=None):
         """
         Enumerate possible single-step reduction products.
 
         mol.reduce() -> [(reaction_name, ReactionContainer), ...]
+        mol.reduce(reaction='ketone_to_alcohol') -> only this reduction
+
+        :param reaction: optional reaction name to apply selectively.
         """
         fgs = self.functional_groups
         for name, fg_name, reactor in reduction_rules:
+            if reaction is not None and name != reaction:
+                continue
             if fg_name in fgs:
                 for rxn in reactor(self):
                     yield name, rxn
 
-    def transform(self):
+    def transform(self, reaction=None):
         """
         Enumerate possible single-molecule functional group interconversions
         (ring formations from open-chain precursors with implicit reagents).
 
         mol.transform() -> [(reaction_name, ReactionContainer), ...]
+        mol.transform(reaction='appel') -> only Appel reaction
+
+        :param reaction: optional reaction name to apply selectively.
         """
         fgs = self.functional_groups
         for name, fg_name, reactor in transformation_rules:
+            if reaction is not None and name != reaction:
+                continue
             if fg_name in fgs:
                 for rxn in reactor(self):
                     yield name, rxn
