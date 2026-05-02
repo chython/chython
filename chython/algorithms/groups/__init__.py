@@ -23,6 +23,7 @@ from ._oxidations import rules as oxidation_rules
 from ._protective import rules as protective_rules
 from ._reactions import rules as reaction_rules
 from ._reductions import rules as reduction_rules
+from ._transformations import rules as transformation_rules
 
 
 class FunctionalGroups:
@@ -130,6 +131,19 @@ class FunctionalGroups:
                 for rxn in reactor(self):
                     yield name, rxn
 
+    def transform(self):
+        """
+        Enumerate possible single-molecule functional group interconversions
+        (ring formations from open-chain precursors with implicit reagents).
+
+        mol.transform() -> [(reaction_name, ReactionContainer), ...]
+        """
+        fgs = self.functional_groups
+        for name, fg_name, reactor in transformation_rules:
+            if fg_name in fgs:
+                for rxn in reactor(self):
+                    yield name, rxn
+
     def __invert__(self):
         """
         Enumerate all possible single-step molecular transformations
@@ -139,6 +153,7 @@ class FunctionalGroups:
         """
         yield from self.oxidize()
         yield from self.reduce()
+        yield from self.transform()
 
     def __matmul__(self, other):
         """

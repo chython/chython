@@ -88,6 +88,17 @@ def _rules():
     # aldehydes and ketones
     rules['aldehyde'] = smarts('[O;z2;x0:2]=[C;D2;x1;z2:1]')
     rules['ketone'] = smarts('[O;z2;x0:2]=[C;D3;x1;z2:1]')
+    # enal: alpha,beta-unsaturated aldehyde (for Doebner-Miller)
+    rules['enal'] = smarts('[O;z2;x0:2]=[C;D2;x1;z2:1]-[C;z2;x0:3]=[C;x0:4]')
+    # fisher, friedlander
+    rules['alpha_ketone'] = smarts('[O;z2;x0:2]=[C;D3;x1:1]-[C;z1;D1,D2;x0:3]')
+    # hantzsch thiazole, imidazo[1,2-a]pyridine
+    rules['alpha_haloketone'] = smarts('[O;z2;x0:2]=[C;D3;x1:1]-[C;z1;D2,D3;x1:3]([Cl,Br,I;D1:100])')
+
+    rules['1_2_diketone'] = smarts('[O;z2;x0:2]=[C;D3;x1:1]-[C;z2;x1;D3:3]=[O:4]')
+    rules['1_3_diketone'] = smarts('[O;z2;x0:2]=[C;D3;x1:1]-[C;z1;D2,D3:5]-[C;z2;x1;D3:3]=[O:4]')
+    rules['1_4_diketone'] = smarts('[O;z2;x0:2]=[C;D3;x1:1]-[C;z1;D2,D3:5]-[C;z1;D2,D3:6]-[C;z2;x1;D3:3]=[O:4]')
+    rules['beta_ketoester'] = smarts('[O;z2;x0:2]=[C;D3;x1:1]-[C;z1;D2;x0:5]-[C;z2;x2;D3:3](=[O:4])[O;D2:100]')
 
     # acids
     rules['alkyl_carboxylic_acid'] = smarts('[O;D1;z1;x0:100][C;z2;x2;D3:1](=[O:2])[C;z1:3]')
@@ -157,6 +168,49 @@ def _rules():
     rules['pyrrole'] = smarts('[N;h1;D2;a;r5:1]')
     rules['pyrazole'] = smarts('[N;h1;D2;a;r5:1]:[N;h0;D2;r5:2]')
     rules['imidazole'] = smarts('[N;h1;D2;a;r5:1]:[A:2]:[N;h0;D2;r5:3]')
+
+    # hydrazines
+    rules['alkyl_hydrazine'] = smarts('[N;D1;z1;x1:2]-[N;D2;z1;x1:1]-[C;z1:3]')
+    rules['aryl_hydrazine'] = smarts('[N;D1;z1;x1:2]-[N;D2;z1;x1:1]-[C;a:3]:[C;a;D2:4]')
+
+    # thioamide (for Hantzsch thiazole)
+    rules['thioamide'] = smarts('[S;z2;x0;D1:2]=[C;D3;x2:1]-[N;D1:3]')
+
+    # ortho-bifunctional arenes
+    rules['o_diaminoarene'] = smarts('[N;D1;z1;x0:1]-[C;a:3]:[C;a:4]-[N;D1,D2;z1;x0:2]')
+    rules['o_aminophenol'] = smarts('[N;D1;z1;x0:1]-[C;a:3]:[C;a:4]-[O;D1:2]')
+    rules['o_aminothiophenol'] = smarts('[N;D1;z1;x0:1]-[C;a:3]:[C;a:4]-[S;D1:2]')
+    rules['o_aminobenzaldehyde'] = smarts('[N;D1;z1;x0:1]-[C;a:3]:[C;a:4]-[C;D2;z2;x1:5]=[O:6]')
+    rules['anthranilic_acid'] = smarts('[N;D1;z1;x0:1]-[C;a:3]:[C;a:4]-[C;z2;x2;D3:5](=[O:6])[O;D1:100]')
+
+    # amidoxime: RC(=NH)NHOH canonical form (for 1,2,4-oxadiazole)
+    rules['amidoxime'] = smarts('[N;D1;z2;x0:3]=[C;D3;x2:1]-[N;D2;z1;x1:2]-[O;D1:4]')
+
+    # amidine: RC(=NH)NH2 (for pyrimidine)
+    rules['amidine'] = smarts('[N;D1;z1;x0:3]-[C;D3;z2;x2:1]=[N;D1:2]')
+    # urea/thiourea (for Biginelli)
+    rules['urea'] = smarts('[N;D1;z1;x0:1]-[C;D3;z2;x3:2](=[O:3])-[N;D1:4]')
+    rules['thiourea'] = smarts('[N;D1;z1;x0:1]-[C;D3;z2;x3:2](=[S;D1:3])-[N;D1:4]')
+
+    # beta-arylethylamine (for Pictet-Spengler)
+    rules['beta_arylethylamine'] = smarts('[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[C;a:4]:[C;a;D2:5]')
+    # 2-aminopyridine / 2-aminoazine (for GBB, imidazo[1,2-a]pyridine)
+    rules['aminopyridine'] = smarts('[N;D1;z1;x0:1]-[C;a:2]:[N;a;h0;D2:3]')
+
+    # alpha-isocyano (for Van Leusen oxazole)
+    rules['tosyl_isocyanide'] = smarts('[C;-;D1:2]#[N;+;D2:1]-[C;D2,D3;z1;x2:3]-[S;D4;x2:100](=O)=O')
+
+    # thioester (for Liebeskind-Srogl): R-C(=O)-S-R'
+    rules['thioester'] = smarts('[O;z2;x0:2]=[C;D3;x2;z2:1]-[S;D2;z1;x0:100]')
+
+    # active methylene (for Knoevenagel): CH flanked by 2 EWGs
+    rules['active_methylene'] = smarts('[C;z1;D2,D3;x0:1](-[C;z2,z3;x1,x2:2])-[C;z2,z3;x1,x2:3]')
+
+    # aniline with ortho C-H (for Doebner-Miller)
+    rules['aniline_ortho_ch'] = smarts('[N;D1;z1;x0:1]-[C;a:2]:[C;a;D2:3]')
+
+    # ortho-haloaniline (for Larock indole)
+    rules['o_haloaniline'] = smarts('[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[Cl,Br,I;D1:100]')
 
     return rules
 
