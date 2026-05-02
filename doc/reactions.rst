@@ -186,6 +186,47 @@ Transformer applies a pattern replacement to a single molecule:
         print(str(result))
 
 
+Predefined Reactors
+--------------------
+
+The ``@`` operator enumerates possible reactions between molecules using predefined
+Reactor templates built on functional group detection. It returns a generator
+of ``(reaction_name, ReactionContainer)`` tuples:
+
+.. code-block:: python
+
+    from chython import smiles
+
+    acid = smiles('CC(=O)O')
+    amine = smiles('CCN')
+
+    # Two-component reaction
+    for name, rxn in acid @ amine:
+        print(name, rxn)
+    # amidation  CCN.O=C(O)C>>CCNC(=O)C
+
+The operator is symmetric — order does not matter:
+
+.. code-block:: python
+
+    list(amine @ acid) == list(acid @ amine)  # True
+
+Multi-component reactions use a list:
+
+.. code-block:: python
+
+    aldehyde = smiles('CC=O')
+    amine = smiles('CCN')
+    isocyanide = smiles('[C-]#[N+]C')
+
+    for name, rxn in aldehyde @ [amine, isocyanide]:
+        print(name, rxn)
+    # ugi_3cr  C(=O)C.CCN.[C-]#[N+]C>>CCNC(C(=O)NC)C
+
+Each molecule's ``functional_groups`` property is used as a pre-filter to select
+applicable Reactor templates. Only matching combinations are attempted.
+
+
 Functional & Protective Groups
 -------------------------------
 
