@@ -620,8 +620,12 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         self.calc_labels()  # refresh all labels
 
         if recalculate_hydrogens:
-            for n in (self._changed or self._atoms):
-                self.calc_implicit(n)  # fix Hs count
+            if not self._changed:
+                for n in self._atoms:
+                    self.calc_implicit(n)
+            else:
+                for n in self._changed.intersection(self._atoms):
+                    self.calc_implicit(n)  # fix Hs count
         self._changed = None
 
     def calc_labels(self):

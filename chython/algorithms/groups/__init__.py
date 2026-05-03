@@ -81,7 +81,6 @@ class FunctionalGroups:
         for n in to_delete:
             self.delete_atom(n, _skip_calculation=True)
         if to_delete or to_add:
-            self._changed.difference_update(to_delete)
             self.fix_structure()
             self.fix_stereo()
             return True
