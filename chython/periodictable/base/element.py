@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,18 +17,80 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import ABC, abstractmethod
-from CachedMethods import class_cached_property
 from collections import defaultdict
+from functools import cache
 from typing import Dict, List, Optional, Set, Tuple, Type
 from .vector import Vector
 from ...exceptions import ValenceError
+
+
+@cache
+def _compiled_valence_rules(cls):
+    elements_classes = {x.__name__: x.atomic_number.fget(None) for x in Element.__subclasses__()}
+    common_valences = cls._common_valences.fget(None)
+
+    rules = defaultdict(list)
+    if common_valences[0] and cls.atomic_number.fget(None) != 1:  # atom has implicit hydrogens by default except H.
+        # only first common valence represents implicit H.
+        valence = common_valences[0]
+        for h in range(valence + 1):
+            rules[(0, False, valence - h)].append((set(), {}, h))  # any atoms and bonds possible
+
+        for valence in common_valences[1:]:
+            rules[(0, False, valence)].append((set(), {}, 0))
+    else:
+        for valence in common_valences:
+            rules[(0, False, valence)].append((set(), {}, 0))  # any atoms and bonds possible
+
+    for charge, is_radical, implicit, environment in cls._valences_exceptions.fget(None):
+        explicit = sum(x for x, _ in environment)
+        explicit_dict = defaultdict(int)
+        explicit_set = set()
+        for b, e in environment:
+            be = (b, elements_classes[e])
+            explicit_set.add(be)
+            explicit_dict[be] += 1
+        explicit_dict = dict(explicit_dict)
+
+        if implicit:
+            valence = explicit + implicit
+            for h in range(implicit + 1):
+                rules[(charge, is_radical, valence - h)].append((explicit_set, explicit_dict, h))
+        else:
+            rules[(charge, is_radical, explicit)].append((explicit_set, explicit_dict, 0))
+    return dict(rules)
+
+
+@cache
+def _compiled_saturation_rules(cls):
+    elements_classes = {x.__name__: x.atomic_number.fget(None) for x in Element.__subclasses__()}
+
+    rules = []
+    for valence in cls._common_valences.fget(None):
+        rules.append((0, False, valence, 0, None))  # any atoms and bonds possible
+
+    for charge, is_radical, implicit, environment in cls._valences_exceptions.fget(None):
+        if not environment:
+            rules.append((charge, is_radical, implicit, 0, None))
+        else:
+            explicit_dict = defaultdict(int)
+            explicit = 0
+            for b, e in environment:
+                explicit_dict[(b, elements_classes[e])] += 1
+                explicit += b
+            rules.append((charge, is_radical, implicit + explicit, implicit, dict(explicit_dict)))
+    return rules
+
+
+@cache
+def _elements_map():
+    return {x.atomic_number.fget(None): x for x in Element.__subclasses__()}
 
 
 class Element(ABC):
     __slots__ = ('_isotope', '_charge', '_is_radical', '_xy', '_implicit_hydrogens',
                  '_explicit_hydrogens', '_stereo', '_parsed_mapping',
                  '_neighbors', '_heteroatoms', '_hybridization', '_ring_sizes', '_in_ring', '_extended_stereo')
-    __class_cache__ = {}
 
     def __init__(self, isotope: Optional[int] = None, *,
                  charge: int = 0, is_radical: bool = False, x: float = 0., y: float = 0.,
@@ -325,12 +387,7 @@ class Element(ABC):
         get Element class by its number
         """
         try:
-            elements = cls.__class_cache__['elements']
-        except KeyError:
-            elements = {x.atomic_number.fget(None): x for x in Element.__subclasses__()}
-            cls.__class_cache__['elements'] = elements
-        try:
-            return elements[number]
+            return _elements_map()[number]
         except KeyError:
             raise ValueError(f'Element with number "{number}" not found')
 
@@ -355,9 +412,13 @@ class Element(ABC):
         valence rules for element with specific charge/radical state
         """
         try:
-            return self._compiled_valence_rules[(self.charge, self.is_radical, valence)]
+            return _compiled_valence_rules(self.__class__)[(self.charge, self.is_radical, valence)]
         except KeyError:
             raise ValenceError
+
+    @property
+    def saturation_rules(self) -> List[Tuple[int, bool, int, int, Optional[Dict[Tuple[int, int], int]]]]:
+        return _compiled_saturation_rules(self.__class__)
 
     @property
     @abstractmethod
@@ -385,81 +446,6 @@ class Element(ABC):
         user both for cyanates and isocyanates etc complexes:
         (-1, False, 0, ((1, 'O'),)) and (-1, False, 0, ((1, 'N'),))
         """
-
-    @class_cached_property
-    def _compiled_charge_radical(self) -> Set[Tuple[int, bool]]:
-        """
-        exceptions in charges, radical state
-        examples:
-        (-1, False) - anion, not radical
-        (0, True) - neutral radical
-        """
-        return {(c, r) for c, r, *_ in self._valences_exceptions}
-
-    @class_cached_property
-    def _compiled_valence_rules(self) -> \
-            Dict[Tuple[int, bool, int], List[Tuple[Set[Tuple[int, int]], Dict[Tuple[int, int], int], int]]]:
-        """
-        dictionary with key = (charge, is_radical, sum_of_bonds) and
-        value = list of possible neighbors and implicit H count
-        """
-        elements_classes = {x.__name__: x.atomic_number.fget(None) for x in Element.__subclasses__()}
-
-        rules = defaultdict(list)
-        if self._common_valences[0] and self.atomic_number != 1:  # atom has implicit hydrogens by default except H.
-            # only first common valence represents implicit H.
-            valence = self._common_valences[0]
-            for h in range(valence + 1):
-                rules[(0, False, valence - h)].append((set(), {}, h))  # any atoms and bonds possible
-
-            for valence in self._common_valences[1:]:
-                rules[(0, False, valence)].append((set(), {}, 0))
-        else:
-            for valence in self._common_valences:
-                rules[(0, False, valence)].append((set(), {}, 0))  # any atoms and bonds possible
-
-        for charge, is_radical, implicit, environment in self._valences_exceptions:
-            explicit = sum(x for x, _ in environment)
-            explicit_dict = defaultdict(int)
-            explicit_set = set()
-            for b, e in environment:
-                be = (b, elements_classes[e])
-                explicit_set.add(be)
-                explicit_dict[be] += 1
-            explicit_dict = dict(explicit_dict)
-
-            if implicit:
-                valence = explicit + implicit
-
-                for h in range(implicit + 1):
-                    rules[(charge, is_radical, valence - h)].append((explicit_set, explicit_dict, h))
-            else:
-                rules[(charge, is_radical, explicit)].append((explicit_set, explicit_dict, 0))
-        return dict(rules)
-
-    @class_cached_property
-    def _compiled_saturation_rules(self) -> List[Tuple[int, bool, int, int, Optional[Dict[Tuple[int, int], int]]]]:
-        """
-        dictionary with key = (charge, is_radical, sum_of_bonds) and
-        value = list of possible neighbors
-        """
-        elements_classes = {x.__name__: x.atomic_number.fget(None) for x in Element.__subclasses__()}
-
-        rules = []
-        for valence in self._common_valences:
-            rules.append((0, False, valence, 0, None))  # any atoms and bonds possible
-
-        for charge, is_radical, implicit, environment in self._valences_exceptions:
-            if not environment:
-                rules.append((charge, is_radical, implicit, 0, None))
-            else:
-                explicit_dict = defaultdict(int)
-                explicit = 0
-                for b, e in environment:
-                    explicit_dict[(b, elements_classes[e])] += 1
-                    explicit += b
-                rules.append((charge, is_radical, implicit + explicit, implicit, dict(explicit_dict)))
-        return rules
 
 
 __all__ = ['Element']

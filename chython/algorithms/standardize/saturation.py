@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -186,7 +186,7 @@ def _find_possible_valences(atoms, neighbors_distances, charges, radicals, allow
             el = len(env)
             dc = charges[n]
             dr = radicals[n]
-            for charge, is_radical, valence, implicit, explicit_dict in atoms[n]._compiled_saturation_rules:
+            for charge, is_radical, valence, implicit, explicit_dict in atoms[n].saturation_rules:
                 if valence < el or dc is not None and dc != charge or dr is not None and dr != is_radical:
                     continue  # skip impossible rules
                 if explicit_dict:
