@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2023-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2023-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -62,7 +62,8 @@ extensions = [
               extra_compile_args=extra_compile_args)
 ]
 
-ext_modules = cythonize(extensions, language_level=3)
+ext_modules = cythonize(extensions, language_level=3,
+                        compiler_directives={'freethreading_compatible': True})
 cmd = build_ext(Distribution({'ext_modules': ext_modules}))
 cmd.ensure_finalized()
 cmd.run()

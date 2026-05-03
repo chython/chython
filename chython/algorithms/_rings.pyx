@@ -1,3 +1,4 @@
+# cython: freethreading_compatible=True
 # cython: undeclared_check_usage=error
 # cython: warn.undeclared=True
 # cython: warn.unused=True

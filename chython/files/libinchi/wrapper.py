@@ -20,6 +20,7 @@ from ctypes import c_char, c_double, c_short, c_long, c_char_p, c_byte, POINTER,
 from importlib.resources import files, as_file
 from itertools import count
 from sysconfig import get_platform
+from threading import Lock
 from warnings import warn
 from .._convert import create_molecule
 from ...containers import MoleculeContainer
@@ -39,54 +40,56 @@ def inchi(data, /, *, ignore_stereo: bool = False, _cls=MoleculeContainer) -> Mo
         raise ImportError('libINCHI not found')
 
     structure = INCHIStructure()
-    if lib.GetStructFromINCHI(byref(InputINCHI(data)), byref(structure)):
-        lib.FreeStructFromINCHI(byref(structure))
-        raise ValueError('invalid INCHI')
+    with _lib_lock:
+        if lib.GetStructFromINCHI(byref(InputINCHI(data)), byref(structure)):
+            lib.FreeStructFromINCHI(byref(structure))
+            raise ValueError('invalid INCHI')
 
-    atoms, bonds = [], []
-    protium = {}
-    deuterium = {}
-    tritium = {}
-    seen = set()
-    for n in range(structure.num_atoms):
-        seen.add(n)
-        atom = structure.atom[n]
+        try:
+            atoms, bonds = [], []
+            protium = {}
+            deuterium = {}
+            tritium = {}
+            seen = set()
+            for n in range(structure.num_atoms):
+                seen.add(n)
+                atom = structure.atom[n]
 
-        atoms.append({'element': atom.atomic_symbol, 'charge': atom.charge, 'x': atom.x, 'y': atom.y,
-                      'z': atom.z, 'isotope': atom.isotope, 'is_radical': atom.is_radical,
-                      'implicit_hydrogens': atom.implicit_hydrogens, 'delta_isotope': atom.delta_isotope})
-        if atom.implicit_protium:
-            protium[n] = atom.implicit_protium
-        if atom.implicit_deuterium:
-            deuterium[n] = atom.implicit_deuterium
-        if atom.implicit_tritium:
-            tritium[n] = atom.implicit_tritium
+                atoms.append({'element': atom.atomic_symbol, 'charge': atom.charge, 'x': atom.x, 'y': atom.y,
+                              'z': atom.z, 'isotope': atom.isotope, 'is_radical': atom.is_radical,
+                              'implicit_hydrogens': atom.implicit_hydrogens, 'delta_isotope': atom.delta_isotope})
+                if atom.implicit_protium:
+                    protium[n] = atom.implicit_protium
+                if atom.implicit_deuterium:
+                    deuterium[n] = atom.implicit_deuterium
+                if atom.implicit_tritium:
+                    tritium[n] = atom.implicit_tritium
 
-        for k in range(atom.num_bonds):
-            m = atom.neighbor[k]
-            if m in seen:
-                continue
-            order = atom.bond_type[k]
-            if order:
-                bonds.append((n, m, order))
+                for k in range(atom.num_bonds):
+                    m = atom.neighbor[k]
+                    if m in seen:
+                        continue
+                    order = atom.bond_type[k]
+                    if order:
+                        bonds.append((n, m, order))
 
-    stereo_atoms = []
-    stereo_allenes = []
-    stereo_cumulenes = []
-    for i in range(structure.num_stereo0D):
-        stereo = structure.stereo0D[i]
-        sign = stereo.sign
-        if sign is not None:
-            if stereo.is_tetrahedral:
-                stereo_atoms.append((stereo.central_atom, stereo.neighbors, sign))
-            elif stereo.is_allene:
-                nn, *_, nm = stereo.neighbors
-                stereo_allenes.append((stereo.central_atom, nn, nm, sign))
-            elif stereo.is_cumulene:
-                nn, n, m, nm = stereo.neighbors
-                stereo_cumulenes.append((n, m, nn, nm, sign))
-
-    lib.FreeStructFromINCHI(byref(structure))
+            stereo_atoms = []
+            stereo_allenes = []
+            stereo_cumulenes = []
+            for i in range(structure.num_stereo0D):
+                stereo = structure.stereo0D[i]
+                sign = stereo.sign
+                if sign is not None:
+                    if stereo.is_tetrahedral:
+                        stereo_atoms.append((stereo.central_atom, stereo.neighbors, sign))
+                    elif stereo.is_allene:
+                        nn, *_, nm = stereo.neighbors
+                        stereo_allenes.append((stereo.central_atom, nn, nm, sign))
+                    elif stereo.is_cumulene:
+                        nn, n, m, nm = stereo.neighbors
+                        stereo_cumulenes.append((n, m, nn, nm, sign))
+        finally:
+            lib.FreeStructFromINCHI(byref(structure))
 
     tmp = {'atoms': atoms, 'bonds': bonds, 'stereo_atoms': stereo_atoms, 'stereo_allenes': stereo_allenes,
            'stereo_cumulenes': stereo_cumulenes, 'mapping': list(range(1, len(atoms) + 1)),
@@ -517,6 +520,7 @@ class INCHIStructure(Structure):
 
 
 lib = None
+_lib_lock = Lock()
 
 platform = get_platform()
 if platform == 'win-amd64':

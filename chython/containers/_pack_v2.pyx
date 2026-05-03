@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# cython: freethreading_compatible=True
 #
 #  Copyright 2022-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
