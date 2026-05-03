@@ -16,7 +16,6 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_method
 from functools import reduce
 from itertools import chain
 from math import ceil
@@ -29,6 +28,7 @@ from ..algorithms.calculate2d import Calculate2DReaction
 from ..algorithms.depict import DepictReaction
 from ..algorithms.mapping import Mapping
 from ..algorithms.standardize import StandardizeReaction
+from .._functions import cached_method
 
 
 class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, DepictReaction):

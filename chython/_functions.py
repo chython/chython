@@ -16,7 +16,37 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from functools import wraps
 from itertools import product
+from threading import Lock
+
+
+_SENTINEL = object()
+
+
+def cached_method(func):
+    """Cache no-argument method result in instance __dict__. Cleared by flush_cache().
+
+    Thread-safe: per-instance lock with double-checked locking.
+    No cross-instance contention — parallel SMILES generation scales linearly.
+    """
+    key = f'__cached_method_{func.__name__}'
+    lock_attr = f'__lock_{func.__name__}'
+
+    @wraps(func)
+    def wrapper(self):
+        val = self.__dict__.get(key, _SENTINEL)
+        if val is not _SENTINEL:
+            return val
+        lock = self.__dict__.setdefault(lock_attr, Lock())
+        with lock:
+            val = self.__dict__.get(key, _SENTINEL)
+            if val is not _SENTINEL:
+                return val
+            val = func(self)
+            self.__dict__[key] = val
+            return val
+    return wrapper
 
 
 # lazy itertools.product with diagonal combination precedence
@@ -66,4 +96,4 @@ def lazy_product(*args):
             yield tuple(p[x] for x, p in zip(ind, pools))
 
 
-__all__ = ['lazy_product']
+__all__ = ['cached_method', 'lazy_product']

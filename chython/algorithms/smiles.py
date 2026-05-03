@@ -18,13 +18,13 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import ABC, abstractmethod
-from CachedMethods import cached_method
 from collections import defaultdict
 from functools import cached_property
 from heapq import heappop, heappush
 from itertools import product
 from random import random
 from typing import Callable, Optional, Tuple, TYPE_CHECKING, Union
+from .._functions import cached_method
 
 
 if TYPE_CHECKING:

@@ -18,7 +18,6 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from asyncio import new_event_loop
-from CachedMethods import cached_method
 from collections import defaultdict
 from math import atan2, sin, cos, hypot
 from os.path import join
@@ -26,6 +25,7 @@ from tempfile import TemporaryDirectory
 from typing import Tuple, TYPE_CHECKING, Union, Literal
 from uuid import uuid4
 from zlib import compress
+from .._functions import cached_method
 
 
 if TYPE_CHECKING:

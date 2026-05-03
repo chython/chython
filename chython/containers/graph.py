@@ -28,7 +28,6 @@ Bond = TypeVar('Bond')
 
 class Graph(Generic[Atom, Bond], ABC):
     __slots__ = ('_atoms', '_bonds', '__dict__')
-    __class_cache__ = {}
 
     _atoms: Dict[int, Atom]
     _bonds: Dict[int, Dict[int, Bond]]

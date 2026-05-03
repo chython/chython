@@ -16,7 +16,6 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_args_method
 from collections import Counter, defaultdict
 from functools import cached_property
 from lazy_object_proxy import Proxy
@@ -117,7 +116,6 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             return tuple(self._bonds[atom].items())
         return tuple(self._bonds[atom])
 
-    @cached_args_method
     def adjacency_matrix(self, set_bonds=False, /):
         """
         Adjacency matrix of Graph.
