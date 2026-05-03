@@ -17,6 +17,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from importlib.resources import files
 from random import random
 from typing import TYPE_CHECKING, Union, Dict, Literal
 from ...exceptions import ImplementationError
@@ -28,10 +29,6 @@ if TYPE_CHECKING:
 
 try:
     from py_mini_racer import MiniRacer
-    try:
-        from importlib.resources import files
-    except ImportError:  # python3.8
-        from importlib_resources import files
 
     ctx = MiniRacer()
     ctx.eval('const self = this')
@@ -85,7 +82,9 @@ class Calculate2DMolecule:
             for n, (x, y) in zip(order, xy):
                 plane[n] = (x - shift_x, shift_y - y)
         elif engine == 'cdk':
-            sdg = self._cdk_engine.layout.StructureDiagramGenerator()
+            from ..._java import get_cdk
+
+            sdg = get_cdk().layout.StructureDiagramGenerator()
             sdg.setUseTemplates(False)
             sdg.setMolecule(self.to_cdk())
             sdg.generateCoordinates()
@@ -95,8 +94,10 @@ class Calculate2DMolecule:
                 xy = mol.getAtom(i).getPoint2d()
                 plane[n] = (xy.x, xy.y)
         elif engine == 'obabel':
+            from openbabel import openbabel
+
             mol = self.to_openbabel()
-            assert self._obgen2d(mol), 'OpenBabel failed to generate 2d layout'
+            assert openbabel.OBOp.FindType('gen2D').Do(mol), 'OpenBabel failed to generate 2d layout'
             assert mol.NumAtoms() == len(self), 'OpenBabel modified molecule'
 
             for i, n in enumerate(self.smiles_atoms_order, 1):

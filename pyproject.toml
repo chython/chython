@@ -1,6 +1,6 @@
 [tool.poetry]
 name = 'chython'
-version = '2.17'
+version = '2.18'
 description = 'Library for processing molecules and reactions in python way'
 authors = ['Ramil Nugmanov <nougmanoff@protonmail.com>']
 license = 'LGPLv3'
@@ -14,7 +14,7 @@ classifiers=[
     'Operating System :: OS Independent',
     'Programming Language :: Python',
     'Programming Language :: Python :: 3 :: Only',
-    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.10',
     'Topic :: Scientific/Engineering',
     'Topic :: Scientific/Engineering :: Chemistry',
     'Topic :: Scientific/Engineering :: Information Analysis',
@@ -30,8 +30,7 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.8"
-cachedmethods = '>=0.1.4'
+python = ">=3.10"
 lazy-object-proxy = '>=1.6'
 lxml = '>=4.1'
 mini-racer = {version = '>=0.12.4', optional = true}

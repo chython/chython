@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,6 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from ctypes import c_char, c_double, c_short, c_long, c_char_p, c_byte, POINTER, Structure, cdll, byref
+from importlib.resources import files, as_file
 from itertools import count
 from sysconfig import get_platform
 from warnings import warn
@@ -25,12 +26,6 @@ from ...containers import MoleculeContainer
 from ...containers.bonds import Bond
 from ...exceptions import ValenceError, IsChiral, NotChiral
 from ...periodictable import H as _H
-
-
-try:
-    from importlib.resources import files, as_file
-except ImportError:  # python3.8
-    from importlib_resources import files, as_file
 
 
 H = 1

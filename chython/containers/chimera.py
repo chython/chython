@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import class_cached_property
+from .._java import get_cdk
 
 
 class Chimera:
@@ -29,7 +29,8 @@ class Chimera:
         Due to translation through SMILES string, atom order is not preserved.
         Use `self.smiles_atoms_order` to map atoms back.
         """
-        parser = self._cdk_engine.smiles.SmilesParser(self._cdk_engine.DefaultChemObjectBuilder.getInstance())
+        cdk = get_cdk()
+        parser = cdk.smiles.SmilesParser(cdk.DefaultChemObjectBuilder.getInstance())
         return parser.parseSmiles(str(self))
 
     def to_openbabel(self):
@@ -41,8 +42,10 @@ class Chimera:
         """
         from openbabel import openbabel
 
+        conv = openbabel.OBConversion()
+        conv.SetInFormat('smi')
         mol = openbabel.OBMol()
-        assert self._obparser(mol, str(self)), 'OpenBabel failed to parse smiles'
+        assert conv.ReadString(mol, str(self)), 'OpenBabel failed to parse smiles'
         return mol
 
     def to_indigo(self):
@@ -52,41 +55,9 @@ class Chimera:
         Due to translation through SMILES string, atom order is not preserved.
         Use `self.smiles_atoms_order` to map atoms back.
         """
-        return self._indigo_engine.loadMolecule(str(self))
-
-    @class_cached_property
-    def _cdk_engine(self):
-        try:
-            from jpype import isJVMStarted, startJVM, JPackage
-
-            if not isJVMStarted():
-                from chython import class_paths
-
-                startJVM('--enable-native-access=ALL-UNNAMED', classpath=class_paths)
-
-            return JPackage('org').openscience.cdk
-        except (ImportError, AttributeError):
-            raise ImportError('Java/JPype/CDK.jar is not installed or broken. make sure CDK_PATH env variable is set')
-
-    @class_cached_property
-    def _indigo_engine(self):
         from indigo import Indigo
 
-        return Indigo()
-
-    @class_cached_property
-    def _obparser(self):
-        from openbabel import openbabel
-
-        obparser = openbabel.OBConversion()
-        obparser.SetInFormat('smi')
-        return obparser.ReadString
-
-    @class_cached_property
-    def _obgen2d(self):
-        from openbabel import openbabel
-
-        return openbabel.OBOp.FindType('gen2D').Do
+        return Indigo().loadMolecule(str(self))
 
 
 __all__ = ['Chimera']

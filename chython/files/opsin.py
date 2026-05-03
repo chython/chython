@@ -19,26 +19,11 @@
 from .daylight import smiles
 
 
-_nametostruct = _opsin = None
-
-
 def opsin(string):
-    """Parse IUPAC name into MoleculeContainer.
-    """
-    global _opsin, _nametostruct
+    """Parse IUPAC name into MoleculeContainer."""
+    from .._java import get_opsin
 
-    if _opsin is None:
-        from jpype import JPackage, isJVMStarted, startJVM
-
-        if not isJVMStarted():
-            from chython import class_paths
-
-            startJVM('--enable-native-access=ALL-UNNAMED', classpath=class_paths)
-
-        _opsin = JPackage('uk').ac.cam.ch.wwmm.opsin
-        _nametostruct = _opsin.NameToStructure.getInstance()
-
-    result = _nametostruct.parseChemicalName(string)
+    result = get_opsin().parseChemicalName(string)
     if str(result.getStatus()) == 'FAILURE':
         raise ValueError(f'Failed to convert `{string}`: {result.getMessage()}')
     return smiles(str(result.getSmiles()))
