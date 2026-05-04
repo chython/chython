@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2025, 2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2025 Tagir Akhmetshin <tagirshin@gmail.com>
 #  This file is part of chython.
 #
@@ -47,7 +47,7 @@ def test_invalid_radius(radius):
     mol = smiles('CCO')
     min_r, max_r = radius
     with raises(AssertionError):
-        mol.morgan_fingerprint(min_radius=min_r, max_radius=max_r)
+        mol.linear_fingerprint(min_radius=min_r, max_radius=max_r)
 
 
 def test_consistency():
@@ -84,8 +84,8 @@ def test_bit_pairs():
     mol = smiles('CCCCCCCCCCCCCCCCCCCCCCCC')  # molecule with multiple similar fragments
 
     # Compare different number_bit_pairs settings
-    fp1 = mol.linear_fingerprint(number_bit_pairs=2)
-    fp2 = mol.linear_fingerprint(number_bit_pairs=3)
+    fp1 = mol.linear_fingerprint(max_count=2)
+    fp2 = mol.linear_fingerprint(max_count=3)
 
     assert not np.array_equal(fp1, fp2)
     assert np.array_equal(fp1 & fp2, fp1)

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2023 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
@@ -32,7 +32,7 @@ class MorganFingerprint:
     __slots__ = ()
 
     def morgan_fingerprint(self, min_radius: int = 1, max_radius: int = 4,
-                           length: int = 1024, number_active_bits: int = 2):
+                           length: int = 1024, number_active_bits: int = 2, max_count: int = -1):
         """
         Transform structures into array of binary features.
         Morgan fingerprints. Similar to RDkit implementation.
@@ -41,29 +41,32 @@ class MorganFingerprint:
         :param max_radius: maximum radius of EC
         :param length: bit string's length. Should be power of 2
         :param number_active_bits: number of active bits for each hashed tuple
-
+        :param max_count: maximum number of counts to consider for each fragment.
+          If 0, all counts are considered. If -1, counting is disabled.
         :return: array(n_features)
         """
-        bits = self.morgan_bit_set(min_radius, max_radius, length, number_active_bits)
+        bits = self.morgan_bit_set(min_radius, max_radius, length, number_active_bits, max_count)
         fingerprints = zeros(length, dtype=uint8)
         fingerprints[list(bits)] = 1
         return fingerprints
 
     def morgan_bit_set(self, min_radius: int = 1, max_radius: int = 4,
-                       length: int = 1024, number_active_bits: int = 2) -> Set[int]:
+                       length: int = 1024, number_active_bits: int = 2, max_count: int = -1) -> Set[int]:
         """
-        Transform structures into set of indexes of True-valued features.
+        Transform structures into a set of indexes of True-valued features.
 
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
         :param length: bit string's length. Should be power of 2
         :param number_active_bits: number of active bits for each hashed tuple
+        :param max_count: maximum number of counts to consider for each fragment.
+          If 0, all counts are considered. If -1, counting is disabled.
         """
         mask = length - 1
         log = int(log2(length))
 
         active_bits = set()
-        for tpl in self.morgan_hash_set(min_radius, max_radius):
+        for tpl in self.morgan_hash_set(min_radius, max_radius, max_count):
             active_bits.add(tpl & mask)
             if number_active_bits == 2:
                 active_bits.add(tpl >> log & mask)
@@ -73,40 +76,28 @@ class MorganFingerprint:
                     active_bits.add(tpl & mask)
         return active_bits
 
-    def morgan_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[int]:
+    def morgan_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4,
+                        max_count: int = -1) -> Set[int]:
         """
         Transform structures into integer hashes of atoms with EC.
 
         :param min_radius: minimal radius of EC
         :param max_radius: maximum radius of EC
+        :param max_count: maximum number of counts to consider for each fragment.
+          If 0, all counts are considered. If -1, counting is disabled.
         """
-        return {x for x in self._morgan_hash_dict(min_radius, max_radius) for x in x.values()}
+        if max_count == -1:
+            # default standard MFP
+            return {x for x in self._morgan_hash_dict(min_radius, max_radius) for x in x.values()}
 
-    def morgan_hash_smiles(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Dict[int, List[str]]:
-        """
-        Transform structures into dictionary of hashes of atoms with EC and corresponding SMILES.
-
-        :param min_radius: minimal radius of EC
-        :param max_radius: maximum radius of EC
-        """
-        smiles_dict = defaultdict(set)
-        for radius, hash_dict in enumerate(self._morgan_hash_dict(min_radius, max_radius), min_radius - 1):
-            for atom, morgan_hash in hash_dict.items():
-                smiles_dict[morgan_hash].add(format(self.augmented_substructure((atom,), deep=radius), 'A'))
-        return {k: list(v) for k, v in smiles_dict.items()}
-
-    def morgan_smiles_hash(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Dict[str, List[int]]:
-        """
-        Transform structures into dictionary of smiles and corresponding hashes of atoms with EC.
-
-        :param min_radius: minimal radius of EC
-        :param max_radius: maximum radius of EC
-        """
-        out = defaultdict(list)
-        for k, sl in self.morgan_hash_smiles(min_radius, max_radius).items():
-            for s in sl:
-                out[s].append(k)
-        return dict(out)
+        # count fragment hashes
+        counts = defaultdict(int)
+        for ids in self._morgan_hash_dict(min_radius, max_radius):
+            for x in ids.values():
+                counts[x] += 1
+        if max_count == 0:
+            max_count = 999_999_999  # effectively unlimited
+        return {hash((tpl, cnt)) for tpl, count in counts.items() for cnt in range(min(count, max_count))}
 
     def _morgan_hash_dict(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> List[Dict[int, int]]:
         """

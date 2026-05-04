@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,6 +19,7 @@
 from functools import reduce
 from itertools import chain
 from math import ceil
+from numpy import zeros, uint8, concatenate
 from operator import itemgetter, or_
 from typing import Dict, Iterator, Optional, Tuple, List, Sequence
 from zlib import compress, decompress
@@ -319,6 +320,79 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
 
     def __len__(self):
         return len(self.reactants) + len(self.products) + len(self.reagents)
+
+    def diff_fingerprint(self, min_radius: int = 1, max_radius: int = 4, length: int = 1024,
+                         number_active_bits: int = 2, max_count: int = 0,
+                         fp_type: str = 'concat', implicit_hydrogens: str = 'count'):
+        """
+        Calculate the difference fingerprint for a reaction.
+
+        :param min_radius: minimal radius of EC
+        :param max_radius: maximum radius of EC
+        :param length: fingerprint length. Should be power of 2
+        :param number_active_bits: number of active bits for each hashed tuple.
+        :param max_count: maximum number of counts to consider for each fragment.
+          If 0, all counts are considered. If -1, counting is disabled.
+        :param fp_type: type of fingerprint to calculate.
+            'binary' - disjoint feature bits between products and reactants. Will be same for a reverse reaction.
+            'concat' - same set of fingerprints concatenated (reactant bits first, then product bits)
+        :param implicit_hydrogens: how to treat implicit hydrogens in atom identifiers
+            'count' to include implicit hydrogens counts for non-carbon atoms in atom identifiers. Default value;
+            'any' to account for implicit hydrogens for non-carbon atoms in atom identifiers.
+                Thus all non-zero counts will be treated equally;
+            'ignore' to not include implicit hydrogens;
+        :return: array(n_features)
+        """
+        if fp_type == 'concat':
+            length = length // 2
+
+        reactant_fp = zeros(length, dtype=uint8)
+        product_fp = zeros(length, dtype=uint8)
+
+        for mol in self.reactants:
+            fp = _Molecule(mol, implicit_hydrogens).morgan_fingerprint(min_radius, max_radius, length, max_count=max_count)
+            reactant_fp |= fp
+        for mol in self.products:
+            fp = _Molecule(mol, implicit_hydrogens).morgan_fingerprint(min_radius, max_radius, length, max_count=max_count)
+            product_fp |= fp
+
+        r_fp_reac = reactant_fp & ~product_fp
+        r_fp_prod = product_fp & ~reactant_fp
+        if fp_type == 'binary':
+            return r_fp_reac | r_fp_prod
+        elif fp_type == 'concat':
+            return concatenate((r_fp_reac, r_fp_prod))
+        else:
+            raise ValueError('Unknown fp_type')
+
+
+class _Molecule(MoleculeContainer):
+    __slots__ = ()
+
+    def __init__(self, molecule: MoleculeContainer, implicit_hydrogens: str = 'count'):
+        super().__init__()
+        self._atoms = molecule._atoms
+        self._bonds = molecule._bonds
+        self._implicit_hydrogens = implicit_hydrogens
+
+    @property
+    def _atom_identifiers(self):
+        if self._implicit_hydrogens == 'count':
+            return {idx: hash((atom.isotope or 0, atom.atomic_number, atom.hybridization,
+                               atom.atomic_number != 6 and atom.implicit_hydrogens or 0,
+                               atom.charge, atom.is_radical))
+                    for idx, atom in self._atoms.items()}
+        elif self._implicit_hydrogens == 'any':
+            return {idx: hash((atom.isotope or 0, atom.atomic_number, atom.hybridization,
+                               bool(atom.atomic_number != 6 and atom.implicit_hydrogens),
+                               atom.charge, atom.is_radical))
+                    for idx, atom in self._atoms.items()}
+        elif self._implicit_hydrogens == 'ignore':
+            return {idx: hash((atom.isotope or 0, atom.atomic_number, atom.hybridization,
+                               atom.charge, atom.is_radical))
+                    for idx, atom in self._atoms.items()}
+        else:
+            raise ValueError('Unknown implicit_hydrogens option')
 
 
 __all__ = ['ReactionContainer']
