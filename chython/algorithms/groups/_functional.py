@@ -163,6 +163,15 @@ def _rules():
 
     # sulfur
     rules['thiol'] = smarts('[S;x0;D1;z1:1][C;z1:2]')
+    rules['thioether'] = smarts('[S;D2;z1;x0:1]([C:2])[C:3]')
+    rules['sulfoxide'] = smarts('[S;D3;z2:1](=[O:2])([C:3])[C:4]')
+
+    # pyridone/lactam halides (for extended ullmann/BH)
+    for _x, _name in (('F', 'fluoride'), ('Cl', 'chloride'), ('Br', 'bromide'), ('I', 'iodide')):
+        rules[f'pyridone_4_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]-[N;D3;M]-;@[C;z2;r6;M]=[O;M]')
+        rules[f'pyridone_3_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]=[C,N;M]-;@[N;D3;r6;M]-;@[C;z2;r6;M]=[O;M]')
+        rules[f'pyridone_2_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]=[C,N;M]-;@[C;z2;r6;M](=[O;M])-[N;D3;M]')
+        rules[f'pyridone_1_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]-[C;z2;x2;M](=[O;M])-[N;D3;M]')
 
     # pyrrole. for tautomerism handling H not in template.
     rules['pyrrole'] = smarts('[N;h1;D2;a;r5:1]')

@@ -91,6 +91,21 @@ def _rules():
                                         (amine, {1: 3, 2: 4, 3: 5})],
                                        '[A:1]-[A:3](-[A:4])-[A:5]'))
 
+    # buchwald-hartwig: pyridone/lactam halides + amines
+    for _x in ('fluoride', 'chloride', 'bromide', 'iodide'):
+        for _n in ('1', '2', '3', '4'):
+            pyridone = f'pyridone_{_n}_{_x}'
+            for amine in ('primary_amine', 'primary_aniline'):
+                rules.append(_make_reactor('buchwald_hartwig',
+                                           [(pyridone, None),
+                                            (amine, {1: 3, 2: 4})],
+                                           '[A:1]-[A:3]-[A:4]'))
+            for amine in ('secondary_amine', 'secondary_aniline'):
+                rules.append(_make_reactor('buchwald_hartwig',
+                                           [(pyridone, None),
+                                            (amine, {1: 3, 2: 4, 3: 5})],
+                                           '[A:1]-[A:3](-[A:4])-[A:5]'))
+
     # ugi 3CR: RCHO + R'NH2 + R''NC -> R'NH-CH(R)-C(=O)NHR''
     rules.append(_make_reactor('ugi_3cr',
                                [('aldehyde', None),
@@ -167,6 +182,23 @@ def _rules():
                                    [(halide, None),
                                     ('imidazole', {1: 3, 2: 4, 3: 5})],
                                    '[A:1]-[A:5]:[A:4]:[A:3]'))
+
+    # ullmann pyrrole: pyridone/lactam halides + N-heterocycles
+    for _x in ('fluoride', 'chloride', 'bromide', 'iodide'):
+        for _n in ('1', '2', '3', '4'):
+            pyridone = f'pyridone_{_n}_{_x}'
+            rules.append(_make_reactor('ullmann_pyrrole',
+                                       [(pyridone, None),
+                                        ('pyrrole', {1: 3})],
+                                       '[A:1]-[A:3]'))
+            rules.append(_make_reactor('ullmann_pyrrole',
+                                       [(pyridone, None),
+                                        ('pyrazole', {1: 3, 2: 4})],
+                                       '[A:1]-[A:4]:[A:3]'))
+            rules.append(_make_reactor('ullmann_pyrrole',
+                                       [(pyridone, None),
+                                        ('imidazole', {1: 3, 2: 4, 3: 5})],
+                                       '[A:1]-[A:5]:[A:4]:[A:3]'))
 
     # chan-lam: ArB(OH)2 + amine/phenol -> Ar-N/Ar-O
     for boron in ('aryl_boronic_acid', 'aryl_boronic_ester'):
@@ -303,6 +335,18 @@ def _rules():
         for alcohol in ('primary_alcohol', 'secondary_alcohol'):
             rules.append(_make_reactor('williamson',
                                        [(halide, None),
+                                        (alcohol, {1: 3, 2: 4})],
+                                       '[A:1]-[A:3]-[A:4]'))
+
+    # Williamson ether with pseudohalides:
+    for pseudohalide in ('alkyl_triflate', 'alkyl_mesylate', 'alkyl_tosylate'):
+        rules.append(_make_reactor('williamson',
+                                   [(pseudohalide, None),
+                                    ('phenol', {1: 3, 2: 4})],
+                                   '[A:1]-[A:3]-[A:4]'))
+        for alcohol in ('primary_alcohol', 'secondary_alcohol'):
+            rules.append(_make_reactor('williamson',
+                                       [(pseudohalide, None),
                                         (alcohol, {1: 3, 2: 4})],
                                        '[A:1]-[A:3]-[A:4]'))
 
@@ -588,6 +632,13 @@ def _rules():
                                 ('beta_ketoester', None),
                                 ('beta_ketoester', {1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 100: 200})],
                                '[N:20]:1:[A:1]:[A:5](-[A:3](=[A:4])-[A:100]):[A:11]:[A:10](-[A:8](=[A:9])-[A:200]):[A:6]:1'))
+
+    # nitrile_grignard: R-C≡N + RMgX → ketone (via imine hydrolysis)
+    for grignard in ('alkyl_grignard', 'aryl_grignard'):
+        rules.append(_make_reactor('nitrile_grignard',
+                                   [('nitrile', None),
+                                    (grignard, {100: 200, 101: 201, 1: 3})],
+                                   '[A:1](=[O:20])-[A:3]'))
 
     return rules
 

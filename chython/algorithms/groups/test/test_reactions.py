@@ -35,6 +35,8 @@ _two_component = [
      'suzuki', 'Brc1ccc(cc1)C.OB(O)CCC>>c1cc(ccc1CCC)C', 1),
     ('buchwald_hartwig_aryl_bromide_primary_amine',
      'buchwald_hartwig', 'Brc1ccc(cc1)C.NCC>>c1cc(ccc1C)NCC', 1),
+    ('buchwald_hartwig_pyridone_bromide_primary_amine',
+     'buchwald_hartwig', 'CN1C=CC(Br)=CC1=O.NCC>>CN1C=CC(=CC1=O)NCC', 1),
     ('mitsunobu_ether_primary_alcohol_phenol',
      'mitsunobu', 'OCC.Oc1ccc(cc1)C>>c1cc(ccc1C)OCC', 1),
     ('mitsunobu_ester_primary_alcohol_acid',
@@ -57,6 +59,8 @@ _two_component = [
      'ullmann_pyrrole', 'Brc1ccc(cc1)C.[nH]1nccc1>>c1cc(ccc1-n1nccc1)C', 2),
     ('ullmann_pyrrole_aryl_bromide_imidazole',
      'ullmann_pyrrole', 'Brc1ccc(cc1)C.[nH]1cncc1>>c1cc(ccc1-n1ccnc1)C', 2),
+    ('ullmann_pyrrole_pyridone_chloride_pyrrole',
+     'ullmann_pyrrole', 'CN1C=CC(Cl)=CC1=O.[nH]1cccc1>>CN1C=CC(=CC1=O)-n1cccc1', 1),
     ('chan_lam_boronic_acid_primary_amine',
      'chan_lam', 'OB(O)c1ccc(cc1)C.NCC>>c1cc(ccc1C)NCC', 1),
     ('chan_lam_boronic_acid_phenol',
@@ -87,6 +91,10 @@ _two_component = [
      'williamson', 'BrCC.Oc1ccc(cc1)C>>c1cc(ccc1C)OCC', 1),
     ('williamson_alkyl_bromide_alcohol',
      'williamson', 'BrCCC.OCC>>CCCOCC', 1),
+    ('williamson_mesylate_phenol',
+     'williamson', 'CS(=O)(=O)OCC.Oc1ccc(cc1)C>>c1cc(ccc1C)OCC', 1),
+    ('williamson_triflate_alcohol',
+     'williamson', 'FC(F)(F)S(=O)(=O)OCC.OCCC>>CCCOCC', 1),
     ('acylation_acyl_chloride_alcohol',
      'acylation', 'ClC(=O)c1ccccc1.OCC>>c1ccccc1C(OCC)=O', 1),
     ('thioether_thiol_alkyl_bromide',
@@ -109,6 +117,8 @@ _two_component = [
      'hiyama', 'Brc1ccc(cc1)C.c1ccccc1[Si](C)(C)C>>c1cc(ccc1-c1ccccc1)C', 1),
     ('grignard_explicit_alkyl_grignard_aldehyde',
      'grignard', 'CC[Mg]Br.O=Cc1ccccc1>>c1ccccc1C(CC)O', 1),
+    ('nitrile_grignard_alkyl',
+     'nitrile_grignard', 'N#CCC.CC[Mg]Br>>CCC(=O)CC', 1),
     ('heck_aryl_bromide_terminal_alkene',
      'heck', 'Brc1ccc(cc1)C.C=CC>>c1cc(ccc1C=CC)C', 1),
     ('heck_aryl_bromide_internal_alkene',
@@ -187,9 +197,17 @@ _transformations = [
     ('isoxazole_from_diketone', 'isoxazole', 'O=C(C)CC(=O)C>>c1(onc(C)c1)C', 1),
     ('pyridazine_from_diketone', 'pyridazine', 'O=C(C)CCC(=O)C>>c1(C)nnc(C)cc1', 1),
     ('appel_primary_alcohol', 'appel', 'OCC>>BrCC', 1),
-    ('appel_secondary_alcohol', 'appel', 'OC(C)c1ccccc1>>c1ccccc1C(C)Br', 1),
-    ('borylation_aryl_bromide', 'borylation', 'Brc1ccc(cc1)C>>OB(O)c1ccc(cc1)C', 1),
-    ('nitrile_hydrolysis_benzonitrile', 'nitrile_hydrolysis', 'N#Cc1ccccc1>>NC(=O)c1ccccc1', 1),
+    ('appel_secondary_alcohol', 'appel', 'OC(C)CC>>BrC(C)CC', 1),
+    ('borylation_aryl_bromide', 'borylation', 'Brc1c(C)c(C)c(C)c(C)c1C>>OB(O)c1c(C)c(C)c(C)c(C)c1C', 1),
+    ('nitrile_hydrolysis', 'nitrile_hydrolysis', 'N#CCC>>NC(=O)CC', 1),
+    ('nitration_benzene', 'nitration', 'c1ccccc1>>[O-][N+](=O)c1ccccc1', 1,
+     {'bromination', 'chlorination', 'iodination'}),
+    ('bromination_benzene', 'bromination', 'c1ccccc1>>Brc1ccccc1', 1,
+     {'nitration', 'chlorination', 'iodination'}),
+    ('chlorination_benzene', 'chlorination', 'c1ccccc1>>Clc1ccccc1', 1,
+     {'nitration', 'bromination', 'iodination'}),
+    ('iodination_benzene', 'iodination', 'c1ccccc1>>Ic1ccccc1', 1,
+     {'nitration', 'bromination', 'chlorination'}),
 ]
 
 _oxidations = [
@@ -197,6 +215,9 @@ _oxidations = [
     ('alcohol_to_ketone', 'alcohol_to_ketone', 'OC(C)C>>O=C(C)C', 1),
     ('aldehyde_to_acid', 'aldehyde_to_acid', 'O=CC>>OC(=O)C', 1),
     ('dihydroxylation', 'dihydroxylation', 'C=Cc1ccccc1>>OC(CO)c1ccccc1', 1),
+    ('thioether_to_sulfoxide', 'thioether_to_sulfoxide', 'CSC>>CS(=O)C', 1, {'thioether_to_sulfone'}),
+    ('thioether_to_sulfone', 'thioether_to_sulfone', 'CSC>>CS(=O)(=O)C', 1, {'thioether_to_sulfoxide'}),
+    ('sulfoxide_to_sulfone', 'sulfoxide_to_sulfone', 'CS(=O)C>>CS(=O)(=O)C', 1),
 ]
 
 _reductions = [
@@ -279,16 +300,19 @@ def test_four_component(test_id, rxn_name, rxn_smi, expected_count):
 
 
 @pytest.mark.parametrize(
-    'test_id,rxn_name,rxn_smi,expected_count',
+    'args',
     _oxidations,
     ids=[x[0] for x in _oxidations]
 )
-def test_oxidation(test_id, rxn_name, rxn_smi, expected_count):
+def test_oxidation(args):
+    test_id, rxn_name, rxn_smi, expected_count = args[:4]
+    exclude = args[4] if len(args) > 4 else set()
+
     r = smiles(rxn_smi)
     r.canonicalize()
     mol = r.reactants[0]
 
-    results = list(mol.oxidize())
+    results = [(n, rxn) for n, rxn in mol.oxidize() if n not in exclude]
 
     names = set(n for n, _ in results)
     assert names == {rxn_name}, f'expected {rxn_name}, got {sorted(names)}'
@@ -321,16 +345,19 @@ def test_reduction(test_id, rxn_name, rxn_smi, expected_count):
 
 
 @pytest.mark.parametrize(
-    'test_id,rxn_name,rxn_smi,expected_count',
+    'args',
     _transformations,
     ids=[x[0] for x in _transformations]
 )
-def test_transformation(test_id, rxn_name, rxn_smi, expected_count):
+def test_transformation(args):
+    test_id, rxn_name, rxn_smi, expected_count = args[:4]
+    exclude = args[4] if len(args) > 4 else set()
+
     r = smiles(rxn_smi)
     r.canonicalize()
     mol = r.reactants[0]
 
-    results = list(mol.transform())
+    results = [(n, rxn) for n, rxn in mol.transform() if n not in exclude]
 
     names = set(n for n, _ in results)
     assert names == {rxn_name}, f'expected {rxn_name}, got {sorted(names)}'

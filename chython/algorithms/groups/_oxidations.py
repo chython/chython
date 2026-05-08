@@ -46,6 +46,15 @@ def _rules():
     rules.append(_make_reactor('dihydroxylation', 'terminal_alkene', '[A:1](-[O:20])-[A:2](-[O:21])'))
     rules.append(_make_reactor('dihydroxylation', 'alkene', '[A:1](-[O:20])-[A:2](-[O:21])'))
 
+    # thioether → sulfoxide (mCPBA, H2O2, NaIO4)
+    rules.append(_make_reactor('thioether_to_sulfoxide', 'thioether', '[A:1](=[O:20])(-[A:2])-[A:3]'))
+
+    # thioether → sulfone (excess mCPBA, H2O2/AcOH, Oxone)
+    rules.append(_make_reactor('thioether_to_sulfone', 'thioether', '[A:1](=[O:20])(=[O:21])(-[A:2])-[A:3]'))
+
+    # sulfoxide → sulfone
+    rules.append(_make_reactor('sulfoxide_to_sulfone', 'sulfoxide', '[A:1](=[A:2])(=[O:20])(-[A:3])-[A:4]'))
+
     return rules
 
 

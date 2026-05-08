@@ -51,6 +51,14 @@ def _rules():
     # Nitrile hydrolysis: R-C≡N → R-C(=O)-NH2 (partial, to amide)
     rules.append(_make_reactor('nitrile_hydrolysis', 'nitrile', '[A:2]-[A:1]=[O:20]'))
 
+    # Electrophilic aromatic nitration: Ar-H → Ar-NO2
+    rules.append(_make_reactor('nitration', 'arene_ch', '[A:1]-[N;+:20](=[O:21])[O;-:22]'))
+
+    # Electrophilic aromatic halogenation: Ar-H → Ar-X
+    rules.append(_make_reactor('bromination', 'arene_ch', '[A:1]-[Br:20]'))
+    rules.append(_make_reactor('chlorination', 'arene_ch', '[A:1]-[Cl:20]'))
+    rules.append(_make_reactor('iodination', 'arene_ch', '[A:1]-[I:20]'))
+
     return rules
 
 
