@@ -200,6 +200,13 @@ def _rules():
                                         ('imidazole', {1: 3, 2: 4, 3: 5})],
                                        '[A:1]-[A:5]:[A:4]:[A:3]'))
 
+    # ullmann pyridol: ArX + hydroxypyridine -> Ar-N-C=O (CN coupling on pyridol tautomer)
+    for halide in ('aryl_fluoride', 'aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+        rules.append(_make_reactor('ullmann_pyrrole',
+                                   [(halide, None),
+                                    ('pyridol', {1: 3, 2: 4, 3: 5})],
+                                   '[A:1]-[A:3]-[A:4]=[A:5]'))
+
     # chan-lam: ArB(OH)2 + amine/phenol -> Ar-N/Ar-O
     for boron in ('aryl_boronic_acid', 'aryl_boronic_ester'):
         for amine in ('primary_amine', 'primary_aniline'):
