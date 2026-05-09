@@ -69,15 +69,6 @@ def _rules():
         []
     )
 
-    rules['hydroxyl_allyl'] = (
-        smarts('[O;D2:1]-;!@[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]'),
-        [1],
-        [],
-        'CC(C)OCC=C',
-        'CC(C)O',
-        []
-    )
-
     rules['hydroxyl_tms'] = (
         smarts('[O;D2:1]-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D1]'),
         [1],
@@ -121,15 +112,6 @@ def _rules():
         'CC(C)O[Si](c1ccccc1)(c1ccccc1)C(C)(C)C',
         'CC(C)O',
         ['CC(C)O[SiH](C)C', 'CC(C)O[Si](c1ccc(C)cc1)(c1ccccc1)C(C)(C)C']
-    )
-
-    rules['hydroxyl_benzyl'] = (
-        smarts('[O;D2:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1'),
-        [1],
-        [],
-        'CC(C)OCc1ccccc1',
-        'CC(C)O',
-        ['CC(C)OCc1cccc(C)c1', 'CC(C)OC(C)c1ccccc1']
     )
 
     rules['hydroxyl_o_nitrobenzyl'] = (
@@ -202,15 +184,6 @@ def _rules():
         'C1=CC=C(C=C1)C(=O)OC(C)C',
         'CC(C)O',
         ['COC1=CC=C(C=C1)C(=O)OC(C)C']
-    )
-
-    rules['hydroxyl_acyl'] = (
-        smarts('[O;D2:1]-;!@[C;z2;x2](=O)-[C;D1]'),
-        [1],
-        [],
-        'CC(C)OC(=O)C',
-        'CC(C)O',
-        ['CC(C)OC(=O)CC']
     )
 
     rules['hydroxyl_tfa'] = (
@@ -310,24 +283,6 @@ def _rules():
         'c1ccc(cc1)C(OC(C)C)(c1ccccc1)c1ccc(OC)cc1',
         'CC(C)O',
         ['CC(C)OC(c1ccccc1)(c1ccccc1)c1ccccc1']
-    )
-
-    rules['hydroxyl_tbu'] = (
-        smarts('[O;D2:1]-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]'),
-        [1],
-        [],
-        'CC(C)OC(C)(C)C',
-        'CC(C)O',
-        []
-    )
-
-    rules['hydroxyl_methyl'] = (
-        smarts('[O;D2:1]-;!@[C;D1]'),
-        [1],
-        [],
-        'CC(C)OC',
-        'CC(C)O',
-        ['CC(C)OCC']
     )
 
     rules['hydroxyl_mpe'] = (
@@ -850,6 +805,54 @@ def _rules():
         'COC1=CC=C(C2NC(C)CS2)C(OC)=C1',
         'NC(C)CS',
         []
+    )
+
+    # General patterns that are subsets of more specific ones above.
+    # Must come last to prevent false matches due to atom overlap.
+
+    rules['hydroxyl_tbu'] = (
+        smarts('[O;D2:1]-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]'),
+        [1],
+        [],
+        'CC(C)OC(C)(C)C',
+        'CC(C)O',
+        []
+    )
+
+    rules['hydroxyl_allyl'] = (
+        smarts('[O;D2:1]-;!@[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]'),
+        [1],
+        [],
+        'CC(C)OCC=C',
+        'CC(C)O',
+        []
+    )
+
+    rules['hydroxyl_benzyl'] = (
+        smarts('[O;D2:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1'),
+        [1],
+        [],
+        'CC(C)OCc1ccccc1',
+        'CC(C)O',
+        ['CC(C)OCc1cccc(C)c1', 'CC(C)OC(C)c1ccccc1']
+    )
+
+    rules['hydroxyl_acyl'] = (
+        smarts('[O;D2:1]-;!@[C;z2;x2](=O)-[C;D1]'),
+        [1],
+        [],
+        'CC(C)OC(=O)C',
+        'CC(C)O',
+        ['CC(C)OC(=O)CC']
+    )
+
+    rules['hydroxyl_methyl'] = (
+        smarts('[O;D2:1]-;!@[C;D1]'),
+        [1],
+        [],
+        'CC(C)OC',
+        'CC(C)O',
+        ['CC(C)OCC']
     )
 
     return rules

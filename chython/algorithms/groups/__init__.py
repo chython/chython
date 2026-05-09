@@ -48,8 +48,14 @@ class FunctionalGroups:
         Dict of protective group names to their count in the molecule.
         """
         found = {}
-        for name, (q, *_) in protective_rules.items():
-            c = sum(1 for _ in q.get_mapping(self))
+        seen = set()
+        for name, (q, keep, *_) in protective_rules.items():
+            c = 0
+            for mp in q.get_mapping(self, automorphism_filter=False):
+                atoms = {m for n, m in mp.items() if n not in keep}
+                if seen.isdisjoint(atoms):
+                    seen.update(atoms)
+                    c += 1
             if c:
                 found[name] = c
         return found
