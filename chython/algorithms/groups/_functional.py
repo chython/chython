@@ -30,6 +30,8 @@ def _rules():
     rules['terminal_alkyne'] = smarts('[C;z3;x0;D1:1]#[C;x0;D2:2]')
     rules['alkyne'] = smarts('[C;z3;x0;D2:1]#[C;x0;D2:2]')
 
+    rules['benzylic_ch'] = smarts('[C;z1;h1,h2;D2,D3:1]-[C;a:2]')
+
     # halides
     rules['aryl_fluoride'] = smarts('[F;D1:100]-[C;a:1]')
     rules['aryl_chloride'] = smarts('[Cl;D1:100]-[C;a:1]')
@@ -106,6 +108,10 @@ def _rules():
     rules['carboxylic_acid'] = smarts('[O;D1;z1;x0:100][C;z2;x2;D3:1]=[O:2]')
     rules['acyl_chloride'] = smarts('[Cl:100][C;z2;x2;D3:1]=[O:2]')
     rules['acyl_fluoride'] = smarts('[F:100][C;z2;x2;D3:1]=[O:2]')
+    rules['chloroformate'] = smarts('[Cl:100][C;z2;x3;D3:1](=[O:2])-[O;D2:3]')
+    rules['fluoroformate'] = smarts('[F:100][C;z2;x3;D3:1](=[O:2])-[O;D2:3]')
+    rules['carbamoyl_chloride'] = smarts('[Cl:100][C;z2;x3;D3:1](=[O:2])-[N;D2,D3:3]')
+    rules['carbamoyl_fluoride'] = smarts('[F:100][C;z2;x3;D3:1](=[O:2])-[N;D2,D3:3]')
 
     # amines
     rules['primary_amine'] = smarts('[N;D1;z1;x0:1][C;z1:2]')

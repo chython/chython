@@ -203,7 +203,7 @@ _transformations = [
     ('appel_primary_alcohol', 'appel', 'OCC>>BrCC', 1, {'triflation'}),
     ('appel_secondary_alcohol', 'appel', 'OC(C)CC>>BrC(C)CC', 1, {'triflation'}),
     ('borylation_aryl_bromide', 'borylation_acid', 'Brc1c(C)c(C)c(C)c(C)c1C>>OB(O)c1c(C)c(C)c(C)c(C)c1C', 1,
-     {'borylation_ester'}),
+     {'borylation_ester', 'cyanation'}),
     ('nitrile_hydrolysis', 'nitrile_hydrolysis', 'N#CCC>>NC(=O)CC', 1, {'nitrile_to_acid'}),
     ('nitration_benzene', 'nitration', 'c1ccccc1>>[O-][N+](=O)c1ccccc1', 1,
      {'bromination', 'chlorination', 'iodination'}),

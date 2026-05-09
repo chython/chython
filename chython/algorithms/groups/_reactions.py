@@ -55,6 +55,40 @@ def _rules():
                                         (amine, {1: 3, 2: 4, 3: 5})],
                                        '[A:1](=[A:2])-[A:3](-[A:4])-[A:5]'))
 
+    # carbamoylation: ROC(=O)X + amine -> ROC(=O)NR'R''  (carbamate from chloroformate)
+    for formate in ('chloroformate', 'fluoroformate'):
+        for amine in ('primary_amine', 'primary_aniline'):
+            rules.append(_make_reactor('carbamoylation',
+                                       [(formate, None),
+                                        (amine, {1: 4, 2: 5})],
+                                       '[A:3]-[A:1](=[A:2])-[A:4]-[A:5]'))
+        for amine in ('secondary_amine', 'secondary_aniline'):
+            rules.append(_make_reactor('carbamoylation',
+                                       [(formate, None),
+                                        (amine, {1: 4, 2: 5, 3: 6})],
+                                       '[A:3]-[A:1](=[A:2])-[A:4](-[A:5])-[A:6]'))
+        rules.append(_make_reactor('carbamoylation',
+                                   [(formate, None),
+                                    ('pyrrole', {1: 4})],
+                                   '[A:3]-[A:1](=[A:2])-[A:4]'))
+        rules.append(_make_reactor('carbamoylation',
+                                   [(formate, None),
+                                    ('imidazole', {1: 4, 2: 5, 3: 6})],
+                                   '[A:3]-[A:1](=[A:2])-[A:6]:[A:5]:[A:4]'))
+
+    # urea from carbamoyl chloride: R2NC(=O)X + amine -> R2NC(=O)NR'R''
+    for carbamoyl in ('carbamoyl_chloride', 'carbamoyl_fluoride'):
+        for amine in ('primary_amine', 'primary_aniline'):
+            rules.append(_make_reactor('urea_from_carbamoyl',
+                                       [(carbamoyl, None),
+                                        (amine, {1: 4, 2: 5})],
+                                       '[A:3]-[A:1](=[A:2])-[A:4]-[A:5]'))
+        for amine in ('secondary_amine', 'secondary_aniline'):
+            rules.append(_make_reactor('urea_from_carbamoyl',
+                                       [(carbamoyl, None),
+                                        (amine, {1: 4, 2: 5, 3: 6})],
+                                       '[A:3]-[A:1](=[A:2])-[A:4](-[A:5])-[A:6]'))
+
     # suzuki
     # aryl: ArX + ArB(OH)2 -> Ar-Ar
     # alkenyl: ArX + alkenyl_boronic -> Ar-CH=CH-R
@@ -278,6 +312,12 @@ def _rules():
         for carbonyl in ('aldehyde', 'ketone'):
             rules.append(_make_reactor('grignard',
                                        [(alkyl_halide, None),
+                                        (carbonyl, {1: 2, 2: 3})],
+                                       '[A:1]-[A:2]-[A:3]'))
+    for aryl_halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+        for carbonyl in ('aldehyde', 'ketone'):
+            rules.append(_make_reactor('grignard',
+                                       [(aryl_halide, None),
                                         (carbonyl, {1: 2, 2: 3})],
                                        '[A:1]-[A:2]-[A:3]'))
 
@@ -647,8 +687,8 @@ def _rules():
                                     (grignard, {100: 200, 101: 201, 1: 3})],
                                    '[A:1](=[O:20])-[A:3]'))
 
-    # N-alkylation: alkyl_halide + pyrrole/pyrazole/imidazole
-    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
+    # N-alkylation: alkyl_halide/triflate + pyrrole/pyrazole/imidazole
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate'):
         rules.append(_make_reactor('n_alkylation',
                                    [(halide, None),
                                     ('pyrrole', {1: 3})],
@@ -662,8 +702,8 @@ def _rules():
                                     ('imidazole', {1: 3, 2: 4, 3: 5})],
                                    '[A:1]-[A:5]:[A:4]:[A:3]'))
 
-    # N-alkylation: alkyl_halide + primary/secondary amine
-    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
+    # N-alkylation: alkyl_halide/triflate + primary/secondary amine
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate'):
         for amine in ('primary_amine', 'primary_aniline'):
             rules.append(_make_reactor('n_alkylation',
                                        [(halide, None),

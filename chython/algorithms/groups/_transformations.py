@@ -67,6 +67,9 @@ def _rules():
     rules.append(_make_reactor('chlorination', 'arene_ch', '[A:1]-[Cl:20]'))
     rules.append(_make_reactor('iodination', 'arene_ch', '[A:1]-[I:20]'))
 
+    # benzylic halogenation: Ar-CH2R → Ar-CHBrR (NBS, Br2/hv)
+    rules.append(_make_reactor('benzylic_bromination', 'benzylic_ch', '[A:1](-[Br:20])-[A:2]'))
+
     # alpha-halogenation: alpha_ketone → alpha-bromoketone (NBS/Br2)
     rules.append(_make_reactor('alpha_halogenation', 'alpha_ketone', '[A:1](=[A:2])-[A:3](-[Br:20])'))
 
@@ -83,14 +86,20 @@ def _rules():
     rules.append(_make_reactor('borylation_ester', 'alkyl_chloride',
                                '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
 
+    # ester to amide: R-C(=O)-OR' → R-C(=O)-NH2 (NH3)
+    rules.append(_make_reactor('ester_to_amide', 'ester', '[A:1](=[A:2])-[N:20]'))
+
     # amide hydrolysis: R-C(=O)-NHR → R-C(=O)-OH
     rules.append(_make_reactor('amide_hydrolysis', 'primary_amide', '[A:2](=[A:3])-[O:20]'))
     rules.append(_make_reactor('amide_hydrolysis', 'secondary_amide', '[A:2](=[A:3])-[O:20]'))
 
-    # cyanation: R-X → R-CN (NaCN)
+    # cyanation: R-X → R-CN (NaCN/CuCN)
     rules.append(_make_reactor('cyanation', 'alkyl_bromide', '[A:1]-[C:20]#[N:21]'))
     rules.append(_make_reactor('cyanation', 'alkyl_iodide', '[A:1]-[C:20]#[N:21]'))
     rules.append(_make_reactor('cyanation', 'alkyl_chloride', '[A:1]-[C:20]#[N:21]'))
+    rules.append(_make_reactor('cyanation', 'aryl_bromide', '[A:1]-[C:20]#[N:21]'))
+    rules.append(_make_reactor('cyanation', 'aryl_iodide', '[A:1]-[C:20]#[N:21]'))
+    rules.append(_make_reactor('cyanation', 'aryl_chloride', '[A:1]-[C:20]#[N:21]'))
 
     # dehydration: R-C(=O)-NH2 → R-C≡N (P2O5/SOCl2)
     rules.append(_make_reactor('dehydration', 'primary_amide', '[A:2]#[A:1]'))

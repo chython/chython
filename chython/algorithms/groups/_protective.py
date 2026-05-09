@@ -573,6 +573,24 @@ def _rules():
         ['c1ccccc1NC(=O)OC(C)c2ccccc2']
     )
 
+    rules['amine_phenylsulfonyl'] = (
+        smarts('[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1'),
+        [1],
+        [],
+        'c1ccccc1S(=O)(=O)Nc1ccccc1',
+        'c1ccccc1N',
+        []
+    )
+
+    rules['amine_tosyl'] = (
+        smarts('[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x0]([C;D1]):[C;D2]:[C;D2]:1'),
+        [1],
+        [],
+        'Cc1ccc(cc1)S(=O)(=O)Nc1ccccc1',
+        'c1ccccc1N',
+        []
+    )
+
     rules['amine_nosyl'] = (
         smarts('[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1'),
         [1],

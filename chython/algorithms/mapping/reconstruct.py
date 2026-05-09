@@ -47,11 +47,13 @@ class Reconstruct:
             c = m.copy()
             c.clean_stereo()
             c.clean_isotopes()
+            c.standardize_tautomers(prepare_molecule=False)
             reactants.append(c)
 
         product = self.products[0].copy()
         product.clean_stereo()
         product.clean_isotopes()
+        product.standardize_tautomers(prepare_molecule=False)
 
         # 1. standalone deprotection: reactant -> product by removing PGs
         for r in reactants:
@@ -71,7 +73,7 @@ class Reconstruct:
         for i, rg in enumerate(reactants):
             # oxidations
             for name, rxn in rg.oxidize():
-                if x := product.get_fast_mapping(rxn.products[0]):
+                if x := _match(rxn.products[0], product):
                     self.products[0].remap(x)
                     return [f'oxidize:{name}']
                 if result := _deprotect(rxn.products[0], product):
@@ -81,7 +83,7 @@ class Reconstruct:
 
             # reductions
             for name, rxn in rg.reduce():
-                if x := product.get_fast_mapping(rxn.products[0]):
+                if x := _match(rxn.products[0], product):
                     self.products[0].remap(x)
                     return [f'reduce:{name}']
                 if result := _deprotect(rxn.products[0], product):
@@ -91,7 +93,7 @@ class Reconstruct:
 
             # transformations
             for name, rxn in rg.transform():
-                if x := product.get_fast_mapping(rxn.products[0]):
+                if x := _match(rxn.products[0], product):
                     self.products[0].remap(x)
                     return [f'transform:{name}']
                 if result := _deprotect(rxn.products[0], product):
@@ -105,7 +107,7 @@ class Reconstruct:
                 for name, rxn in mols[0].react(*mols[1:]):
                     if len(rxn.products) != 1:
                         continue
-                    if x := product.get_fast_mapping(rxn.products[0]):
+                    if x := _match(rxn.products[0], product):
                         self.products[0].remap(x)
                         return [f'react:{name}']
                     if result := _deprotect(rxn.products[0], product):
@@ -113,6 +115,15 @@ class Reconstruct:
                         self.products[0].remap(mapping)
                         return [f'react:{name}'] + [f'deprotect:{p}' for p in removed]
         return []
+
+
+def _match(generated, reference):
+    """Match generated product to reference, with tautomer standardization fallback."""
+    if x := reference.get_fast_mapping(generated):
+        return x
+    # tautomer fallback: standardize generated in-place (throwaway object)
+    generated.standardize_tautomers(prepare_molecule=False)
+    return reference.get_fast_mapping(generated)
 
 
 def _deprotect(reactant, product) -> tuple[dict[int, int], list[str]] | None:
@@ -124,7 +135,7 @@ def _deprotect(reactant, product) -> tuple[dict[int, int], list[str]] | None:
     ppg = product.protective_groups
     # check if all PGs in product are present in reactant
     for p, c in ppg.items():
-        if p not in rpg or c >= rpg[p]:
+        if p not in rpg or c > rpg[p]:
             return
     # find PGs in reactant that are not in product
     missing = {}
@@ -137,10 +148,10 @@ def _deprotect(reactant, product) -> tuple[dict[int, int], list[str]] | None:
     m = reactant.copy()
     for p in missing:
         m.remove_protection(p)
-    if m == product:
-        mapping = product.get_fast_mapping(m)
-        if mapping:
-            return mapping, list(missing)
+    m.kekule()
+    m.thiele()
+    if x := _match(m, product):
+        return x, list(missing)
 
 
 __all__ = ['Reconstruct']

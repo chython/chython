@@ -60,6 +60,10 @@ def _rules():
     # azide → primary_amine (PPh3/H2O, H2/Pd)
     rules.append(_make_reactor('azide_to_amine', 'azide', '[A:1]'))
 
+    # alkene hydrogenation: C=C → C-C (H2/Pd, H2/Pt)
+    rules.append(_make_reactor('alkene_hydrogenation', 'alkene', '[A:1]-[A:2]'))
+    rules.append(_make_reactor('alkene_hydrogenation', 'terminal_alkene', '[A:1]-[A:2]'))
+
     # deoxygenation: alcohol → alkane (Barton-McCombie, Appel+reduction)
     rules.append(_make_reactor('deoxygenation', 'primary_alcohol', '[A:2]'))
     rules.append(_make_reactor('deoxygenation', 'secondary_alcohol', '[A:2]'))
