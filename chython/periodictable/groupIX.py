@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Tagir Akhmetshin <tagirshin@gmail.com>
 #  Copyright 2019 Tansu Nasyrova <tansu.nasurova@gmail.com>
 #  This file is part of chython.

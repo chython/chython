@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2014-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2014-2019 Timur Madzhidov tmadzhidov@gmail.com features and API discussion
 #  Copyright 2014-2019 Alexandre Varnek <varnek@unistra.fr> base idea of CGR approach
 #  This file is part of chython.
