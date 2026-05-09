@@ -40,7 +40,7 @@ class StandardizeReaction:
             total.extend((n, x) for x in m.canonicalize(logging=True, fix_tautomers=fix_tautomers))
 
         if fix_mapping:
-            total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
+            total.extend(self.fix_mapping(logging=True))
 
         if total:
             self.flush_cache(keep_molecule_cache=True)

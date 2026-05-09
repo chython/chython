@@ -18,15 +18,10 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from functools import cache
-from itertools import chain, count, repeat
+from itertools import repeat
 from logging import getLogger, INFO
 from numpy import ix_, unravel_index, argmax, zeros, array, isclose, nonzero, ones, mean
 from threading import Lock
-from typing import TYPE_CHECKING, Union
-
-
-if TYPE_CHECKING:
-    from chython import ReactionContainer
 
 logger = getLogger('chython.attention')
 logger.setLevel(INFO)
@@ -46,15 +41,15 @@ def _get_attention_model():
 class Attention:
     __slots__ = ()
 
-    def reset_mapping(self: Union['ReactionContainer', 'Attention'], *, return_score: bool = False, multiplier=1.75,
-                      keep_reactants_numbering=False) -> Union[bool, float]:
+    def attention_mapping(self, *, return_score: bool = False, multiplier=1.75,
+                          keep_reactants_numbering=False) -> bool | float:
         """
         Do atom-to-atom mapping. Return True if mapping changed.
         """
         if any(len(bs) > 14 for m in self.molecules() for bs in m._bonds.values()):
             logger.info('atom-to-atom mapping not supported for hypervalent compounds')
             return False
-        fixed = self.__fix_collisions()
+        fixed = self.reset_mapping()
         equal_atoms, p2r, r2p, r_adj, p_adj, r_map, p_map, pa, rg_map = self.__prepare_remapping()
 
         # rxnmapper-inspired algorithm
@@ -123,30 +118,13 @@ class Attention:
             self.flush_cache()
             fixed = True
 
-        if self.fix_groups_mapping():  # fix carboxy etc
-            fixed = True
         if self.fix_mapping():  # fix common mistakes in mechanisms
             fixed = True
         if return_score:
             return score
         return fixed
 
-    def __fix_collisions(self: 'ReactionContainer'):
-        r = [n for m in chain(self.reactants, self.reagents) for n in m._atoms]
-        p = [n for m in self.products for n in m._atoms]
-        c = count(1)
-        if len(r) != len(set(r)):
-            for m in chain(self.reactants, self.reagents):
-                m.remap({n: next(c) for n in m._atoms})
-        if len(p) != len(set(p)):
-            for m in self.products:
-                m.remap({n: next(c) for n in m._atoms})
-        if next(c) != 1:
-            self.flush_cache()
-            return True
-        return False
-
-    def __prepare_remapping(self: 'ReactionContainer'):
+    def __prepare_remapping(self):
         r_map = [n for m in self.reactants for n in m]
         p_map = [n for m in self.products for n in m]
         rg_map = [n for m in self.reagents for n in m]
