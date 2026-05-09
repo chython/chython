@@ -17,9 +17,13 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from logging import getLogger
 from typing import Union
 from .base import BaseReactor
 from ..containers import QueryContainer, MoleculeContainer
+
+
+logger = getLogger('chython.reactor')
 
 
 class Transformer(BaseReactor):
@@ -54,7 +58,11 @@ class Transformer(BaseReactor):
             raise TypeError('only Molecules possible')
 
         for mapping in self._pattern.get_mapping(structure, automorphism_filter=self._automorphism_filter):
-            transformed = self._patcher(structure, mapping)
+            try:
+                transformed = self._patcher(structure, mapping)
+            except Exception:
+                logger.info('invalid product structure, skipping')
+                continue
             if self._copy_metadata:
                 transformed.meta.update(structure.meta)
             yield transformed

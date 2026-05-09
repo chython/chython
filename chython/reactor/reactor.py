@@ -141,7 +141,11 @@ class Reactor(BaseReactor):
             if united_chosen is None:
                 united_chosen = reduce(or_, chosen)
                 max_ignored_number = max(ignored, default=0)
-            new = self._patcher(united_chosen, mapping)
+            try:
+                new = self._patcher(united_chosen, mapping)
+            except Exception:
+                logger.info('invalid product structure, skipping')
+                continue
             collision = set(new).intersection(ignored)
             if collision:
                 new.remap(dict(zip(collision, count(max(max_ignored_number, max(new)) + 1))))
