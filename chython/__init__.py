@@ -27,7 +27,6 @@ from .reactor import *
 from .utils import *
 
 
-torch_device = 'cpu'  # AAM model device. Change before first `reset_mapping` call!
 clean2d_engine: Literal['rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo'] = 'smilesdrawer'
 conformer_engine: Literal['rdkit', 'cdpkit'] = 'rdkit'
 class_paths = [getenv('CDK_PATH', 'cdk.jar'), getenv('OPSIN_PATH', 'opsin.jar')]
