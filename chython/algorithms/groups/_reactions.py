@@ -647,6 +647,61 @@ def _rules():
                                     (grignard, {100: 200, 101: 201, 1: 3})],
                                    '[A:1](=[O:20])-[A:3]'))
 
+    # N-alkylation: alkyl_halide + pyrrole/pyrazole/imidazole
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
+        rules.append(_make_reactor('n_alkylation',
+                                   [(halide, None),
+                                    ('pyrrole', {1: 3})],
+                                   '[A:1]-[A:3]'))
+        rules.append(_make_reactor('n_alkylation',
+                                   [(halide, None),
+                                    ('pyrazole', {1: 3, 2: 4})],
+                                   '[A:1]-[A:4]:[A:3]'))
+        rules.append(_make_reactor('n_alkylation',
+                                   [(halide, None),
+                                    ('imidazole', {1: 3, 2: 4, 3: 5})],
+                                   '[A:1]-[A:5]:[A:4]:[A:3]'))
+
+    # N-alkylation: alkyl_halide + primary/secondary amine
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
+        for amine in ('primary_amine', 'primary_aniline'):
+            rules.append(_make_reactor('n_alkylation',
+                                       [(halide, None),
+                                        (amine, {1: 3, 2: 4})],
+                                       '[A:1]-[A:3]-[A:4]'))
+        for amine in ('secondary_amine', 'secondary_aniline'):
+            rules.append(_make_reactor('n_alkylation',
+                                       [(halide, None),
+                                        (amine, {1: 3, 2: 4, 3: 5})],
+                                       '[A:1]-[A:3](-[A:4])-[A:5]'))
+
+    # urea from 2 amines (CDI/phosgene implicit)
+    for amine1 in ('primary_amine', 'primary_aniline'):
+        for amine2 in ('primary_amine', 'primary_aniline'):
+            rules.append(_make_reactor('urea_from_amines',
+                                       [(amine1, None),
+                                        (amine2, {1: 3, 2: 4})],
+                                       '[A:1](-[A:2])-[C:20](=[O:21])-[A:3]-[A:4]'))
+
+    # oxazoline: amino_alcohol + carboxylic_acid → 2-oxazoline ring
+    rules.append(_make_reactor('oxazoline',
+                               [('amino_alcohol', None),
+                                ('carboxylic_acid', {100: 200, 1: 5, 2: 6})],
+                               '[A:5]1=[A:1]-[A:2]-[A:3]-[A:4]-1'))
+
+    # oxime O-alkylation: oxime + alkyl_halide → oxime ether
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
+        rules.append(_make_reactor('oxime_alkylation',
+                                   [('oxime', None),
+                                    (halide, {100: 200, 1: 4})],
+                                   '[A:1](-[A:4])-[A:2]=[A:3]'))
+
+    # aldol with ketone (extension): alpha_ketone + ketone
+    rules.append(_make_reactor('aldol',
+                               [('alpha_ketone', None),
+                                ('ketone', {1: 4, 2: 5})],
+                               '[A:1](=[A:2])-[A:3]-[A:4]-[A:5]'))
+
     return rules
 
 

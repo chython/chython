@@ -64,6 +64,10 @@ def _rules():
     rules.append(_make_reactor('deoxygenation', 'primary_alcohol', '[A:2]'))
     rules.append(_make_reactor('deoxygenation', 'secondary_alcohol', '[A:2]'))
 
+    # carbonyl → primary amine (reductive amination with NH3)
+    rules.append(_make_reactor('carbonyl_to_amine', 'aldehyde', '[A:1]-[N:20]'))
+    rules.append(_make_reactor('carbonyl_to_amine', 'ketone', '[A:1]-[N:20]'))
+
     return rules
 
 

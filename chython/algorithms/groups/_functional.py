@@ -209,6 +209,12 @@ def _rules():
     # 2-aminopyridine / 2-aminoazine (for GBB, imidazo[1,2-a]pyridine)
     rules['aminopyridine'] = smarts('[N;D1;z1;x0:1]-[C;a:2]:[N;a;h0;D2:3]')
 
+    # amino alcohol (for oxazoline formation): H2N-C-C-OH
+    rules['amino_alcohol'] = smarts('[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[O;D1:4]')
+
+    # oxime: C=N-OH
+    rules['oxime'] = smarts('[O;D1;z1;x1:1]-[N;D2;z2;x1:2]=[C:3]')
+
     # alpha-isocyano (for Van Leusen oxazole)
     rules['tosyl_isocyanide'] = smarts('[C;-;D1:2]#[N;+;D2:1]-[C;D2,D3;z1;x2:3]-[S;D4;x2:100](=O)=O')
 

@@ -43,10 +43,18 @@ def _rules():
     rules.append(_make_reactor('appel', 'primary_alcohol', '[Br:20]-[A:2]'))
     rules.append(_make_reactor('appel', 'secondary_alcohol', '[Br:20]-[A:2]'))
 
+    # Miyaura borylation: ArX → ArB(OH)2
+    rules.append(_make_reactor('borylation_acid', 'aryl_bromide', '[A:1]-[B:20](-[O:21])-[O:22]'))
+    rules.append(_make_reactor('borylation_acid', 'aryl_iodide', '[A:1]-[B:20](-[O:21])-[O:22]'))
+    rules.append(_make_reactor('borylation_acid', 'aryl_chloride', '[A:1]-[B:20](-[O:21])-[O:22]'))
+
     # Miyaura borylation: ArX → ArBpin (Pd, B2pin2)
-    rules.append(_make_reactor('borylation', 'aryl_bromide', '[A:1]-[B:20](-[O:21])-[O:22]'))
-    rules.append(_make_reactor('borylation', 'aryl_iodide', '[A:1]-[B:20](-[O:21])-[O:22]'))
-    rules.append(_make_reactor('borylation', 'aryl_chloride', '[A:1]-[B:20](-[O:21])-[O:22]'))
+    rules.append(_make_reactor('borylation_ester', 'aryl_bromide',
+                               '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
+    rules.append(_make_reactor('borylation_ester', 'aryl_iodide',
+                               '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
+    rules.append(_make_reactor('borylation_ester', 'aryl_chloride',
+                               '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
 
     # Nitrile hydrolysis: R-C≡N → R-C(=O)-NH2 (partial, to amide)
     rules.append(_make_reactor('nitrile_hydrolysis', 'nitrile', '[A:2]-[A:1]=[O:20]'))
@@ -58,6 +66,42 @@ def _rules():
     rules.append(_make_reactor('bromination', 'arene_ch', '[A:1]-[Br:20]'))
     rules.append(_make_reactor('chlorination', 'arene_ch', '[A:1]-[Cl:20]'))
     rules.append(_make_reactor('iodination', 'arene_ch', '[A:1]-[I:20]'))
+
+    # alpha-halogenation: alpha_ketone → alpha-bromoketone (NBS/Br2)
+    rules.append(_make_reactor('alpha_halogenation', 'alpha_ketone', '[A:1](=[A:2])-[A:3](-[Br:20])'))
+
+    # alkyl borylation: R-X → R-B(OH)2
+    rules.append(_make_reactor('borylation_acid', 'alkyl_bromide', '[A:1]-[B:20](-[O:21])-[O:22]'))
+    rules.append(_make_reactor('borylation_acid', 'alkyl_iodide', '[A:1]-[B:20](-[O:21])-[O:22]'))
+    rules.append(_make_reactor('borylation_acid', 'alkyl_chloride', '[A:1]-[B:20](-[O:21])-[O:22]'))
+
+    # alkyl borylation: R-X → R-Bpin
+    rules.append(_make_reactor('borylation_ester', 'alkyl_bromide',
+                               '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
+    rules.append(_make_reactor('borylation_ester', 'alkyl_iodide',
+                               '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
+    rules.append(_make_reactor('borylation_ester', 'alkyl_chloride',
+                               '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
+
+    # amide hydrolysis: R-C(=O)-NHR → R-C(=O)-OH
+    rules.append(_make_reactor('amide_hydrolysis', 'primary_amide', '[A:2](=[A:3])-[O:20]'))
+    rules.append(_make_reactor('amide_hydrolysis', 'secondary_amide', '[A:2](=[A:3])-[O:20]'))
+
+    # cyanation: R-X → R-CN (NaCN)
+    rules.append(_make_reactor('cyanation', 'alkyl_bromide', '[A:1]-[C:20]#[N:21]'))
+    rules.append(_make_reactor('cyanation', 'alkyl_iodide', '[A:1]-[C:20]#[N:21]'))
+    rules.append(_make_reactor('cyanation', 'alkyl_chloride', '[A:1]-[C:20]#[N:21]'))
+
+    # dehydration: R-C(=O)-NH2 → R-C≡N (P2O5/SOCl2)
+    rules.append(_make_reactor('dehydration', 'primary_amide', '[A:2]#[A:1]'))
+
+    # triflation: phenol/alcohol → triflate (Tf2O)
+    rules.append(_make_reactor('triflation', 'phenol', '[A:2]-[A:1]-[S:20](=[O:21])(=[O:22])-[C:23]([F:24])([F:25])[F:26]'))
+    rules.append(_make_reactor('triflation', 'primary_alcohol', '[A:2]-[A:1]-[S:20](=[O:21])(=[O:22])-[C:23]([F:24])([F:25])[F:26]'))
+    rules.append(_make_reactor('triflation', 'secondary_alcohol', '[A:2]-[A:1]-[S:20](=[O:21])(=[O:22])-[C:23]([F:24])([F:25])[F:26]'))
+
+    # nitrile full hydrolysis: R-C≡N → R-COOH
+    rules.append(_make_reactor('nitrile_to_acid', 'nitrile', '[A:1](=[O:20])-[O:21]'))
 
     return rules
 

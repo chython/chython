@@ -166,7 +166,7 @@ _two_component = [
     ('van_leusen_oxazole_tosmic_aldehyde',
      'van_leusen_oxazole', '[C-]#[N+]CS(=O)(=O)c1ccc(cc1)C.O=CC>>c1oc(C)nc1', 1),
     ('imidazopyridine_aminopyridine_haloketone',
-     'imidazopyridine', 'Nc1ncccc1.ClCC(=O)C>>c1cccn2c1nc(C)c2', 1, {'reductive_amination'}),
+     'imidazopyridine', 'Nc1ncccc1.ClCC(=O)C>>c1cccn2c1nc(C)c2', 1, {'reductive_amination', 'n_alkylation'}),
     ('niementowski_anthranilic_acid_amide',
      'niementowski', 'Nc1ccccc1C(=O)O.NC(=O)C>>Oc1c2c(nc(n1)C)cccc2', 1),
     ('liebeskind_srogl_thioester_boronic_acid',
@@ -196,12 +196,15 @@ _four_component = [
 ]
 
 _transformations = [
-    ('isoxazole_from_diketone', 'isoxazole', 'O=C(C)CC(=O)C>>c1(onc(C)c1)C', 1),
-    ('pyridazine_from_diketone', 'pyridazine', 'O=C(C)CCC(=O)C>>c1(C)nnc(C)cc1', 1),
-    ('appel_primary_alcohol', 'appel', 'OCC>>BrCC', 1),
-    ('appel_secondary_alcohol', 'appel', 'OC(C)CC>>BrC(C)CC', 1),
-    ('borylation_aryl_bromide', 'borylation', 'Brc1c(C)c(C)c(C)c(C)c1C>>OB(O)c1c(C)c(C)c(C)c(C)c1C', 1),
-    ('nitrile_hydrolysis', 'nitrile_hydrolysis', 'N#CCC>>NC(=O)CC', 1),
+    ('isoxazole_from_diketone', 'isoxazole', 'O=C(C)CC(=O)C>>c1(onc(C)c1)C', 1,
+     {'alpha_halogenation'}),
+    ('pyridazine_from_diketone', 'pyridazine', 'O=C(C)CCC(=O)C>>c1(C)nnc(C)cc1', 1,
+     {'alpha_halogenation'}),
+    ('appel_primary_alcohol', 'appel', 'OCC>>BrCC', 1, {'triflation'}),
+    ('appel_secondary_alcohol', 'appel', 'OC(C)CC>>BrC(C)CC', 1, {'triflation'}),
+    ('borylation_aryl_bromide', 'borylation_acid', 'Brc1c(C)c(C)c(C)c(C)c1C>>OB(O)c1c(C)c(C)c(C)c(C)c1C', 1,
+     {'borylation_ester'}),
+    ('nitrile_hydrolysis', 'nitrile_hydrolysis', 'N#CCC>>NC(=O)CC', 1, {'nitrile_to_acid'}),
     ('nitration_benzene', 'nitration', 'c1ccccc1>>[O-][N+](=O)c1ccccc1', 1,
      {'bromination', 'chlorination', 'iodination'}),
     ('bromination_benzene', 'bromination', 'c1ccccc1>>Brc1ccccc1', 1,
@@ -223,8 +226,8 @@ _oxidations = [
 ]
 
 _reductions = [
-    ('aldehyde_to_alcohol', 'aldehyde_to_alcohol', 'O=Cc1ccccc1>>OCc1ccccc1', 1),
-    ('ketone_to_alcohol', 'ketone_to_alcohol', 'O=C(C)c1ccccc1>>OC(C)c1ccccc1', 1),
+    ('aldehyde_to_alcohol', 'aldehyde_to_alcohol', 'O=Cc1ccccc1>>OCc1ccccc1', 1, {'carbonyl_to_amine'}),
+    ('ketone_to_alcohol', 'ketone_to_alcohol', 'O=C(C)c1ccccc1>>OC(C)c1ccccc1', 1, {'carbonyl_to_amine'}),
     ('acid_to_alcohol', 'acid_to_alcohol', 'OC(=O)c1ccccc1>>OCc1ccccc1', 1),
     ('ester_to_alcohol', 'ester_to_alcohol', 'COC(=O)c1ccccc1>>OCc1ccccc1', 1),
     ('amide_to_amine_primary', 'amide_to_amine', 'NC(=O)c1ccccc1>>NCc1ccccc1', 1),
@@ -326,16 +329,19 @@ def test_oxidation(args):
 
 
 @pytest.mark.parametrize(
-    'test_id,rxn_name,rxn_smi,expected_count',
+    'args',
     _reductions,
     ids=[x[0] for x in _reductions]
 )
-def test_reduction(test_id, rxn_name, rxn_smi, expected_count):
+def test_reduction(args):
+    test_id, rxn_name, rxn_smi, expected_count = args[:4]
+    exclude = args[4] if len(args) > 4 else set()
+
     r = smiles(rxn_smi)
     r.canonicalize()
     mol = r.reactants[0]
 
-    results = list(mol.reduce())
+    results = [(n, rxn) for n, rxn in mol.reduce() if n not in exclude]
 
     names = set(n for n, _ in results)
     assert names == {rxn_name}, f'expected {rxn_name}, got {sorted(names)}'

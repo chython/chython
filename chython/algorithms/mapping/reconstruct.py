@@ -22,7 +22,7 @@ from itertools import combinations
 class Reconstruct:
     __slots__ = ()
 
-    def reconstruct_mapping(self) -> bool:
+    def reconstruct_mapping(self) -> list[str]:
         """
         Annotate reaction by trying to reconstruct the product from reactants
         using predefined reaction templates.
@@ -30,10 +30,12 @@ class Reconstruct:
         Tries in order:
         1. Standalone deprotection (reactant -> product via PG removal)
         2. Standalone protection (product -> reactant via PG removal, i.e. reverse)
-        3. Multi/single-component reactions (react/oxidize/reduce/transform)
+        3. Single-molecule reactions (oxidize/reduce/transform)
            with optional one-pot deprotection of the product
+        4. Multi-component reactions with optional deprotection
 
-        Returns True if a reaction was found, False otherwise.
+        Returns list of matched reaction/deprotection names.
+        Empty list if no match found.
         If found, updates atom-to-atom mapping.
         """
         assert self.reactants, 'No reactants in reaction'
@@ -53,16 +55,17 @@ class Reconstruct:
 
         # 1. standalone deprotection: reactant -> product by removing PGs
         for r in reactants:
-            if x := _deprotect(r, product):
-                # remap product atom to reactant atom
-                self.products[0].remap(x)
-                return True
+            if result := _deprotect(r, product):
+                mapping, removed = result
+                self.products[0].remap(mapping)
+                return [f'deprotect:{name}' for name in removed]
 
         # 2. standalone protection: product -> reactant by removing PGs (reverse direction)
         for i, r in enumerate(reactants):
-            if x := _deprotect(product, r):
-                self.reactants[i].remap(x)
-                return True
+            if result := _deprotect(product, r):
+                mapping, removed = result
+                self.reactants[i].remap(mapping)
+                return [f'protect:{name}' for name in removed]
 
         # 3. single-molecule transforms
         for i, rg in enumerate(reactants):
@@ -70,28 +73,31 @@ class Reconstruct:
             for name, rxn in rg.oxidize():
                 if x := product.get_fast_mapping(rxn.products[0]):
                     self.products[0].remap(x)
-                    return True
-                if x := _deprotect(rxn.products[0], product):
-                    self.products[0].remap(x)
-                    return True
+                    return [f'oxidize:{name}']
+                if result := _deprotect(rxn.products[0], product):
+                    mapping, removed = result
+                    self.products[0].remap(mapping)
+                    return [f'oxidize:{name}'] + [f'deprotect:{p}' for p in removed]
 
             # reductions
             for name, rxn in rg.reduce():
                 if x := product.get_fast_mapping(rxn.products[0]):
                     self.products[0].remap(x)
-                    return True
-                if x := _deprotect(rxn.products[0], product):
-                    self.products[0].remap(x)
-                    return True
+                    return [f'reduce:{name}']
+                if result := _deprotect(rxn.products[0], product):
+                    mapping, removed = result
+                    self.products[0].remap(mapping)
+                    return [f'reduce:{name}'] + [f'deprotect:{p}' for p in removed]
 
             # transformations
             for name, rxn in rg.transform():
                 if x := product.get_fast_mapping(rxn.products[0]):
                     self.products[0].remap(x)
-                    return True
-                if x := _deprotect(rxn.products[0], product):
-                    self.products[0].remap(x)
-                    return True
+                    return [f'transform:{name}']
+                if result := _deprotect(rxn.products[0], product):
+                    mapping, removed = result
+                    self.products[0].remap(mapping)
+                    return [f'transform:{name}'] + [f'deprotect:{p}' for p in removed]
 
         # 4. multi-component reactions
         for size in range(min(len(reactants), 4), 1, -1):
@@ -101,14 +107,19 @@ class Reconstruct:
                         continue
                     if x := product.get_fast_mapping(rxn.products[0]):
                         self.products[0].remap(x)
-                        return True
-                    if x := _deprotect(rxn.products[0], product):
-                        self.products[0].remap(x)
-                        return True
-        return False
+                        return [f'react:{name}']
+                    if result := _deprotect(rxn.products[0], product):
+                        mapping, removed = result
+                        self.products[0].remap(mapping)
+                        return [f'react:{name}'] + [f'deprotect:{p}' for p in removed]
+        return []
 
 
-def _deprotect(reactant, product) -> dict[int, int] | None:
+def _deprotect(reactant, product) -> tuple[dict[int, int], list[str]] | None:
+    """Try to match reactant to product by removing PGs.
+
+    Returns (mapping, list_of_removed_pg_names) or None.
+    """
     rpg = reactant.protective_groups
     ppg = product.protective_groups
     # check if all PGs in product are present in reactant
@@ -124,9 +135,12 @@ def _deprotect(reactant, product) -> dict[int, int] | None:
 
     # remove PGs from reactant
     m = reactant.copy()
-    for p, c in missing.items():
+    for p in missing:
         m.remove_protection(p)
-    if m == product: return product.get_fast_mapping(m)
+    if m == product:
+        mapping = product.get_fast_mapping(m)
+        if mapping:
+            return mapping, list(missing)
 
 
 __all__ = ['Reconstruct']
