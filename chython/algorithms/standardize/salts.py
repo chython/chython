@@ -16,12 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from typing import TYPE_CHECKING, List, Tuple, Union
 from ._salts import acids, rules
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
 
 
 # atomic number constants
@@ -34,8 +29,7 @@ s_metals_ammonia = {3, 4, 7, 11, 12, 19, 20, 37, 38, 55, 56, 87, 88}
 class Salts:
     __slots__ = ()
 
-    def remove_metals(self: 'MoleculeContainer', *,
-                      skip_elements: List[int] = None, logging=False) -> Union[bool, List]:
+    def remove_metals(self, *, skip_elements: list[int] = None, logging=False) -> bool | list:
         """
         Remove disconnected S-metals and ammonia.
 
@@ -64,7 +58,7 @@ class Salts:
             return []
         return False
 
-    def remove_acids(self: 'MoleculeContainer', *, logging=False) -> Union[bool, List[int]]:
+    def remove_acids(self, *, logging=False) -> bool | list:
         """
         Remove common acids from organic bases salts.
         Works only for neutral pairs like HA+B. Use `neutralize` before.
@@ -92,9 +86,7 @@ class Salts:
             return []
         return False
 
-    def split_metal_salts(self: 'MoleculeContainer', *,
-                          skip_elements: List[int] = None,
-                          logging=False) -> Union[bool, List[Tuple[int, int]]]:
+    def split_metal_salts(self, *, skip_elements: list[int] = None, logging=False) -> bool | list:
         """
         Split connected S-metal salts to cation/anion pairs.
 

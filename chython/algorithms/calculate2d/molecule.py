@@ -19,13 +19,9 @@
 #
 from importlib.resources import files
 from random import random
-from typing import TYPE_CHECKING, Union, Dict, Literal
+from typing import Literal
 from ...exceptions import ImplementationError
 from ...periodictable.base.vector import Vector
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
 
 try:
     from py_mini_racer import MiniRacer
@@ -39,11 +35,8 @@ except (ImportError, RuntimeError):
 
 class Calculate2DMolecule:
     __slots__ = ()
-    _atoms: Dict[int, 'Element']
-    _bonds: Dict[int, Dict[int, 'Bond']]
 
-    def clean2d(self: Union['MoleculeContainer', 'Calculate2DMolecule'],
-                *, engine: Literal['rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo'] = None):
+    def clean2d(self, *, engine: Literal['rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo'] = None):
         """
         Calculate 2d layout of graph.
 
@@ -123,7 +116,7 @@ class Calculate2DMolecule:
                 shift_x = self._fix_plane_mean(shift_x, component=c) + .9
         self.__dict__.pop('__cached_method__repr_svg_', None)
 
-    def rescale2d(self: 'MoleculeContainer'):
+    def rescale2d(self):
         """
         Rescale coordinates to average bond length 0.825.
         """
@@ -188,7 +181,7 @@ class Calculate2DMolecule:
                 max_x += .25
         return max_x
 
-    def __clean2d_prepare(self: 'MoleculeContainer', entry):
+    def __clean2d_prepare(self, entry):
         w = {n: random() for n in self._atoms}
         w[entry] = -1
         smiles, order = self._smiles(w.__getitem__, random=True, charges=False, stereo=False, _return_order=True)

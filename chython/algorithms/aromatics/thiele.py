@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,14 +17,9 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import defaultdict
-from typing import TYPE_CHECKING
 from ._rules import freak_rules
 from .._rings import sssr
 from ..rings import _connected_components
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
 
 
 # atomic number constants
@@ -40,7 +35,7 @@ Se = 34
 class Thiele:
     __slots__ = ()
 
-    def thiele(self: 'MoleculeContainer', *, fix_tautomers=True) -> bool:
+    def thiele(self, *, fix_tautomers=True) -> bool:
         """
         Convert structure to aromatic form (Huckel rule ignored). Return True if found any kekule ring.
         Also marks atoms as aromatic.

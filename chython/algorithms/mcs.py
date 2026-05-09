@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2021 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,20 +18,19 @@
 #
 from collections import defaultdict
 from itertools import product, combinations, islice
-from typing import Dict, Set, Iterator, Tuple
-from ..containers import molecule
+from collections.abc import Iterator
 
 
 class MCS:
     __slots__ = ()
 
-    def get_mcs_mapping(self, other: 'molecule.MoleculeContainer', /, *, limit=10000) -> Iterator[Dict[int, int]]:
+    def get_mcs_mapping(self, other: 'MoleculeContainer', /, *, limit=10000) -> Iterator[dict[int, int]]:
         """
         Find maximum common substructure. Based on clique searching in product graph.
 
         :param limit: limit tested cliques
         """
-        if not isinstance(other, molecule.MoleculeContainer):
+        if not isinstance(other, MCS):
             raise TypeError('MoleculeContainer expected')
 
         core_product, full_product = self.__get_product(other)
@@ -92,7 +91,7 @@ class MCS:
                 hits2.append(mapping)
         yield from (dict(x) for x in hits2)
 
-    def __get_product(self: 'molecule.MoleculeContainer', other: 'molecule.MoleculeContainer'):
+    def __get_product(self, other):
         bonds = self._bonds
         o_bonds = other._bonds
 
@@ -157,7 +156,7 @@ class MCS:
         return core_product, full_product
 
 
-def _clique(graph) -> Iterator[Set[Tuple[int, int]]]:
+def _clique(graph) -> Iterator[set[tuple[int, int]]]:
     """
     clique search
 

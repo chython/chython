@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -22,14 +22,10 @@ from functools import cached_property, partial
 from io import BytesIO
 from itertools import permutations
 from struct import Struct
-from typing import Any, Collection, Dict, Iterator, Optional, TYPE_CHECKING, Union
+from collections.abc import Collection, Iterator
+from typing import Any
 from .._functions import lazy_product
 from ..periodictable import Element, Query, AnyElement, AnyMetal, ListElement, QueryElement, ExtendedQuery
-
-
-if TYPE_CHECKING:
-    from chython.containers.graph import Graph
-    from chython.containers import MoleculeContainer
 
 
 header_struct = Struct('I')
@@ -80,7 +76,7 @@ class Isomorphism:
         return True
 
     def _get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter=True, searching_scope=None,
-                     components=None, get_mapping=None) -> Iterator[Dict[int, int]]:
+                     components=None, get_mapping=None) -> Iterator[dict[int, int]]:
         if components is None:  # ad-hoc for QueryContainer
             components, closures = self._compiled_query
             get_mapping = partial(_get_mapping, query_closures=closures, o_atoms=other._atoms, o_bonds=other._bonds)
@@ -124,14 +120,14 @@ class Isomorphism:
                         yield mapping
 
     @cached_property
-    def _compiled_query(self: 'Graph'):
+    def _compiled_query(self):
         return _compile_query(self._atoms, self._bonds)
 
 
 class MoleculeIsomorphism(Isomorphism):
     __slots__ = ()
 
-    def __contains__(self: 'MoleculeContainer', other: Union[Element, Query, str]):
+    def __contains__(self, other: Element | Query | str):
         """
         Atom in Structure test.
         """
@@ -139,7 +135,7 @@ class MoleculeIsomorphism(Isomorphism):
             return any(other == a.atomic_symbol for _, a in self.atoms())
         return any(other == a for _, a in self.atoms())
 
-    def is_automorphic(self):
+    def is_automorphic(self) -> bool:
         """
         Test for automorphism symmetry of graph.
         """
@@ -149,14 +145,15 @@ class MoleculeIsomorphism(Isomorphism):
             return False
         return True
 
-    def get_automorphism_mapping(self: 'MoleculeContainer') -> Iterator[Dict[int, int]]:
+    def get_automorphism_mapping(self) -> Iterator[dict[int, int]]:
         """
         Iterator of all possible automorphism mappings.
         """
         return _get_automorphism_mapping(self._chiral_morgan, self._bonds)
 
     def get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter: bool = True,
-                    searching_scope: Optional[Collection[int]] = None, match_stereo: bool = False):
+                    searching_scope: Collection[int] | None = None,
+                    match_stereo: bool = False) -> Iterator[dict[int, int]]:
         """
         Get self to other Molecule substructure mapping generator.
 
@@ -182,7 +179,7 @@ class MoleculeIsomorphism(Isomorphism):
             else:
                 yield mapping
 
-    def get_fast_mapping(self, other: 'MoleculeContainer') -> Optional[Dict[int, int]]:
+    def get_fast_mapping(self, other: 'MoleculeContainer') -> dict[int, int] | None:
         """
         Get self to other fast (suboptimal) structure mapping.
         Only one possible atoms mapping returned.
@@ -199,7 +196,7 @@ class MoleculeIsomorphism(Isomorphism):
         raise TypeError('MoleculeContainer expected')
 
     @cached_property
-    def _cython_compiled_structure(self: 'MoleculeContainer'):
+    def _cython_compiled_structure(self):
         # long I:
         # bond: single, double, triple, aromatic, special = 5 bit
         # bond in ring: 2 bit
@@ -311,7 +308,7 @@ class QueryIsomorphism(Isomorphism):
     __slots__ = ()
 
     def get_mapping(self, other: 'MoleculeContainer', /, *, automorphism_filter: bool = True,
-                    searching_scope: Optional[Collection[int]] = None, _cython=True):
+                    searching_scope: Collection[int] | None = None, _cython=True) -> Iterator[dict[int, int]]:
         """
         Get Query to Molecule substructure mapping generator.
 
@@ -574,7 +571,7 @@ class QueryIsomorphism(Isomorphism):
         return components
 
 
-def _get_automorphism_mapping(atoms: Dict[int, int], bonds: Dict[int, Dict[int, Any]]) -> Iterator[Dict[int, int]]:
+def _get_automorphism_mapping(atoms: dict[int, int], bonds: dict[int, dict[int, Any]]) -> Iterator[dict[int, int]]:
     if len(atoms) == len(set(atoms.values())):
         return  # all atoms unique
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -18,12 +18,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from math import acos, sqrt
-from typing import TYPE_CHECKING, Union
 from .depict import _render_config
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
 
 
 def plane_normal(nmx, nmy, nmz, nox, noy, noz):
@@ -136,7 +131,7 @@ def _render_dashes(nx, ny, nz, nmx, nmy, nmz, nm_ln, r_angle=None):
 class X3domMolecule:
     __slots__ = ()
 
-    def depict3d(self: Union['MoleculeContainer', 'X3domMolecule'], index: int = 0) -> str:
+    def depict3d(self, index: int = 0) -> str:
         """Get X3DOM XML string.
 
         :param index: index of conformer
@@ -166,7 +161,7 @@ class X3domMolecule:
         """
         return JupyterWidget(self.depict3d(index), width, height)
 
-    def __render_atoms(self: 'MoleculeContainer', xyz):
+    def __render_atoms(self, xyz):
         font = _render_config['font_size']
         carbon = _render_config['carbon']
         radius = _render_config['atom_radius']
@@ -206,7 +201,7 @@ class X3domMolecule:
                              "      </shape>\n    </transform>\n")
         return ''.join(atoms)
 
-    def __render_bonds(self: 'MoleculeContainer', xyz):
+    def __render_bonds(self, xyz):
         bonds = self._bonds
 
         bond_color = _render_config['bond_color']

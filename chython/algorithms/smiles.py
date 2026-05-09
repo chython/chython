@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  This file is part of chython.
 #
@@ -23,13 +23,8 @@ from functools import cached_property
 from heapq import heappop, heappush
 from itertools import product
 from random import random
-from typing import Callable, Optional, Tuple, TYPE_CHECKING, Union
+from collections.abc import Callable
 from .._functions import cached_method
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer, CGRContainer
-    from chython.containers.graph import Graph
 
 charge_str = {-4: '-4', -3: '-3', -2: '-2', -1: '-', 0: '0', 1: '+', 2: '+2', 3: '+3', 4: '+4'}
 order_str = {1: '-', 2: '=', 3: '#', 4: ':', 8: '~', None: '.'}
@@ -59,7 +54,7 @@ class Smiles(ABC):
     __slots__ = ()
 
     @property
-    def smiles(self):
+    def smiles(self) -> str:
         """
         Generate SMILES string of the molecule.
         """
@@ -75,7 +70,7 @@ class Smiles(ABC):
         self.__dict__['smiles_atoms_order'] = tuple(order)  # cache smiles_atoms_order
         return ''.join(smiles)
 
-    def __format__(self: Union['Graph', 'Smiles'], format_spec, *, _return_order=False):
+    def __format__(self, format_spec, *, _return_order=False):
         """
         Signature generation options.
 
@@ -146,7 +141,7 @@ class Smiles(ABC):
         return hash(str(self))
 
     @cached_property
-    def smiles_atoms_order(self) -> Tuple[int, ...]:
+    def smiles_atoms_order(self) -> tuple[int, ...]:
         """
         Atoms order in canonic SMILES.
         """
@@ -157,7 +152,7 @@ class Smiles(ABC):
         self.__dict__['__cached_method___str__'] = ''.join(smiles)  # cache smiles
         return tuple(order)
 
-    def _smiles(self: Union['Graph', 'Smiles'], weights, *, asymmetric_closures=False,
+    def _smiles(self, weights, *, asymmetric_closures=False,
                 open_parenthesis='(', close_parenthesis=')', delimiter='.', _return_order=False, **kwargs):
         if not self._atoms:
             return []
@@ -326,16 +321,16 @@ class Smiles(ABC):
     def _smiles_order(self, stereo=True) -> Callable:
         ...
 
-    def _format_cxsmiles(self, order) -> Optional[str]:
+    def _format_cxsmiles(self, order) -> str | None:
         ...
 
 
 class MoleculeSmiles(Smiles):
     __slots__ = ()
 
-    def sticky_smiles(self: Union['MoleculeContainer', 'MoleculeSmiles'], left: int = None, right: int = None, *,
+    def sticky_smiles(self, left: int = None, right: int = None, *,
                       remove_left: bool = False, remove_right: bool = False, tries: int = 10,
-                      keep_bond_left: bool = False, keep_bond_right: bool = False, hydrogens: bool = False):
+                      keep_bond_left: bool = False, keep_bond_right: bool = False, hydrogens: bool = False) -> str:
         """
         Generate smiles with fixed left and/or right terminal atoms.
         The right atom must be terminal if set. Use a temporary attached atom with remove_right=True as a workaround.
@@ -402,13 +397,13 @@ class MoleculeSmiles(Smiles):
             raise ValueError('either left or right atom should be specified')
         return ''.join(smiles)
 
-    def _smiles_order(self: 'MoleculeContainer', stereo=True):
+    def _smiles_order(self, stereo=True):
         if stereo:
             return self._chiral_morgan.__getitem__
         else:
             return self.atoms_order.__getitem__
 
-    def _format_cxsmiles(self: 'MoleculeContainer', order):
+    def _format_cxsmiles(self, order):
         cx = []
         rd = []
         es = defaultdict(list)
@@ -433,7 +428,7 @@ class MoleculeSmiles(Smiles):
             return '|' + ','.join(cx) + '|'
         return None
 
-    def _format_atom(self: 'MoleculeContainer', n, adjacency, **kwargs):
+    def _format_atom(self, n, adjacency, **kwargs):
         atom = self._atoms[n]
 
         smi = ['',  # [
@@ -495,7 +490,7 @@ class MoleculeSmiles(Smiles):
             smi[2] = atom.atomic_symbol
         return ''.join(smi)
 
-    def _format_bond(self: Union['MoleculeContainer', 'MoleculeSmiles'], n, m, adjacency, **kwargs):
+    def _format_bond(self, n, m, adjacency, **kwargs):
         if not kwargs.get('bonds', True):
             return ''
         bond = self._bonds[n][m]
@@ -522,7 +517,7 @@ class MoleculeSmiles(Smiles):
         else:  # bond == 8
             return '~'
 
-    def __ct_map(self: 'MoleculeContainer', adjacency):
+    def __ct_map(self, adjacency):
         stereo_bonds = {n for n, mb in self._bonds.items() if any(b.stereo is not None for m, b in mb.items())}
         if not stereo_bonds:
             return {}
@@ -574,10 +569,10 @@ class MoleculeSmiles(Smiles):
 class CGRSmiles(Smiles):
     __slots__ = ()
 
-    def _smiles_order(self: 'CGRContainer', stereo=True):
+    def _smiles_order(self, stereo=True):
         return self.atoms_order.__getitem__
 
-    def _format_atom(self: 'CGRContainer', n, adjacency, **kwargs):
+    def _format_atom(self, n, adjacency, **kwargs):
         atom = self._atoms[n]
         if atom.isotope:
             smi = [str(atom.isotope), atom.atomic_symbol]
@@ -594,7 +589,7 @@ class CGRSmiles(Smiles):
             smi.append(']')
         return ''.join(smi)
 
-    def _format_bond(self: 'CGRContainer', n, m, adjacency, **kwargs):
+    def _format_bond(self, n, m, adjacency, **kwargs):
         bond = self._bonds[n][m]
         return dyn_order_str[(bond.order, bond.p_order)]
 

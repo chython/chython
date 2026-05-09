@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2019-2020 Dinar Batyrshin <batyrshin-dinar@mail.ru>
 #  This file is part of chython.
 #
@@ -22,14 +22,10 @@ from collections import defaultdict
 from math import atan2, sin, cos, hypot
 from os.path import join
 from tempfile import TemporaryDirectory
-from typing import Tuple, TYPE_CHECKING, Union, Literal
+from typing import Literal
 from uuid import uuid4
 from zlib import compress
 from .._functions import cached_method
-
-
-if TYPE_CHECKING:
-    from chython import ReactionContainer, MoleculeContainer
 
 cpk = tuple('''
  #909090                                                                                         #D9FFFF
@@ -162,8 +158,8 @@ def _render_aromatic_bond(n_x, n_y, m_x, m_y, c_x, c_y):
 
 def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool = False,
                     bond_color: str = 'black', aam_color: str = '#0305A7', atoms_colors: tuple = cpk,
-                    bond_width: float = .04, wedge_space: float = .08, dashes: Tuple[float, float] = (.2, .1),
-                    aromatic_dashes: Tuple[float, float] = (.15, .05), dx_ci: float = .05, dy_ci: float = .2,
+                    bond_width: float = .04, wedge_space: float = .08, dashes: tuple[float, float] = (.2, .1),
+                    aromatic_dashes: tuple[float, float] = (.15, .05), dx_ci: float = .05, dy_ci: float = .2,
                     dx_m: float = .05, dy_m: float = .2, dx_s: float = .05, dy_s: float = .1, span_dy: float = .15,
                     double_space: float = .06, triple_space: float = .13, aromatic_space: float = .14,
                     atom_radius: float = .2, bond_radius=.02, font_size: float = .5, other_size: float = .3,
@@ -238,9 +234,9 @@ def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool 
 class DepictMolecule:
     __slots__ = ()
 
-    def depict(self: Union['MoleculeContainer', 'DepictMolecule'], *, width=None, height=None, clean2d: bool = True,
+    def depict(self, *, width=None, height=None, clean2d: bool = True,
                format: Literal['svg', 'png', 'svgz'] = 'svg', png_width=1000, png_heigh=1000, png_scale=1.,
-               _embedding=False) -> Union[str, bytes]:
+               _embedding=False) -> str | bytes:
         """
         Depict molecule in SVG or PNG format.
 
@@ -298,7 +294,7 @@ class DepictMolecule:
     def _repr_svg_(self):
         return self.depict()
 
-    def __render_bonds(self: Union['MoleculeContainer', 'DepictMolecule']):
+    def __render_bonds(self):
         atoms = self._atoms
         svg = []
         double_space = _render_config['double_space']
@@ -359,7 +355,7 @@ class DepictMolecule:
                 svg.append(aromatic)
         return svg
 
-    def __render_atoms(self: 'MoleculeContainer', uid):
+    def __render_atoms(self, uid):
         bonds = self._bonds
 
         carbon = _render_config['carbon']
@@ -505,9 +501,9 @@ class DepictMolecule:
 class DepictReaction:
     __slots__ = ()
 
-    def depict(self: 'ReactionContainer', *, width=None, height=None, clean2d: bool = True,
+    def depict(self, *, width=None, height=None, clean2d: bool = True,
                format: Literal['svg', 'png', 'svgz'] = 'svg',
-               png_width=1000, png_heigh=1000, png_scale=1.) -> Union[str, bytes]:
+               png_width=1000, png_heigh=1000, png_scale=1.) -> str | bytes:
         """
         Depict reaction in SVG format.
 

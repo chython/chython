@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,13 +18,8 @@
 #
 from collections import deque, defaultdict
 from itertools import product
-from typing import TYPE_CHECKING
 from ..aromatics.kekule import _kekule_component
 from ...exceptions import InvalidAromaticRing
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
 
 
 # atomic number constants
@@ -37,7 +32,7 @@ P = 15
 class HeteroArenes:
     __slots__ = ()
 
-    def _enumerate_hetero_arene_tautomers(self: 'MoleculeContainer'):
+    def _enumerate_hetero_arene_tautomers(self):
         atoms = self._atoms
         bonds = self._bonds
 

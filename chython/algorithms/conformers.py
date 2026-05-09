@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2025, 2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -17,17 +17,13 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from io import StringIO
-from typing import Literal, TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
+from typing import Literal
 
 
 class Conformers:
     __slots__ = ()
 
-    def generate_conformers(self: 'MoleculeContainer', limit: int = 10, *, optimize: bool = False,
+    def generate_conformers(self, limit: int = 10, *, optimize: bool = False,
                             engine: Literal['rdkit', 'cdpkit'] = None, **kwargs) -> int:
         """
         Generate conformers for the molecule ignoring implicit hydrogens. Set them manually to have a full 3D structure.

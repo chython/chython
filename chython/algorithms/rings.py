@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2017-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2017-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -18,19 +18,15 @@
 #
 from collections import defaultdict, deque
 from functools import cached_property
-from typing import Any, Dict, List, Set, Tuple, Union, TYPE_CHECKING
+from typing import Any
 from ._rings import sssr
-
-
-if TYPE_CHECKING:
-    from chython.containers import MoleculeContainer
 
 
 class Rings:
     __slots__ = ()
 
     @cached_property
-    def sssr(self) -> List[Tuple[int, ...]]:
+    def sssr(self) -> list[tuple[int, ...]]:
         """
         Smallest Set of Smallest Rings. Special bonds ignored.
 
@@ -47,7 +43,7 @@ class Rings:
         return []
 
     @cached_property
-    def atoms_rings(self) -> Dict[int, List[Tuple[int, ...]]]:
+    def atoms_rings(self) -> dict[int, list[tuple[int, ...]]]:
         """
         A dictionary with atom numbers as keys and a list of tuples (representing SSSR rings) as values.
         """
@@ -58,7 +54,7 @@ class Rings:
         return dict(rings)
 
     @cached_property
-    def atoms_rings_sizes(self) -> Dict[int, Set[int]]:
+    def atoms_rings_sizes(self) -> dict[int, set[int]]:
         """
         Sizes of SSSR rings containing atom.
         """
@@ -73,7 +69,7 @@ class Rings:
         return sum(len(x) for x in bonds.values()) // 2 - len(bonds) + len(_connected_components(bonds))
 
     @cached_property
-    def not_special_connectivity(self: 'MoleculeContainer') -> Dict[int, Set[int]]:
+    def not_special_connectivity(self) -> dict[int, set[int]]:
         """
         Graph connectivity without special bonds.
         """
@@ -86,7 +82,7 @@ class Rings:
         return bonds
 
     @cached_property
-    def connected_components(self: 'MoleculeContainer') -> List[Set[int]]:
+    def connected_components(self) -> list[set[int]]:
         """
         Isolated components of single graph. E.g. salts as ion pair.
         """
@@ -100,14 +96,14 @@ class Rings:
         return len(self.connected_components)
 
     @cached_property
-    def skin_graph(self: 'MoleculeContainer') -> Dict[int, Set[int]]:
+    def skin_graph(self) -> dict[int, set[int]]:
         """
         Graph without terminal atoms. Only rings and linkers
         """
         return _skin_graph(self._bonds)
 
     @cached_property
-    def rings_graph(self: 'MoleculeContainer'):
+    def rings_graph(self) -> dict[int, set[int]]:
         """
         Graph of rings. Linkers are not included. Special bonds are considered.
         """
@@ -146,7 +142,7 @@ class Rings:
         return bonds
 
 
-def _connected_components(bonds: Dict[int, Union[Set[int], Dict[int, Any]]]) -> List[Set[int]]:
+def _connected_components(bonds: dict[int, set[int] | dict[int, Any]]) -> list[set[int]]:
     atoms = set(bonds)
     components = []
     while atoms:
@@ -164,7 +160,7 @@ def _connected_components(bonds: Dict[int, Union[Set[int], Dict[int, Any]]]) -> 
     return components
 
 
-def _skin_graph(bonds: Dict[int, Union[Set[int], Dict[int, Any]]]) -> Dict[int, Set[int]]:
+def _skin_graph(bonds: dict[int, set[int] | dict[int, Any]]) -> dict[int, set[int]]:
     """
     Graph without terminal nodes. Only rings and linkers
     """

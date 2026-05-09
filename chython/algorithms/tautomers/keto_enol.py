@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -19,12 +19,7 @@
 from collections import defaultdict
 from functools import cached_property
 from itertools import chain, repeat
-from typing import TYPE_CHECKING, Union
 from ._keto_enol import *
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
 
 
 # atomic number constants
@@ -34,7 +29,7 @@ C = 6
 class KetoEnol:
     __slots__ = ()
 
-    def _enumerate_keto_enol_tautomers(self: Union['MoleculeContainer', 'KetoEnol'], partial=False):
+    def _enumerate_keto_enol_tautomers(self, partial=False):
         for fix, ket in self.__enumerate_bonds(partial):
             if ket:
                 a = fix[-1][1]
@@ -64,7 +59,7 @@ class KetoEnol:
             ek.append((e, k))
         return ek
 
-    def __enumerate_bonds(self: 'MoleculeContainer', partial):
+    def __enumerate_bonds(self, partial):
         atoms = self._atoms
         bonds = self._bonds
         rings = self.atoms_rings_sizes

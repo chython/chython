@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2022-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2022-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,21 +16,16 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from collections.abc import Iterator
 from itertools import combinations, product
-from typing import TYPE_CHECKING, Union, List
 from ._acid import rules as acid_rules, stripped_rules as stripped_acid_rules
 from ._base import rules as base_rules, stripped_rules as stripped_base_rules
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
 
 
 class AcidBase:
     __slots__ = ()
 
-    def neutralize(self: 'MoleculeContainer', *, keep_charge=True, logging=False,
-                   _fix_stereo=True) -> Union[bool, List[int]]:
+    def neutralize(self, *, keep_charge=True, logging=False, _fix_stereo=True) -> bool | list:
         """
         Convert organic salts to neutral form if possible. Only one possible form used for charge unbalanced structures.
 
@@ -52,7 +47,7 @@ class AcidBase:
             return list(changed)
         return True
 
-    def enumerate_charged_forms(self: 'MoleculeContainer', *, deep: int = 4, limit: int = 1000):
+    def enumerate_charged_forms(self, *, deep: int = 4, limit: int = 1000) -> Iterator['MoleculeContainer']:
         """
         Enumerate protonated and deprotonated ions. Use on neutralized molecules.
 
@@ -128,7 +123,7 @@ class AcidBase:
                     if not limit:
                         return
 
-    def _neutralize(self: 'MoleculeContainer', keep_charge=True):
+    def _neutralize(self, keep_charge=True):
         donors = set()
         acceptors = set()
         for q in stripped_acid_rules:
@@ -190,7 +185,7 @@ class AcidBase:
                 a._charge += 1
             yield mol, donors | acceptors
 
-    def _enumerate_zwitter_tautomers(self: 'MoleculeContainer'):
+    def _enumerate_zwitter_tautomers(self):
         donors = set()
         acceptors = set()
         for q in acid_rules:

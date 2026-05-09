@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2019-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2019-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  This file is part of chython.
 #
 #  chython is free software; you can redistribute it and/or modify
@@ -16,17 +16,12 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from chython import ReactionContainer
 
 
 class Calculate2DReaction:
     __slots__ = ()
 
-    def clean2d(self: 'ReactionContainer'):
+    def clean2d(self):
         """
         Recalculate 2d coordinates
         """
@@ -34,7 +29,7 @@ class Calculate2DReaction:
             m.clean2d()
         self.fix_positions()
 
-    def fix_positions(self: 'ReactionContainer'):
+    def fix_positions(self):
         """
         Fix coordinates of molecules in reaction
         """

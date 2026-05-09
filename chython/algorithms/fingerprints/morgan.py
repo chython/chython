@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2021-2023 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2021-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2023 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  Copyright 2021 Aleksandr Sizov <murkyrussian@gmail.com>
 #  This file is part of chython.
@@ -20,19 +20,14 @@
 #
 from collections import defaultdict
 from math import log2
-from numpy import uint8, zeros
-from typing import Dict, List, Set, TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
+from numpy import ndarray, uint8, zeros
 
 
 class MorganFingerprint:
     __slots__ = ()
 
     def morgan_fingerprint(self, min_radius: int = 1, max_radius: int = 4,
-                           length: int = 1024, number_active_bits: int = 2):
+                           length: int = 1024, number_active_bits: int = 2) -> ndarray:
         """
         Transform structures into array of binary features.
         Morgan fingerprints. Similar to RDkit implementation.
@@ -50,7 +45,7 @@ class MorganFingerprint:
         return fingerprints
 
     def morgan_bit_set(self, min_radius: int = 1, max_radius: int = 4,
-                       length: int = 1024, number_active_bits: int = 2) -> Set[int]:
+                       length: int = 1024, number_active_bits: int = 2) -> set[int]:
         """
         Transform structures into set of indexes of True-valued features.
 
@@ -73,7 +68,7 @@ class MorganFingerprint:
                     active_bits.add(tpl & mask)
         return active_bits
 
-    def morgan_hash_set(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Set[int]:
+    def morgan_hash_set(self, min_radius: int = 1, max_radius: int = 4) -> set[int]:
         """
         Transform structures into integer hashes of atoms with EC.
 
@@ -82,7 +77,7 @@ class MorganFingerprint:
         """
         return {x for x in self._morgan_hash_dict(min_radius, max_radius) for x in x.values()}
 
-    def morgan_hash_smiles(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Dict[int, List[str]]:
+    def morgan_hash_smiles(self, min_radius: int = 1, max_radius: int = 4) -> dict[int, list[str]]:
         """
         Transform structures into dictionary of hashes of atoms with EC and corresponding SMILES.
 
@@ -95,7 +90,7 @@ class MorganFingerprint:
                 smiles_dict[morgan_hash].add(format(self.augmented_substructure((atom,), deep=radius), 'A'))
         return {k: list(v) for k, v in smiles_dict.items()}
 
-    def morgan_smiles_hash(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> Dict[str, List[int]]:
+    def morgan_smiles_hash(self, min_radius: int = 1, max_radius: int = 4) -> dict[str, list[int]]:
         """
         Transform structures into dictionary of smiles and corresponding hashes of atoms with EC.
 
@@ -108,7 +103,7 @@ class MorganFingerprint:
                 out[s].append(k)
         return dict(out)
 
-    def _morgan_hash_dict(self: 'MoleculeContainer', min_radius: int = 1, max_radius: int = 4) -> List[Dict[int, int]]:
+    def _morgan_hash_dict(self, min_radius: int = 1, max_radius: int = 4) -> list[dict[int, int]]:
         """
         Transform structures into integer hashes of atoms with EC.
         Returns list of atom-hash pairs for different radii.
@@ -130,7 +125,7 @@ class MorganFingerprint:
         return out[-(max_radius - min_radius + 1):]  # slice [min, max] radii range
 
     @property
-    def _atom_identifiers(self) -> Dict[int, int]:
+    def _atom_identifiers(self) -> dict[int, int]:
         raise NotImplementedError
 
 

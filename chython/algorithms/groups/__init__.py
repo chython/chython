@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from collections.abc import Iterator
 from functools import cached_property
 from itertools import permutations
 from ._functional import rules as functional_rules
@@ -86,7 +87,7 @@ class FunctionalGroups:
             return True
         return False
 
-    def react(self, *others, reaction=None):
+    def react(self, *others, reaction=None) -> Iterator[tuple[str, 'ReactionContainer']]:
         """
         Enumerate possible reaction products between molecules.
 
@@ -109,7 +110,7 @@ class FunctionalGroups:
                         yield name, rxn
                     break
 
-    def oxidize(self, reaction=None):
+    def oxidize(self, reaction=None) -> Iterator[tuple[str, 'ReactionContainer']]:
         """
         Enumerate possible single-step oxidation products.
 
@@ -126,7 +127,7 @@ class FunctionalGroups:
                 for rxn in reactor(self):
                     yield name, rxn
 
-    def reduce(self, reaction=None):
+    def reduce(self, reaction=None) -> Iterator[tuple[str, 'ReactionContainer']]:
         """
         Enumerate possible single-step reduction products.
 
@@ -143,7 +144,7 @@ class FunctionalGroups:
                 for rxn in reactor(self):
                     yield name, rxn
 
-    def transform(self, reaction=None):
+    def transform(self, reaction=None) -> Iterator[tuple[str, 'ReactionContainer']]:
         """
         Enumerate possible single-molecule functional group interconversions
         (ring formations from open-chain precursors with implicit reagents).

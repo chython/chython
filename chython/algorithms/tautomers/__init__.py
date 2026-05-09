@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2020-2024 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2020-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2020 Nail Samikaev <samikaevn@yandex.ru>
 #  This file is part of chython.
 #
@@ -18,14 +18,10 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import deque
-from typing import TYPE_CHECKING, Iterator, Union
+from collections.abc import Iterator
 from .acid_base import *
 from .heteroarenes import *
 from .keto_enol import *
-
-
-if TYPE_CHECKING:
-    from chython import MoleculeContainer
 
 
 class Tautomers(AcidBase, HeteroArenes, KetoEnol):
@@ -34,7 +30,7 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
     """
     __slots__ = ()
 
-    def enumerate_tautomers(self: Union['MoleculeContainer', 'Tautomers'], *, prepare_molecules=True, zwitter=True,
+    def enumerate_tautomers(self, *, prepare_molecules=True, zwitter=True,
                             partial=False, increase_aromaticity=True, keep_sugars=True, heteroarenes=True,
                             keto_enol=True, limit: int = 1000) -> Iterator['MoleculeContainer']:
         """
@@ -144,9 +140,9 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
                 if counter == limit:
                     return
 
-    def enumerate_charged_tautomers(self: 'MoleculeContainer', *, prepare_molecules=True, partial=False,
+    def enumerate_charged_tautomers(self, *, prepare_molecules=True, partial=False,
                                     increase_aromaticity=True, keep_sugars=True, heteroarenes=True,
-                                    keto_enol=True, deep: int = 4, limit: int = 1000):
+                                    keto_enol=True, deep: int = 4, limit: int = 1000) -> Iterator['MoleculeContainer']:
         """
         Enumerate tautomers and protonated-deprotonated forms.
         Better to use on neutralized non-ionic molecules.

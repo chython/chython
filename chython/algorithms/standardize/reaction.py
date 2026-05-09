@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2018-2025 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  Copyright 2018-2026 Ramil Nugmanov <nougmanoff@protonmail.com>
 #  Copyright 2021 Timur Gimadiev <timur.gimadiev@gmail.com>
 #  Copyright 2024 Philippe Gantzer <p.gantzer@icredd.hokudai.ac.jp>
 #  This file is part of chython.
@@ -19,32 +19,25 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import defaultdict
-from typing import List, Tuple, TYPE_CHECKING, Union
 from ._reagents import *
 from ...exceptions import MappingError
-
-
-if TYPE_CHECKING:
-    from chython import ReactionContainer
 
 
 class StandardizeReaction:
     __slots__ = ()
 
-    def canonicalize(self: 'ReactionContainer', *, fix_mapping: bool = True, logging=False, fix_tautomers=True) -> \
-            Union[bool, List[Tuple[int, Tuple[int, ...], int, str]]]:
+    def canonicalize(self, *, fix_mapping: bool = True, logging=False, fix_tautomers=True) -> bool | list:
         """
         Convert molecules to canonical forms of functional groups and aromatic rings without explicit hydrogens.
         Return True if in any molecule found not canonical group.
 
         :param fix_mapping: Search AAM errors of functional groups.
-        :param logging: return log from molecules with index of molecule.
-            Otherwise, return True if these groups found in any molecule.
+        :param logging: return processing log.
         :param fix_tautomers: convert tautomers to canonical forms.
         """
         total = []
         for n, m in enumerate(self.molecules()):
-            total.extend((n, *x) for x in m.canonicalize(logging=True, fix_tautomers=fix_tautomers))
+            total.extend((n, x) for x in m.canonicalize(logging=True, fix_tautomers=fix_tautomers))
 
         if fix_mapping:
             total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
@@ -55,33 +48,7 @@ class StandardizeReaction:
             return total
         return bool(total)
 
-    def standardize(self: 'ReactionContainer', *, fix_mapping: bool = True, logging=False, fix_tautomers=True) -> \
-            Union[bool, List[Tuple[int, Tuple[int, ...], int, str]]]:
-        """
-        Fix functional groups representation.
-        Return True if in any molecule fixed group.
-
-        Deprecated method. Use `canonicalize` directly.
-
-        :param fix_mapping: Search AAM errors of functional groups.
-        :param logging: return log from molecules with index of molecule.
-            Otherwise, return True if these groups found in any molecule.
-        :param fix_tautomers: convert tautomers to canonical forms.
-        """
-        total = []
-        for n, m in enumerate(self.molecules()):
-            total.extend((n, *x) for x in m.standardize(logging=True, fix_tautomers=fix_tautomers))
-
-        if fix_mapping:
-            total.extend((-1, x, -1, m) for m, x in self.fix_groups_mapping(logging=True))
-
-        if total:
-            self.flush_cache(keep_molecule_cache=True)
-        if logging:
-            return total
-        return bool(total)
-
-    def thiele(self: 'ReactionContainer', *, fix_tautomers=True) -> bool:
+    def thiele(self, *, fix_tautomers=True) -> bool:
         """
         Convert structures to aromatic form.
         Return True if in any molecule found kekule ring
@@ -96,7 +63,7 @@ class StandardizeReaction:
             self.flush_cache(keep_molecule_cache=True)
         return total
 
-    def kekule(self: 'ReactionContainer', *, buffer_size=7, ignore_pyrrole_hydrogen=False) -> bool:
+    def kekule(self, *, buffer_size=7, ignore_pyrrole_hydrogen=False) -> bool:
         """
         Convert structures to a kekule form.
         Return True if in any molecule found aromatic ring
@@ -112,7 +79,7 @@ class StandardizeReaction:
             self.flush_cache(keep_molecule_cache=True)
         return total
 
-    def clean_isotopes(self: 'ReactionContainer') -> bool:
+    def clean_isotopes(self) -> bool:
         """
         Clean isotope marks for all molecules in reaction.
         Returns True if in any molecule found isotope.
@@ -125,7 +92,7 @@ class StandardizeReaction:
             self.flush_cache(keep_molecule_cache=True)
         return flag
 
-    def clean_stereo(self: 'ReactionContainer'):
+    def clean_stereo(self):
         """
         Remove stereo data
         """
@@ -133,20 +100,7 @@ class StandardizeReaction:
             m.clean_stereo()
         self.flush_cache(keep_molecule_cache=True)
 
-    def check_valence(self: 'ReactionContainer') -> List[Tuple[int, Tuple[int, ...]]]:
-        """
-        Check valences of all atoms of all molecules.
-
-        Works only on molecules with aromatic rings in Kekule form.
-        :return: list of invalid molecules with invalid atoms lists
-        """
-        out = []
-        for n, m in enumerate(self.molecules()):
-            if c := m.check_valence():
-                out.append((n, tuple(c)))
-        return out
-
-    def implicify_hydrogens(self: 'ReactionContainer') -> int:
+    def implicify_hydrogens(self) -> int:
         """
         Remove explicit hydrogens if possible.
 
@@ -159,7 +113,7 @@ class StandardizeReaction:
             self.flush_cache(keep_molecule_cache=True)
         return total
 
-    def explicify_hydrogens(self: 'ReactionContainer') -> int:
+    def explicify_hydrogens(self) -> int:
         """
         Add explicit hydrogens to atoms
 
@@ -222,7 +176,7 @@ class StandardizeReaction:
             return self.__remove_reagents_mapping(keep_reagents)
         return self.__remove_reagents_rules(keep_reagents)
 
-    def __remove_reagents_rules(self: 'ReactionContainer', keep_reagents):
+    def __remove_reagents_rules(self, keep_reagents):
         if not self.reactants or not self.products:  # there is no reaction
             return False
 
@@ -279,7 +233,7 @@ class StandardizeReaction:
         self.fix_positions()
         return True
 
-    def __remove_reagents_mapping(self: 'ReactionContainer', keep_reagents):
+    def __remove_reagents_mapping(self, keep_reagents):
         cgr = ~self
         if cgr.center_atoms:
             active = set(cgr.center_atoms)
@@ -315,7 +269,7 @@ class StandardizeReaction:
             return False
         raise MappingError("Reaction center is absent according to mapping")
 
-    def contract_ions(self: 'ReactionContainer') -> bool:
+    def contract_ions(self) -> bool:
         """
         Contract ions into salts (Molecules with disconnected components).
         Note: works only for unambiguous cases. e.g. equal anions/cations and different or equal cations/anions.
