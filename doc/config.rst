@@ -19,8 +19,8 @@ Configuration Reference
     chython.conformer_engine = 'rdkit'  # default
     # Options: 'rdkit', 'cdpkit'
 
-    # Neural AAM device (set before first reset_mapping call)
-    chython.torch_device = 'cpu'  # default; 'cuda:0' for GPU
+    # Neural AAM device (legacy, unused since migration to ONNX)
+    chython.torch_device = 'cpu'  # kept for backward compatibility
 
     # Java JAR paths (CDK, OPSIN)
     chython.class_paths = ['/path/to/cdk.jar', '/path/to/opsin.jar']

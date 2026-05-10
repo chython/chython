@@ -117,23 +117,35 @@ CGR overlays reactant and product graphs, showing bond changes:
 Atom-Atom Mapping
 -----------------
 
-Neural attention-based mapping (requires ``chytorch-rxnmap`` package):
+Neural attention-based mapping (requires ``chython-rxnmap`` package):
 
 .. code-block:: python
 
-    import chython
-    chython.torch_device = 'cpu'  # set before first use; 'cuda:0' for GPU
+    from chython import smiles
 
     rxn = smiles('CCO.CC(=O)O>>CCOC(=O)C.O')
+
+    # Neural attention mapping (ONNX-based, CPU only)
+    rxn.attention_mapping()
+
+    # With score (float, higher = more confident)
+    score = rxn.attention_mapping(return_score=True)
+
+    # Keep original reactant atom numbers
+    rxn.attention_mapping(keep_reactants_numbering=True)
+
+``attention_mapping`` loads the ONNX model once on first call.
+
+Utility methods:
+
+.. code-block:: python
+
+    # Reset mapping: deduplicate atom numbers across components (no model)
     rxn.reset_mapping()
 
-    # Rule-based fix for known mapping mistakes
+    # Rule-based fix for known mapping mistakes (called automatically by attention_mapping)
     rxn.fix_mapping()
     log = rxn.fix_mapping(logging=True)
-
-``reset_mapping`` loads the neural model once on first call.
-To use GPU, set ``chython.torch_device`` before the first call.
-For multiprocessing, call ``reset_mapping`` only inside workers to avoid a single-GPU bottleneck.
 
 
 Reactor (Multi-Reactant Templates)
@@ -323,3 +335,39 @@ Remove protective groups (in-place):
     mol2 = smiles('CC(NC(=O)OC(C)(C)C)COC(=O)OCC=C')
     mol2.canonicalize()
     mol2.remove_protection()  # removes all found PGs
+
+
+Reconstruct Mapping
+-------------------
+
+Annotate a reaction by trying to reconstruct the product from reactants using
+predefined templates. If successful, sets atom-to-atom mapping and returns
+matched reaction labels:
+
+.. code-block:: python
+
+    from chython import smiles
+
+    rxn = smiles('Brc1ccccc1.OB(O)c1ccc(F)cc1>>Fc1ccc(-c2ccccc2)cc1')
+    rxn.reset_mapping()
+
+    labels = rxn.reconstruct_mapping()
+    # ['react:suzuki']
+
+    # Mapping is now set on the product
+    format(rxn, 'm')  # reaction SMILES with atom mapping
+
+Supports single-product reactions. Tries in order:
+
+1. Standalone deprotection
+2. Standalone protection (reverse)
+3. Single-molecule transforms (oxidize/reduce/transform)
+4. Deprotection + transform composition
+5. Multi-component reactions (subset-based)
+
+Returns an empty list if no template matches:
+
+.. code-block:: python
+
+    rxn = smiles('CC>>CCC')
+    rxn.reconstruct_mapping()  # []
