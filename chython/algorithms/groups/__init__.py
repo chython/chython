@@ -73,12 +73,15 @@ class FunctionalGroups:
         else:
             raise ValueError(f'Unknown protective group: {name}')
 
+        kept_atoms = set()
         for q, keep, add, *_ in rules:
             for mp in q.get_mapping(self, automorphism_filter=False):
                 delete = {m for n, m in mp.items() if n not in keep}
                 if not to_delete.isdisjoint(delete):
                     continue
                 to_delete.update(delete)
+                for n in keep:
+                    kept_atoms.add(mp[n])
                 for n, a, b in add:
                     to_add.append((mp[n], a, b))
 
@@ -89,6 +92,11 @@ class FunctionalGroups:
             self.delete_atom(n, _skip_calculation=True)
         if to_delete or to_add:
             self.fix_structure()
+            # fix implicit H on aromatic N freed from PG
+            for n in kept_atoms:
+                a = self.atom(n)
+                if a.atomic_symbol == 'N' and a.hybridization == 4 and a.implicit_hydrogens is None:
+                    a._implicit_hydrogens = 1
             self.fix_stereo()
             return True
         return False
@@ -126,7 +134,7 @@ class FunctionalGroups:
         :param reaction: optional reaction name to apply selectively.
         """
         fgs = self.functional_groups
-        for name, fg_name, reactor in oxidation_rules:
+        for name, fg_name, _, reactor in oxidation_rules:
             if reaction is not None and name != reaction:
                 continue
             if fg_name in fgs:
@@ -143,7 +151,7 @@ class FunctionalGroups:
         :param reaction: optional reaction name to apply selectively.
         """
         fgs = self.functional_groups
-        for name, fg_name, reactor in reduction_rules:
+        for name, fg_name, _, reactor in reduction_rules:
             if reaction is not None and name != reaction:
                 continue
             if fg_name in fgs:
@@ -161,7 +169,7 @@ class FunctionalGroups:
         :param reaction: optional reaction name to apply selectively.
         """
         fgs = self.functional_groups
-        for name, fg_name, reactor in transformation_rules:
+        for name, fg_name, _, reactor in transformation_rules:
             if reaction is not None and name != reaction:
                 continue
             if fg_name in fgs:

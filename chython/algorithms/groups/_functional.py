@@ -30,6 +30,8 @@ def _rules():
     rules['terminal_alkyne'] = smarts('[C;z3;x0;D1:1]#[C;x0;D2:2]')
     rules['alkyne'] = smarts('[C;z3;x0;D2:1]#[C;x0;D2:2]')
 
+    rules['vicinal_diol'] = smarts('[O;D1;z1;x0:1]-[C;z1;x1]-[C;z1;x1]-[O;D1;z1;x0:2]')
+
     rules['benzylic_ch'] = smarts('[C;z1;h1,h2;D2,D3:1]-[C;a:2]')
 
     # halides
@@ -186,6 +188,10 @@ def _rules():
     rules['pyrrole'] = smarts('[N;h1;D2;a;r5:1]')
     rules['pyrazole'] = smarts('[N;h1;D2;a;r5:1]:[N;h0;D2;r5:2]')
     rules['imidazole'] = smarts('[N;h1;D2;a;r5:1]:[A:2]:[N;h0;D2;r5:3]')
+
+    # heterocycles (for screening)
+    rules['isoxazole'] = smarts('[O;a;D2;r5:1]:[N;a;D2;r5:2]')
+    rules['pyridazine'] = smarts('[N;a;D2;r6:1]:[N;a;D2;r6:2]')
 
     # hydrazines
     rules['alkyl_hydrazine'] = smarts('[N;D1;z1;x1:2]-[N;D2;z1;x1:1]-[C;z1:3]')

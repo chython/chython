@@ -19,41 +19,41 @@
 from lazy_object_proxy import Proxy
 
 
-def _make_reactor(rxn_name, fg_name, product_smarts):
+def _make_reactor(rxn_name, fg_name, output_fg, product_smarts):
     from ._functional import rules
     from ...reactor import Reactor
     from ... import smarts
 
     q = rules[fg_name]
     product = smarts(product_smarts)
-    return rxn_name, fg_name, Reactor((q,), (product,),
-                                       delete_atoms=True, one_shot=True, fix_broken_pyrroles=True)
+    return rxn_name, fg_name, output_fg, Reactor((q,), (product,),
+                                                  delete_atoms=True, one_shot=True, fix_broken_pyrroles=True)
 
 
 def _rules():
     rules = []
 
     # primary_alcohol → aldehyde (Swern, Dess-Martin, PCC)
-    rules.append(_make_reactor('alcohol_to_aldehyde', 'primary_alcohol', '[A:1]=[A:2]'))
+    rules.append(_make_reactor('alcohol_to_aldehyde', 'primary_alcohol', 'aldehyde', '[A:1]=[A:2]'))
 
     # secondary_alcohol → ketone (Dess-Martin, Jones, PCC)
-    rules.append(_make_reactor('alcohol_to_ketone', 'secondary_alcohol', '[A:1]=[A:2]'))
+    rules.append(_make_reactor('alcohol_to_ketone', 'secondary_alcohol', 'ketone', '[A:1]=[A:2]'))
 
     # aldehyde → carboxylic_acid (Pinnick, Jones, KMnO4)
-    rules.append(_make_reactor('aldehyde_to_acid', 'aldehyde', '[A:2]=[A:1]-[O:20]'))
+    rules.append(_make_reactor('aldehyde_to_acid', 'aldehyde', 'carboxylic_acid', '[A:2]=[A:1]-[O:20]'))
 
     # alkene → 1,2-diol (Sharpless dihydroxylation, OsO4/KMnO4)
-    rules.append(_make_reactor('dihydroxylation', 'terminal_alkene', '[A:1](-[O:20])-[A:2](-[O:21])'))
-    rules.append(_make_reactor('dihydroxylation', 'alkene', '[A:1](-[O:20])-[A:2](-[O:21])'))
+    rules.append(_make_reactor('dihydroxylation', 'terminal_alkene', 'vicinal_diol', '[A:1](-[O:20])-[A:2](-[O:21])'))
+    rules.append(_make_reactor('dihydroxylation', 'alkene', 'vicinal_diol', '[A:1](-[O:20])-[A:2](-[O:21])'))
 
     # thioether → sulfoxide (mCPBA, H2O2, NaIO4)
-    rules.append(_make_reactor('thioether_to_sulfoxide', 'thioether', '[A:1](=[O:20])(-[A:2])-[A:3]'))
+    rules.append(_make_reactor('thioether_to_sulfoxide', 'thioether', 'sulfoxide', '[A:1](=[O:20])(-[A:2])-[A:3]'))
 
     # thioether → sulfone (excess mCPBA, H2O2/AcOH, Oxone)
-    rules.append(_make_reactor('thioether_to_sulfone', 'thioether', '[A:1](=[O:20])(=[O:21])(-[A:2])-[A:3]'))
+    rules.append(_make_reactor('thioether_to_sulfone', 'thioether', 'sulfone', '[A:1](=[O:20])(=[O:21])(-[A:2])-[A:3]'))
 
     # sulfoxide → sulfone
-    rules.append(_make_reactor('sulfoxide_to_sulfone', 'sulfoxide', '[A:1](=[A:2])(=[O:20])(-[A:3])-[A:4]'))
+    rules.append(_make_reactor('sulfoxide_to_sulfone', 'sulfoxide', 'sulfone', '[A:1](=[A:2])(=[O:20])(-[A:3])-[A:4]'))
 
     return rules
 
