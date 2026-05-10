@@ -42,6 +42,8 @@ def _rules():
     # Appel: alcohol → alkyl halide (CCl4/CBr4 + PPh3)
     rules.append(_make_reactor('appel', 'primary_alcohol', 'alkyl_bromide', '[Br:20]-[A:2]'))
     rules.append(_make_reactor('appel', 'secondary_alcohol', 'alkyl_bromide', '[Br:20]-[A:2]'))
+    rules.append(_make_reactor('appel_chloride', 'primary_alcohol', 'alkyl_chloride', '[Cl:20]-[A:2]'))
+    rules.append(_make_reactor('appel_chloride', 'secondary_alcohol', 'alkyl_chloride', '[Cl:20]-[A:2]'))
 
     # Miyaura borylation: ArX → ArB(OH)2
     rules.append(_make_reactor('borylation_acid', 'aryl_bromide', 'aryl_boronic_acid', '[A:1]-[B:20](-[O:21])-[O:22]'))
@@ -89,6 +91,9 @@ def _rules():
     # ester to amide: R-C(=O)-OR' → R-C(=O)-NH2 (NH3)
     rules.append(_make_reactor('ester_to_amide', 'ester', 'primary_amide', '[A:1](=[A:2])-[N:20]'))
 
+    # ester to hydroxamic acid: R-C(=O)-OR' → R-C(=O)-NH-OH (NH2OH)
+    rules.append(_make_reactor('ester_to_hydroxamic_acid', 'ester', 'hydroxamic_acid', '[A:1](=[A:2])-[N:20]-[O:21]'))
+
     # amide hydrolysis: R-C(=O)-NHR → R-C(=O)-OH
     rules.append(_make_reactor('amide_hydrolysis', 'primary_amide', 'carboxylic_acid', '[A:2](=[A:3])-[O:20]'))
     rules.append(_make_reactor('amide_hydrolysis', 'secondary_amide', 'carboxylic_acid', '[A:2](=[A:3])-[O:20]'))
@@ -111,6 +116,13 @@ def _rules():
 
     # nitrile full hydrolysis: R-C≡N → R-COOH
     rules.append(_make_reactor('nitrile_to_acid', 'nitrile', 'carboxylic_acid', '[A:1](=[O:20])-[O:21]'))
+
+    # tertiary alcohol dehydration: R3C-OH → R2C=CR (loss of water)
+    rules.append(_make_reactor('alcohol_dehydration', 'tertiary_alcohol_with_alpha_h', 'alkene', '[A:2]=[A:3]'))
+
+    # oximation: ketone/aldehyde → oxime (+ NH2OH implicit)
+    rules.append(_make_reactor('oximation', 'ketone', 'oxime', '[O:20]-[N:21]=[A:1]'))
+    rules.append(_make_reactor('oximation', 'aldehyde', 'oxime', '[O:20]-[N:21]=[A:1]'))
 
     return rules
 

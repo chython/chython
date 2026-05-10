@@ -87,6 +87,8 @@ def _rules():
     rules['primary_alcohol'] = smarts('[O;D1;z1;x0:1][C;D2;x1;z1:2]')
     rules['secondary_alcohol'] = smarts('[O;D1;z1;x0:1][C;D3;x1;z1:2]')
     rules['tertiary_alcohol'] = smarts('[O;D1;z1;x0:1][C;D4;x1;z1:2]')
+    # tertiary alcohol with adjacent sp3 CH (eliminable): for dehydration
+    rules['tertiary_alcohol_with_alpha_h'] = smarts('[O;D1;z1;x0:1]-[C;D4;x1;z1:2]-[C;z1;h1,h2:3]')
     rules['phenol'] = smarts('[O;D1;z1;x0:1]-[C;a:2]')
 
     # aldehydes and ketones
@@ -98,6 +100,8 @@ def _rules():
     rules['alpha_ketone'] = smarts('[O;z2;x0:2]=[C;D3;x1:1]-[C;z1;D1,D2;x0:3]')
     # hantzsch thiazole, imidazo[1,2-a]pyridine
     rules['alpha_haloketone'] = smarts('[O;z2;x0:2]=[C;D3;x1:1]-[C;z1;D2,D3;x1:3]([Cl,Br,I;D1:100])')
+    # imidazo[1,2-a]pyridine from alpha-haloester (ester O masked, carbonyl O deleted)
+    rules['alpha_haloester'] = smarts('[O;D2;x0;M]-[C;D3;x2;z2:1](=[O:2])-[C;z1;D2,D3;x1:3]([Cl,Br,I;D1:100])')
 
     rules['1_2_diketone'] = smarts('[O;z2;x0:2]=[C;D3;x1:1]-[C;z2;x1;D3:3]=[O:4]')
     rules['1_3_diketone'] = smarts('[O;z2;x0:2]=[C;D3;x1:1]-[C;z1;D2,D3:5]-[C;z2;x1;D3:3]=[O:4]')
@@ -118,6 +122,8 @@ def _rules():
     # amines
     rules['primary_amine'] = smarts('[N;D1;z1;x0:1][C;z1:2]')
     rules['primary_aniline'] = smarts('[N;D1;z1;x0:1][C;a:2]')
+    # NH2 on sp2 C=N (e.g. pyrazoline, amidine-like)
+    rules['primary_amidine_amine'] = smarts('[N;D1;z1;x0:1]-[C;z2:2]=[N;M]')
     rules['secondary_amine'] = smarts('[N;D2;z1;x0:1]([C;z1:2])[C;z1:3]')
     rules['secondary_aniline'] = smarts('[N;D2;z1;x0:1]([C;a:2])[C;z1:3]')
     rules['biaryl_aniline'] = smarts('[N;D2;z1;x0:1]([C;a:2])[C;a:3]')
@@ -128,8 +134,8 @@ def _rules():
     rules['secondary_amide'] = smarts('[N;D2;z1;x0:1][C;z2;x2;D3:2]=[O:3]')
 
     # sulfonyl
-    rules['sulfonyl_chloride'] = smarts('[S;x3;D4:1](=[O:2])(=[O:3])[Cl;D1:100]')
-    rules['sulfonyl_fluoride'] = smarts('[S;x3;D4:1](=[O:2])(=[O:3])[F;D1:100]')
+    rules['sulfonyl_chloride'] = smarts('[S;D4:1](=[O:2])(=[O:3])[Cl;D1:100]')
+    rules['sulfonyl_fluoride'] = smarts('[S;D4:1](=[O:2])(=[O:3])[F;D1:100]')
     rules['sulfonamide'] = smarts('[S;x3;D4:1](=[O:2])(=[O:3])-[N;z1:100]')
     rules['sulfonyl_anhydride'] = smarts('[S;x3;D4:1](=[O:2])(=[O:3])-[O:100]-[S;x3;D4](=O)(=O)')
 
@@ -151,9 +157,15 @@ def _rules():
     rules['aryl_zinc'] = smarts('[Zn;D2:100](-[F,Cl,Br,I])-[C;a:1]')
     rules['alkenyl_zinc'] = smarts('[Zn;D2:100](-[F,Cl,Br,I])-[C;z2:1]=[C:2]')
 
+    # boronate alkyl halides: B-CH2-X (one-carbon, for SN2)
+    rules['boronate_alkyl_chloride'] = smarts('[Cl;D1:100]-[C;z1;D2;x2:1]-[B;M]')
+    rules['boronate_alkyl_bromide'] = smarts('[Br;D1:100]-[C;z1;D2;x2:1]-[B;M]')
+    rules['boronate_alkyl_iodide'] = smarts('[I;D1:100]-[C;z1;D2;x2:1]-[B;M]')
+
     # stannanes (R-SnR3)
     rules['aryl_stannane'] = smarts('[Sn;D4;z1:100]-;!@[C;a:1]')
     rules['alkenyl_stannane'] = smarts('[Sn;D4;z1:100]-;!@[C;z2:1]=[C:2]')
+    rules['alkyl_stannane'] = smarts('[Sn;D4;z1:100]-;!@[C;z1;D2,D3,D4:1]')
 
     # silanes (R-SiR3, for Hiyama coupling)
     rules['aryl_silane'] = smarts('[Si;D4:100]-;!@[C;a:1]')
@@ -173,6 +185,7 @@ def _rules():
     rules['thiol'] = smarts('[S;x0;D1;z1:1][C;z1:2]')
     rules['thioether'] = smarts('[S;D2;z1;x0:1]([C:2])[C:3]')
     rules['sulfoxide'] = smarts('[S;D3;z2:1](=[O:2])([C:3])[C:4]')
+    rules['sulfone'] = smarts('[S;D4:1](=[O:2])(=[O:3])([C:4])[C:5]')
 
     # pyridone/lactam halides (for extended ullmann/BH)
     for _x, _name in (('F', 'fluoride'), ('Cl', 'chloride'), ('Br', 'bromide'), ('I', 'iodide')):
@@ -196,6 +209,9 @@ def _rules():
     # hydrazines
     rules['alkyl_hydrazine'] = smarts('[N;D1;z1;x1:2]-[N;D2;z1;x1:1]-[C;z1:3]')
     rules['aryl_hydrazine'] = smarts('[N;D1;z1;x1:2]-[N;D2;z1;x1:1]-[C;a:3]:[C;a;D2:4]')
+
+    # hydrazone (C=N-NH-R, product of carbonyl + hydrazine condensation)
+    rules['hydrazone'] = smarts('[C;z2:1]=[N;D2;z2;x1:2]-[N;D2;z1;x1:3]')
 
     # thioamide (for Hantzsch thiazole)
     rules['thioamide'] = smarts('[S;z2;x0;D1:2]=[C;D3;x2:1]-[N;D1:3]')
@@ -224,8 +240,14 @@ def _rules():
     # amino alcohol (for oxazoline formation): H2N-C-C-OH
     rules['amino_alcohol'] = smarts('[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[O;D1:4]')
 
+    # hydroxamic acid: R-C(=O)-NH-OH
+    rules['hydroxamic_acid'] = smarts('[O;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]')
+
     # oxime: C=N-OH
     rules['oxime'] = smarts('[O;D1;z1;x1:1]-[N;D2;z2;x1:2]=[C:3]')
+
+    # O-alkylhydroxylamine: R-O-NH2 (for oxime ether formation)
+    rules['O_alkylhydroxylamine'] = smarts('[N;D1;z1;x1:1]-[O;D2;z1;x1:2]-[C:3]')
 
     # alpha-isocyano (for Van Leusen oxazole)
     rules['tosyl_isocyanide'] = smarts('[C;-;D1:2]#[N;+;D2:1]-[C;D2,D3;z1;x2:3]-[S;D4;x2:100](=O)=O')

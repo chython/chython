@@ -114,7 +114,7 @@ def _rules():
 
     # buchwald-hartwig: ArX + R'NH2 -> ArNHR'
     for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
-        for amine in ('primary_amine', 'primary_aniline'):
+        for amine in ('primary_amine', 'primary_aniline', 'primary_amidine_amine'):
             rules.append(_make_reactor('buchwald_hartwig',
                                        [(halide, None),
                                         (amine, {1: 3, 2: 4})],
@@ -283,6 +283,14 @@ def _rules():
                                         (amine, {1: 4, 2: 5, 3: 6})],
                                        '[A:1](=[A:2])(=[A:3])-[A:4](-[A:5])-[A:6]'))
 
+    # sulfonamide from amide N-H: RSO2X + R'C(=O)NHR" -> R'C(=O)N(SO2R)R"
+    for sulfonyl in ('sulfonyl_chloride', 'sulfonyl_fluoride'):
+        for amide in ('primary_amide', 'secondary_amide'):
+            rules.append(_make_reactor('sulfonamide_formation',
+                                       [(sulfonyl, None),
+                                        (amide, {1: 4, 2: 5, 3: 6})],
+                                       '[A:1](=[A:2])(=[A:3])-[A:4]-[A:5]=[A:6]'))
+
     # aminolysis: ester + amine -> amide
     for amine in ('primary_amine', 'primary_aniline'):
         rules.append(_make_reactor('aminolysis',
@@ -379,7 +387,7 @@ def _rules():
                                     ('phenol', {1: 3, 2: 4})],
                                    '[A:1]-[A:3]-[A:4]'))
 
-        for alcohol in ('primary_alcohol', 'secondary_alcohol'):
+        for alcohol in ('primary_alcohol', 'secondary_alcohol', 'tertiary_alcohol'):
             rules.append(_make_reactor('williamson',
                                        [(halide, None),
                                         (alcohol, {1: 3, 2: 4})],
@@ -391,7 +399,7 @@ def _rules():
                                    [(pseudohalide, None),
                                     ('phenol', {1: 3, 2: 4})],
                                    '[A:1]-[A:3]-[A:4]'))
-        for alcohol in ('primary_alcohol', 'secondary_alcohol'):
+        for alcohol in ('primary_alcohol', 'secondary_alcohol', 'tertiary_alcohol'):
             rules.append(_make_reactor('williamson',
                                        [(pseudohalide, None),
                                         (alcohol, {1: 3, 2: 4})],
@@ -519,6 +527,10 @@ def _rules():
                                    [(halide, None),
                                     ('alkenyl_stannane', {100: 200, 1: 2, 2: 3})],
                                    '[A:1]-[A:2]=[A:3]'))
+        rules.append(_make_reactor('stille',
+                                   [(halide, None),
+                                    ('alkyl_stannane', {100: 200, 1: 2})],
+                                   '[A:1]-[A:2]'))
 
     # hiyama: ArX + R-SiR3 -> Ar-R
     for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
@@ -619,6 +631,11 @@ def _rules():
                                [('aminopyridine', None),
                                 ('alpha_haloketone', {1: 4, 2: 5, 3: 6, 100: 200})],
                                '[A:3]:1:[A:6]:[A:4]:[A:1]:[A:2]:1'))
+    # imidazo[1,2-a]pyridine: aminopyridine + alpha_haloester (ester O masked, carbonyl O deleted)
+    rules.append(_make_reactor('imidazopyridine',
+                               [('aminopyridine', None),
+                                ('alpha_haloester', {1: 4, 2: 5, 3: 6, 100: 200})],
+                               '[A:3]:1:[A:6]:[A:4]:[A:1]:[A:2]:1'))
 
     # biginelli: aldehyde + beta_ketoester + urea/thiourea -> DHPM (3-component)
     for urea_fg in ('urea', 'thiourea'):
@@ -687,8 +704,8 @@ def _rules():
                                     (grignard, {100: 200, 101: 201, 1: 3})],
                                    '[A:1](=[O:20])-[A:3]'))
 
-    # N-alkylation: alkyl_halide/triflate + pyrrole/pyrazole/imidazole
-    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate'):
+    # N-alkylation: alkyl_halide/triflate/tosylate + pyrrole/pyrazole/imidazole/pyridol
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate', 'alkyl_tosylate'):
         rules.append(_make_reactor('n_alkylation',
                                    [(halide, None),
                                     ('pyrrole', {1: 3})],
@@ -701,9 +718,14 @@ def _rules():
                                    [(halide, None),
                                     ('imidazole', {1: 3, 2: 4, 3: 5})],
                                    '[A:1]-[A:5]:[A:4]:[A:3]'))
+        rules.append(_make_reactor('n_alkylation',
+                                   [(halide, None),
+                                    ('pyridol', {1: 3, 2: 4, 3: 5})],
+                                   '[A:1]-[A:3]-[A:4]=[A:5]'))
 
     # N-alkylation: alkyl_halide/triflate + primary/secondary amine
-    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate'):
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate',
+                   'boronate_alkyl_chloride', 'boronate_alkyl_bromide', 'boronate_alkyl_iodide'):
         for amine in ('primary_amine', 'primary_aniline'):
             rules.append(_make_reactor('n_alkylation',
                                        [(halide, None),
@@ -736,11 +758,24 @@ def _rules():
                                     (halide, {100: 200, 1: 4})],
                                    '[A:1](-[A:4])-[A:2]=[A:3]'))
 
+    # oxime ether formation: O-alkylhydroxylamine + aldehyde → R-O-N=CH-R'
+    rules.append(_make_reactor('oxime_ether',
+                               [('O_alkylhydroxylamine', None),
+                                ('aldehyde', {1: 4, 2: 5})],
+                               '[A:3]-[A:2]-[A:1]=[A:4]'))
+
     # aldol with ketone (extension): alpha_ketone + ketone
     rules.append(_make_reactor('aldol',
                                [('alpha_ketone', None),
                                 ('ketone', {1: 4, 2: 5})],
                                '[A:1](=[A:2])-[A:3]-[A:4]-[A:5]'))
+
+    # hydrazone formation: aldehyde/ketone + aryl_hydrazine -> C=N-NH-Ar
+    for carbonyl in ('aldehyde', 'ketone'):
+        rules.append(_make_reactor('hydrazone',
+                                   [(carbonyl, None),
+                                    ('aryl_hydrazine', {1: 3, 2: 4, 3: 5, 4: 6})],
+                                   '[A:1]=[A:4]-[A:3]-[A:5]:[A:6]'))
 
     return rules
 

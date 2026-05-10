@@ -825,6 +825,16 @@ def _rules():
         []
     )
 
+    # hydroxyl Boc: O-C(=O)-O-C(C)(C)C  (tert-butoxycarbonyl on O)
+    rules['hydroxyl_boc'] = (
+        smarts('[O;D2:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]'),
+        [1],
+        [],
+        'CC(C)OC(=O)OC(C)(C)C',
+        'CC(C)O',
+        []
+    )
+
     # General patterns that are subsets of more specific ones above.
     # Must come last to prevent false matches due to atom overlap.
 
