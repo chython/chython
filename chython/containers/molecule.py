@@ -368,20 +368,24 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         """
         if not atoms:
             raise ValueError('empty atoms list not allowed')
-        if set(atoms) - self._atoms.keys():
+        atoms_set = set(atoms)
+        if atoms_set - self._atoms.keys():
             raise ValueError('invalid atom numbers')
-        atoms = tuple(n for n in self if n in atoms)  # save original order
+        atoms = tuple(n for n in self if n in atoms_set)  # save original order
         sub = object.__new__(self.__class__)
         sub._name = sub._meta = sub._changed = sub._backup = None
-        sub._atoms = {n: self._atoms[n].copy(hydrogens=not recalculate_hydrogens, stereo=True) for n in atoms}
+        sub._atoms = {n: self._atoms[n].copy(hydrogens=True, stereo=True) for n in atoms}
         sub._bonds = sb = {}
         for n in atoms:
             sb[n] = sbn = {}
             for m, bond in self._bonds[n].items():
                 if m in sb:  # bond partially exists. need back-connection.
                     sbn[m] = sb[m][n]
-                elif m in atoms:
+                elif m in atoms_set:
                     sbn[m] = bond.copy(stereo=True)
+        if recalculate_hydrogens:
+            # Only recalculate H on atoms that lost neighbors
+            sub._changed = {n for n in atoms if not self._bonds[n].keys() <= atoms_set}
         sub.fix_structure(recalculate_hydrogens=recalculate_hydrogens)
         sub.fix_stereo()
         return sub
