@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_args_method
+from chython._cache import cached_args_method
 from collections import Counter, defaultdict
 from functools import cached_property
 from lazy_object_proxy import Proxy

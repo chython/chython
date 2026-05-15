@@ -20,7 +20,7 @@ from array import array
 from collections import defaultdict, deque
 from functools import cached_property, partial
 from io import BytesIO
-from itertools import permutations
+from itertools import permutations, product
 from struct import Struct
 from typing import Any, Optional, TYPE_CHECKING, Union
 from collections.abc import Collection, Iterator
@@ -106,16 +106,23 @@ class Isomorphism:
                         seen.add(atoms)
                     yield mapping
         else:
-            for candidates in permutations(other.connected_components, len(components)):
-                mappers = []
-                for component, candidate in zip(components, candidates):
+            # K-component query: product over target components with repetition,
+            # filtered to atom-disjoint partials. Handles K-query vs <K-target.
+            target_components = other.connected_components
+            for candidates in product(target_components, repeat=len(components)):
+                scoped = []
+                for candidate in candidates:
                     if searching_scope:
                         candidate = searching_scope.intersection(candidate)
                         if not candidate:
                             break
-                    mappers.append(get_mapping(component, scope=candidate))
+                    scoped.append(candidate)
                 else:
-                    for match in lazy_product(*mappers):
+                    partials = [list(get_mapping(c, scope=s))
+                                for c, s in zip(components, scoped)]
+                    if any(not p for p in partials):
+                        continue
+                    for match in _atom_disjoint_combinations(partials):
                         mapping = match[0].copy()
                         for m in match[1:]:
                             mapping.update(m)
@@ -683,6 +690,30 @@ def _get_mapping(linear_query, query_closures, o_atoms, o_bonds, scope, recursiv
                             obon = o_bonds[o_n]
                             if all(bond == obon[mapping[m]] for m, bond in query_closures[s_n]):
                                 stack.append((o_n, depth))
+
+
+def _atom_disjoint_combinations(partials):
+    """Yield K-tuples picking one mapping from each of K partial lists, such
+    that the chosen mappings' target atoms are pairwise disjoint."""
+    k = len(partials)
+    if k == 0:
+        return
+
+    picked = [None] * k
+
+    def walk(depth, used):
+        if depth == k:
+            yield tuple(picked)
+            return
+        for m in partials[depth]:
+            atoms = m.values()
+            atom_set = set(atoms)
+            if not atom_set.isdisjoint(used):
+                continue
+            picked[depth] = m
+            yield from walk(depth + 1, used | atom_set)
+
+    yield from walk(0, set())
 
 
 def _recursive_ok(recursive_scope, s_n, o_n):

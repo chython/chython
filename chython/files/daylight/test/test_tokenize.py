@@ -51,12 +51,18 @@ def test_smiles_tokenize_atom():
 
 
 def test_smarts_tokenize_atom():
-    # Test basic SMARTS tokenization
-    assert smarts_tokenize('[C]') == [(0, {'element': 'C'})]
-    assert smarts_tokenize('[C,N]') == [(0, {'element': ['C', 'N']})]
-    assert smarts_tokenize('[C+]') == [(0, {'charge': 1, 'element': 'C'})]
+    # Per standard SMARTS semantics, uppercase aromaticity-capable symbols
+    # ([C], [N], …) carry an implicit aliphatic constraint, encoded as
+    # hybridization ∈ {1, 2, 3} so the matcher rejects aromatic atoms.
+    # The marker ``_default_aliphatic`` is consumed by the parser to relax
+    # the constraint when the atom is connected by an aromatic-only bond
+    # (legacy ``[C]:[C]`` chython idiom).
+    _aliph = {'hybridization': [1, 2, 3], '_default_aliphatic': True}
+    assert smarts_tokenize('[C]') == [(0, {'element': 'C', **_aliph})]
+    assert smarts_tokenize('[C,N]') == [(0, {'element': ['C', 'N'], **_aliph})]
+    assert smarts_tokenize('[C+]') == [(0, {'charge': 1, 'element': 'C', **_aliph})]
     assert smarts_tokenize('[#1]') == [(0, {'element': 1})]
-    assert smarts_tokenize('[C;h1;@]') == [(0, {'element': 'C', 'implicit_hydrogens': [1], 'stereo': True})]
+    assert smarts_tokenize('[C;h1;@]') == [(0, {'element': 'C', 'implicit_hydrogens': [1], 'stereo': True, **_aliph})]
     assert smarts_tokenize('[O;z1,z2;x1]') == [(0, {'element': 'O', 'heteroatoms': [1], 'hybridization': [1, 2]})]
     assert smarts_tokenize('[Se;a;D1,D2;r4,r7:3]') == [(8, {'parsed_mapping': 3, 'element': 'Se', 'hybridization': 4, 'neighbors': [1, 2], 'ring_sizes': [4, 7]})]
     assert smarts_tokenize('[Cl;M]') == [(0, {'element': 'Cl', 'masked': True})]
@@ -65,13 +71,14 @@ def test_smarts_tokenize_atom():
 
 
 def test_smarts_tokenize_bonds():
-    assert smarts_tokenize('[C][C]') == [(0, {'element': 'C'}), (0, {'element': 'C'})]
-    assert smarts_tokenize('[C]-[C]') == [(0, {'element': 'C'}), (1, 1), (0, {'element': 'C'})]
-    assert smarts_tokenize('[C]~[C]') == [(0, {'element': 'C'}), (1, 8), (0, {'element': 'C'})]
-    assert smarts_tokenize('[C]!:[C]') == [(0, {'element': 'C'}), (10, [1, 2, 3]), (0, {'element': 'C'})]
-    assert smarts_tokenize('[C]-,=[C]') == [(0, {'element': 'C'}), (10, [1, 2]), (0, {'element': 'C'})]
-    assert smarts_tokenize('[C]-;@[C]') == [(0, {'element': 'C'}), (12, QueryBond(1, True)), (0, {'element': 'C'})]
-    assert smarts_tokenize('[C]!-;!@[C]') == [(0, {'element': 'C'}), (12, QueryBond((2, 3, 4), False)),
-                                              (0, {'element': 'C'})]
-    assert smarts_tokenize('[C]-,=;!@[C]') == [(0, {'element': 'C'}), (12, QueryBond((1, 2), False)),
-                                               (0, {'element': 'C'})]
+    _aliph_C = {'element': 'C', 'hybridization': [1, 2, 3], '_default_aliphatic': True}
+    assert smarts_tokenize('[C][C]') == [(0, _aliph_C), (0, _aliph_C)]
+    assert smarts_tokenize('[C]-[C]') == [(0, _aliph_C), (1, 1), (0, _aliph_C)]
+    assert smarts_tokenize('[C]~[C]') == [(0, _aliph_C), (1, 8), (0, _aliph_C)]
+    assert smarts_tokenize('[C]!:[C]') == [(0, _aliph_C), (10, [1, 2, 3]), (0, _aliph_C)]
+    assert smarts_tokenize('[C]-,=[C]') == [(0, _aliph_C), (10, [1, 2]), (0, _aliph_C)]
+    assert smarts_tokenize('[C]-;@[C]') == [(0, _aliph_C), (12, QueryBond(1, True)), (0, _aliph_C)]
+    assert smarts_tokenize('[C]!-;!@[C]') == [(0, _aliph_C), (12, QueryBond((2, 3, 4), False)),
+                                              (0, _aliph_C)]
+    assert smarts_tokenize('[C]-,=;!@[C]') == [(0, _aliph_C), (12, QueryBond((1, 2), False)),
+                                               (0, _aliph_C)]

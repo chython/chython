@@ -51,6 +51,7 @@ def _parse_mol_smarts(data: str) -> QueryContainer:
     g = QueryContainer(data)
 
     mapping = {}
+    default_aliphatic = {}  # internal-atom-number -> True if hybridization defaulted from uppercase symbol
     free = count(max(a.get('parsed_mapping', 0) for a in parsed['atoms']) + 1)
     for i, a in enumerate(parsed['atoms']):
         mapping[i] = n = a.pop('parsed_mapping', 0) or next(global_free_masked if a.get('masked') else free)
@@ -58,6 +59,8 @@ def _parse_mol_smarts(data: str) -> QueryContainer:
         charge_not = a.pop('charge_not', None)
         recursive_smarts_raw = a.pop('recursive_smarts', None)
         excluded_elements = a.pop('excluded_elements', None)
+        if a.pop('_default_aliphatic', False):
+            default_aliphatic[n] = True
         if isinstance(e, int):
             e = QueryElement.from_atomic_number(e)
         elif isinstance(e, str):
@@ -87,6 +90,16 @@ def _parse_mol_smarts(data: str) -> QueryContainer:
                 else:
                     b.stereo = s1 == s2
         g.add_bond(mapping[n], mapping[m], b)
+
+    # Relax aliphatic-default if the atom has an aromatic bond — preserves
+    # legacy ``[C]:[C]`` idioms while keeping strict ``[C]`` semantics.
+    if default_aliphatic:
+        for atom_n in default_aliphatic:
+            for neighbour, bond in g._bonds[atom_n].items():
+                bond_orders = bond.order
+                if bond_orders == (4,):
+                    g._atoms[atom_n]._hybridization = ()
+                    break
     return g
 
 
@@ -128,17 +141,68 @@ def smarts(data: str) -> Union[QueryContainer, ReactionContainer]:
         raise TypeError('Must be a SMARTS string')
 
     if '>' in data:
+        # Reaction-level trailing CX block: indices are absolute across
+        # reactants → reagents → products.
+        body, rxn_rad_atoms = _split_trailing_cx(data)
         try:
-            reactants_str, reagents_str, products_str = data.split('>')
+            reactants_str, reagents_str, products_str = body.split('>')
         except ValueError as e:
             raise ValueError('invalid reaction SMARTS') from e
 
-        reactants = [_parse_mol_smarts(x.strip()) for x in reactants_str.split('.') if x.strip()]
-        products = [_parse_mol_smarts(x.strip()) for x in products_str.split('.') if x.strip()]
-        reagents = [_parse_mol_smarts(x.strip()) for x in reagents_str.split('.') if x.strip()]
+        reactants = _parse_smarts_side(reactants_str)
+        reagents = _parse_smarts_side(reagents_str)
+        products = _parse_smarts_side(products_str)
+
+        if rxn_rad_atoms:
+            cum = 0
+            for side_mols in (reactants, reagents, products):
+                for mol in side_mols:
+                    atom_ids = list(mol._atoms.keys())
+                    for pos, aid in enumerate(atom_ids):
+                        if (cum + pos) in rxn_rad_atoms:
+                            mol._atoms[aid]._is_radical = True
+                    cum += len(atom_ids)
         return ReactionContainer(reactants, products, reagents)
 
     return _parse_mol_smarts(data)
+
+
+def _split_trailing_cx(s: str):
+    """Strip trailing CX block; return (body, radical_indices_set)."""
+    s = s.strip()
+    if not s.endswith('|'):
+        return s, set()
+    open_pipe = s.rfind('|', 0, -1)
+    if open_pipe <= 0 or s[open_pipe - 1] != ' ':
+        return s, set()
+    cx_block = s[open_pipe:]
+    body = s[:open_pipe - 1]
+    if '|' in body:  # legacy per-fragment CX present; leave body alone
+        return s, set()
+    rad = set()
+    for x in findall(cx_radicals, cx_block):
+        for i in x[3:].split(','):
+            rad.add(int(i))
+    return body, rad
+
+
+def _parse_smarts_side(side: str) -> list[QueryContainer]:
+    """Parse one reaction side. Supports legacy per-fragment CX
+    (``[A] |^1:0|.[B]``) and side-local CX (``[A].[B] |^1:N|``)."""
+    side, rad_atoms = _split_trailing_cx(side)
+    if not side:
+        return []
+    frags = [f.strip() for f in side.split('.') if f.strip()]
+    mols = [_parse_mol_smarts(f) for f in frags]
+    if rad_atoms:
+        cum = 0
+        for mol in mols:
+            atom_ids = list(mol._atoms.keys())
+            for pos, aid in enumerate(atom_ids):
+                if (cum + pos) in rad_atoms:
+                    mol._atoms[aid]._is_radical = True
+            cum += len(atom_ids)
+    return mols
 
 
 __all__ = ['smarts']

@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_method
+from chython._cache import cached_method
 from collections import defaultdict
 from functools import reduce
 from itertools import chain
@@ -30,6 +30,7 @@ from .cgr import CGRContainer
 from .cgr_query import QueryCGRContainer
 from .molecule import MoleculeContainer
 from .query import QueryContainer
+from ..algorithms.smarts import _query_smarts_body
 from ..periodictable import DynamicQueryElement, DynamicAnyElement
 from ..periodictable.base.query import AnyElement
 from ..algorithms.calculate2d import Calculate2DReaction
@@ -494,13 +495,26 @@ class ReactionContainer(StandardizeReaction, Mapping, Calculate2DReaction, Depic
         graph_cls = self._get_graph_cls()
         if issubclass(graph_cls, QueryContainer):
             keep_order = '!c' in format_spec
+            disable_cx = '!x' in format_spec
             sig = []
+            radicals = []  # absolute-index `is_radical` flag for every atom
             for ml in (self.reactants, self.reagents, self.products):
+                per_mol = []
+                for m in ml:
+                    body, order = _query_smarts_body(m)
+                    radicals.extend(m._atoms[n].is_radical for n in order)
+                    per_mol.append(body)
                 if keep_order:
-                    sig.append('.'.join(str(m) for m in ml))
+                    sig.append('.'.join(per_mol))
                 else:
-                    sig.append('.'.join(sorted(str(m) for m in ml)))
-            return '>'.join(sig)
+                    sig.append('.'.join(sorted(per_mol)))
+            base = '>'.join(sig)
+            if disable_cx:
+                return base
+            rad_idx = ','.join(str(i) for i, r in enumerate(radicals) if r)
+            if rad_idx:
+                return f"{base} |^1:{rad_idx}|"
+            return base
 
         sig = []
         count = 0

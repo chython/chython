@@ -18,7 +18,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import ABC, abstractmethod
-from CachedMethods import cached_method
+from chython._cache import cached_method
 from collections import defaultdict
 from functools import cached_property
 from itertools import product, count

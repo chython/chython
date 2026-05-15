@@ -101,55 +101,27 @@ class QueryCGRContainer(Graph, QueryCGRSmiles, DepictQueryCGR, Calculate2DCGR):
             del self._plane[n]
 
     def remap(self, mapping, *, copy=False) -> 'QueryCGRContainer':
-        h = super().remap(mapping, copy=copy)
+        target = self.copy() if copy else self
+
+        if len(mapping) != len(set(mapping.values())) or \
+                not (target._atoms.keys() - mapping.keys()).isdisjoint(mapping.values()):
+            raise ValueError('mapping overlap')
+
         mg = mapping.get
-        spr = self._p_radicals
-        sn = self._neighbors
-        sh = self._hybridizations
-        spn = self._p_neighbors
-        sph = self._p_hybridizations
-        if copy:
-            hch = getattr(h, '_charges', {})
-            hrd = getattr(h, '_radicals', {})
-            hpc = h._p_charges
-            hpr = h._p_radicals
-            hn = h._neighbors
-            hh = h._hybridizations
-            hpn = h._p_neighbors
-            hph = h._p_hybridizations
-        else:
-            hch = {}
-            hrd = {}
-            hpc = {}
-            hpr = {}
-            hn = {}
-            hh = {}
-            hpn = {}
-            hph = {}
-
-        for n, c in self._p_charges.items():
-            m = mg(n, n)
-            hch[m] = self._charges.get(n, 0)
-            hrd[m] = self._radicals.get(n, False)
-            hpc[m] = c
-            hpr[m] = spr[n]
-            hn[m] = sn[n]
-            hpn[m] = spn[n]
-            hh[m] = sh[n]
-            hph[m] = sph[n]
-
-        if copy:
-            return h
-
-        self._charges = hch
-        self._radicals = hrd
-        self._p_charges = hpc
-        self._p_radicals = hpr
-        self._neighbors = hn
-        self._hybridizations = hh
-        self._p_neighbors = hpn
-        self._p_hybridizations = hph
-        return self
+        target._atoms = {mg(n, n): atom for n, atom in target.atoms()}
+        target._bonds = {mg(n, n): {mg(m, m): bond for m, bond in m_bond.items()}
+                         for n, m_bond in target._bonds.items()}
+        target._charges = {mg(n, n): c for n, c in target._charges.items()}
+        target._radicals = {mg(n, n): r for n, r in target._radicals.items()}
+        target._p_charges = {mg(n, n): c for n, c in target._p_charges.items()}
+        target._p_radicals = {mg(n, n): r for n, r in target._p_radicals.items()}
+        target._neighbors = {mg(n, n): v for n, v in target._neighbors.items()}
+        target._hybridizations = {mg(n, n): v for n, v in target._hybridizations.items()}
+        target._p_neighbors = {mg(n, n): v for n, v in target._p_neighbors.items()}
+        target._p_hybridizations = {mg(n, n): v for n, v in target._p_hybridizations.items()}
+        target._plane = {mg(n, n): p for n, p in target._plane.items()}
+        target.flush_cache()
+        return target
 
     def copy(self, **kwargs) -> 'QueryCGRContainer':
         copy = super().copy(**kwargs)

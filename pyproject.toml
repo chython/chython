@@ -1,77 +1,77 @@
-[tool.poetry]
-name = 'chython-synplan'
-version = '1.94'
-description = 'Library for processing molecules and reactions in python way'
-authors = ['Ramil Nugmanov <nougmanoff@protonmail.com>']
-license = 'LGPLv3'
-readme = 'README.rst'
-homepage = 'https://github.com/chython/chython'
-documentation = 'https://chython.readthedocs.io'
-classifiers=[
-    'Environment :: Plugins',
-    'Intended Audience :: Science/Research',
-    'License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)',
-    'Operating System :: OS Independent',
-    'Programming Language :: Python',
-    'Programming Language :: Python :: 3 :: Only',
-    'Programming Language :: Python :: 3.10',
-    'Programming Language :: Python :: 3.11',
-    'Programming Language :: Python :: 3.12',
-    'Programming Language :: Python :: 3.13',
-    'Programming Language :: Python :: 3.14',
-    'Topic :: Scientific/Engineering',
-    'Topic :: Scientific/Engineering :: Chemistry',
-    'Topic :: Scientific/Engineering :: Information Analysis',
-    'Topic :: Software Development',
-    'Topic :: Software Development :: Libraries',
-    'Topic :: Software Development :: Libraries :: Python Modules'
+[project]
+name = "chython-synplan"
+version = "1.94"
+description = "Library for processing molecules and reactions in python way"
+authors = [
+    { name = "Ramil Nugmanov", email = "nougmanoff@protonmail.com" }
 ]
+license = "LGPL-3.0-or-later"
+readme = "README.rst"
+requires-python = ">=3.10,<4.0"
+classifiers = [
+    "Environment :: Plugins",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+dependencies = [
+    # cachedmethods was vendored into chython/_cache.py — see priority-rules
+    # bug #5 (0.2.0 broke chython's slotted Element classes; 0.2.1 was never
+    # published to PyPI). chython is now standalone for caching needs.
+    "lazy-object-proxy>=1.6",
+    "lxml>=4.1",
+    "numpy>=2.0.0"
+]
+
+[project.urls]
+homepage = "https://github.com/chython/chython"
+documentation = "https://chython.readthedocs.io"
+
+[project.optional-dependencies]
+mapping = ["chytorch-rxnmap-synplan>=1.7"]
+rdkit = ["rdkit>=2023.9"]
+png = ["pyppeteer>=2.0.0"]
+racer-default = ["mini-racer>=0.12.4"]
+racer-deprecated = ["py-mini-racer"]
+
+[dependency-groups]
+dev = ["pytest>=7.4.3"]
+docs = [
+    "nbsphinx>=0.9.3",
+    "pandoc>=2.3",
+    "rdkit>=2023.9.1",
+    "ipython>=8.12.1"
+]
+
+[tool.poetry]
 packages = [
     { include = "chython" }
 ]
 include = [
-    {path = 'chython/*/*.pyd', format = 'wheel'},
-    {path = 'chython/*/*.so', format = 'wheel'},
-    {path = 'chython/files/libinchi/libinchi.*', format = 'wheel'}
+    { path = "chython/*/*.pyd", format = "wheel" },
+    { path = "chython/*/*.so", format = "wheel" },
+    { path = "chython/files/libinchi/libinchi.*", format = "wheel" }
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.10,<4.0"
-cachedmethods = '>=0.1.4'
-lazy-object-proxy = '>=1.6'
-lxml = '>=4.1'
-mini-racer = {version = '>=0.12.4', optional = true}
-chytorch-rxnmap-synplan = {version = '>=1.7', optional = true}
-rdkit = {version = '>=2023.9', optional = true}
-pyppeteer = {version = '>=2.0.0', optional = true}
-numpy = ">=2.0.0"
+[tool.poetry.build]
+script = "build.py"
+generate-setup-file = false
 
-[tool.poetry.extras]
-mapping = ['chytorch-rxnmap-synplan']
-rdkit = ['rdkit']
-png = ['pyppeteer']
-racer-default = ['mini-racer']
-racer-deprecated = ['py-mini-racer']
-
-[tool.poetry.group.dev]
-optional = true
-
-[tool.poetry.group.dev.dependencies]
-pytest = '>=7.4.3'
-
-[tool.poetry.group.docs]
-optional = true
-
-[tool.poetry.group.docs.dependencies]
-nbsphinx = '>=0.9.3'
-pandoc = '>=2.3'
-rdkit = '>=2023.9.1'
-ipython = '>=8.12.1'
+[tool.uv]
+package = true
 
 [build-system]
 requires = ["poetry-core>=2.0.1", "setuptools", "cython>=3.0.5"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.build]
-script = 'build.py'
-generate-setup-file = false

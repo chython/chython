@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from abc import ABC, abstractmethod
-from CachedMethods import class_cached_property
+from chython._cache import class_cached_property
 from collections import defaultdict
 from typing import Optional
 from .vector import Vector

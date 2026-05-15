@@ -613,6 +613,19 @@ def _query_parse(token):
     # Infer aromatic hybridization from lowercase symbol if not explicitly set
     if aromatic_from_symbol and 'hybridization' not in out:
         out['hybridization'] = 4
+    elif not aromatic_from_symbol and 'hybridization' not in out:
+        # Standard SMARTS: uppercase aromaticity-capable symbol = aliphatic.
+        # Marker is relaxed by the parser if the atom has an aromatic bond.
+        elem = out.get('element')
+        aromatic_capable = set(_aromatic_upper.values())
+        if isinstance(elem, str):
+            if elem in aromatic_capable:
+                out['hybridization'] = [1, 2, 3]
+                out['_default_aliphatic'] = True
+        elif isinstance(elem, list):
+            if elem and all(isinstance(e, str) and e in aromatic_capable for e in elem):
+                out['hybridization'] = [1, 2, 3]
+                out['_default_aliphatic'] = True
 
     # Return type 8 for aromatic atoms so the parser assigns aromatic bonds
     _type = 8 if out.get('hybridization') == 4 else 0
