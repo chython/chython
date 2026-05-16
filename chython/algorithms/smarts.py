@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import cached_method
+from chython._cache import cached_method
 from typing import TYPE_CHECKING
 from .smiles import Smiles, charge_str, order_str
 
@@ -210,6 +210,13 @@ class Smarts(Smiles):
         if rd:
             return '|^1:' + ','.join(rd) + '|'
         return None
+
+
+def _query_smarts_body(q: 'QueryContainer'):
+    """SMARTS body without trailing CX; returns (body, order) so callers
+    can build a reaction-wide CX block instead of per-molecule."""
+    smiles, order = q._smiles(q._smiles_order(), _return_order=True)
+    return ''.join(smiles), order
 
 
 __all__ = ['Smarts']

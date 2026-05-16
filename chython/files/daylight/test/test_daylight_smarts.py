@@ -145,14 +145,19 @@ def test_daylight_smarts_heterocycles():
 
 
 def test_daylight_smarts_charged_aromatics():
-    # Test charged aromatic ring systems
+    # Test charged aromatic ring systems. Per standard SMARTS, lowercase
+    # `[n+]` is the *aromatic* nitrogen cation; uppercase `[N+]` is the
+    # aliphatic case and must NOT match aromatic pyridinium/N-oxide.
     pyridinium = smiles('c1cc[nH+]cc1')  # protonated pyridine
     n_oxide = smiles('c1cc[n+]([O-])cc1')  # pyridine N-oxide
-    
-    # Test patterns for charged systems
-    charged_n = smarts('[N+]')  # positively charged nitrogen
-    assert charged_n.is_substructure(pyridinium)
-    assert charged_n.is_substructure(n_oxide)
+
+    aromatic_n = smarts('[n+]')
+    assert aromatic_n.is_substructure(pyridinium)
+    assert aromatic_n.is_substructure(n_oxide)
+
+    aliphatic_n = smarts('[N+]')
+    assert not aliphatic_n.is_substructure(pyridinium)
+    assert not aliphatic_n.is_substructure(n_oxide)
 
 
 def test_daylight_smarts_drug_patterns():

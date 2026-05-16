@@ -18,7 +18,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from asyncio import new_event_loop
-from CachedMethods import cached_method
+from chython._cache import cached_method
 from collections import defaultdict
 from functools import partial
 from math import atan2, sin, cos, hypot, pi

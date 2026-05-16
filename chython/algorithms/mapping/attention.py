@@ -17,7 +17,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from CachedMethods import class_cached_property
+from chython._cache import class_cached_property
 from itertools import chain, count, repeat
 from logging import getLogger, INFO
 from numpy import ix_, unravel_index, argmax, zeros, array, isclose, nonzero, ones, mean

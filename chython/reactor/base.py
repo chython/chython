@@ -40,6 +40,13 @@ class BaseReactor:
         self._fix_rings = fix_rings
         self._fix_tautomers = fix_tautomers
         self._fix_broken_pyrroles = fix_broken_pyrroles
+        # Skip the bug-6 snapshot for rules that don't write aromatic bonds.
+        self._writes_aromatic = False
+        if fix_rings and isinstance(replacement, QueryContainer):
+            for *_, b in replacement.bonds():
+                if 4 in b.order:
+                    self._writes_aromatic = True
+                    break
 
     def _get_deleted(self, structure, mapping):
         if not self._to_delete:
@@ -202,12 +209,59 @@ class BaseReactor:
             # else: ignore label
 
         if self._fix_rings:
-            new.kekule(ignore_pyrrole_hydrogen=self._fix_broken_pyrroles)  # keeps stereo as is
-            if not new.thiele(fix_tautomers=self._fix_tautomers):  # fixes stereo if any ring aromatized
-                new.fix_stereo()
+            if self._writes_aromatic:
+                # Snapshot pre-kekule aromatic atoms; restore if thiele drops them.
+                pre_aromatic = {n for n, a in new.atoms() if a.hybridization == 4}
+                snapshot = snapshot_aromaticity_subset(new, pre_aromatic) if pre_aromatic else None
+                new.kekule(ignore_pyrrole_hydrogen=self._fix_broken_pyrroles)
+                if not new.thiele(fix_tautomers=self._fix_tautomers):
+                    new.fix_stereo()
+                if pre_aromatic:
+                    post_aromatic = {n for n, a in new.atoms() if a.hybridization == 4}
+                    if not pre_aromatic.issubset(post_aromatic):
+                        restore_aromaticity(new, snapshot)
+            else:
+                new.kekule(ignore_pyrrole_hydrogen=self._fix_broken_pyrroles)
+                if not new.thiele(fix_tautomers=self._fix_tautomers):
+                    new.fix_stereo()
         else:
             new.fix_stereo()
         return new
 
 
-__all__ = ['BaseReactor']
+def snapshot_aromaticity_subset(mol, atom_subset):
+    """Capture hybridization + bond orders for ``atom_subset``.
+
+    Pair with :func:`restore_aromaticity` to protect against a
+    ``kekule`` → ``thiele`` round trip dropping aromatic atoms.
+    """
+    bonds = mol._bonds
+    atoms_state = {n: mol._atoms[n].hybridization for n in atom_subset}
+    bonds_state = {}
+    for n in atom_subset:
+        for m, b in bonds[n].items():
+            if m in atom_subset and n < m:
+                bonds_state[(n, m)] = b.order
+    return atoms_state, bonds_state
+
+
+def restore_aromaticity(mol, snapshot):
+    """Restore state from :func:`snapshot_aromaticity_subset`. Idempotent.
+    """
+    atoms_state, bonds_state = snapshot
+    bonds = mol._bonds
+    for (n, m), order in bonds_state.items():
+        bn = bonds[n].get(m)
+        if bn is not None and bn.order != order:
+            bn._order = order
+        bm = bonds[m].get(n)
+        if bm is not None and bm.order != order:
+            bm._order = order
+    atoms = mol._atoms
+    for n, hyb in atoms_state.items():
+        if n in atoms:
+            atoms[n]._hybridization = hyb
+    mol.flush_cache()
+
+
+__all__ = ['BaseReactor', 'snapshot_aromaticity_subset', 'restore_aromaticity']
