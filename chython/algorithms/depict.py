@@ -1756,7 +1756,7 @@ class DepictQuery(Depict):
             else:
                 level = 0
 
-            if atom.hybridization:
+            if atom.hybridization and not _is_uninformative_hybridization(atom.hybridization):
                 hh = "".join(_render_hybridization[x] for x in atom.hybridization)
                 h_dy = nh_dy + level * level_sign
                 hbrdztns.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{nh_dx:.2f}" dy="{h_dy:.2f}" '
@@ -2165,14 +2165,18 @@ class DepictQueryCGR(Depict):
                 level = 0
 
             if atom.hybridization:
-                hh = ''.join(_render_hybridization[x] for x in atom.hybridization)
-                if atom.p_hybridization:
-                    ph = ''.join(_render_hybridization[x] for x in atom.p_hybridization)
-                else:
-                    ph = '0'
-                h_dy = nh_dy + level * level_sign
-                hbrdztns.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{nh_dx:.2f}" dy="{h_dy:.2f}" '
-                                f'text-anchor="{anchor}">{hh}»{ph}</text>')
+                hh_uninformative = _is_uninformative_hybridization(atom.hybridization)
+                ph_uninformative = (bool(atom.p_hybridization)
+                                    and _is_uninformative_hybridization(atom.p_hybridization))
+                if not (hh_uninformative and ph_uninformative):
+                    hh = ''.join(_render_hybridization[x] for x in atom.hybridization)
+                    if atom.p_hybridization:
+                        ph = ''.join(_render_hybridization[x] for x in atom.p_hybridization)
+                    else:
+                        ph = '0'
+                    h_dy = nh_dy + level * level_sign
+                    hbrdztns.append(f'        <text x="{x:.2f}" y="{y:.2f}" dx="{nh_dx:.2f}" dy="{h_dy:.2f}" '
+                                    f'text-anchor="{anchor}">{hh}»{ph}</text>')
 
         if nghbrs:
             svg.append(f'      <g fill="{query_fill}" font-family="{other_font_style}" font-size="{other_size:.2f}">')
@@ -2194,6 +2198,13 @@ class DepictQueryCGR(Depict):
 
 
 _render_hybridization = {1: 's', 2: 'd', 3: 't', 4: 'a'}
+_UNINFORMATIVE_HYBRIDIZATION = (frozenset((1, 2, 3)), frozenset((1, 2, 3, 4)))
+
+
+def _is_uninformative_hybridization(hyb) -> bool:
+    return frozenset(hyb) in _UNINFORMATIVE_HYBRIDIZATION
+
+
 _render_p_charge = {-4: {-3: '-4»-3', -2: '-4»-2', -1: '-4»-', 0: '-4»0', 1: '-4»+', 2: '-4»2', 3: '-4»3', 4: '-4»4'},
                     -3: {-4: '-3»-4', -2: '-3»-2', -1: '-3»-', 0: '-3»0', 1: '-3»+', 2: '-3»2', 3: '-3»3', 4: '-3»4'},
                     -2: {-4: '-2»-4', -3: '-2»-3', -1: '-2»-', 0: '-2»0', 1: '-2»+', 2: '-2»2', 3: '-2»3', 4: '-2»4'},
