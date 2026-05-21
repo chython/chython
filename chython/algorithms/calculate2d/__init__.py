@@ -28,12 +28,28 @@ from ...periodictable import Element
 class Calculate2D:
     __slots__ = ()
 
+    def _fix_plane_component(self, component):
+        plane = self._plane
+        atoms = self._atoms
+        if component is None:
+            component = atoms
+
+        component = tuple(n for n in component if n in atoms)
+        for n in component:
+            if n not in plane:
+                atom = atoms[n]
+                try:
+                    plane[n] = tuple(atom.xy)
+                except (AttributeError, TypeError, KeyError):
+                    plane[n] = (0., 0.)
+        return component
+
     def clean2d(self):
         """
         Calculate 2d layout of graph. https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 JS implementation used.
         """
         if ctx is None:
-            raise ImportError('py-mini-racer required for clean2d')
+            raise ImportError('mini-racer is not installed or broken')
         plane = {}
         for _ in range(5):
             smiles, order = self._clean2d_prepare()
@@ -72,8 +88,9 @@ class Calculate2D:
     def _fix_plane_mean(self, shift_x, shift_y=0, component=None):
         plane = self._plane
         atoms = self._atoms
-        if component is None:
-            component = plane
+        component = self._fix_plane_component(component)
+        if not component:
+            return shift_x
 
         left_atom = min(component, key=lambda x: plane[x][0])
         right_atom = max(component, key=lambda x: plane[x][0])
@@ -98,8 +115,9 @@ class Calculate2D:
     def _fix_plane_min(self, shift_x, shift_y=0, component=None):
         plane = self._plane
         atoms = self._atoms
-        if component is None:
-            component = plane
+        component = self._fix_plane_component(component)
+        if not component:
+            return shift_x
 
         right_atom = max(component, key=lambda x: plane[x][0])
         min_x = min(plane[x][0] for x in component) - shift_x
