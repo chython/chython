@@ -125,18 +125,18 @@ def _rules():
                                         (amine, {1: 3, 2: 4, 3: 5})],
                                        '[A:1]-[A:3](-[A:4])-[A:5]'))
 
-    # buchwald-hartwig: pyridone/lactam halides + amines
+    # buchwald-hartwig: lactam halides + amines
     for _x in ('fluoride', 'chloride', 'bromide', 'iodide'):
-        for _n in ('1', '2', '3', '4'):
-            pyridone = f'pyridone_{_n}_{_x}'
+        for _n in ('1', '2', '3', '4', '5', '6'):
+            lactam = f'lactam_{_n}_{_x}'
             for amine in ('primary_amine', 'primary_aniline'):
                 rules.append(_make_reactor('buchwald_hartwig',
-                                           [(pyridone, None),
+                                           [(lactam, None),
                                             (amine, {1: 3, 2: 4})],
                                            '[A:1]-[A:3]-[A:4]'))
             for amine in ('secondary_amine', 'secondary_aniline'):
                 rules.append(_make_reactor('buchwald_hartwig',
-                                           [(pyridone, None),
+                                           [(lactam, None),
                                             (amine, {1: 3, 2: 4, 3: 5})],
                                            '[A:1]-[A:3](-[A:4])-[A:5]'))
 
@@ -202,6 +202,14 @@ def _rules():
                                     ('phenol', {1: 3, 2: 4})],
                                    '[A:1]-[A:3]-[A:4]'))
 
+    # ullmann alcohol: ArX + ROH -> Ar-O-R (SNAr/Cu-mediated with aliphatic alcohols)
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_fluoride'):
+        for alcohol in ('primary_alcohol', 'secondary_alcohol'):
+            rules.append(_make_reactor('snar',
+                                       [(halide, None),
+                                        (alcohol, {1: 3, 2: 4})],
+                                       '[A:1]-[A:3]-[A:4]'))
+
     # ullmann pyrrole: ArX + pyrrole-NH -> Ar-N(pyrrole)
     for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
         rules.append(_make_reactor('ullmann_pyrrole',
@@ -217,20 +225,20 @@ def _rules():
                                     ('imidazole', {1: 3, 2: 4, 3: 5})],
                                    '[A:1]-[A:5]:[A:4]:[A:3]'))
 
-    # ullmann pyrrole: pyridone/lactam halides + N-heterocycles
+    # ullmann pyrrole: lactam halides + N-heterocycles
     for _x in ('fluoride', 'chloride', 'bromide', 'iodide'):
-        for _n in ('1', '2', '3', '4'):
-            pyridone = f'pyridone_{_n}_{_x}'
+        for _n in ('1', '2', '3', '4', '5', '6'):
+            lactam = f'lactam_{_n}_{_x}'
             rules.append(_make_reactor('ullmann_pyrrole',
-                                       [(pyridone, None),
+                                       [(lactam, None),
                                         ('pyrrole', {1: 3})],
                                        '[A:1]-[A:3]'))
             rules.append(_make_reactor('ullmann_pyrrole',
-                                       [(pyridone, None),
+                                       [(lactam, None),
                                         ('pyrazole', {1: 3, 2: 4})],
                                        '[A:1]-[A:4]:[A:3]'))
             rules.append(_make_reactor('ullmann_pyrrole',
-                                       [(pyridone, None),
+                                       [(lactam, None),
                                         ('imidazole', {1: 3, 2: 4, 3: 5})],
                                        '[A:1]-[A:5]:[A:4]:[A:3]'))
 

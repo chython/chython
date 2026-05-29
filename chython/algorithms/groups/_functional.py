@@ -187,12 +187,22 @@ def _rules():
     rules['sulfoxide'] = smarts('[S;D3;z2:1](=[O:2])([C:3])[C:4]')
     rules['sulfone'] = smarts('[S;D4:1](=[O:2])(=[O:3])([C:4])[C:5]')
 
-    # pyridone/lactam halides (for extended ullmann/BH)
+    # lactam halides: ring-closure patterns for activated C(sp2)-X in 6-membered lactam rings
+    # covers pyridone, pyridazinone, quinazolinone, pyrimidinone, benzo-fused lactams
+    # 6 positional patterns per halide (all relative positions of X to N-C=O in ring)
     for _x, _name in (('F', 'fluoride'), ('Cl', 'chloride'), ('Br', 'bromide'), ('I', 'iodide')):
-        rules[f'pyridone_4_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]-[N;D3;M]-;@[C;z2;r6;M]=[O;M]')
-        rules[f'pyridone_3_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]=[C,N;M]-;@[N;D3;r6;M]-;@[C;z2;r6;M]=[O;M]')
-        rules[f'pyridone_2_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]=[C,N;M]-;@[C;z2;r6;M](=[O;M])-[N;D3;M]')
-        rules[f'pyridone_1_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]-[C;z2;x2;M](=[O;M])-[N;D3;M]')
+        # X=C-C/N-C(=O)-N-C/N  e.g. CN1C=CC(Br)=CC1=O
+        rules[f'lactam_1_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]1=[C,N;z2;M]-[C;D3;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1')
+        # X=C-N-C(=O)-C/N-C/N  e.g. CN1C(Br)=CC=CC1=O
+        rules[f'lactam_2_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]=1-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C,N;z2;M]=1')
+        # X=C-N-C/N-C/N-C(=O)  e.g. CN1C=CC(=O)C=C1Br
+        rules[f'lactam_3_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]=1-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C;D3;z2;M]-[C,N;z2;M]=1')
+        # X=C-C(=O)-N-C/N-C/N  e.g. CN1C=CC=C(Br)C1=O
+        rules[f'lactam_4_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]=1-[C;D3;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C,N;z2;M]=1')
+        # X=C-C/N-C/N-N-C(=O)  e.g. CN1C=CC(=O)C(Br)=C1
+        rules[f'lactam_5_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C;D3;z2;M]1')
+        # X=C-C/N-N-C(=O)-C/N  e.g. CN1C=C(Br)C=CC1=O
+        rules[f'lactam_6_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1')
 
     # pyridol (hydroxypyridine tautomer of pyridone; chython stores NH-pyridones as pyridols)
     rules['pyridol'] = smarts('[N;r5,r6;D2;a:1]:[C:2]-[O;D1:3]')

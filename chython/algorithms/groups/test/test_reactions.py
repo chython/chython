@@ -42,7 +42,7 @@ _two_component = [
     ('mitsunobu_ester_primary_alcohol_acid',
      'mitsunobu', 'OCC.OC(=O)c1ccccc1>>c1ccccc1C(OCC)=O', 1),
     ('deoxygenative_coupling_alcohol_aryl_bromide',
-     'deoxygenative_coupling', 'OCC.Brc1ccc(cc1)C>>c1cc(ccc1C)CC', 1),
+     'deoxygenative_coupling', 'OCC.Brc1ccc(cc1)C>>c1cc(ccc1C)CC', 1, {'snar'}),
     ('decarboxylative_coupling_acid_aryl_bromide',
      'decarboxylative_coupling', 'OC(=O)CC.Brc1ccc(cc1)C>>c1cc(ccc1C)CC', 1),
     ('xec_aryl_bromide_alkyl_bromide',

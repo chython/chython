@@ -883,6 +883,15 @@ def _rules():
         ['CC(C)OCC']
     )
 
+    rules['hydroxyl_ethyl'] = (
+        smarts('[O;D2:1]-;!@[C;D2;z1;x1]-[C;D1]'),
+        [1],
+        [],
+        'CC(C)OCC',
+        'CC(C)O',
+        []
+    )
+
     return rules
 
 

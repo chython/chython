@@ -124,6 +124,9 @@ def _rules():
     rules.append(_make_reactor('oximation', 'ketone', 'oxime', '[O:20]-[N:21]=[A:1]'))
     rules.append(_make_reactor('oximation', 'aldehyde', 'oxime', '[O:20]-[N:21]=[A:1]'))
 
+    # acid chloride formation: RCOOH → RCOCl (SOCl2, oxalyl chloride)
+    rules.append(_make_reactor('acid_chlorination', 'carboxylic_acid', 'acyl_chloride', '[Cl:20]-[A:1]=[A:2]'))
+
     return rules
 
 

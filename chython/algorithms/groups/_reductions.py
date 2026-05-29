@@ -72,6 +72,11 @@ def _rules():
     rules.append(_make_reactor('carbonyl_to_amine', 'aldehyde', 'primary_amine', '[A:1]-[N:20]'))
     rules.append(_make_reactor('carbonyl_to_amine', 'ketone', 'primary_amine', '[A:1]-[N:20]'))
 
+    # reductive dehalogenation: Ar-X → Ar-H (H2/Pd, n-Bu3SnH, Zn/AcOH)
+    rules.append(_make_reactor('debromination', 'aryl_bromide', None, '[A:1]'))
+    rules.append(_make_reactor('dechlorination', 'aryl_chloride', None, '[A:1]'))
+    rules.append(_make_reactor('deiodination', 'aryl_iodide', None, '[A:1]'))
+
     return rules
 
 
