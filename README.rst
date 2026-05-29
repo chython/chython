@@ -29,7 +29,7 @@ Chython is fork of `CGRtools <https://github.com/stsouko/CGRtools>`_.
 Install
 =======
 
-Only python 3.8+.
+Only python 3.10+.
 
     pip install chython[racer-default]
 

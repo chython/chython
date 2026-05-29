@@ -18,6 +18,8 @@ extensions = [
     'sphinx.ext.viewcode',
 ]
 
+autodoc_mock_imports = ['chython']
+
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'tutorial']
 source_suffix = '.rst'
 master_doc = 'index'
