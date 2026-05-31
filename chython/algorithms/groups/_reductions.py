@@ -63,6 +63,8 @@ def _rules():
     # alkene hydrogenation: C=C → C-C (H2/Pd, H2/Pt)
     rules.append(_make_reactor('alkene_hydrogenation', 'alkene', None, '[A:1]-[A:2]'))
     rules.append(_make_reactor('alkene_hydrogenation', 'terminal_alkene', None, '[A:1]-[A:2]'))
+    rules.append(_make_reactor('alkene_hydrogenation', 'enamine', None, '[A:1]-[A:2]-[A:3]'))
+    rules.append(_make_reactor('alkene_hydrogenation', 'enol_ether', None, '[A:1]-[A:2]-[A:3]'))
 
     # deoxygenation: alcohol → alkane (Barton-McCombie, Appel+reduction)
     rules.append(_make_reactor('deoxygenation', 'primary_alcohol', None, '[A:2]'))

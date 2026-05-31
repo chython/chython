@@ -30,6 +30,10 @@ def _rules():
     rules['terminal_alkyne'] = smarts('[C;z3;x0;D1:1]#[C;x0;D2:2]')
     rules['alkyne'] = smarts('[C;z3;x0;D2:1]#[C;x0;D2:2]')
 
+    # enamines/enol ethers: C=C bonded to N or O (for hydrogenation)
+    rules['enamine'] = smarts('[C;z2;D2,D3:1]=[C;z2;D2,D3:2]-[N;z1;D2,D3:3]')
+    rules['enol_ether'] = smarts('[C;z2;D2,D3:1]=[C;z2;D2,D3:2]-[O;D2:3]')
+
     rules['vicinal_diol'] = smarts('[O;D1;z1;x0:1]-[C;z1;x1]-[C;z1;x1]-[O;D1;z1;x0:2]')
 
     rules['benzylic_ch'] = smarts('[C;z1;h1,h2;D2,D3:1]-[C;a:2]')
@@ -205,7 +209,7 @@ def _rules():
         rules[f'lactam_6_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1')
 
     # pyridol (hydroxypyridine tautomer of pyridone; chython stores NH-pyridones as pyridols)
-    rules['pyridol'] = smarts('[N;r5,r6;D2;a:1]:[C:2]-[O;D1:3]')
+    rules['pyridol'] = smarts('[N;r5,r6;D2;h0;a:1]:[C:2]-[O;D1:3]')
 
     # pyrrole. for tautomerism handling H not in template.
     rules['pyrrole'] = smarts('[N;h1;D2;a;r5:1]')
@@ -273,6 +277,12 @@ def _rules():
 
     # ortho-haloaniline (for Larock indole)
     rules['o_haloaniline'] = smarts('[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[Cl,Br,I;D1:100]')
+
+    # tertiary amine (for N-oxidation): NR3 where all substituents are C
+    rules['tertiary_amine'] = smarts('[N;D3;z1;x0:1]')
+
+    # pyridine-like nitrogen (for N-oxidation): aromatic N with no H, degree 2
+    rules['pyridine_n'] = smarts('[N;a;D2;h0:1]')
 
     return rules
 

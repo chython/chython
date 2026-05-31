@@ -55,6 +55,12 @@ def _rules():
     # sulfoxide → sulfone
     rules.append(_make_reactor('sulfoxide_to_sulfone', 'sulfoxide', 'sulfone', '[A:1](=[A:2])(=[O:20])(-[A:3])-[A:4]'))
 
+    # tertiary amine → N-oxide (mCPBA, H2O2)
+    rules.append(_make_reactor('nitrogen_oxidation', 'tertiary_amine', None, '[N;+:1]([O;-:20])'))
+
+    # pyridine → N-oxide (mCPBA, H2O2)
+    rules.append(_make_reactor('nitrogen_oxidation', 'pyridine_n', None, '[N;+:1]([O;-:20])'))
+
     return rules
 
 
