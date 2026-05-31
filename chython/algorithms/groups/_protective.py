@@ -681,6 +681,15 @@ def _rules():
         []
     )
 
+    rules['amine_phth'] = (
+        smarts('[N;D3:1]1[C;z2;x2;D3](=O)[C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2[C;z2;x2;D3]1=O'),
+        [1],
+        [],
+        'O=C1c2ccccc2C(=O)N1Cc1ccccc1',
+        'NCc1ccccc1',
+        []
+    )
+
     rules['amine_benzyl'] = (
         smarts('[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1'),
         [1],
@@ -741,6 +750,60 @@ def _rules():
         [],
         'CC(C)NC(c1c(Cl)cccc1)(c1ccccc1)c1ccccc1',
         'CC(C)N',
+        []
+    )
+
+    rules['amine_thp'] = (
+        smarts('[N;D2,D3:1]-;!@[C;D3;x2;z1;r6]1[O;D2][C;D2][C;D2][C;D2][C;D2]1'),
+        [1],
+        [],
+        'c1cn(C2CCCCO2)nc1',
+        'c1c[nH]nc1',
+        []
+    )
+
+    rules['amine_sulfinyl'] = (
+        smarts('[N;D2,D3:1]-;!@[S;D3;x2;z2](=O)[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]'),
+        [1],
+        [],
+        'c1ccccc1NS(=O)C(C)(C)C',
+        'c1ccccc1N',
+        []
+    )
+
+    rules['amine_acyl'] = (
+        smarts('[N;D2,D3:1]-;!@[C;z2;x2](=O)-[C;D1]'),
+        [1],
+        [],
+        'c1ccccc1NC(=O)C',
+        'c1ccccc1N',
+        []
+    )
+
+    rules['amine_benzhydrylidene'] = (
+        smarts('[N;D2:1]=;!@[C;D3;z2;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2'),
+        [1],
+        [],
+        'c1ccccc1N=C(c1ccccc1)c1ccccc1',
+        'c1ccccc1N',
+        []
+    )
+
+    rules['amine_tbu'] = (
+        smarts('[N;D2,D3:1]-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]'),
+        [1],
+        [],
+        'c1ccccc1NC(C)(C)C',
+        'c1ccccc1N',
+        []
+    )
+
+    rules['amine_benzoate'] = (
+        smarts('[N;D2,D3:1]-;!@[C;z2;x2](=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1'),
+        [1],
+        [],
+        'c1ccccc1NC(=O)c1ccccc1',
+        'c1ccccc1N',
         []
     )
 

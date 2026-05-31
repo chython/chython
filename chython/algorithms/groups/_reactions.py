@@ -93,27 +93,30 @@ def _rules():
     # aryl: ArX + ArB(OH)2 -> Ar-Ar
     # alkenyl: ArX + alkenyl_boronic -> Ar-CH=CH-R
     # alkyl: ArX + alkyl_boronic -> Ar-R
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         for boron in ('aryl_boronic_acid', 'aryl_boronic_ester', 'aryl_molander_salt'):
             rules.append(_make_reactor('suzuki',
-                                       [(halide, {100: 200}),
+                                       [(halide, {100: 200, 101: 201, 102: 202, 103: 203,
+                                                  104: 204, 105: 205, 106: 206, 107: 207}),
                                         (boron, {1: 2})],
                                        '[A:1]-[A:2]'))
 
         for boron in ('alkenyl_boronic_acid', 'alkenyl_boronic_ester', 'alkenyl_molander_salt'):
             rules.append(_make_reactor('suzuki',
-                                       [(halide, {100: 200}),
+                                       [(halide, {100: 200, 101: 201, 102: 202, 103: 203,
+                                                  104: 204, 105: 205, 106: 206, 107: 207}),
                                         (boron, {1: 2, 2: 3})],
                                        '[A:1]-[A:2]=[A:3]'))
 
         for boron in ('alkyl_boronic_acid', 'alkyl_boronic_ester', 'alkyl_molander_salt'):
             rules.append(_make_reactor('suzuki',
-                                       [(halide, {100: 200}),
+                                       [(halide, {100: 200, 101: 201, 102: 202, 103: 203,
+                                                  104: 204, 105: 205, 106: 206, 107: 207}),
                                         (boron, {1: 2})],
                                        '[A:1]-[A:2]'))
 
     # buchwald-hartwig: ArX + R'NH2 -> ArNHR'
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate', 'aryl_mesylate'):
         for amine in ('primary_amine', 'primary_aniline', 'primary_amidine_amine'):
             rules.append(_make_reactor('buchwald_hartwig',
                                        [(halide, None),
@@ -160,7 +163,7 @@ def _rules():
 
     # deoxygenative coupling: ROH + ArX -> R-Ar
     for alcohol in ('primary_alcohol', 'secondary_alcohol'):
-        for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+        for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
             rules.append(_make_reactor('deoxygenative_coupling',
                                        [(alcohol, None),
                                         (halide, {1: 3})],
@@ -168,14 +171,14 @@ def _rules():
 
     # decarboxylative coupling: R-COOH + ArX -> R-Ar
     for acid in ('alkyl_carboxylic_acid', 'aryl_carboxylic_acid'):
-        for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+        for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
             rules.append(_make_reactor('decarboxylative_coupling',
                                        [(acid, None),
                                         (halide, {100: 200, 1: 4})],
                                        '[A:3]-[A:4]'))
 
     # XEC (cross-electrophile coupling): ArX + R'X -> Ar-R'
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         for alkyl_halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
             rules.append(_make_reactor('xec',
                                        [(halide, None),
@@ -196,14 +199,14 @@ def _rules():
                                        '[A:1]-[A:3](-[A:4])-[A:5]'))
 
     # ullmann phenol: ArX + ArOH -> Ar-O-Ar
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         rules.append(_make_reactor('ullmann_phenol',
                                    [(halide, None),
                                     ('phenol', {1: 3, 2: 4})],
                                    '[A:1]-[A:3]-[A:4]'))
 
     # ullmann alcohol: ArX + ROH -> Ar-O-R (SNAr/Cu-mediated with aliphatic alcohols)
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_fluoride'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_fluoride', 'aryl_triflate', 'aryl_mesylate'):
         for alcohol in ('primary_alcohol', 'secondary_alcohol'):
             rules.append(_make_reactor('snar',
                                        [(halide, None),
@@ -211,7 +214,7 @@ def _rules():
                                        '[A:1]-[A:3]-[A:4]'))
 
     # ullmann pyrrole: ArX + pyrrole-NH -> Ar-N(pyrrole)
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         rules.append(_make_reactor('ullmann_pyrrole',
                                    [(halide, None),
                                     ('pyrrole', {1: 3})],
@@ -338,7 +341,7 @@ def _rules():
                                        '[A:1]-[A:2]-[A:3]'))
 
     # sonogashira: ArX + terminal alkyne -> Ar-C≡C-R
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         rules.append(_make_reactor('sonogashira',
                                    [(halide, None),
                                     ('terminal_alkyne', {1: 2, 2: 3})],
@@ -424,8 +427,8 @@ def _rules():
                                 ('phenol', {1: 3, 2: 4})],
                                '[A:1](=[A:2])-[A:3]-[A:4]'))
 
-    # thioether: thiol + alkyl_halide -> R-S-R'
-    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
+    # thioether: thiol + alkyl_halide/pseudohalide -> R-S-R'
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate', 'alkyl_mesylate', 'alkyl_tosylate'):
         rules.append(_make_reactor('thioether',
                                    [('thiol', None),
                                     (halide, {100: 200, 1: 3})],
@@ -488,7 +491,7 @@ def _rules():
                                '[A:1](=[A:2])-[A:3]'))
 
     # heck: ArX + alkene -> Ar-CH=CH-R
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         for alkene in ('terminal_alkene', 'alkene'):
             rules.append(_make_reactor('heck',
                                        [(halide, None),
@@ -502,7 +505,7 @@ def _rules():
                                '[A:2]=[A:4]'))
 
     # kumada: ArX + RMgX -> Ar-R
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         for grignard in ('alkyl_grignard', 'aryl_grignard'):
             rules.append(_make_reactor('kumada',
                                        [(halide, None),
@@ -514,7 +517,7 @@ def _rules():
                                    '[A:1]-[A:2]=[A:3]'))
 
     # negishi: ArX + RZnX -> Ar-R
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         for zinc in ('alkyl_zinc', 'aryl_zinc'):
             rules.append(_make_reactor('negishi',
                                        [(halide, None),
@@ -526,7 +529,7 @@ def _rules():
                                    '[A:1]-[A:2]=[A:3]'))
 
     # stille: ArX + R-SnR3 -> Ar-R
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         rules.append(_make_reactor('stille',
                                    [(halide, None),
                                     ('aryl_stannane', {100: 200, 1: 2})],
@@ -541,7 +544,7 @@ def _rules():
                                    '[A:1]-[A:2]'))
 
     # hiyama: ArX + R-SiR3 -> Ar-R
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         rules.append(_make_reactor('hiyama',
                                    [(halide, None),
                                     ('aryl_silane', {100: 200, 1: 2})],
@@ -712,8 +715,8 @@ def _rules():
                                     (grignard, {100: 200, 101: 201, 1: 3})],
                                    '[A:1](=[O:20])-[A:3]'))
 
-    # N-alkylation: alkyl_halide/triflate/tosylate + pyrrole/pyrazole/imidazole/pyridol
-    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate', 'alkyl_tosylate'):
+    # N-alkylation: alkyl_halide/triflate/tosylate/mesylate + pyrrole/pyrazole/imidazole/pyridol
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate', 'alkyl_tosylate', 'alkyl_mesylate'):
         rules.append(_make_reactor('n_alkylation',
                                    [(halide, None),
                                     ('pyrrole', {1: 3})],
@@ -731,8 +734,8 @@ def _rules():
                                     ('pyridol', {1: 3, 2: 4, 3: 5})],
                                    '[A:1]-[A:3]-[A:4]=[A:5]'))
 
-    # N-alkylation: alkyl_halide/triflate + primary/secondary amine
-    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate',
+    # N-alkylation: alkyl_halide/triflate/tosylate/mesylate + primary/secondary amine
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate', 'alkyl_tosylate', 'alkyl_mesylate',
                    'boronate_alkyl_chloride', 'boronate_alkyl_bromide', 'boronate_alkyl_iodide'):
         for amine in ('primary_amine', 'primary_aniline'):
             rules.append(_make_reactor('n_alkylation',
@@ -744,6 +747,14 @@ def _rules():
                                        [(halide, None),
                                         (amine, {1: 3, 2: 4, 3: 5})],
                                        '[A:1]-[A:3](-[A:4])-[A:5]'))
+
+    # N-alkylation: alkyl_halide/triflate/tosylate/mesylate + primary/secondary amide (lactam NH)
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate', 'alkyl_tosylate', 'alkyl_mesylate'):
+        for amide in ('primary_amide', 'secondary_amide'):
+            rules.append(_make_reactor('n_alkylation',
+                                       [(halide, None),
+                                        (amide, {1: 3, 2: 4, 3: 5})],
+                                       '[A:1]-[A:3]-[A:4]=[A:5]'))
 
     # urea from 2 amines (CDI/phosgene implicit)
     for amine1 in ('primary_amine', 'primary_aniline'):
@@ -759,8 +770,8 @@ def _rules():
                                 ('carboxylic_acid', {100: 200, 1: 5, 2: 6})],
                                '[A:5]1=[A:1]-[A:2]-[A:3]-[A:4]-1'))
 
-    # oxime O-alkylation: oxime + alkyl_halide → oxime ether
-    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide'):
+    # oxime O-alkylation: oxime + alkyl_halide/pseudohalide → oxime ether
+    for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate', 'alkyl_mesylate', 'alkyl_tosylate'):
         rules.append(_make_reactor('oxime_alkylation',
                                    [('oxime', None),
                                     (halide, {100: 200, 1: 4})],

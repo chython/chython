@@ -57,6 +57,9 @@ def _rules():
                                '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
     rules.append(_make_reactor('borylation_ester', 'aryl_chloride', 'aryl_boronic_ester',
                                '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
+    rules.append(_make_reactor('borylation_acid', 'aryl_triflate', 'aryl_boronic_acid', '[A:1]-[B:20](-[O:21])-[O:22]'))
+    rules.append(_make_reactor('borylation_ester', 'aryl_triflate', 'aryl_boronic_ester',
+                               '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
 
     # Nitrile hydrolysis: R-C≡N → R-C(=O)-NH2 (partial, to amide)
     rules.append(_make_reactor('nitrile_hydrolysis', 'nitrile', 'primary_amide', '[A:2]-[A:1]=[O:20]'))
@@ -126,6 +129,16 @@ def _rules():
 
     # acid chloride formation: RCOOH → RCOCl (SOCl2, oxalyl chloride)
     rules.append(_make_reactor('acid_chlorination', 'carboxylic_acid', 'acyl_chloride', '[Cl:20]-[A:1]=[A:2]'))
+
+    # mesylation: ROH → ROMs (MsCl, Et3N)
+    rules.append(_make_reactor('mesylation', 'primary_alcohol', 'alkyl_mesylate', '[A:2]-[A:1]-[S:20](=[O:21])(=[O:22])-[C:23]'))
+    rules.append(_make_reactor('mesylation', 'secondary_alcohol', 'alkyl_mesylate', '[A:2]-[A:1]-[S:20](=[O:21])(=[O:22])-[C:23]'))
+
+    # tosylation: ROH → ROTs (TsCl, pyridine)
+    rules.append(_make_reactor('tosylation', 'primary_alcohol', 'alkyl_tosylate',
+                               '[A:2]-[A:1]-[S:20](=[O:21])(=[O:22])-[C:23]:1:[C:24]:[C:25]:[C:26](-[C:27]):[C:28]:[C:29]:1'))
+    rules.append(_make_reactor('tosylation', 'secondary_alcohol', 'alkyl_tosylate',
+                               '[A:2]-[A:1]-[S:20](=[O:21])(=[O:22])-[C:23]:1:[C:24]:[C:25]:[C:26](-[C:27]):[C:28]:[C:29]:1'))
 
     return rules
 
