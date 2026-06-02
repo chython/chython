@@ -60,9 +60,15 @@ class FunctionalGroups:
                 found[name] = c
         return found
 
-    def remove_protection(self, name=None) -> bool:
+    def remove_protection(self, name=None, canonicalize=True,
+                          fix_tautomers=True, ignore_pyrrole_hydrogen=False) -> bool:
         """
         Remove protective groups from the given molecule if applicable.
+
+        :param name: Specific protective group name to remove (None = all).
+        :param canonicalize: Run full canonicalization after removal.
+        :param fix_tautomers: Canonicalize tautomer forms. Passed to canonicalize().
+        :param ignore_pyrrole_hydrogen: Fix invalid rings like Cn1cc[nH]c1. Passed to canonicalize().
         """
         to_delete = set()
         to_add = []
@@ -92,12 +98,16 @@ class FunctionalGroups:
             self.delete_atom(n, _skip_calculation=True)
         if to_delete or to_add:
             self.fix_structure()
-            # fix implicit H on aromatic N freed from PG
-            for n in kept_atoms:
-                a = self.atom(n)
-                if a.atomic_symbol == 'N' and a.hybridization == 4 and a.implicit_hydrogens is None:
-                    a._implicit_hydrogens = 1
-            self.fix_stereo()
+            if canonicalize:
+                self.canonicalize(fix_tautomers=fix_tautomers,
+                                 ignore_pyrrole_hydrogen=ignore_pyrrole_hydrogen)
+            else:
+                # fix implicit H on aromatic N freed from PG
+                for n in kept_atoms:
+                    a = self.atom(n)
+                    if a.atomic_symbol == 'N' and a.hybridization == 4 and a.implicit_hydrogens is None:
+                        a._implicit_hydrogens = 1
+                self.fix_stereo()
             return True
         return False
 

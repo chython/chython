@@ -46,13 +46,11 @@ class Reconstruct:
         assert len(self.products) == 1, 'Only single product reactions supported'
         self.reset_mapping()
 
-        # Prepare raw copies (no NH patch) for FG detection and reactor input
+        # Prepare clean copies for FG detection and reactor input
         reactants = [_prepare(m) for m in self.reactants]
 
-        # Prepare product: raw for FG detection, patched for comparison
+        # Prepare product for comparison (canonicalize ensures canonical form)
         product = _prepare(self.products[0])
-        product_patched = product.copy(keep_sssr=True, keep_components=True)
-        _patch_nh(product_patched)
         pfgs = product.functional_groups
         product_size = len(product)
 
@@ -60,10 +58,10 @@ class Reconstruct:
         for subset_indices in _candidate_subsets(reactants, product_size):
             if len(subset_indices) == 1:
                 r = reactants[subset_indices[0]]
-                result = _try_single(r, product_patched, pfgs)
+                result = _try_single(r, product, pfgs)
             else:
                 subset = [reactants[i] for i in subset_indices]
-                result = _try_multi(subset, product_patched)
+                result = _try_multi(subset, product)
             if result:
                 mapping, labels = result
                 _safe_remap(self.products[0], mapping)
@@ -102,28 +100,17 @@ def _safe_remap(mol, mapping):
 
 
 def _prepare(mol):
-    """Clean copy for FG detection and reactor input. NO NH patching."""
+    """Clean copy for FG detection and reactor input. Applies full canonicalization."""
     c = mol.copy(keep_sssr=True, keep_components=True)
     c.clean_stereo()
     c.clean_isotopes()
+    c.canonicalize()
     return c
 
 
-def _patch_nh(mol):
-    """Set implicit_hydrogens=None on aromatic N with h=1 for tautomeric equivalence."""
-    patched = False
-    for _, a in mol.atoms():
-        if a.atomic_symbol == 'N' and a.hybridization == 4 and a.implicit_hydrogens == 1:
-            a._implicit_hydrogens = None
-            patched = True
-    if patched:
-        mol.flush_cache()
-
-
-def _match(generated, product_patched):
-    """Patch NH on generated (reactor output), then compare to pre-patched product."""
-    _patch_nh(generated)
-    return product_patched.get_fast_mapping(generated)
+def _match(generated, product):
+    """Compare generated product to expected product using fast mapping."""
+    return product.get_fast_mapping(generated)
 
 
 def _candidate_subsets(reactants, product_size):
@@ -167,7 +154,7 @@ def _candidate_subsets(reactants, product_size):
         yield from quads
 
 
-def _try_single(r, product_patched, pfgs):
+def _try_single(r, product, pfgs):
     """
     Try all single-reactant paths in order:
     1. Standalone deprotection
@@ -178,35 +165,35 @@ def _try_single(r, product_patched, pfgs):
     Returns (mapping, labels) or None.
     """
     # 1. Standalone deprotection
-    result = _try_deprotect(r, product_patched)
+    result = _try_deprotect(r, product)
     if result:
         return result
 
     # 2. Standalone protection (reverse: product is deprotected form of reactant)
-    result = _try_protect(r, product_patched)
+    result = _try_protect(r, product)
     if result:
         return result
 
     # 3. Single-molecule transforms with FG screening
-    result = _try_transforms(r, product_patched, pfgs)
+    result = _try_transforms(r, product, pfgs)
     if result:
         return result
 
     # 4. Deprotection + transform composition
-    result = _try_deprotect_then_transform(r, product_patched, pfgs)
+    result = _try_deprotect_then_transform(r, product, pfgs)
     if result:
         return result
 
     return None
 
 
-def _try_deprotect(r, product_patched):
+def _try_deprotect(r, product):
     """
     Try standalone deprotection: reactant has PGs, product has none of those.
     Returns (mapping, labels) or None.
     """
     rpg = r.protective_groups
-    ppg = product_patched.protective_groups
+    ppg = product.protective_groups
     # product must have NO PGs that reactant doesn't have
     for p in ppg:
         if p not in rpg:
@@ -223,13 +210,12 @@ def _try_deprotect(r, product_patched):
     m = r.copy(keep_sssr=True, keep_components=True)
     for p in to_remove:
         m.remove_protection(p)
-    _patch_nh(m)
-    if x := product_patched.get_fast_mapping(m):
+    if x := product.get_fast_mapping(m):
         return x, [f'deprotect:{name}' for name in to_remove]
     return None
 
 
-def _try_protect(r, product_patched):
+def _try_protect(r, product):
     """
     Try standalone protection (reverse direction):
     product is reactant with PGs added.
@@ -239,7 +225,7 @@ def _try_protect(r, product_patched):
     Returns (mapping, labels) or None.
     """
     rpg = r.protective_groups
-    ppg = product_patched.protective_groups
+    ppg = product.protective_groups
     # reactant must have NO PGs that product doesn't have
     for p in rpg:
         if p not in ppg:
@@ -252,25 +238,19 @@ def _try_protect(r, product_patched):
     to_add = [p for p in ppg if p not in rpg]
     if not to_add:
         return None
-    # deprotect the product_patched and compare against reactant
-    # Patch NH on reactant copy for comparison
-    r_patched = r.copy(keep_sssr=True, keep_components=True)
-    _patch_nh(r_patched)
-    # Deprotect a copy of product
-    m = product_patched.copy(keep_sssr=True, keep_components=True)
+    # deprotect a copy of product and compare against reactant
+    m = product.copy(keep_sssr=True, keep_components=True)
     for p in to_add:
         m.remove_protection(p)
-    _patch_nh(m)
-    if x := r_patched.get_fast_mapping(m):
+    if x := r.get_fast_mapping(m):
         return x, [f'protect:{name}' for name in to_add]
     return None
 
 
-def _try_transforms(r, product_patched, pfgs):
+def _try_transforms(r, product, pfgs):
     """
     Unified loop over oxidation, reduction, and transformation rules.
-    FG detection uses raw (unpatched) reactant. Reactor operates on raw reactant.
-    Comparison patches NH on output.
+    Reactor products are fully canonicalized via reactor pipeline.
 
     Returns (mapping, labels) or None.
     """
@@ -286,7 +266,7 @@ def _try_transforms(r, product_patched, pfgs):
             continue
         for rxn in reactor(r):
             p = rxn.products[0]
-            if x := _match(p, product_patched):
+            if x := _match(p, product):
                 return x, [f'oxidize:{name}']
 
     # Reduction rules
@@ -299,7 +279,7 @@ def _try_transforms(r, product_patched, pfgs):
             continue
         for rxn in reactor(r):
             p = rxn.products[0]
-            if x := _match(p, product_patched):
+            if x := _match(p, product):
                 return x, [f'reduce:{name}']
 
     # Transformation rules
@@ -312,19 +292,19 @@ def _try_transforms(r, product_patched, pfgs):
             continue
         for rxn in reactor(r):
             p = rxn.products[0]
-            if x := _match(p, product_patched):
+            if x := _match(p, product):
                 return x, [f'transform:{name}']
 
     return None
 
 
-def _try_deprotect_then_transform(r, product_patched, pfgs):
+def _try_deprotect_then_transform(r, product, pfgs):
     """
     Composition: deprotect first, then apply single-molecule transforms.
     Returns (mapping, labels) or None.
     """
     rpg = r.protective_groups
-    ppg = product_patched.protective_groups
+    ppg = product.protective_groups
     # Validate PG delta (same logic as standalone deprotect)
     for p in ppg:
         if p not in rpg:
@@ -340,7 +320,7 @@ def _try_deprotect_then_transform(r, product_patched, pfgs):
     for p in to_remove:
         deprot.remove_protection(p)
     # Use deprotected molecule's FGs for screening (raw, unpatched)
-    result = _try_transforms(deprot, product_patched, pfgs)
+    result = _try_transforms(deprot, product, pfgs)
     if result:
         mapping, transform_labels = result
         labels = [f'deprotect:{n}' for n in to_remove] + transform_labels
@@ -348,7 +328,7 @@ def _try_deprotect_then_transform(r, product_patched, pfgs):
     return None
 
 
-def _try_multi(subset, product_patched):
+def _try_multi(subset, product):
     """
     Multi-component reactions: try all reaction templates that match
     the subset length and FG requirements.
@@ -365,7 +345,7 @@ def _try_multi(subset, product_patched):
             if all(fg_names[i] in fgs[j] for i, j in enumerate(perm)):
                 for rxn in reactor(*(subset[j] for j in perm)):
                     p = rxn.products[0]
-                    if x := _match(p, product_patched):
+                    if x := _match(p, product):
                         return x, [f'react:{name}']
                 break
 
