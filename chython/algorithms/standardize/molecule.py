@@ -103,12 +103,7 @@ class Standardize:
         :param logging: return list of fixed atoms with matched rules.
         :param ignore: ignore standardization bugs.
         """
-        r = self.fix_resonance(logging=True, _fix_stereo=False)
-        if r:
-            log = [(tuple(r), -1, 'resonance fixed')]
-            fixed = set(r)
-        else:
-            log, fixed = [], set()
+        log, fixed = [], set()
 
         l, f = self.__standardize(double_rules, fix_tautomers)
         log.extend(l)
