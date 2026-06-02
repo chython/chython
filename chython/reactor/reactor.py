@@ -44,18 +44,18 @@ class Reactor(BaseReactor):
     def __init__(self, patterns: Tuple[QueryContainer, ...],
                  products: Tuple[Union[MoleculeContainer, QueryContainer], ...], *,
                  delete_atoms: bool = True, one_shot: bool = True, polymerise_limit: int = 10,
-                 automorphism_filter: bool = True, fix_aromatic_rings: bool = True,
-                 fix_broken_pyrroles: bool = False, fix_tautomers: bool = True):
+                 automorphism_filter: bool = True, canonicalize: bool = True,
+                 fix_tautomers: bool = True, ignore_pyrrole_hydrogen: bool = False):
         """
         :param patterns: Search patterns for each reactant.
         :param products: Resulted structures.
         :param delete_atoms: If True atoms exists in reactants but not exists in products will be removed.
         :param one_shot: Do only single reaction center then True, else do all possible combinations of reactions.
         :param polymerise_limit: Limit of self reactions. Make sense than one_shot = False.
-        :param fix_aromatic_rings: Proceed kekule and thiele on products.
-        :param fix_tautomers: See `thiele()` docs.
         :param automorphism_filter: Skip matches to same atoms.
-        :param fix_broken_pyrroles: fix invalid rings like Cn1cc[nH]c1.
+        :param canonicalize: Run full canonicalization on products (kekule, standardize, thiele, etc.).
+        :param fix_tautomers: Canonicalize tautomer forms. Passed to canonicalize().
+        :param ignore_pyrrole_hydrogen: Fix invalid rings like Cn1cc[nH]c1. Passed to canonicalize().
         """
         if not patterns or not products:
             raise ValueError('empty template')
@@ -71,8 +71,8 @@ class Reactor(BaseReactor):
         self._polymerise_limit = polymerise_limit
         self._products_atoms = tuple(set(m) for m in products)
         self._automorphism_filter = automorphism_filter
-        super().__init__(reduce(or_, patterns), reduce(or_, products), delete_atoms, fix_aromatic_rings,
-                         fix_tautomers, fix_broken_pyrroles)
+        super().__init__(reduce(or_, patterns), reduce(or_, products), delete_atoms, canonicalize,
+                         fix_tautomers, ignore_pyrrole_hydrogen)
 
     def __call__(self, *structures: MoleculeContainer):
         if any(not isinstance(structure, MoleculeContainer) for structure in structures):

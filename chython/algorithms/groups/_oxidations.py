@@ -27,7 +27,7 @@ def _make_reactor(rxn_name, fg_name, output_fg, product_smarts):
     q = rules[fg_name]
     product = smarts(product_smarts)
     return rxn_name, fg_name, output_fg, Reactor((q,), (product,),
-                                                  delete_atoms=True, one_shot=True, fix_broken_pyrroles=True)
+                                                 delete_atoms=True, one_shot=True, ignore_pyrrole_hydrogen=True)
 
 
 def _rules():

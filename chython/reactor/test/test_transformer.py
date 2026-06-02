@@ -27,7 +27,7 @@ data = [
     ('[C:1]Br', '[A:1][O;M]', 'C/C=C/CBr', 'C/C=C/CO'),  # keep stereo out of match
     ('[C:1]Br', '[A:1][O;M]', 'CC=[C@]=CCBr', 'CC=[C@]=CCO'),  # keep
     ('[C:1]Br', '[A:1][O;M]', 'CC=[C@]=CBr', 'CC=C=CO'),  # drop stereo on RC
-    ('[C:1]Br', '[A:1][O;M]', 'C/C=C/Br', 'CC=CO'),  # drop stereo on RC
+    ('[C:1]Br', '[A:1][I;M]', 'C/C=C/Br', 'CC=CI'),  # drop stereo on RC
 ]
 
 

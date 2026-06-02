@@ -24,7 +24,7 @@ from ..periodictable import Element, AnyElement, QueryElement
 
 
 class BaseReactor:
-    def __init__(self, pattern, replacement, delete_atoms, fix_rings, fix_tautomers, fix_broken_pyrroles):
+    def __init__(self, pattern, replacement, delete_atoms, canonicalize, fix_tautomers, ignore_pyrrole_hydrogen):
         if isinstance(replacement, QueryContainer):
             for n, a in replacement.atoms():
                 if not isinstance(a, (AnyElement, QueryElement)):
@@ -37,9 +37,9 @@ class BaseReactor:
 
         self._to_delete = {n for n, a in pattern.atoms() if not a.masked} - set(replacement) if delete_atoms else ()
         self._replacement = replacement
-        self._fix_rings = fix_rings
+        self._canonicalize = canonicalize
         self._fix_tautomers = fix_tautomers
-        self._fix_broken_pyrroles = fix_broken_pyrroles
+        self._ignore_pyrrole_hydrogen = ignore_pyrrole_hydrogen
 
     def _get_deleted(self, structure, mapping):
         if not self._to_delete:
@@ -211,10 +211,9 @@ class BaseReactor:
                 nbonds[n][m]._stereo = s
             # else: ignore label
 
-        if self._fix_rings:
-            new.kekule(ignore_pyrrole_hydrogen=self._fix_broken_pyrroles)  # keeps stereo as is
-            if not new.thiele(fix_tautomers=self._fix_tautomers):  # fixes stereo if any ring aromatized
-                new.fix_stereo()
+        if self._canonicalize:
+            new.canonicalize(fix_tautomers=self._fix_tautomers,
+                            ignore_pyrrole_hydrogen=self._ignore_pyrrole_hydrogen)
         else:
             new.fix_stereo()
         return new
