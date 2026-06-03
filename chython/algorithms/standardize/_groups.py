@@ -534,25 +534,70 @@ def _rules_single():
     rules.append((q, atom_fix, bonds_fix, True))
 
     #
-    # fix pyridin-2-imine
-    #
-    q = smarts('[N;D2;z2;!R]=[C;D3;r6]1[C,N;h1,h2;z1][A;z2]-,=[A;z2][A;z2]-,=[A;z2]1')
-    atom_fix = {}
-    bonds_fix = ((1, 2, 1), (2, 3, 2))
-    rules.append((q, atom_fix, bonds_fix, True))
-
-    #
     # fix pyridin-4-one
     #
-    q = smarts('[O,S;D1;z2;x0]=[C;D3;r6]1[A;z2]=[A;z2][N;D2;z1][A;z2]-,=[A;z2]1')
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[A;z2]=[A;z2][N;D2;z1][A;z2]-,=[A;z2]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2), (3, 4, 1), (4, 5, 2))
     rules.append((q, atom_fix, bonds_fix, True))
 
     #
+    # fix pyridin-1,3-dione (uracil-type)
+    # e.g. O=C1NC(=O)C=CN1 → Oc1nc(O)ccn1 (both keto→enol, restores aromaticity)
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2]C(=[O,S,N;D1])[A;z2]-,=[A;z2][C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 8, 2), (4, 5, 1), (3, 4, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyridin-1,4-dione
+    # e.g. O=C1NNC(=O)C=C1 → Oc1nnc(O)cc1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2][C,N;h1,h2]C(=[O,S,N;D1])[A;z2]-,=[A;z2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2), (5, 6, 1), (4, 5, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyridin-1,2-dione
+    # e.g. O=C1C(=O)NNC=C1 → Oc1c(O)nncc1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1C(=[O,S,N;D1])[C,N;h1,h2][A;z2]-,=[A;z2][C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 8, 2), (3, 4, 1), (3, 5, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix 1,3,5-triketone (cyanuric acid type)
+    # e.g. O=C1NC(=O)NC(=O)N1 → Oc1nc(O)nc(O)n1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2]C(=[O,S,N;D1])[C,N;h1,h2]C(=[O,S,N;D1])[C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2), (4, 5, 1), (4, 6, 2), (7, 8, 1), (7, 9, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyrrole-2,5-dione
+    # e.g. O=C1CCC(=O)N1 → OC1=CC=C(O)N1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r5]1[N,O,S;z1;D2,D3]C(=[O,S,N;D1])[C,N;h1,h2][C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 7, 2), (4, 5, 1), (4, 6, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyrrole-2,4-dione
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r5]1[N,O,S;z1;D2,D3][C,N;h1,h2]C(=[O,S,N;D1])[C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 7, 2), (5, 6, 1), (4, 5, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
     # fix pyrrole-2-one
     #
-    q = smarts('[O,S;D1;z2;x0]=[C;D3;r5]1[C,N;h1,h2;z1][N,O,S;z1;D2,D3][A;z2]-,=[A;z2]1')
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r5]1[C,N;h1,h2][N,O,S;z1;D2,D3][A;z2]-,=[A;z2]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
@@ -560,7 +605,15 @@ def _rules_single():
     #
     # fix pyrrole-1-one
     #
-    q = smarts('[O,S;D1;z2;x0]=[C;D3;r5]1[C,N;h1,h2;z1][A;z2]=,-[A;z2]-[N,O,S;z1;D2,D3]1')
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r5]1[C,N;h1,h2][A;z2]=,-[A;z2]-[N,O,S;z1;D2,D3]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyridin-2-imine. move double bond to the ring
+    #
+    q = smarts('[N;z2;!R]=[C;D3;r6]1[C,N;h1,h2][A]-,=[A]-,=[A]-,=[A]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
@@ -568,7 +621,7 @@ def _rules_single():
     #
     # fix pyrrole-2-imin. move double bond to the ring
     #
-    q = smarts('[N;z2;!R]=[C;D3;r5]1[C,N;h1,h2;z1][N,O,S;z1;D2,D3][A]-,=[A]1')
+    q = smarts('[N;z2;!R]=[C;D3;r5]1[C,N;h1,h2][N,O,S;z1;D2,D3][A]-,=[A]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
@@ -585,7 +638,7 @@ def _rules_single():
     # fix fused r5+r6 pyridinone. bridge N(D3,z1) adjacent to z1 atom.
     # e.g. OC1=NC2=CC=CN2C=C1 (pyrrolo[1,2-a]pyrimidinone)
     #
-    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2;z1][C;D3;z2;r5]=2[N;D3]([A;z2]-,=[A;z2][A;z2]=2)[A;z2]-,=[A;z2]1')
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2][C;D3;z2;r5]=2[N;D3]([A;z2]-,=[A;z2][A;z2]=2)[A;z2]-,=[A;z2]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
@@ -594,7 +647,7 @@ def _rules_single():
     # fix fused r5+r6 pyridinone. bridge at ring closure, N(D3,z1) last.
     # e.g. OC1=CC=CC2=CC=CN12 (indolizinone)
     #
-    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2;z1][A;z2]-,=[A;z2][C;D3;z2;r5]=2[N;D3;z1]1[A;z2]-,=[A;z2][A;z2]=2')
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2][A;z2]-,=[A;z2][C;D3;z2;r5]=2[N;D3;z1]1[A;z2]-,=[A;z2][A;z2]=2')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
@@ -603,7 +656,7 @@ def _rules_single():
     # fix fused r5+r6 pyridinone. bridge at ring closure, N(D3,z1) before C(D3).
     # e.g. OC1=NC=CN2C=CC=C12 (imidazo[1,2-a]pyridinone)
     #
-    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2;z1][A;z2]-,=[A;z2][N;D3;z1;r5]2[C;D3;z2]1=[A;z2][A;z2]-,=[A;z2]2')
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2][A;z2]-,=[A;z2][N;D3;z1;r5]2[C;D3;z2]1=[A;z2][A;z2]-,=[A;z2]2')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
@@ -612,7 +665,69 @@ def _rules_single():
     # fix fused r5+r6 pyridinone. C=O adjacent to bridge N(D3,z1).
     # e.g. O=C1CN2C=CC=C2C=C1 -> OC1=CN2C=CC=C2C=C1
     #
-    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C;h1,h2;z1][N;D3;z1;r5]2[C;D3;z2](=[A;z2][A;z2]-,=[A;z2]2)[A;z2]-,=[A;z2]1')
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2][N;D3;z1;r5]2[C;D3;z2](=[A;z2][A;z2]-,=[A;z2]2)[A;z2]-,=[A;z2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix fused r5+r6 diketone. two C=O in 6-ring, bridge N(D3,z1) between them.
+    # e.g. O=C1CN2C=CC=C2C(=O)C1 -> Oc1cn2cccc2c(O)c1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2][N;D3;z1;r5]2[C;D3;z2](=[A;z2][A;z2]-,=[A;z2]2)C(=[O,S,N;D1])[C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2), (9, 10, 1), (9, 11, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix fused r5+r6 diketone. C=O directly on bridge N, second C=O further.
+    # e.g. O=C1N2C=CC=C2CC(=O)C1 -> Oc1n2cccc2cc(O)c1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[N;D3;z1;r5]2[C;D3;z2](=[A;z2][A;z2]-,=[A;z2]2)[C,N;h1,h2]C(=[O,S,N;D1])[C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 11, 2), (9, 10, 1), (8, 9, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix fused r5+r6 diketone. both C=O adjacent to bridge N.
+    # e.g. O=C1N2C=CC=C2C(=O)CC1 -> Oc1n2cccc2c(O)cc1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[N;D3;z1;r5]2[C;D3;z2](=[A;z2][A;z2]-,=[A;z2]2)C(=[O,S,N;D1])[C,N;h1,h2][C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 11, 2), (8, 9, 1), (8, 10, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix fused r5+r5 azolone. C=O with C;z1 and S/O;z1 in same ring, bridge to second r5.
+    # e.g. O=C1CSC2=CC=CN12 -> OC1=CSC2=CC=CN12 (indolizine-thiazolone)
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r5]1[C,N;h1,h2][N,O,S;z1;D2,D3][C;D3;z2]=2[N;D3;z1]1[A;z2;r5]-,=[A;z2][A;z2]=2')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix fused r5+r5 azolone. C=O with heteroatom at ring closure, bridge N between rings.
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r5]1[C,N;h1,h2][N;D3;z1]2[C;D3;z2](=[A;z2;r5][A;z2]-,=[A;z2]2)[N,O,S;z1;D2,D3]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix fused r5+r5 azolone. C=O with N bridge then C bridge (swapped).
+    # e.g. O=C1CNN2C=CC=C12 -> OC1=CNN2C=CC=C12
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r5]1[C,N;h1,h2][N,O,S;z1;D2,D3][N;D3;z1]2[A;z2;r5]-,=[A;z2][A;z2]=[C;D3]12')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix fused r5+r5 azolone. C=O with C bridge then N bridge.
+    # e.g. O=C1CC2=CC=CN2N1 -> Oc1cn2cccc2[nH]1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r5]1[C,N;h1,h2][C;D3;z2]2=[A;z2][A;z2]-,=[A;z2][N;D3;z1]2[C,N;h1,h2]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
