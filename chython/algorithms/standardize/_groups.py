@@ -526,6 +526,42 @@ def _rules_single():
     rules.append((q, atom_fix, bonds_fix, True))
 
     #
+    # fix 1,3,5-triketone (cyanuric acid type)
+    # e.g. O=C1NC(=O)NC(=O)N1 → Oc1nc(O)nc(O)n1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2]C(=[O,S,N;D1])[C,N;h1,h2]C(=[O,S,N;D1])[C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2), (4, 5, 1), (4, 6, 2), (7, 8, 1), (7, 9, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyridin-1,3-dione (uracil-type)
+    # e.g. O=C1NC(=O)C=CN1 → Oc1nc(O)ccn1 (both keto→enol, restores aromaticity)
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2]C(=[O,S,N;D1])[A;z2]-,=[A;z2][C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 8, 2), (4, 5, 1), (3, 4, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyridin-1,2-dione
+    # e.g. O=C1C(=O)NNC=C1 → Oc1c(O)nncc1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1C(=[O,S,N;D1])[C,N;h1,h2][A;z2]-,=[A;z2][C,N;h1,h2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 8, 2), (3, 4, 1), (3, 5, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyridin-1,4-dione
+    # e.g. O=C1NNC(=O)C=C1 → Oc1nnc(O)cc1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2][C,N;h1,h2]C(=[O,S,N;D1])[A;z2]-,=[A;z2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2), (5, 6, 1), (4, 5, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
     # fix pyridin-2-one. note: only after amide rule
     #
     q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2;z1][A;z2]-,=[A;z2][A;z2]-,=[A;z2]1')
@@ -539,42 +575,6 @@ def _rules_single():
     q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[A;z2]=[A;z2][N;D2;z1][A;z2]-,=[A;z2]1')
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2), (3, 4, 1), (4, 5, 2))
-    rules.append((q, atom_fix, bonds_fix, True))
-
-    #
-    # fix pyridin-1,3-dione (uracil-type)
-    # e.g. O=C1NC(=O)C=CN1 → Oc1nc(O)ccn1 (both keto→enol, restores aromaticity)
-    #
-    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2]C(=[O,S,N;D1])[A;z2]-,=[A;z2][C,N;h1,h2]1')
-    atom_fix = {}
-    bonds_fix = ((1, 2, 1), (2, 8, 2), (4, 5, 1), (3, 4, 2))
-    rules.append((q, atom_fix, bonds_fix, True))
-
-    #
-    # fix pyridin-1,4-dione
-    # e.g. O=C1NNC(=O)C=C1 → Oc1nnc(O)cc1
-    #
-    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2][C,N;h1,h2]C(=[O,S,N;D1])[A;z2]-,=[A;z2]1')
-    atom_fix = {}
-    bonds_fix = ((1, 2, 1), (2, 3, 2), (5, 6, 1), (4, 5, 2))
-    rules.append((q, atom_fix, bonds_fix, True))
-
-    #
-    # fix pyridin-1,2-dione
-    # e.g. O=C1C(=O)NNC=C1 → Oc1c(O)nncc1
-    #
-    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1C(=[O,S,N;D1])[C,N;h1,h2][A;z2]-,=[A;z2][C,N;h1,h2]1')
-    atom_fix = {}
-    bonds_fix = ((1, 2, 1), (2, 8, 2), (3, 4, 1), (3, 5, 2))
-    rules.append((q, atom_fix, bonds_fix, True))
-
-    #
-    # fix 1,3,5-triketone (cyanuric acid type)
-    # e.g. O=C1NC(=O)NC(=O)N1 → Oc1nc(O)nc(O)n1
-    #
-    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2]C(=[O,S,N;D1])[C,N;h1,h2]C(=[O,S,N;D1])[C,N;h1,h2]1')
-    atom_fix = {}
-    bonds_fix = ((1, 2, 1), (2, 3, 2), (4, 5, 1), (4, 6, 2), (7, 8, 1), (7, 9, 2))
     rules.append((q, atom_fix, bonds_fix, True))
 
     #
@@ -698,6 +698,15 @@ def _rules_single():
     rules.append((q, atom_fix, bonds_fix, True))
 
     #
+    # fix fused r5+r6 diketone. two C=O in 6-ring with bridge N between them (1,4-dione with N in path).
+    # e.g. OC1=NN2C=CC=C2N=C1O (degraded to O=C1NNC2=CC=CC2NC1=O)
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2][N;D3;z1;r5]2[C;D3;z2](=[A;z2][A;z2]-,=[A;z2]2)[C,N;h1,h2]C1=[O,S,N;D1]')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2), (10, 11, 1), (9, 10, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
     # fix fused r5+r5 azolone. C=O with C;z1 and S/O;z1 in same ring, bridge to second r5.
     # e.g. O=C1CSC2=CC=CN12 -> OC1=CSC2=CC=CN12 (indolizine-thiazolone)
     #
@@ -731,6 +740,42 @@ def _rules_single():
     atom_fix = {}
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix charged azolone (imidazolium/oxazolium-type with C=O)
+    # e.g. CN1N=[N+](C)CC1=O -> Cn1n[n+](C)cc1O, C[N+]1=NOC(=O)C1 -> C[n+]1noc(O)c1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r5]1[C,N;h1,h2][N;z2;+]-,=[A;z2]-[N,O,S;z1;D2,D3]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix charged azolone (alternative isomer, N+ at ring closure)
+    # e.g. CN1CC(=O)[N+](C)=N1 -> Cn1cc(O)[n+](C)n1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r5]1[C,N;h1,h2][N,O,S;z1;D2,D3][A;z2]-,=[N;z2;+]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix charged pyridinone (N+ in 6-ring with C=O)
+    # e.g. C[N+]1=CC=CC(=O)N1 -> C[n+]1cc=cc(O)n1
+    #
+    q = smarts('[O,S,N;D1;z2;x0]=[C;D3;r6]1[C,N;h1,h2][N;z2;+]-,=[A;z2]-,=[A;z2]-,=[A;z2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    #
+    # fix pyrylium dearomatization. restore O+ in aromatic ring from N+ form.
+    # e.g. O1C(=[NH+]...)... -> [O+]1=C(N...)...
+    #
+    q = smarts('[O;D2;r6]1[C;z2](=[N;+])[A;z2]-,=[A;z2]-,=[A;z2]-,=[A;z2]1')
+    atom_fix = {1: (1, None), 3: (-1, None)}
+    bonds_fix = ((1, 2, 2), (2, 3, 1))
+    rules.append((q, atom_fix, bonds_fix, False))
 
     # acyclic keto-enol
     #         OH                  O

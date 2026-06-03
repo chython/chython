@@ -161,3 +161,42 @@ def test_group(raw, result):
     tmp = smiles(raw)
     tmp.standardize()
     assert tmp == smiles(result), f'{raw} > {tmp} != {result}'
+
+
+tautomer_fix_data = [
+    ('O=C1NC(=O)NC(=O)N1', 'N1=C(N=C(N=C1O)O)O'),  # 1,3,5-triketone (cyanuric acid)
+    ('O=C1NC(=O)C=CN1', 'OC1=NC=CC(O)=N1'),  # pyridin-1,3-dione (uracil)
+    ('O=C1C(=O)NC=CN1', 'C=1(C(=NC=CN=1)O)O'),  # pyridin-1,2-dione
+    ('O=C1C=CC(=O)NN1', 'C1=CC(O)=NN=C1O'),  # pyridin-1,4-dione
+    ('O=C1NC(=O)CC1', 'C=1C=C(O)NC=1O'),  # pyrrole-2,5-dione (succinimide)
+    ('O=C1NCC(=O)C1', 'C=1(O)C=C(O)NC=1'),  # pyrrole-2,4-dione
+    ('O=C1CC=CC2=CC=CN12', 'C=1C=C2C=CC=C(O)N2C=1'),  # fused r5+r6 indolizinone
+    ('O=C1NC=CN2C=CC=C12', 'C=1C=C2C(O)=NC=CN2C=1'),  # fused r5+r6 imidazo[1,2-a]pyridinone
+    ('O=C1CN2C=CC=C2C=C1', 'C=1N2C(=CC=C2)C=CC=1O'),  # fused r5+r6 pyridinone bridge N
+    ('O=C1CN2C=CC=C2C(=O)C1', 'C=1N2C=CC=C2C(O)=CC=1O'),  # fused r5+r6 diketone N between
+    ('O=C1N2C=CC=C2CC(=O)C1', 'C=1(O)N2C=CC=C2C=C(O)C=1'),  # fused r5+r6 diketone N direct
+    ('O=C1N2C=CC=C2C(=O)CC1', 'C=1C=C(O)N2C(=CC=C2)C=1O'),  # fused r5+r6 diketone both adj N
+    ('O=C1CSC2=CC=CN12', 'C1=CC=C2SC=C(O)N12'),  # fused r5+r5 thiazolone
+    ('O=C1COC2=CC=CN12', 'C1=CC=C2OC=C(O)N12'),  # fused r5+r5 oxazolone
+    ('O=C1CNN2C=CC=C12', 'C1=CC=C2C(O)=CNN12'),  # fused r5+r5 N-C bridge
+    ('O=C1CC2=CC=CN2N1', 'C1=CC=C2C=C(O)NN12'),  # fused r5+r5 C-N bridge
+    ('CN1N=[N+](C)CC1=O', 'C1(O)=C[N+](C)=NN1C'),  # charged triazolium azolone
+    ('C[N+]1=NOC(=O)C1', 'C[N+]1=NOC(O)=C1'),  # charged oxadiazolium
+    ('CN1CC(=O)[N+](C)=N1', 'C[N+]1=NN(C=C1O)C'),  # charged azolone alt N+
+    ('C[N+]1=CC=CC(=O)N1', '[N+]=1(C)N=C(C=CC=1)O'),  # charged pyridinone
+]
+
+
+@mark.parametrize('raw,result', tautomer_fix_data)
+def test_tautomer_fix(raw, result):
+    tmp = smiles(raw)
+    tmp.standardize()
+    assert tmp == smiles(result), f'{raw} > {tmp} != {result}'
+
+
+def test_pyrylium_fix():
+    # O in ring with C=[N+] -> [O+] in ring with C-N
+    tmp = smiles('O1C(=[NH+]C)C=CC=C1')
+    tmp.standardize()
+    expected = smiles('C=1[O+]=C(NC)C=CC=1')
+    assert tmp == expected
