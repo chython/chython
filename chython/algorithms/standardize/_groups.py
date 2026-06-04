@@ -19,7 +19,7 @@
 from lazy_object_proxy import Proxy
 
 
-def _rules_single():
+def _rules():
     """
     rules without overlapping. these rules can match once to same set of atoms.
     """
@@ -504,6 +504,15 @@ def _rules_single():
     rules.append((q, atom_fix, bonds_fix, False))
 
     #
+    # fix pyrylium dearomatization. restore O+ in aromatic ring from N+ form.
+    # e.g. O1C(=[NH+]...)... -> [O+]1=C(N...)...
+    #
+    q = smarts('[O;D2;r6]1[C;z2](=[N;+])[A;z2]-,=[A;z2]-,=[A;z2]-,=[A;z2]1')
+    atom_fix = {1: (1, None), 3: (-1, None)}
+    bonds_fix = ((1, 2, 2), (2, 3, 1))
+    rules.append((q, atom_fix, bonds_fix, False))
+
+    #
     #      [O,S]H    [O,S]
     #      /         //
     # N = C  >> NH - C
@@ -768,15 +777,6 @@ def _rules_single():
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
 
-    #
-    # fix pyrylium dearomatization. restore O+ in aromatic ring from N+ form.
-    # e.g. O1C(=[NH+]...)... -> [O+]1=C(N...)...
-    #
-    q = smarts('[O;D2;r6]1[C;z2](=[N;+])[A;z2]-,=[A;z2]-,=[A;z2]-,=[A;z2]1')
-    atom_fix = {1: (1, None), 3: (-1, None)}
-    bonds_fix = ((1, 2, 2), (2, 3, 1))
-    rules.append((q, atom_fix, bonds_fix, False))
-
     # acyclic keto-enol
     #         OH                  O
     #        /                   //
@@ -1012,6 +1012,19 @@ def _rules_single():
     rules.append((q, atom_fix, bonds_fix, True))
 
     #
+    #     [OH]                O
+    #      |                 //
+    #  N = S = A  >>  [NH] - S = A   (duplicated for overlapping groups)
+    #      |                 |
+    #      A                 A
+    #
+    q = smarts('[S;D4;z3:1]([O;D1:2])(=[N;D1,D2;z2:3])(=[A])[A]')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 2), (1, 3, 1))
+    rules.append((q, atom_fix, bonds_fix, True))
+    rules.append((q, atom_fix, bonds_fix, True))  # second shot for overlapping groups
+
+    #
     # C # C - [O,NH,S]H  >> C=C=[O,NH,S]
     #
     q = smarts('[C;D2;z3;x1]([N,O,S;D1])#[C;D1,D2]')
@@ -1104,30 +1117,7 @@ def _rules_single():
             for q, atom_fix, bonds_fix, is_tautomer in rules]
 
 
-def _rules_double():
-    from ... import smarts
-
-    rules = []
-
-    #
-    #     [OH]                O
-    #      |                 //
-    #  N = S = A  >>  [NH] - S = A
-    #      |                 |
-    #      A                 A
-    #
-    q = smarts('[S;D4;z3:1]([O;D1:2])(=[N;D1,D2;z2:3])(=[A])[A]')
-    atom_fix = {}
-    bonds_fix = ((1, 2, 2), (1, 3, 1))
-    rules.append((q, atom_fix, bonds_fix, True))
-
-    return [(q, atom_fix, bonds_fix,
-             [n for n, a in q.atoms() if a.atomic_symbol == 'A' and n not in atom_fix], is_tautomer)
-            for q, atom_fix, bonds_fix, is_tautomer in rules]
+rules = Proxy(_rules)
 
 
-single_rules = Proxy(_rules_single)
-double_rules = Proxy(_rules_double)
-
-
-__all__ = ['single_rules', 'double_rules']
+__all__ = ['rules']

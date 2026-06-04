@@ -20,7 +20,7 @@
 #
 from collections import defaultdict
 from ._charged import fixed_rules, morgan_rules
-from ._groups import *
+from ._groups import rules as fragment_rules
 from ._tautomers import rules as tautomers_rules
 from ._metal_organics import rules as metal_rules
 from ...containers.bonds import Bond
@@ -105,14 +105,7 @@ class Standardize:
         """
         log, fixed = [], set()
 
-        l, f = self.__standardize(double_rules, fix_tautomers)
-        log.extend(l)
-        fixed.update(f)
-        if f:
-            l, f = self.__standardize(double_rules, fix_tautomers)  # double shot rules for overlapped groups
-            log.extend(l)
-            fixed.update(f)
-        l, f = self.__standardize(single_rules, fix_tautomers)
+        l, f = self.__standardize(fragment_rules, fix_tautomers)
         log.extend(l)
         fixed.update(f)
         l, f = self.__standardize(metal_rules, fix_tautomers)  # metal-organics fix
