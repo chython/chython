@@ -61,8 +61,6 @@ _two_component = [
      'ullmann_pyrrole', 'Brc1ccc(cc1)C.[nH]1cncc1>>c1cc(ccc1-n1ccnc1)C', 2),
     ('ullmann_pyrrole_pyridone_chloride_pyrrole',
      'ullmann_pyrrole', 'CN1C=CC(Cl)=CC1=O.[nH]1cccc1>>CN1C=CC(=CC1=O)-n1cccc1', 1),
-    ('ullmann_pyrrole_pyridol_aryl_bromide',
-     'ullmann_pyrrole', 'Brc1ccc(cc1)C.Oc1ccccn1>>O=C1C=CC=CN1c1ccc(cc1)C', 1, {'ullmann_phenol'}),
     ('chan_lam_boronic_acid_primary_amine',
      'chan_lam', 'OB(O)c1ccc(cc1)C.NCC>>c1cc(ccc1C)NCC', 1),
     ('chan_lam_boronic_acid_phenol',

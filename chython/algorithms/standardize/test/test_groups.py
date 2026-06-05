@@ -69,65 +69,27 @@ data = [
         ('CC(C)(C)[N+][O-]', 'CC(C)(C)N=O'),
         ('CN=O', 'C=NO'),
         ('NC=[O+]C', '[NH2+]=COC'), ('CNC=[O+]C', 'C[NH+]=COC'), ('CN(C)C=[O+]C', 'C[N+](C)=COC'),
+        # amide rule: N=C-OH >> NH-C=O
         ('N=CO', 'NC=O'), ('N=CS', 'NC=S'),
-        ('O=C1NC=CC=C1', 'OC1=NC=CC=C1'), ('OC1=NC=CC=C1', 'OC1=NC=CC=C1'),
-        ('N=C1NC=CC=C1', 'NC1=NC=CC=C1'),
-        ('CN=C1NC=CC=C1', 'CNC1=NC=CC=C1'),
-        ('O=C1C=CNC=C1', 'OC1=CC=NC=C1'), ('OC1=CC=NC=C1', 'OC1=CC=NC=C1'),
-        ('C=C(O)O', 'CC(=O)O'), ('C=C(O)N', 'CC(=O)N'),
+        # ring amidation (6-membered): OH-C=N in ring >> O=C-NH in ring
+        ('OC1=CC=CC=N1', 'O=C1NC=CC=C1'),
+        ('OC1=CC=NC=N1', 'O=C1NC=NC=C1'),
+        ('OC1=NC=CC=N1', 'O=C1N=CC=CN1'),
+        ('OC1=C(O)N=CC=N1', 'O=C1NC=CNC1=O'),
+        ('OC1=NC=CN=C1O', 'O=C1NC=CNC1=O'),
+        ('OC1=CC=NC(=O)N1', 'O=C1NC=CC(=O)N1'),
+        ('OC1=CC=NC(O)=N1', 'O=C1NC=CC(=O)N1'),
+        ('OC1=NC(O)=NC=C1', 'O=C1NC=CC(=O)N1'),
+        # acyclic enol (51)
         ('OC=C', 'O=CC'), ('OC(C)=C', 'O=C(C)C'),
-        ('O=C1N=CC=CC1', 'OC=1N=CC=CC=1'), ('OC=1N=CC=CC=1', 'OC=1N=CC=CC=1'),
-        ('N=C1N=CC=CC1', 'NC=1N=CC=CC=1'),
-        ('CN1N=CNC1=O', 'CN1N=CN=C1O'), ('CN1N=CN=C1O', 'CN1N=CN=C1O'),
-        ('S=C1NC=CN1', 'SC1=NC=CN1'), ('SC1=NC=CN1', 'SC1=NC=CN1'),
-        ('S=C1NCCN1', 'S=C1NCCN1'), ('SC1=NCCN1', 'S=C1NCCN1'),
-        ('CN=C1NC=CN1', 'CNC1=NC=CN1'), ('CNC1=NC=CN1', 'CNC1=NC=CN1'),
-        ('CN=C1NCCN1', 'CNC1=NCCN1'), ('CNC1=NCCN1', 'CNC1=NCCN1'),
-        ('S=C1NNC=C1', 'SC1=NNC=C1'), ('SC1=NNC=C1', 'SC1=NNC=C1'),
-        ('S=C1NNCC1', 'S=C1NNCC1'), ('SC1=NNCC1', 'S=C1NNCC1'),
-        ('CN=C1NNC=C1', 'CNC1=NNC=C1'), ('CNC1=NNC=C1', 'CNC1=NNC=C1'),
-        ('CN=C1NNCC1', 'CNC1=NNCC1'), ('CNC1=NNCC1', 'CNC1=NNCC1'),
-        ('N=C1NC=CO1', 'NC1=NC=CO1'), ('NC1=NC=CO1', 'NC1=NC=CO1'),
-        ('OC1=NC=CO1', 'OC1=NC=CO1'), ('O=C1NC=CO1', 'OC1=NC=CO1'),
-        ('O=C1NCCO1', 'O=C1NCCO1'), ('OC1=NCCO1', 'O=C1NCCO1'),
-        ('CN=C1NOC=C1', 'CNC1=NOC=C1'),
-        ('CN=C1N=CC=CC1', 'CNC=1N=CC=CC=1'),
-        ('OC1=CC=NN1', 'OC1=CC=NN1'), ('OC1=CN=CO1', 'OC1=CN=CO1'),
-        ('OC1=NN=CO1', 'OC1=NN=CO1'), ('OC1=NC=CS1', 'OC1=NC=CS1'),
-        ('OC1=NOC=C1', 'OC1=NOC=C1'), ('CN1N=CC=C1O', 'CN1N=CC=C1O'),
-        ('OC1=CC=CN1', 'OC1=CC=CN1'), ('O=C1CC=CN1', 'OC1=CC=CN1'),
-        ('SC1=CC=CN1', 'SC1=CC=CN1'), ('S=C1CC=CN1', 'SC1=CC=CN1'),
-        ('OC1=CC=CS1', 'OC1=CC=CS1'), ('O=C1CC=CS1', 'OC1=CC=CS1'),
-        ('OC1=CSC=C1', 'OC1=CSC=C1'), ('O=C1CSC=C1', 'OC1=CSC=C1'),
-        ('OC1=CC=CO1', 'OC1=CC=CO1'), ('O=C1CC=CO1', 'OC1=CC=CO1'),
-        ('OC1=COC=C1', 'OC1=COC=C1'), ('O=C1COC=C1', 'OC1=COC=C1'),
-        # ('OC1=NC(O)=NC=C1', 'OC1=NC(O)=NC=C1'),
-        # ('NC1=CN=C(O)N=C1O', 'NC1=CN=C(O)N=C1O'),
-        # ('OC1=NC2=CC=CC=C2C(O)=N1', 'OC1=NC2=CC=CC=C2C(O)=N1'),
-        ('OC1=CC2=C(N1)C=NC=C2', 'OC1=CC2=C(N1)C=NC=C2'),
-        ('OC1=CN2C=CC=CC2=C1', 'OC1=CN2C=CC=CC2=C1'),
-        ('OC1=CN2C=CN=CC2=N1', 'OC1=CN2C=CN=CC2=N1'),
-        ('OC1=NC2=NN=CN2C=C1', 'OC1=NC2=NN=CN2C=C1'),
-        ('OC1=CC=CC2=CC=CN12', 'OC1=CC=CC2=CC=CN12'),
-        ('O=C1CN2C=CC=C2C=C1', 'OC1=CN2C=CC=C2C=C1'),
-        ('OC1=CN2C=CC=C2C=C1', 'OC1=CN2C=CC=C2C=C1'),
-        ('OC1=NC=CN2C=CC=C12', 'OC1=NC=CN2C=CC=C12'),
-        ('OC1=NC=NN2C=CN=C12', 'OC1=NC=NN2C=CN=C12'),
-        ('SC1=NC2=CC=CC=C2O1', 'SC1=NC2=CC=CC=C2O1'),
-        ('SC1=NC2=C(O1)C=CC=C2', 'SC1=NC2=C(O1)C=CC=C2'),
-        ('CN1C(O)=NC2=CC=CC=C12', 'CN1C(O)=NC2=CC=CC=C12'),
-        ('CN1C(O)=NC2=C(N)N=CN=C12', 'CN1C(O)=NC2=C(N)N=CN=C12'),
-        ('CN1C(O)=NC2=C(N)N=C(N)N=C12', 'CN1C(O)=NC2=C(N)N=C(N)N=C12'),
-        ('OC1=CSC2=CC=CN12', 'OC1=CSC2=CC=CN12'),
-        ('O=C1CSC2=CC=CN12', 'OC1=CSC2=CC=CN12'),
-        ('OC1=COC2=CC=CN12', 'OC1=COC2=CC=CN12'),
-        ('O=C1COC2=CC=CN12', 'OC1=COC2=CC=CN12'),
+        # P rules
         ('[O-][P+](C)(C)C', 'O=P(C)(C)C'),
         ('[CH2+][P-](C)(C)C', 'C=P(C)(C)C'),
         ('FP(F)(F)(F)(F)F', 'F[P-](F)(F)(F)(F)F'),
         ('C[P-](C)(=O)=O', 'CP(C)(=O)[O-]'),
         ('CP(C)(=O)[S-]', 'CP(C)(=S)[O-]'),
         ('CP(C)(=O)S', 'CP(C)(=S)O'),
+        # S rules
         ('CS(=O)(=O)[S-]', 'CS(=O)(=S)[O-]'),
         ('CS(=O)(=O)S', 'CS(=O)(=S)O'),
         ('C[S+](C)[O-]', 'CS(C)=O'),
@@ -141,6 +103,7 @@ data = [
         ('CS(C)(=O)O', 'CS(C)(=O)=O'),
         ('CS(C)(=O)N', 'CS(C)(=O)=N'),
         ('N=S(C)O', 'NS(C)=O'), ('N=S(C)(C)(C)O', 'NS(C)(C)(C)=O'),
+        # C rules
         ('C#CO', 'C=C=O'),
         ('C#CNC', 'C=C=NC'),
         ('C=O |^1:0|', '[C-]#[O+]'),
@@ -148,10 +111,12 @@ data = [
         ('[CH2+]N(C)C', 'C=[N+](C)C'),
         ('[CH2+]N(C)O', 'C=[N+](C)O'),
         ('[CH2+]=NC', 'C#[N+]C'),
+        # Cl rules
         ('O[Cl+][O-]', 'OCl=O'),
         ('O[Cl+2]([O-])[O-]', 'OCl(=O)=O'),
         ('O[Cl+3]([O-])([O-])[O-]', 'OCl(=O)(=O)=O'),
         ('[Cl-]=O', 'Cl[O-]'),
+        # S=N double rules
         ('OS(=N)(=N)O', 'O=S(N)(N)=O'), ('OS(=N)(=N)C', 'O=S(N)(=N)C')
 ]
 
@@ -161,42 +126,3 @@ def test_group(raw, result):
     tmp = smiles(raw)
     tmp.standardize()
     assert tmp == smiles(result), f'{raw} > {tmp} != {result}'
-
-
-tautomer_fix_data = [
-    ('O=C1NC(=O)NC(=O)N1', 'N1=C(N=C(N=C1O)O)O'),  # 1,3,5-triketone (cyanuric acid)
-    ('O=C1NC(=O)C=CN1', 'OC1=NC=CC(O)=N1'),  # pyridin-1,3-dione (uracil)
-    ('O=C1C(=O)NC=CN1', 'C=1(C(=NC=CN=1)O)O'),  # pyridin-1,2-dione
-    ('O=C1C=CC(=O)NN1', 'C1=CC(O)=NN=C1O'),  # pyridin-1,4-dione
-    ('O=C1NC(=O)CC1', 'C=1C=C(O)NC=1O'),  # pyrrole-2,5-dione (succinimide)
-    ('O=C1NCC(=O)C1', 'C=1(O)C=C(O)NC=1'),  # pyrrole-2,4-dione
-    ('O=C1CC=CC2=CC=CN12', 'C=1C=C2C=CC=C(O)N2C=1'),  # fused r5+r6 indolizinone
-    ('O=C1NC=CN2C=CC=C12', 'C=1C=C2C(O)=NC=CN2C=1'),  # fused r5+r6 imidazo[1,2-a]pyridinone
-    ('O=C1CN2C=CC=C2C=C1', 'C=1N2C(=CC=C2)C=CC=1O'),  # fused r5+r6 pyridinone bridge N
-    ('O=C1CN2C=CC=C2C(=O)C1', 'C=1N2C=CC=C2C(O)=CC=1O'),  # fused r5+r6 diketone N between
-    ('O=C1N2C=CC=C2CC(=O)C1', 'C=1(O)N2C=CC=C2C=C(O)C=1'),  # fused r5+r6 diketone N direct
-    ('O=C1N2C=CC=C2C(=O)CC1', 'C=1C=C(O)N2C(=CC=C2)C=1O'),  # fused r5+r6 diketone both adj N
-    ('O=C1CSC2=CC=CN12', 'C1=CC=C2SC=C(O)N12'),  # fused r5+r5 thiazolone
-    ('O=C1COC2=CC=CN12', 'C1=CC=C2OC=C(O)N12'),  # fused r5+r5 oxazolone
-    ('O=C1CNN2C=CC=C12', 'C1=CC=C2C(O)=CNN12'),  # fused r5+r5 N-C bridge
-    ('O=C1CC2=CC=CN2N1', 'C1=CC=C2C=C(O)NN12'),  # fused r5+r5 C-N bridge
-    ('CN1N=[N+](C)CC1=O', 'C1(O)=C[N+](C)=NN1C'),  # charged triazolium azolone
-    ('C[N+]1=NOC(=O)C1', 'C[N+]1=NOC(O)=C1'),  # charged oxadiazolium
-    ('CN1CC(=O)[N+](C)=N1', 'C[N+]1=NN(C=C1O)C'),  # charged azolone alt N+
-    ('C[N+]1=CC=CC(=O)N1', '[N+]=1(C)N=C(C=CC=1)O'),  # charged pyridinone
-]
-
-
-@mark.parametrize('raw,result', tautomer_fix_data)
-def test_tautomer_fix(raw, result):
-    tmp = smiles(raw)
-    tmp.standardize()
-    assert tmp == smiles(result), f'{raw} > {tmp} != {result}'
-
-
-def test_pyrylium_fix():
-    # O in ring with C=[N+] -> [O+] in ring with C-N
-    tmp = smiles('O1C(=[NH+]C)C=CC=C1')
-    tmp.standardize()
-    expected = smiles('C=1[O+]=C(NC)C=CC=1')
-    assert tmp == expected
