@@ -541,6 +541,15 @@ def _rules():
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
 
+    #
+    # 6-membered ring hydroxypyridine to pyridone
+    # e.g. OC1=CC=NC=C1 >> O=C1C=CNC=C1 (4-pyridone)
+    #
+    q = smarts('[O,S;D1;z1;x0]-[C;r6;z2]1=[A;z2][A;z2]=[N;D2][A;z2]-,=[A;z2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 2), (2, 3, 1), (3, 4, 2), (4, 5, 1))
+    rules.append((q, atom_fix, bonds_fix, True))
+
     # acyclic keto-enol
     #         OH                  O
     #        /                   //
