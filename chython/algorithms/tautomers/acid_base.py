@@ -25,7 +25,7 @@ from ._base import rules as base_rules, stripped_rules as stripped_base_rules
 class AcidBase:
     __slots__ = ()
 
-    def neutralize(self, *, keep_charge=True, logging=False, _fix_stereo=True) -> bool | list:
+    def neutralize(self, *, keep_charge=True, logging=False) -> bool | list:
         """
         Convert organic salts to neutral form if possible. Only one possible form used for charge unbalanced structures.
 
@@ -41,8 +41,7 @@ class AcidBase:
 
         self._atoms = mol._atoms
         self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)
-        if _fix_stereo:
-            self.fix_stereo()
+        self.fix_stereo()
         if logging:
             return list(changed)
         return True

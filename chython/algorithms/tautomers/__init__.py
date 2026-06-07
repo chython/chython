@@ -52,7 +52,7 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
         copy = self.copy(keep_sssr=True, keep_components=True)
         if prepare_molecules:  # transform to kekule form without hydrogens
             copy.kekule()
-            copy.implicify_hydrogens(_fix_stereo=False)
+            copy.implicify_hydrogens()
 
         # transform to thiele to prevent duplicates and dearomatization
         thiele = copy.copy(keep_sssr=True, keep_components=True)
@@ -62,7 +62,7 @@ class Tautomers(AcidBase, HeteroArenes, KetoEnol):
         seen = {thiele: None}  # value is parent molecule - required for preventing migrations in sugars.
 
         # first try to neutralize
-        if copy.neutralize(_fix_stereo=False):  # found neutral form
+        if copy.neutralize():  # found neutral form
             thiele = copy.copy(keep_sssr=True, keep_components=True)
             thiele.thiele(fix_tautomers=False)
             yield thiele

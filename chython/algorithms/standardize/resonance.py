@@ -35,7 +35,7 @@ Te = 52
 class Resonance:
     __slots__ = ()
 
-    def fix_resonance(self, *, logging=False, _fix_stereo=True) -> bool | list:
+    def fix_resonance(self, *, logging=False) -> bool | list:
         """
         Transform biradical or dipole resonance structures into neutral form. Return True if structure form changed.
 
@@ -89,8 +89,7 @@ class Resonance:
             for n in hs:
                 self.calc_implicit(n)
             self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)
-            if _fix_stereo:
-                self.fix_stereo()
+            self.fix_stereo()
             if logging:
                 return list(hs)
             return True

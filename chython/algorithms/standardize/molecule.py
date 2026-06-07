@@ -50,8 +50,8 @@ class Standardize:
         :param ignore_pyrrole_hydrogen: ignore hydrogen on pyrrole to fix invalid rings like Cn1cc[nH]c1.
         """
         k = self.kekule(buffer_size=buffer_size, ignore_pyrrole_hydrogen=ignore_pyrrole_hydrogen)
-        s = self.standardize(_fix_stereo=False, logging=True, ignore=ignore, fix_tautomers=fix_tautomers)
-        h, changed = self.implicify_hydrogens(_fix_stereo=False, logging=True)
+        s = self.standardize(logging=True, ignore=ignore, fix_tautomers=fix_tautomers)
+        h, changed = self.implicify_hydrogens(logging=True)
 
         if fix_tautomers and (logging or keep_kekule):  # thiele can change tautomeric form
             hgs = {n: a.implicit_hydrogens for n, a in self.atoms()}
@@ -95,7 +95,7 @@ class Standardize:
             return s
         return bool(k or s or h or t or c or a)
 
-    def standardize(self, *, logging=False, ignore=True, fix_tautomers=True, _fix_stereo=True) -> bool | list:
+    def standardize(self, *, logging=False, ignore=True, fix_tautomers=True) -> bool | list:
         """
         Standardize functional groups. Return True if any non-canonical group found.
 
@@ -118,7 +118,7 @@ class Standardize:
             else:
                 raise ImplementationError(f'standardization leads to invalid valences: {b}')
 
-        if fixed and _fix_stereo:
+        if fixed:
             self.fix_stereo()
 
         if logging:
@@ -348,7 +348,7 @@ class Standardize:
             return []
         return False
 
-    def remove_coordinate_bonds(self, *, keep_to_terminal=True, _fix_stereo=True) -> int:
+    def remove_coordinate_bonds(self, *, keep_to_terminal=True) -> int:
         """Remove coordinate (or hydrogen) bonds marked with 8 (any) bond
 
         :param keep_to_terminal: Keep any bonds to terminal hydrogens
@@ -367,11 +367,10 @@ class Standardize:
         if ab:
             self.flush_cache(keep_sssr=True, keep_special_connectivity=True)
             self.calc_labels()
-            if _fix_stereo:
-                self.fix_stereo()
+            self.fix_stereo()
         return len(ab)
 
-    def implicify_hydrogens(self, *, logging=False, _fix_stereo=True) -> int | tuple:
+    def implicify_hydrogens(self, *, logging=False) -> int | tuple:
         """
         Remove explicit hydrogen if possible. Return number of removed hydrogens.
         Works only with Kekule forms of aromatic structures.
@@ -432,14 +431,13 @@ class Standardize:
         if to_remove:
             self.flush_cache(keep_sssr=True)
             self.calc_labels()
-            if _fix_stereo:
-                self.fix_stereo()
+            self.fix_stereo()
 
         if logging:
             return len(to_remove), list(fixed)
         return len(to_remove)
 
-    def explicify_hydrogens(self, *, start_map=None, _return_map=False, _fix_stereo=True) -> int | list:
+    def explicify_hydrogens(self, *, start_map=None, _return_map=False) -> int | list:
         """
         Add explicit hydrogens to atoms.
 
@@ -467,8 +465,7 @@ class Standardize:
 
             self.flush_cache(keep_sssr=True)
             self.calc_labels()
-            if _fix_stereo:
-                self.fix_stereo()
+            self.fix_stereo()
             if _return_map:
                 return log
             return len(to_add)
