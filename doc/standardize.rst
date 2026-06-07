@@ -47,8 +47,10 @@ without changing aromaticity or tautomers. Over 80 rules applied:
     # With logging
     log = mol.standardize(logging=True)
 
-    # Charge normalization (zwitterions)
-    mol.standardize_charges()
+    # Charge and tautomer isomer positioning
+    mol.kekule()
+    mol.thiele()
+    mol.standardize_isomers()
 
 
 Neutralize

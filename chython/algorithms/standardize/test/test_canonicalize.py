@@ -52,3 +52,15 @@ def test_canonicalize_idempotent():
     mol.canonicalize()
     s2 = str(mol)
     assert s1 == s2
+
+
+def test_keep_kekule_after_charge_isomer_standardization():
+    mol = smiles('C=1N(C)C=[N+](CC)C=1')
+    mol.canonicalize(keep_kekule=True)
+
+    aromatic = mol.copy()
+    aromatic.thiele()
+
+    expected = smiles('c1[n+](C)ccn1CC')
+    expected.canonicalize()
+    assert aromatic == expected
