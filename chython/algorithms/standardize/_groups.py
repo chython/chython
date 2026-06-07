@@ -517,7 +517,7 @@ def _rules():
     # e.g. OC1=CC=NC=N1 >> O=C1NC=NC=C1 (pyrimidinone)
     #      OC1=CC=CC=N1 >> O=C1NC=CC=C1 (pyridinone)
     #
-    q = smarts('[O,S;D1;z1;x0]-[C;r6;z2]=2[N;z2]=[A][A;z2]-,=[A;z2][A;z2]=2')
+    q = smarts('[O,S;D1;z1;x0]-[C;r6;z2]=2[N;z2]=[A;z2][A;z2]=[A;z2][A;z2]=2')
     atom_fix = {}
     bonds_fix = ((1, 2, 2), (2, 7, 1), (3, 4, 1), (4, 5, 2), (5, 6, 1), (6, 7, 2))
     rules.append((q, atom_fix, bonds_fix, True))
@@ -558,6 +558,62 @@ def _rules():
     q = smarts('[O;D1;z1;x0][C;D2,D3;z2;x1;!R]=[C;z2;x0]')
     atom_fix = {}
     bonds_fix = ((1, 2, 2), (2, 3, 1))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    # 5-membered ring amidation (short flip, N adjacent to C=N)
+    # e.g. CN1C=CC(O)=N1 >> CN1NC(=O)C=C1
+    #
+    q = smarts('[O,S;D1;z1;x0]-[C;r5;z2]1=N[N;z1][A;z2]-,=[A;z2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 2), (2, 3, 1))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    # 5-membered ring amidation (long flip, N far from C=N)
+    # e.g. CN1N=CC=C1O >> CN1NC=CC1=O
+    #
+    q = smarts('[O,S;D1;z1;x0]-[C;r5;z2]1=[A;z2][A;z2]=N[N;z1]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 2), (2, 3, 1), (3, 4, 2), (4, 5, 1))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    # 6-membered ring N=C-CH adjacent to C=O (short flip)
+    # e.g. O=C1C=CCC=N1 >> O=C1NC=CC=C1
+    #
+    q = smarts('[N;r6;z2]1=[A;z2][C;h1,h2][A;z2]-,=[A;z2]C1=O')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    # 6-membered ring N=C-C=C-CH adjacent to C=O (long flip)
+    # e.g. O=C1CC=CC=N1 >> O=C1NC=CC=C1
+    #
+    q = smarts('[N;r6;z2]1=[A;z2][A;z2]=[A;z2][C;h1,h2]C1=O')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2), (3, 4, 1), (4, 5, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    # 6-membered ring N=C-CH adjacent to C=O (C=O between CH and ring end)
+    # e.g. O=C1CC=NC=C1 >> O=C1C=CNC=C1
+    #
+    q = smarts('[N;r6;z2]1=[A;z2][C;h1,h2]C(=O)[A;z2]-,=[A;z2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    # 5-membered ring N=C-CH >> NH-C=C
+    # e.g. C1C=NC=N1 >> N1C=CN=C1
+    #
+    q = smarts('[N;r5;z2]1=[A;z2][C;h1,h2][A;z2]-,=[A;z2]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
+    # 5-membered ring N=C-CH with sp3 N,O closure
+    # e.g. CN1N=CCC1=O >> CN1NC=CC1=O
+    #
+    q = smarts('[N;r5;z2]1=[A;z2][C;h1,h2][A;z2][N,O;z1]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
 
     #

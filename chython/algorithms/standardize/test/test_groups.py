@@ -80,6 +80,22 @@ data = [
         ('OC1=CC=NC(=O)N1', 'O=C1NC=CC(=O)N1'),
         ('OC1=CC=NC(O)=N1', 'O=C1NC=CC(=O)N1'),
         ('OC1=NC(O)=NC=C1', 'O=C1NC=CC(=O)N1'),
+        # 5-membered ring amidation (short flip)
+        ('CN1C=CC(O)=N1', 'CN1NC(=O)C=C1'),
+        # 5-membered ring amidation (long flip)
+        ('CN1N=CC=C1O', 'CN1NC=CC1=O'),
+        # hydroxypyridine to pyridone
+        ('OC1=CC=NC=C1', 'O=C1C=CNC=C1'),
+        # 6-membered ring N=C-CH adjacent to C=O (short flip)
+        ('O=C1C=CCC=N1', 'O=C1NC=CC=C1'),
+        # 6-membered ring N=C-C=C-CH adjacent to C=O (long flip)
+        ('O=C1CC=CC=N1', 'O=C1NC=CC=C1'),
+        # 6-membered ring N=C-CH adjacent to C=O (C=O between CH and ring end)
+        ('O=C1CC=NC=C1', 'O=C1C=CNC=C1'),
+        # 5-membered ring N=C-CH >> NH-C=C
+        ('C1C=NC=N1', 'N1C=CN=C1'),
+        # 5-membered ring N=C-CH with sp3 N,O closure
+        ('CN1N=CCC1=O', 'CN1NC=CC1=O'),
         # acyclic enol (51)
         ('OC=C', 'O=CC'), ('OC(C)=C', 'O=C(C)C'),
         # P rules
