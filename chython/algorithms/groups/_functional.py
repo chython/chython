@@ -208,9 +208,6 @@ def _rules():
         # X=C-C/N-N-C(=O)-C/N  e.g. CN1C=C(Br)C=CC1=O
         rules[f'lactam_6_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1')
 
-    # pyridol (hydroxypyridine tautomer of pyridone; chython stores NH-pyridones as pyridols)
-    rules['pyridol'] = smarts('[N;r5,r6;D2;h0;a:1]:[C:2]-[O;D1:3]')
-
     # pyrrole. for tautomerism handling H not in template.
     rules['pyrrole'] = smarts('[N;h1;D2;a;r5:1]')
     rules['pyrazole'] = smarts('[N;h1;D2;a;r5:1]:[N;h0;D2;r5:2]')

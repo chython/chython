@@ -128,6 +128,14 @@ def _rules():
                                         (amine, {1: 3, 2: 4, 3: 5})],
                                        '[A:1]-[A:3](-[A:4])-[A:5]'))
 
+    # buchwald-hartwig: ArX + amide-NH -> Ar-N-C(=O) (N-arylation of amides/lactams)
+    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate', 'aryl_mesylate'):
+        for amide in ('primary_amide', 'secondary_amide'):
+            rules.append(_make_reactor('buchwald_hartwig',
+                                       [(halide, None),
+                                        (amide, {1: 3, 2: 4, 3: 5})],
+                                       '[A:1]-[A:3]-[A:4]=[A:5]'))
+
     # buchwald-hartwig: lactam halides + amines
     for _x in ('fluoride', 'chloride', 'bromide', 'iodide'):
         for _n in ('1', '2', '3', '4', '5', '6'):
@@ -214,7 +222,7 @@ def _rules():
                                        '[A:1]-[A:3]-[A:4]'))
 
     # ullmann pyrrole: ArX + pyrrole-NH -> Ar-N(pyrrole)
-    for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
+    for halide in ('aryl_fluoride', 'aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
         rules.append(_make_reactor('ullmann_pyrrole',
                                    [(halide, None),
                                     ('pyrrole', {1: 3})],
@@ -244,13 +252,6 @@ def _rules():
                                        [(lactam, None),
                                         ('imidazole', {1: 3, 2: 4, 3: 5})],
                                        '[A:1]-[A:5]:[A:4]:[A:3]'))
-
-    # ullmann pyridol: ArX + hydroxypyridine -> Ar-N-C=O (CN coupling on pyridol tautomer)
-    for halide in ('aryl_fluoride', 'aryl_chloride', 'aryl_bromide', 'aryl_iodide'):
-        rules.append(_make_reactor('ullmann_pyrrole',
-                                   [(halide, None),
-                                    ('pyridol', {1: 3, 2: 4, 3: 5})],
-                                   '[A:1]-[A:3]-[A:4]=[A:5]'))
 
     # chan-lam: ArB(OH)2 + amine/phenol -> Ar-N/Ar-O
     for boron in ('aryl_boronic_acid', 'aryl_boronic_ester'):
@@ -376,6 +377,13 @@ def _rules():
                                    [('aryl_fluoride', None),
                                     (amine, {1: 3, 2: 4, 3: 5})],
                                    '[A:1]-[A:3](-[A:4])-[A:5]'))
+
+    # SNAr: ArF + amide-NH -> Ar-N-C(=O)
+    for amide in ('primary_amide', 'secondary_amide'):
+        rules.append(_make_reactor('snar',
+                                   [('aryl_fluoride', None),
+                                    (amide, {1: 3, 2: 4, 3: 5})],
+                                   '[A:1]-[A:3]-[A:4]=[A:5]'))
 
     # SNAr: ArF + phenol -> Ar-O-Ar
     rules.append(_make_reactor('snar',
@@ -729,10 +737,6 @@ def _rules():
                                    [(halide, None),
                                     ('imidazole', {1: 3, 2: 4, 3: 5})],
                                    '[A:1]-[A:5]:[A:4]:[A:3]'))
-        rules.append(_make_reactor('n_alkylation',
-                                   [(halide, None),
-                                    ('pyridol', {1: 3, 2: 4, 3: 5})],
-                                   '[A:1]-[A:3]-[A:4]=[A:5]'))
 
     # N-alkylation: alkyl_halide/triflate/tosylate/mesylate + primary/secondary amine
     for halide in ('alkyl_chloride', 'alkyl_bromide', 'alkyl_iodide', 'alkyl_triflate', 'alkyl_tosylate', 'alkyl_mesylate',

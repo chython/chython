@@ -164,8 +164,6 @@ def _rules():
     # Hydroxy to chloro: ROH → RCl (SOCl2, PCl5 — broader than Appel)
     # phenol → ArCl (PCl5, POCl3)
     rules.append(_make_reactor('hydroxy_to_chloro', 'phenol', 'aryl_chloride', '[Cl:20]-[A:2]'))
-    # pyridol → chloropyridine (POCl3) — covers pyrimidinol, pyridazinol, etc.
-    rules.append(_make_reactor('hydroxy_to_chloro', 'pyridol', 'aryl_chloride', '[A:1]:[A:2]-[Cl:20]'))
     # tertiary_alcohol → RCl
     rules.append(_make_reactor('hydroxy_to_chloro', 'tertiary_alcohol', 'alkyl_chloride', '[Cl:20]-[A:2]'))
 

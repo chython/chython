@@ -31,6 +31,9 @@ class Reconstruct:
         Annotate reaction by trying to reconstruct the product from reactants
         using predefined reaction templates.
 
+        Expects all structures (reactants and products) to be already
+        standardized and canonicalized before calling this method.
+
         Tries in order:
         1. Standalone deprotection
         2. Standalone protection (reverse)
@@ -46,11 +49,8 @@ class Reconstruct:
         assert len(self.products) == 1, 'Only single product reactions supported'
         self.reset_mapping()
 
-        # Prepare clean copies for FG detection and reactor input
-        reactants = [_prepare(m) for m in self.reactants]
-
-        # Prepare product for comparison (canonicalize ensures canonical form)
-        product = _prepare(self.products[0])
+        reactants = list(self.reactants)
+        product = self.products[0]
         pfgs = product.functional_groups
         product_size = len(product)
 
@@ -97,15 +97,6 @@ def _safe_remap(mol, mapping):
                 used.add(counter)
                 counter += 1
         mol.remap(final)
-
-
-def _prepare(mol):
-    """Clean copy for FG detection and reactor input. Applies full canonicalization."""
-    c = mol.copy(keep_sssr=True, keep_components=True)
-    c.clean_stereo()
-    c.clean_isotopes()
-    c.canonicalize()
-    return c
 
 
 def _match(generated, product):
