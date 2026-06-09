@@ -754,12 +754,10 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             for k,  v in self.__dict__.items():
                 if k in ('sssr', 'atoms_rings', 'atoms_rings_sizes', 'rings_count'):
                     backup[k] = v
-        if keep_special_connectivity:
+        if keep_special_connectivity and 'not_special_connectivity' in self.__dict__:
             backup['not_special_connectivity'] = self.not_special_connectivity
-        if keep_components:
-            # good to keep if no new bonds or bonds deletions
-            if 'connected_components' in self.__dict__:
-                backup['connected_components'] = self.connected_components
+        if keep_components and 'connected_components' in self.__dict__:
+            backup['connected_components'] = self.connected_components
         self.__dict__ = backup
 
     def __int__(self):

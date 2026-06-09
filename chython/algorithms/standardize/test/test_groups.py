@@ -94,6 +94,8 @@ data = [
         ('O=C1CC=NC=C1', 'O=C1C=CNC=C1'),
         # 5-membered ring N=C-CH >> NH-C=C
         ('C1C=NC=N1', 'N1C=CN=C1'),
+        # 6-membered ring exocyclic C=N to C-NH (cytosine-like)
+        ('N=C1NC=CC(=O)N1', 'NC1=NC=CC(=O)N1'),
         # 5-membered ring N=C-CH with sp3 N,O closure
         ('CN1N=CCC1=O', 'CN1NC=CC1=O'),
         # acyclic enol (51)

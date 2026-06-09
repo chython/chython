@@ -318,7 +318,7 @@ def _rules():
     rules.append((q, 'tautomer_morgan_donor'))
 
     # === amidine: global H+bond resolution ===
-    q = smarts('[N;h0,h1;z2:1]=[C;z2;x2,x3:3]-[N;h1,h2;z1:2]')
+    q = smarts('[N;h0,h1;z2:1]=[C;z2;x2,x3;!R:3]-[N;h1,h2;z1:2]')
     rules.append((q, 'amidine'))
 
     return rules

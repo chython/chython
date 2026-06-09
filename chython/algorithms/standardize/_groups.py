@@ -616,6 +616,12 @@ def _rules():
     bonds_fix = ((1, 2, 1), (2, 3, 2))
     rules.append((q, atom_fix, bonds_fix, True))
 
+    # N=C1NC=CC(=O)N1 >> NC1=NC=CC(=O)N1
+    q = smarts('[O,S;D1;z2]=[C;D3;r6]1[N;z1][C;D3:1](=[N:2])[N;h1:3][A]-,=[A]1')
+    atom_fix = {}
+    bonds_fix = ((1, 2, 1), (1, 3, 2))
+    rules.append((q, atom_fix, bonds_fix, True))
+
     #
     #       A                   A
     #       |                   |
