@@ -170,6 +170,15 @@ def _rules():
     # acid fluoride formation: RCOOH → RCOF (cyanuric fluoride, DAST)
     rules.append(_make_reactor('acid_fluorination', 'carboxylic_acid', 'acyl_fluoride', '[F:20]-[A:1]=[A:2]'))
 
+    # acid to diazoketone: RCOOH/RCOX → RC(=O)CH=N2 (+ TMS-diazomethane). Arndt-Eistert step 1.
+    # Accepts free acid or activated acid (acyl halide); the OH/halide is the leaving group.
+    rules.append(_make_reactor('acid_to_diazoketone', 'carboxylic_acid', 'ketone',
+                               '[A:1](=[A:2])-[C:20]=[N;+:21]=[N;-:22]'))
+    rules.append(_make_reactor('acid_to_diazoketone', 'acyl_chloride', 'ketone',
+                               '[A:1](=[A:2])-[C:20]=[N;+:21]=[N;-:22]'))
+    rules.append(_make_reactor('acid_to_diazoketone', 'acyl_fluoride', 'ketone',
+                               '[A:1](=[A:2])-[C:20]=[N;+:21]=[N;-:22]'))
+
     # Sandmeyer: ArNH2 → ArX (NaNO2/HX, CuX)
     rules.append(_make_reactor('sandmeyer_bromination', 'primary_aniline', 'aryl_bromide', '[Br:20]-[A:2]'))
     rules.append(_make_reactor('sandmeyer_iodination', 'primary_aniline', 'aryl_iodide', '[I:20]-[A:2]'))
@@ -262,6 +271,26 @@ def _rules():
     rules.append(_make_reactor('halide_to_thiol', 'aryl_bromide', None, '[A:1]-[S:20]'))
     rules.append(_make_reactor('halide_to_thiol', 'alkyl_bromide', 'thiol', '[A:1]-[S:20]'))
     rules.append(_make_reactor('halide_to_thiol', 'alkyl_chloride', 'thiol', '[A:1]-[S:20]'))
+
+    # Grignard methylation: C=O → C(-OH)(-CH3) (+ MeMgBr/MeLi, implicit). Carbonyl + methyl nucleophile.
+    rules.append(_make_reactor('grignard_methylation', 'ketone', 'tertiary_alcohol', '[A:2]-[A:1]-[C:20]'))
+    rules.append(_make_reactor('grignard_methylation', 'aldehyde', 'secondary_alcohol', '[A:2]-[A:1]-[C:20]'))
+
+    # Katritzky salt formation: RNH2 → N-alkyl 2,4,6-triphenylpyridinium (+ triphenylpyrylium BF4).
+    # Amine activation step of deaminative Csp3-Csp2 coupling. N becomes a traceless leaving group.
+    rules.append(_make_reactor('katritzky_salt', 'primary_amine', None,
+                               '[A:2]-[N;+:1]:1:[C:20](-[C:30]:2:[C:31]:[C:32]:[C:33]:[C:34]:[C:35]:2):'
+                               '[C:21]:[C:22](-[C:40]:3:[C:41]:[C:42]:[C:43]:[C:44]:[C:45]:3):'
+                               '[C:23]:[C:24]:1-[C:50]:4:[C:51]:[C:52]:[C:53]:[C:54]:[C:55]:4'))
+
+    # Bamford-Stevens: sulfonylhydrazone → diazo compound (base). C=N-NH-SO2R → C=N+=N-.
+    rules.append(_make_reactor('bamford_stevens', 'sulfonylhydrazone', None,
+                               '[A:1]=[N;+:2]=[N;-:3]'))
+
+    # Protodesilylation: C(sp2/sp)-SiR3 → C-H (TBAF, K2CO3/MeOH). TMS as temporary blocking group.
+    rules.append(_make_reactor('protodesilylation', 'aryl_silane', None, '[A:1]'))
+    rules.append(_make_reactor('protodesilylation', 'alkenyl_silane', None, '[A:1]=[A:2]'))
+    rules.append(_make_reactor('protodesilylation', 'alkynyl_silane', 'terminal_alkyne', '[A:1]#[A:2]'))
 
     # Halide to thioether: RX → RSMe (NaSMe)
     rules.append(_make_reactor('halide_to_thioether', 'aryl_chloride', 'thioether', '[A:1]-[S:20]-[C:21]'))

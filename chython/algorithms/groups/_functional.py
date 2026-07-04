@@ -174,6 +174,7 @@ def _rules():
     # silanes (R-SiR3, for Hiyama coupling)
     rules['aryl_silane'] = smarts('[Si;D4:100]-;!@[C;a:1]')
     rules['alkenyl_silane'] = smarts('[Si;D4:100]-;!@[C;z2:1]=[C:2]')
+    rules['alkynyl_silane'] = smarts('[Si;D4:100]-;!@[C;z3:1]#[C:2]')
 
     # phosphorus ylides and phosphonates
     rules['phosphonium_ylide'] = smarts('[P;D4;z2;x0:100]=[C:1]')
@@ -223,6 +224,10 @@ def _rules():
 
     # hydrazone (C=N-NH-R, product of carbonyl + hydrazine condensation)
     rules['hydrazone'] = smarts('[C;z2:1]=[N;D2;z2;x1:2]-[N;D2;z1;x1:3]')
+
+    # sulfonylhydrazone (C=N-NH-SO2R, e.g. tosylhydrazone; precursor to diazo via Bamford-Stevens)
+    # N:3 bonded to N and S -> x2
+    rules['sulfonylhydrazone'] = smarts('[C;z2:1]=[N;D2;z2;x1:2]-[N;D2;z1;x2:3]-[S;D4;x3:100](=[O])(=[O])')
 
     # thioamide (for Hantzsch thiazole)
     rules['thioamide'] = smarts('[S;z2;x0;D1:2]=[C;D3;x2:1]-[N;D1:3]')

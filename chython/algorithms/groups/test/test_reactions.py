@@ -195,9 +195,9 @@ _four_component = [
 
 _transformations = [
     ('isoxazole_from_diketone', 'isoxazole', 'O=C(C)CC(=O)C>>c1(onc(C)c1)C', 1,
-     {'alpha_halogenation', 'oximation', 'oxo_to_difluoro', 'oxo_to_thioxo'}),
+     {'alpha_halogenation', 'oximation', 'oxo_to_difluoro', 'oxo_to_thioxo', 'grignard_methylation'}),
     ('pyridazine_from_diketone', 'pyridazine', 'O=C(C)CCC(=O)C>>c1(C)nnc(C)cc1', 1,
-     {'alpha_halogenation', 'oximation', 'oxo_to_difluoro', 'oxo_to_thioxo'}),
+     {'alpha_halogenation', 'oximation', 'oxo_to_difluoro', 'oxo_to_thioxo', 'grignard_methylation'}),
     ('appel_primary_alcohol', 'appel', 'OCC>>BrCC', 1,
      {'triflation', 'appel_chloride', 'mesylation', 'tosylation', 'fluorination', 'appel_iodide', 'azidation'}),
     ('appel_secondary_alcohol', 'appel', 'OC(C)CC>>BrC(C)CC', 1,
@@ -214,6 +214,18 @@ _transformations = [
      {'nitration', 'bromination', 'iodination', 'fluorination'}),
     ('iodination_benzene', 'iodination', 'c1ccccc1>>Ic1ccccc1', 1,
      {'nitration', 'bromination', 'chlorination', 'fluorination'}),
+    ('acid_to_diazoketone', 'acid_to_diazoketone', 'FC1(F)C(C(=O)O)C1>>FC1(F)CC1C(=O)C=[N+]=[N-]', 1,
+     {'acid_chlorination', 'acid_fluorination', 'acid_to_amide'}),
+    ('diazoketone_from_acyl_chloride', 'acid_to_diazoketone', 'FC1(F)C(C(=O)Cl)C1>>FC1(F)CC1C(=O)C=[N+]=[N-]', 1,
+     {'acyl_chloride_hydrolysis', 'acyl_chloride_to_amide'}),
+    ('protodesilylation', 'protodesilylation', 'C[Si](C)(C)C#CCCCC>>C#CCCCC', 1),
+    ('bamford_stevens', 'bamford_stevens', 'Cc1ccc(cc1)S(=O)(=O)NN=C(C)c1ccccc1>>CC(=[N+]=[N-])c1ccccc1', 1,
+     {'bromination', 'chlorination', 'fluorination', 'iodination', 'nitration'}),
+    ('katritzky_salt', 'katritzky_salt',
+     'CCCCN>>CCCC[n+]1c(-c2ccccc2)cc(-c2ccccc2)cc1-c1ccccc1', 1,
+     {'amino_to_azide', 'amino_to_hydroxy', 'amino_to_isocyanate', 'amino_to_isothiocyanate'}),
+    ('grignard_methylation', 'grignard_methylation', 'C1CC(CCO1)=O>>C1COCCC1(O)C', 1,
+     {'alpha_halogenation', 'oximation', 'oxo_to_difluoro', 'oxo_to_thioxo'}),
 ]
 
 _oxidations = [
@@ -227,8 +239,10 @@ _oxidations = [
 ]
 
 _reductions = [
-    ('aldehyde_to_alcohol', 'aldehyde_to_alcohol', 'O=Cc1ccccc1>>OCc1ccccc1', 1, {'carbonyl_to_amine'}),
-    ('ketone_to_alcohol', 'ketone_to_alcohol', 'O=C(C)c1ccccc1>>OC(C)c1ccccc1', 1, {'carbonyl_to_amine'}),
+    ('aldehyde_to_alcohol', 'aldehyde_to_alcohol', 'O=Cc1ccccc1>>OCc1ccccc1', 1,
+     {'carbonyl_to_amine', 'aldehyde_to_methyl'}),
+    ('ketone_to_alcohol', 'ketone_to_alcohol', 'O=C(C)c1ccccc1>>OC(C)c1ccccc1', 1,
+     {'carbonyl_to_amine', 'ketone_to_methylene'}),
     ('acid_to_alcohol', 'acid_to_alcohol', 'OC(=O)c1ccccc1>>OCc1ccccc1', 1),
     ('ester_to_alcohol', 'ester_to_alcohol', 'COC(=O)c1ccccc1>>OCc1ccccc1', 1),
     ('amide_to_amine_primary', 'amide_to_amine', 'NC(=O)c1ccccc1>>NCc1ccccc1', 1),
@@ -238,6 +252,10 @@ _reductions = [
     ('azide_to_amine', 'azide_to_amine', 'CN=[N+]=[N-]>>CN', 1),
     ('deoxygenation_primary', 'deoxygenation', 'OCC1CCCCC1>>CC1CCCCC1', 1),
     ('deoxygenation_secondary', 'deoxygenation', 'OC(C)c1ccccc1>>CCc1ccccc1', 1),
+    ('ketone_to_methylene', 'ketone_to_methylene', 'O=C(C)c1ccccc1>>CCc1ccccc1', 1,
+     {'carbonyl_to_amine', 'ketone_to_alcohol'}),
+    ('aldehyde_to_methyl', 'aldehyde_to_methyl', 'O=Cc1ccccc1>>Cc1ccccc1', 1,
+     {'carbonyl_to_amine', 'aldehyde_to_alcohol'}),
 ]
 
 
