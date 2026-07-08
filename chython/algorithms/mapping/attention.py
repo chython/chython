@@ -18,11 +18,11 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from functools import cache
-from itertools import repeat
+from itertools import chain, count, repeat
 from logging import getLogger, INFO
 from numpy import array, argmax, clip, concatenate, int32, int64, isclose, ix_, mean, nan_to_num
 from numpy import nonzero, ones, unravel_index, zeros
-from scipy.sparse.csgraph import shortest_path
+
 
 logger = getLogger('chython.attention')
 logger.setLevel(INFO)
@@ -108,6 +108,12 @@ def _encode_molecule(mol):
         neighbors: 0=cls, 2+=neighbor_count+2
         distances: 0=padding, 1=unreachable/cross-component, 2+=shortest_path+2
     """
+    try:
+        from scipy.sparse.csgraph import shortest_path
+    except ImportError:
+        raise ImportError('scipy package is required for attention mapping. '
+                          'Install it with: pip install scipy')
+
     n_atoms = len(mol)
     size = n_atoms + 1  # +1 for mol_cls
 
@@ -216,6 +222,29 @@ def _greedy_mapping(am, r_map, p_map, r_adj, p_adj, multiplier):
 class Attention:
     __slots__ = ()
 
+    def _reset_mapping_loose(self) -> bool:
+        """
+        Reset mapping only where a side (reactants+reagents / products) has *internal* duplicate
+        numbers; a reactant and a product may still share a number afterwards. The attention mapper
+        builds its own disjoint numbering downstream and relies on this loose reset — unlike the
+        public ``reset_mapping``, which makes every atom in the reaction globally unique.
+
+        Return True if any numbering changed.
+        """
+        r = [n for m in chain(self.reactants, self.reagents) for n in m._atoms]
+        p = [n for m in self.products for n in m._atoms]
+        c = count(1)
+        if len(r) != len(set(r)):
+            for m in chain(self.reactants, self.reagents):
+                m.remap({n: next(c) for n in m._atoms})
+        if len(p) != len(set(p)):
+            for m in self.products:
+                m.remap({n: next(c) for n in m._atoms})
+        if next(c) != 1:
+            self.flush_cache()
+            return True
+        return False
+
     def attention_mapping(self, *, return_score: bool = False, multiplier=1.75,
                           keep_reactants_numbering=False) -> bool | float:
         """Do atom-to-atom mapping. Return True if mapping changed."""
@@ -223,7 +252,7 @@ class Attention:
             logger.info('atom-to-atom mapping not supported for hypervalent compounds')
             return False
 
-        fixed = self.reset_mapping()
+        fixed = self._reset_mapping_loose()
         r_map, p_map, rg_map, equal_atoms, p2r, r2p, r_adj, p_adj = _prepare_masks(
             self.reactants, self.products, self.reagents
         )

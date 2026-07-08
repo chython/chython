@@ -29,16 +29,18 @@ class Mapping(Reconstruct, Attention):
 
     def reset_mapping(self) -> bool:
         """
-        Reset atom-to-atom mapping by remapping atoms to unique numbers.
+        Reset atom-to-atom mapping by remapping every atom in the reaction to a globally unique
+        number. This makes the reactant, reagent and product number spaces disjoint, so no atom on
+        one side shares a number with an atom on another (the correspondence is fully erased).
+
+        Return True if any numbering changed.
         """
-        r = [n for m in chain(self.reactants, self.reagents) for n in m._atoms]
-        p = [n for m in self.products for n in m._atoms]
         c = count(1)
-        if len(r) != len(set(r)):
-            for m in chain(self.reactants, self.reagents):
-                m.remap({n: next(c) for n in m._atoms})
-        if len(p) != len(set(p)):
-            for m in self.products:
+        # renumber everything from one counter only when not already globally unique (avoid
+        # pointless churn / cache flush on clean inputs).
+        all_atoms = [n for m in self.molecules() for n in m._atoms]
+        if len(all_atoms) != len(set(all_atoms)):
+            for m in self.molecules():
                 m.remap({n: next(c) for n in m._atoms})
         if next(c) != 1:
             self.flush_cache()
