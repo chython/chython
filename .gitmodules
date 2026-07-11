@@ -1,0 +1,3 @@
+[submodule "INCHI/INCHI-1-SRC"]
+	path = INCHI/INCHI-1-SRC
+	url = https://github.com/IUPAC-InChI/InChI
