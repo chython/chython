@@ -26,9 +26,119 @@ from ._reactions import rules as reaction_rules
 from ._reductions import rules as reduction_rules
 from ._transformations import rules as transformation_rules
 
+# Descriptor bucket boundaries (MW in Da)
+_MW_BOUNDS = (150, 250, 350, 450, 550)
+
+
+def fingerprint_schema() -> dict[str, int]:
+    """
+    Return the stable mapping from feature name to bit index used by
+    ``functional_fingerprint()``.  Import this once in chemder to build
+    the selector's ``mapping`` array.
+
+    Bit layout
+    ----------
+    0 – 5   rings_count   buckets 0,1,2,3,4,5+
+    6 – 11  hba_count     buckets 0,1,2,3,4,5+
+    12 – 17 hbd_count     buckets 0,1,2,3,4,5+
+    18 – 22 sp3_fraction  quintiles 0-20%, 20-40%, 40-60%, 60-80%, 80-100%
+    23 – 28 molecular_mass buckets <150,150-250,250-350,350-450,450-550,550+
+    29 – 34 rotatable_bonds buckets 0,1,2,3,4-6,7+
+    35 +    functional group presence (one bit per pattern in functional_rules)
+    """
+    schema: dict[str, int] = {}
+    for i, name in enumerate(('rings_0', 'rings_1', 'rings_2', 'rings_3', 'rings_4', 'rings_5p')):
+        schema[name] = i
+    for i, name in enumerate(('hba_0', 'hba_1', 'hba_2', 'hba_3', 'hba_4', 'hba_5p')):
+        schema[name] = 6 + i
+    for i, name in enumerate(('hbd_0', 'hbd_1', 'hbd_2', 'hbd_3', 'hbd_4', 'hbd_5p')):
+        schema[name] = 12 + i
+    for i, name in enumerate(('sp3_q0', 'sp3_q1', 'sp3_q2', 'sp3_q3', 'sp3_q4')):
+        schema[name] = 18 + i
+    for i, name in enumerate(('mw_lt150', 'mw_150', 'mw_250', 'mw_350', 'mw_450', 'mw_550p')):
+        schema[name] = 23 + i
+    for i, name in enumerate(('rbc_0', 'rbc_1', 'rbc_2', 'rbc_3', 'rbc_4_6', 'rbc_7p')):
+        schema[name] = 29 + i
+    for offset, fg_name in enumerate(functional_rules):
+        schema[fg_name] = 35 + offset
+    return schema
+
 
 class FunctionalGroups:
     __slots__ = ()
+
+    @cached_property
+    def functional_fingerprint(self) -> bytes:
+        """
+        256-bit (32-byte) binary feature vector for fast AVX2 bitmap filtering.
+
+        Bit layout matches ``fingerprint_schema()``:
+          0– 5  rings_count   buckets  0 / 1 / 2 / 3 / 4 / 5+
+          6–11  hba           buckets  0 / 1 / 2 / 3 / 4 / 5+
+         12–17  hbd           buckets  0 / 1 / 2 / 3 / 4 / 5+
+         18–22  sp3 fraction  quintiles 0–20% / 20–40% / 40–60% / 60–80% / 80–100%
+         23–28  molecular_mass  <150 / 150–250 / 250–350 / 350–450 / 450–550 / 550+
+         29–34  rotatable_bonds  0 / 1 / 2 / 3 / 4–6 / 7+
+         35+    one bit per pattern in functional_rules (presence only)
+        """
+        bits = bytearray(32)
+
+        def _set(idx):
+            bits[idx >> 3] |= 1 << (idx & 7)
+
+        # rings_count bucket (0–5+)
+        rc = min(self.rings_count, 5)
+        _set(rc)
+
+        # hba bucket (0–5+)
+        hba = min(self.hydrogen_bond_acceptors_count, 5)
+        _set(6 + hba)
+
+        # hbd bucket (0–5+)
+        hbd = min(self.hydrogen_bond_donors_count, 5)
+        _set(12 + hbd)
+
+        # sp3 fraction quintile (0–4)
+        sp3q = min(int(self.carbon_sp3_fraction * 5), 4)
+        _set(18 + sp3q)
+
+        # molecular_mass bucket
+        mw = self.molecular_mass
+        if mw < 150:
+            _set(23)
+        elif mw < 250:
+            _set(24)
+        elif mw < 350:
+            _set(25)
+        elif mw < 450:
+            _set(26)
+        elif mw < 550:
+            _set(27)
+        else:
+            _set(28)
+
+        # rotatable_bonds bucket: 0/1/2/3/4-6/7+
+        rbc = self.rotatable_bonds_count
+        if rbc == 0:
+            _set(29)
+        elif rbc == 1:
+            _set(30)
+        elif rbc == 2:
+            _set(31)
+        elif rbc == 3:
+            _set(32)
+        elif rbc <= 6:
+            _set(33)
+        else:
+            _set(34)
+
+        # functional group bits (one bit per named pattern, presence only)
+        fgs = self.functional_groups
+        for offset, name in enumerate(functional_rules):
+            if name in fgs:
+                _set(35 + offset)
+
+        return bytes(bits)
 
     @cached_property
     def functional_groups(self) -> dict[str, int]:
@@ -209,4 +319,4 @@ class FunctionalGroups:
         return self.react(other)
 
 
-__all__ = ['FunctionalGroups']
+__all__ = ['FunctionalGroups', 'fingerprint_schema']

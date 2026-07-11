@@ -321,18 +321,6 @@ def _rules():
     rules['diaryl'] = smarts('[C,N;a:1]-;!@[C,N;a:2]')
     rules['bridged_diaryl'] = smarts('[C,N;a:1]-;!@[C,O,N,S:3]-;!@[C,N;a:2]')
 
-    # unwanted / toxic atoms in medchem products
-    # boron is common in BBs (boronic acids) but rarely desired in drug products
-    rules['has_boron'] = smarts('[B:1]')
-    rules['has_silicon'] = smarts('[Si:1]')
-    rules['has_phosphorus'] = smarts('[P:1]')
-    rules['has_arsenic'] = smarts('[As:1]')
-    rules['has_selenium'] = smarts('[Se:1]')
-    rules['has_tellurium'] = smarts('[Te:1]')
-    rules['has_tin'] = smarts('[Sn:1]')
-    rules['has_mercury'] = smarts('[Hg:1]')
-    rules['has_lead'] = smarts('[Pb:1]')
-
     return rules
 
 
