@@ -115,6 +115,9 @@ def _rules():
     # acids
     rules['alkyl_carboxylic_acid'] = smarts('[O;D1;z1;x0:100][C;z2;x2;D3:1](=[O:2])[C;z1:3]')
     rules['aryl_carboxylic_acid'] = smarts('[O;D1;z1;x0:100][C;z2;x2;D3:1](=[O:2])[C;a:3]')
+    rules['alkenyl_carboxylic_acid'] = smarts('[O;D1;z1;x0:100][C;z2;x2;D3:1](=[O:2])[C;z2:3]=[C:4]')
+    rules['alkynyl_carboxylic_acid'] = smarts('[O;D1;z1;x0:100][C;z2;x2;D3:1](=[O:2])[C;z3;x0:3]')
+    rules['cyclic_carboxylic_acid'] = smarts('[O;D1;z1;x0:100][C;z2;x2;D3:1](=[O:2])[C;z1;r5,r6:3]')
     rules['carboxylic_acid'] = smarts('[O;D1;z1;x0:100][C;z2;x2;D3:1]=[O:2]')
     rules['acyl_chloride'] = smarts('[Cl:100][C;z2;x2;D3:1]=[O:2]')
     rules['acyl_fluoride'] = smarts('[F:100][C;z2;x2;D3:1]=[O:2]')
@@ -137,6 +140,9 @@ def _rules():
     rules['primary_amide'] = smarts('[N;D1;z1;x0:1][C;z2;x2;D3:2]=[O:3]')
     rules['secondary_amide'] = smarts('[N;D2;z1;x0:1][C;z2;x2;D3:2]=[O:3]')
 
+    # sulfo (sulfonic acid: R-SO3H; distinct from sulfonyl halide / sulfonamide)
+    rules['sulfo'] = smarts('[S;x3;D4:1](=[O:2])(=[O:3])[O;D1:4]')
+
     # sulfonyl
     rules['sulfonyl_chloride'] = smarts('[S;D4:1](=[O:2])(=[O:3])[Cl;D1:100]')
     rules['sulfonyl_fluoride'] = smarts('[S;D4:1](=[O:2])(=[O:3])[F;D1:100]')
@@ -146,6 +152,9 @@ def _rules():
     # nitrogen functional groups
     rules['nitrile'] = smarts('[N;D1;z3;x0:2]#[C;D2;x1:1]')
     rules['azide'] = smarts('[N;x1;D2:1]=[N+:2]=[N-:3]')
+    rules['diazo'] = smarts('[C;z2:1]=[N+;D2:2]=[N-;D1:3]')
+    rules['diazonium'] = smarts('[C;a:1]-[N+;D2:2]#[N;D1:3]')
+    rules['azo'] = smarts('[N;D2;x1:1]=[N;D2;x1:2]')
     rules['isocyanate'] = smarts('[N;z2;x0;D2:1]=[C:2]=[O:3]')
     rules['isocyano'] = smarts('[N;D2;x0;+:1]#[C;-:2]')
     rules['guanidine'] = smarts('[N;z1;x0:1][C;!R:2]([N;z1;x0:3])=[N;x0:4]')
@@ -285,6 +294,44 @@ def _rules():
 
     # pyridine-like nitrogen (for N-oxidation): aromatic N with no H, degree 2
     rules['pyridine_n'] = smarts('[N;a;D2;h0:1]')
+
+    # esters: methyl ester has distinct reactivity (saponification, transesterification)
+    rules['methyl_ester'] = smarts('[O;z2;x0:2]=[C;D3;x2;z2:1]-[O;D2;x0:3]-[C;D1:100]')
+
+    # epoxide: strained 3-membered ring
+    rules['epoxide'] = smarts('[O;D2;r3:1]1-[C;r3:2]-[C;r3:3]-1')
+
+    # fluorine substituents (descriptor flags: metabolic stability, bioisosteres)
+    rules['trifluoromethyl'] = smarts('[C;D4;z1;x3:1]([F:2])([F:3])[F:4]')
+    rules['difluoromethyl'] = smarts('[C;D3;z1;x2:1]([F:2])[F:3]')
+
+    # structural alerts / medchem flags
+    rules['catechol'] = smarts('[O;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[O;D1;z1;x0:4]')
+    rules['disulfide'] = smarts('[S;D2;z1:1]-[S;D2;z1:2]')
+    # vinyl sulfone / vinyl sulfonamide / vinyl sulfonate (covalent warhead, PAINS alert)
+    rules['vinyl_sulfone'] = smarts('[S;D4;x3:1](=[O:2])(=[O:3])(-[O,N:100])-[C;z2:4]=[C:5]')
+    rules['peroxide'] = smarts('[O;D2;z1:1]-[O;D2;z1:2]')
+    rules['nitroso'] = smarts('[N;D2;z2:1]=[O;D1:2]')
+    rules['isothiocyanate'] = smarts('[N;z2;x0;D2:1]=[C:2]=[S;D1:3]')
+    rules['maleimide'] = smarts('[N;r5:1]1-[C;z2;r5:2](=[O:3])-[C;z2;r5:4]=[C;z2;r5:5]-[C;z2;r5:6]1=[O:7]')
+
+    # scaffold flags (for BB classification and filtering)
+    rules['fused_aromatic'] = smarts('[A;a;D3:1](:[A;a])(:[A;a]):[A;a]')
+    rules['polyarene'] = smarts('[A;a:1]:[A;a;D3:2](:[A;a:3]):[A;a:4]:[A;a;D3:5](:[A;a:6]):[A;a:7]')
+    rules['diaryl'] = smarts('[C,N;a:1]-;!@[C,N;a:2]')
+    rules['bridged_diaryl'] = smarts('[C,N;a:1]-;!@[C,O,N,S:3]-;!@[C,N;a:2]')
+
+    # unwanted / toxic atoms in medchem products
+    # boron is common in BBs (boronic acids) but rarely desired in drug products
+    rules['has_boron'] = smarts('[B:1]')
+    rules['has_silicon'] = smarts('[Si:1]')
+    rules['has_phosphorus'] = smarts('[P:1]')
+    rules['has_arsenic'] = smarts('[As:1]')
+    rules['has_selenium'] = smarts('[Se:1]')
+    rules['has_tellurium'] = smarts('[Te:1]')
+    rules['has_tin'] = smarts('[Sn:1]')
+    rules['has_mercury'] = smarts('[Hg:1]')
+    rules['has_lead'] = smarts('[Pb:1]')
 
     return rules
 
