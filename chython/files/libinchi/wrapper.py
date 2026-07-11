@@ -526,15 +526,12 @@ platform = get_platform()
 if platform == 'win-amd64':
     opt_flag = '/'
     libname = 'libinchi.dll'
-elif platform == 'linux-x86_64':
+elif platform.startswith('linux'):
     opt_flag = '-'
     libname = 'libinchi.so'
-elif platform.startswith('macosx') and platform.endswith('x86_64'):
-    opt_flag = '-'
-    libname = 'libinchi.dynlib'
 elif platform.startswith('macosx'):
     opt_flag = '-'
-    libname = 'libinchi_arm64.dylib'
+    libname = 'libinchi.dylib'
 else:
     warn('unsupported platform for libinchi', ImportWarning)
     libname = None

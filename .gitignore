@@ -3,7 +3,11 @@ __pycache__
 *.so
 *.dll
 *.dynlib
+*.dylib
 *.c
+
+# vendored IUPAC InChI source (compiled into libinchi at build time)
+!INCHI/**
 
 .idea
 venv
