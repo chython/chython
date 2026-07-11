@@ -180,18 +180,26 @@ def _candidate_subsets(reactants, product_size):
         yield from quads
 
 
-def _strip(mol, groups):
+def _strip(mol, groups, start=None):
     """
     Return a copy of ``mol`` with the named protective groups removed, or None on failure.
 
     ``remove_protection`` canonicalizes the result (kekule/thiele/...), which can raise on a
     structure that has no valid kekule form. Reconstruction must never crash, so a failed strip is
     reported as "no match" (None) rather than propagated.
+
+    ``start``, when given, is passed to ``remove_protection`` as the starting atom number for any
+    newly added atoms (e.g. the carbonyl O restored from an acetal), avoiding collisions with
+    other molecules in a multi-component reaction context.
     """
     m = mol.copy(keep_sssr=True, keep_components=True)
     try:
+        cursor = start
         for p in groups:
-            m.remove_protection(p)
+            before = set(m._atoms)
+            m.remove_protection(p, start=cursor)
+            if cursor is not None:
+                cursor += len(m) - len(before)
     except Exception:  # noqa: BLE001 - an unkekulizable deprotection product is simply not a match
         return None
     return m
@@ -219,7 +227,7 @@ def _deprotect_excess(r, product):
     to_remove = [p for p in rpg if p not in ppg]
     if not to_remove:
         return None
-    if (m := _strip(r, to_remove)) is None:
+    if (m := _strip(r, to_remove, max(product) + 1)) is None:
         return None
     return m, [f'deprotect:{name}' for name in to_remove]
 

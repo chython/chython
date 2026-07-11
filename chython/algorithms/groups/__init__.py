@@ -171,7 +171,8 @@ class FunctionalGroups:
         return found
 
     def remove_protection(self, name=None, canonicalize=True,
-                          fix_tautomers=True, ignore_pyrrole_hydrogen=False) -> bool:
+                          fix_tautomers=True, ignore_pyrrole_hydrogen=False,
+                          *, start=None) -> bool:
         """
         Remove protective groups from the given molecule if applicable.
 
@@ -179,6 +180,8 @@ class FunctionalGroups:
         :param canonicalize: Run full canonicalization after removal.
         :param fix_tautomers: Canonicalize tautomer forms. Passed to canonicalize().
         :param ignore_pyrrole_hydrogen: Fix invalid rings like Cn1cc[nH]c1. Passed to canonicalize().
+        :param start: Starting atom number for newly added atoms (e.g. restored carbonyl O).
+            When None, defaults to max(existing) + 1.
         """
         to_delete = set()
         to_add = []
@@ -201,9 +204,11 @@ class FunctionalGroups:
                 for n, a, b in add:
                     to_add.append((mp[n], a, b))
 
+        m = start
         for n, a, b in to_add:
-            m = self.add_atom(a, _skip_calculation=True)
+            m = self.add_atom(a, n=m, _skip_calculation=True)
             self.add_bond(m, n, b, _skip_calculation=True)
+            m += 1
         for n in to_delete:
             self.delete_atom(n, _skip_calculation=True)
         if to_delete or to_add:
