@@ -52,7 +52,7 @@ def build_libinchi(target: Path):
     the package. If the source tree or CMake is unavailable the build is skipped
     with a warning so that a wheel is still produced (InChI features disabled).
     """
-    source = Path('INCHI/INCHI-1-SRC/INCHI-1-SRC/INCHI_API/libinchi/src')
+    source = Path('INCHI/INCHI-1-SRC/INCHI_API/libinchi/src')
     if not source.is_dir():
         warn(f'InChI source not found at {source}; skipping libinchi build')
         return
