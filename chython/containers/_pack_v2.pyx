@@ -56,7 +56,7 @@ from libc.string cimport memset
 @cython.wraparound(False)
 def pack(object molecule):
     cdef bint b = True # binary flag
-    cdef char charge
+    cdef signed char charge
     cdef unsigned char atomic_number, ngb_count, isotope, bond, s = 0, buffer_b, buffer_o, stereo, hcr
     cdef unsigned char *data
     cdef unsigned short atoms_count, bonds_count = 0, cis_trans_count, n, m, tn, tm

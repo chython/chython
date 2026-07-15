@@ -112,3 +112,9 @@ class InvalidMolBlock(ValueError):
     """
     Invalid MDL MOL
     """
+
+
+class SSSRTimeout(ValueError):
+    """
+    SSSR ring perception exceeded the configured time limit
+    """

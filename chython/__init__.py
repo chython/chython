@@ -30,6 +30,9 @@ from .utils import *
 clean2d_engine: Literal['rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo'] = 'smilesdrawer'
 conformer_engine: Literal['rdkit', 'cdpkit'] = 'rdkit'
 class_paths = [getenv('CDK_PATH', 'cdk.jar'), getenv('OPSIN_PATH', 'opsin.jar')]
+# hard wall-clock limit (seconds) for SSSR ring perception. 0 disables the limit.
+# pathological (highly fused) molecules can otherwise stall for hours; on expiry SSSRTimeout is raised.
+sssr_timeout: float = 60.
 
 
 __all__ = []

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = 'chython'
-version = '2.20'
+version = '2.21'
 description = 'Library for processing molecules and reactions in python way'
 authors = ['Ramil Nugmanov <nougmanoff@protonmail.com>']
 license = 'LGPLv3'
@@ -67,7 +67,7 @@ sphinx = '>=7.0'
 furo = '>=2024.1'
 
 [build-system]
-requires = ['poetry-core', 'setuptools', 'cython>=3.0.5']
+requires = ['poetry-core', 'setuptools', 'cython>=3.1']
 build-backend = 'poetry.core.masonry.api'
 
 [tool.poetry.build]

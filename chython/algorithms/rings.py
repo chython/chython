@@ -39,7 +39,8 @@ class Rings:
         :return rings atoms numbers
         """
         if self.rings_count:
-            return sssr(_skin_graph(self.not_special_connectivity), self.rings_count)
+            from chython import sssr_timeout
+            return sssr(_skin_graph(self.not_special_connectivity), self.rings_count, sssr_timeout)
         return []
 
     @cached_property

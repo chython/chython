@@ -24,9 +24,15 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from cpython.mem cimport PyMem_Malloc, PyMem_Free, PyMem_Realloc
+# Raw allocators are used instead of PyMem_Malloc/Free/Realloc so the heavy PID/CSET
+# phase can run under `with nogil` (PyMem_* require the GIL, PyMem_Raw* do not).
+from cpython.mem cimport PyMem_RawMalloc as PyMem_Malloc, PyMem_RawFree as PyMem_Free, \
+    PyMem_RawRealloc as PyMem_Realloc
 from libc.limits cimport USHRT_MAX
 from libc.string cimport memset, memcpy
+from libc.time cimport time, time_t
+
+from chython.exceptions import SSSRTimeout
 
 
 cdef struct paths_t:
@@ -59,7 +65,7 @@ cdef struct rings_t:
     ring_t *rings
 
 
-cdef dist_matrix_t *alloc_dist_matrix(unsigned short n_nodes):
+cdef dist_matrix_t *alloc_dist_matrix(unsigned short n_nodes) noexcept nogil:
     cdef size_t i, total = n_nodes * n_nodes
     cdef dist_matrix_t *matrix = <dist_matrix_t *> PyMem_Malloc(sizeof(dist_matrix_t))
 
@@ -75,7 +81,7 @@ cdef dist_matrix_t *alloc_dist_matrix(unsigned short n_nodes):
     return matrix
 
 
-cdef rings_t *alloc_rings(unsigned short n_rings, size_t hash_size):
+cdef rings_t *alloc_rings(unsigned short n_rings, size_t hash_size) noexcept nogil:
     cdef size_t i, n1 = n_rings + 1
     cdef rings_t *rings = <rings_t *> PyMem_Malloc(sizeof(rings_t))
 
@@ -91,7 +97,7 @@ cdef rings_t *alloc_rings(unsigned short n_rings, size_t hash_size):
     return rings
 
 
-cdef void realloc_rings(rings_t *rings, size_t n_rings):
+cdef void realloc_rings(rings_t *rings, size_t n_rings) noexcept nogil:
     cdef size_t i
     rings.rings = <ring_t *> PyMem_Realloc(rings.rings, n_rings * sizeof(ring_t))
     memset(rings.rings + rings.n_reserved, 0, (n_rings - rings.n_reserved) * sizeof(ring_t))
@@ -101,7 +107,7 @@ cdef void realloc_rings(rings_t *rings, size_t n_rings):
     rings.n_reserved = n_rings
 
 
-cdef void free_pid0(paths_t *paths):
+cdef void free_pid0(paths_t *paths) noexcept nogil:
     cdef size_t i
     if paths.num_pid0 == 0: return
     for i in range(paths.num_pid0):
@@ -111,7 +117,7 @@ cdef void free_pid0(paths_t *paths):
     paths.pid0 = NULL
 
 
-cdef void free_pid1(paths_t *paths):
+cdef void free_pid1(paths_t *paths) noexcept nogil:
     cdef size_t i
     if paths.num_pid1 == 0: return
     for i in range(paths.num_pid1):
@@ -121,12 +127,12 @@ cdef void free_pid1(paths_t *paths):
     paths.pid1 = NULL
 
 
-cdef void free_pids(paths_t *paths):
+cdef void free_pids(paths_t *paths) noexcept nogil:
     free_pid0(paths)
     free_pid1(paths)
 
 
-cdef void free_dist_matrix(dist_matrix_t *matrix):
+cdef void free_dist_matrix(dist_matrix_t *matrix) noexcept nogil:
     cdef size_t i, total = matrix.n_nodes * matrix.n_nodes
     for i in range(total):
         free_pids(&matrix.data[i])
@@ -135,14 +141,14 @@ cdef void free_dist_matrix(dist_matrix_t *matrix):
     PyMem_Free(matrix)
 
 
-cdef void free_ring(ring_t *ring):
+cdef void free_ring(ring_t *ring) noexcept nogil:
     PyMem_Free(ring.hash)
     PyMem_Free(ring.nodes)
     ring.hash = NULL
     ring.nodes = NULL
 
 
-cdef void free_rings(rings_t *rings):
+cdef void free_rings(rings_t *rings) noexcept nogil:
     cdef size_t i
     for i in range(rings.n_allocated):
         free_ring(&rings.rings[i])
@@ -150,7 +156,7 @@ cdef void free_rings(rings_t *rings):
     PyMem_Free(rings)
 
 
-cdef void move_paths(paths_t *paths):
+cdef void move_paths(paths_t *paths) noexcept nogil:
     free_pid1(paths)
 
     paths.num_pid1 = paths.num_pid0
@@ -159,7 +165,7 @@ cdef void move_paths(paths_t *paths):
     paths.pid0 = NULL
 
 
-cdef unsigned short *concatenate_paths(paths_t *paths_ik, paths_t *paths_kj, unsigned short k):
+cdef unsigned short *concatenate_paths(paths_t *paths_ik, paths_t *paths_kj, unsigned short k) noexcept nogil:
     cdef unsigned short *path
     cdef size_t size1, size2
 
@@ -175,14 +181,14 @@ cdef unsigned short *concatenate_paths(paths_t *paths_ik, paths_t *paths_kj, uns
     return path
 
 
-cdef void append_pid0(paths_t *paths_ij, paths_t *paths_ik, paths_t *paths_kj, unsigned short k):
+cdef void append_pid0(paths_t *paths_ij, paths_t *paths_ik, paths_t *paths_kj, unsigned short k) noexcept nogil:
     cdef size_t i = paths_ij.num_pid0
     paths_ij.num_pid0 += 1
     paths_ij.pid0 = <unsigned short **> PyMem_Realloc(paths_ij.pid0, paths_ij.num_pid0 * sizeof(unsigned short *))
     paths_ij.pid0[i] = concatenate_paths(paths_ik, paths_kj, k)
 
 
-cdef void append_pid1(paths_t *paths_ij, paths_t *paths_ik, paths_t *paths_kj, unsigned short k):
+cdef void append_pid1(paths_t *paths_ij, paths_t *paths_ik, paths_t *paths_kj, unsigned short k) noexcept nogil:
     cdef size_t i = paths_ij.num_pid1
     paths_ij.num_pid1 += 1
     paths_ij.pid1 = <unsigned short **> PyMem_Realloc(paths_ij.pid1, paths_ij.num_pid1 * sizeof(unsigned short *))
@@ -198,7 +204,7 @@ cdef tuple ring_to_tuple(ring_t *ring):
     return tuple(result)
 
 
-cdef int has_not_overlap(paths_t *paths_ik, paths_t *paths_kj, paths_t *paths_ij, unsigned short k, int test_pid1):
+cdef int has_not_overlap(paths_t *paths_ik, paths_t *paths_kj, paths_t *paths_ij, unsigned short k, int test_pid1) noexcept nogil:
     cdef size_t i, j
     cdef unsigned short n1, n2
     cdef unsigned short *path
@@ -227,7 +233,7 @@ cdef int has_not_overlap(paths_t *paths_ik, paths_t *paths_kj, paths_t *paths_ij
 
 
 cdef unsigned long long *build_hash(unsigned short *path1, unsigned short *path2,
-                                    unsigned short i, unsigned short j, size_t size1, size_t size2, size_t hash_size):
+                                    unsigned short i, unsigned short j, size_t size1, size_t size2, size_t hash_size) noexcept nogil:
     cdef size_t k
     cdef unsigned short n
     cdef unsigned long long *hash = <unsigned long long *> PyMem_Malloc(hash_size * sizeof(unsigned long long))
@@ -246,7 +252,7 @@ cdef unsigned long long *build_hash(unsigned short *path1, unsigned short *path2
 
 
 cdef unsigned short *build_ring(unsigned short *path1, unsigned short *path2,
-                                unsigned short i, unsigned short j, size_t size1, size_t size2):
+                                unsigned short i, unsigned short j, size_t size1, size_t size2) noexcept nogil:
     cdef size_t k, s = size1 + 1
     cdef unsigned short *nodes
 
@@ -262,7 +268,7 @@ cdef unsigned short *build_ring(unsigned short *path1, unsigned short *path2,
     return nodes
 
 
-cdef void push_ring(ring_t *ring, rings_t *rings, unsigned short rank):
+cdef void push_ring(ring_t *ring, rings_t *rings, unsigned short rank) noexcept nogil:
     cdef size_t i
     cdef unsigned short ext
 
@@ -279,7 +285,7 @@ cdef void push_ring(ring_t *ring, rings_t *rings, unsigned short rank):
     rings.n_allocated += 1
 
 
-cdef unsigned short get_rank(ring_t *ring, rings_t *rings):
+cdef unsigned short get_rank(ring_t *ring, rings_t *rings) noexcept nogil:
     cdef size_t i, j
     cdef int hash_match
     cdef ring_t *other
@@ -298,7 +304,8 @@ cdef unsigned short get_rank(ring_t *ring, rings_t *rings):
             return i
 
 
-cdef void build_pid(dist_matrix_t *matrix):
+cdef int build_pid(dist_matrix_t *matrix, time_t deadline) noexcept nogil:
+    # returns 1 if the wall-clock deadline was exceeded, else 0.
     cdef size_t i, j, k, sk, si
     cdef unsigned short rk
     cdef unsigned int d
@@ -310,6 +317,9 @@ cdef void build_pid(dist_matrix_t *matrix):
         sk = k * matrix.n_nodes
         rk = matrix.mapping[k]
         for i in range(matrix.n_nodes):
+            # O(n_nodes) work per check keeps timing overhead negligible (~1s granularity).
+            if deadline and time(NULL) > deadline:
+                return 1
             if i == k: continue
             si = i * matrix.n_nodes
             paths_ik = &matrix.data[si + k]
@@ -336,9 +346,11 @@ cdef void build_pid(dist_matrix_t *matrix):
                 elif d == paths_ij.distance + 1:  # new pid1 path
                     if has_not_overlap(paths_ik, paths_kj, paths_ij, rk, 1):
                         append_pid1(paths_ij, paths_ik, paths_kj, rk)
+    return 0
 
 
-cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
+cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings, time_t deadline) noexcept nogil:
+    # returns NULL on deadline expiry (partial rings are freed here, caller gets nothing to clean up).
     cdef size_t i, j, k, si, n_max = 0
     cdef unsigned short ri, rj, d, rank
     cdef ring_t ring
@@ -352,6 +364,9 @@ cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
     rings = alloc_rings(n_rings, (n_max + 64) // 64)
 
     for i in range(matrix.n_nodes):
+        if deadline and time(NULL) > deadline:
+            free_rings(rings)
+            return NULL
         si = i * matrix.n_nodes
         ri = matrix.mapping[i]
         for j in range(matrix.n_nodes):
@@ -400,7 +415,7 @@ cdef rings_t *build_cset(dist_matrix_t *matrix, size_t n_rings):
     return rings
 
 
-cdef void filter_rings(rings_t *rings):
+cdef void filter_rings(rings_t *rings) noexcept nogil:
     cdef size_t i, j, k, pc = 0
     cdef ring_t *ring
     cdef int is_unique
@@ -440,14 +455,16 @@ cdef void filter_rings(rings_t *rings):
     PyMem_Free(hash)
 
 
-def sssr(object graph, size_t n_rings):
+def sssr(object graph, size_t n_rings, double timeout=0):
     cdef size_t si
     cdef unsigned short i, n, m, n_nodes = len(graph)
     cdef unsigned short [USHRT_MAX] reverse_mapping  # 128kb
-    cdef rings_t *rings
+    cdef rings_t *rings = NULL
     cdef dist_matrix_t *matrix
     cdef object mb
     cdef list output = []
+    cdef time_t deadline = 0
+    cdef int timed_out = 0
 
     if not n_rings: return output
 
@@ -463,13 +480,24 @@ def sssr(object graph, size_t n_rings):
         for m in mb:
             matrix.data[si + reverse_mapping[m]].distance = 1
 
-    # run PID matrix calculation
-    build_pid(matrix)
-    # run CSET calculation
-    rings = build_cset(matrix, n_rings)
-    free_dist_matrix(matrix)
-    # filter out condensed rings
-    filter_rings(rings)
+    if timeout > 0:
+        deadline = time(NULL) + <time_t> timeout
+
+    # heavy PID/CSET/filter phase touches no Python objects: release the GIL so other threads run.
+    # timeout is signalled two ways: build_pid returns 1, build_cset returns NULL (each already freed its own).
+    with nogil:
+        # run PID matrix calculation
+        timed_out = build_pid(matrix, deadline)
+        if not timed_out:
+            # run CSET calculation
+            rings = build_cset(matrix, n_rings, deadline)
+        free_dist_matrix(matrix)
+        if rings is not NULL:
+            # filter out condensed rings
+            filter_rings(rings)
+
+    if timed_out or rings is NULL:
+        raise SSSRTimeout(f'SSSR ring perception exceeded {timeout} s')
 
     for i in range(rings.n_rings):
         output.append(ring_to_tuple(&rings.rings[i]))

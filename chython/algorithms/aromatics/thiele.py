@@ -182,7 +182,8 @@ class Thiele:
         n_sssr = sum(len(x) for x in rings.values()) // 2 - len(rings) + len(_connected_components(rings))
         if not n_sssr:
             return False
-        rings = sssr(rings, n_sssr)  # search rings again
+        from chython import sssr_timeout
+        rings = sssr(rings, n_sssr, sssr_timeout)  # search rings again
 
         seen = set()
         for ring in rings:
