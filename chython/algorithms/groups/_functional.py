@@ -120,6 +120,7 @@ def _rules():
     rules['cyclic_carboxylic_acid'] = smarts('[O;D1;z1;x0:100][C;z2;x2;D3:1](=[O:2])[C;z1;r5,r6:3]')
     rules['carboxylic_acid'] = smarts('[O;D1;z1;x0:100][C;z2;x2;D3:1]=[O:2]')
     rules['acyl_chloride'] = smarts('[Cl:100][C;z2;x2;D3:1]=[O:2]')
+    rules['acyl_bromide'] = smarts('[Br:100][C;z2;x2;D3:1]=[O:2]')
     rules['acyl_fluoride'] = smarts('[F:100][C;z2;x2;D3:1]=[O:2]')
     rules['chloroformate'] = smarts('[Cl:100][C;z2;x3;D3:1](=[O:2])-[O;D2:3]')
     rules['fluoroformate'] = smarts('[F:100][C;z2;x3;D3:1](=[O:2])-[O;D2:3]')
@@ -137,6 +138,8 @@ def _rules():
 
     # esters and amides
     rules['ester'] = smarts('[O;z2;x0:2]=[C;D3;x2;z2:1]-[O;D2;x0:100]')
+    # carboxylic anhydride R-C(=O)-O-C(=O)-R (note: also matches `ester` twice)
+    rules['anhydride'] = smarts('[C;z2;x2;D3:1](=[O:2])-[O;D2;x0:100]-[C;z2;x2;D3:3]=[O:4]')
     rules['primary_amide'] = smarts('[N;D1;z1;x0:1][C;z2;x2;D3:2]=[O:3]')
     rules['secondary_amide'] = smarts('[N;D2;z1;x0:1][C;z2;x2;D3:2]=[O:3]')
 
@@ -189,8 +192,12 @@ def _rules():
     rules['phosphonium_ylide'] = smarts('[P;D4;z2;x0:100]=[C:1]')
     rules['phosphonate'] = smarts('[P;D4;x3:100](=O)([O;D2;x1])([O;D2;x1])-[C:1]')
 
-    # weinreb amide
-    rules['weinreb_amide'] = smarts('[O:2]=[C;D3;x2:1]-[N;D3;x1:100][O;D2;x1]')
+    # weinreb amide N-methoxy-N-methyl amide (require the extra C on N to exclude
+    # N-acyloxy imides such as NHS esters, which are C(=O)-O-N(C=O)C=O)
+    rules['weinreb_amide'] = smarts('[O:2]=[C;D3;x2:1]-[N;D3;x1:100]([C;z1])[O;D2;x1]')
+
+    # N-hydroxysuccinimide (NHS) active ester C(=O)-O-N(succinimide)
+    rules['nhs_ester'] = smarts('[C;z2;x2;D3:1](=[O:2])-[O;D2;x1:3]-[N;D3:100]1-[C;z2](=O)-[C;z1]-[C;z1]-[C;z2]-1=O')
 
     # arene C-H (for electrophilic aromatic substitution)
     rules['arene_ch'] = smarts('[C;a;D2:1]')
