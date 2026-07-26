@@ -336,6 +336,10 @@ class FunctionalGroups:
         """
         if role is not None and role not in role_rules:
             raise ValueError(f'Unknown role: {role}')
+        # no cap rule disconnects a connected molecule; only a salt/mixture input
+        # would leave a detached counter-ion, which sticky_smiles cannot serialize.
+        if self.connected_components_count != 1:
+            return
 
         fgs = self.functional_groups
         items = role_transformers.items() if role is None else [(role, role_transformers[role])]
@@ -344,20 +348,12 @@ class FunctionalGroups:
                 if fg_name not in fgs:
                     continue
                 for product in transformer(self):
-                    # skip disconnected products (e.g. cutting one ion of a salt
-                    # leaves the counter-ion detached); sticky_smiles needs one
-                    # connected component.
-                    if product.connected_components_count != 1:
-                        continue
                     # the transformer guarantees exactly one freshly created [At]
                     # cap, and a new atom is always the highest atom number.
                     n_at = max(product)
-                    canonical = str(product)
-                    product.flush_cache()
                     left = product.sticky_smiles(left=n_at, remove_left=True, keep_bond_left=True)
-                    product.flush_cache()
                     right = product.sticky_smiles(right=n_at, remove_right=True, keep_bond_right=True)
-                    yield FragmentResult(role_name, left, right, canonical)
+                    yield FragmentResult(role_name, left, right, str(product))
 
     def sticky_linkers(self, role_left: Optional[str] = None,
                        role_right: Optional[str] = None) -> Iterator['LinkerResult']:
@@ -377,6 +373,10 @@ class FunctionalGroups:
             raise ValueError(f'Unknown role: {role_left}')
         if role_right is not None and role_right not in role_rules:
             raise ValueError(f'Unknown role: {role_right}')
+        # as in sticky_fragments: no cap rule disconnects a connected molecule,
+        # so only a salt/mixture input could yield a detached component.
+        if self.connected_components_count != 1:
+            return
 
         fgs = self.functional_groups
         left_items = role_transformers.items() if role_left is None else [(role_left, role_transformers[role_left])]
@@ -390,7 +390,6 @@ class FunctionalGroups:
                     # highest atom number; label it 210 before the second stage.
                     n210 = max(inter)
                     inter.atom(n210).isotope = 210
-                    inter.flush_cache()
 
                     right_items = (role_transformers.items() if role_right is None
                                    else [(role_right, role_transformers[role_right])])
@@ -399,9 +398,6 @@ class FunctionalGroups:
                             for product in right_t(inter):
                                 n211 = max(product)
                                 product.atom(n211).isotope = 211
-                                if product.connected_components_count != 1:
-                                    continue
-                                product.flush_cache()
                                 yield LinkerResult(left_name, right_name,
                                                    product.sticky_smiles(left=n210, right=n211),
                                                    str(product))
