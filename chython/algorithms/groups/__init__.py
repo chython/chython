@@ -19,12 +19,28 @@
 from collections.abc import Iterator
 from functools import cached_property
 from itertools import permutations
+from typing import NamedTuple, Optional
 from ._functional import rules as functional_rules
 from ._oxidations import rules as oxidation_rules
 from ._protective import rules as protective_rules
 from ._reactions import rules as reaction_rules
 from ._reductions import rules as reduction_rules
+from ._roles import roles as role_rules, transformers as role_transformers
 from ._transformations import rules as transformation_rules
+
+class FragmentResult(NamedTuple):
+    role: str              # role name of the single [At] attachment
+    sticky_smiles: str     # [At]-terminated, concatenation-ready SMILES
+    canonical_smiles: str  # canonical SMILES of the capped fragment (dedup key)
+
+
+def _new_astatine(mol):
+    """Return the atom number of the freshly created (isotopeless) astatine cap."""
+    for n, a in mol.atoms():
+        if a.atomic_symbol == 'At' and a.isotope is None:
+            return n
+    return None
+
 
 # Descriptor bucket boundaries (MW in Da)
 _MW_BOUNDS = (150, 250, 350, 450, 550)
@@ -301,6 +317,35 @@ class FunctionalGroups:
                 for rxn in reactor(self):
                     yield name, rxn
 
+    def sticky_fragments(self, role: Optional[str] = None) -> Iterator['FragmentResult']:
+        """
+        Enumerate mono-attachment sticky fragments (capped with plain [At]).
+
+        mol.sticky_fragments() -> yields FragmentResult for all known roles.
+        mol.sticky_fragments('aryl_halide') -> only that role.
+
+        One result is yielded per match; dedup by canonical_smiles downstream.
+
+        :param role: optional role name to restrict enumeration.
+        """
+        if role is not None and role not in role_rules:
+            raise ValueError(f'Unknown role: {role}')
+
+        fgs = self.functional_groups
+        items = role_transformers.items() if role is None else [(role, role_transformers[role])]
+        for role_name, entries in items:
+            for fg_name, transformer in entries:
+                if fg_name not in fgs:
+                    continue
+                for product in transformer(self):
+                    n_at = _new_astatine(product)
+                    if n_at is None:
+                        continue
+                    product.flush_cache()
+                    yield FragmentResult(role_name,
+                                         product.sticky_smiles(right=n_at),
+                                         str(product))
+
     def __invert__(self):
         """
         Enumerate all possible single-step molecular transformations
@@ -324,4 +369,4 @@ class FunctionalGroups:
         return self.react(other)
 
 
-__all__ = ['FunctionalGroups', 'fingerprint_schema']
+__all__ = ['FunctionalGroups', 'fingerprint_schema', 'FragmentResult']
