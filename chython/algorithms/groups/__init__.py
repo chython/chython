@@ -28,10 +28,12 @@ from ._reductions import rules as reduction_rules
 from ._roles import roles as role_rules, transformers as role_transformers
 from ._transformations import rules as transformation_rules
 
+
 class FragmentResult(NamedTuple):
-    role: str              # role name of the single [At] attachment
-    sticky_smiles: str     # [At]-terminated, concatenation-ready SMILES
-    canonical_smiles: str  # canonical SMILES of the capped fragment (dedup key)
+    role: str              # role name of the single attachment point
+    sticky_left: str       # open bond at the start ('-...'), glues onto the left
+    sticky_right: str      # open bond at the end ('...-'), glues onto the right
+    canonical_smiles: str  # canonical SMILES of the [At]-capped fragment (dedup key)
 
 
 class LinkerResult(NamedTuple):
@@ -39,14 +41,6 @@ class LinkerResult(NamedTuple):
     role_right: str        # role at the [211At] end
     sticky_smiles: str     # [210At] left, [211At] right, concatenation-ready
     canonical_smiles: str  # canonical SMILES of the capped linker (dedup key)
-
-
-def _new_astatine(mol):
-    """Return the atom number of the freshly created (isotopeless) astatine cap."""
-    for n, a in mol.atoms():
-        if a.atomic_symbol == 'At' and a.isotope is None:
-            return n
-    return None
 
 
 # Descriptor bucket boundaries (MW in Da)
@@ -326,10 +320,15 @@ class FunctionalGroups:
 
     def sticky_fragments(self, role: Optional[str] = None) -> Iterator['FragmentResult']:
         """
-        Enumerate mono-attachment sticky fragments (capped with plain [At]).
+        Enumerate mono-attachment sticky fragments.
 
         mol.sticky_fragments() -> yields FragmentResult for all known roles.
         mol.sticky_fragments('aryl_halide') -> only that role.
+
+        Each result carries the attachment point in three forms: ``sticky_left``
+        (open bond first, ``-...`` — glues onto the left of another fragment),
+        ``sticky_right`` (open bond last, ``...-`` — glues onto the right) and
+        ``canonical_smiles`` (the [At]-capped fragment, the dedup key).
 
         One result is yielded per match; dedup by canonical_smiles downstream.
 
@@ -345,13 +344,20 @@ class FunctionalGroups:
                 if fg_name not in fgs:
                     continue
                 for product in transformer(self):
-                    n_at = _new_astatine(product)
-                    if n_at is None:
+                    # skip disconnected products (e.g. cutting one ion of a salt
+                    # leaves the counter-ion detached); sticky_smiles needs one
+                    # connected component.
+                    if product.connected_components_count != 1:
                         continue
+                    # the transformer guarantees exactly one freshly created [At]
+                    # cap, and a new atom is always the highest atom number.
+                    n_at = max(product)
+                    canonical = str(product)
                     product.flush_cache()
-                    yield FragmentResult(role_name,
-                                         product.sticky_smiles(right=n_at),
-                                         str(product))
+                    left = product.sticky_smiles(left=n_at, remove_left=True, keep_bond_left=True)
+                    product.flush_cache()
+                    right = product.sticky_smiles(right=n_at, remove_right=True, keep_bond_right=True)
+                    yield FragmentResult(role_name, left, right, canonical)
 
     def sticky_linkers(self, role_left: Optional[str] = None,
                        role_right: Optional[str] = None) -> Iterator['LinkerResult']:
@@ -380,19 +386,18 @@ class FunctionalGroups:
                 if left_fg not in fgs:
                     continue
                 for inter in left_t(self):
-                    n210 = _new_astatine(inter)
-                    if n210 is None:
-                        continue
+                    # the transformer guarantees one fresh [At] cap, always the
+                    # highest atom number; label it 210 before the second stage.
+                    n210 = max(inter)
                     inter.atom(n210).isotope = 210
+                    inter.flush_cache()
 
                     right_items = (role_transformers.items() if role_right is None
                                    else [(role_right, role_transformers[role_right])])
                     for right_name, right_entries in right_items:
                         for _right_fg, right_t in right_entries:
                             for product in right_t(inter):
-                                n211 = _new_astatine(product)
-                                if n211 is None:
-                                    continue
+                                n211 = max(product)
                                 product.atom(n211).isotope = 211
                                 if product.connected_components_count != 1:
                                     continue

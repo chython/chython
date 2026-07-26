@@ -31,12 +31,25 @@ def test_aryl_bromide_yields_capped_fragment():
     r = results[0]
     assert isinstance(r, FragmentResult)
     assert r.role == 'aryl_halide'
-    # sticky smiles ends at the [At] cap (terminal, right-anchored)
-    assert '[At]' in r.sticky_smiles
-    assert r.sticky_smiles.rstrip().endswith('[At]')
-    # canonical smiles is a stable string containing the cap and the toluene core
+    # left-aligned form: open bond first ('-...'), glues onto the left
+    assert r.sticky_left.startswith('-')
+    assert '[At]' not in r.sticky_left
+    # right-aligned form: open bond last ('...-'), glues onto the right
+    assert r.sticky_right.rstrip().endswith('-')
+    assert '[At]' not in r.sticky_right
+    # canonical smiles is a stable string containing the [At] cap and toluene core
     assert '[At]' in r.canonical_smiles
     assert 'C' in r.canonical_smiles
+
+
+def test_left_and_right_forms_are_glueable():
+    # two copies of the same fragment glue right-open onto left-open into a
+    # single connected biaryl (no leftover cap, one ring-fused product).
+    r = _by_role(smiles('Brc1ccc(cc1)C'), 'aryl_halide')[0]
+    glued = r.sticky_right + r.sticky_left[1:]  # drop the leading '-'
+    mol = smiles(glued)
+    assert mol.connected_components_count == 1
+    assert '[At]' not in str(mol)
 
 
 def test_canonical_key_stable_across_sources():
@@ -59,6 +72,14 @@ def test_role_none_runs_all_roles():
 def test_no_match_yields_nothing():
     mol = smiles('CCCC')
     assert _by_role(mol, 'aryl_halide') == []
+
+
+def test_salt_input_does_not_abort_enumeration():
+    # sodium 4-bromobenzoate: the Na+ counter-ion is a separate component, so
+    # every cut yields a disconnected product. These must be skipped rather than
+    # raising out of the generator (a raise would drop the whole enumeration).
+    mol = smiles('[Na+].[O-]C(=O)c1ccc(Br)cc1')
+    assert _by_role(mol) == []  # skipped cleanly, no exception
 
 
 def test_unknown_role_raises():
