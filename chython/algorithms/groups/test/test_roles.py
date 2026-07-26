@@ -60,7 +60,9 @@ def test_every_entry_fires_on_a_real_molecule():
         'aryl_silane': '[Si](C)(C)(C)c1ccccc1', 'alkenyl_silane': '[Si](C)(C)(C)C=CC',
         'alkynyl_silane': '[Si](C)(C)(C)C#Cc1ccccc1',
         'alkyl_carboxylic_acid': 'OC(=O)CCC', 'aryl_carboxylic_acid': 'OC(=O)c1ccccc1',
-        'alkenyl_carboxylic_acid': 'OC(=O)C=CC', 'alkynyl_carboxylic_acid': 'OC(=O)C#CC',
+        # cinnamic acid: beta-vinyl carbon (:4) carries a phenyl, so a cap that
+        # drops :4 would visibly truncate the ring (regression guard).
+        'alkenyl_carboxylic_acid': 'OC(=O)C=Cc1ccccc1', 'alkynyl_carboxylic_acid': 'OC(=O)C#CC',
         'acyl_chloride': 'ClC(=O)CCC', 'acyl_bromide': 'BrC(=O)CCC', 'acyl_fluoride': 'FC(=O)CCC',
         'primary_amine': 'NCCC', 'secondary_amine': 'CNCC',
         'primary_aniline': 'Nc1ccccc1', 'secondary_aniline': 'CNc1ccccc1',
@@ -74,3 +76,16 @@ def test_every_entry_fires_on_a_real_molecule():
             assert products, f'{role_name}/{fg_name} produced no capped product'
             assert any(a.atomic_symbol == 'At' for p in products for _, a in p.atoms()), \
                 f'{role_name}/{fg_name} produced no astatine cap'
+
+
+def test_alkenyl_acid_roles_keep_the_vinyl_arm():
+    # regression: alkenyl_carboxylic_acid maps the beta-vinyl carbon as :4; caps
+    # omitting :4 silently delete it and everything beyond (e.g. cinnamic acid's
+    # phenyl). The capped fragment must still contain the aromatic ring.
+    cinnamic = smiles('OC(=O)C=Cc1ccccc1')
+    for role in ('alkenyl_acyl', 'alkenyl_decarboxy'):
+        products = [p for _fg, t in transformers[role] for p in t(cinnamic)]
+        assert products, f'{role} produced no product'
+        for p in products:
+            aromatic = sum(1 for _, a in p.atoms() if a.atomic_symbol == 'C' and a.hybridization == 4)
+            assert aromatic == 6, f'{role} lost the phenyl ring: {p}'

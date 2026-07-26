@@ -117,7 +117,8 @@ roles = {
     # --- acyl handle: keep the carbonyl O and the R-carbon (:3) ---
     'alkyl_acyl':    [('alkyl_carboxylic_acid',    '[A:3]-[A:1](=[A:2])-[At:20]')],
     'aryl_acyl':     [('aryl_carboxylic_acid',     '[A:3]-[A:1](=[A:2])-[At:20]')],
-    'alkenyl_acyl':  [('alkenyl_carboxylic_acid',  '[A:3]-[A:1](=[A:2])-[At:20]')],
+    # alkenyl acid pattern maps the beta-vinyl carbon as :4 -> keep it too
+    'alkenyl_acyl':  [('alkenyl_carboxylic_acid',  '[A:3](=[A:4])-[A:1](=[A:2])-[At:20]')],
     'alkynyl_acyl':  [('alkynyl_carboxylic_acid',  '[A:3]-[A:1](=[A:2])-[At:20]')],
     'acyl_halide': [
         ('acyl_chloride', '[A:1](=[A:2])-[At:20]'),
@@ -150,7 +151,7 @@ roles = {
     # --- decarboxylative coupling: drop the whole COOH, cap the R-carbon (:3) ---
     'alkyl_decarboxy':   [('alkyl_carboxylic_acid',    '[A:3]-[At:20]')],
     'aryl_decarboxy':    [('aryl_carboxylic_acid',     '[A:3]-[At:20]')],
-    'alkenyl_decarboxy': [('alkenyl_carboxylic_acid',  '[A:3]-[At:20]')],
+    'alkenyl_decarboxy': [('alkenyl_carboxylic_acid',  '[A:3](=[A:4])-[At:20]')],
     'alkynyl_decarboxy': [('alkynyl_carboxylic_acid',  '[A:3]-[At:20]')],
 }
 
