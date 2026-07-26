@@ -34,6 +34,13 @@ class FragmentResult(NamedTuple):
     canonical_smiles: str  # canonical SMILES of the capped fragment (dedup key)
 
 
+class LinkerResult(NamedTuple):
+    role_left: str         # role at the [210At] end
+    role_right: str        # role at the [211At] end
+    sticky_smiles: str     # [210At] left, [211At] right, concatenation-ready
+    canonical_smiles: str  # canonical SMILES of the capped linker (dedup key)
+
+
 def _new_astatine(mol):
     """Return the atom number of the freshly created (isotopeless) astatine cap."""
     for n, a in mol.atoms():
@@ -346,6 +353,54 @@ class FunctionalGroups:
                                          product.sticky_smiles(right=n_at),
                                          str(product))
 
+    def sticky_linkers(self, role_left: Optional[str] = None,
+                       role_right: Optional[str] = None) -> Iterator['LinkerResult']:
+        """
+        Enumerate bi-attachment sticky linkers. The first (left) role is capped
+        with [210At], the second (right) role with [211At].
+
+        mol.sticky_linkers() -> all role pairs.
+        mol.sticky_linkers('aryl_halide', 'aryl_acyl') -> restrict both ends.
+
+        One result per (left match, right match); dedup downstream.
+
+        :param role_left: optional role for the [210At] end (None = all roles).
+        :param role_right: optional role for the [211At] end (None = all roles).
+        """
+        if role_left is not None and role_left not in role_rules:
+            raise ValueError(f'Unknown role: {role_left}')
+        if role_right is not None and role_right not in role_rules:
+            raise ValueError(f'Unknown role: {role_right}')
+
+        fgs = self.functional_groups
+        left_items = role_transformers.items() if role_left is None else [(role_left, role_transformers[role_left])]
+
+        for left_name, left_entries in left_items:
+            for left_fg, left_t in left_entries:
+                if left_fg not in fgs:
+                    continue
+                for inter in left_t(self):
+                    n210 = _new_astatine(inter)
+                    if n210 is None:
+                        continue
+                    inter.atom(n210).isotope = 210
+
+                    right_items = (role_transformers.items() if role_right is None
+                                   else [(role_right, role_transformers[role_right])])
+                    for right_name, right_entries in right_items:
+                        for _right_fg, right_t in right_entries:
+                            for product in right_t(inter):
+                                n211 = _new_astatine(product)
+                                if n211 is None:
+                                    continue
+                                product.atom(n211).isotope = 211
+                                if product.connected_components_count != 1:
+                                    continue
+                                product.flush_cache()
+                                yield LinkerResult(left_name, right_name,
+                                                   product.sticky_smiles(left=n210, right=n211),
+                                                   str(product))
+
     def __invert__(self):
         """
         Enumerate all possible single-step molecular transformations
@@ -369,4 +424,4 @@ class FunctionalGroups:
         return self.react(other)
 
 
-__all__ = ['FunctionalGroups', 'fingerprint_schema', 'FragmentResult']
+__all__ = ['FunctionalGroups', 'fingerprint_schema', 'FragmentResult', 'LinkerResult']
