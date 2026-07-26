@@ -1,3 +1,4 @@
+from chython import smiles
 from chython.algorithms.groups._roles import roles, transformers
 from chython.reactor import Transformer
 
@@ -23,8 +24,53 @@ def test_transformers_compiled_per_entry():
             assert isinstance(t, Transformer)
 
 
-def test_leaving_halogen_excludes_fluoride():
+def test_halide_roles_exclude_fluoride():
     # F is its own role, never grouped with Cl/Br/I
-    fg_names = {fg for fg, _ in roles.get('leaving_halogen', [])}
-    assert 'aryl_fluoride' not in fg_names
-    assert 'alkyl_fluoride' not in fg_names
+    for role in ('aryl_halide', 'alkyl_halide', 'alkenyl_halide', 'alkynyl_halide'):
+        fg_names = {fg for fg, _ in roles[role]}
+        assert not any('fluoride' in fg for fg in fg_names)
+
+
+def test_every_entry_fires_on_a_real_molecule():
+    # functional spot-check: each compiled transformer must produce at least one
+    # capped product on a representative substrate (guards against cap templates
+    # referencing unmapped atoms, e.g. the alkynyl_bromide :2 bug).
+    substrates = {
+        'aryl_chloride': 'Clc1ccccc1', 'aryl_bromide': 'Brc1ccccc1', 'aryl_iodide': 'Ic1ccccc1',
+        'alkyl_chloride': 'ClCCC', 'alkyl_bromide': 'BrCCC', 'alkyl_iodide': 'ICCC',
+        'alkenyl_chloride': 'ClC=CC', 'alkenyl_bromide': 'BrC=CC', 'alkenyl_iodide': 'IC=CC',
+        'alkynyl_chloride': 'ClC#CC', 'alkynyl_bromide': 'BrC#CC', 'alkynyl_iodide': 'IC#CC',
+        'aryl_fluoride': 'Fc1ccccc1', 'alkyl_fluoride': 'FCCC',
+        'alkenyl_fluoride': 'FC=CC', 'alkynyl_fluoride': 'FC#CC',
+        'aryl_triflate': 'O=S(=O)(Oc1ccccc1)C(F)(F)F', 'aryl_mesylate': 'O=S(=O)(Oc1ccccc1)C',
+        'aryl_tosylate': 'O=S(=O)(Oc1ccccc1)c1ccc(C)cc1', 'alkyl_triflate': 'O=S(=O)(OCCC)C(F)(F)F',
+        'alkyl_mesylate': 'O=S(=O)(OCCC)C', 'alkyl_tosylate': 'O=S(=O)(OCCC)c1ccc(C)cc1',
+        'aryl_boronic_acid': 'OB(O)c1ccccc1', 'aryl_boronic_ester': 'CC1(C)OB(c2ccccc2)OC1(C)C',
+        'aryl_molander_salt': '[B-](F)(F)(F)c1ccccc1',
+        'alkyl_boronic_acid': 'OB(O)CCC', 'alkyl_boronic_ester': 'CC1(C)OB(CCC)OC1(C)C',
+        'alkyl_molander_salt': '[B-](F)(F)(F)CCC',
+        'alkenyl_boronic_acid': 'OB(O)C=CC', 'alkenyl_boronic_ester': 'CC1(C)OB(C=CC)OC1(C)C',
+        'alkenyl_molander_salt': '[B-](F)(F)(F)C=CC',
+        'alkynyl_boronic_acid': 'OB(O)C#CC', 'alkynyl_boronic_ester': 'CC1(C)OB(C#CC)OC1(C)C',
+        'alkynyl_molander_salt': '[B-](F)(F)(F)C#CC',
+        'aryl_grignard': '[Mg](Br)c1ccccc1', 'alkyl_grignard': '[Mg](Br)CCC', 'alkenyl_grignard': '[Mg](Br)C=CC',
+        'aryl_zinc': '[Zn](Br)c1ccccc1', 'alkyl_zinc': '[Zn](Br)CCC', 'alkenyl_zinc': '[Zn](Br)C=CC',
+        'aryl_stannane': '[Sn](C)(C)(C)c1ccccc1', 'alkyl_stannane': '[Sn](C)(C)(C)CCC',
+        'alkenyl_stannane': '[Sn](C)(C)(C)C=CC',
+        'aryl_silane': '[Si](C)(C)(C)c1ccccc1', 'alkenyl_silane': '[Si](C)(C)(C)C=CC',
+        'alkynyl_silane': '[Si](C)(C)(C)C#Cc1ccccc1',
+        'alkyl_carboxylic_acid': 'OC(=O)CCC', 'aryl_carboxylic_acid': 'OC(=O)c1ccccc1',
+        'alkenyl_carboxylic_acid': 'OC(=O)C=CC', 'alkynyl_carboxylic_acid': 'OC(=O)C#CC',
+        'acyl_chloride': 'ClC(=O)CCC', 'acyl_bromide': 'BrC(=O)CCC', 'acyl_fluoride': 'FC(=O)CCC',
+        'primary_amine': 'NCCC', 'secondary_amine': 'CNCC',
+        'primary_aniline': 'Nc1ccccc1', 'secondary_aniline': 'CNc1ccccc1',
+        'primary_alcohol': 'OCCC', 'secondary_alcohol': 'OC(C)CC', 'tertiary_alcohol': 'OC(C)(C)CC',
+        'phenol': 'Oc1ccccc1', 'carboxylic_acid': 'OC(=O)CCC', 'thiol': 'SCCC',
+    }
+    for role_name, entries in transformers.items():
+        for fg_name, t in entries:
+            mol = smiles(substrates[fg_name])
+            products = list(t(mol))
+            assert products, f'{role_name}/{fg_name} produced no capped product'
+            assert any(a.atomic_symbol == 'At' for p in products for _, a in p.atoms()), \
+                f'{role_name}/{fg_name} produced no astatine cap'
