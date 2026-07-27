@@ -34,7 +34,7 @@ _two_component = [
     ('suzuki_alkyl_boronic_acid',
      'suzuki', 'Brc1ccc(cc1)C.OB(O)CCC>>c1cc(ccc1CCC)C', 1),
     ('buchwald_hartwig_aryl_bromide_primary_amine',
-     'buchwald_hartwig', 'Brc1ccc(cc1)C.NCC>>c1cc(ccc1C)NCC', 1),
+     'buchwald_hartwig', 'Brc1ccc(cc1)C.NCC>>c1cc(ccc1C)NCC', 1, {'deaminative_coupling'}),
     ('buchwald_hartwig_pyridone_bromide_primary_amine',
      'buchwald_hartwig', 'CN1C=CC(Br)=CC1=O.NCC>>CN1C=CC(=CC1=O)NCC', 1),
     ('mitsunobu_ether_primary_alcohol_phenol',
