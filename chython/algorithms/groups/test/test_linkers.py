@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from chython import smiles
-from chython.algorithms.groups import LinkerResult
+from chython.algorithms.groups import StickyLinker
 
 
 def test_bifunctional_yields_dual_capped_linker():
@@ -26,7 +26,7 @@ def test_bifunctional_yields_dual_capped_linker():
     results = list(mol.sticky_linkers('aryl_halide', 'aryl_acyl'))
     assert results, 'expected at least one linker'
     r = results[0]
-    assert isinstance(r, LinkerResult)
+    assert isinstance(r, StickyLinker)
     assert r.role_left == 'aryl_halide'
     assert r.role_right == 'aryl_acyl'
     # sticky_smiles is open-bond at both ends ('-...-'): left end (210) first,
@@ -68,6 +68,30 @@ def test_no_single_atom_linker_from_overlapping_cuts():
             core = r.canonical_smiles.replace('[210At]', '').replace('[211At]', '')
             heavy = ''.join(c for c in core if c.isalpha())
             assert heavy != 'C', f'{smi} produced a single-atom linker: {r.canonical_smiles}'
+
+
+def test_deamino_acyl_linker_from_aminobenzoic_acid():
+    # 4-aminobenzoic acid: aryl_deamino (NH2 via diazonium) + aryl_acyl (COOH).
+    mol = smiles('Nc1ccc(cc1)C(=O)O')
+    results = list(mol.sticky_linkers('aryl_deamino', 'aryl_acyl'))
+    assert results, 'expected at least one linker'
+    r = results[0]
+    assert isinstance(r, StickyLinker)
+    assert r.role_left == 'aryl_deamino' and r.role_right == 'aryl_acyl'
+    assert r.sticky_smiles.startswith('-') and r.sticky_smiles.rstrip().endswith('-')
+    assert '[210At]' in r.canonical_smiles and '[211At]' in r.canonical_smiles
+
+
+def test_alkyl_deamino_halide_linker():
+    # 4-bromobenzylamine: alkyl_deamino (CH2NH2, drops N) + aryl_halide (Br).
+    mol = smiles('NCc1ccc(Br)cc1')
+    results = list(mol.sticky_linkers('alkyl_deamino', 'aryl_halide'))
+    assert results, 'expected at least one linker'
+    r = results[0]
+    assert r.role_left == 'alkyl_deamino' and r.role_right == 'aryl_halide'
+    # nitrogen dropped on the deaminative end
+    assert 'N' not in r.canonical_smiles
+    assert '[210At]' in r.canonical_smiles and '[211At]' in r.canonical_smiles
 
 
 def test_unknown_role_raises():

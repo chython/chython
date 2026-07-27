@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from chython import smiles
-from chython.algorithms.groups import FragmentResult
+from chython.algorithms.groups import StickyFragment
 
 
 def _by_role(mol, role=None):
@@ -29,7 +29,7 @@ def test_aryl_bromide_yields_capped_fragment():
     results = _by_role(mol, 'aryl_halide')
     assert len(results) == 1
     r = results[0]
-    assert isinstance(r, FragmentResult)
+    assert isinstance(r, StickyFragment)
     assert r.role == 'aryl_halide'
     # left-aligned form: open bond first ('-...'), glues onto the left
     assert r.sticky_left.startswith('-')
@@ -67,6 +67,47 @@ def test_role_none_runs_all_roles():
     roles_found = {r.role for r in _by_role(mol)}
     assert 'aryl_halide' in roles_found
     assert 'aryl_acyl' in roles_found
+
+
+def test_alkyl_deamino_drops_nitrogen_caps_carbon():
+    # deaminative coupling handle: propylamine -> propyl cap (N gone, alpha C capped)
+    results = _by_role(smiles('NCCC'), 'alkyl_deamino')
+    assert len(results) == 1
+    r = results[0]
+    assert isinstance(r, StickyFragment)
+    assert r.role == 'alkyl_deamino'
+    # no nitrogen left in the capped fragment
+    assert 'N' not in r.canonical_smiles
+    assert '[At]' in r.canonical_smiles
+    assert r.sticky_left.startswith('-') and r.sticky_right.rstrip().endswith('-')
+
+
+def test_aryl_deamino_from_aniline():
+    # diazonium-route deaminative handle: aniline -> aryl cap (N gone)
+    results = _by_role(smiles('Nc1ccc(cc1)C'), 'aryl_deamino')
+    assert len(results) == 1
+    r = results[0]
+    assert r.role == 'aryl_deamino'
+    assert 'N' not in r.canonical_smiles
+    assert '[At]' in r.canonical_smiles
+
+
+def test_tertiary_alcohol_deoxy_fragment():
+    # tert-butanol under the deoxygenative handle: O dropped, quaternary C capped
+    results = _by_role(smiles('CC(C)(O)C'), 'alkyl_deoxy')
+    assert len(results) == 1
+    r = results[0]
+    assert r.role == 'alkyl_deoxy'
+    assert 'O' not in r.canonical_smiles
+    assert '[At]' in r.canonical_smiles
+
+
+def test_amine_carries_both_nucleophile_and_deamino_roles():
+    # a primary alkyl amine exposes an N-nucleophile handle (alkyl_amine, keeps N)
+    # AND a deaminative C-handle (alkyl_deamino, drops N). role=None yields both.
+    roles_found = {r.role for r in _by_role(smiles('NCCC'))}
+    assert 'alkyl_amine' in roles_found
+    assert 'alkyl_deamino' in roles_found
 
 
 def test_no_match_yields_nothing():

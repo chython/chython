@@ -153,6 +153,11 @@ roles = {
     'aryl_decarboxy':    [('aryl_carboxylic_acid',     '[A:3]-[At:20]')],
     'alkenyl_decarboxy': [('alkenyl_carboxylic_acid',  '[A:3](=[A:4])-[At:20]')],
     'alkynyl_decarboxy': [('alkynyl_carboxylic_acid',  '[A:3]-[At:20]')],
+
+    # --- deaminative coupling: drop the N, cap the alpha carbon (:2) ---
+    # sp3 amines couple via Katritzky pyridinium salts; anilines via diazonium.
+    'alkyl_deamino': [('primary_amine',   '[A:2]-[At:20]')],
+    'aryl_deamino':  [('primary_aniline', '[A:2]-[At:20]')],
 }
 
 
