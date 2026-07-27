@@ -86,6 +86,11 @@ def test_every_entry_fires_on_a_real_molecule():
         'primary_aniline': 'Nc1ccccc1', 'secondary_aniline': 'CNc1ccccc1',
         'primary_alcohol': 'OCCC', 'secondary_alcohol': 'OC(C)CC', 'tertiary_alcohol': 'OC(C)(C)CC',
         'phenol': 'Oc1ccccc1', 'carboxylic_acid': 'OC(=O)CCC', 'thiol': 'SCCC',
+        'primary_amide': 'CCC(=O)N', 'secondary_amide': 'CCC(=O)NC',
+        'pyrrole': 'c1cc[nH]c1', 'pyrazole': 'c1cc[nH]n1', 'imidazole': 'c1c[nH]cn1',
+        'aldehyde': 'CCC=O', 'ketone': 'CC(=O)CC',
+        'terminal_alkyne': 'C#CCC',
+        'sulfonyl_chloride': 'O=S(=O)(Cl)c1ccccc1', 'sulfonyl_fluoride': 'O=S(=O)(F)CCC',
     }
     for role_name, entries in transformers.items():
         for fg_name, t in entries:

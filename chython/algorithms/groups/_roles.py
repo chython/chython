@@ -135,10 +135,40 @@ roles = {
         ('primary_aniline',   '[A:1](-[A:2])-[At:20]'),
         ('secondary_aniline', '[A:1](-[A:2])(-[A:3])-[At:20]'),
     ],
+    # amide N-H as Goldberg/Buchwald N-nucleophile: keep N(:1) + carbonyl C(:2)=O(:3)
+    'amide_nitrogen': [
+        ('primary_amide',   '[A:1](-[A:2]=[A:3])-[At:20]'),
+        ('secondary_amide', '[A:1](-[A:2]=[A:3])-[At:20]'),
+    ],
+    # azole N-H as N-arylation nucleophile: mirror _reactions.py ullmann_pyrrole --
+    # the handle attaches to the h0 (pyridine-type) nitrogen (pyrazole :2, imidazole
+    # :3), NOT the matched h1 NH (:1). Redraw ring bonds aromatic (:) so the ring
+    # survives; the stale h1 on the far nitrogen heals via ignore_pyrrole_hydrogen.
+    'azole_nitrogen': [
+        ('pyrrole',   '[A:1]-[At:20]'),
+        ('pyrazole',  '[A:1]:[A:2]-[At:20]'),
+        ('imidazole', '[A:1]:[A:2]:[A:3]-[At:20]'),
+    ],
     'alkyl_thiol': [('thiol', '[A:1](-[A:2])-[At:20]')],
-    # Mitsunobu O-nucleophiles: keep the oxygen (-> Ar-O[At] / R-C(=O)-O[At])
+    # O-nucleophiles: keep the oxygen (-> R-O[At] / Ar-O[At] / R-C(=O)-O[At])
+    'alkyl_hydroxyl': [
+        ('primary_alcohol',   '[A:1](-[A:2])-[At:20]'),
+        ('secondary_alcohol', '[A:1](-[A:2])-[At:20]'),
+        ('tertiary_alcohol',  '[A:1](-[A:2])-[At:20]'),
+    ],
     'aryl_hydroxyl': [('phenol',          '[A:1](-[A:2])-[At:20]')],
     'acid_hydroxyl': [('carboxylic_acid', '[A:1](=[A:2])-[A:100]-[At:20]')],
+
+    # terminal alkyne C-H as Sonogashira nucleophile: cap the terminal sp carbon,
+    # keep the whole triple bond (:1#:2).
+    'alkynyl_terminal': [('terminal_alkyne', '[At:20]-[A:1]#[A:2]')],
+
+    # sulfonyl electrophile (RSO2X -> sulfonamide/sulfonate ester): cap the sulfur,
+    # keep both S=O (:2, :3); the halide leaving group (:100) is orphan-deleted.
+    'sulfonyl': [
+        ('sulfonyl_chloride', '[A:1](=[A:2])(=[A:3])-[At:20]'),
+        ('sulfonyl_fluoride', '[A:1](=[A:2])(=[A:3])-[At:20]'),
+    ],
 
     # --- deoxygenative coupling: drop the O, cap the carbon ---
     'alkyl_deoxy': [
@@ -147,6 +177,12 @@ roles = {
         ('tertiary_alcohol',  '[A:2]-[At:20]'),
     ],
     'aryl_deoxy': [('phenol', '[A:2]-[At:20]')],
+
+    # --- reductive amination C-side: drop the carbonyl O, cap the carbon (:1) ---
+    'carbonyl_electrophile': [
+        ('aldehyde', '[A:1]-[At:20]'),
+        ('ketone',   '[A:1]-[At:20]'),
+    ],
 
     # --- decarboxylative coupling: drop the whole COOH, cap the R-carbon (:3) ---
     'alkyl_decarboxy':   [('alkyl_carboxylic_acid',    '[A:3]-[At:20]')],
@@ -171,7 +207,8 @@ def _transformers():
         built = []
         for fg_name, cap_template in entries:
             t = Transformer(functional_rules[fg_name], smarts(cap_template),
-                            delete_atoms=True, automorphism_filter=True, canonicalize=True)
+                            delete_atoms=True, automorphism_filter=True, canonicalize=True,
+                            ignore_pyrrole_hydrogen=True)
             built.append((fg_name, t))
         compiled[role_name] = built
     return compiled
