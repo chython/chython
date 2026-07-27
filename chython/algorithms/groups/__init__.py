@@ -19,12 +19,55 @@
 from collections.abc import Iterator
 from functools import cached_property
 from itertools import permutations
+from typing import NamedTuple, Optional
 from ._functional import rules as functional_rules
 from ._oxidations import rules as oxidation_rules
 from ._protective import rules as protective_rules
 from ._reactions import rules as reaction_rules
 from ._reductions import rules as reduction_rules
+from ._roles import roles as role_rules, transformers as role_transformers
 from ._transformations import rules as transformation_rules
+
+
+class EnumeratedReaction(NamedTuple):
+    name: str                    # reaction rule name (e.g. 'suzuki', 'appel')
+    reaction: 'ReactionContainer'  # the enumerated reaction
+
+
+class StickyFragment(NamedTuple):
+    role: str              # role name of the single attachment point
+    sticky_left: str       # open bond at the start ('-...'), glues onto the left
+    sticky_right: str      # open bond at the end ('...-'), glues onto the right
+    canonical_smiles: str  # canonical SMILES of the [At]-capped fragment (dedup key)
+
+
+class StickyLinker(NamedTuple):
+    role_left: str         # role at the [210At] end
+    role_right: str        # role at the [211At] end
+    sticky_smiles: str     # [210At] left, [211At] right, concatenation-ready
+    canonical_smiles: str  # canonical SMILES of the capped linker (dedup key)
+
+
+def _present_transformers(role, fgs):
+    """
+    Resolve a role selector to the (role_name, transformer) pairs whose handle
+    functional group is actually present in ``fgs``.
+
+    role=None -> every role; a role name -> just that role. Raises ValueError on
+    an unknown role name. Filtering against ``fgs`` (the molecule's cached
+    functional_groups) up front means we never run a transformer for a handle the
+    molecule does not carry -- capping a cut never creates a new coupling handle,
+    so a handle absent from the source is absent from every intermediate too.
+    """
+    if role is None:
+        items = role_transformers.items()
+    elif role in role_rules:
+        items = [(role, role_transformers[role])]
+    else:
+        raise ValueError(f'Unknown role: {role}')
+    return [(role_name, transformer) for role_name, entries in items
+            for fg_name, transformer in entries if fg_name in fgs]
+
 
 # Descriptor bucket boundaries (MW in Da)
 _MW_BOUNDS = (150, 250, 350, 450, 550)
@@ -226,12 +269,12 @@ class FunctionalGroups:
             return True
         return False
 
-    def react(self, *others, reaction=None) -> Iterator[tuple[str, 'ReactionContainer']]:
+    def react(self, *others, reaction=None) -> Iterator['EnumeratedReaction']:
         """
         Enumerate possible reaction products between molecules.
 
-        mol1.react(mol2) -> [(reaction_name, ReactionContainer), ...]
-        mol1.react(mol2, mol3) -> [(reaction_name, ReactionContainer), ...]  # multi-component
+        mol1.react(mol2) -> [EnumeratedReaction(name, ReactionContainer), ...]
+        mol1.react(mol2, mol3) -> [EnumeratedReaction(...), ...]  # multi-component
         mol1.react(mol2, reaction='suzuki') -> only suzuki coupling
 
         :param reaction: optional reaction name to apply selectively.
@@ -246,14 +289,14 @@ class FunctionalGroups:
             for perm in permutations(mols):
                 if all(fg in mol.functional_groups for mol, fg in zip(perm, fg_names)):
                     for rxn in reactor(*perm):
-                        yield name, rxn
+                        yield EnumeratedReaction(name, rxn)
                     break
 
-    def oxidize(self, reaction=None) -> Iterator[tuple[str, 'ReactionContainer']]:
+    def oxidize(self, reaction=None) -> Iterator['EnumeratedReaction']:
         """
         Enumerate possible single-step oxidation products.
 
-        mol.oxidize() -> [(reaction_name, ReactionContainer), ...]
+        mol.oxidize() -> [EnumeratedReaction(name, ReactionContainer), ...]
         mol.oxidize(reaction='alcohol_to_aldehyde') -> only this oxidation
 
         :param reaction: optional reaction name to apply selectively.
@@ -264,13 +307,13 @@ class FunctionalGroups:
                 continue
             if fg_name in fgs:
                 for rxn in reactor(self):
-                    yield name, rxn
+                    yield EnumeratedReaction(name, rxn)
 
-    def reduce(self, reaction=None) -> Iterator[tuple[str, 'ReactionContainer']]:
+    def reduce(self, reaction=None) -> Iterator['EnumeratedReaction']:
         """
         Enumerate possible single-step reduction products.
 
-        mol.reduce() -> [(reaction_name, ReactionContainer), ...]
+        mol.reduce() -> [EnumeratedReaction(name, ReactionContainer), ...]
         mol.reduce(reaction='ketone_to_alcohol') -> only this reduction
 
         :param reaction: optional reaction name to apply selectively.
@@ -281,14 +324,14 @@ class FunctionalGroups:
                 continue
             if fg_name in fgs:
                 for rxn in reactor(self):
-                    yield name, rxn
+                    yield EnumeratedReaction(name, rxn)
 
-    def transform(self, reaction=None) -> Iterator[tuple[str, 'ReactionContainer']]:
+    def transform(self, reaction=None) -> Iterator['EnumeratedReaction']:
         """
         Enumerate possible single-molecule functional group interconversions
         (ring formations from open-chain precursors with implicit reagents).
 
-        mol.transform() -> [(reaction_name, ReactionContainer), ...]
+        mol.transform() -> [EnumeratedReaction(name, ReactionContainer), ...]
         mol.transform(reaction='appel') -> only Appel reaction
 
         :param reaction: optional reaction name to apply selectively.
@@ -299,14 +342,95 @@ class FunctionalGroups:
                 continue
             if fg_name in fgs:
                 for rxn in reactor(self):
-                    yield name, rxn
+                    yield EnumeratedReaction(name, rxn)
+
+    def sticky_fragments(self, role: Optional[str] = None) -> Iterator['StickyFragment']:
+        """
+        Enumerate mono-attachment sticky fragments.
+
+        mol.sticky_fragments() -> yields StickyFragment for all known roles.
+        mol.sticky_fragments('aryl_halide') -> only that role.
+
+        Each result carries the attachment point in three forms: ``sticky_left``
+        (open bond first, ``-...`` — glues onto the left of another fragment),
+        ``sticky_right`` (open bond last, ``...-`` — glues onto the right) and
+        ``canonical_smiles`` (the [At]-capped fragment, the dedup key).
+
+        One result is yielded per match; dedup by canonical_smiles downstream.
+
+        :param role: optional role name to restrict enumeration.
+        """
+        # no cap rule disconnects a connected molecule; only a salt/mixture input
+        # would leave a detached counter-ion, which sticky_smiles cannot serialize.
+        if self.connected_components_count != 1:
+            return
+        for role_name, transformer in _present_transformers(role, self.functional_groups):
+            for product in transformer(self):
+                # the transformer guarantees exactly one freshly created [At]
+                # cap, and a new atom is always the highest atom number.
+                n_at = max(product)
+                left = product.sticky_smiles(left=n_at, remove_left=True, keep_bond_left=True)
+                right = product.sticky_smiles(right=n_at, remove_right=True, keep_bond_right=True)
+                yield StickyFragment(role_name, left, right, str(product))
+
+    def sticky_linkers(self, role_left: Optional[str] = None,
+                       role_right: Optional[str] = None) -> Iterator['StickyLinker']:
+        """
+        Enumerate bi-attachment sticky linkers. The first (left) role is capped
+        with [210At], the second (right) role with [211At].
+
+        mol.sticky_linkers() -> all role pairs.
+        mol.sticky_linkers('aryl_halide', 'aryl_acyl') -> restrict both ends.
+
+        One result per (left match, right match); dedup downstream.
+
+        :param role_left: optional role for the [210At] end (None = all roles).
+        :param role_right: optional role for the [211At] end (None = all roles).
+        """
+        # as in sticky_fragments: no cap rule disconnects a connected molecule,
+        # so only a salt/mixture input could yield a detached component.
+        if self.connected_components_count != 1:
+            return
+        fgs = self.functional_groups
+        # capping a cut never creates a coupling handle, so every right handle
+        # must already be present in the source. Resolve both ends up front and
+        # bail before any transform work if either end has no present handle --
+        # this avoids running left transforms only to find no right FG exists.
+        left_transformers = _present_transformers(role_left, fgs)
+        right_transformers = _present_transformers(role_right, fgs)
+        if not left_transformers or not right_transformers:
+            return
+
+        for left_name, left_t in left_transformers:
+            for inter in left_t(self):
+                # the transformer guarantees one fresh [At] cap, always the
+                # highest atom number; label it 210 before the second stage.
+                n210 = max(inter)
+                inter.atom(n210).isotope = 210
+                # source atom the 210 cap hangs off (caps are terminal -> one neighbor)
+                core210 = next(iter(inter._bonds[n210]))
+
+                for right_name, right_t in right_transformers:
+                    for product in right_t(inter):
+                        n211 = max(product)
+                        # both cuts landing on the same atom would collapse the
+                        # linker to a single core (e.g. bromoacetic acid halide +
+                        # decarboxy -> [At]C[At]); require >=1 atom between caps.
+                        if next(iter(product._bonds[n211])) == core210:
+                            continue
+                        product.atom(n211).isotope = 211
+                        yield StickyLinker(left_name, right_name,
+                                           product.sticky_smiles(left=n210, right=n211,
+                                                                 remove_left=True, keep_bond_left=True,
+                                                                 remove_right=True, keep_bond_right=True),
+                                           str(product))
 
     def __invert__(self):
         """
         Enumerate all possible single-step molecular transformations
         (oxidations, reductions, and functional group interconversions).
 
-        ~mol -> [(reaction_name, ReactionContainer), ...]
+        ~mol -> [EnumeratedReaction(name, ReactionContainer), ...]
         """
         yield from self.oxidize()
         yield from self.reduce()
@@ -316,12 +440,13 @@ class FunctionalGroups:
         """
         Enumerate possible reaction products between molecules.
 
-        mol1 @ mol2 -> [(reaction_name, ReactionContainer), ...]
-        mol1 @ [mol2, mol3] -> [(reaction_name, ReactionContainer), ...]  # multi-component
+        mol1 @ mol2 -> [EnumeratedReaction(name, ReactionContainer), ...]
+        mol1 @ [mol2, mol3] -> [EnumeratedReaction(...), ...]  # multi-component
         """
         if isinstance(other, (list, tuple)):
             return self.react(*other)
         return self.react(other)
 
 
-__all__ = ['FunctionalGroups', 'fingerprint_schema']
+__all__ = ['FunctionalGroups', 'fingerprint_schema', 'EnumeratedReaction',
+           'StickyFragment', 'StickyLinker']

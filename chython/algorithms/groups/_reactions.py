@@ -170,10 +170,21 @@ def _rules():
                                    '[A:2]-[A:100]-[A:3](=[A:4])'))
 
     # deoxygenative coupling: ROH + ArX -> R-Ar
-    for alcohol in ('primary_alcohol', 'secondary_alcohol'):
+    for alcohol in ('primary_alcohol', 'secondary_alcohol', 'tertiary_alcohol'):
         for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
             rules.append(_make_reactor('deoxygenative_coupling',
                                        [(alcohol, None),
+                                        (halide, {1: 3})],
+                                       '[A:2]-[A:3]'))
+
+    # deaminative coupling: R-NH2 + ArX -> R-Ar
+    # sp3 amines couple via Katritzky pyridinium salts; anilines via diazonium
+    # (Meerwein/Gomberg-Bachmann-type). The amine carbon (:2) bonds to the aryl
+    # halide (:3); the nitrogen (:1) leaves.
+    for amine in ('primary_amine', 'primary_aniline'):
+        for halide in ('aryl_chloride', 'aryl_bromide', 'aryl_iodide', 'aryl_triflate'):
+            rules.append(_make_reactor('deaminative_coupling',
+                                       [(amine, None),
                                         (halide, {1: 3})],
                                        '[A:2]-[A:3]'))
 
