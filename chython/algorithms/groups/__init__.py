@@ -355,15 +355,11 @@ class FunctionalGroups:
 
         :param role: optional role name to restrict enumeration.
         """
-        transformers = _present_transformers(role, self.functional_groups)
-        if not transformers:
-            return
         # no cap rule disconnects a connected molecule; only a salt/mixture input
         # would leave a detached counter-ion, which sticky_smiles cannot serialize.
         if self.connected_components_count != 1:
             return
-
-        for role_name, transformer in transformers:
+        for role_name, transformer in _present_transformers(role, self.functional_groups):
             for product in transformer(self):
                 # the transformer guarantees exactly one freshly created [At]
                 # cap, and a new atom is always the highest atom number.
@@ -386,6 +382,10 @@ class FunctionalGroups:
         :param role_left: optional role for the [210At] end (None = all roles).
         :param role_right: optional role for the [211At] end (None = all roles).
         """
+        # as in sticky_fragments: no cap rule disconnects a connected molecule,
+        # so only a salt/mixture input could yield a detached component.
+        if self.connected_components_count != 1:
+            return
         fgs = self.functional_groups
         # capping a cut never creates a coupling handle, so every right handle
         # must already be present in the source. Resolve both ends up front and
@@ -395,10 +395,6 @@ class FunctionalGroups:
         right_transformers = _present_transformers(role_right, fgs)
         if not left_transformers or not right_transformers:
             return
-        # as in sticky_fragments: no cap rule disconnects a connected molecule,
-        # so only a salt/mixture input could yield a detached component.
-        if self.connected_components_count != 1:
-            return
 
         for left_name, left_t in left_transformers:
             for inter in left_t(self):
@@ -406,10 +402,17 @@ class FunctionalGroups:
                 # highest atom number; label it 210 before the second stage.
                 n210 = max(inter)
                 inter.atom(n210).isotope = 210
+                # source atom the 210 cap hangs off (caps are terminal -> one neighbor)
+                core210 = next(iter(inter._bonds[n210]))
 
                 for right_name, right_t in right_transformers:
                     for product in right_t(inter):
                         n211 = max(product)
+                        # both cuts landing on the same atom would collapse the
+                        # linker to a single core (e.g. bromoacetic acid halide +
+                        # decarboxy -> [At]C[At]); require >=1 atom between caps.
+                        if next(iter(product._bonds[n211])) == core210:
+                            continue
                         product.atom(n211).isotope = 211
                         yield LinkerResult(left_name, right_name,
                                            product.sticky_smiles(left=n210, right=n211,

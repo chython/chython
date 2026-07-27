@@ -59,6 +59,17 @@ def test_monofunctional_yields_no_linker():
     assert list(mol.sticky_linkers('aryl_halide', 'aryl_acyl')) == []
 
 
+def test_no_single_atom_linker_from_overlapping_cuts():
+    # bromoacetic acid: alkyl_halide caps C2 (drops Br) and alkyl_decarboxy also
+    # anchors on C2 (drops the whole COOH). Both cuts on one atom would collapse
+    # to [At]C[At] -- a degenerate zero-span linker that must be suppressed.
+    for smi in ('BrCC(=O)O', 'OCC(=O)O', 'OC(=O)CC(=O)O'):
+        for r in smiles(smi).sticky_linkers():
+            core = r.canonical_smiles.replace('[210At]', '').replace('[211At]', '')
+            heavy = ''.join(c for c in core if c.isalpha())
+            assert heavy != 'C', f'{smi} produced a single-atom linker: {r.canonical_smiles}'
+
+
 def test_unknown_role_raises():
     import pytest
     mol = smiles('Brc1ccc(cc1)C(=O)O')
