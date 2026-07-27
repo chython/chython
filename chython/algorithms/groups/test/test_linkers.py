@@ -29,11 +29,12 @@ def test_bifunctional_yields_dual_capped_linker():
     assert isinstance(r, LinkerResult)
     assert r.role_left == 'aryl_halide'
     assert r.role_right == 'aryl_acyl'
-    # both isotope caps present, ordered 210 (left) / 211 (right)
-    assert '[210At]' in r.sticky_smiles
-    assert '[211At]' in r.sticky_smiles
-    assert r.sticky_smiles.lstrip().startswith('[210At]')
-    assert r.sticky_smiles.rstrip().endswith('[211At]')
+    # sticky_smiles is open-bond at both ends ('-...-'): left end (210) first,
+    # right end (211) last, ready to concatenate on either side.
+    assert r.sticky_smiles.startswith('-')
+    assert r.sticky_smiles.rstrip().endswith('-')
+    assert '[At]' not in r.sticky_smiles
+    # isotope caps live in the canonical dedup key, ordered 210 (left) / 211 (right)
     assert '[210At]' in r.canonical_smiles and '[211At]' in r.canonical_smiles
 
 

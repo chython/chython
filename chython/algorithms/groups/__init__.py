@@ -43,6 +43,27 @@ class LinkerResult(NamedTuple):
     canonical_smiles: str  # canonical SMILES of the capped linker (dedup key)
 
 
+def _present_transformers(role, fgs):
+    """
+    Resolve a role selector to the (role_name, transformer) pairs whose handle
+    functional group is actually present in ``fgs``.
+
+    role=None -> every role; a role name -> just that role. Raises ValueError on
+    an unknown role name. Filtering against ``fgs`` (the molecule's cached
+    functional_groups) up front means we never run a transformer for a handle the
+    molecule does not carry -- capping a cut never creates a new coupling handle,
+    so a handle absent from the source is absent from every intermediate too.
+    """
+    if role is None:
+        items = role_transformers.items()
+    elif role in role_rules:
+        items = [(role, role_transformers[role])]
+    else:
+        raise ValueError(f'Unknown role: {role}')
+    return [(role_name, transformer) for role_name, entries in items
+            for fg_name, transformer in entries if fg_name in fgs]
+
+
 # Descriptor bucket boundaries (MW in Da)
 _MW_BOUNDS = (150, 250, 350, 450, 550)
 
@@ -334,26 +355,22 @@ class FunctionalGroups:
 
         :param role: optional role name to restrict enumeration.
         """
-        if role is not None and role not in role_rules:
-            raise ValueError(f'Unknown role: {role}')
+        transformers = _present_transformers(role, self.functional_groups)
+        if not transformers:
+            return
         # no cap rule disconnects a connected molecule; only a salt/mixture input
         # would leave a detached counter-ion, which sticky_smiles cannot serialize.
         if self.connected_components_count != 1:
             return
 
-        fgs = self.functional_groups
-        items = role_transformers.items() if role is None else [(role, role_transformers[role])]
-        for role_name, entries in items:
-            for fg_name, transformer in entries:
-                if fg_name not in fgs:
-                    continue
-                for product in transformer(self):
-                    # the transformer guarantees exactly one freshly created [At]
-                    # cap, and a new atom is always the highest atom number.
-                    n_at = max(product)
-                    left = product.sticky_smiles(left=n_at, remove_left=True, keep_bond_left=True)
-                    right = product.sticky_smiles(right=n_at, remove_right=True, keep_bond_right=True)
-                    yield FragmentResult(role_name, left, right, str(product))
+        for role_name, transformer in transformers:
+            for product in transformer(self):
+                # the transformer guarantees exactly one freshly created [At]
+                # cap, and a new atom is always the highest atom number.
+                n_at = max(product)
+                left = product.sticky_smiles(left=n_at, remove_left=True, keep_bond_left=True)
+                right = product.sticky_smiles(right=n_at, remove_right=True, keep_bond_right=True)
+                yield FragmentResult(role_name, left, right, str(product))
 
     def sticky_linkers(self, role_left: Optional[str] = None,
                        role_right: Optional[str] = None) -> Iterator['LinkerResult']:
@@ -369,38 +386,36 @@ class FunctionalGroups:
         :param role_left: optional role for the [210At] end (None = all roles).
         :param role_right: optional role for the [211At] end (None = all roles).
         """
-        if role_left is not None and role_left not in role_rules:
-            raise ValueError(f'Unknown role: {role_left}')
-        if role_right is not None and role_right not in role_rules:
-            raise ValueError(f'Unknown role: {role_right}')
+        fgs = self.functional_groups
+        # capping a cut never creates a coupling handle, so every right handle
+        # must already be present in the source. Resolve both ends up front and
+        # bail before any transform work if either end has no present handle --
+        # this avoids running left transforms only to find no right FG exists.
+        left_transformers = _present_transformers(role_left, fgs)
+        right_transformers = _present_transformers(role_right, fgs)
+        if not left_transformers or not right_transformers:
+            return
         # as in sticky_fragments: no cap rule disconnects a connected molecule,
         # so only a salt/mixture input could yield a detached component.
         if self.connected_components_count != 1:
             return
 
-        fgs = self.functional_groups
-        left_items = role_transformers.items() if role_left is None else [(role_left, role_transformers[role_left])]
+        for left_name, left_t in left_transformers:
+            for inter in left_t(self):
+                # the transformer guarantees one fresh [At] cap, always the
+                # highest atom number; label it 210 before the second stage.
+                n210 = max(inter)
+                inter.atom(n210).isotope = 210
 
-        for left_name, left_entries in left_items:
-            for left_fg, left_t in left_entries:
-                if left_fg not in fgs:
-                    continue
-                for inter in left_t(self):
-                    # the transformer guarantees one fresh [At] cap, always the
-                    # highest atom number; label it 210 before the second stage.
-                    n210 = max(inter)
-                    inter.atom(n210).isotope = 210
-
-                    right_items = (role_transformers.items() if role_right is None
-                                   else [(role_right, role_transformers[role_right])])
-                    for right_name, right_entries in right_items:
-                        for _right_fg, right_t in right_entries:
-                            for product in right_t(inter):
-                                n211 = max(product)
-                                product.atom(n211).isotope = 211
-                                yield LinkerResult(left_name, right_name,
-                                                   product.sticky_smiles(left=n210, right=n211),
-                                                   str(product))
+                for right_name, right_t in right_transformers:
+                    for product in right_t(inter):
+                        n211 = max(product)
+                        product.atom(n211).isotope = 211
+                        yield LinkerResult(left_name, right_name,
+                                           product.sticky_smiles(left=n210, right=n211,
+                                                                 remove_left=True, keep_bond_left=True,
+                                                                 remove_right=True, keep_bond_right=True),
+                                           str(product))
 
     def __invert__(self):
         """
