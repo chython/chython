@@ -44,7 +44,8 @@ class StickyFragment(NamedTuple):
 class StickyLinker(NamedTuple):
     role_left: str         # role at the [210At] end
     role_right: str        # role at the [211At] end
-    sticky_smiles: str     # [210At] left, [211At] right, concatenation-ready
+    sticky_left: str       # '-A...B-' role_left end open first (glues that end left)
+    sticky_right: str      # '-B...A-' role_right end open first (linker flipped)
     canonical_smiles: str  # canonical SMILES of the capped linker (dedup key)
 
 
@@ -213,27 +214,35 @@ class FunctionalGroups:
                 found[name] = c
         return found
 
-    def remove_protection(self, name=None, canonicalize=True,
+    def remove_protection(self, names=None, canonicalize=True,
                           fix_tautomers=True, ignore_pyrrole_hydrogen=False,
-                          *, start=None) -> bool:
+                          *, start=None, logging=False) -> 'bool | list':
         """
         Remove protective groups from the given molecule if applicable.
 
-        :param name: Specific protective group name to remove (None = all).
+        :param names: protective group names to remove, as a list. ``None``
+            removes all; a list removes exactly that set (useful to strip
+            incidental protecting groups while leaving an intrinsic one in
+            place). Unknown names raise ``ValueError``.
         :param canonicalize: Run full canonicalization after removal.
         :param fix_tautomers: Canonicalize tautomer forms. Passed to canonicalize().
         :param ignore_pyrrole_hydrogen: Fix invalid rings like Cn1cc[nH]c1. Passed to canonicalize().
         :param start: Starting atom number for newly added atoms (e.g. restored carbonyl O).
             When None, defaults to max(existing) + 1.
+        :param logging: return the list of freed (kept) atom numbers instead of a
+            bool. These are the heteroatoms retained from each protecting-group
+            match (e.g. the revealed amine nitrogen) — the atoms that become newly
+            reactive, ready to feed a sticky_fragments/sticky_linkers ``masked`` set.
         """
         to_delete = set()
         to_add = []
-        if name is None:
+        if names is None:
             rules = protective_rules.values()
-        elif name in protective_rules:
-            rules = [protective_rules[name]]
         else:
-            raise ValueError(f'Unknown protective group: {name}')
+            unknown = set(names) - protective_rules.keys()
+            if unknown:
+                raise ValueError(f'Unknown protective group(s): {sorted(unknown)}')
+            rules = [protective_rules[n] for n in names]
 
         kept_atoms = set()
         for q, keep, add, *_ in rules:
@@ -266,8 +275,8 @@ class FunctionalGroups:
                     if a.atomic_symbol == 'N' and a.hybridization == 4 and a.implicit_hydrogens is None:
                         a._implicit_hydrogens = 1
                 self.fix_stereo()
-            return True
-        return False
+            return list(kept_atoms) if logging else True
+        return [] if logging else False
 
     def react(self, *others, reaction=None) -> Iterator['EnumeratedReaction']:
         """
@@ -344,7 +353,8 @@ class FunctionalGroups:
                 for rxn in reactor(self):
                     yield EnumeratedReaction(name, rxn)
 
-    def sticky_fragments(self, role: Optional[str] = None) -> Iterator['StickyFragment']:
+    def sticky_fragments(self, role: Optional[str] = None, *,
+                         masked=None) -> Iterator['StickyFragment']:
         """
         Enumerate mono-attachment sticky fragments.
 
@@ -359,22 +369,34 @@ class FunctionalGroups:
         One result is yielded per match; dedup by canonical_smiles downstream.
 
         :param role: optional role name to restrict enumeration.
+        :param masked: optional atom numbers barred from becoming the attachment
+            point. A fragment whose fresh [At] cap hangs off a masked atom is
+            skipped. Use it after ``remove_protection(logging=True)`` so a group
+            revealed by an incidental deprotection ("cleaved FG") never becomes a
+            standalone coupling handle. Numbers refer to this molecule's atoms and
+            survive into the transformer products unchanged.
         """
         # no cap rule disconnects a connected molecule; only a salt/mixture input
         # would leave a detached counter-ion, which sticky_smiles cannot serialize.
         if self.connected_components_count != 1:
             return
+        masked = masked or ()
         for role_name, transformer in _present_transformers(role, self.functional_groups):
             for product in transformer(self):
                 # the transformer guarantees exactly one freshly created [At]
                 # cap, and a new atom is always the highest atom number.
                 n_at = max(product)
+                # the source atom the cap hangs off keeps its original number;
+                # a cap on a masked atom is a barred (step-1) attachment.
+                if next(iter(product._bonds[n_at])) in masked:
+                    continue
                 left = product.sticky_smiles(left=n_at, remove_left=True, keep_bond_left=True)
                 right = product.sticky_smiles(right=n_at, remove_right=True, keep_bond_right=True)
                 yield StickyFragment(role_name, left, right, str(product))
 
     def sticky_linkers(self, role_left: Optional[str] = None,
-                       role_right: Optional[str] = None) -> Iterator['StickyLinker']:
+                       role_right: Optional[str] = None, *,
+                       masked=None) -> Iterator['StickyLinker']:
         """
         Enumerate bi-attachment sticky linkers. The first (left) role is capped
         with [210At], the second (right) role with [211At].
@@ -382,15 +404,28 @@ class FunctionalGroups:
         mol.sticky_linkers() -> all role pairs.
         mol.sticky_linkers('aryl_halide', 'aryl_acyl') -> restrict both ends.
 
+        Each result carries the whole linker in two open-bond traversals ready to
+        concatenate: ``sticky_left`` (role_left end open first, ``-A...B-``) and
+        ``sticky_right`` (role_right end open first, the flipped ``-B...A-``), plus
+        ``canonical_smiles`` (the [210At]/[211At]-capped structure, the dedup key,
+        always 210=left / 211=right).
+
         One result per (left match, right match); dedup downstream.
 
         :param role_left: optional role for the [210At] end (None = all roles).
         :param role_right: optional role for the [211At] end (None = all roles).
+        :param masked: optional atom numbers barred from the LEFT (step-1, [210At])
+            end only; the RIGHT (step-2, [211At]) end is exempt. A masked atom is
+            one revealed by an intrinsic deprotection whose sole coupling role is
+            the deferred second step (e.g. a Boc-masked amine): it may sit on the
+            right but never the left. This also removes the (amine_left, X_right) /
+            (X_left, amine_right) ordering duplication for such reserved ends.
         """
         # as in sticky_fragments: no cap rule disconnects a connected molecule,
         # so only a salt/mixture input could yield a detached component.
         if self.connected_components_count != 1:
             return
+        masked = masked or ()
         fgs = self.functional_groups
         # capping a cut never creates a coupling handle, so every right handle
         # must already be present in the source. Resolve both ends up front and
@@ -406,9 +441,12 @@ class FunctionalGroups:
                 # the transformer guarantees one fresh [At] cap, always the
                 # highest atom number; label it 210 before the second stage.
                 n210 = max(inter)
-                inter.atom(n210).isotope = 210
                 # source atom the 210 cap hangs off (caps are terminal -> one neighbor)
                 core210 = next(iter(inter._bonds[n210]))
+                # a masked atom is barred from the step-1 (left) end
+                if core210 in masked:
+                    continue
+                inter.atom(n210).isotope = 210
 
                 for right_name, right_t in right_transformers:
                     for product in right_t(inter):
@@ -416,14 +454,20 @@ class FunctionalGroups:
                         # both cuts landing on the same atom would collapse the
                         # linker to a single core (e.g. bromoacetic acid halide +
                         # decarboxy -> [At]C[At]); require >=1 atom between caps.
+                        # the right (step-2) end is exempt from `masked` by design.
                         if next(iter(product._bonds[n211])) == core210:
                             continue
                         product.atom(n211).isotope = 211
+                        # two traversal orientations of the same linker: 210-first
+                        # (-A...B-) and 211-first (-B...A-), both open-bond both-ends.
+                        sticky_left = product.sticky_smiles(left=n210, right=n211,
+                                                            remove_left=True, keep_bond_left=True,
+                                                            remove_right=True, keep_bond_right=True)
+                        sticky_right = product.sticky_smiles(left=n211, right=n210,
+                                                             remove_left=True, keep_bond_left=True,
+                                                             remove_right=True, keep_bond_right=True)
                         yield StickyLinker(left_name, right_name,
-                                           product.sticky_smiles(left=n210, right=n211,
-                                                                 remove_left=True, keep_bond_left=True,
-                                                                 remove_right=True, keep_bond_right=True),
-                                           str(product))
+                                           sticky_left, sticky_right, str(product))
 
     def __invert__(self):
         """

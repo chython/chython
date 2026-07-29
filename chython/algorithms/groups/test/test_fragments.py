@@ -128,3 +128,27 @@ def test_unknown_role_raises():
     mol = smiles('Brc1ccccc1')
     with pytest.raises(ValueError):
         list(mol.sticky_fragments('not_a_role'))
+
+
+def test_masked_atom_suppresses_its_cap():
+    # Boc-benzylamine: strip the Boc, then bar the just-revealed amine N (a
+    # "cleaved FG") from being a standalone step-1 handle. The N-nucleophile
+    # role (alkyl_amine) must vanish; the deaminative C-handle (alkyl_deamino,
+    # which caps the alpha-carbon, not the N) and aryl_halide survive.
+    mol = smiles('O=C(OC(C)(C)C)NCc1ccc(Br)cc1')
+    mol.canonicalize()
+    freed = mol.remove_protection(logging=True)
+    assert freed, 'expected the Boc removal to free the amine nitrogen'
+    unmasked = {f.role for f in mol.sticky_fragments()}
+    masked = {f.role for f in mol.sticky_fragments(masked=freed)}
+    assert 'alkyl_amine' in unmasked
+    assert 'alkyl_amine' not in masked          # freed amine barred as a handle
+    assert {'alkyl_deamino', 'aryl_halide'} <= masked   # others untouched
+
+
+def test_masked_none_and_empty_are_equivalent():
+    mol = smiles('Nc1ccc(Br)cc1')
+    default = {f.canonical_smiles for f in mol.sticky_fragments()}
+    explicit = {f.canonical_smiles for f in mol.sticky_fragments(masked=None)}
+    empty = {f.canonical_smiles for f in mol.sticky_fragments(masked=())}
+    assert default == explicit == empty

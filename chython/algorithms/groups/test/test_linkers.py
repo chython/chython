@@ -29,11 +29,12 @@ def test_bifunctional_yields_dual_capped_linker():
     assert isinstance(r, StickyLinker)
     assert r.role_left == 'aryl_halide'
     assert r.role_right == 'aryl_acyl'
-    # sticky_smiles is open-bond at both ends ('-...-'): left end (210) first,
-    # right end (211) last, ready to concatenate on either side.
-    assert r.sticky_smiles.startswith('-')
-    assert r.sticky_smiles.rstrip().endswith('-')
-    assert '[At]' not in r.sticky_smiles
+    # two open-bond traversals ('-...-'): sticky_left leads with the role_left end,
+    # sticky_right leads with the role_right end (the flipped orientation).
+    for s in (r.sticky_left, r.sticky_right):
+        assert s.startswith('-') and s.rstrip().endswith('-')
+        assert '[At]' not in s
+    assert r.sticky_left != r.sticky_right          # genuinely different orientations
     # isotope caps live in the canonical dedup key, ordered 210 (left) / 211 (right)
     assert '[210At]' in r.canonical_smiles and '[211At]' in r.canonical_smiles
 
@@ -78,7 +79,8 @@ def test_deamino_acyl_linker_from_aminobenzoic_acid():
     r = results[0]
     assert isinstance(r, StickyLinker)
     assert r.role_left == 'aryl_deamino' and r.role_right == 'aryl_acyl'
-    assert r.sticky_smiles.startswith('-') and r.sticky_smiles.rstrip().endswith('-')
+    for s in (r.sticky_left, r.sticky_right):
+        assert s.startswith('-') and s.rstrip().endswith('-')
     assert '[210At]' in r.canonical_smiles and '[211At]' in r.canonical_smiles
 
 
@@ -101,3 +103,40 @@ def test_unknown_role_raises():
         list(mol.sticky_linkers('aryl_halide', 'nope'))
     with pytest.raises(ValueError):
         list(mol.sticky_linkers('nope', 'aryl_acyl'))
+
+
+def test_sticky_left_and_right_are_reversed_traversals():
+    # both traversals open the bond at BOTH ends ('-...-'); sticky_left leads with
+    # the role_left (210) end, sticky_right leads with the role_right (211) end.
+    mol = smiles('Brc1ccc(cc1)C(=O)O')
+    r = list(mol.sticky_linkers('aryl_halide', 'aryl_acyl'))[0]
+    # halide end is the aromatic ring carbon; acyl end is the carbonyl carbon.
+    # sticky_left starts on the ring, sticky_right starts on the C=O.
+    assert r.sticky_left.startswith('-c') and r.sticky_left.rstrip().endswith('-')
+    assert r.sticky_right.startswith('-C(=O)') and r.sticky_right.rstrip().endswith('-')
+
+
+def test_masked_atom_barred_from_left_but_allowed_on_right():
+    # Boc-benzylamine: reveal the amine, then mask it. As a "cleaved FG" it may
+    # only be the deferred step-2 (right, 211) end of a linker, never step-1
+    # (left, 210) -- which also kills the (amine_left,X)/(X,amine_right) ordering
+    # duplicate.
+    mol = smiles('O=C(OC(C)(C)C)NCc1ccc(Br)cc1')
+    mol.canonicalize()
+    freed = mol.remove_protection(logging=True)
+    unmasked = {(l.role_left, l.role_right) for l in mol.sticky_linkers()}
+    masked = {(l.role_left, l.role_right) for l in mol.sticky_linkers(masked=freed)}
+    # unmasked surfaces the amine at BOTH orientations
+    assert ('alkyl_amine', 'aryl_halide') in unmasked
+    assert ('aryl_halide', 'alkyl_amine') in unmasked
+    # masked: amine barred as LEFT, kept as RIGHT
+    assert ('alkyl_amine', 'aryl_halide') not in masked
+    assert ('aryl_halide', 'alkyl_amine') in masked
+
+
+def test_masked_none_and_empty_are_equivalent():
+    mol = smiles('Brc1ccc(cc1)C(=O)O')
+    default = {l.canonical_smiles for l in mol.sticky_linkers()}
+    explicit = {l.canonical_smiles for l in mol.sticky_linkers(masked=None)}
+    empty = {l.canonical_smiles for l in mol.sticky_linkers(masked=())}
+    assert default == explicit == empty

@@ -33,7 +33,7 @@ def test_deprotection(name, q, keep, add, test_smi, cleaved_smi, decoys):
     # deprotection produces expected product
     a = smiles(cleaved_smi)
     a.canonicalize()
-    t.remove_protection(name)
+    t.remove_protection([name])
     assert t == a, f'deprotection gave {t}, expected {a}'
     # decoys are not matched
     for d in decoys:
@@ -90,6 +90,42 @@ def test_protective_groups_no_overlap():
                     f"'{other}' deletable atoms overlap with '{name}' on '{test_smi}'. "
                     f"Reorder rules in _protective.py so '{name}' comes before '{other}'."
                 )
+
+
+def test_logging_returns_freed_atoms():
+    # Boc-benzylamine: removing the Boc reveals the amine nitrogen. logging=True
+    # returns the freed (kept) atom numbers instead of a bool, ready to feed a
+    # sticky_fragments/sticky_linkers ``masked`` set.
+    mol = smiles('O=C(OC(C)(C)C)NCc1ccc(Br)cc1')
+    mol.canonicalize()
+    freed = mol.remove_protection(logging=True)
+    assert isinstance(freed, list) and freed
+    # the freed atom is the revealed amine nitrogen
+    assert all(mol.atom(n).atomic_symbol == 'N' for n in freed)
+
+
+def test_logging_noop_returns_empty_list():
+    # nothing to deprotect -> [] (the logging analogue of False)
+    mol = smiles('Brc1ccccc1')
+    mol.canonicalize()
+    assert mol.remove_protection(logging=True) == []
+    assert mol.remove_protection() is False
+
+
+def test_selective_names_leave_other_pg_in_place():
+    # boc + tbu on one molecule: removing only ['amine_boc'] must leave the tbu ether.
+    mol = smiles('CC(C)(C)OC(=O)Nc1ccc(OC(C)(C)C)cc1')
+    mol.canonicalize()
+    assert mol.protective_groups == {'amine_boc': 1, 'hydroxyl_tbu': 1}
+    changed = mol.remove_protection(['amine_boc'])
+    assert changed is True
+    assert mol.protective_groups == {'hydroxyl_tbu': 1}
+
+
+def test_unknown_name_raises():
+    mol = smiles('CCC')
+    with pytest.raises(ValueError):
+        mol.remove_protection(['not_a_pg'])
 
 
 @pytest.mark.parametrize('smi,expected', [

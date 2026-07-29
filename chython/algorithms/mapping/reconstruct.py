@@ -194,12 +194,7 @@ def _strip(mol, groups, start=None):
     """
     m = mol.copy(keep_sssr=True, keep_components=True)
     try:
-        cursor = start
-        for p in groups:
-            before = set(m._atoms)
-            m.remove_protection(p, start=cursor)
-            if cursor is not None:
-                cursor += len(m) - len(before)
+        m.remove_protection(groups, start=start)
     except Exception:  # noqa: BLE001 - an unkekulizable deprotection product is simply not a match
         return None
     return m
