@@ -4,20 +4,15 @@
   "description": "",
   "main": "dist/clean2d.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webpack && mv dist/clean2d.js ../chython/algorithms/calculate2d"
+    "build": "esbuild src/index.js --bundle --format=iife --global-name=$ --minify --outfile=../chython/algorithms/calculate2d/clean2d.js"
   },
   "dependencies": {
-    "smiles-drawer": "^2.0.1"
+    "smiles-drawer": "2.4.1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@babel/core": "^7.12.16",
-    "@babel/preset-env": "^7.12.16",
-    "babel-loader": "^8.2.2",
-    "webpack": "^5.22.0",
-    "webpack-cli": "^4.5.0"
+    "esbuild": "^0.28.1"
   }
 }

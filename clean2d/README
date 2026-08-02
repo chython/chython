@@ -1,3 +1,47 @@
-# for rebuilding clean2d blob type:
-npm init
-npm run build
+# clean2d
+
+Builds the 2D-layout blob used by the `smilesdrawer` engine of
+`MoleculeContainer.clean2d()`. Wraps smiles-drawer's layout internals and exposes a
+single `$.clean2d(tree)` global that MiniRacer evaluates from Python.
+
+## Rebuild
+
+    npm install
+    npm run build
+
+`npm run build` bundles `src/index.js` with esbuild into
+`../chython/algorithms/calculate2d/clean2d.js` (IIFE, global `$`).
+
+## Deps
+
+- `smiles-drawer` (pinned exact) — layout engine. Its package `exports` only expose the
+  bundled dist, so `src/index.js` imports the internals directly by relative path
+  (`../node_modules/smiles-drawer/src/DrawerBase.js`). Keep the version pinned: the parse
+  tree below is coupled to smiles-drawer's internal `Graph` format.
+- `esbuild` (dev) — the only build dependency.
+
+## API: `$.clean2d(tree)`
+
+`tree` is a smiles-drawer parse tree built directly on the Python side (no SMILES round
+trip). Returns `[[x, y], ...]` for heavy atoms, in the same order the Python builder
+created them (heavy-atom `idx` order == `graph.atomIdxToVertexId`).
+
+### Parse-tree node schema
+
+    {
+      atom: "C",               // bare element string
+      isBracket: false,
+      branches: [ <node with extra `branchBond`>, ... ],
+      branchCount: int,
+      ringbonds: [ { bond: "-"|"="|"#", id: int }, ... ],
+      ringbondCount: int,
+      bond: "-"|"="|"#"|".",   // bond to `next` ("." chains disconnected components)
+      next: <node> | null,
+      hasNext: bool
+    }
+
+- Layout depends only on element and connectivity, so atoms are plain element strings:
+  charge, isotope, hydrogen counts and aromaticity are omitted (none of them move atoms).
+  Aromatic bonds are emitted as `"-"`.
+- A ring closure pushes a matching `ringbond` entry (same `id`) on both endpoints.
+- Implicit hydrogens are not emitted; only heavy atoms receive an `idx`.

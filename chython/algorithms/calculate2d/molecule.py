@@ -18,7 +18,6 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from importlib.resources import files
-from random import random
 from typing import Literal
 from ...exceptions import ImplementationError
 from ...periodictable.base.vector import Vector
@@ -27,7 +26,6 @@ try:
     from py_mini_racer import MiniRacer
 
     ctx = MiniRacer()
-    ctx.eval('const self = this')
     ctx.eval(files(__package__).joinpath('clean2d.js').read_text())
 except (ImportError, RuntimeError):
     ctx = None
@@ -60,15 +58,12 @@ class Calculate2DMolecule:
         elif engine == 'smilesdrawer':
             if ctx is None:
                 raise ImportError('mini_racer is not installed or broken')
-            entry = iter(sorted(self, key=lambda n: len(self._bonds[n])))
-            for _ in range(min(5, len(self))):
-                smiles, order = self.__clean2d_prepare(next(entry))
-                try:
-                    xy = ctx.call('$.clean2d', smiles)
-                except Exception:
-                    continue
-                break
-            else:
+            # smiles-drawer normalizes the layout regardless of the tree root, so a single
+            # deterministic layout pass is enough.
+            tree, order = self.__clean2d_tree()
+            try:
+                xy = ctx.call('$.clean2d', tree)
+            except Exception:
                 raise ImplementationError
 
             shift_x, shift_y = xy[0]
@@ -181,11 +176,78 @@ class Calculate2DMolecule:
                 max_x += .25
         return max_x
 
-    def __clean2d_prepare(self, entry):
-        w = {n: random() for n in self._atoms}
-        w[entry] = -1
-        smiles, order = self._smiles(w.__getitem__, random=True, charges=False, stereo=False, _return_order=True)
-        return ''.join(smiles).replace('~', '-'), order
+    def __clean2d_tree(self):
+        """
+        Build a smiles-drawer parse tree directly from the molecule graph. Any spanning
+        tree is fine: the layout only needs valid connectivity (and is root-invariant), so
+        this is a plain iterative DFS with ring-closure detection, not a canonical SMILES
+        traversal. All neighbours are emitted as `branches`; `next` is used only to chain
+        `.`-separated connected components. Returns `(tree, order)` where `order[i]` is the
+        atom number of the i-th heavy atom created (matching smiles-drawer's atom index).
+
+        See clean2d/README for the parse-tree node schema.
+        """
+        atoms = self._atoms
+        bonds = self._bonds
+        order = []
+        nodes = {}  # atom number -> its node dict
+        parent_of = {}  # atom number -> tree parent atom number (root: None)
+
+        # each atom becomes one node. layout depends only on element and connectivity, so
+        # `atom` is a bare element string (charge, isotope, hydrogens and even aromaticity
+        # do not move atoms). bond order maps to a smiles-drawer token; orders without a
+        # single/double/triple counterpart (aromatic 4, any 8) collapse to '-'.
+        bond_symbol = {1: '-', 2: '=', 3: '#', 4: '-', 8: '-'}
+
+        # spanning forest via iterative DFS. all neighbours become `branches`.
+        components = []
+        for root in self:
+            if root in nodes:
+                continue
+            nodes[root] = rnode = {'atom': atoms[root].atomic_symbol, 'isBracket': False,
+                                   'branches': [], 'branchCount': 0, 'ringbonds': [], 'ringbondCount': 0,
+                                   'bond': '-', 'branchBond': '-', 'next': None, 'hasNext': False}
+            order.append(root)
+            components.append(rnode)
+            parent_of[root] = None
+            stack = [root]
+            while stack:
+                parent = stack[-1]
+                for child in bonds[parent]:
+                    if child not in nodes:
+                        bs = bond_symbol[bonds[parent][child].order]
+                        nodes[child] = cnode = {'atom': atoms[child].atomic_symbol, 'isBracket': False,
+                                                'branches': [], 'branchCount': 0, 'ringbonds': [],
+                                                'ringbondCount': 0, 'bond': bs, 'branchBond': bs,
+                                                'next': None, 'hasNext': False}
+                        order.append(child)
+                        pnode = nodes[parent]
+                        pnode['branches'].append(cnode)
+                        pnode['branchCount'] += 1
+                        parent_of[child] = parent
+                        stack.append(child)
+                        break
+                else:
+                    stack.pop()
+
+        # ring closures: every non-tree edge gets a matching ringbond id on both ends.
+        cycle = 0
+        for n in order:
+            for m in bonds[n]:
+                if m <= n or parent_of.get(m) == n or parent_of.get(n) == m:
+                    continue
+                cycle += 1
+                bs = bond_symbol[bonds[n][m].order]
+                for k in (n, m):
+                    nodes[k]['ringbonds'].append({'bond': bs, 'id': cycle})
+                    nodes[k]['ringbondCount'] += 1
+
+        # chain disconnected components through `next` with a '.' bond.
+        for prev, comp in zip(components, components[1:]):
+            comp['bond'] = '.'
+            prev['next'] = comp
+            prev['hasNext'] = True
+        return components[0], order
 
 
 __all__ = ['Calculate2DMolecule']
