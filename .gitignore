@@ -17,3 +17,23 @@ venv
 build
 dist
 MANIFEST
+
+# OS / editor / agent scratch
+.DS_Store
+.ipynb_checkpoints/
+.claude/
+node_modules/
+_build/
+
+# local scratch and benchmark artifacts (keep out of the public repo).
+# broad globs; already-tracked files stay tracked.
+*.pkl
+*.pk
+*.log
+*.ipynb
+*.smi
+*.smiles
+*.data
+*.csv
+*.txt
+*.zip
