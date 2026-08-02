@@ -320,21 +320,111 @@ Detect protective groups:
     mol.protective_groups
     # {'amine_boc': 2}
 
-Remove protective groups (in-place):
+Remove protective groups (in-place). ``remove_protection`` takes a **list** of
+group names (or ``None`` for all) and returns ``True`` if anything changed:
 
 .. code-block:: python
 
     mol = smiles('c1ccccc1NC(=O)OC(C)(C)C')
     mol.canonicalize()
 
-    # Remove specific protective group
-    mol.remove_protection('amine_boc')  # returns True if changed
+    # Remove a specific set of protective groups (pass a list, not a string)
+    mol.remove_protection(['amine_boc'])  # returns True if changed
     str(mol)  # 'c1ccccc1N'
 
     # Remove all known protective groups
     mol2 = smiles('CC(NC(=O)OC(C)(C)C)COC(=O)OCC=C')
     mol2.canonicalize()
-    mol2.remove_protection()  # removes all found PGs
+    mol2.remove_protection()  # None => removes all found PGs
+
+Passing a list removes exactly that set, leaving other groups in place. Unknown
+names raise ``ValueError``:
+
+.. code-block:: python
+
+    mol = smiles('CC(C)(C)OC(=O)Nc1ccc(OC(C)(C)C)cc1')
+    mol.canonicalize()
+    mol.protective_groups              # {'amine_boc': 1, 'hydroxyl_tbu': 1}
+
+    mol.remove_protection(['amine_boc'])   # strip only the Boc
+    mol.protective_groups              # {'hydroxyl_tbu': 1}  (tBu ether kept)
+
+With ``logging=True`` it returns the list of freed (retained) atom numbers
+instead of a bool — the heteroatoms revealed by deprotection (e.g. the unmasked
+amine nitrogen). These feed the ``masked`` argument of the sticky enumerators
+below:
+
+.. code-block:: python
+
+    mol = smiles('O=C(OC(C)(C)C)NCc1ccc(Br)cc1')
+    mol.canonicalize()
+    freed = mol.remove_protection(logging=True)   # [<amine N number>]
+    # no-op deprotection returns [] (the logging analogue of False)
+
+
+Sticky Fragments & Linkers
+--------------------------
+
+Cut a molecule at each detected coupling role and emit the pieces as
+concatenation-ready SMILES for combinatorial reassembly. Roles are coupling
+handles (``aryl_halide``, ``aryl_acyl``, ``alkyl_amine``, ...). The molecule must
+be a single connected component.
+
+``sticky_fragments()`` enumerates mono-attachment pieces — one open bond each:
+
+.. code-block:: python
+
+    from chython import smiles
+
+    mol = smiles('Brc1ccc(cc1)C(=O)O')
+    mol.canonicalize()
+
+    for frag in mol.sticky_fragments():
+        print(frag.role, frag.sticky_left, frag.sticky_right)
+    # aryl_halide  -c1ccc(C(=O)O)cc1   O=C(O)c1ccc(cc1)-
+    # aryl_acyl    -C(=O)c1ccc(Br)cc1  Brc1ccc(cc1)C(=O)-
+
+    # Restrict to one role
+    list(mol.sticky_fragments('aryl_halide'))
+
+Each ``StickyFragment`` carries the attachment three ways: ``sticky_left``
+(``-...``, glues onto the left of another piece), ``sticky_right`` (``...-``,
+glues onto the right), and ``canonical_smiles`` (the ``[At]``-capped fragment,
+the dedup key).
+
+``sticky_linkers()`` enumerates bi-attachment pieces — open bonds at both ends.
+The left role is capped ``[210At]``, the right ``[211At]``:
+
+.. code-block:: python
+
+    for lk in mol.sticky_linkers('aryl_halide', 'aryl_acyl'):
+        print(lk.role_left, lk.role_right)
+        print(lk.sticky_left)   # -c1ccc(cc1)C(=O)-   (role_left end first)
+        print(lk.sticky_right)  # -C(=O)c1ccc(cc1)-   (flipped orientation)
+
+    # No role arguments: all role pairs
+    list(mol.sticky_linkers())
+
+``sticky_left`` / ``sticky_right`` are the same linker traversed from opposite
+ends; ``canonical_smiles`` (with ``[210At]``/``[211At]`` caps) is the dedup key.
+
+Both enumerators accept ``masked`` — atom numbers barred from becoming a step-1
+attachment point. Feed it the output of ``remove_protection(logging=True)`` so a
+group revealed by an incidental deprotection never becomes a standalone handle:
+
+.. code-block:: python
+
+    mol = smiles('O=C(OC(C)(C)C)NCc1ccc(Br)cc1')
+    mol.canonicalize()
+    freed = mol.remove_protection(logging=True)   # reveal the amine
+
+    # the freed amine is now barred as a fragment attachment point
+    roles = {f.role for f in mol.sticky_fragments(masked=freed)}
+    # 'alkyl_amine' not in roles
+
+For linkers, ``masked`` bars the atom from the **left** (``[210At]``, step-1) end
+only; the right (``[211At]``, deferred step-2) end is exempt. ``masked=None`` and
+``masked=()`` behave identically to omitting it.
 
 
 Reconstruct Mapping
