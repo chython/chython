@@ -88,14 +88,16 @@ class Calculate2DMolecule:
             assert openbabel.OBOp.FindType('gen2D').Do(mol), 'OpenBabel failed to generate 2d layout'
             assert mol.NumAtoms() == len(self), 'OpenBabel modified molecule'
 
-            for i, n in enumerate(self.smiles_atoms_order, 1):
+            # to_openbabel preserves atom order: OBMol index i (1-based) matches the i-th atom
+            for i, n in enumerate(self, 1):
                 xy = mol.GetAtom(i).GetVector()
                 plane[n] = (xy.GetX(), xy.GetY())
         elif engine == 'indigo':
             mol = self.to_indigo()
             assert not mol.layout(), 'Indigo failed to generate 2d layout'
 
-            for n, a in zip(self.smiles_atoms_order, mol.iterateAtoms()):
+            # to_indigo preserves atom order: iterateAtoms() matches self order
+            for n, a in zip(self, mol.iterateAtoms()):
                 x, y, _ = a.xyz()
                 plane[n] = (x, y)
         else: raise ValueError(f'Invalid clean2d engine: {engine}')

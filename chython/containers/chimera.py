@@ -16,48 +16,169 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from typing import TYPE_CHECKING
 from .._java import get_cdk
+
+
+if TYPE_CHECKING:
+    from chython import MoleculeContainer
 
 
 class Chimera:
     __slots__ = ()
 
-    def to_cdk(self):
+    def to_cdk(self: 'MoleculeContainer'):
         """
         Convert molecule to CDK Molecule object.
 
         Due to translation through SMILES string, atom order is not preserved.
-        Use `self.smiles_atoms_order` to map atoms back.
+        Use `self.smiles_atoms_order` to map atoms back. A direct builder was
+        benchmarked but is ~10x slower than the SMILES parser because every atom
+        and bond attribute crosses the JPype/JVM boundary individually; the
+        isomeric SMILES round-trip already preserves stereochemistry.
         """
         cdk = get_cdk()
         parser = cdk.smiles.SmilesParser(cdk.DefaultChemObjectBuilder.getInstance())
         return parser.parseSmiles(str(self))
 
-    def to_openbabel(self):
+    def to_openbabel(self: 'MoleculeContainer'):
         """
         Convert molecule to OpenBabel OBMol object.
 
-        Due to translation through SMILES string, atom order is not preserved.
-        Use `self.smiles_atoms_order` to map atoms back.
+        Atoms are built directly from the graph, so atom order is preserved:
+        OBMol atom index `n` (1-based) corresponds to the n-th atom yielded by
+        `self.atoms()`. Aromatic, tetrahedral and cis-trans stereo are set
+        directly. Allene/cumulene stereo is not exported: OpenBabel cannot carry
+        it (no extended-tetrahedral support in the bundled build), mirroring
+        `to_rdkit`.
         """
         from openbabel import openbabel
 
-        conv = openbabel.OBConversion()
-        conv.SetInFormat('smi')
+        # OBMol atom ids default to idx-1; we reuse that as the stable stereo ref.
+        implicit_ref = openbabel.OBStereo.ImplicitRef & 0xFFFFFFFFFFFFFFFF
+
         mol = openbabel.OBMol()
-        assert conv.ReadString(mol, str(self)), 'OpenBabel failed to parse smiles'
+        # NB: do NOT wrap the build in BeginModify()/EndModify() - EndModify
+        # re-perceives the structure and discards the stereo we set below.
+        idx = {}  # chython atom number -> OBMol atom index (1-based, for bonds)
+        ids = {}  # chython atom number -> OBAtom id (stereo refs are keyed by id)
+        for n, a in self.atoms():
+            oa = mol.NewAtom()
+            oa.SetAtomicNum(a.atomic_number)
+            if a.charge:
+                oa.SetFormalCharge(a.charge)
+            if a.isotope:
+                oa.SetIsotope(a.isotope)
+            if a.is_radical:
+                oa.SetSpinMultiplicity(2)
+            if a.implicit_hydrogens is not None:
+                oa.SetImplicitHCount(a.implicit_hydrogens)
+            if a.hybridization == 4:
+                oa.SetAromatic(True)
+            idx[n] = oa.GetIdx()
+            ids[n] = oa.GetId()
+
+        for n, m, b in self.bonds():
+            # aromatic (order 4) has no numeric bond order: add as single + aromatic flag
+            mol.AddBond(idx[n], idx[m], 1 if b.order == 4 else b.order)
+            if b.order == 4:
+                mol.GetBond(idx[n], idx[m]).SetAromatic(True)
+        mol.SetAromaticPerceived(True)
+
+        for n, a in self.atoms():
+            if a.stereo is None:
+                continue
+            if n not in self.stereogenic_tetrahedrons:
+                continue  # allenes are not supported
+            env = list(self._bonds[n])
+            s = self._translate_tetrahedron_sign(n, env)
+            refs = [ids[x] for x in env]
+            if len(refs) < 4:  # implicit hydrogen
+                refs.append(implicit_ref)
+            config = openbabel.OBTetrahedralConfig()
+            config.center = ids[n]
+            config.from_or_towards = refs[0]
+            config.view = openbabel.OBStereo.ViewFrom
+            config.refs = openbabel.OBStereo.MakeRefs(refs[1], refs[2], refs[3])
+            config.winding = openbabel.OBStereo.AntiClockwise if s else openbabel.OBStereo.Clockwise
+            config.specified = True
+            ts = openbabel.OBTetrahedralStereo(mol)
+            ts.SetConfig(config)
+            mol.CloneData(ts)  # SetData is C++ only; CloneData is the python entry point
+
+        for n, m, b in self.bonds():
+            if b.stereo is None:
+                continue
+            nm = self._stereo_cis_trans_centers.get(n)
+            if nm is None or n not in nm or m not in nm:
+                continue
+            n1, m1, *_ = self.stereogenic_cis_trans[nm]
+            config = openbabel.OBCisTransConfig()
+            config.begin = ids[n]
+            config.end = ids[m]
+            # ShapeU refs: [begin-neighbor, ?, ?, ?]; cis puts the end neighbor
+            # at index 3 (same side), trans at index 2 (opposite side).
+            if b.stereo:  # cis
+                config.refs = openbabel.OBStereo.MakeRefs(ids[n1], implicit_ref, implicit_ref, ids[m1])
+            else:  # trans
+                config.refs = openbabel.OBStereo.MakeRefs(ids[n1], implicit_ref, ids[m1], implicit_ref)
+            config.shape = openbabel.OBStereo.ShapeU
+            config.specified = True
+            cts = openbabel.OBCisTransStereo(mol)
+            cts.SetConfig(config)
+            mol.CloneData(cts)
+
+        mol.SetChiralityPerceived(True)
         return mol
 
-    def to_indigo(self):
+    def to_indigo(self: 'MoleculeContainer'):
         """
         Convert molecule to Indigo molecule object.
 
-        Due to translation through SMILES string, atom order is not preserved.
-        Use `self.smiles_atoms_order` to map atoms back.
+        Atoms are built directly from the graph, so atom order is preserved:
+        `mol.iterateAtoms()` yields atoms in the same order as `self.atoms()`.
+        Aromatic and tetrahedral stereo are set directly.
+
+        Cis-trans and allene stereo are NOT exported: Indigo derives them from 2D
+        coordinates (via `markStereobonds`), which a freshly parsed molecule does
+        not have. This mirrors `to_rdkit`, which also drops allenes.
         """
         from indigo import Indigo
 
-        return Indigo().loadMolecule(str(self))
+        mol = Indigo().createMolecule()
+        mapping = {}
+        for n, a in self.atoms():
+            ia = mol.addAtom(a.atomic_symbol)
+            if a.charge:
+                ia.setCharge(a.charge)
+            if a.isotope:
+                ia.setIsotope(a.isotope)
+            if a.is_radical:
+                ia.setRadical(2)  # 2 == doublet in Indigo
+            if a.implicit_hydrogens is not None:
+                ia.setImplicitHCount(a.implicit_hydrogens)
+            mapping[n] = ia.index()
+
+        for n, m, b in self.bonds():
+            # Indigo accepts aromatic (order 4) bonds directly
+            mol.getAtom(mapping[n]).addBond(mol.getAtom(mapping[m]), b.order)
+
+        for n, a in self.atoms():
+            if a.stereo is None:
+                continue
+            if n not in self.stereogenic_tetrahedrons:
+                continue  # allenes are not supported
+            env = list(self._bonds[n])
+            s = self._translate_tetrahedron_sign(n, env)
+            pyramid = [mapping[x] for x in env]
+            while len(pyramid) < 4:  # implicit hydrogen encoded as -1
+                pyramid.append(-1)
+            if s:  # swap two refs to flip handedness for chython's sign convention
+                pyramid[1], pyramid[2] = pyramid[2], pyramid[1]
+            mol.getAtom(mapping[n]).addStereocenter(Indigo.ABS, pyramid[0], pyramid[1], pyramid[2], pyramid[3])
+
+        mol.aromatize()
+        return mol
 
 
 __all__ = ['Chimera']

@@ -97,6 +97,10 @@ class RDkit:
         """
         Convert into RDKit molecule object
 
+        Aromatic, tetrahedral and cis-trans stereo are preserved. Allene/cumulene
+        stereo is not exported: RDKit cannot round-trip it (the 3D embedder ignores
+        allene chirality), mirroring `to_openbabel` and `to_indigo`.
+
         :param keep_mapping: set atom numbers
         :param keep_hydrogens: set implicit hydrogens
         """
