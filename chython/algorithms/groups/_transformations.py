@@ -92,11 +92,28 @@ def _rules():
     rules.append(_make_reactor('borylation_ester', 'alkyl_chloride', 'alkyl_boronic_ester',
                                '[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
 
+    # alkenyl borylation: vinyl-X → vinyl-B(OH)2 (the pattern's second alkene carbon :2 must be
+    # carried into the product with its double bond, else it is deleted and the C=C is broken)
+    rules.append(_make_reactor('borylation_acid', 'alkenyl_bromide', 'alkenyl_boronic_acid', '[A:2]=[A:1]-[B:20](-[O:21])-[O:22]'))
+    rules.append(_make_reactor('borylation_acid', 'alkenyl_iodide', 'alkenyl_boronic_acid', '[A:2]=[A:1]-[B:20](-[O:21])-[O:22]'))
+    rules.append(_make_reactor('borylation_acid', 'alkenyl_chloride', 'alkenyl_boronic_acid', '[A:2]=[A:1]-[B:20](-[O:21])-[O:22]'))
+
+    # alkenyl borylation: vinyl-X → vinyl-Bpin
+    rules.append(_make_reactor('borylation_ester', 'alkenyl_bromide', 'alkenyl_boronic_ester',
+                               '[A:2]=[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
+    rules.append(_make_reactor('borylation_ester', 'alkenyl_iodide', 'alkenyl_boronic_ester',
+                               '[A:2]=[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
+    rules.append(_make_reactor('borylation_ester', 'alkenyl_chloride', 'alkenyl_boronic_ester',
+                               '[A:2]=[A:1]-[B:20]1-[O:21]-[C:22]([C:23])([C:24])-[C:25]([C:26])([C:27])-[O:28]-1'))
+
     # ester to amide: R-C(=O)-OR' → R-C(=O)-NH2 (NH3)
     rules.append(_make_reactor('ester_to_amide', 'ester', 'primary_amide', '[A:1](=[A:2])-[N:20]'))
 
     # ester to hydroxamic acid: R-C(=O)-OR' → R-C(=O)-NH-OH (NH2OH)
     rules.append(_make_reactor('ester_to_hydroxamic_acid', 'ester', 'hydroxamic_acid', '[A:1](=[A:2])-[N:20]-[O:21]'))
+
+    # ester to hydrazide: R-C(=O)-OR' → R-C(=O)-NH-NH2 (N2H4)
+    rules.append(_make_reactor('ester_to_hydrazide', 'ester', 'hydrazide', '[A:1](=[A:2])-[N:20]-[N:21]'))
 
     # amide hydrolysis: R-C(=O)-NHR → R-C(=O)-OH
     rules.append(_make_reactor('amide_hydrolysis', 'primary_amide', 'carboxylic_acid', '[A:2](=[A:3])-[O:20]'))
@@ -166,6 +183,14 @@ def _rules():
     rules.append(_make_reactor('hydroxy_to_chloro', 'phenol', 'aryl_chloride', '[Cl:20]-[A:2]'))
     # tertiary_alcohol → RCl
     rules.append(_make_reactor('hydroxy_to_chloro', 'tertiary_alcohol', 'alkyl_chloride', '[Cl:20]-[A:2]'))
+
+    # azinone chlorination: cyclic amide → chloroazine (POCl3/PCl5). The lactam C=O
+    # becomes an aromatic C-Cl and the C-N amide bond becomes an aromatic C=N.
+    rules.append(_make_reactor('azinone_chlorination', 'azinone', 'aryl_chloride', '[Cl:20]-[A:1]=[A:3]'))
+
+    # azinone hydrolysis: chloroazine → cyclic amide (H2O, the reverse of azinone_chlorination).
+    # The aromatic C-Cl becomes a C=O and the adjacent ring C=N becomes a C-N(H) amide.
+    rules.append(_make_reactor('azinone_hydrolysis', 'chloroazine', 'azinone', '[O:20]=[A:1]-[A:3]'))
 
     # acid fluoride formation: RCOOH → RCOF (cyanuric fluoride, DAST)
     rules.append(_make_reactor('acid_fluorination', 'carboxylic_acid', 'acyl_fluoride', '[F:20]-[A:1]=[A:2]'))

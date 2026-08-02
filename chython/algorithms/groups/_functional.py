@@ -196,14 +196,21 @@ def _rules():
     # N-acyloxy imides such as NHS esters, which are C(=O)-O-N(C=O)C=O)
     rules['weinreb_amide'] = smarts('[O:2]=[C;D3;x2:1]-[N;D3;x1:100]([C;z1])[O;D2;x1]')
 
-    # N-hydroxysuccinimide (NHS) active ester C(=O)-O-N(succinimide)
-    rules['nhs_ester'] = smarts('[C;z2;x2;D3:1](=[O:2])-[O;D2;x1:3]-[N;D3:100]1-[C;z2](=O)-[C;z1]-[C;z1]-[C;z2]-1=O')
+    # redox-active ester (NHPI/TCNHPI/NHS "Baran ester"): R-C(=O)-O-N(cyclic imide).
+    # Undergoes decarboxylative coupling like a free acid; the -C(=O)-O-N(C=O)C=O fragment
+    # leaves, transferring the alkyl R (:3). The imide N sits in a 5-membered ring flanked by
+    # two carbonyls (succinimide, phthalimide/NHPI, tetrachlorophthalimide/TCNHPI) -- the only
+    # redox-active ester scaffolds in practice -- which keeps this focused and distinct from an
+    # open N-acyloxy amide.
+    rules['redox_active_ester'] = smarts('[C;z1:3]-[C;z2;x2;D3:1](=[O:2])-[O;D2;x1:100]-[N;D3;x1;r5](-[C;z2;r5]=O)-[C;z2;r5]=O')
 
     # arene C-H (for electrophilic aromatic substitution)
     rules['arene_ch'] = smarts('[C;a;D2:1]')
 
     # sulfur
     rules['thiol'] = smarts('[S;x0;D1;z1:1][C;z1:2]')
+    # thiophenol: S-H on aromatic carbon (aryl thiol; the [C;z1] in `thiol` excludes it)
+    rules['aryl_thiol'] = smarts('[S;x0;D1;z1:1][C;a:2]')
     rules['thioether'] = smarts('[S;D2;z1;x0:1]([C:2])[C:3]')
     rules['sulfoxide'] = smarts('[S;D3;z2:1](=[O:2])([C:3])[C:4]')
     rules['sulfone'] = smarts('[S;D4:1](=[O:2])(=[O:3])([C:4])[C:5]')
@@ -224,6 +231,18 @@ def _rules():
         rules[f'lactam_5_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C;D3;z2;M]1')
         # X=C-C/N-N-C(=O)-C/N  e.g. CN1C=C(Br)C=CC1=O
         rules[f'lactam_6_{_name}'] = smarts(f'[{_x};D1:100]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1')
+
+    # azinone: conjugated/aromatizable cyclic amide (2-pyridone, quinazolin-4-one, ...)
+    # that undergoes POCl3-type dehydrative chlorination to a
+    # chloroazine. The masked sp2/aromatic ring atom flanking the carbonyl distinguishes
+    # it from saturated lactams (valerolactam etc.), which do NOT aromatize.
+    rules['azinone'] = smarts('[O;z2;x0:2]=[C;z2;x2;D3;r6:1](-[C,N;z2,z4;r6;M])-[N;z1;D2;r6:3]')
+
+    # chloroazine: Cl on an aromatic carbon adjacent to an aromatic ring N (2-chloropyridine,
+    # 4-chloroquinazoline, ...). Hydrolyzes to the azinone (lactam) -- the reverse of
+    # azinone_chlorination. The adjacent ring N distinguishes it from a plain aryl chloride
+    # (chlorobenzene) or a chloro carbon not next to N (3-chloropyridine), which give phenols.
+    rules['chloroazine'] = smarts('[Cl;D1:100]-[C;a:1]:[N;a;D2:3]')
 
     # pyrrole. for tautomerism handling H not in template.
     rules['pyrrole'] = smarts('[N;h1;D2;a;r5:1]')
@@ -275,14 +294,29 @@ def _rules():
     # hydroxamic acid: R-C(=O)-NH-OH
     rules['hydroxamic_acid'] = smarts('[O;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]')
 
+    # hydrazide: R-C(=O)-NH-NH2 (acyl hydrazide, from ester + hydrazine)
+    rules['hydrazide'] = smarts('[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]')
+
     # oxime: C=N-OH
     rules['oxime'] = smarts('[O;D1;z1;x1:1]-[N;D2;z2;x1:2]=[C:3]')
 
     # O-alkylhydroxylamine: R-O-NH2 (for oxime ether formation)
     rules['O_alkylhydroxylamine'] = smarts('[N;D1;z1;x1:1]-[O;D2;z1;x1:2]-[C:3]')
 
+    # N,O-dialkylhydroxylamine: R'-O-NH-R'' (Weinreb amine reagent). The N-H (h1) N is bonded to
+    # the O and to any N-alkyl (:2), and the O to any O-alkyl (:4) -- both left as generic [C;z1]
+    # so it matches beyond the N,O-dimethyl parent (N,O-diethyl, etc.).
+    rules['NO_dialkylhydroxylamine'] = smarts('[N;D2;z1;x1;h1:1](-[C;z1:2])-[O;D2;z1;x1:3]-[C;z1:4]')
+
     # alpha-isocyano (for Van Leusen oxazole)
     rules['tosyl_isocyanide'] = smarts('[C;-;D1:2]#[N;+;D2:1]-[C;D2,D3;z1;x2:3]-[S;D4;x2:100](=O)=O')
+
+    # activated isocyanide: isocyanide with an acidic alpha-CH, C(-)#N(+)-CH(R)- (for Van Leusen
+    # pyrrole). The base deprotonates that alpha-CH; whatever makes it acidic -- ester, ketone,
+    # amide, nitrile, sulfonyl, ... -- is left unspecified, so any activating group qualifies. The
+    # alpha-C only needs to be sp3 and bear an H (h1,h2). Distinct from a bare isocyanide with no
+    # alpha-H (methyl/aryl isocyanide), which cannot form the required carbanion.
+    rules['activated_isocyanide'] = smarts('[C;-;D1:1]#[N;+;D2:2]-[C;z1;h1,h2:3]')
 
     # thioester (for Liebeskind-Srogl): R-C(=O)-S-R'
     rules['thioester'] = smarts('[O;z2;x0:2]=[C;D3;x2;z2:1]-[S;D2;z1;x0:100]')
