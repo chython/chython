@@ -16,6 +16,7 @@ Library for processing molecules and reactions in Python.
 - Atom-to-atom mapping (neural + rule-based)
 - Template-based reaction application
 - Functional and protective group detection and deprotection
+- Sticky fragment / linker enumeration for combinatorial reassembly
 - Stereo handling (tetrahedral, allene, cis-trans)
 - 2D/3D depiction with Jupyter support
 - RDKit interoperability
