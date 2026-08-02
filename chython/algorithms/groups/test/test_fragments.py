@@ -110,6 +110,19 @@ def test_amine_carries_both_nucleophile_and_deamino_roles():
     assert 'alkyl_deamino' in roles_found
 
 
+def test_carbamoyl_halide_keeps_nitrogen_and_carbonyl():
+    # carbamoyl chloride (R2N-C(=O)-Cl): the halide leaves, the carbonyl carbon is
+    # capped, and both the amine N and the carbonyl O are retained.
+    results = _by_role(smiles('ClC(=O)N1CCCCC1'), 'carbamoyl_halide')
+    assert len(results) == 1
+    r = results[0]
+    assert isinstance(r, StickyFragment)
+    assert r.role == 'carbamoyl_halide'
+    assert 'N' in r.canonical_smiles and 'O' in r.canonical_smiles
+    assert 'Cl' not in r.canonical_smiles
+    assert '[At]' in r.canonical_smiles
+
+
 def test_no_match_yields_nothing():
     mol = smiles('CCCC')
     assert _by_role(mol, 'aryl_halide') == []

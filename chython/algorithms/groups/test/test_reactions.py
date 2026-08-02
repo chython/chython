@@ -39,10 +39,18 @@ _two_component = [
      'suzuki', 'Brc1ccc(cc1)C.OB(O)CCC>>c1cc(ccc1CCC)C', 1),
     ('suzuki_alkenyl_bromide_aryl_boronic_acid',
      'suzuki', 'BrC1=CCCCC1.OB(O)c1ccccc1>>c1ccccc1C1=CCCCC1', 1),
+    # pseudohalide electrophiles: aryl tosylate/mesylate now couple in suzuki
+    ('suzuki_aryl_tosylate_aryl_boronic_acid',
+     'suzuki', 'Cc1ccc(cc1)S(=O)(=O)Oc1ccc(C)cc1.OB(O)c1ccccc1>>c1cc(ccc1C)-c1ccccc1', 1),
+    ('suzuki_aryl_mesylate_aryl_boronic_acid',
+     'suzuki', 'CS(=O)(=O)Oc1ccc(C)cc1.OB(O)c1ccccc1>>c1cc(ccc1C)-c1ccccc1', 1),
     ('buchwald_hartwig_aryl_bromide_primary_amine',
      'buchwald_hartwig', 'Brc1ccc(cc1)C.NCC>>c1cc(ccc1C)NCC', 1, {'deaminative_coupling'}),
     ('buchwald_hartwig_pyridone_bromide_primary_amine',
      'buchwald_hartwig', 'CN1C=CC(Br)=CC1=O.NCC>>CN1C=CC(=CC1=O)NCC', 1),
+    # amide/amidine N-nucleophiles in buchwald-hartwig
+    ('buchwald_hartwig_aryl_bromide_primary_amide',
+     'buchwald_hartwig', 'Brc1ccc(cc1)C.O=C(N)CC>>c1cc(ccc1C)NC(=O)CC', 1),
     ('mitsunobu_ether_primary_alcohol_phenol',
      'mitsunobu', 'OCC.Oc1ccc(cc1)C>>c1cc(ccc1C)OCC', 1),
     ('mitsunobu_ester_primary_alcohol_acid',

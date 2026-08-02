@@ -125,6 +125,12 @@ roles = {
         ('acyl_bromide',  '[A:1](=[A:2])-[At:20]'),
         ('acyl_fluoride', '[A:1](=[A:2])-[At:20]'),
     ],
+    # carbamoyl electrophile (R2N-C(=O)-X -> urea/carbamate): cap the carbonyl carbon,
+    # keep the carbonyl O (:2) and the amine N (:3); the halide leaving group is deleted.
+    'carbamoyl_halide': [
+        ('carbamoyl_chloride', '[A:3]-[A:1](=[A:2])-[At:20]'),
+        ('carbamoyl_fluoride', '[A:3]-[A:1](=[A:2])-[At:20]'),
+    ],
 
     # --- heteroatom nucleophiles: cap the heteroatom, keep N/O/S ---
     'alkyl_amine': [
@@ -140,6 +146,9 @@ roles = {
         ('primary_amide',   '[A:1](-[A:2]=[A:3])-[At:20]'),
         ('secondary_amide', '[A:1](-[A:2]=[A:3])-[At:20]'),
     ],
+    # amidine NH2 as Buchwald-Hartwig N-nucleophile: cap the primary N(:1), keep the
+    # amidine carbon (:2); the far imine N survives as an orphan hanging off :2.
+    'amidine_nitrogen': [('primary_amidine_amine', '[A:1](-[A:2])-[At:20]')],
     # azole N-H as N-arylation nucleophile: mirror _reactions.py ullmann_pyrrole --
     # the handle attaches to the h0 (pyridine-type) nitrogen (pyrazole :2, imidazole
     # :3), NOT the matched h1 NH (:1). Redraw ring bonds aromatic (:) so the ring
@@ -150,6 +159,7 @@ roles = {
         ('imidazole', '[A:1]:[A:2]:[A:3]-[At:20]'),
     ],
     'alkyl_thiol': [('thiol', '[A:1](-[A:2])-[At:20]')],
+    'aryl_thiol':  [('aryl_thiol', '[A:1](-[A:2])-[At:20]')],
     # O-nucleophiles: keep the oxygen (-> R-O[At] / Ar-O[At] / R-C(=O)-O[At])
     'alkyl_hydroxyl': [
         ('primary_alcohol',   '[A:1](-[A:2])-[At:20]'),
