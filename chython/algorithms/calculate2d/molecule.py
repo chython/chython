@@ -78,7 +78,8 @@ class Calculate2DMolecule:
             sdg.generateCoordinates()
             mol = sdg.getMolecule()
 
-            for i, n in enumerate(self.smiles_atoms_order):
+            # to_cdk preserves atom order: CDK atom index i (0-based) matches the i-th atom
+            for i, n in enumerate(self):
                 xy = mol.getAtom(i).getPoint2d()
                 plane[n] = (xy.x, xy.y)
         elif engine == 'obabel':
