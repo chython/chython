@@ -50,6 +50,7 @@ def parse_mol_v2000(data):
     atoms = []
     bonds = []
     stereo = []
+    stereo_atoms = []
     dat = {}
 
     # parse atom block
@@ -89,6 +90,15 @@ def parse_mol_v2000(data):
         atoms.append({'element': element, 'charge': charge, 'isotope': isotope,
                       'parsed_mapping': int(mapping) if mapping.strip() else 0,
                       'x': x, 'y': y, 'z': z, 'delta_isotope': delta_isotope})
+
+        # atom stereo parity (sss column): 1=odd, 2=even. coordinate-free tetrahedral chirality
+        # used as a fallback when the atom carries no wedge bond (see mdl/stereo.py). stored as
+        # the add_atom_stereo mark (even -> True, odd -> False), matching the SMILES parser.
+        parity = line[39:42]
+        if parity == '  1':
+            stereo_atoms.append((i - 1, False))
+        elif parity == '  2':
+            stereo_atoms.append((i - 1, True))
 
     # parse bond block
     for i, line in enumerate(data[4 + atoms_count: 4 + atoms_count + bonds_count], 1):
@@ -180,7 +190,8 @@ def parse_mol_v2000(data):
         except KeyError:
             raise InvalidV2000(f'Invalid SGROUP {x}')
 
-    return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'log': log}
+    return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo,
+            'stereo_atoms': stereo_atoms, 'log': log}
 
 
 __all__ = ['parse_mol_v2000']

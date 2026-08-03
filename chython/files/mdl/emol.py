@@ -47,6 +47,7 @@ def parse_mol_v3000(data, *, _header=True):
     atoms = []
     bonds = []
     stereo = []
+    stereo_atoms = []
     meta = {}
     atom_map = {}
     star_points = set()
@@ -96,6 +97,7 @@ def parse_mol_v3000(data, *, _header=True):
         isotope = None
         charge = 0
         is_radical = False
+        parity = None
         for kv in kvs:
             k, v = kv.split('=', 1)
             if k == 'CHG':
@@ -104,6 +106,16 @@ def parse_mol_v3000(data, *, _header=True):
                 isotope = int(v)
             elif k == 'RAD':
                 is_radical = True
+            elif k == 'CFG':
+                # atom stereo parity: 1=odd, 2=even. coordinate-free tetrahedral chirality used as
+                # a fallback when the atom carries no wedge bond (see mdl/stereo.py). stored as the
+                # add_atom_stereo mark (even -> True, odd -> False), matching the SMILES parser.
+                if v == '1':
+                    parity = False
+                elif v == '2':
+                    parity = True
+        if parity is not None:
+            stereo_atoms.append((len(atoms), parity))
         if a == 'D':
             if isotope:
                 raise ValueError(f'V3000 atom line {i}: isotope on deuterium atom')
@@ -245,7 +257,8 @@ def parse_mol_v3000(data, *, _header=True):
                             log.append(f'invalid atom in STEREL collection: {a}')
                 # STEABS is the default (no extended_stereo needed)
 
-    return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo, 'meta': meta, 'log': log}
+    return {'title': title, 'atoms': atoms, 'bonds': bonds, 'stereo': stereo,
+            'stereo_atoms': stereo_atoms, 'meta': meta, 'log': log}
 
 
 __all__ = ['parse_mol_v3000']

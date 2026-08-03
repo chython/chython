@@ -24,6 +24,29 @@ from ...containers import MoleculeContainer
 charge_map = {-4: '  0', -3: '  7', -2: '  6', -1: '  5', 0: '  0', 1: '  3', 2: '  2', 3: '  1', 4: '  0'}
 
 
+def _atom_parity(g):
+    """
+    MDL atom stereo parity for each stereogenic tetrahedron: 1=odd, 2=even.
+
+    Parity is defined over neighbours ordered by ascending atom-block position (implicit
+    hydrogen counts as the highest). `_translate_tetrahedron_sign` yields the sign for that
+    ordering; mark True maps to parity 2 (even) and mark False to parity 1 (odd) - the exact
+    inverse of the read path (see mdl/stereo.py). This is coordinate-free and complements the
+    wedge bonds, so tetrahedral chirality survives even without a 2d layout.
+    """
+    parity = {}
+    st = g.stereogenic_tetrahedrons
+    bonds = g._bonds
+    # atom-block position of each atom in the write order (g.atoms()).
+    file_of = {n: i for i, n in enumerate(g)}
+    for n, a in g.atoms():
+        if a.stereo is None or n not in st:
+            continue  # allenes have no atom parity
+        env = sorted(bonds[n], key=file_of.__getitem__)
+        parity[n] = 2 if g._translate_tetrahedron_sign(n, env) else 1
+    return parity
+
+
 class IO:
     def __init__(self, file, *, mapping: bool = True, append: bool = False):
         """
@@ -88,6 +111,7 @@ class EMOLWrite(IO):
             z = 0
 
         bonds = g._bonds
+        parity = _atom_parity(g)
 
         file = self._file
         file.write(f'M  V30 BEGIN CTAB\nM  V30 COUNTS {g.atoms_count} {g.bonds_count} 0 0 0\nM  V30 BEGIN ATOM\n')
@@ -102,10 +126,11 @@ class EMOLWrite(IO):
             c = f' CHG={a.charge}' if a.charge else ''
             r = ' RAD=2' if a.is_radical else ''
             i = f' MASS={a.isotope}' if a.isotope else ''
+            p = f' CFG={parity[m]}' if m in parity else ''
 
             if not self._mapping:
                 m = 0
-            file.write(f'M  V30 {n} {a.atomic_symbol} {x:.4f} {y:.4f} {z} {m}{c}{r}{i}\n')
+            file.write(f'M  V30 {n} {a.atomic_symbol} {x:.4f} {y:.4f} {z} {m}{c}{r}{i}{p}\n')
 
         file.write('M  V30 END ATOM\nM  V30 BEGIN BOND\n')
 
@@ -163,6 +188,7 @@ class MOLWrite(IO):
             z = 0.
 
         bonds = g._bonds
+        parity = _atom_parity(g)
 
         file = self._file
         file.write(f'{g.name}\n\n\n{g.atoms_count:3d}{g.bonds_count:3d}  0  0  0  0            999 V2000\n')
@@ -174,9 +200,10 @@ class MOLWrite(IO):
                 x, y = a.x, a.y
 
             c = charge_map[a.charge]
+            p = parity.get(m, 0)
             if not self._mapping:
                 m = 0
-            file.write(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} 0{c}  0  0  0  0  0  0  0{m:3d}  0  0\n')
+            file.write(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} 0{c}{p:3d}  0  0  0  0  0  0{m:3d}  0  0\n')
 
         atoms = {m: n for n, m in enumerate(g, start=1)}
         wedge = defaultdict(set)

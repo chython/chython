@@ -28,15 +28,30 @@ def postprocess_molecule(molecule, data, *, ignore_stereo=False, calc_cis_trans=
     if calc_cis_trans:
         molecule.calculate_cis_trans_from_2d(clean_cache=False)
 
-    stereo = [(mapping[n], mapping[m], s) for n, m, s in data['stereo']]
+    # a stereo centre only becomes chiral once its neighbours are resolved, so both signals need
+    # iterative resolution (e.g. CC(O)C(O)C(C)O needs several passes). merge them into one loop as
+    # (method, *args) work items - the pattern the SMILES/InChI parsers use. coordinate-free atom
+    # parity is listed first so it wins on shared centres: it sets the sign, then add_wedge raises
+    # IsChiral and is dropped.
+    stereo = []
+    if data.get('stereo_atoms'):
+        # neighbours are numbered by ascending atom-block position, not chython atom number.
+        file_of = {cn: fi for fi, cn in enumerate(mapping)}
+        bonds = molecule._bonds
+        for i, mark in data['stereo_atoms']:
+            n = mapping[i]
+            env = sorted(bonds[n], key=file_of.__getitem__)
+            stereo.append((molecule.add_atom_stereo, n, env, mark))
+    stereo.extend((molecule.add_wedge, mapping[n], mapping[m], s) for n, m, s in data['stereo'])
+
     while stereo:
         fail_stereo = []
         old_stereo = len(stereo)
-        for n, m, s in stereo:
+        for f, *args in stereo:
             try:
-                molecule.add_wedge(n, m, s, clean_cache=False)
+                f(*args, clean_cache=False)
             except NotChiral:
-                fail_stereo.append((n, m, s))
+                fail_stereo.append((f, *args))
             except IsChiral:
                 pass
             except ValenceError:
