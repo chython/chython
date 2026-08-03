@@ -16,7 +16,6 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-from io import StringIO
 from typing import Literal
 
 
@@ -64,16 +63,56 @@ class Conformers:
                 for conf in rmol.GetConformers() if conf.Is3D()
             ]
         elif engine == 'cdpkit':
-            from CDPL import Base, Chem, ConfGen
-            from chython import SDFWrite, SDFRead  # to prevent circular imports
-            from chython.files.mdl import parse_mol_v2000
+            from CDPL import Chem, ConfGen
 
-            # the easiest way is just to provide intermediate SDF
-            f = StringIO()
-            SDFWrite(f, mapping=False).write(copy)
+            # build the CDPKit molecule directly from the graph. an SDF proxy loses
+            # chirality: chython has no 2D layout, so the wedge bonds it writes are
+            # ambiguous and CDPKit generates arbitrary handedness. setting stereo
+            # descriptors explicitly makes conformers stereochemically correct.
             cmol = Chem.BasicMolecule()
-            if not Chem.SDFMoleculeReader(Base.StringIOStream(f.getvalue())).read(cmol):
-                return 0
+            pos = {}  # chython atom number -> CDPKit atom index (0-based), atom order preserved
+            for i, (n, a) in enumerate(copy.atoms()):
+                ca = cmol.addAtom()
+                Chem.setType(ca, a.atomic_number)
+                Chem.setFormalCharge(ca, a.charge)
+                Chem.setImplicitHydrogenCount(ca, 0)  # hydrogens are explicit
+                if a.isotope:
+                    Chem.setIsotope(ca, a.isotope)
+                if a.is_radical:
+                    Chem.setRadicalType(ca, Chem.RadicalType.DOUBLET)
+                    Chem.setUnpairedElectronCount(ca, 1)
+                pos[n] = i
+
+            bond_of = {}  # (n, m) and (m, n) -> CDPKit bond, for cis/trans reference lookup
+            for n, m, b in copy.bonds():
+                cb = cmol.addBond(pos[n], pos[m])
+                Chem.setOrder(cb, 1 if b.order == 4 else b.order)
+                bond_of[n, m] = bond_of[m, n] = cb
+                if b.order == 4:
+                    Chem.setAromaticityFlag(cb, True)
+            Chem.calcBasicProperties(cmol, False)
+
+            for n, a in copy.atoms():
+                if a.stereo is None or n not in copy.stereogenic_tetrahedrons:
+                    continue  # allenes are not supported
+                env = list(copy._bonds[n])
+                s = copy._translate_tetrahedron_sign(n, env)
+                refs = [cmol.getAtom(pos[x]) for x in env]
+                if len(refs) < 4:  # implicit hydrogen is encoded as the central atom itself
+                    refs.append(cmol.getAtom(pos[n]))
+                cfg = Chem.AtomConfiguration.S if s else Chem.AtomConfiguration.R
+                Chem.setStereoDescriptor(cmol.getAtom(pos[n]), Chem.StereoDescriptor(cfg, *refs))
+
+            for n, m, b in copy.bonds():
+                if b.stereo is None:
+                    continue
+                nm = copy._stereo_cis_trans_centers.get(n)
+                if nm is None or n not in nm or m not in nm:
+                    continue
+                n1, m1, *_ = copy.stereogenic_cis_trans[nm]
+                cfg = Chem.BondConfiguration.CIS if b.stereo else Chem.BondConfiguration.TRANS  # True -> cis/Z
+                Chem.setStereoDescriptor(bond_of[n, m], Chem.StereoDescriptor(
+                    cfg, cmol.getAtom(pos[n1]), cmol.getAtom(pos[n]), cmol.getAtom(pos[m]), cmol.getAtom(pos[m1])))
 
             ConfGen.prepareForConformerGeneration(cmol)
             gen = ConfGen.ConformerGenerator()
@@ -86,16 +125,11 @@ class Conformers:
 
             gen.setConformers(cmol)
             c = gen.getNumConformers()
-            f = Base.StringIOStream(mode='w')
-            Chem.SDFMolecularGraphWriter(f).write(cmol)
-            s = SDFRead(StringIO(f.getvalue()))
-
+            # read coordinates directly per conformer; zip(self, ...) keeps only heavy atoms
+            atom_of = {n: cmol.getAtom(pos[n]) for n in self}
             conformers = [
-                {
-                    n: (a['x'], a['y'], a['z'])
-                    for n, a in zip(self, parse_mol_v2000(s._read_mol(current=False))['atoms'])
-                }
-                for _ in range(c)
+                {n: tuple(Chem.getConformer3DCoordinates(atom_of[n], i)) for n in self}
+                for i in range(c)
             ]
         else: raise ValueError(f'Invalid conformer generation engine: {engine}')
         if conformers:
