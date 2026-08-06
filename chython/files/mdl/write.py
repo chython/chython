@@ -23,6 +23,29 @@ from ...containers import MoleculeContainer
 
 charge_map = {-4: '  0', -3: '  7', -2: '  6', -1: '  5', 0: '  0', 1: '  3', 2: '  2', 3: '  1', 4: '  0'}
 
+# V3000 physical lines are limited to 80 chars including the `M  V30 ` prefix (7 chars). Longer
+# logical lines are split with a trailing `-` continuation marker; parse_mol_v3000 rejoins them.
+_V30_PREFIX = 'M  V30 '
+_V30_LIMIT = 80 - len(_V30_PREFIX)  # room for content after the prefix
+
+
+def _write_v30(file, content):
+    """Write a single logical V3000 line (`M  V30 ` + content), wrapping to 80 chars.
+
+    Continuation physical lines end with `-` and reserve one char for it; the reader
+    (parse_mol_v3000) strips the prefix and the trailing `-` and concatenates the parts.
+    """
+    if len(content) <= _V30_LIMIT:
+        file.write(f'{_V30_PREFIX}{content}\n')
+        return
+    pos = 0
+    chunk = _V30_LIMIT - 1  # leave room for the trailing `-`
+    n = len(content)
+    while n - pos > _V30_LIMIT:
+        file.write(f'{_V30_PREFIX}{content[pos:pos + chunk]}-\n')
+        pos += chunk
+    file.write(f'{_V30_PREFIX}{content[pos:]}\n')
+
 
 def _atom_parity(g):
     """
@@ -130,7 +153,7 @@ class EMOLWrite(IO):
 
             if not self._mapping:
                 m = 0
-            file.write(f'M  V30 {n} {a.atomic_symbol} {x:.4f} {y:.4f} {z} {m}{c}{r}{i}{p}\n')
+            _write_v30(file, f'{n} {a.atomic_symbol} {x:.4f} {y:.4f} {z} {m}{c}{r}{i}{p}')
 
         file.write('M  V30 END ATOM\nM  V30 BEGIN BOND\n')
 
@@ -163,13 +186,13 @@ class EMOLWrite(IO):
         if rac or rel or (self._absolute and ast):
             file.write('M  V30 BEGIN COLLECTION\n')
             if self._absolute and ast:
-                file.write(f'M  V30 MDLV30/STEABS ATOMS=({len(ast)} {" ".join(str(x) for x in ast)})\n')
+                _write_v30(file, f'MDLV30/STEABS ATOMS=({len(ast)} {" ".join(str(x) for x in ast)})')
             for gid in sorted(rac):
                 al = rac[gid]
-                file.write(f'M  V30 MDLV30/STERAC{gid} ATOMS=({len(al)} {" ".join(str(x) for x in al)})\n')
+                _write_v30(file, f'MDLV30/STERAC{gid} ATOMS=({len(al)} {" ".join(str(x) for x in al)})')
             for gid in sorted(rel):
                 al = rel[gid]
-                file.write(f'M  V30 MDLV30/STEREL{gid} ATOMS=({len(al)} {" ".join(str(x) for x in al)})\n')
+                _write_v30(file, f'MDLV30/STEREL{gid} ATOMS=({len(al)} {" ".join(str(x) for x in al)})')
             file.write('M  V30 END COLLECTION\n')
 
         file.write('M  V30 END CTAB\n')

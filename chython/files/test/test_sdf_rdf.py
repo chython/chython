@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from io import StringIO
 from chython import smiles
-from chython.files import SDFRead, SDFWrite, RDFRead, RDFWrite, mdl_mol
+from chython.files import SDFRead, SDFWrite, ESDFWrite, RDFRead, RDFWrite, mdl_mol
 
 
 # V3000 propane with a DAT SGROUP whose FIELDDISP wraps across two lines via a
@@ -44,6 +44,30 @@ def test_sdf_read_v3000_line_continuation():
     with SDFRead(StringIO(_V3000_CONTINUATION + '$$$$\n')) as f:
         mol = next(f)
     assert str(mol) == 'CCC'
+
+
+def test_esdf_write_wraps_long_v3000_lines():
+    # a large enhanced-stereo collection would produce a >80 char logical line; the
+    # writer must split it with `-` continuations, and the result must round-trip.
+    mol = smiles('N' + 'C(F)' * 40 + 'O')
+    mol.clean2d()
+    for _, a in mol.atoms():
+        if a.atomic_symbol == 'C':
+            a._extended_stereo = 1  # all centers in AND group 1 -> long STERAC line
+            a._stereo = True
+
+    buf = StringIO()
+    with ESDFWrite(buf) as w:
+        w.write(mol)
+    out = buf.getvalue()
+
+    assert all(len(line) <= 80 for line in out.splitlines())
+
+    buf.seek(0)
+    with SDFRead(buf) as r:
+        mol2 = next(r)
+    assert str(mol) == str(mol2)
+    assert sum(1 for _, a in mol2.atoms() if a.extended_stereo) == 40
 
 
 def test_sdf_read():
