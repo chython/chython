@@ -58,12 +58,15 @@ def parse_mol_v3000(data, *, _header=True):
             if k and v:
                 meta[k] = v
 
-    # concatenate line continuations using list+join
+    # concatenate line continuations using list+join. accept lines with or without a trailing
+    # newline: SDFRead feeds raw lines (keepends), mdl_mol feeds splitlines() output — the V3000
+    # continuation marker is a trailing `-`, so normalize the line ending before testing for it.
     tmp = []
     parts = []
     for line in data[3:]:
-        if line.endswith('-\n'):
-            parts.append(line[7:-2])  # skip `M  V30 ` prefix and `-\n` suffix
+        line = line.rstrip('\r\n')
+        if line.endswith('-'):
+            parts.append(line[7:-1])  # skip `M  V30 ` prefix and `-` continuation suffix
         else:
             content = line[7:].rstrip()
             if parts:
