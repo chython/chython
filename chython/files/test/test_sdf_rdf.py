@@ -70,6 +70,23 @@ def test_esdf_write_wraps_long_v3000_lines():
     assert sum(1 for _, a in mol2.atoms() if a.extended_stereo) == 40
 
 
+def test_sdf_write_coordinate_overflow_raises():
+    # V2000 coordinates live in a fixed 10-char column; %10.4f overflows for
+    # |x| >= 1e5 and would corrupt the fixed layout so the record cannot be read
+    # back. the writer must raise instead of silently emitting a broken record.
+    from pytest import raises
+
+    mol = smiles('CCO')
+    mol.clean2d()
+    _, a = next(iter(mol.atoms()))
+    a.x = 123456.789
+
+    buf = StringIO()
+    with raises(ValueError):
+        with SDFWrite(buf) as w:
+            w.write(mol)
+
+
 def test_sdf_read():
     with SDFRead('test/implicit.sdf') as f:
         mols = f.read()

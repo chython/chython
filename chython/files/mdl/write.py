@@ -23,6 +23,20 @@ from ...containers import MoleculeContainer
 
 charge_map = {-4: '  0', -3: '  7', -2: '  6', -1: '  5', 0: '  0', 1: '  3', 2: '  2', 3: '  1', 4: '  0'}
 
+
+def _coord_v2000(v):
+    """Format a coordinate into the fixed 10-char F10.4 column of a V2000 atom line.
+
+    `%10.4f` overflows the column for |v| >= 1e5 (or <= -1e4), which would shift every
+    following fixed-position field and make the record unparseable on read. Raise instead
+    of silently corrupting the layout; such molecules must be written as V3000.
+    """
+    s = f'{v:.4f}'
+    if len(s) > 10:
+        raise ValueError(f'coordinate {v} does not fit MDL V2000 10-char field; use V3000')
+    return f'{s:>10}'
+
+
 # V3000 physical lines are limited to 80 chars including the `M  V30 ` prefix (7 chars). Longer
 # logical lines are split with a trailing `-` continuation marker; parse_mol_v3000 rejoins them.
 _V30_PREFIX = 'M  V30 '
@@ -226,7 +240,8 @@ class MOLWrite(IO):
             p = parity.get(m, 0)
             if not self._mapping:
                 m = 0
-            file.write(f'{x:10.4f}{y:10.4f}{z:10.4f} {a.atomic_symbol:3s} 0{c}{p:3d}  0  0  0  0  0  0{m:3d}  0  0\n')
+            file.write(f'{_coord_v2000(x)}{_coord_v2000(y)}{_coord_v2000(z)} {a.atomic_symbol:3s} 0{c}{p:3d}'
+                       f'  0  0  0  0  0  0{m:3d}  0  0\n')
 
         atoms = {m: n for n, m in enumerate(g, start=1)}
         wedge = defaultdict(set)
