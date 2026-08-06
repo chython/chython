@@ -166,7 +166,13 @@ roles = {
         ('secondary_alcohol', '[A:1](-[A:2])-[At:20]'),
         ('tertiary_alcohol',  '[A:1](-[A:2])-[At:20]'),
     ],
-    'aryl_hydroxyl': [('phenol',          '[A:1](-[A:2])-[At:20]')],
+    # phenol keeps its oxygen directly; pyridone (azinone C:1=O:2, ring N:3) exposes
+    # the same aryl-O handle via its hydroxyazine tautomer -- the ring aromatizes
+    # (C=O -> C-O[At], C-N -> C=N), mirroring the mitsunobu/ullmann_phenol O-couplings.
+    'aryl_hydroxyl': [
+        ('phenol',  '[A:1](-[A:2])-[At:20]'),
+        ('azinone', '[A:1](=[A:3])-[A:2]-[At:20]'),
+    ],
     'acid_hydroxyl': [('carboxylic_acid', '[A:1](=[A:2])-[A:100]-[At:20]')],
 
     # terminal alkyne C-H as Sonogashira nucleophile: cap the terminal sp carbon,

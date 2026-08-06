@@ -282,6 +282,13 @@ def _rules():
                                    [(halide, None),
                                     ('phenol', {1: 3, 2: 4})],
                                    '[A:1]-[A:3]-[A:4]'))
+        # pyridone O-arylation: the lactam O (azinone C:1=O:2, ring N:3) is the
+        # nucleophile via its hydroxyazine tautomer -- the ring aromatizes as the
+        # C=O becomes C-O-Ar and the C-N becomes C=N (mirror mitsunobu azinone).
+        rules.append(_make_reactor('ullmann_phenol',
+                                   [(halide, None),
+                                    ('azinone', {2: 3, 1: 4, 3: 5})],
+                                   '[A:1]-[A:3]-[A:4]=[A:5]'))
 
     # ullmann alcohol: ArX + ROH -> Ar-O-R (SNAr/Cu-mediated with aliphatic alcohols)
     for halide in ARYL_LG_F:
@@ -339,6 +346,11 @@ def _rules():
                                    [(boron, None),
                                     ('phenol', {1: 3, 2: 4})],
                                    '[A:1]-[A:3]-[A:4]'))
+        # pyridone O-arylation via Chan-Lam (lactam O nucleophile, ring aromatizes)
+        rules.append(_make_reactor('chan_lam',
+                                   [(boron, None),
+                                    ('azinone', {2: 3, 1: 4, 3: 5})],
+                                   '[A:1]-[A:3]-[A:4]=[A:5]'))
 
     # sulfonylation: RSO2X + alcohol/phenol -> sulfonate ester
     for sulfonyl in ('sulfonyl_chloride', 'sulfonyl_fluoride'):
@@ -351,6 +363,11 @@ def _rules():
                                    [(sulfonyl, None),
                                     ('phenol', {1: 4, 2: 5})],
                                    '[A:1](=[A:2])(=[A:3])-[A:4]-[A:5]'))
+        # pyridone O-sulfonylation (lactam O nucleophile, ring aromatizes)
+        rules.append(_make_reactor('sulfonylation',
+                                   [(sulfonyl, None),
+                                    ('azinone', {2: 4, 1: 5, 3: 6})],
+                                   '[A:1](=[A:2])(=[A:3])-[A:4]-[A:5]=[A:6]'))
 
     # sulfonamide: RSO2X + amine -> sulfonamide
     for sulfonyl in ('sulfonyl_chloride', 'sulfonyl_fluoride'):
@@ -455,6 +472,12 @@ def _rules():
                                 ('phenol', {1: 3, 2: 4})],
                                '[A:1]-[A:3]-[A:4]'))
 
+    # SNAr: ArF + pyridone -> Ar-O-azine (lactam O nucleophile, ring aromatizes)
+    rules.append(_make_reactor('snar',
+                               [('aryl_fluoride', None),
+                                ('azinone', {2: 3, 1: 4, 3: 5})],
+                               '[A:1]-[A:3]-[A:4]=[A:5]'))
+
     # SNAr: ArF + thiol -> Ar-S-R
     rules.append(_make_reactor('snar',
                                [('aryl_fluoride', None),
@@ -467,6 +490,11 @@ def _rules():
                                    [(halide, None),
                                     ('phenol', {1: 3, 2: 4})],
                                    '[A:1]-[A:3]-[A:4]'))
+        # pyridone O-alkylation (lactam O nucleophile, ring aromatizes)
+        rules.append(_make_reactor('williamson',
+                                   [(halide, None),
+                                    ('azinone', {2: 3, 1: 4, 3: 5})],
+                                   '[A:1]-[A:3]-[A:4]=[A:5]'))
 
         for alcohol in ('primary_alcohol', 'secondary_alcohol', 'tertiary_alcohol'):
             rules.append(_make_reactor('williamson',
@@ -484,6 +512,11 @@ def _rules():
                                [('acyl_chloride', None),
                                 ('phenol', {1: 3, 2: 4})],
                                '[A:1](=[A:2])-[A:3]-[A:4]'))
+    # pyridone O-acylation (lactam O nucleophile, ring aromatizes)
+    rules.append(_make_reactor('acylation',
+                               [('acyl_chloride', None),
+                                ('azinone', {2: 3, 1: 4, 3: 5})],
+                               '[A:1](=[A:2])-[A:3]-[A:4]=[A:5]'))
 
     # thioether: alkyl_halide/pseudohalide + thiol -> R-S-R'. Remap the fixed
     # 2-atom thiol (not the halide, whose sulfonate variants carry many extra
@@ -512,6 +545,11 @@ def _rules():
                                [('isocyanate', None),
                                 ('phenol', {1: 4, 2: 5})],
                                '[A:1]-[A:2](=[A:3])-[A:4]-[A:5]'))
+    # pyridone O-carbamoylation (lactam O nucleophile, ring aromatizes)
+    rules.append(_make_reactor('carbamate',
+                               [('isocyanate', None),
+                                ('azinone', {2: 4, 1: 5, 3: 6})],
+                               '[A:1]-[A:2](=[A:3])-[A:4]-[A:5]=[A:6]'))
 
     # tetrazole: azide + nitrile -> 2,5-disubstituted tetrazole (ring formation)
     rules.append(_make_reactor('tetrazole',
