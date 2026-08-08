@@ -94,6 +94,100 @@ def test_no_layout_no_conformer():
     assert mol.to_rdkit(keep_coordinates=False).GetNumConformers() == 0
 
 
+enhanced = [
+    # source, expected extended_stereo per stereocenter in chython atom order
+    ('C[C@H](O)[C@@H](N)[C@H](F)C |&1:1,o2:3|', [1, -2, None]),
+    ('C[C@H](O)[C@@H](N)C |&1:1,&1:3|', [1, 1]),
+    ('C[C@H](O)[C@@H](N)C |&3:1,o2:3|', [3, -2]),
+    ('C[C@H](O)CC |o1:1|', [-1]),
+    ('C[C@H](O)[C@@H](N)C', [None, None]),
+]
+
+
+@mark.parametrize('source, expected', enhanced)
+def test_enhanced_stereo_roundtrip(source, expected):
+    """AND/OR groups survive the round trip, group ids included."""
+    mol = smiles(source)
+    assert [a.extended_stereo for _, a in mol.atoms() if a.stereo is not None] == expected
+
+    back = from_rdkit_molecule(mol.to_rdkit(keep_mapping=False))
+    assert format(back, 'h') == format(mol, 'h')
+    assert [a.extended_stereo for _, a in back.atoms() if a.stereo is not None] == expected
+
+
+def test_enhanced_stereo_export():
+    mol = smiles('C[C@H](O)[C@@H](N)[C@H](F)C |&1:1,o2:3|')
+
+    # absolute group is implicit by default and explicit on demand, mirroring the MDL V3000 writers
+    assert Chem.MolToCXSmiles(mol.to_rdkit(keep_mapping=False)).endswith('|o2:3,&1:5|')
+    assert Chem.MolToCXSmiles(mol.to_rdkit(keep_mapping=False, absolute=True)).endswith('|a:1,o2:3,&1:5|')
+
+    collection = [x[7:] for x in Chem.MolToV3KMolBlock(mol.to_rdkit(keep_mapping=False, absolute=True)).splitlines()
+                  if 'MDLV30/STE' in x]
+    assert collection == ['MDLV30/STEABS ATOMS=(1 6)', 'MDLV30/STERAC1 ATOMS=(1 2)', 'MDLV30/STEREL2 ATOMS=(1 4)']
+
+    # a molecule without extended stereo gets no groups unless asked for
+    assert not smiles('C[C@H](O)CC').to_rdkit(keep_mapping=False).GetStereoGroups()
+
+
+def test_enhanced_stereo_absolute_dropped_on_import():
+    """chython marks a center absolute by the absence of a group, so ABS carries no information."""
+    mol = from_rdkit_molecule(Chem.MolFromSmiles('C[C@H](O)[C@@H](N)C |a:1,&1:3|'))
+    assert [a.extended_stereo for _, a in mol.atoms() if a.stereo is not None] == [None, 1]
+
+
+def test_enhanced_stereo_only_tetrahedrons():
+    """A group on a non-tetrahedral or non-stereogenic atom must not reach rdkit.
+
+    rdkit happily writes a collection entry for an atom without a chiral tag, which would
+    produce a mol block claiming stereo the molecule does not have.
+    """
+    mol = smiles('CC(O)CC')
+    mol.atom(2)._extended_stereo = 1  # no stereo label -> masked by the extended_stereo property
+    assert not mol.to_rdkit(keep_mapping=False).GetStereoGroups()
+
+    # allene centers carry extended stereo too, but allenes are not exported at all
+    allene = smiles('OC(F)=[C@]=C(O)F |&1:3|')
+    assert allene.atom(4).extended_stereo == 1  # not masked, the center is labeled
+    assert not allene.to_rdkit(keep_mapping=False).GetStereoGroups()
+
+
+def test_enhanced_stereo_atom_in_two_groups():
+    """rdkit allows an atom in an AND and an OR group at once, the signed chython int does not."""
+    mol = from_rdkit_molecule(Chem.MolFromSmiles('C[C@H](O)[C@@H](N)C |&1:1,o1:1|'))
+    assert [a.extended_stereo for _, a in mol.atoms() if a.stereo is not None] == [1, None]
+
+
+@mark.parametrize('source', ['C/C=C/C.O', 'C/C=C/C.C', 'CC/C=C\\CC.[Na+].[Cl-]',
+                             'C/C=C/C.C/C=C\\C', 'C/C=C/C=C/C.CC(=O)O'])
+def test_cis_trans_multifragment(source):
+    """rdkit derives smiles bond directions from the stereo atoms only for single fragment mols.
+
+    Without an explicit SetDoubleBondNeighborDirections every salt and solvate silently
+    lost its cis-trans marks on smiles export.
+    """
+    assert Chem.MolToSmiles(smiles(source).to_rdkit(keep_mapping=False)) == Chem.CanonSmiles(source)
+
+
+def test_cis_trans_at_boron():
+    """The dative bond direction fix reversed every bond, breaking SetStereoAtoms on B and At."""
+    assert Chem.MolToSmiles(smiles('C/B=C/C').to_rdkit(keep_mapping=False)) == 'C/B=C/C'
+
+
+@mark.parametrize('order', [('Fe', 'N'), ('N', 'Fe')])
+def test_dative_bond_direction(order):
+    """A dative bond always points from the donor to the acceptor, whatever the atom order."""
+    from chython import MoleculeContainer
+
+    mol = MoleculeContainer()
+    n, m = (mol.add_atom(x) for x in order)
+    mol.add_bond(n, m, 8)
+    rd_mol = mol.to_rdkit(keep_mapping=False)
+
+    bond = rd_mol.GetBondWithIdx(0)
+    assert (bond.GetBeginAtom().GetSymbol(), bond.GetEndAtom().GetSymbol()) == ('N', 'Fe')
+
+
 def test_conformers_invariant():
     """Conformers either match the atom set exactly or are None. Never desynced.
 

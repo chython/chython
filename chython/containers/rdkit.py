@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from collections import defaultdict
 from typing import TYPE_CHECKING, Type
 from ..periodictable import Element
 
@@ -31,8 +32,11 @@ class RDkit:
     def from_rdkit(cls: Type['MoleculeContainer'], data):
         """
         RDKit molecule object to MoleculeContainer converter
+
+        AND/OR stereo groups are imported as extended stereo. Absolute groups are dropped:
+        chython treats any set stereo label outside an AND/OR group as absolute already.
         """
-        from rdkit.Chem import BondStereo, BondType, ChiralType
+        from rdkit.Chem import BondStereo, BondType, ChiralType, StereoGroupType
 
         _rdkit_bond_map = {BondType.SINGLE: 1, BondType.DOUBLE: 2, BondType.TRIPLE: 3, BondType.AROMATIC: 4,
                            BondType.ZERO: 8, BondType.UNSPECIFIED: 8, BondType.DATIVE: 8}
@@ -40,6 +44,8 @@ class RDkit:
         _chiral_ccw = ChiralType.CHI_TETRAHEDRAL_CCW
         _trans = BondStereo.STEREOE
         _cis = BondStereo.STEREOZ
+        _and = StereoGroupType.STEREO_AND
+        _or = StereoGroupType.STEREO_OR
 
         mol = cls()
 
@@ -91,26 +97,47 @@ class RDkit:
             except KeyError:
                 pass
 
+        # AND groups are positive, OR groups negative. group ids are taken as is
+        for sg in data.GetStereoGroups():
+            if (gt := sg.GetGroupType()) is _and:
+                sign = 1
+            elif gt is _or:
+                sign = -1
+            else:  # absolute group. chython has no explicit mark for it
+                continue
+            # bond-level extended stereo has no place in the chython model, atoms only
+            es = sign * (sg.GetReadId() or 1)
+            for ra in sg.GetAtoms():
+                a = mol.atom(mapping[ra.GetIdx()])
+                if a._extended_stereo is None:  # rdkit allows an atom in AND and OR at once. first wins
+                    a._extended_stereo = es
+
         mol.fix_structure(recalculate_hydrogens=False)
         if tetrahedron_stereo or cis_trans_stereo:
             mol.fix_stereo()
         return mol
 
-    def to_rdkit(self: 'MoleculeContainer', *, keep_mapping=True, keep_hydrogens=True, keep_coordinates=None):
+    def to_rdkit(self: 'MoleculeContainer', *, keep_mapping=True, keep_hydrogens=True, keep_coordinates=None,
+                 absolute=False):
         """
         Convert into RDKit molecule object
 
-        Aromatic, tetrahedral and cis-trans stereo are preserved. Allene/cumulene
-        stereo is not exported: RDKit cannot round-trip it (the 3D embedder ignores
-        allene chirality), mirroring `to_openbabel` and `to_indigo`.
+        Aromatic, tetrahedral, cis-trans and extended (AND/OR) stereo are preserved.
+        Allene/cumulene stereo is not exported: RDKit cannot round-trip it (the 3D
+        embedder ignores allene chirality), mirroring `to_openbabel` and `to_indigo`.
 
         :param keep_mapping: set atom numbers
         :param keep_hydrogens: set implicit hydrogens
         :param keep_coordinates: export the 2D layout as an RDKit conformer.
          `None` (default) exports it only when a layout exists, i.e. some atom has nonzero coordinates.
+        :param absolute: add an ABS stereo group for stereocenters without extended stereo groups.
+            By default chython treats any set chirality flag as absolute if not in an AND/OR group,
+            but some tools require the ABS group to be explicitly present. Mirrors the `absolute`
+            flag of the MDL V3000 writers.
         """
-        from rdkit.Chem import (AssignStereochemistry, Atom, BondStereo, BondType, ChiralType,
-                                Conformer, RWMol, SanitizeMol)
+        from rdkit.Chem import (AssignStereochemistry, Atom, BondStereo, BondType, ChiralType, Conformer,
+                                CreateStereoGroup, RWMol, SanitizeMol, SetDoubleBondNeighborDirections,
+                                StereoGroupType)
 
         _bond_map = {1: BondType.SINGLE, 2: BondType.DOUBLE, 3: BondType.TRIPLE,
                      4: BondType.AROMATIC, 8: BondType.DATIVE}
@@ -140,8 +167,8 @@ class RDkit:
         inverted = {v: k for k, v in mapping.items()}
 
         for n, m, b in self.bonds():
-            if self.atom(n).atomic_symbol not in _inorganic:
-                n, m = m, n  # fix direction of dative bond
+            if b.order == 8 and self.atom(n).atomic_symbol not in _inorganic:
+                n, m = m, n  # dative bond points from the donor to the acceptor
             mol.AddBond(mapping[n], mapping[m], _bond_map[b.order])
 
         for n, a in self.atoms():
@@ -167,6 +194,33 @@ class RDkit:
             rb.SetStereoAtoms(mapping[n1], mapping[m1])
             rb.SetStereo(_cis if b.stereo else _trans)
 
+        # extended stereo groups. only tetrahedrons, matching the exported chirality tags
+        rac = defaultdict(list)  # AND groups: positive extended_stereo
+        rel = defaultdict(list)  # OR groups: negative extended_stereo
+        ast = []  # absolute stereo
+        for n, a in self.atoms():
+            if a.stereo is None or n not in self.stereogenic_tetrahedrons:
+                continue
+            if (es := a.extended_stereo) is None:
+                ast.append(mapping[n])
+            elif es > 0:
+                rac[es].append(mapping[n])
+            else:
+                rel[-es].append(mapping[n])
+
+        groups = []
+        if absolute and ast:
+            groups.append((StereoGroupType.STEREO_ABSOLUTE, 0, ast))
+        groups.extend((StereoGroupType.STEREO_AND, gid, rac[gid]) for gid in sorted(rac))
+        groups.extend((StereoGroupType.STEREO_OR, gid, rel[gid]) for gid in sorted(rel))
+        if groups:
+            sgs = []
+            for gt, gid, al in groups:
+                sg = CreateStereoGroup(gt, mol, al, [], gid)
+                sg.SetWriteId(gid)  # otherwise rdkit renumbers the groups from one on write
+                sgs.append(sg)
+            mol.SetStereoGroups(sgs)
+
         if keep_coordinates is None:
             keep_coordinates = any(a.x or a.y for _, a in self.atoms())
         if keep_coordinates:
@@ -184,6 +238,9 @@ class RDkit:
 
         SanitizeMol(mol)
         AssignStereochemistry(mol, flagPossibleStereoCenters=True, force=True)
+        # rdkit derives the smiles bond directions from the stereo atoms only for single fragment
+        # molecules. without this any salt or solvate loses its cis-trans marks on smiles export
+        SetDoubleBondNeighborDirections(mol)
         return mol
 
 
