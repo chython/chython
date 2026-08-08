@@ -136,24 +136,41 @@ def _render_aromatic_bond(n_x, n_y, m_x, m_y, c_x, c_y):
     mr_x, mr_y = hypot(mn_x, mn_y), 0
     cr_x, cr_y = _rotate_vector(cn_x, cn_y, mn_x, -mn_y)
 
-    if cr_y and aromatic_space / cr_y < .65:
-        if cr_y > 0:
-            r_y = aromatic_space
-        else:
-            r_y = -aromatic_space
-            cr_y = -cr_y
+    # skip bonds with a nearly collinear ring centroid: the inner line is undefined there and
+    # its inset would explode. abs() keeps the test symmetric for both centroid sides.
+    if not cr_y or aromatic_space / abs(cr_y) >= .65:
+        return
 
-        ar_x = aromatic_space * cr_x / cr_y
-        br_x = mr_x - aromatic_space * (mr_x - cr_x) / cr_y
+    if cr_y > 0:
+        r_y = aromatic_space
+    else:
+        r_y = -aromatic_space
+        cr_y = -cr_y
 
-        # backward reorienting
-        an_x, an_y = _rotate_vector(ar_x, r_y, mn_x, mn_y)
-        bn_x, bn_y = _rotate_vector(br_x, r_y, mn_x, mn_y)
-        a_x, a_y = n_x + an_x, n_y + an_y
-        b_x, b_y = n_x + bn_x, n_y + bn_y
+    ar_x = aromatic_space * cr_x / cr_y
+    br_x = mr_x - aromatic_space * (mr_x - cr_x) / cr_y
 
-        return f'      <line x1="{a_x:.2f}" y1="{-a_y:.2f}" x2="{b_x:.2f}" y2="{-b_y:.2f}" ' \
-               f'stroke-dasharray="{dash3:.2f} {dash4:.2f}"/>'
+    # a skewed centroid (distorted ring) projects the insets outside the bond. clamp to the
+    # bond footprint so the dash can't slide out of the ring.
+    if ar_x < 0.:
+        ar_x = 0.
+    elif ar_x > mr_x:
+        ar_x = mr_x
+    if br_x < 0.:
+        br_x = 0.
+    elif br_x > mr_x:
+        br_x = mr_x
+    if br_x <= ar_x:  # nothing left to draw
+        return
+
+    # backward reorienting
+    an_x, an_y = _rotate_vector(ar_x, r_y, mn_x, mn_y)
+    bn_x, bn_y = _rotate_vector(br_x, r_y, mn_x, mn_y)
+    a_x, a_y = n_x + an_x, n_y + an_y
+    b_x, b_y = n_x + bn_x, n_y + bn_y
+
+    return f'      <line x1="{a_x:.2f}" y1="{-a_y:.2f}" x2="{b_x:.2f}" y2="{-b_y:.2f}" ' \
+           f'stroke-dasharray="{dash3:.2f} {dash4:.2f}"/>'
 
 
 def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool = False,
