@@ -168,12 +168,11 @@ class RDkit:
         conf.Set3D(False)
         mol.AddConformer(conf, assignId=True)
 
-        if hasattr(self, '_conformers'):
-            for c in self._conformers:
-                conf = Conformer()
-                for n, xyz in c.items():
-                    conf.SetAtomPosition(mapping[n], xyz)
-                mol.AddConformer(conf, assignId=True)
+        for c in self._conformers or ():
+            conf = Conformer()
+            for n, xyz in c.items():
+                conf.SetAtomPosition(mapping[n], xyz)
+            mol.AddConformer(conf, assignId=True)
 
         SanitizeMol(mol)
         AssignStereochemistry(mol, flagPossibleStereoCenters=True, force=True)

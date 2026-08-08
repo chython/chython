@@ -87,6 +87,25 @@ def test_sdf_write_coordinate_overflow_raises():
             w.write(mol)
 
 
+def test_sdf_write3d_reports_missing_conformer():
+    # write3d indexes into _conformers; a missing conformer or an out of range index
+    # used to surface as a bare TypeError/KeyError deep inside the writer.
+    from pytest import raises
+
+    mol = smiles('CCO')
+    with raises(ValueError):  # no conformers at all
+        with SDFWrite(StringIO()) as w:
+            w.write(mol, write3d=0)
+
+    mol.generate_conformers(limit=1)
+    with SDFWrite(StringIO()) as w:
+        w.write(mol, write3d=0)
+
+    with raises(IndexError):
+        with SDFWrite(StringIO()) as w:
+            w.write(mol, write3d=5)
+
+
 def test_sdf_read():
     with SDFRead('test/implicit.sdf') as f:
         mols = f.read()

@@ -57,9 +57,8 @@ def test_coordinates():
     rd_mol_h = Chem.AddHs(rd_mol)
     AllChem.EmbedMolecule(rd_mol_h)
     rd_mol_nh = Chem.RemoveHs(rd_mol_h)
-
     mol = from_rdkit_molecule(rd_mol_nh)
-    assert hasattr(mol, '_conformers')
+    assert mol._conformers is not None
     assert isinstance(mol._conformers, list)
     assert len(mol._conformers) == 1
     assert isinstance(mol._conformers[0], dict)
@@ -68,3 +67,67 @@ def test_coordinates():
     assert all(len(x) == 3 for x in mol._conformers[0].values())
     assert all(isinstance(x, float) for x in mol._conformers[0].values() for x in x)
     assert any(x for x in mol._conformers[0].values() for x in x)
+
+
+def test_conformers_invariant():
+    """Conformers either match the atom set exactly or are None. Never desynced.
+
+    Anything that changes the atom set or the connectivity flushes them; only
+    implicify_hydrogens keeps geometry, since hiding an explicit H does not move
+    the heavy atoms.
+    """
+    def build():
+        rd = Chem.AddHs(Chem.MolFromSmiles('CC(C)(C)OC(=O)NCC(=O)O'))
+        AllChem.EmbedMolecule(rd, randomSeed=42)
+        mol = from_rdkit_molecule(Chem.RemoveHs(rd))
+        assert mol._conformers[0].keys() == set(mol)
+        return mol
+
+    # copy and remap preserve the geometry, keys stay in sync
+    mol = build()
+    copy = mol.copy()
+    assert copy._conformers[0] == mol._conformers[0]
+    assert copy._conformers[0] is not mol._conformers[0]
+    mol.remap({next(iter(mol)): max(mol) + 10})
+    assert mol._conformers[0].keys() == set(mol)
+
+    # explicify_hydrogens adds atoms with unknown coordinates -> flush
+    mol = build()
+    assert mol.explicify_hydrogens()
+    assert mol._conformers is None
+
+    # implicify_hydrogens is the one exception: geometry kept, removed H pruned
+    mol = smiles('[H]CCO')
+    mol.generate_conformers(limit=1)
+    assert mol.implicify_hydrogens()
+    assert mol._conformers[0].keys() == set(mol)
+
+    # any edit of the atom set or the connectivity flushes
+    for edit in (lambda m: m.delete_atom(next(iter(m))),
+                 lambda m: m.add_atom('O'),
+                 lambda m: m.delete_bond(*next((n, k) for n, k, _ in m.bonds())),
+                 lambda m: m.add_bond(next(iter(m)), m.add_atom('O'), 1),
+                 lambda m: m.remove_protection(),
+                 lambda m: m.union(smiles('CC'), remap=True, copy=False)):
+        mol = build()
+        edit(mol)
+        assert mol._conformers is None, edit
+
+    # substructure / split drop geometry: bonds are cut
+    mol = build()
+    assert mol.substructure(list(mol)[:3])._conformers is None
+    assert mol.union(smiles('CC'), remap=True)._conformers is None
+    mol = build()
+    assert all(m._conformers is None for m in mol.split())
+
+    # a rolled back transaction restores the geometry it flushed
+    mol = build()
+    saved = mol._conformers[0].copy()
+    try:
+        with mol as m:
+            m.delete_atom(next(iter(m)))
+            assert m._conformers is None
+            raise ValueError
+    except ValueError:
+        pass
+    assert mol._conformers[0] == saved

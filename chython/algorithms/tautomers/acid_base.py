@@ -39,6 +39,8 @@ class AcidBase:
                 return []
             return False
 
+        # conformers are kept: neutralization moves charges and implicit hydrogens only.
+        # the atom set and the connectivity are untouched, so the geometry stays valid.
         self._atoms = mol._atoms
         self.flush_cache(keep_sssr=True, keep_components=True, keep_special_connectivity=True)
         self.fix_stereo()

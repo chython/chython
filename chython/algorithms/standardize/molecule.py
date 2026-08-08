@@ -347,6 +347,12 @@ class Standardize:
             atoms[n]._implicit_hydrogens = h
 
         if to_remove:
+            # hiding an explicit hydrogen doesn't move the heavy atoms, so the geometry
+            # stays valid. drop only the removed atoms from each conformer.
+            if self._conformers is not None:
+                for c in self._conformers:
+                    for n in to_remove:
+                        del c[n]
             self.flush_cache(keep_sssr=True)
             self.calc_labels()
             self.fix_stereo()
@@ -381,6 +387,7 @@ class Standardize:
                 log.append((n, m))
                 m += 1
 
+            self._conformers = None  # coordinates of the added hydrogens are unknown
             self.flush_cache(keep_sssr=True)
             self.calc_labels()
             self.fix_stereo()
@@ -458,6 +465,7 @@ class Standardize:
                             b._order = bo
                         else:  # new bond
                             keep_sssr = keep_components = False
+                            self._conformers = None  # geometry changed
                             bonds[n][m] = bonds[m][n] = Bond(bo)
                     log.append((tuple(match), r, str(pattern)))
 

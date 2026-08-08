@@ -75,6 +75,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         self._name = None
         self._changed = None
         self._backup = None
+        self._conformers = None
 
     @property
     def meta(self) -> Dict:
@@ -276,6 +277,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
                 raise TypeError('Element object expected')
 
         n = super().add_atom(atom, *args, **kwargs)
+        self._conformers = None  # geometry changed
         if self._changed is None:
             self._changed = {n}
         else:
@@ -298,6 +300,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         super().add_bond(n, m, bond)
         if bond == 8:
             return  # any bond doesn't change anything
+        self._conformers = None  # geometry changed
         if self._changed is None:
             self._changed = {n, m}
         else:
@@ -316,6 +319,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
         del self._atoms[n]
+        self._conformers = None  # geometry changed
         for m, bond in self._bonds.pop(n).items():
             del self._bonds[m][n]
             if bond == 8:
@@ -337,6 +341,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
         Call `kekule()` and `thiele()` in sequence to fix marks.
         """
         del self._bonds[n][m]
+        self._conformers = None  # geometry changed
         if self._bonds[m].pop(n) != 8:
             if self._changed is None:
                 self._changed = {n, m}
@@ -355,6 +360,10 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             copy._meta = None
         else:
             copy._meta = self._meta.copy()
+        if self._conformers is None:
+            copy._conformers = None
+        else:
+            copy._conformers = [c.copy() for c in self._conformers]
 
         if keep_sssr:
             for k,  v in self.__dict__.items():
@@ -368,7 +377,15 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
     def union(self, other: 'MoleculeContainer', *, remap: bool = False, copy: bool = True) -> 'MoleculeContainer':
         if not isinstance(other, MoleculeContainer):
             raise TypeError('MoleculeContainer expected')
-        return super().union(other, remap=remap, copy=copy)
+        u = super().union(other, remap=remap, copy=copy)
+        u._conformers = None  # conformers of two molecules describe unrelated geometries
+        return u
+
+    def remap(self, mapping: Dict[int, int]):
+        super().remap(mapping)
+        if self._conformers is not None:
+            mg = mapping.get
+            self._conformers = [{mg(n, n): xyz for n, xyz in c.items()} for c in self._conformers]
 
     def substructure(self, atoms: Iterable[int], *, recalculate_hydrogens=True) -> 'MoleculeContainer':
         """
@@ -388,7 +405,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             raise ValueError('invalid atom numbers')
         atoms = tuple(n for n in self if n in atoms_set)  # save original order
         sub = object.__new__(self.__class__)
-        sub._name = sub._meta = sub._changed = sub._backup = None
+        sub._name = sub._meta = sub._changed = sub._backup = sub._conformers = None
         sub._atoms = {n: self._atoms[n].copy(hydrogens=True, stereo=True) for n in atoms}
         sub._bonds = sb = {}
         for n in atoms:
@@ -822,6 +839,7 @@ class MoleculeContainer(MoleculeStereo, Graph[Element, Bond], Morgan, Rings, Mol
             self._bonds = backup._bonds
             self._meta = backup._meta
             self._name = backup._name
+            self._conformers = backup._conformers
             self.__dict__ = backup.__dict__
         else:  # update internal state
             self.fix_structure()

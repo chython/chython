@@ -50,6 +50,7 @@ class Salts:
                 del atoms[n]
                 del bonds[n]
 
+            self._conformers = None  # geometry changed
             self.flush_cache(keep_sssr=True)
             if logging:
                 return metals
@@ -78,6 +79,7 @@ class Salts:
                     del atoms[n]
                     del bonds[n]
 
+                self._conformers = None  # geometry changed
                 self.flush_cache()
                 if logging:
                     return log
@@ -115,6 +117,7 @@ class Salts:
                     atoms[m]._charge -= 1
                     log.append((n, m))
             if log:
+                self._conformers = None  # bonds broken. geometry changed
                 self.flush_cache()
                 self.fix_stereo()
                 if logging:

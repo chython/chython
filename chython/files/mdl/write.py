@@ -61,6 +61,18 @@ def _write_v30(file, content):
     file.write(f'{_V30_PREFIX}{content[pos:]}\n')
 
 
+def _get_conformer(g, index):
+    """
+    3D coordinates of the given conformer.
+    """
+    if g._conformers is None:
+        raise ValueError('no conformers stored within structure')
+    try:
+        return g._conformers[index]
+    except IndexError:
+        raise IndexError('invalid conformer index')
+
+
 def _atom_parity(g):
     """
     MDL atom stereo parity for each stereogenic tetrahedron: 1=odd, 2=even.
@@ -143,7 +155,7 @@ class EMOLWrite(IO):
             raise TypeError('MoleculeContainer expected')
 
         if write3d is not None:
-            xyz = g._conformers[write3d]
+            xyz = _get_conformer(g, write3d)
         else:
             z = 0
 
@@ -220,7 +232,7 @@ class MOLWrite(IO):
             raise ValueError('MOL file support only small molecules')
 
         if write3d is not None:
-            xyz = g._conformers[write3d]
+            xyz = _get_conformer(g, write3d)
         else:
             z = 0.
 

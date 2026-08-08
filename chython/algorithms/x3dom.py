@@ -136,7 +136,7 @@ class X3domMolecule:
 
         :param index: index of conformer
         """
-        if not hasattr(self, '_conformers'):
+        if self._conformers is None:
             raise ValueError('No conformers stored within structure')
         try:
             xyz = self._conformers[index]

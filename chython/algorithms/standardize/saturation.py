@@ -151,6 +151,10 @@ class Saturation:
                     return log
                 return False
         # reset molecule
+        # NOTE: conformers are intentionally kept. saturate() derives bond orders, charges
+        # and radicals from an existing geometry and never touches the atom set, so the
+        # coordinates stay valid; xyz() calls it with the parsed conformer as the source
+        # of truth and would lose it otherwise.
         self._bonds = bonds
         for n, r in radicals.items():
             atoms[n]._is_radical = r
