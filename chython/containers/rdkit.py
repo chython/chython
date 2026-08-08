@@ -64,14 +64,17 @@ class RDkit:
                 cis_trans_stereo.append((n, m, mapping[nn], mapping[nm], s == _cis))
 
         if cs := data.GetConformers():
-            # set coordinates from the first rdkit conformer. usually it's 2d layout
-            for (_, atom), (x, y, _) in zip(mol.atoms(), cs[0].GetPositions()):
-                atom.xy = (x, y)
-
             conformers = []
+            plane = None
             for c in cs:
                 if c.Is3D():
                     conformers.append({n: tuple(v) for n, v in enumerate(c.GetPositions(), 1)})
+                elif plane is None:
+                    plane = c  # first 2d conformer is the layout
+            if plane is not None:
+                # the xy of a 3d conformer is a meaningless projection, not a layout
+                for (_, atom), (x, y, _) in zip(mol.atoms(), plane.GetPositions()):
+                    atom.xy = (x, y)
             if conformers:
                 mol._conformers = conformers
 
@@ -93,7 +96,7 @@ class RDkit:
             mol.fix_stereo()
         return mol
 
-    def to_rdkit(self: 'MoleculeContainer', *, keep_mapping=True, keep_hydrogens=True):
+    def to_rdkit(self: 'MoleculeContainer', *, keep_mapping=True, keep_hydrogens=True, keep_coordinates=None):
         """
         Convert into RDKit molecule object
 
@@ -103,6 +106,8 @@ class RDkit:
 
         :param keep_mapping: set atom numbers
         :param keep_hydrogens: set implicit hydrogens
+        :param keep_coordinates: export the 2D layout as an RDKit conformer.
+         `None` (default) exports it only when a layout exists, i.e. some atom has nonzero coordinates.
         """
         from rdkit.Chem import (AssignStereochemistry, Atom, BondStereo, BondType, ChiralType,
                                 Conformer, RWMol, SanitizeMol)
@@ -162,11 +167,14 @@ class RDkit:
             rb.SetStereoAtoms(mapping[n1], mapping[m1])
             rb.SetStereo(_cis if b.stereo else _trans)
 
-        conf = Conformer()
-        for n, a in self.atoms():
-            conf.SetAtomPosition(mapping[n], (a.x, a.y, 0))
-        conf.Set3D(False)
-        mol.AddConformer(conf, assignId=True)
+        if keep_coordinates is None:
+            keep_coordinates = any(a.x or a.y for _, a in self.atoms())
+        if keep_coordinates:
+            conf = Conformer()
+            for n, a in self.atoms():
+                conf.SetAtomPosition(mapping[n], (a.x, a.y, 0))
+            conf.Set3D(False)
+            mol.AddConformer(conf, assignId=True)
 
         for c in self._conformers or ():
             conf = Conformer()

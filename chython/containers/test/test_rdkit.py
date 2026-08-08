@@ -57,6 +57,9 @@ def test_coordinates():
     rd_mol_h = Chem.AddHs(rd_mol)
     AllChem.EmbedMolecule(rd_mol_h)
     rd_mol_nh = Chem.RemoveHs(rd_mol_h)
+    # xy of a 3d conformer is a projection, not a layout. it must not be imported
+    assert not any(a.x or a.y for _, a in from_rdkit_molecule(rd_mol_nh).atoms())
+
     mol = from_rdkit_molecule(rd_mol_nh)
     assert mol._conformers is not None
     assert isinstance(mol._conformers, list)
@@ -67,6 +70,28 @@ def test_coordinates():
     assert all(len(x) == 3 for x in mol._conformers[0].values())
     assert all(isinstance(x, float) for x in mol._conformers[0].values() for x in x)
     assert any(x for x in mol._conformers[0].values() for x in x)
+
+
+def test_no_layout_no_conformer():
+    """A molecule without a 2d layout must not export a degenerate all-zero conformer.
+
+    RDKit dumps it into CXSMILES and derives bond directions from it, losing stereo.
+    """
+    mol = smiles('C/C=C/CO')
+    rd_mol = mol.to_rdkit(keep_mapping=False)
+    assert rd_mol.GetNumConformers() == 0
+    assert '|' not in Chem.MolToCXSmiles(rd_mol)
+    # cis-trans survives the mol block round trip only without the degenerate conformer
+    reparsed = Chem.MolFromMolBlock(Chem.MolToMolBlock(rd_mol))
+    assert Chem.MolToSmiles(reparsed) == Chem.MolToSmiles(rd_mol)
+
+    mol.clean2d()
+    rd_mol = mol.to_rdkit(keep_mapping=False)
+    assert rd_mol.GetNumConformers() == 1
+    assert not rd_mol.GetConformer(0).Is3D()
+
+    assert smiles('CCO').to_rdkit(keep_coordinates=True).GetNumConformers() == 1
+    assert mol.to_rdkit(keep_coordinates=False).GetNumConformers() == 0
 
 
 def test_conformers_invariant():
