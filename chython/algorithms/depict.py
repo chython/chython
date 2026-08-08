@@ -98,6 +98,21 @@ def _rotate_vector(x1, y1, x2, y2):
     return cos_rad * x1 - sin_rad * y1, sin_rad * x1 + cos_rad * y1
 
 
+def _dasharray(dash, gap):
+    """
+    dash pattern compensated for round linecaps.
+
+    round caps extend every dash by bond_width/2 on each end. shrink the painted part and grow
+    the gap by that amount so the rendered pattern matches the configured lengths.
+    """
+    cap = _render_config['bond_width'] / 2
+    dash -= 2 * cap
+    gap += 2 * cap
+    if dash < .01:  # dot-like pattern. keep it renderable
+        dash = .01
+    return f'stroke-dasharray="{dash:.2f} {gap:.2f}"'
+
+
 def _graph_svg(atoms, bonds, define, masks, uid, viewbox_x, viewbox_y, width, height):
     svg = [f'  <g id="{uid}-molecule">\n    <defs>']
     svg.extend(define)
@@ -109,13 +124,14 @@ def _graph_svg(atoms, bonds, define, masks, uid, viewbox_x, viewbox_y, width, he
             svg.extend(masks)
             svg.append('      </mask>\n    </defs>\n'
                        f'    <g fill="none" stroke="{_render_config["bond_color"]}" '
-                       f'stroke-width="{_render_config["bond_width"]:.2f}" mask="url(#{uid}-mask)">')
+                       f'stroke-width="{_render_config["bond_width"]:.2f}" stroke-linecap="round" '
+                       f'mask="url(#{uid}-mask)">')
             if len(bonds) == 1:  # SVG BUG adhoc
                 svg.append(f'      <line x1="{viewbox_x:.2f}" y1="{viewbox_y:.2f}" '
                            f'x2="{viewbox_x + width:.2f}" y2="{viewbox_y:.2f}" stroke="none"/>')
         else:
             svg.append(f'    </defs>\n    <g fill="none" stroke="{_render_config["bond_color"]}" '
-                       f'stroke-width="{_render_config["bond_width"]:.2f}">')
+                       f'stroke-width="{_render_config["bond_width"]:.2f}" stroke-linecap="round">')
         svg.extend(bonds)
         svg.append('    </g>')
     else:
@@ -170,7 +186,7 @@ def _render_aromatic_bond(n_x, n_y, m_x, m_y, c_x, c_y):
     b_x, b_y = n_x + bn_x, n_y + bn_y
 
     return f'      <line x1="{a_x:.2f}" y1="{-a_y:.2f}" x2="{b_x:.2f}" y2="{-b_y:.2f}" ' \
-           f'stroke-dasharray="{dash3:.2f} {dash4:.2f}"/>'
+           f'{_dasharray(dash3, dash4)}/>'
 
 
 def depict_settings(*, carbon: bool = False, aam: bool = True, monochrome: bool = False,
@@ -352,7 +368,7 @@ class DepictMolecule:
                 svg.append(f'      <line x1="{nx - dx:.2f}" y1="{ny + dy:.2f}" x2="{mx - dx:.2f}" y2="{my + dy:.2f}"/>')
             else:
                 svg.append(f'      <line x1="{nx:.2f}" y1="{ny:.2f}" x2="{mx:.2f}" y2="{my:.2f}" '
-                           f'stroke-dasharray="{dash1:.2f} {dash2:.2f}"/>')
+                           f'{_dasharray(dash1, dash2)}/>')
 
         for ring in self.aromatic_rings:
             cx = sum(atoms[n].x for n in ring) / len(ring)
