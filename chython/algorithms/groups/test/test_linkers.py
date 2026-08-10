@@ -134,6 +134,20 @@ def test_masked_atom_barred_from_left_but_allowed_on_right():
     assert ('aryl_halide', 'alkyl_amine') in masked
 
 
+def test_masked_atom_barred_from_left_as_leaving_group():
+    # Same Boc-benzylamine, but the masked amine drives the LEFT end as a leaving
+    # group rather than a handle: alkyl_deamino consumes the freed N while capping
+    # the alpha-carbon. Masking must bar it from step-1 just as it bars the
+    # amine-as-handle orientation -- a cleaved FG may never open a coupling.
+    mol = smiles('O=C(OC(C)(C)C)NCc1ccc(Br)cc1')
+    mol.canonicalize()
+    freed = mol.remove_protection(logging=True)
+    unmasked = {(l.role_left, l.role_right) for l in mol.sticky_linkers()}
+    masked = {(l.role_left, l.role_right) for l in mol.sticky_linkers(masked=freed)}
+    assert ('alkyl_deamino', 'aryl_halide') in unmasked   # freed N as left leaving group
+    assert ('alkyl_deamino', 'aryl_halide') not in masked  # ...barred once masked
+
+
 def test_masked_none_and_empty_are_equivalent():
     mol = smiles('Brc1ccc(cc1)C(=O)O')
     default = {l.canonical_smiles for l in mol.sticky_linkers()}

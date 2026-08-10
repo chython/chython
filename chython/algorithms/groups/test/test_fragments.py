@@ -143,20 +143,25 @@ def test_unknown_role_raises():
         list(mol.sticky_fragments('not_a_role'))
 
 
-def test_masked_atom_suppresses_its_cap():
+def test_masked_atom_barred_as_handle_and_as_leaving_group():
     # Boc-benzylamine: strip the Boc, then bar the just-revealed amine N (a
-    # "cleaved FG") from being a standalone step-1 handle. The N-nucleophile
-    # role (alkyl_amine) must vanish; the deaminative C-handle (alkyl_deamino,
-    # which caps the alpha-carbon, not the N) and aryl_halide survive.
+    # "cleaved FG") from driving any coupling this fragment represents. A masked
+    # atom participates in two ways, both barred:
+    #   - as the attachment site: alkyl_amine caps the N itself -> vanishes;
+    #   - as a leaving group: alkyl_deamino consumes the N while capping the
+    #     alpha-carbon -> also vanishes (the deaminative coupling would still be
+    #     spending the freshly-revealed amine).
+    # aryl_halide neither caps nor consumes the amine, so it survives.
     mol = smiles('O=C(OC(C)(C)C)NCc1ccc(Br)cc1')
     mol.canonicalize()
     freed = mol.remove_protection(logging=True)
     assert freed, 'expected the Boc removal to free the amine nitrogen'
     unmasked = {f.role for f in mol.sticky_fragments()}
     masked = {f.role for f in mol.sticky_fragments(masked=freed)}
-    assert 'alkyl_amine' in unmasked
+    assert {'alkyl_amine', 'alkyl_deamino', 'aryl_halide'} <= unmasked
     assert 'alkyl_amine' not in masked          # freed amine barred as a handle
-    assert {'alkyl_deamino', 'aryl_halide'} <= masked   # others untouched
+    assert 'alkyl_deamino' not in masked        # ...and as a leaving group
+    assert 'aryl_halide' in masked              # untouched role survives
 
 
 def test_masked_none_and_empty_are_equivalent():

@@ -380,15 +380,24 @@ class FunctionalGroups:
         # would leave a detached counter-ion, which sticky_smiles cannot serialize.
         if self.connected_components_count != 1:
             return
-        masked = masked or ()
+        masked = frozenset(masked or ())
         for role_name, transformer in _present_transformers(role, self.functional_groups):
             for product in transformer(self):
                 # the transformer guarantees exactly one freshly created [At]
                 # cap, and a new atom is always the highest atom number.
                 n_at = max(product)
-                # the source atom the cap hangs off keeps its original number;
-                # a cap on a masked atom is a barred (step-1) attachment.
-                if next(iter(product._bonds[n_at])) in masked:
+                # a masked atom (a group revealed by incidental deprotection) must
+                # never participate in the coupling this fragment represents. It
+                # participates in two ways, both barred:
+                #   - as the attachment site: the fresh [At] cap hangs off it
+                #     (addition/substitution roles, e.g. the freed amine as an
+                #     alkyl_amine handle);
+                #   - as a leaving group: the transform consumes (deletes) it while
+                #     capping a neighbour (deaminative/deoxy/decarboxy roles, e.g.
+                #     the freed amine as an alkyl_deamino leaving group).
+                # Atom numbers survive into products unchanged, so a masked atom is
+                # "consumed" iff it is absent from the product's atom set.
+                if next(iter(product._bonds[n_at])) in masked or not masked <= set(product):
                     continue
                 left = product.sticky_smiles(left=n_at, remove_left=True, keep_bond_left=True)
                 right = product.sticky_smiles(right=n_at, remove_right=True, keep_bond_right=True)
@@ -425,7 +434,7 @@ class FunctionalGroups:
         # so only a salt/mixture input could yield a detached component.
         if self.connected_components_count != 1:
             return
-        masked = masked or ()
+        masked = frozenset(masked or ())
         fgs = self.functional_groups
         # capping a cut never creates a coupling handle, so every right handle
         # must already be present in the source. Resolve both ends up front and
@@ -443,8 +452,11 @@ class FunctionalGroups:
                 n210 = max(inter)
                 # source atom the 210 cap hangs off (caps are terminal -> one neighbor)
                 core210 = next(iter(inter._bonds[n210]))
-                # a masked atom is barred from the step-1 (left) end
-                if core210 in masked:
+                # a masked atom must not drive the step-1 (left) coupling, whether
+                # as the attachment site (cap hangs off it) or as a leaving group
+                # consumed by the left transform (absent from the intermediate).
+                # The step-2 (right) end stays exempt from `masked` by design.
+                if core210 in masked or not masked <= set(inter):
                     continue
                 inter.atom(n210).isotope = 210
 
