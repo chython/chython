@@ -31,11 +31,11 @@ def test_aryl_bromide_yields_capped_fragment():
     r = results[0]
     assert isinstance(r, StickyFragment)
     assert r.role == 'aryl_halide'
-    # left-aligned form: open bond first ('-...'), glues onto the left
+    # left-aligned form carries the junction bond ('-...'); the right-aligned form
+    # drops it (no trailing '-') so right+left concatenation emits exactly one bond.
     assert r.sticky_left.startswith('-')
     assert '[At]' not in r.sticky_left
-    # right-aligned form: open bond last ('...-'), glues onto the right
-    assert r.sticky_right.rstrip().endswith('-')
+    assert not r.sticky_right.rstrip().endswith('-')
     assert '[At]' not in r.sticky_right
     # canonical smiles is a stable string containing the [At] cap and toluene core
     assert '[At]' in r.canonical_smiles
@@ -46,7 +46,9 @@ def test_left_and_right_forms_are_glueable():
     # two copies of the same fragment glue right-open onto left-open into a
     # single connected biaryl (no leftover cap, one ring-fused product).
     r = _by_role(smiles('Brc1ccc(cc1)C'), 'aryl_halide')[0]
-    glued = r.sticky_right + r.sticky_left[1:]  # drop the leading '-'
+    # right form (no trailing bond) + left form (leading bond) concatenate directly:
+    # the single junction bond comes from the left form, so no dash surgery needed.
+    glued = r.sticky_right + r.sticky_left
     mol = smiles(glued)
     assert mol.connected_components_count == 1
     assert '[At]' not in str(mol)
@@ -79,7 +81,7 @@ def test_alkyl_deamino_drops_nitrogen_caps_carbon():
     # no nitrogen left in the capped fragment
     assert 'N' not in r.canonical_smiles
     assert '[At]' in r.canonical_smiles
-    assert r.sticky_left.startswith('-') and r.sticky_right.rstrip().endswith('-')
+    assert r.sticky_left.startswith('-') and not r.sticky_right.rstrip().endswith('-')
 
 
 def test_aryl_deamino_from_aniline():

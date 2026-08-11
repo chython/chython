@@ -29,10 +29,12 @@ def test_bifunctional_yields_dual_capped_linker():
     assert isinstance(r, StickyLinker)
     assert r.role_left == 'aryl_halide'
     assert r.role_right == 'aryl_acyl'
-    # two open-bond traversals ('-...-'): sticky_left leads with the role_left end,
-    # sticky_right leads with the role_right end (the flipped orientation).
+    # two traversals ('-A...B'): each carries its LEADING junction bond and drops
+    # the TRAILING one; sticky_left leads with the role_left end, sticky_right leads
+    # with the role_right end (the flipped orientation). Dropping the trailing bond
+    # lets a frag-linker-frag chain concatenate to exactly one bond per junction.
     for s in (r.sticky_left, r.sticky_right):
-        assert s.startswith('-') and s.rstrip().endswith('-')
+        assert s.startswith('-') and not s.rstrip().endswith('-')
         assert '[At]' not in s
     assert r.sticky_left != r.sticky_right          # genuinely different orientations
     # isotope caps live in the canonical dedup key, ordered 210 (left) / 211 (right)
@@ -80,7 +82,7 @@ def test_deamino_acyl_linker_from_aminobenzoic_acid():
     assert isinstance(r, StickyLinker)
     assert r.role_left == 'aryl_deamino' and r.role_right == 'aryl_acyl'
     for s in (r.sticky_left, r.sticky_right):
-        assert s.startswith('-') and s.rstrip().endswith('-')
+        assert s.startswith('-') and not s.rstrip().endswith('-')
     assert '[210At]' in r.canonical_smiles and '[211At]' in r.canonical_smiles
 
 
@@ -106,14 +108,34 @@ def test_unknown_role_raises():
 
 
 def test_sticky_left_and_right_are_reversed_traversals():
-    # both traversals open the bond at BOTH ends ('-...-'); sticky_left leads with
-    # the role_left (210) end, sticky_right leads with the role_right (211) end.
+    # both traversals open the bond at the LEADING end only ('-A...B'); sticky_left
+    # leads with the role_left (210) end, sticky_right leads with the role_right
+    # (211) end. Neither carries a trailing bond (that belongs to the next piece).
     mol = smiles('Brc1ccc(cc1)C(=O)O')
     r = list(mol.sticky_linkers('aryl_halide', 'aryl_acyl'))[0]
     # halide end is the aromatic ring carbon; acyl end is the carbonyl carbon.
     # sticky_left starts on the ring, sticky_right starts on the C=O.
-    assert r.sticky_left.startswith('-c') and r.sticky_left.rstrip().endswith('-')
-    assert r.sticky_right.startswith('-C(=O)') and r.sticky_right.rstrip().endswith('-')
+    assert r.sticky_left.startswith('-c') and not r.sticky_left.rstrip().endswith('-')
+    assert r.sticky_right.startswith('-C(=O)') and not r.sticky_right.rstrip().endswith('-')
+
+
+def test_frag_linker_frag_concatenates_to_valid_smiles():
+    # the payoff of the bond-ownership rule: string-concatenating a left fragment,
+    # a linker and a right fragment must parse to a single connected molecule with
+    # no [At] caps and no "2 bonds in a row". Each junction gets exactly one bond
+    # (from the LEFT piece's leading dash; the right piece dropped its trailing one).
+    left = next(iter(smiles('Nc1ccc(Br)cc1').sticky_fragments('aryl_halide')))
+    linker = next(l for l in smiles('Nc1ccc(Br)cc1').sticky_linkers('aryl_halide', 'aryl_amine'))
+    right = next(iter(smiles('OCc1ccc(Br)cc1').sticky_fragments('aryl_halide')))
+
+    # frag + frag
+    ff = smiles(left.sticky_right + right.sticky_left)
+    assert ff.connected_components_count == 1 and '[At]' not in str(ff)
+
+    # frag + linker + frag, both linker orientations
+    for linker_form in (linker.sticky_left, linker.sticky_right):
+        flf = smiles(left.sticky_right + linker_form + right.sticky_left)
+        assert flf.connected_components_count == 1 and '[At]' not in str(flf)
 
 
 def test_masked_atom_barred_from_left_but_allowed_on_right():

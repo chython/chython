@@ -354,7 +354,8 @@ class FunctionalGroups:
                     yield EnumeratedReaction(name, rxn)
 
     def sticky_fragments(self, role: Optional[str] = None, *,
-                         masked=None) -> Iterator['StickyFragment']:
+                         masked=None, tries: int = 10,
+                         hydrogens: bool = False) -> Iterator['StickyFragment']:
         """
         Enumerate mono-attachment sticky fragments.
 
@@ -375,6 +376,10 @@ class FunctionalGroups:
             revealed by an incidental deprotection ("cleaved FG") never becomes a
             standalone coupling handle. Numbers refer to this molecule's atoms and
             survive into the transformer products unchanged.
+        :param tries: attempts per sticky-SMILES generation (forwarded to
+            ``sticky_smiles``). The right-terminal traversal is a bounded random
+            search; raise this for topologies where 10 tries occasionally fail.
+        :param hydrogens: show implicit hydrogens in the generated sticky SMILES.
         """
         # no cap rule disconnects a connected molecule; only a salt/mixture input
         # would leave a detached counter-ion, which sticky_smiles cannot serialize.
@@ -399,13 +404,20 @@ class FunctionalGroups:
                 # "consumed" iff it is absent from the product's atom set.
                 if next(iter(product._bonds[n_at])) in masked or not masked <= set(product):
                     continue
-                left = product.sticky_smiles(left=n_at, remove_left=True, keep_bond_left=True)
-                right = product.sticky_smiles(right=n_at, remove_right=True, keep_bond_right=True)
+                # the bond that joins two pieces belongs to the LEFT partner: the
+                # left form keeps its leading bond, the right form drops its
+                # trailing bond, so ``A.sticky_right + B.sticky_left`` emits exactly
+                # one bond token (two would be "2 bonds in a row" -> invalid SMILES).
+                left = product.sticky_smiles(left=n_at, remove_left=True, keep_bond_left=True,
+                                             tries=tries, hydrogens=hydrogens)
+                right = product.sticky_smiles(right=n_at, remove_right=True, keep_bond_right=False,
+                                              tries=tries, hydrogens=hydrogens)
                 yield StickyFragment(role_name, left, right, str(product))
 
     def sticky_linkers(self, role_left: Optional[str] = None,
                        role_right: Optional[str] = None, *,
-                       masked=None) -> Iterator['StickyLinker']:
+                       masked=None, tries: int = 10,
+                       hydrogens: bool = False) -> Iterator['StickyLinker']:
         """
         Enumerate bi-attachment sticky linkers. The first (left) role is capped
         with [210At], the second (right) role with [211At].
@@ -429,6 +441,10 @@ class FunctionalGroups:
             the deferred second step (e.g. a Boc-masked amine): it may sit on the
             right but never the left. This also removes the (amine_left, X_right) /
             (X_left, amine_right) ordering duplication for such reserved ends.
+        :param tries: attempts per sticky-SMILES generation (forwarded to
+            ``sticky_smiles``). The terminal-atom traversal is a bounded random
+            search; raise this for topologies where 10 tries occasionally fail.
+        :param hydrogens: show implicit hydrogens in the generated sticky SMILES.
         """
         # as in sticky_fragments: no cap rule disconnects a connected molecule,
         # so only a salt/mixture input could yield a detached component.
@@ -472,12 +488,18 @@ class FunctionalGroups:
                         product.atom(n211).isotope = 211
                         # two traversal orientations of the same linker: 210-first
                         # (-A...B-) and 211-first (-B...A-), both open-bond both-ends.
+                        # same bond-ownership rule as sticky_fragments: each open
+                        # end keeps its LEADING bond and drops its TRAILING one, so
+                        # a frag-linker-frag chain (``A.sticky_right + linker +
+                        # B.sticky_left``) emits exactly one bond per junction.
                         sticky_left = product.sticky_smiles(left=n210, right=n211,
                                                             remove_left=True, keep_bond_left=True,
-                                                            remove_right=True, keep_bond_right=True)
+                                                            remove_right=True, keep_bond_right=False,
+                                                            tries=tries, hydrogens=hydrogens)
                         sticky_right = product.sticky_smiles(left=n211, right=n210,
                                                              remove_left=True, keep_bond_left=True,
-                                                             remove_right=True, keep_bond_right=True)
+                                                             remove_right=True, keep_bond_right=False,
+                                                             tries=tries, hydrogens=hydrogens)
                         yield StickyLinker(left_name, right_name,
                                            sticky_left, sticky_right, str(product))
 
