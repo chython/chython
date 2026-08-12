@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections.abc import Iterator
-from functools import cached_property
+from functools import cached_property, lru_cache
 from itertools import permutations
 from typing import NamedTuple, Optional
 from ._functional import rules as functional_rules
@@ -73,12 +73,40 @@ def _present_transformers(role, fgs):
 # Descriptor bucket boundaries (MW in Da)
 _MW_BOUNDS = (150, 250, 350, 450, 550)
 
+# Fingerprint bit layout. Protective groups sit ahead of functional groups
+# because functional_rules is the frequently extended set -- appending a pattern
+# there grows the vector at the tail without moving any protective bit.
+_PG_OFFSET = 35
+
+
+@lru_cache(maxsize=None)
+def _layout() -> tuple[int, int]:
+    """
+    (functional group bit offset, vector width in bytes). Computed on first use,
+    not at import: both rule dicts are lazy proxies and forcing them here would
+    close an import cycle.
+    """
+    fg_offset = _PG_OFFSET + len(protective_rules)
+    return fg_offset, -(-(fg_offset + len(functional_rules)) // 8)
+
+
+def fingerprint_size() -> int:
+    """
+    Width of ``functional_fingerprint()`` in bytes. Derived from the rule set
+    sizes, so it grows when patterns are added.
+    """
+    return _layout()[1]
+
 
 def fingerprint_schema() -> dict[str, int]:
     """
     Return the stable mapping from feature name to bit index used by
-    ``functional_fingerprint()``.  Import this once in chemder to build
-    the selector's ``mapping`` array.
+    ``functional_fingerprint()``.  Import this once to build a bitmap
+    filter's ``mapping`` array.
+
+    Protective and functional group names are disjoint, so both share this
+    flat namespace and a bit can be looked up by the same name that
+    ``protective_groups`` / ``functional_groups`` report.
 
     Bit layout
     ----------
@@ -88,8 +116,10 @@ def fingerprint_schema() -> dict[str, int]:
     18 – 22 sp3_fraction  quintiles 0-20%, 20-40%, 40-60%, 60-80%, 80-100%
     23 – 28 molecular_mass buckets <150,150-250,250-350,350-450,450-550,550+
     29 – 34 rotatable_bonds buckets 0,1,2,3,4-6,7+
-    35 +    functional group presence (one bit per pattern in functional_rules)
+    35 +    protective group presence (one bit per pattern in protective_rules)
+    then    functional group presence (one bit per pattern in functional_rules)
     """
+    fg_offset = _layout()[0]
     schema: dict[str, int] = {}
     for i, name in enumerate(('rings_0', 'rings_1', 'rings_2', 'rings_3', 'rings_4', 'rings_5p')):
         schema[name] = i
@@ -103,8 +133,10 @@ def fingerprint_schema() -> dict[str, int]:
         schema[name] = 23 + i
     for i, name in enumerate(('rbc_0', 'rbc_1', 'rbc_2', 'rbc_3', 'rbc_4_6', 'rbc_7p')):
         schema[name] = 29 + i
+    for offset, pg_name in enumerate(protective_rules):
+        schema[pg_name] = _PG_OFFSET + offset
     for offset, fg_name in enumerate(functional_rules):
-        schema[fg_name] = 35 + offset
+        schema[fg_name] = fg_offset + offset
     return schema
 
 
@@ -114,7 +146,8 @@ class FunctionalGroups:
     @cached_property
     def functional_fingerprint(self) -> bytes:
         """
-        256-bit (32-byte) binary feature vector for fast AVX2 bitmap filtering.
+        Binary feature vector for fast bitmap filtering. ``fingerprint_size()``
+        bytes wide.
 
         Bit layout matches ``fingerprint_schema()``:
           0– 5  rings_count   buckets  0 / 1 / 2 / 3 / 4 / 5+
@@ -123,9 +156,11 @@ class FunctionalGroups:
          18–22  sp3 fraction  quintiles 0–20% / 20–40% / 40–60% / 60–80% / 80–100%
          23–28  molecular_mass  <150 / 150–250 / 250–350 / 350–450 / 450–550 / 550+
          29–34  rotatable_bonds  0 / 1 / 2 / 3 / 4–6 / 7+
-         35+    one bit per pattern in functional_rules (presence only)
+         35+    one bit per pattern in protective_rules (presence only)
+         then   one bit per pattern in functional_rules (presence only)
         """
-        bits = bytearray(32)
+        fg_offset, fp_bytes = _layout()
+        bits = bytearray(fp_bytes)
 
         def _set(idx):
             bits[idx >> 3] |= 1 << (idx & 7)
@@ -176,11 +211,19 @@ class FunctionalGroups:
         else:
             _set(34)
 
+        # protective group bits (one bit per named pattern, presence only).
+        # reuses the cached property so bits agree with remove_protection,
+        # including its overlap filtering of nested sub-patterns.
+        pgs = self.protective_groups
+        for offset, name in enumerate(protective_rules):
+            if name in pgs:
+                _set(_PG_OFFSET + offset)
+
         # functional group bits (one bit per named pattern, presence only)
         fgs = self.functional_groups
         for offset, name in enumerate(functional_rules):
             if name in fgs:
-                _set(35 + offset)
+                _set(fg_offset + offset)
 
         return bytes(bits)
 
@@ -526,5 +569,5 @@ class FunctionalGroups:
         return self.react(other)
 
 
-__all__ = ['FunctionalGroups', 'fingerprint_schema', 'EnumeratedReaction',
-           'StickyFragment', 'StickyLinker']
+__all__ = ['FunctionalGroups', 'fingerprint_schema', 'fingerprint_size',
+           'EnumeratedReaction', 'StickyFragment', 'StickyLinker']
