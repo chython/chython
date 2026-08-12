@@ -410,7 +410,7 @@ class FunctionalGroups:
                 # one bond token (two would be "2 bonds in a row" -> invalid SMILES).
                 left = product.sticky_smiles(left=n_at, remove_left=True, keep_bond_left=True,
                                              tries=tries, hydrogens=hydrogens)
-                right = product.sticky_smiles(right=n_at, remove_right=True, keep_bond_right=False,
+                right = product.sticky_smiles(right=n_at, remove_right=True,
                                               tries=tries, hydrogens=hydrogens)
                 yield StickyFragment(role_name, left, right, str(product))
 
