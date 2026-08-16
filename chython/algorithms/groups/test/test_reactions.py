@@ -228,7 +228,11 @@ _three_component = [
     ('ugi_3cr_aldehyde_amine_isocyano',
      'ugi_3cr', 'O=CC.NCC.[C-]#[N+]C>>CCNC(C(=O)NC)C', 1),
     ('biginelli_aldehyde_ketoester_urea',
-     'biginelli', 'O=CC.O=C(C)CC(=O)OC.NC(=O)N>>N1C(NC(C)C=C1C)=O', 1),
+     'biginelli', 'O=CC.O=C(C)CC(=O)OC.NC(=O)N>>COC(=O)C1=C(C)NC(=O)NC1C', 1),
+    ('biginelli_aldehyde_ketoester_thiourea',
+     'biginelli', 'O=CC.O=C(C)CC(=O)OC.NC(=S)N>>COC(=O)C1=C(C)NC(=S)NC1C', 1),
+    ('biginelli_aldehyde_ketoester_methylurea',
+     'biginelli', 'O=CC.O=C(C)CC(=O)OC.CNC(=O)N>>COC(=O)C1=C(C)N(C)C(=O)NC1C', 1),
     ('hantzsch_pyridine_aldehyde_ketoester',
      'hantzsch_pyridine', 'O=CC.O=C(C)CC(=O)OCC.O=C(C)CC(=O)OCC>>c1(C)c(c(nc(c1C(=O)OCC)C)C)C(=O)OCC', 1),
 ]

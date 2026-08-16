@@ -279,9 +279,14 @@ def _rules():
 
     # amidine: RC(=NH)NH2 (for pyrimidine)
     rules['amidine'] = smarts('[N;D1;z1;x0:3]-[C;D3;z2;x2:1]=[N;D1:2]')
-    # urea/thiourea (for Biginelli)
-    rules['urea'] = smarts('[N;D1;z1;x0:1]-[C;D3;z2;x3:2](=[O:3])-[N;D1:4]')
-    rules['thiourea'] = smarts('[N;D1;z1;x0:1]-[C;D3;z2;x3:2](=[S;D1:3])-[N;D1:4]')
+    # urea/thiourea
+    rules['urea'] = smarts('[N;z1:1]-[C;D3;z2;x3:2](=[O:3])-[N;z1:4]')
+    rules['thiourea'] = smarts('[N;z1:1]-[C;D3;z2;x3:2](=[S;D1:3])-[N;z1:4]')
+    # condensation-capable subset (for Biginelli): acyclic, with an N-H left on both nitrogens so
+    # each can take a bond into the new ring. Excludes N,N-disubstituted ureas (no H on one N)
+    # and ureas whose nitrogens already sit in a ring, neither of which gives a DHPM.
+    rules['nh_urea'] = smarts('[N;z1;h1,h2;!R:1]-[C;D3;z2;x3:2](=[O:3])-[N;z1;h1,h2;!R:4]')
+    rules['nh_thiourea'] = smarts('[N;z1;h1,h2;!R:1]-[C;D3;z2;x3:2](=[S;D1:3])-[N;z1;h1,h2;!R:4]')
 
     # beta-arylethylamine (for Pictet-Spengler)
     rules['beta_arylethylamine'] = smarts('[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[C;a:4]:[C;a;D2:5]')

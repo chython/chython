@@ -764,13 +764,16 @@ def _rules():
                                 ('alpha_haloester', {1: 4, 2: 5, 3: 6, 100: 200})],
                                '[A:3]:1:[A:6]:[A:4]:[A:1]:[A:2]:1'))
 
-    # biginelli: aldehyde + beta_ketoester + urea/thiourea -> DHPM (3-component)
-    for urea_fg in ('urea', 'thiourea'):
+    # biginelli: aldehyde + beta_ketoester + urea/thiourea -> DHPM (3-component). The ester
+    # (:5 carbon, :6 carbonyl O, :200 alkoxy O) survives into the DHPM, so it has to be spelled
+    # out in the product -- pattern atoms left out of the template are deleted. Only the two
+    # carbonyl oxygens lost as water (:2 aldehyde, :4 ketone) are omitted.
+    for urea_fg in ('nh_urea', 'nh_thiourea'):
         rules.append(_make_reactor('biginelli',
                                    [('aldehyde', None),
                                     ('beta_ketoester', {1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 100: 200}),
                                     (urea_fg, {1: 8, 2: 9, 3: 10, 4: 11})],
-                                   '[A:8]1-[A:9](=[A:10])-[A:11]-[A:3]=[A:7]-[A:1]-1'))
+                                   '[A:8]1-[A:9](=[A:10])-[A:11]-[A:3]=[A:7](-[A:5](=[A:6])-[A:200])-[A:1]-1'))
 
     # niementowski quinazoline: anthranilic_acid + primary_amide -> 4-oxoquinazoline
     rules.append(_make_reactor('niementowski',
