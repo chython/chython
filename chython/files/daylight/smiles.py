@@ -23,8 +23,9 @@ from .parser import parser
 from .tokenize import smiles_tokenize
 from .._convert import create_molecule, create_reaction
 from .._mapping import postprocess_parsed_molecule, postprocess_parsed_reaction
-from ...containers import MoleculeContainer, ReactionContainer
+from ...containers import MoleculeContainer, ReactionContainer, MarkushContainer
 from ...exceptions import IsChiral, NotChiral, ValenceError
+from ...periodictable import R, X
 
 
 cx_fragments = compile(r'f:(?:[0-9]+(?:\.[0-9]+)+)(?:,(?:[0-9]+(?:\.[0-9]+)+))*')
@@ -35,8 +36,8 @@ cx_stereo_abs = compile(r'a:(\d+(?:,\d+)*)')
 
 def smiles(data, /, *, ignore: bool = True, remap: bool = False, ignore_stereo: bool = False,
            ignore_bad_isotopes: bool = False, keep_implicit: bool = False, ignore_carbon_radicals: bool = False,
-           ignore_aromatic_radicals: bool = True,
-           _r_cls=ReactionContainer, _m_cls=MoleculeContainer) -> Union[MoleculeContainer, ReactionContainer]:
+           ignore_aromatic_radicals: bool = True, _r_cls=ReactionContainer, _m_cls=MoleculeContainer,
+           _mk_cls=MarkushContainer) -> Union[MoleculeContainer, ReactionContainer, MarkushContainer]:
     """
     SMILES string parser
 

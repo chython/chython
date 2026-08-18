@@ -55,6 +55,7 @@ str_re = compile(r'@[@?]?')
 replace_dict = {'-': 1, '=': 2, '#': 3, ':': 4, '~': 8}
 not_dict = {'-': [2, 3, 4], '=': [1, 3, 4], '#': [1, 2, 4], ':': [1, 2, 3]}
 atom_re = compile(r'([1-9][0-9]{0,2})?([A-IK-PR-Zacnopsbt][a-ik-pr-vy]?)(@@|@)?(H[1-4]?)?([+-][1-4+-]?)?(:[0-9]{1,4})?')
+markush_re = compile(r'([RX])([1-9][0-9]?)?')
 charge_dict = {'+': 1, '+1': 1, '++': 2, '+2': 2, '+3': 3, '+++': 3, '+4': 4, '++++': 4,
                '-': -1, '-1': -1, '--': -2, '-2': -2, '-3': -3, '---': -3, '-4': -4, '----': -4}
 
@@ -352,7 +353,13 @@ def smiles_tokenize(smi):
         if token_type in (0, 8):  # simple atom
             out.append((token_type, {'element': token}))
         elif token_type == 5:
-            out.append(_atom_parse(token))
+            if (_match := markush_re.fullmatch(token)) is None:
+                out.append(_atom_parse(token))
+            else:  # Markush detected
+                atom, idx = _match.groups()
+                if idx:
+                    idx = int(idx)
+                out.append((0, {'element': atom, 'isotope': idx}))
         elif token_type == 10:
             raise IncorrectSmiles('SMARTS detected')
         else:
