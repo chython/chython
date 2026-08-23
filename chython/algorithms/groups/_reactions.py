@@ -69,6 +69,13 @@ def _rules():
                                        [(acyl, None),
                                         (amine, {1: 3, 2: 4, 3: 5})],
                                        '[A:1](=[A:2])-[A:3](-[A:4])-[A:5]'))
+        # aziridine_nh maps its nucleophilic N alone (see _functional.py) -- the ring carbons are
+        # left out of the pattern, so the reactor keeps the strained ring as-is. Every site below
+        # that accepts a secondary amine gets the same one-atom variant.
+        rules.append(_make_reactor('amidation',
+                                   [(acyl, None),
+                                    ('aziridine_nh', {1: 3})],
+                                   '[A:1](=[A:2])-[A:3]'))
 
     # weinreb amidation: RCOX + R'O-NH-R'' -> RC(=O)-N(R'')-O-R' (EDC/coupling). The acid OH (:100)
     # leaves; the hydroxylamine N (:3) bonds to the carbonyl C, keeping its N-alkyl (:4) and O-R (:5,:6).
@@ -78,8 +85,10 @@ def _rules():
                                     ('NO_dialkylhydroxylamine', {1: 3, 2: 4, 3: 5, 4: 6})],
                                    '[A:1](=[A:2])-[A:3](-[A:4])-[A:5]-[A:6]'))
 
-    # carbamoylation: ROC(=O)X + amine -> ROC(=O)NR'R''  (carbamate from chloroformate)
-    for formate in ('chloroformate', 'fluoroformate'):
+    # carbamoylation: ROC(=O)X + amine -> ROC(=O)NR'R''  (carbamate from a chloroformate or from an
+    # activated carbonate -- NHS/DSC, aryl, CDI-derived imidazolyl -- which share its atom numbering)
+    for formate in ('chloroformate', 'fluoroformate', 'succinimidyl_carbonate', 'aryl_carbonate',
+                    'imidazolyl_carbonate'):
         for amine in ('primary_amine', 'primary_aniline'):
             rules.append(_make_reactor('carbamoylation',
                                        [(formate, None),
@@ -90,10 +99,11 @@ def _rules():
                                        [(formate, None),
                                         (amine, {1: 4, 2: 5, 3: 6})],
                                        '[A:3]-[A:1](=[A:2])-[A:4](-[A:5])-[A:6]'))
-        rules.append(_make_reactor('carbamoylation',
-                                   [(formate, None),
-                                    ('pyrrole', {1: 4})],
-                                   '[A:3]-[A:1](=[A:2])-[A:4]'))
+        for nucleophile in ('pyrrole', 'aziridine_nh'):
+            rules.append(_make_reactor('carbamoylation',
+                                       [(formate, None),
+                                        (nucleophile, {1: 4})],
+                                       '[A:3]-[A:1](=[A:2])-[A:4]'))
         rules.append(_make_reactor('carbamoylation',
                                    [(formate, None),
                                     ('imidazole', {1: 4, 2: 5, 3: 6})],
@@ -111,6 +121,10 @@ def _rules():
                                        [(carbamoyl, None),
                                         (amine, {1: 4, 2: 5, 3: 6})],
                                        '[A:3]-[A:1](=[A:2])-[A:4](-[A:5])-[A:6]'))
+        rules.append(_make_reactor('urea_from_carbamoyl',
+                                   [(carbamoyl, None),
+                                    ('aziridine_nh', {1: 4})],
+                                   '[A:3]-[A:1](=[A:2])-[A:4]'))
 
     # suzuki
     # aryl: ArX + ArB(OH)2 -> Ar-Ar
@@ -171,6 +185,10 @@ def _rules():
                                        [(halide, None),
                                         (amine, {1: 3, 2: 4, 3: 5})],
                                        '[A:1]-[A:3](-[A:4])-[A:5]'))
+        rules.append(_make_reactor('buchwald_hartwig',
+                                   [(halide, None),
+                                    ('aziridine_nh', {1: 3})],
+                                   '[A:1]-[A:3]'))
 
     # buchwald-hartwig: ArX + amide-NH -> Ar-N-C(=O) (N-arylation of amides/lactams)
     for halide in ARYL_LG:
@@ -194,6 +212,10 @@ def _rules():
                                            [(lactam, None),
                                             (amine, {1: 3, 2: 4, 3: 5})],
                                            '[A:1]-[A:3](-[A:4])-[A:5]'))
+            rules.append(_make_reactor('buchwald_hartwig',
+                                       [(lactam, None),
+                                        ('aziridine_nh', {1: 3})],
+                                       '[A:1]-[A:3]'))
 
     # ugi 3CR: RCHO + R'NH2 + R''NC -> R'NH-CH(R)-C(=O)NHR''
     rules.append(_make_reactor('ugi_3cr',
@@ -275,6 +297,10 @@ def _rules():
                                        [(carbonyl, None),
                                         (amine, {1: 3, 2: 4, 3: 5})],
                                        '[A:1]-[A:3](-[A:4])-[A:5]'))
+        rules.append(_make_reactor('reductive_amination',
+                                   [(carbonyl, None),
+                                    ('aziridine_nh', {1: 3})],
+                                   '[A:1]-[A:3]'))
 
     # ullmann phenol: ArX + ArOH -> Ar-O-Ar
     for halide in ARYL_LG:
@@ -290,9 +316,11 @@ def _rules():
                                     ('azinone', {2: 3, 1: 4, 3: 5})],
                                    '[A:1]-[A:3]-[A:4]=[A:5]'))
 
-    # ullmann alcohol: ArX + ROH -> Ar-O-R (SNAr/Cu-mediated with aliphatic alcohols)
+    # ullmann alcohol: ArX + ROH -> Ar-O-R (SNAr/Cu-mediated with aliphatic alcohols).
+    # Tertiary alkoxides are included: they are poor SN2 nucleophiles but fine on an activated
+    # arene under Cs2CO3, and quaternary-carbinol scaffolds (e.g. bicycloalkanols) rely on it.
     for halide in ARYL_LG_F:
-        for alcohol in ('primary_alcohol', 'secondary_alcohol'):
+        for alcohol in ('primary_alcohol', 'secondary_alcohol', 'tertiary_alcohol'):
             rules.append(_make_reactor('snar',
                                        [(halide, None),
                                         (alcohol, {1: 3, 2: 4})],
@@ -344,6 +372,10 @@ def _rules():
                                        '[A:1]-[A:3](-[A:4])-[A:5]'))
         rules.append(_make_reactor('chan_lam',
                                    [(boron, None),
+                                    ('aziridine_nh', {1: 3})],
+                                   '[A:1]-[A:3]'))
+        rules.append(_make_reactor('chan_lam',
+                                   [(boron, None),
                                     ('phenol', {1: 3, 2: 4})],
                                    '[A:1]-[A:3]-[A:4]'))
         # pyridone O-arylation via Chan-Lam (lactam O nucleophile, ring aromatizes)
@@ -381,6 +413,10 @@ def _rules():
                                        [(sulfonyl, None),
                                         (amine, {1: 4, 2: 5, 3: 6})],
                                        '[A:1](=[A:2])(=[A:3])-[A:4](-[A:5])-[A:6]'))
+        rules.append(_make_reactor('sulfonamide_formation',
+                                   [(sulfonyl, None),
+                                    ('aziridine_nh', {1: 4})],
+                                   '[A:1](=[A:2])(=[A:3])-[A:4]'))
 
     # sulfonamide from amide N-H: RSO2X + R'C(=O)NHR" -> R'C(=O)N(SO2R)R"
     for sulfonyl in ('sulfonyl_chloride', 'sulfonyl_fluoride'):
@@ -401,6 +437,10 @@ def _rules():
                                    [('ester', None),
                                     (amine, {1: 3, 2: 4, 3: 5})],
                                    '[A:1](=[A:2])-[A:3](-[A:4])-[A:5]'))
+    rules.append(_make_reactor('aminolysis',
+                               [('ester', None),
+                                ('aziridine_nh', {1: 3})],
+                               '[A:1](=[A:2])-[A:3]'))
 
     # grignard: RMgX + RCHO/R2CO -> alcohol
     for grignard in ('alkyl_grignard', 'aryl_grignard'):
@@ -440,6 +480,10 @@ def _rules():
                                    [('isocyanate', None),
                                     (amine, {1: 4, 2: 5, 3: 6})],
                                    '[A:1]-[A:2](=[A:3])-[A:4](-[A:5])-[A:6]'))
+    rules.append(_make_reactor('urea_synthesis',
+                               [('isocyanate', None),
+                                ('aziridine_nh', {1: 4})],
+                               '[A:1]-[A:2](=[A:3])-[A:4]'))
 
     # CuAAC: azide + terminal alkyne -> 1,2,3-triazole
     rules.append(_make_reactor('cuaac',
@@ -458,6 +502,29 @@ def _rules():
                                    [('aryl_fluoride', None),
                                     (amine, {1: 3, 2: 4, 3: 5})],
                                    '[A:1]-[A:3](-[A:4])-[A:5]'))
+    rules.append(_make_reactor('snar',
+                               [('aryl_fluoride', None),
+                                ('aziridine_nh', {1: 3})],
+                               '[A:1]-[A:3]'))
+
+    # epoxide ring opening: Nu-H + epoxide -> beta-functionalised alcohol. The template rebonds
+    # O(:1)-C(:2)-C(:3)-Nu, which drops the original O-C(:3) bond and leaves the O as a hydroxyl.
+    # terminal_epoxide pins :3 to the CH2, giving the base-mediated regiochemistry (attack at the
+    # less hindered carbon) rather than an arbitrary one -- see the note in _functional.py.
+    for nucleophile, remap, tail in (
+            ('primary_amine',   {1: 4, 2: 5},         '[A:4]-[A:5]'),
+            ('primary_aniline', {1: 4, 2: 5},         '[A:4]-[A:5]'),
+            ('secondary_amine', {1: 4, 2: 5, 3: 6},   '[A:4](-[A:5])-[A:6]'),
+            ('secondary_aniline', {1: 4, 2: 5, 3: 6}, '[A:4](-[A:5])-[A:6]'),
+            ('aziridine_nh',    {1: 4},               '[A:4]'),
+            ('pyrrole',         {1: 4},               '[A:4]'),
+            ('thiol',           {1: 4, 2: 5},         '[A:4]-[A:5]'),
+            ('aryl_thiol',      {1: 4, 2: 5},         '[A:4]-[A:5]'),
+            ('phenol',          {1: 4, 2: 5},         '[A:4]-[A:5]')):
+        rules.append(_make_reactor('epoxide_opening',
+                                   [('terminal_epoxide', None),
+                                    (nucleophile, remap)],
+                                   f'[A:1]-[A:2]-[A:3]-{tail}'))
 
     # SNAr: ArF + amide-NH -> Ar-N-C(=O)
     for amide in ('primary_amide', 'secondary_amide'):
@@ -666,11 +733,24 @@ def _rules():
                                 ('thioamide', {1: 4, 2: 5, 3: 6})],
                                '[A:5]:1:[A:4]:[A:6]:[A:1]:[A:3]:1'))
 
-    # knorr pyrazole: 1,3-diketone + alkyl_hydrazine -> pyrazole
-    rules.append(_make_reactor('knorr_pyrazole',
-                               [('1_3_diketone', None),
-                                ('alkyl_hydrazine', {1: 6, 2: 7, 3: 8})],
-                               '[A:6](:1:[A:7]:[A:1]:[A:5]:[A:3]:1)-[A:8]'))
+    # knorr pyrazole: 1,3-diketone + hydrazine -> pyrazole (N-alkyl or N-aryl; both hydrazine
+    # patterns number the substituted N :1, the terminal NH2 :2 and the substituent :3)
+    for hydrazine in ('alkyl_hydrazine', 'aryl_hydrazine'):
+        rules.append(_make_reactor('knorr_pyrazole',
+                                   [('1_3_diketone', None),
+                                    (hydrazine, {1: 6, 2: 7, 3: 8})],
+                                   '[A:6](:1:[A:7]:[A:1]:[A:5]:[A:3]:1)-[A:8]'))
+
+    # knorr pyrazolone: beta-ketoester + hydrazine -> 2-pyrazolin-5-one (e.g. ethyl acetoacetate +
+    # phenylhydrazine -> edaravone). The substituted N (:6) closes onto the ester carbon (:3),
+    # keeping that carbonyl O (:4) as the ring lactam; the terminal NH2 (:7) condenses with the
+    # ketone (:1), so the ketone O (:2) and the alkoxy O (:200) are lost as water/alcohol. The
+    # ring is not aromatic -- C4 (:5) stays sp3 -- so the bonds are spelled out explicitly.
+    for hydrazine in ('alkyl_hydrazine', 'aryl_hydrazine'):
+        rules.append(_make_reactor('knorr_pyrazolone',
+                                   [('beta_ketoester', {100: 200}),
+                                    (hydrazine, {1: 6, 2: 7, 3: 8})],
+                                   '[A:8]-[A:6]1-[A:3](=[A:4])-[A:5]-[A:1]=[A:7]-1'))
 
     # paal_knorr pyrrole: 1,4-diketone + primary_amine -> pyrrole
     for amine in ('primary_amine', 'primary_aniline'):
@@ -680,8 +760,9 @@ def _rules():
                                    '[A:7](:1:[A:1]:[A:5]:[A:6]:[A:3]:1)-[A:8]'))
 
     # fischer indole: aryl_hydrazine + alpha_ketone -> indole
+    # the ortho CH (:4) becomes a ring atom of the new indole, hence the stricter pattern
     rules.append(_make_reactor('fischer_indole',
-                               [('aryl_hydrazine', None),
+                               [('aryl_hydrazine_ortho_ch', None),
                                 ('alpha_ketone', {1: 5, 2: 6, 3: 7})],
                                '[A:1]:1:[A:3]:[A:4]:[A:7]:[A:5]:1'))
 
@@ -861,6 +942,10 @@ def _rules():
                                        [(halide, None),
                                         (amine, {1: 3, 2: 4, 3: 5})],
                                        '[A:1]-[A:3](-[A:4])-[A:5]'))
+        rules.append(_make_reactor('n_alkylation',
+                                   [(halide, None),
+                                    ('aziridine_nh', {1: 3})],
+                                   '[A:1]-[A:3]'))
 
     # N-alkylation (SN2): alkyl halide/pseudohalide + primary/secondary amide (lactam NH)
     for halide in ALKYL_LG:
@@ -909,8 +994,41 @@ def _rules():
     for carbonyl in ('aldehyde', 'ketone'):
         rules.append(_make_reactor('hydrazone',
                                    [(carbonyl, None),
-                                    ('aryl_hydrazine', {1: 3, 2: 4, 3: 5, 4: 6})],
-                                   '[A:1]=[A:4]-[A:3]-[A:5]:[A:6]'))
+                                    ('aryl_hydrazine', {1: 3, 2: 4, 3: 5})],
+                                   '[A:1]=[A:4]-[A:3]-[A:5]'))
+
+    # N-acylhydrazone: aldehyde/ketone + acyl hydrazide -> C=N-NH-C(=O)R. The hydrazide's terminal
+    # NH2 (:3) condenses with the carbonyl; the acyl arm (:5 C=O :6) is untouched.
+    for carbonyl in ('aldehyde', 'ketone'):
+        rules.append(_make_reactor('acylhydrazone',
+                                   [(carbonyl, None),
+                                    ('hydrazide', {1: 3, 2: 4, 3: 5, 4: 6})],
+                                   '[A:1]=[A:3]-[A:4]-[A:5](=[A:6])'))
+
+    # sulfonylhydrazone: aldehyde/ketone + RSO2-NH-NH2 -> C=N-NH-SO2R (tosylhydrazone etc.)
+    for carbonyl in ('aldehyde', 'ketone'):
+        rules.append(_make_reactor('sulfonylhydrazone',
+                                   [(carbonyl, None),
+                                    ('sulfonylhydrazide', {1: 3, 2: 4, 3: 5, 4: 6, 5: 7})],
+                                   '[A:1]=[A:3]-[A:4]-[A:5](=[A:6])(=[A:7])'))
+
+    # 1,3,4-oxadiazole: acyl hydrazide + acid/acyl chloride -> 2,5-disubstituted oxadiazole.
+    # Acylation then cyclodehydration loses two leaving groups: the acid's OH (or Cl) as :200 and
+    # its carbonyl O (:6). The hydrazide's own carbonyl O (:4) is retained as the ring O1.
+    for acyl in ('carboxylic_acid', 'acyl_chloride'):
+        rules.append(_make_reactor('oxadiazole',
+                                   [('hydrazide', None),
+                                    (acyl, {1: 5, 2: 6, 100: 200})],
+                                   '[A:3]:1:[A:2]:[A:1]:[A:5]:[A:4]:1'))
+
+    # N'-substituted hydrazide: RCOX + R'NH-NH2 -> RC(=O)-NH-NH-R'. The terminal NH2 (:4) is the
+    # nucleophile, so the substituted N (:3) keeps its alkyl/aryl group (:5).
+    for acyl in ('carboxylic_acid', 'acyl_chloride'):
+        for hydrazine in ('alkyl_hydrazine', 'aryl_hydrazine'):
+            rules.append(_make_reactor('hydrazide_formation',
+                                       [(acyl, None),
+                                        (hydrazine, {1: 3, 2: 4, 3: 5})],
+                                       '[A:1](=[A:2])-[A:4]-[A:3]-[A:5]'))
 
     return rules
 

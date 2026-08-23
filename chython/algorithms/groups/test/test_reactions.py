@@ -27,6 +27,10 @@ from chython import smiles
 _two_component = [
     ('amidation_acyl_chloride_primary_amine',
      'amidation', 'ClC(=O)C.NCC>>CCNC(=O)C', 1),
+    # aziridine N-H as amine nucleophile: the two N-substituents are bonded to each other, so
+    # the branched secondary_amine pattern can never match it (isomorphism is induced).
+    ('amidation_acyl_chloride_aziridine',
+     'amidation', 'ClC(=O)C.C1NC1>>C1CN1C(=O)C', 1),
     ('weinreb_amidation_acid_dimethylhydroxylamine',
      'weinreb_amidation', 'OC(=O)c1ccccc1.CON(C)>>c1ccccc1C(=O)N(C)OC', 1),
     ('weinreb_amidation_acid_diethylhydroxylamine',
@@ -46,6 +50,8 @@ _two_component = [
      'suzuki', 'CS(=O)(=O)Oc1ccc(C)cc1.OB(O)c1ccccc1>>c1cc(ccc1C)-c1ccccc1', 1),
     ('buchwald_hartwig_aryl_bromide_primary_amine',
      'buchwald_hartwig', 'Brc1ccc(cc1)C.NCC>>c1cc(ccc1C)NCC', 1, {'deaminative_coupling'}),
+    ('buchwald_hartwig_aryl_bromide_aziridine',
+     'buchwald_hartwig', 'Brc1ccc(cc1)C.C1NC1>>c1cc(ccc1C)N1CC1', 1),
     ('buchwald_hartwig_pyridone_bromide_primary_amine',
      'buchwald_hartwig', 'CN1C=CC(Br)=CC1=O.NCC>>CN1C=CC(=CC1=O)NCC', 1),
     # amide/amidine N-nucleophiles in buchwald-hartwig
@@ -62,11 +68,11 @@ _two_component = [
     ('deoxygenative_coupling_secondary_alcohol_aryl_iodide',
      'deoxygenative_coupling', 'OC(C)CC.Ic1ccc(cc1)C>>c1cc(ccc1C)C(C)CC', 1, {'snar'}),
     ('deoxygenative_coupling_tertiary_alcohol_aryl_bromide',
-     'deoxygenative_coupling', 'CC(C)(O)C.Brc1ccc(cc1)C>>c1cc(ccc1C)C(C)(C)C', 1),
+     'deoxygenative_coupling', 'CC(C)(O)C.Brc1ccc(cc1)C>>c1cc(ccc1C)C(C)(C)C', 1, {'snar'}),
     ('deoxygenative_coupling_tertiary_alcohol_aryl_chloride',
-     'deoxygenative_coupling', 'CC(C)(O)C.Clc1ccc(cc1)C>>c1cc(ccc1C)C(C)(C)C', 1),
+     'deoxygenative_coupling', 'CC(C)(O)C.Clc1ccc(cc1)C>>c1cc(ccc1C)C(C)(C)C', 1, {'snar'}),
     ('deoxygenative_coupling_tertiary_cyclohexanol_aryl_iodide',
-     'deoxygenative_coupling', 'OC1(CCCCC1)C.Ic1ccccc1>>c1ccccc1C1(C)CCCCC1', 1),
+     'deoxygenative_coupling', 'OC1(CCCCC1)C.Ic1ccccc1>>c1ccccc1C1(C)CCCCC1', 1, {'snar'}),
     ('decarboxylative_coupling_acid_aryl_bromide',
      'decarboxylative_coupling', 'OC(=O)CC.Brc1ccc(cc1)C>>c1cc(ccc1C)CC', 1),
     ('decarboxylative_coupling_nhpi_ester_aryl_bromide',
@@ -106,6 +112,10 @@ _two_component = [
      'sulfonylation', 'ClS(=O)(=O)c1ccccc1.OCCC>>c1ccccc1S(=O)(=O)OCCC', 1),
     ('sulfonamide_formation_sulfonyl_chloride_amine',
      'sulfonamide_formation', 'ClS(=O)(=O)c1ccccc1.NCC>>c1ccccc1S(=O)(=O)NCC', 1),
+    ('sulfonamide_formation_sulfonyl_chloride_aziridine',
+     'sulfonamide_formation', 'ClS(=O)(=O)c1ccccc1.C1NC1>>c1ccccc1S(=O)(=O)N1CC1', 1),
+    ('n_alkylation_alkyl_bromide_aziridine',
+     'n_alkylation', 'BrCCC.C1NC1>>CCCN1CC1', 1),
     ('aminolysis_ester_primary_amine',
      'aminolysis', 'COC(=O)c1ccc(cc1)C.NCC>>c1cc(ccc1C(NCC)=O)C', 1),
     ('grignard_alkyl_bromide_aldehyde',
@@ -184,10 +194,53 @@ _two_component = [
      'hantzsch_thiazole', 'ClCC(=O)C.NC(=S)C>>c1(C)scc(C)n1', 1),
     ('knorr_pyrazole_acetylacetone_methylhydrazine',
      'knorr_pyrazole', 'O=C(C)CC(=O)C.NNC>>c1(C)nn(c(C)c1)C', 1),
+    # aryl hydrazines give N-aryl pyrazoles; the N-H nitrogen (:1) carries the aryl
+    ('knorr_pyrazole_acetylacetone_phenylhydrazine',
+     'knorr_pyrazole', 'O=C(C)CC(=O)C.NNc1ccccc1>>Cc1cc(C)n(n1)c1ccccc1', 1,
+     {'hydrazone', 'fischer_indole'}),
+    # knorr pyrazolone: beta-ketoester + hydrazine -> 2-pyrazolin-5-one (edaravone regiochemistry:
+    # the substituted N ends up on the lactam carbonyl, the terminal NH2 on the ketone carbon)
+    ('knorr_pyrazolone_ketoester_phenylhydrazine',
+     'knorr_pyrazolone', 'O=C(C)CC(=O)OCC.NNc1ccccc1>>O=C1CC(C)=NN1c1ccccc1', 1,
+     {'hydrazone', 'fischer_indole'}),
+    ('knorr_pyrazolone_ketoester_methylhydrazine',
+     'knorr_pyrazolone', 'O=C(C)CC(=O)OCC.NNC>>O=C1CC(C)=NN1C', 1),
+    # acyl hydrazide as a carbonyl nucleophile -> N-acylhydrazone
+    ('acylhydrazone_benzaldehyde_acetohydrazide',
+     'acylhydrazone', 'O=Cc1ccccc1.CC(=O)NN>>CC(=O)NN=Cc1ccccc1', 1),
+    # hydrazide + acid -> 1,3,4-oxadiazole (double cyclodehydration)
+    ('oxadiazole_acetohydrazide_benzoic_acid',
+     'oxadiazole', 'CC(=O)NN.OC(=O)c1ccccc1>>Cc1nnc(o1)c1ccccc1', 1),
+    # N'-substituted hydrazide: the terminal NH2 acylates, the substituted N keeps its group
+    ('hydrazide_formation_benzoic_acid_phenylhydrazine',
+     'hydrazide_formation', 'OC(=O)c1ccccc1.NNc1ccccc1>>c1ccccc1C(=O)NNc1ccccc1', 1),
+    # sulfonylhydrazide + carbonyl -> sulfonylhydrazone (unlocks the existing bamford_stevens
+    # transformation, whose substrate FG had no route in)
+    ('sulfonylhydrazone_acetophenone_tosylhydrazide',
+     'sulfonylhydrazone', 'O=C(C)c1ccccc1.NNS(=O)(=O)c1ccc(C)cc1'
+                          '>>CC(=NNS(=O)(=O)c1ccc(C)cc1)c1ccccc1', 1),
+    # epoxide ring opening -> beta-functionalised alcohol. The nucleophile lands on the CH2, so
+    # styrene oxide gives the benzylic alcohol (one regiochemistry, not an arbitrary one).
+    ('epoxide_opening_ethylene_oxide_secondary_amine',
+     'epoxide_opening', 'C1OC1.N(C)CC>>OCCN(C)CC', 1),
+    ('epoxide_opening_ethylene_oxide_thiol',
+     'epoxide_opening', 'C1OC1.SCCC>>OCCSCCC', 1),
+    ('epoxide_opening_styrene_oxide_aniline',
+     'epoxide_opening', 'C1OC1c1ccccc1.Nc1ccccc1>>OC(c1ccccc1)CNc1ccccc1', 1),
+    ('epoxide_opening_glycidyl_ether_phenol',
+     'epoxide_opening', 'C1OC1COc1ccccc1.Oc1ccc(C)cc1>>OC(COc1ccccc1)COc1ccc(C)cc1', 1),
     ('paal_knorr_hexanedione_ethylamine',
      'paal_knorr', 'O=C(C)CCC(=O)C.NCC>>Cc1ccc(C)n1CC', 1, {'reductive_amination'}),
     ('fischer_indole_phenylhydrazine_acetone',
      'fischer_indole', 'NNc1ccccc1.O=C(C)C>>c1cc2c(cc(C)[nH]2)cc1', 1, {'hydrazone'}),
+    ('hydrazone_ketone_phenylhydrazine',
+     'hydrazone', 'O=C(C)C.NNc1ccccc1>>CC(C)=NNc1ccccc1', 1, {'fischer_indole'}),
+    # ArN2H3 with both ortho positions blocked: still a hydrazine for condensation, but it
+    # cannot indolize -- only fischer_indole needs the free ortho CH.
+    ('hydrazone_ketone_2_6_dimethylphenylhydrazine',
+     'hydrazone', 'O=C(C)C.NNc1c(C)cccc1C>>CC(C)=NNc1c(C)cccc1C', 1),
+    ('hydrazone_aldehyde_ortho_blocked_pyridylhydrazine',
+     'hydrazone', 'O=CC.NNc1nccc(C)c1C>>CC=NNc1nccc(C)c1C', 1),
     ('benzimidazole_diamine_aldehyde',
      'benzimidazole', 'Nc1ccccc1N.O=CC>>c1(C)[nH]c2c(cccc2)n1', 1, {'reductive_amination'}),
     ('benzoxazole_aminophenol_aldehyde',
@@ -222,6 +275,18 @@ _two_component = [
      'larock_indole', 'Nc1ccccc1Br.CC#CC>>Cc1[nH]c2c(cccc2)c1C', 1, {'reductive_amination'}),
     ('doebner_miller_aniline_crotonaldehyde',
      'doebner_miller', 'Nc1ccccc1.O=CC=CC>>C1=CC=CC=2C(C)=CC=NC12', 1, {'reductive_amination'}),
+    # tertiary alkoxides do SNAr on activated arenes too (Cs2CO3/DMF), so the O-nucleophile
+    # set must not stop at secondary -- quaternary-carbinol scaffolds are common substrates.
+    ('snar_tertiary_alcohol_fluoronitrobenzene',
+     'snar', 'CC(C)(C)O.c1cc(ccc1F)[N+](=O)[O-]>>CC(C)(C)Oc1ccc(cc1)[N+]([O-])=O', 1),
+    # activated carbonates acylate amines to carbamates exactly like a chloroformate --
+    # the leaving alkoxide/azolide is a whole fragment (NHS, p-nitrophenol, imidazole).
+    ('carbamoylation_succinimidyl_carbonate_piperidine',
+     'carbamoylation', 'O=C1CCC(=O)N1OC(=O)OCC.C1CCNCC1>>CCOC(=O)N1CCCCC1', 1),
+    ('carbamoylation_nitrophenyl_carbonate_piperidine',
+     'carbamoylation', 'CCOC(=O)Oc1ccc(cc1)[N+](=O)[O-].C1CCNCC1>>CCOC(=O)N1CCCCC1', 1),
+    ('carbamoylation_imidazolyl_carbonate_piperidine',
+     'carbamoylation', 'CCOC(=O)n1ccnc1.C1CCNCC1>>CCOC(=O)N1CCCCC1', 1),
 ]
 
 _three_component = [

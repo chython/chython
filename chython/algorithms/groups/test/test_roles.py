@@ -83,7 +83,7 @@ def test_every_entry_fires_on_a_real_molecule():
         'alkenyl_carboxylic_acid': 'OC(=O)C=Cc1ccccc1', 'alkynyl_carboxylic_acid': 'OC(=O)C#CC',
         'acyl_chloride': 'ClC(=O)CCC', 'acyl_bromide': 'BrC(=O)CCC', 'acyl_fluoride': 'FC(=O)CCC',
         'carbamoyl_chloride': 'ClC(=O)N(C)C', 'carbamoyl_fluoride': 'FC(=O)N(C)C',
-        'primary_amine': 'NCCC', 'secondary_amine': 'CNCC',
+        'primary_amine': 'NCCC', 'secondary_amine': 'CNCC', 'aziridine_nh': 'C1NC1c1ccccc1',
         'primary_aniline': 'Nc1ccccc1', 'secondary_aniline': 'CNc1ccccc1',
         'primary_alcohol': 'OCCC', 'secondary_alcohol': 'OC(C)CC', 'tertiary_alcohol': 'OC(C)(C)CC',
         'phenol': 'Oc1ccccc1', 'azinone': 'O=C1C=CC=CN1',

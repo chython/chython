@@ -124,6 +124,17 @@ def _rules():
     rules['acyl_fluoride'] = smarts('[F:100][C;z2;x2;D3:1]=[O:2]')
     rules['chloroformate'] = smarts('[Cl:100][C;z2;x3;D3:1](=[O:2])-[O;D2:3]')
     rules['fluoroformate'] = smarts('[F:100][C;z2;x3;D3:1](=[O:2])-[O;D2:3]')
+    # activated carbonates R-O-C(=O)-LG: chloroformate surrogates that acylate amines to carbamates.
+    # Numbered exactly like chloroformate (:1 carbonyl C, :2 carbonyl O, :3 surviving alkoxy O,
+    # :100 the leaving heteroatom) so they drop straight into the carbamoylation rules. The rest of
+    # the leaving group is left unmapped and goes away with :100 as an orphaned fragment.
+    # succinimidyl (NHS/DSC) carbonate -- same N-hydroxyimide leaving group as redox_active_ester.
+    rules['succinimidyl_carbonate'] = smarts('[O;D2:3]-[C;z2;x3;D3:1](=[O:2])-[O;D2;x1:100]-[N;D3;x1;r5](-[C;z2;r5]=O)-[C;z2;r5]=O')
+    # aryl carbonate (phenyl / p-nitrophenyl / pentafluorophenyl): the aryloxide is the leaving
+    # group, so :100 is the O bearing the aromatic ring and :3 keeps the other side.
+    rules['aryl_carbonate'] = smarts('[O;D2:3]-[C;z2;x3;D3:1](=[O:2])-[O;D2;x0:100]-[C;a]')
+    # imidazolyl carbonate (CDI adduct of an alcohol): here the leaving atom is the azole nitrogen.
+    rules['imidazolyl_carbonate'] = smarts('[O;D2:3]-[C;z2;x3;D3:1](=[O:2])-[N;a;D3;r5:100]1:[C;a]:[N;a]:[C;a]:[C;a]:1')
     rules['carbamoyl_chloride'] = smarts('[Cl:100][C;z2;x3;D3:1](=[O:2])-[N;D2,D3:3]')
     rules['carbamoyl_fluoride'] = smarts('[F:100][C;z2;x3;D3:1](=[O:2])-[N;D2,D3:3]')
 
@@ -133,6 +144,11 @@ def _rules():
     # NH2 on sp2 C=N (e.g. pyrazoline, amidine-like)
     rules['primary_amidine_amine'] = smarts('[N;D1;z1;x0:1]-[C;z2:2]=[N;M]')
     rules['secondary_amine'] = smarts('[N;D2;z1;x0:1]([C;z1:2])[C;z1:3]')
+    # aziridine N-H. Isomorphism is induced, so the branched `secondary_amine` pattern above can
+    # never match a 3-ring: its two carbons are bonded to each other, which counts as an extra
+    # closure. Match the nucleophilic N alone (like `pyrrole`) -- both ring carbons then stay
+    # outside the pattern, so the reactor preserves the strained ring untouched.
+    rules['aziridine_nh'] = smarts('[N;D2;z1;x0;h1;r3:1]')
     rules['secondary_aniline'] = smarts('[N;D2;z1;x0:1]([C;a:2])[C;z1:3]')
     rules['biaryl_aniline'] = smarts('[N;D2;z1;x0:1]([C;a:2])[C;a:3]')
 
@@ -255,7 +271,12 @@ def _rules():
 
     # hydrazines
     rules['alkyl_hydrazine'] = smarts('[N;D1;z1;x1:2]-[N;D2;z1;x1:1]-[C;z1:3]')
-    rules['aryl_hydrazine'] = smarts('[N;D1;z1;x1:2]-[N;D2;z1;x1:1]-[C;a:3]:[C;a;D2:4]')
+    # plain Ar-NH-NH2: no constraint on the ring beyond the attachment carbon, so hydrazines
+    # with both ortho positions blocked (or hetaryl ones with no ortho CH at all) still match.
+    rules['aryl_hydrazine'] = smarts('[N;D1;z1;x1:2]-[N;D2;z1;x1:1]-[C;a:3]')
+    # Ar-NH-NH2 carrying a free ortho CH (:4). Indolization-type ring closures consume that
+    # carbon, so they need the stricter pattern -- see fischer_indole in _reactions.py.
+    rules['aryl_hydrazine_ortho_ch'] = smarts('[N;D1;z1;x1:2]-[N;D2;z1;x1:1]-[C;a:3]:[C;a;D2:4]')
 
     # hydrazone (C=N-NH-R, product of carbonyl + hydrazine condensation)
     rules['hydrazone'] = smarts('[C;z2:1]=[N;D2;z2;x1:2]-[N;D2;z1;x1:3]')
@@ -263,6 +284,9 @@ def _rules():
     # sulfonylhydrazone (C=N-NH-SO2R, e.g. tosylhydrazone; precursor to diazo via Bamford-Stevens)
     # N:3 bonded to N and S -> x2
     rules['sulfonylhydrazone'] = smarts('[C;z2:1]=[N;D2;z2;x1:2]-[N;D2;z1;x2:3]-[S;D4;x3:100](=[O])(=[O])')
+    # sulfonylhydrazide RSO2-NH-NH2 (tosylhydrazide & co): the reagent that makes the above.
+    # Terminal N :1 is bonded to N only (x1); the internal N :2 sees N and S (x2).
+    rules['sulfonylhydrazide'] = smarts('[N;D1;z1;x1:1]-[N;D2;z1;x2:2]-[S;D4;x3:3](=[O:4])(=[O:5])')
 
     # thioamide (for Hantzsch thiazole)
     rules['thioamide'] = smarts('[S;z2;x0;D1:2]=[C;D3;x2:1]-[N;D1:3]')
@@ -346,6 +370,11 @@ def _rules():
 
     # epoxide: strained 3-membered ring
     rules['epoxide'] = smarts('[O;D2;r3:1]1-[C;r3:2]-[C;r3:3]-1')
+    # epoxide oriented for ring opening: :3 is the less hindered carbon (D2, i.e. a CH2) that the
+    # nucleophile attacks, so :2 is the one that keeps the oxygen. The plain `epoxide` pattern above
+    # is symmetric, so the automorphism filter collapses its two mappings and the regiochemistry
+    # would be arbitrary. Fully internal epoxides (no CH2, e.g. cyclohexene oxide) do not match.
+    rules['terminal_epoxide'] = smarts('[O;D2;r3:1]1-[C;r3:2]-[C;r3;D2:3]-1')
 
     # fluorine substituents (descriptor flags: metabolic stability, bioisosteres)
     rules['trifluoromethyl'] = smarts('[C;D4;z1;x3:1]([F:2])([F:3])[F:4]')

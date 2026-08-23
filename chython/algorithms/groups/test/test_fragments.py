@@ -172,3 +172,19 @@ def test_masked_none_and_empty_are_equivalent():
     explicit = {f.canonical_smiles for f in mol.sticky_fragments(masked=None)}
     empty = {f.canonical_smiles for f in mol.sticky_fragments(masked=())}
     assert default == explicit == empty
+
+
+def test_aziridine_is_an_alkyl_amine_handle():
+    # the branched secondary_amine pattern cannot match a 3-ring (induced isomorphism:
+    # the two N-substituents are bonded to each other), so aziridine needs the
+    # one-atom aziridine_nh pattern to expose an N-nucleophile handle here too.
+    results = _by_role(smiles('C1NC1c1ccccc1'), 'alkyl_amine')
+    assert len(results) == 1
+    r = results[0]
+    assert isinstance(r, StickyFragment)
+    assert r.role == 'alkyl_amine'
+    # the strained ring must survive the capping untouched
+    assert smiles(r.canonical_smiles).rings_count == 2
+    assert r.sticky_left.startswith('-')
+    assert '[At]' not in r.sticky_left
+    assert '[At]' not in r.sticky_right

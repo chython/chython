@@ -136,6 +136,9 @@ roles = {
     'alkyl_amine': [
         ('primary_amine',   '[A:1](-[A:2])-[At:20]'),
         ('secondary_amine', '[A:1](-[A:2])(-[A:3])-[At:20]'),
+        # aziridine_nh maps the N alone (the branched secondary_amine pattern cannot match a
+        # 3-ring), so its cap keeps just that atom -- both ring carbons stay untouched.
+        ('aziridine_nh',    '[A:1]-[At:20]'),
     ],
     'aryl_amine': [
         ('primary_aniline',   '[A:1](-[A:2])-[At:20]'),
