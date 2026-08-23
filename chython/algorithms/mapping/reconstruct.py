@@ -65,30 +65,56 @@ class Reconstruct:
         # numbers, which is only safe (and correct) when the two spaces don't overlap.
         self.reset_mapping()
 
-        reactants = self.reactants
         product = self.products[0]
         product_size = len(product)
 
+        # A logged reactant record routinely bundles a spectator counterion with the reactive
+        # species (K/Na trifluoroborate, amine.HCl, sodium alkoxide, carboxylate salt). Templates
+        # have to see the reactive component on its own: handed the whole container, the reactor
+        # faithfully carries the spectator into the generated product, which then can never equal
+        # the salt-free target, and a real match is lost.
+        #
+        # So a multi-component record contributes its components as extra candidates *in addition
+        # to* the intact container, never instead of it -- the counterion is sometimes retained on
+        # both sides (amine.HCl -> amine'.HCl) and that only reconstructs from the intact form.
+        # The intact form is listed first and every phase returns on first success, so records that
+        # already matched keep their exact result and components can only add new matches.
+        #
+        # split() preserves atom numbers and reset_mapping() above made them globally unique, so a
+        # component's mapping applies verbatim to its parent. `sources[i]` is the container unit `i`
+        # came from; `intact[i]` marks the whole-container candidates.
+        reactants, sources, intact = [], [], []
+        for r in self.reactants:
+            reactants.append(r)
+            sources.append(r)
+            intact.append(True)
+            if len(r.connected_components) > 1:
+                for c in r.split():
+                    reactants.append(c)
+                    sources.append(r)
+                    intact.append(False)
+
         # Precheck: purification (product is literally one of the reactants, i.e. recrystallization
         # or workup logged as a reaction). Cheap structural equality; bail before the expensive
-        # functional_groups / template enumeration below.
+        # functional_groups / template enumeration below. Covers components too, so a bare
+        # salt-break (amine.HCl -> amine) is caught here instead of being enumerated in vain.
         if product in reactants:
             return []
 
         # 1. Standalone protection (separate reaction; never composed with transforms/couplings).
         # Tried before the size filter: a protection legitimately grafts a large group from an
         # unlisted reagent, so the product can dwarf the listed reactants yet still be a real match.
-        for r in reactants:
+        for i, r in enumerate(reactants):
             if (result := _try_protect(r, product)) is not None:
                 mapping, labels = result
-                r.remap(mapping)
+                sources[i].remap(mapping)
                 return labels
 
         # Reject grossly unbalanced records (missing reactants, bad data): a product with
         # >=max_size_ratio x the total reactant atoms cannot be reconstructed by any remaining
         # template. Skipped for small products (< min_filter_size atoms): enumeration there is cheap,
         # so full compute is preferred over the risk of rejecting a real reaction.
-        total_reactant_atoms = sum(len(r) for r in reactants)
+        total_reactant_atoms = sum(len(r) for r in self.reactants)
         if max_size_ratio > 0 and product_size >= min_filter_size \
                 and product_size >= max_size_ratio * total_reactant_atoms:
             return []
@@ -104,23 +130,24 @@ class Reconstruct:
         # transformed in place by the reaction, in which case the raw form is the right substrate.
         # `forms[i]` is a list of (mol, labels) for reactant i, raw first so it is preferred.
         forms = []
-        for r in reactants:
+        for i, r in enumerate(reactants):
             candidates = [(r, [])]
             if (result := _deprotect_excess(r, product)) is not None:
                 m, labels = result
                 if (mapping := m.get_fast_mapping(product)) is not None:
-                    r.remap(mapping)
+                    sources[i].remap(mapping)
                     return labels
                 candidates.append((m, labels))
             forms.append(candidates)
 
         # 4. Single-molecule transforms (largest reactant first). FG-screened, so tiny reagents cost
         # almost nothing; this also covers reagent-adding transforms the size-based subset gate skips.
+        # Size ordering also puts an intact salt record ahead of its own components.
         for i in sorted(range(len(forms)), key=lambda j: len(reactants[j]), reverse=True):
             for m, dep in forms[i]:
                 if (result := _try_transforms(m, product)) is not None:
                     mapping, labels = result
-                    reactants[i].remap(mapping)
+                    sources[i].remap(mapping)
                     return dep + labels
 
         # 5. Multi-component reactions over reactant subsets (size-ordered). For each subset we try
@@ -128,15 +155,40 @@ class Reconstruct:
         for subset_indices in _candidate_subsets(reactants, product_size):
             if len(subset_indices) == 1:
                 continue  # singles already covered by phases 3-4
+            if _mixes_views(subset_indices, sources, intact):
+                continue
             for combo in iproduct(*(forms[i] for i in subset_indices)):
                 subset = [m for m, _ in combo]
                 if (result := _try_multi(subset, product)) is not None:
                     mapping, labels = result
+                    # remap each distinct source container once: two components of the same record
+                    # share a source, and `mapping` already spans every atom of the subset.
+                    seen = set()
                     for i in subset_indices:
-                        reactants[i].remap(mapping)
+                        if id(sources[i]) not in seen:
+                            seen.add(id(sources[i]))
+                            sources[i].remap(mapping)
                     return [l for _, dep in combo for l in dep] + labels
 
         return []
+
+
+def _mixes_views(subset_indices, sources, intact):
+    """
+    True if ``subset_indices`` combines a salt record's intact container with one of its own
+    components. Those are alternative views of the same atoms, so pairing them would feed the
+    same atoms to a template twice. Two *components* of one record together are fine -- that is
+    a genuine co-formulated pair (a record holding both coupling partners).
+    """
+    seen = {}
+    for i in subset_indices:
+        src = id(sources[i])
+        if src in seen:
+            if intact[i] or seen[src]:
+                return True
+        else:
+            seen[src] = intact[i]
+    return False
 
 
 def _candidate_subsets(reactants, product_size):
