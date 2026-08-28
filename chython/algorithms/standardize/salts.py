@@ -119,6 +119,7 @@ class Salts:
             if log:
                 self._conformers = None  # bonds broken. geometry changed
                 self.flush_cache()
+                self.calc_labels()
                 self.fix_stereo()
                 if logging:
                     return log

@@ -115,3 +115,35 @@ def test_format_specifiers():
     mol = smiles('[CH3:1][OH:2]')
     s_map = format(mol, 'm')
     assert ':1]' in s_map or ':2]' in s_map
+
+
+def test_split_metal_salts_refreshes_labels():
+    """Breaking the metal bond must leave the acceptor's marks matching its real environment.
+
+    flush_cache() clears cached properties only, so without calc_labels() the anion keeps
+    counting the metal that just left: it reports one neighbor too many and one heteroatom too
+    many, and every D/x query on it fails.
+    """
+    mol = smiles('c1ccccc1C(=O)O[K]')  # potassium benzoate, metal written as a covalent bond
+    assert mol.split_metal_salts()
+
+    for n, atom in mol.atoms():
+        assert atom.neighbors == sum(b != 8 for b in mol._bonds[n].values()), f'atom {n}'
+
+    anion = next(n for n, a in mol.atoms() if a.charge == -1)
+    assert mol.atom(anion).neighbors == 1
+    assert mol.atom(anion).heteroatoms == 0
+
+
+def test_split_metal_salts_then_neutralize():
+    """The stale marks made neutralize() a no-op: its base rules never saw the carboxylate."""
+    covalent = smiles('c1ccccc1C(=O)O[K]')
+    covalent.split_metal_salts()
+    ionic = smiles('c1ccccc1C(=O)[O-].[K+]')
+
+    assert covalent == ionic
+    assert covalent.neutralize(keep_charge=False)
+    assert ionic.neutralize(keep_charge=False)
+    assert covalent == ionic
+    # the proton is back on the acid; the cation is remove_metals()' business, not neutralize()'s
+    assert not any(a.charge < 0 for _, a in covalent.atoms())
