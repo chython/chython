@@ -1,0 +1,42 @@
+REMARK   1 Hand-written dinucleotide fixture: 5'-terminal DA and mid-chain DC.
+REMARK   1 DA uses O3* (alias for O3') to exercise normalize_atom_name.
+REMARK   1 DC uses O1P/O2P (aliases for OP1/OP2) for the same reason.
+REMARK   1 DA has no phosphate group (5'-terminal); DC has no OP3 (mid-chain).
+ATOM      1 O5'   DA A   1       1.000   0.000   0.000  1.00 20.00           O  
+ATOM      2 C5'   DA A   1       2.000   0.000   0.000  1.00 20.00           C  
+ATOM      3 C4'   DA A   1       3.000   0.000   0.000  1.00 20.00           C  
+ATOM      4 O4'   DA A   1       4.000   0.000   0.000  1.00 20.00           O  
+ATOM      5 C3'   DA A   1       5.000   0.000   0.000  1.00 20.00           C  
+ATOM      6 O3*   DA A   1       6.000   0.000   0.000  1.00 20.00           O  
+ATOM      7 C2'   DA A   1       7.000   0.000   0.000  1.00 20.00           C  
+ATOM      8 C1'   DA A   1       8.000   0.000   0.000  1.00 20.00           C  
+ATOM      9 N9    DA A   1       9.000   0.000   0.000  1.00 20.00           N  
+ATOM     10 C8    DA A   1      10.000   0.000   0.000  1.00 20.00           C  
+ATOM     11 N7    DA A   1      11.000   0.000   0.000  1.00 20.00           N  
+ATOM     12 C5    DA A   1      12.000   0.000   0.000  1.00 20.00           C  
+ATOM     13 C6    DA A   1      13.000   0.000   0.000  1.00 20.00           C  
+ATOM     14 N6    DA A   1      14.000   0.000   0.000  1.00 20.00           N  
+ATOM     15 N1    DA A   1      15.000   0.000   0.000  1.00 20.00           N  
+ATOM     16 C2    DA A   1      16.000   0.000   0.000  1.00 20.00           C  
+ATOM     17 N3    DA A   1      17.000   0.000   0.000  1.00 20.00           N  
+ATOM     18 C4    DA A   1      18.000   0.000   0.000  1.00 20.00           C  
+ATOM     19 P     DC A   2      19.000   0.000   0.000  1.00 20.00           P  
+ATOM     20 O1P   DC A   2      20.000   0.000   0.000  1.00 20.00           O  
+ATOM     21 O2P   DC A   2      21.000   0.000   0.000  1.00 20.00           O  
+ATOM     22 O5'   DC A   2      22.000   0.000   0.000  1.00 20.00           O  
+ATOM     23 C5'   DC A   2      23.000   0.000   0.000  1.00 20.00           C  
+ATOM     24 C4'   DC A   2      24.000   0.000   0.000  1.00 20.00           C  
+ATOM     25 O4'   DC A   2      25.000   0.000   0.000  1.00 20.00           O  
+ATOM     26 C3'   DC A   2      26.000   0.000   0.000  1.00 20.00           C  
+ATOM     27 O3'   DC A   2      27.000   0.000   0.000  1.00 20.00           O  
+ATOM     28 C2'   DC A   2      28.000   0.000   0.000  1.00 20.00           C  
+ATOM     29 C1'   DC A   2      29.000   0.000   0.000  1.00 20.00           C  
+ATOM     30 N1    DC A   2      30.000   0.000   0.000  1.00 20.00           N  
+ATOM     31 C2    DC A   2      31.000   0.000   0.000  1.00 20.00           C  
+ATOM     32 O2    DC A   2      32.000   0.000   0.000  1.00 20.00           O  
+ATOM     33 N3    DC A   2      33.000   0.000   0.000  1.00 20.00           N  
+ATOM     34 C4    DC A   2      34.000   0.000   0.000  1.00 20.00           C  
+ATOM     35 N4    DC A   2      35.000   0.000   0.000  1.00 20.00           N  
+ATOM     36 C5    DC A   2      36.000   0.000   0.000  1.00 20.00           C  
+ATOM     37 C6    DC A   2      37.000   0.000   0.000  1.00 20.00           C  
+END

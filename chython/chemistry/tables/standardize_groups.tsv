@@ -1,0 +1,165 @@
+# The standardization rules: match `smarts`, then apply `atom_fix` to the matched atoms' charge and
+# radical state and `bonds_fix` to the bonds between them.  Rules run in the order they appear here,
+# against the molecule as it now stands, so a general rule no longer matches a site a specific rule has
+# already fixed.  Rules DO overlap -- `groups:45` matches a dihydroxy-diazine twice on overlapping ring
+# atoms -- and `_standardize.py::_pass` documents the policy that handles it.
+#
+# COLUMNS
+#
+#   id         `groups:<0-based row index>`.  A log record names this, never a bare index
+#   smarts     the pattern, in the core's dialect -- see the `z` note below
+#   atom_fix   `;`-joined `slot:charge_delta:radical`; radical `-` leave alone, `0` not a radical,
+#              `1` a radical.  ENTRY ORDER IS PRESERVED
+#   bonds_fix  `;`-joined `a:b:order`, order 8 being a dative contact
+#   tautomer   `0`/`1` -- see below
+#   after      `;`-joined ids this row must follow, or `-`.  Every entry is MEASURED, not asserted:
+#              `test/test_standardize_rules_examples.py` puts the two rules alone in a table, runs both
+#              orders over an example, and fails if the answer does not depend on the order
+#   examples   `;`-joined `IN>>OUT`s -- a SMILES this row repairs, and what the whole pass makes of it.
+#              ONE PER `,` ALTERNATIVE of the pattern, so a row saying `[P&D4&x0&z1,N&D4&z1]` carries a
+#              phosphonium case AND a quaternary-ammonium case.  EXECUTED -- the same test asserts that
+#              THIS ROW'S OWN id fires on each and that the product is exactly OUT
+#   why        what was drawn wrong and what the patch does about it.  This is also the message the row
+#              puts into a `standardize(log=...)` record, so it is written to be read in a log
+#
+# An empty cell is spelled `-`; no cell contains a tab.
+#
+# A SLOT IS AN ATOM NUMBER, not a position: an explicit `:N` in the SMARTS where one is written, else the
+# next unused integer from 1 walking the atoms in declaration order.  The first atom of a pattern that maps
+# three of its later atoms is 4.
+#
+# THE HYDROGEN COUNT IS A CONSEQUENCE, NEVER AN INPUT.  No row writes one; the engine re-derives every atom a
+# patch touched, so an example may come out with a different brutto formula than it went in with -- a
+# phosphorus drawn neutral with four bonds was carrying a hydrogen it cannot have, and loses it when the charge
+# arrives.
+#
+# `tautomer` = 0/1, AND THE DEFINITION IS MECHANICAL: 1 when the repair moves a hydrogen from one heavy atom to
+# another.  Since no row writes a hydrogen count, a displacement is a CONSEQUENCE of the bond and charge edits
+# and cannot be read off the patch columns -- which is why it is a column and not something the engine infers.
+# 26 rows carry it and `standardize(fix_tautomers=False)` withholds exactly those 26.
+#
+# WITHHOLDING A FLAGGED ROW CAN LEAVE AN ILLEGAL VALENCE.  Measured: the hypervalent sulfur of `OS(=N)(=N)O` and
+# `OS(=N)(=N)C` is repaired by `groups:71` and by no other row, so with the flag off nothing fires and the
+# drawing's own violation stands.  That is the intended reading of the switch -- `fix_tautomers=False` says "do
+# not choose a tautomer for me", and where the only legal spelling requires choosing one the caller gets their
+# drawing back; `check_valence()` is how they find out.  More often the fallback is a different LEGAL answer
+# instead: `C=N(=O)O` gets nitromethane from `groups:11` or the aci-nitro form from `groups:12`.
+#
+# `groups:71` and `groups:72` ARE THE SAME RULE TWICE, deliberately: the pattern matches a second, overlapping
+# site only once the first has been patched, so one pass would leave the second imide mis-drawn.  `groups:50`,
+# the other way round, IS UNREACHABLE as shipped and kept rather than deleted: every site it matches is a
+# `groups:47` site, `groups:47` comes first, and measured on `groups:50`'s own example they agree.  The example
+# test knows `groups:47` fires there and turns red if the two stop agreeing.
+#
+# `z` IS THE CORE'S HYBRIDIZATION WORD: 1 sp3, 2 sp2, 3 sp AND NOTHING ELSE, 4 aromatic, 5 two cumulated
+# doubles with no triple (allene, sulfone, sulfonamide, nitro), 6 any other combination.  A pattern that
+# repairs a mis-drawn pentavalent nitro, sulfonyl or azide therefore says `z5` or `z6`; a `z3` there would
+# narrow it to alkynes and nitriles and the repair would stop happening silently.
+#
+# `D` DOES NOT COUNT A DATIVE BOND: a coordination contact is not a substituent, which is why `derive_scalars`
+# calls the nitrogen of `[Fe]~N(C)(C)C` sp3.  So the two rows claiming "four substituents, therefore a formal
+# charge" -- `groups:09` on boron, `groups:10` on phosphorus or nitrogen -- say it as `D4` plus `z1`: `z1`
+# forbids every bond order but single, so that already IS four single bonds, and `D4` cannot see a
+# three-coordinate donor as four-coordinate.
+#
+# `[*]` is any element, any charge, any radical.  `[A]` is the neutral-only wildcard, so it does not match
+# `[Na+]` -- an unstated charge means charge zero and never "any charge".
+#
+# ROWS APPLYING THE SAME PATCH through patterns differing in one element, coordination number or bond order
+# are written as ONE ROW with a `&` high-AND alternation -- `[P&D4&z1,S&D3&z1;+]` is "a four-coordinate sp3
+# phosphorus or a three-coordinate sp3 sulfur, cationic either way".  `gen_standardize_rules.MERGES` records
+# which rows went where and `test/test_standardize_rules_merges.py` proves each collapse selects exactly the
+# sites its members selected.
+#
+# TWO CONSEQUENCES FOR ANYONE EDITING THIS FILE.  Row ids are POSITIONAL, so inserting or collapsing a row
+# renumbers every row after it and an id written down elsewhere goes stale silently.  And a MERGED ROW SITS
+# AT THE POSITION OF THE LAST ROW IT REPLACED, never the first: a union is at least as general as any of its
+# members, order is semantics here, and a merged row moved early gets a shot at a site a more specific rule
+# between the members was supposed to see first.
+
+id	smarts	atom_fix	bonds_fix	tautomer	after	examples	why
+groups:00	[B;z1:1]1[H;D2:3][B;z1:2][H;D2:4]1	-	1:3:8;2:4:8	0	-	[H]1B(C)([H]B1(C)C)C>>C[B]1(~[H][B](~[H]1)(C)C)C	A diborane's bridging hydrogens are drawn as two ordinary B-H bonds each; the second bond of each bridge is a three-centre contact and becomes dative
+groups:01	[O;D1;z1][N;D3;z1][C,N;z1] |^1:0,2|	1:-1:0;2:1:-;3:0:0	2:3:2	0	-	[O]N(C)[NH] |^1:0,3|>>C[N+](=N)[O-]	Two radicals on one trivalent nitrogen, an oxygen and a carbon or nitrogen, are a drawn-out N-oxide: the oxygen becomes [O-], the nitrogen [N+], and the second radical is consumed into a double bond
+groups:02	[O,S;D1;z1][S;D4;z1][O;D1;z1] |^1:0,2|	1:0:0;3:0:0	1:2:2;2:3:2	0	-	[O]S(C)(C)[O] |^1:0,4|>>CS(=O)(C)=O	A sulfone drawn as a four-coordinate sulfur carrying two single-bonded radical oxygens; the two radicals are the two S=O bonds
+groups:03	[B]-[N;D3;z2]	-	1:2:8	0	-	BN(C)=C>>[BH3]~[N](=C)C	An sp2 nitrogen single-bonded to boron has no electron left to share, so the B-N bond is the nitrogen's lone pair and becomes dative
+groups:04	[B;z1,z2]-,=[N;D4;z1,z2]	-	1:2:8	0	-	B=N(C)(C)C>>[BH3]~[N](C)(C)C	A four-coordinate nitrogen bonded to boron is an amine-borane adduct; the B-N bond is a donation and becomes dative
+groups:05	[B;z1]-[O,S;D3;z1]	-	1:2:8	0	-	BS(C)C>>[BH3]~[S](C)C	A three-coordinate ether or thioether bonded to boron is donating its lone pair; the bond becomes dative
+groups:06	[B;z2;-]=[N;D1,D2,D3;z2;+]	1:1:-;2:-1:-	1:2:1	0	-	[B-]=[N+]>>BN	A borane adduct drawn as the ylide [B-]=[N+]; the two charges cancel and the bond is an ordinary single one
+groups:07	[B;D4;z1;+3]([A;-])([A;-])([A;-])[A;-]	1:-4:-;2:1:-;3:1:-;4:1:-;5:1:-	-	0	-	[O-][B+3]([O-])([O-])[O-]>>[B-](O)(O)(O)O	A borate drawn with the whole count of charges on the boron and an anion on every ligand as well; the boron is [B-] and the four ligands are neutral
+groups:08	[B;D4;z1]-[A;-]	1:-1:-;2:1:-	-	0	-	[O-]B(O)(O)O>>[B-](O)(O)(O)O	A four-coordinate boron carrying an anionic ligand holds the charge itself; the negative charge moves from the ligand to the boron
+groups:09	[B;D4;z1]	1:-1:-	-	0	groups:00;groups:08	OB(O)(O)O>>[B-](O)(O)(O)O	Four single bonds on a boron is a borate; the drawing left it neutral, so the charge is added
+groups:10	[P&D4&x0&z1,N&D4&z1]	1:1:-	-	0	-	CP(C)(C)C>>C[P+](C)(C)C;CN(C)(C)C>>C[N+](C)(C)C	Four single bonds on a phosphorus with no heteroatom neighbour, or on a nitrogen, is a phosphonium or a quaternary ammonium; the drawing left it neutral, so the charge is added and the phantom hydrogen goes with it
+groups:11	[N;D3;z5;x2](=[O;D1])([O;D1])=C	1:1:-;3:-1:-	1:4:1	1	-	C=N(=O)O>>C[N+]([O-])=O	A nitro group drawn pentavalent in its aci form, C=N(=O)OH; the nitro becomes charge-separated and the acidic hydrogen moves from oxygen to carbon
+groups:12	[N;D3;z5](=[O;D1])(=[C,N,O])-[A]	1:1:-;2:-1:-	1:2:1	0	groups:11	C=N(C)=O>>C=[N+](C)[O-]	A pentavalent nitrogen carrying an N=O and a second double bond; the N=O is separated into [N+]-[O-] and the other double bond is left as drawn
+groups:13	[N;D3;z2;x2;+]([O;D1;-])([O;D1])=C	-	1:3:2;1:4:1	1	groups:12	C=[N+]([O-])O>>C[N+]([O-])=O	An aci-nitro already charge-separated but still drawn with its hydrogen on oxygen; the C=N becomes single and the N-OH becomes N=O, so the hydrogen moves to carbon
+groups:14	[N;D3;z5](=[N;D3;z2;+])(=[O&D1,N&D1&z2,N&D2&z2])[A]	1:1:-;3:-1:-	1:3:1	0	-	CN(=O)=[N+](C)C>>C[N+]([O-])=[N+](C)C;CN(=N)=[N+](C)C>>[N+](C)(=[N+](C)C)[NH-]	A pentavalent nitrogen between an already-cationic nitrogen and either an oxygen or a second nitrogen; the N=O or N=N is separated into [N+]-[X-]
+groups:15	[N;D3;z5](=[N;D1,D2;z2])(=[C,N])[A]	1:1:-;2:-1:-	1:2:1	0	-	CN(=N)=N>>C[N+]([NH-])=N	A pentavalent nitrogen carrying an imino nitrogen and a second double bond; which of the two to break is not unique and this row breaks the N=N
+groups:16	[N;D3;z2;+](=[O;D1])[N;D1,D2;z1;-]	2:-1:-;3:1:-	1:2:1;1:3:2	0	-	[N-][N+](=O)C>>C[N+](=N)[O-]	An N-nitrosamine drawn with its charges swapped, [N-]-[N+]=O; the N-N becomes a double bond and the negative charge moves to the oxygen
+groups:17	[N;D3;z5](=[O;D1])(=[O;D1])[A;-]	1:1:-;2:-1:-	1:2:1	0	-	[O-]N(=O)=O>>[N+]([O-])(=O)[O-]	A pentavalent nitro on an anionic neighbour; one N=O is separated into [N+]-[O-] and the neighbour keeps its own charge
+groups:18	[N;D3;a](:[O;D1])(:[O;D1])[A]	1:1:-;2:-1:-	1:2:1;1:3:2	0	-	Cn(o)o>>C[N+]([O-])=O	A nitro group swept into an aromatic ring by a writer that lower-cased it; the two aromatic N-O bonds become one N=O and one [N+]-[O-]
+groups:19	[N;D2;z5;x2;-](=[O;D1])=[O;D1]	1:1:-;2:-1:-	1:2:1	0	-	O=[N-]=O>>N([O-])=O	A nitrite drawn as a pentavalent [N-] with two N=O; the charge moves to one oxygen and that bond becomes single
+groups:20	[N;D2;z6](#[N;D1])=[C,N,O]	1:1:-;2:-1:-	1:2:2	0	-	C=N#N>>C=[N+]=[N-]	A diazo group drawn as a pentavalent X=N#N; the terminal nitrogen takes the negative charge, the inner one the positive, and the triple bond becomes double
+groups:21	[N;D2;z3;+](#[N;D1])[C,N,O;z1;-]	2:-1:-;3:1:-	1:2:2;1:3:2	0	-	N#[N+][O-]>>[N-]=[N+]=O	An anion next to a diazonium, [C,N,O-]-[N+]#N; the lone pair delocalises into the diazo group, so the charge moves out to the terminal nitrogen and both bonds become double
+groups:22	[N;D2;z6;x2](#[N;D2;+][A])=[N;D1;-]	1:1:-;2:-1:-	1:2:2	0	-	C[N+]#N=[N-]>>CN=[N+]=[N-]	An azide with its positive charge on the terminal nitrogen, A-[N+]#N=[N-]; the charge moves to the middle nitrogen and the triple bond becomes double
+groups:23	[N;D2;z5;x2](=[N;D2;z2])=[N;D1]	1:1:-;3:-1:-	-	0	-	CN=N=N>>CN=[N+]=[N-]	An azide drawn neutral as three cumulated double bonds; the bonds are already right and only the two charges are missing
+groups:24	[N;D2;z3;x2]([N;D2;z1])#[N;D1]	1:1:-;3:-1:-	1:2:2;1:3:2	0	-	CNN#N>>CN=[N+]=[N-]	An azide drawn in its hydrazine spelling, A-NH-N#N; both N-N bonds become double, which is also why the drawn N-H does not survive
+groups:25	[N;D2;z6;x2](=[N;D2;z2])#[N;D1;-]	1:1:-	1:3:2	0	-	CN=N#[N-]>>CN=[N+]=[N-]	An azide drawn with its negative charge on the terminal nitrogen and a triple bond to it; the middle nitrogen takes the positive charge and the triple bond becomes double
+groups:26	[N;D2;z6;x2](=[N;D1;-])#[N;D1]	1:1:-;3:-1:-	1:3:2	0	-	[N-]=N#N>>[N-]=[N+]=[N-]	An azide anion drawn with a pentavalent middle nitrogen; that nitrogen takes the positive charge and the triple bond becomes double
+groups:27	[N;D2;z6;x1](=[N;D1])#[C;D1,D2]	1:1:-;2:-1:-	1:3:2	1	-	C#N=N>>C=[N+]=[N-]	A diazo group drawn as a nitrile with a pentavalent nitrogen, A-C#N=NH; the hydrogen moves from nitrogen to carbon, giving [CH]=[N+]=[N-]
+groups:28	[N;D2;z6;x1](=[N,O;z2])#[C;D1,D2]	1:1:-;2:-1:-	1:2:1	0	groups:27	C#N=O>>C#[N+][O-]	A nitrile N-oxide or N-imide drawn pentavalent, A-C#N=[O,N]; the exocyclic double bond is separated into [N+]-[O,N-] and the nitrile is left alone
+groups:29	[N;D2;z3;x1]([N&D1,O&D1,S&D1,N&D2&z1])#[C;D1,D2]	1:1:-;2:-1:-	-	0	-	NN#C>>C#[N+][NH-];CNN#C>>C#[N+][N-]C	An amidoxime or hydrazonoyl drawn with a pentavalent nitrogen, [NH2,OH,SH]-N#C or RNH-N#C; the charges separate onto the nitrogen and its substituent
+groups:30	[N;D2;z3;x1;+]([N&D1,O&D1,S&D1,N&D2&z1])#[C;D1;-]	2:-1:-;3:1:-	-	1	-	[C-]#[N+]O>>C#[N+][O-];[C-]#[N+]NC>>C#[N+][N-]C	A nitrilium already charge-separated but still drawn with its hydrogen on the [NH2,OH,SH] or NHR substituent; the hydrogen moves to the carbanion
+groups:31	[N;D2;z3]([A])#[C;D1]	1:1:-;3:-1:-	-	0	groups:29;groups:30	CN#C>>[C-]#[N+]C	An isocyanide drawn neutral, A-N#C; the nitrogen takes the positive charge and the terminal carbon the negative
+groups:32	[N;D2;z5;x1;+](=[N;D1])=[C;D1,D2;z2;-]	2:-1:-;3:1:-	-	1	-	[CH-]=[N+]=N>>C=[N+]=[N-]	A diazo group drawn in chython 2's old carbanion form, A-[C-]=[N+]=[NH]; the hydrogen moves from nitrogen to carbon
+groups:33	[N;D4;z2]=[O,N;z2]	1:1:-;2:-1:-	1:2:1	0	-	CN(=N)(C)C>>C[N+]([NH-])(C)C	A four-coordinate nitrogen drawn with a double bond to oxygen or nitrogen; the double bond becomes single and the charges separate
+groups:34	[N;D3;z2]=[O;D1] |^1:0|	1:0:0;2:0:1	1:2:1	0	-	C[N](=O)C |^1:1|>>CN([O])C |^1:2|	A nitroxide drawn with its radical on the nitrogen and a double bond to the oxygen; the radical belongs on the oxygen and the bond is single
+groups:35	[O;D1][N;D3;z2] |^1:0|	1:-1:0;2:1:0	-	0	-	C=N(C)[O] |^1:3|>>C=[N+](C)[O-]	An N-oxide drawn as a radical oxygen on a nitrogen that already has a double bond elsewhere; the unpaired electron is really a charge separation
+groups:36	[N;D3;z3;x1](#[N;D1])(C)C	1:1:-;2:-1:-	1:2:2	0	-	CN(#N)C>>C[N+](=[N-])C	A dialkyl diazo drawn with a triple bond on a three-coordinate nitrogen; the bond becomes double and the charges separate
+groups:37	[N;D1;z2;x1;+]=[N;D2;x1;z2]	1:-1:-;2:1:-	1:2:3	0	-	CN=[N+]>>C[N+]#N	A diazonium drawn with its charge on the terminal nitrogen and only a double bond; the charge moves inward and the bond becomes triple
+groups:38	[C;D2;z2;x2;-]([N;D1,D2;z1;+])=[O;D1]	1:1:-;2:-1:-	1:2:2	0	-	[NH2+][C-]=O>>C(=N)=O	An isocyanate drawn as the ylide [N+]-[C-]=O; the two charges cancel and the C-N becomes a double bond
+groups:39	[N;D1;x0;z3]#[C;D2;z3;x2][O;D1]	-	1:2:2;2:3:2	1	-	N#CO>>C(=N)=O	Cyanic acid drawn as N#C-OH; both bonds become double and the hydrogen moves from oxygen to nitrogen
+groups:40	[N;D1;x0;z3]#[C;D2;z3;x2][O;D1;-]	1:-1:-;3:1:-	1:2:2;2:3:2	0	-	N#C[O-]>>C(=[N-])=O	A cyanate drawn as N#C-[O-]; both bonds become double and the charge moves to the nitrogen
+groups:41	[O;D1;z1;x1;-][N;D2;z1;+]	1:1:-;2:-1:-	1:2:2	0	-	CC(C)(C)[N+][O-]>>C(C)(N=O)(C)C	A nitroso drawn charge-separated as [N+]-[O-] on a two-coordinate nitrogen; the charges cancel into an N=O
+groups:42	[O;D1;z2;x1]=[N;D2;x1;z2][C;D1,D2,D3;z1]	-	1:2:1;2:3:2	1	-	CN=O>>C=NO	A nitroso drawn on the carbon side of a CH; the hydrogen moves from carbon to oxygen and the C-N becomes double, giving the oxime
+groups:43	[O;D2;z2;+]=[C;z2][N;D1,D2,D3;z1]	1:-1:-;3:1:-	1:2:1;2:3:2	0	-	NC=[O+]C>>C(=[NH2+])OC	An amide drawn as an O-alkyl oxocarbenium; the positive charge belongs on the nitrogen, so the C=[O+] becomes a single bond
+groups:44	[O;D2;r6]1[C;z2](=[N;+])[A;z2]-,=[A;z2]-,=[A;z2]-,=[A;z2]1	1:1:-;3:-1:-	1:2:2;2:3:1	0	groups:43	O1C(=[NH2+])C=CC=C1>>[O+]=1C=CC=CC=1N	A pyrylium dearomatized onto its exocyclic nitrogen; the positive charge is returned to the ring oxygen and the C=[N+] becomes single
+groups:45	[O,S;D1;z1;x0]-[C;r6;z2]=2[N;z2]=[A;z2][A;z2]=[A;z2][A;z2]=2	-	1:2:2;2:7:1;3:4:1;4:5:2;5:6:1;6:7:2	1	-	OC1=CC=CC=N1>>C=1C(=O)NC=CC=1	A hydroxy-azine drawn as the enol on a ring carbon that bears a ring C=N; the ring flips to the amide form and the hydrogen moves from oxygen to nitrogen
+groups:46	[O,S;D1;z1;x0]-[C;r6;z2]=2[N;z1][C;z2][N;z2]=[A;z2][A;z2]=2	-	1:2:2;2:7:1;7:6:2;6:5:1	1	-	OC1=CC=NC(=O)N1>>C=1NC(NC(=O)C=1)=O	The same flip as groups:49 for a 1,3-dicarbonyl azine whose other ring nitrogen is already sp3
+groups:47	[N;z2]=[C;D2,D3;z2]-[O,S;D1]	-	1:2:1;2:3:2	1	-	N=CO>>C(N)=O	An amide drawn as its imidic-acid tautomer, N=C-OH; the hydrogen moves from oxygen to nitrogen
+groups:48	[O,S;D1;z1;x0]-[C;r6;z2]1=[A;z2][A;z2]=[N;D2][A;z2]-,=[A;z2]1	-	1:2:2;2:3:1;3:4:2;4:5:1	1	-	OC1=CC=NC=C1>>C=1C(=O)C=CNC=1	A 4-hydroxypyridine drawn as the enol; the ring flips to the 4-pyridone and the hydrogen moves from oxygen to the ring nitrogen
+groups:49	[O;D1;z1;x0][C;D2,D3;z2;x1;!R]=[C;z2;x0]	-	1:2:2;2:3:1	1	-	OC=C>>C(C)=O	An acyclic enol; the hydrogen moves from oxygen to the far carbon and the C=C becomes the C=O of the ketone
+groups:50	[O,S;D1;z1;x0]-[C;r5;z2]1=N[N;z1][A;z2]-,=[A;z2]1	-	1:2:2;2:3:1	1	-	CN1C=CC(O)=N1>>O=C1NN(C)C=C1	A hydroxy-pyrazole drawn as the enol on the ring carbon of the C=N, the pyrazolone family; the ring flips to the amide form and the hydrogen moves from oxygen to nitrogen.  Unreachable as shipped and kept for the record: every site this matches is also a groups:51 site, groups:51 comes first, and on this row's own example the two give the same product
+groups:51	[O,S;D1;z1;x0]-[C;r5;z2]1=[A;z2][A;z2]=N[N;z1]1	-	1:2:2;2:3:1;3:4:2;4:5:1	1	-	CN1N=CC=C1O>>O=C1N(C)NC=C1	The five-membered counterpart of groups:49 where the ring nitrogen is the far one, so the flip walks the whole ring
+groups:52	[N;r6;z2]1=[A;z2][C;h1,h2][A;z2]-,=[A;z2]C1=O	-	1:2:1;2:3:2	1	-	O=C1C=CCC=N1>>C=1C(=O)NC=CC=1	A ring C=N next to a CH2 in a six-ring that already has a C=O; the hydrogen moves from carbon to the ring nitrogen
+groups:53	[N;r6;z2]1=[A;z2][A;z2]=[A;z2][C;h1,h2]C1=O	-	1:2:1;2:3:2;3:4:1;4:5:2	1	-	O=C1CC=CC=N1>>C=1C(=O)NC=CC=1	The same repair as groups:56 with a C=C between the CH2 and the ring nitrogen, so the flip walks two more bonds
+groups:54	[N;r6;z2]1=[A;z2][C;h1,h2]C(=O)[A;z2]-,=[A;z2]1	-	1:2:1;2:3:2	1	-	O=C1CC=NC=C1>>C=1C(=O)C=CNC=1	The same repair as groups:56 with the C=O between the CH2 and the far end of the ring rather than beside the nitrogen
+groups:55	[N;r5;z2]1=[A;z2][C;h1,h2][A;z2]-,=[A;z2]1	-	1:2:1;2:3:2	1	-	C1C=NC=N1>>N1C=NC=C1	A five-ring C=N next to a CH; the hydrogen moves from carbon to nitrogen, which is the aromatic imidazole or pyrazole tautomer
+groups:56	[N;r5;z2]1=[A;z2][C;h1,h2][A;z2][N,O;z1]1	-	1:2:1;2:3:2	1	-	CN1N=CCC1=O>>O=C1N(C)NC=C1	The same repair as groups:59 where the ring closes through an sp3 nitrogen or oxygen instead of a carbon
+groups:57	[O,S;D1;z2]=[C;D3;r6]1[N;z1][C;D3:1](=[N:2])[N;h1:3][A]-,=[A]1	-	1:2:1;1:3:2	1	-	N=C1NC=CC(=O)N1>>O=C1NC(=NC=C1)N	A cyclic guanidine drawn with the imine outside the ring; the exocyclic C=N becomes single and the ring C=N double, moving the hydrogen onto the exocyclic nitrogen
+groups:58	[P;D4;z1;-][C;D1,D2,D3;z1;+]	1:1:-;2:-1:-	1:2:2	0	-	CN(C)[CH+][P-](C)(C)C>>N(C=P(C)(C)C)(C)C	A phosphorus ylide drawn as [P-]-[C+]; the charges cancel into a P=C
+groups:59	[P;D6;z1]([F;D1])([F;D1])([F;D1])([F;D1])([F;D1])[F;D1]	1:-1:-	-	0	-	FP(F)(F)(F)(F)F>>F[P-](F)(F)(F)(F)F	A hexafluorophosphate drawn neutral; six single bonds on a phosphorus is the anion, so the charge is added
+groups:60	[P;D4;z5;-](=[O;D1])(=[O;D1])([A])[A]	1:1:-;2:-1:-	1:2:1	0	-	C[P-](C)(=O)=O>>CP([O-])(=O)C	A phosphonate drawn as a pentavalent [P-] with two P=O; one becomes [P]-[O-] and the phosphorus goes neutral
+groups:61	[S;D1;z1;x1;-][P;D4;z2]=[O;D1]	1:1:-;3:-1:-	1:2:2;2:3:1	0	-	CP(C)(=O)[S-]>>CP([O-])(=S)C	A thiophosphonate drawn with the charge on sulfur and the double bond on oxygen; the double bond and the charge swap places
+groups:62	[S;D1;z1;x1][P;D4;z2]=[O;D1]	-	1:2:2;2:3:1	1	-	CP(C)(=O)S>>CP(O)(=S)C	The same swap as groups:66 with the hydrogen in place of the charge, so the hydrogen moves from sulfur to oxygen
+groups:63	[S;D1;-][S;D4;z5](=[O;D1])(=[A])[A]	1:1:-;3:-1:-	1:2:2;2:3:1	0	-	CS(=O)(=O)[S-]>>[O-]S(=S)(C)=O	A thiosulfonate drawn with the charge on the terminal sulfur and the double bond on oxygen; the double bond and the charge swap places
+groups:64	[S;D1][S;D4;z5](=[O;D1])(=[A])[A]	-	1:2:2;2:3:1	1	-	CS(=O)(=O)S>>O=S(O)(=S)C	The same swap as groups:68 with the hydrogen in place of the charge, so the hydrogen moves from sulfur to oxygen
+groups:65	[S;D3;z1;-]([C;D1,D2,D3;z1;+])	1:1:-;2:-1:-	1:2:2	0	-	CN(C)[CH+][S-](C)C>>N(C=S(C)C)(C)C	A sulfur ylide drawn as [S-]-[C+]; the charges cancel into an S=C
+groups:66	[S;D3;z5;-](=[O;D1])(=[O;D1])[A]	1:1:-;2:-1:-	1:2:1	0	-	C[S-](=O)=O>>CS([O-])=O	A sulfinate drawn as a pentavalent [S-] with two S=O; one becomes [S]-[O-] and the sulfur goes neutral
+groups:67	[S;D4;z6;-](=[O;D1])(=[O;D1])(=[O;D1])[A]	1:1:-;2:-1:-	1:2:1	0	-	O=[S-](C)(=O)=O>>CS([O-])(=O)=O	A sulfonate drawn as an [S-] with three S=O; one becomes [S]-[O-] and the sulfur goes neutral
+groups:68	[S;D3;z5;x3;-]([S;D1;-])(=[O;D1])=[O;D1]	1:1:-;2:1:-;3:-1:-;4:-1:-	1:2:2;1:3:1;1:4:1	0	-	O=[S-](=O)[S-]>>S=S([O-])[O-]	A thiosulfate drawn with a charge on each sulfur and two S=O; the charges move onto the two oxygens and the S-S becomes a double bond
+groups:69	[S;D4;z2](=[O;D1])[O&D1,N&D1&z1,N&D2&z1]	-	1:3:2	0	-	CS(C)(=O)O>>CS(=O)(C)=O;CS(C)(=O)N>>CS(=N)(=O)C	A sulfone or sulfonimide drawn with one S=O and one single-bonded OH or NH2 on a four-coordinate sulfur; the single bond becomes the second double bond and the hydrogen it carried goes with it
+groups:70	[S;D3,D5;z2](=[N;D1,D2;z2])[O;D1]	-	1:2:1;1:3:2	1	-	CS(=N)O>>CS(N)=O	A sulfinamide drawn as the S=N tautomer with the hydrogen on oxygen; the hydrogen moves from oxygen to nitrogen and the S-O becomes S=O
+groups:71	[S;D4;z5:1]([O;D1:2])(=[N;D1,D2;z2:3])(=[A])[A]	-	1:2:2;1:3:1	1	-	OS(=N)(=N)C>>CS(=N)(N)=O	A sulfonimidamide drawn as the S=N tautomer with the hydrogen on oxygen; the hydrogen moves from oxygen to nitrogen and the S-O becomes S=O
+groups:72	[S;D4;z5:1]([O;D1:2])(=[N;D1,D2;z2:3])(=[A])[A]	-	1:2:2;1:3:1	1	-	OS(=N)(=N)O>>NS(=O)(N)=O	groups:81 a second time, on purpose: the pattern matches a second overlapping site only once the first has been patched, so one pass would leave the second imide mis-drawn
+groups:73	[C;D2;z3;x1]([N&D1,O&D1,S&D1,N&D2&z1])#[C;D1,D2]	-	1:2:2;1:3:2	1	-	C#CO>>C(=C)=O;C#CNC>>C(=C)=NC	A ketene, ketenimine or thioketene drawn as an ynol or an ynamine, C#C-[OH,NH2,SH,NHR]; both bonds become double and the hydrogen moves from the heteroatom to the far carbon
+groups:74	[C;D1;x1;z2]=[O;D1] |^1:0|	1:-1:0;2:1:-	1:2:3	0	-	C=O |^1:0|>>[C-]#[O+]	Carbon monoxide drawn as a carbene, [C]=O; it is the charge-separated triple bond [C-]#[O+]
+groups:75	[O;D1][O;D2][O;D1] |^1:0,2|	1:0:0;2:1:-;3:-1:0	1:2:2	0	-	[O]O[O] |^1:0,2|>>[O-][O+]=O	Ozone drawn as a diradical, [O]-O-[O]; it is the charge-separated O=[O+]-[O-]
+groups:76	[C;D1,D2,D3;z1;+]-[N;D3;z1]	1:-1:-;2:1:-	1:2:2	0	groups:58;groups:65	[CH2+]N(C)O>>C=[N+](C)O	An iminium drawn as a carbocation next to an amine; the lone pair forms the double bond and the charge moves from carbon to nitrogen.  It follows the [A-]-[C+] rules, which is the one ordering chython 2 annotated: a rule that names the anion specifically must have had its chance first
+groups:77	[C;D1,D2;z2;x1;+]=[N;D1,D2;z2]	1:-1:-;2:1:-	1:2:3	0	-	[CH2+]=NC>>C#[N+]C	A nitrilium drawn as a carbocation double-bonded to nitrogen; the charge moves to the nitrogen and the bond becomes triple
+groups:78	[P&D4&z1,S&D3&z1,Se&D3&z1,Si&D3&z1,S&D2&z2,S&D4&z2,Cl&D2&z1,Br&D2&z1,I&D2&z1;+][O;D1;-]	1:-1:-;2:1:-	1:2:2	0	-	C[P+]([O-])(C)C>>CP(=O)(C)C;C[S+]([O-])C>>CS(=O)C;C=[S+][O-]>>C=S=O;O[Cl+][O-]>>O=ClO	A phosphine oxide, sulfoxide, selenoxide, silanone, sulfine or hypohalite drawn charge-separated as [X+]-[O-], which is how RDKit writes them; the charges cancel into a double bond.  Each element brings its own coordination and hybridization, which is what the `&` alternatives spell out
+groups:79	[S&D3&z2,S&D4&z1,Cl&D3&z1,Br&D3&z1,I&D3&z1;+2]([O;D1;-])[O;D1;-]	1:-2:-;2:1:-;3:1:-	1:2:2;1:3:2	0	-	C=[S+2]([O-])[O-]>>C=S(=O)=O;C[S+2]([O-])(C)[O-]>>CS(=O)(C)=O;O[Cl+2]([O-])[O-]>>O=Cl(O)=O	A sulfene, sulfone or halite drawn as [X+2] with two [O-]; all the charges cancel into two double bonds
+groups:80	[Cl,Br,I;D4;z1;+3]([O;D1;-])([O;D1;-])[O;D1;-]	1:-3:-;2:1:-;3:1:-;4:1:-	1:2:2;1:3:2;1:4:2	0	-	O[Cl+3]([O-])([O-])[O-]>>O=Cl(O)(=O)=O	A halate drawn as [Hal+3] with three [O-]; all four charges cancel into three double bonds
+groups:81	[Cl,Br,I;D1;z2;-]=[O;D1]	1:1:-;2:-1:-	1:2:1	0	-	[Cl-]=O>>[O-]Cl	A hypohalite drawn as [Hal-]=O, which is how Reaxys writes it; the charge moves to the oxygen and the bond becomes single
+groups:82	[O;D1;h1;z1][N;D3;z2]	1:-1:-;2:1:-	-	0	-	ON1=CC=CC=C1>>[O-][N+]1=CC=CC=C1	An N-oxide drawn as a hydroxyl on a nitrogen that already has a double bond elsewhere -- the Kekule spelling of what the aromatic reader charge-separates on its own.  The hydrogen on the oxygen is the phantom the missing minus left behind, so the charges separate and the hydrogen goes with them; `groups:35` is this row for a radical oxygen
+groups:83	[O;D1;z1;-][N;D3;z2]	2:1:-	-	0	-	[O-]N1=CC=CC=C1>>[O-][N+]1=CC=CC=C1	An N-oxide half charge-separated: the oxygen kept its minus and the nitrogen lost its plus, so only the nitrogen is charged here.  The neutral-oxygen spelling of the same defect is `groups:82`
+groups:84	[N;D3;z2]	1:1:-	-	0	groups:82	CN1=CC=CC=C1>>C[N+]1=CC=CC=C1	Three substituents and a double bond, therefore a formal charge -- `groups:10` for a nitrogen that is sp2 rather than sp3, and the last word on a neutral nitrogen holding four bonds' worth of valence.  It is an azinium or an iminium whose plus the drawing dropped, and the alternative reading needs a bond order changed and hydrogens added, which is not a repair a charge can make.  It runs after `groups:82` on purpose: where a terminal heteroatom can take the counter-charge the compound is neutral overall and separating is the answer, so the general claim must not reach the site first.  `groups:83` needs no such obligation: its patch is this row's patch, the oxygen already carrying the minus.  Only oxygen takes a counter-charge -- a terminal amino group is a substituent like any other and the aromatic reader promotes 1-aminopyridinium to a cation rather than separating it into an aminide, which is measured in `test_standardize_overvalent_nitrogen.py`

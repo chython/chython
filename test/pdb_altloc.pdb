@@ -1,0 +1,15 @@
+REMARK   1 Hand written.  What it demonstrates: two alternate conformers of one serine, A and
+REMARK   1 B.  Both survive as distinct atoms with their altLoc kept, and the CONECT records
+REMARK   1 bond each conformer only to itself -- serials are per atom, so no conformer can
+REMARK   1 acquire a bond to the other one.
+ATOM      1  N   SER A  34       0.000   0.000   0.000  1.00  8.00           N
+ATOM      2  CA  SER A  34       1.450   0.000   0.000  1.00  8.10           C
+ATOM      3  CB ASER A  34       1.950  -0.760   1.220  0.60  8.40           C
+ATOM      4  OG ASER A  34       3.360  -0.700   1.330  0.60  8.50           O
+ATOM      5  CB BSER A  34       1.980  -0.700  -1.240  0.40  9.40           C
+ATOM      6  OG BSER A  34       3.390  -0.640  -1.360  0.40  9.50           O
+CONECT    1    2
+CONECT    2    1    3    5
+CONECT    3    2    4
+CONECT    5    2    6
+END

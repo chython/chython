@@ -1,0 +1,218 @@
+# maccs.tsv -- the 166 published MACCS structural keys.
+# Durant, Leland, Henry, Nourse, J. Chem. Inf. Comput. Sci. 2002, 42, 1273.
+#
+# PROVENANCE, AND THE LIMIT OF WHAT THIS FILE CLAIMS.  the 166-bit NUMBERING is MDL's; the PATTERNS
+# are chython's reading of the published key descriptions, written in chython SMARTS.  nothing here
+# claims bit-for-bit parity with any other implementation, and a bit that differs from another
+# toolkit's is a documented difference, not a defect -- widely used implementations knowingly differ
+# from the published list, and where they do this file follows the publication.  DO NOT reconcile a
+# row against another implementation's key file and do not use one as an oracle; the oracle is
+# tables/maccs_corpus.tsv, whose expected answers are read off the published descriptions by hand.
+#
+# kind = smarts    : the key is set when the pattern matches at least once.  count is 1.
+#        count     : the key is set when the pattern matches at least `count` DISTINCT atom sets.
+#                    this is how the published "> n" wordings are expressed.
+#        predicate : the key is not a substructure at all.  `predicate` names one of the registered
+#                    predicates and `pattern` is `-`.
+#        unset     : the published description states no definition, so there is nothing to
+#                    transcribe and the bit is PERMANENTLY ZERO.  exactly one key: 44, whose
+#                    published description is the literal placeholder `OTHER`.  a guessed pattern
+#                    would be invented chemistry and a copied one would breach the licence posture,
+#                    so the honest answer is a zero a caller can read the reason for.
+#
+# ONE-BASED.  key 1 is the published key 1; maccs_keys()[0] is permanently zero.
+#
+# THE MDL SHORTHAND, AND ITS chython SPELLING.  the published descriptions are MDL's key notation:
+#   A       any heavy atom                      [!#1;*]
+#   Q       any heteroatom (not C, not H)        [!#6;!#1;*]
+#   X       halogen                              [F,Cl,Br,I;*]
+#   AH, QH  the same atom bearing a hydrogen     append ;H1,H2,H3,H4
+#   CH2     carbon with exactly two hydrogens    [C;*;H2]
+#   T       triple bond                          #
+#   %A      the bond is aromatic                 :
+#   not%A   the bond is not aromatic             -,=,#
+#   $A      the bond is a ring bond              ~;@
+#   !A      the bond is a non-ring bond          ~;!@
+#   @1      the atoms close a ring of that size  the r<n> primitive on a ring atom
+#   nM Ring membership of an n-membered ring     [!#1;*;r<n>]
+#   > n     at least n+1 distinct sites          kind = count, count = n + 1
+# a bare adjacency with no bond character stated is `-,=` where an aromatic reading is excluded and
+# `~` where it is not; which one, and why, is in the row's own description.
+#
+# `A` AND `Q` CARRY `!#1` BECAUSE `[*]` MATCHES AN EXPLICIT HYDROGEN.  ethanol has 3 `[*]` sites and,
+# after explicify_hydrogens(), 9; `[!#1;*]` answers 3 both times.  MDL's `A` is an atom other than
+# hydrogen -- the shorthand has a separate `AH` for "A bearing a hydrogen" -- and a descriptor may not
+# change because a caller made hydrogens explicit.  Q is never narrowed to "N, O or S": three quarters
+# of the Q keys would become a different key.
+# EVERY BRACKET ATOM FREES THE CHARGE (`*`) or states one: an unstated charge is charge ZERO in
+# chython SMARTS and no MACCS key means neutral-only.
+# EVERY BOND IS WRITTEN OUT.  an absent bond token matches SINGLE ONLY, so two aromatic atoms are
+# joined by `:` and an "any bond" is `~`; a juxtaposed `][` is always a transcription slip and
+# test_maccs_tsv.py::test_no_pattern_leaves_a_bond_implicit refuses it.
+key	kind	pattern	count	predicate	description
+1	predicate	-	0	isotope	ISOTOPE
+2	predicate	-	0	atomic_number_gt_103	103 < atomic no. < 256.  the second of the two high-atomic-number keys, key 1 being the isotope key; the published column states no wording, so this is chython's reading
+3	smarts	[Ge,As,Se,Sn,Sb,Te,Pb,Bi,Po;*]	1	-	Group IVa,Va,VIa Rows 4-6
+4	smarts	[Ac,Th,Pa,U,Np,Pu,Am,Cm,Bk,Cf,Es,Fm,Md,No,Lr;*]	1	-	actinide.  overlaps key 2's predicate above lawrencium; both are published and both stay
+5	smarts	[Sc,Y,La,Ac,Ti,Zr,Hf;*]	1	-	Group IIIB,IVB (Sc...)
+6	smarts	[La,Ce,Pr,Nd,Pm,Sm,Eu,Gd,Tb,Dy,Ho,Er,Tm,Yb,Lu;*]	1	-	Lanthanide
+7	smarts	[V,Nb,Ta,Cr,Mo,W,Mn,Tc,Re;*]	1	-	Group VB,VIB,VIIB
+8	smarts	[!#6;!#1;*;r4]~;@[!#1;*]~;@[!#1;*]~;@[!#1;*]	1	-	QAAA@1: a heteroatom and three heavy atoms closing a four-membered ring
+9	smarts	[Fe,Co,Ni,Ru,Rh,Pd,Os,Ir,Pt;*]	1	-	Group VIII (Fe...)
+10	smarts	[Be,Mg,Ca,Sr,Ba,Ra;*]	1	-	Group IIa (Alkaline earth)
+11	smarts	[!#1;*;r4]	1	-	4M Ring
+12	smarts	[Cu,Ag,Au,Zn,Cd,Hg;*]	1	-	Group IB,IIB (Cu..)
+13	smarts	[O;*]=,-[N;*](-[C;*])-[C;*]	1	-	ON(C)C.  the O-N bond order is not stated, so `=,-` -- the single-only spelling misses every N-oxide and nitrone
+14	smarts	[S;*]-[S;*]	1	-	S-S
+15	smarts	[O;*]~[C;*](~[O;*])~[O;*]	1	-	OC(O)O.  `~` for the whole OC(O)O / NC(O)O / NC(N)N / OS(O)O family: an all-single reading makes this an orthoester key, and a carbonate carries one C=O
+16	smarts	[!#6;!#1;*;r3]~;@[!#1;*]~;@[!#1;*]	1	-	QAA@1: a heteroatom and two heavy atoms closing a three-membered ring
+17	smarts	[C;*]#[C;*]	1	-	CTC
+18	smarts	[B,Al,Ga,In,Tl;*]	1	-	Group IIIA (B...)
+19	smarts	[!#1;*;r7]	1	-	7M Ring
+20	smarts	[Si;*]	1	-	Si
+21	smarts	[C;*]=[C;*](-[!#6;!#1;*])-[!#6;!#1;*]	1	-	C=C(Q)Q
+22	smarts	[!#1;*;r3]	1	-	3M Ring
+23	smarts	[N;*]~[C;*](~[O;*])~[O;*]	1	-	NC(O)O: the carbamate key.  `~` for the reason on key 15
+24	smarts	[N;*]-[O;*]	1	-	N-O
+25	smarts	[N;*]~[C;*](~[N;*])~[N;*]	1	-	NC(N)N: the guanidine key.  `~` for the reason on key 15
+26	smarts	[C;*]=;@[C;*](~;@[!#1;*])~;@[!#1;*]	1	-	C$=C($A)$A: a ring double bond, both other bonds on the second carbon also ring bonds
+27	smarts	[I;*]	1	-	I
+28	smarts	[!#6;!#1;*]~[C;*;H2]~[!#6;!#1;*]	1	-	QCH2Q
+29	smarts	[P;*]	1	-	P
+30	smarts	[C;*]~[!#6;!#1;*](~[C;*])(~[C;*])~[!#1;*]	1	-	CQ(C)(C)A
+31	smarts	[!#6;!#1;*]~[F,Cl,Br,I;*]	1	-	QX
+32	smarts	[C;*]~[S;*]~[N;*]	1	-	CSN
+33	smarts	[N;*]~[S;*]	1	-	NS
+34	smarts	[C;*;H2]=[!#1;*]	1	-	CH2=A
+35	smarts	[Li,Na,K,Rb,Cs,Fr;*]	1	-	Group IA (Alkali Metal)
+36	smarts	[S;*;R]	1	-	S Heterocycle
+37	smarts	[N;*]~[C;*](~[O;*])~[N;*]	1	-	NC(O)N
+38	smarts	[N;*]~[C;*](~[C;*])~[N;*]	1	-	NC(C)N
+39	smarts	[O;*]~[S;*](~[O;*])~[O;*]	1	-	OS(O)O
+40	smarts	[S;*]-[O;*]	1	-	S-O
+41	smarts	[C;*]#[N;*]	1	-	CTN
+42	smarts	[F;*]	1	-	F
+43	smarts	[!#6;!#1;*;H1,H2,H3,H4]~[!#1;*]~[!#6;!#1;*;H1,H2,H3,H4]	1	-	QHAQH
+44	unset	-	0	-	OTHER -- the published description is the literal placeholder, so there is no definition to transcribe and the bit ships permanently unset
+45	smarts	[C;*]=[C;*]~[N;*]	1	-	C=CN
+46	smarts	[Br;*]	1	-	BR
+47	smarts	[S;*]~[!#1;*]~[N;*]	1	-	SAN
+48	smarts	[O;*]~[!#6;!#1;*](~[O;*])~[O;*]	1	-	OQ(O)O
+49	predicate	-	0	charge	CHARGE
+50	smarts	[C;*]=[C;*](-[C;*])-[C;*]	1	-	C=C(C)C
+51	smarts	[C;*]~[S;*]~[O;*]	1	-	CSO
+52	smarts	[N;*]~[N;*]	1	-	NN
+53	smarts	[!#6;!#1;*;H1,H2,H3,H4]~[!#1;*]~[!#1;*]~[!#1;*]~[!#6;!#1;*;H1,H2,H3,H4]	1	-	QHAAAQH
+54	smarts	[!#6;!#1;*;H1,H2,H3,H4]~[!#1;*]~[!#1;*]~[!#6;!#1;*;H1,H2,H3,H4]	1	-	QHAAQH
+55	smarts	[O;*]~[S;*]~[O;*]	1	-	OSO
+56	smarts	[O;*]~[N;*](~[O;*])~[C;*]	1	-	ON(O)C
+57	smarts	[O;*;R]	1	-	O Heterocycle
+58	smarts	[!#6;!#1;*]~[S;*]~[!#6;!#1;*]	1	-	QSQ
+59	smarts	[S;*]-,=,#[!#1;*]:[!#1;*]	1	-	Snot%A%A: S joined by a non-aromatic bond to an atom that is in an aromatic bond
+60	smarts	[S;*]=[O;*]	1	-	S=O
+61	smarts	[!#1;*]~[S;*](~[!#1;*])~[!#1;*]	1	-	AS(A)A
+62	smarts	[!#1;*]~;@[!#1;*]~;!@[!#1;*]~;@[!#1;*]	1	-	A$A!A$A: two ring bonds bridged by a non-ring bond.  the published column reads `A$!A$A`, which states no atom after the first `$` and is not legal under the legend, so this is chython's reading
+63	smarts	[N;*]=[O;*]	1	-	N=O
+64	smarts	[!#1;*]~;@[!#1;*]~;!@[S;*]	1	-	A$A!S
+65	smarts	[C;*]:[N;*]	1	-	C%N: an AROMATIC C-N bond, not a triple one -- key 41 is the triple, and two published keys are not one key
+66	smarts	[C;*]~[C;*](~[C;*])(~[C;*])~[!#1;*]	1	-	CC(C)(C)A
+67	smarts	[!#6;!#1;*]~[S;*]	1	-	QS
+68	smarts	[!#6;!#1;*;H1,H2,H3,H4]~[!#6;!#1;*;H1,H2,H3,H4]	1	-	QHQH: adjacent heteroatoms, BOTH carrying a hydrogen
+69	smarts	[!#6;!#1;*]~[!#6;!#1;*;H1,H2,H3,H4]	1	-	QQH: the same pair with only the second one's hydrogen demanded
+70	smarts	[!#6;!#1;*]~[N;*]~[!#6;!#1;*]	1	-	QNQ
+71	smarts	[N;*]~[O;*]	1	-	NO
+72	smarts	[O;*]~[!#1;*]~[O;*]	1	-	OAAO
+73	smarts	[S;*]=[!#1;*]	1	-	S=A
+74	smarts	[C;*;H3]~[!#1;*]~[C;*;H3]	1	-	CH3ACH3
+75	smarts	[!#1;*]~;!@[N;*]~;@[!#1;*]	1	-	A!N$A
+76	smarts	[C;*]=[C;*](~[!#1;*])~[!#1;*]	1	-	C=C(A)A
+77	smarts	[N;*]~[!#1;*]~[N;*]	1	-	NAN
+78	smarts	[C;*]=[N;*]	1	-	C=N
+79	smarts	[N;*]~[!#1;*]~[!#1;*]~[N;*]	1	-	NAAN
+80	smarts	[N;*]~[!#1;*]~[!#1;*]~[!#1;*]~[N;*]	1	-	NAAAN
+81	smarts	[S;*]~[!#1;*](~[!#1;*])~[!#1;*]	1	-	SA(A)A
+82	smarts	[!#1;*]~[C;*;H2]~[!#6;!#1;*;H1,H2,H3,H4]	1	-	ACH2QH
+83	smarts	[!#6;!#1;*;r5]~;@[!#1;*]~;@[!#1;*]~;@[!#1;*]~;@[!#1;*]	1	-	QAAAA@1: a heteroatom and four heavy atoms closing a five-membered ring
+84	smarts	[N;*;H2]	1	-	NH2
+85	smarts	[C;*]~[N;*](~[C;*])~[C;*]	1	-	CN(C)C
+86	smarts	[C;*;H2]~[!#6;!#1;*]~[C;*;H2]	1	-	CH2QCH2
+87	smarts	[F,Cl,Br,I;*]~;!@[!#1;*]~;@[!#1;*]	1	-	X!A$A
+88	smarts	[S;*]	1	-	S
+89	smarts	[O;*]~[!#1;*]~[!#1;*]~[!#1;*]~[O;*]	1	-	OAAAO
+90	smarts	[!#6;!#1;*;H1,H2,H3,H4]~[!#1;*]~[!#1;*]~[C;*;H2]~[!#1;*]	1	-	QHAACH2A
+91	smarts	[!#6;!#1;*;H1,H2,H3,H4]~[!#1;*]~[!#1;*]~[!#1;*]~[C;*;H2]~[!#1;*]	1	-	QHAAACH2A
+92	smarts	[O;*]~[C;*](~[N;*])~[C;*]	1	-	OC(N)C
+93	smarts	[!#6;!#1;*]~[C;*;H3]	1	-	QCH3
+94	smarts	[!#6;!#1;*]~[N;*]	1	-	QN
+95	smarts	[N;*]~[!#1;*]~[!#1;*]~[O;*]	1	-	NAAO
+96	smarts	[!#1;*;r5]	1	-	5 M ring
+97	smarts	[N;*]~[!#1;*]~[!#1;*]~[!#1;*]~[O;*]	1	-	NAAAO
+98	smarts	[!#6;!#1;*;r6]~;@[!#1;*]~;@[!#1;*]~;@[!#1;*]~;@[!#1;*]~;@[!#1;*]	1	-	QAAAAA@1: a heteroatom and five heavy atoms closing a six-membered ring
+99	smarts	[C;*]=[C;*]	1	-	C=C
+100	smarts	[!#1;*]~[C;*;H2]~[N;*]	1	-	ACH2N
+101	smarts	[!#1;*;r8,r9,r10,r11,r12,r13,r14]	1	-	8M Ring or larger.  chython's `r` primitive tops out at 14, so a ring larger than that leaves the bit down -- a disclosed divergence from the published wording, not a reading of anyone's limit
+102	smarts	[!#6;!#1;*]~[O;*]	1	-	QO
+103	smarts	[Cl;*]	1	-	CL
+104	smarts	[!#6;!#1;*;H1,H2,H3,H4]~[!#1;*]~[C;*;H2]~[!#1;*]	1	-	QHACH2A
+105	smarts	[!#1;*]~;@[!#1;*](~;@[!#1;*])~;@[!#1;*]	1	-	A$A($A)$A: three ring bonds on one atom
+106	smarts	[!#6;!#1;*]~[!#1;*](~[!#6;!#1;*])~[!#6;!#1;*]	1	-	QA(Q)Q
+107	smarts	[F,Cl,Br,I;*]~[!#1;*](~[!#1;*])~[!#1;*]	1	-	XA(A)A
+108	smarts	[C;*;H3]~[!#1;*]~[!#1;*]~[!#1;*]~[C;*;H2]~[!#1;*]	1	-	CH3AAACH2A
+109	smarts	[!#1;*]~[C;*;H2]~[O;*]	1	-	ACH2O
+110	smarts	[N;*]~[C;*]~[O;*]	1	-	NCO
+111	smarts	[N;*]~[!#1;*]~[C;*;H2]~[!#1;*]	1	-	NACH2A
+112	smarts	[!#1;*]~[!#1;*](~[!#1;*])(~[!#1;*])~[!#1;*]	1	-	AA(A)(A)A
+113	smarts	[O;*]-,=,#[!#1;*]:[!#1;*]	1	-	Onot%A%A: O joined by a non-aromatic bond to an atom that is in an aromatic bond
+114	smarts	[C;*;H3]~[C;*;H2]~[!#1;*]	1	-	CH3CH2A
+115	smarts	[C;*;H3]~[!#1;*]~[C;*;H2]~[!#1;*]	1	-	CH3ACH2A
+116	smarts	[C;*;H3]~[!#1;*]~[!#1;*]~[C;*;H2]~[!#1;*]	1	-	CH3AACH2A
+117	smarts	[N;*]~[!#1;*]~[O;*]	1	-	NAO
+118	count	[!#1;*]~[C;*;H2]-[C;*;H2]~[!#1;*]	2	-	ACH2CH2A > 1
+119	smarts	[N;*]=[!#1;*]	1	-	N=A
+120	count	[!#6;!#1;*;R]	2	-	Heterocyclic atom > 1
+121	smarts	[N;*;R]	1	-	N Heterocycle
+122	smarts	[!#1;*]~[N;*](~[!#1;*])~[!#1;*]	1	-	AN(A)A
+123	smarts	[O;*]~[C;*]~[O;*]	1	-	OCO
+124	smarts	[!#6;!#1;*]~[!#6;!#1;*]	1	-	QQ: two ADJACENT heteroatoms.  the `~` is a bond, not a separator -- a polyol whose oxygens are not bonded to each other does not match
+125	predicate	-	0	aromatic_rings_gt_1	Aromatic Ring > 1.  a predicate and not a count row: it counts RINGS, and a count row counts distinct matched atom sets, so benzene's six aromatic carbons would set it
+126	smarts	[!#1;*]~;!@[O;*]~;!@[!#1;*]	1	-	A!O!A: an oxygen joined to two heavy atoms by non-ring bonds
+127	count	[!#1;*]~;@[!#1;*]~;!@[O;*]	2	-	A$A!O > 1
+128	smarts	[!#1;*]~[C;*;H2]~[!#1;*]~[!#1;*]~[!#1;*]~[C;*;H2]~[!#1;*]	1	-	ACH2AAACH2A
+129	smarts	[!#1;*]~[C;*;H2]~[!#1;*]~[!#1;*]~[C;*;H2]~[!#1;*]	1	-	ACH2AACH2A
+130	count	[!#6;!#1;*]~[!#6;!#1;*]	2	-	QQ > 1: more than one pair of ADJACENT heteroatoms
+131	count	[!#6;!#1;*;H1,H2,H3,H4]	2	-	QH > 1: a HETEROATOM bearing a hydrogen, not a nitrogen bearing one -- a diol sets this
+132	smarts	[O;*]~[!#1;*]~[C;*;H2]~[!#1;*]	1	-	OACH2A
+133	smarts	[!#1;*]~;@[!#1;*]~;!@[N;*]	1	-	A$A!N
+134	smarts	[F,Cl,Br,I;*]	1	-	X (HALOGEN)
+135	smarts	[N;*]-,=,#[!#1;*]:[!#1;*]	1	-	Nnot%A%A: N joined by a non-aromatic bond to an atom that is in an aromatic bond.  the nitrogen sibling of key 59 Snot%A%A and key 113 Onot%A%A, read the same way
+136	count	[O;*]=[!#1;*]	2	-	O=A>1
+137	smarts	[!#6;!#1;*;R]	1	-	Heterocycle
+138	count	[!#6;!#1;*]~[C;*;H2]~[!#1;*]	2	-	QCH2A>1
+139	smarts	[O;*;H1]	1	-	OH
+140	count	[O;*]	4	-	O > 3
+141	count	[C;*;H3]	3	-	CH3 > 2
+142	count	[N;*]	2	-	N > 1
+143	smarts	[!#1;*]~;@[!#1;*]~;!@[O;*]	1	-	A$A!O
+144	smarts	[!#1;*]-,=,#[!#1;*]:[!#1;*]-,=,#[!#1;*]	1	-	Anot%A%Anot%A: an aromatic bond whose two atoms each carry a non-aromatic bond to a heavy atom
+145	predicate	-	0	six_rings_gt_1	6M ring > 1.  a predicate and not a count row: `[!#1;*;r6]` matches benzene six times, so a count row would set it on a single ring
+146	count	[O;*]	3	-	O > 2
+147	smarts	[!#1;*]~[C;*;H2]-[C;*;H2]~[!#1;*]	1	-	ACH2CH2A
+148	smarts	[!#1;*]~[!#6;!#1;*](~[!#1;*])~[!#1;*]	1	-	AQ(A)A
+149	count	[C;*;H3]	2	-	CH3 > 1
+150	smarts	[!#1;*]~;!@[!#1;*]~;@[!#1;*]~;!@[!#1;*]	1	-	A!A$A!A
+151	smarts	[N;*;H1,H2,H3]	1	-	NH
+152	smarts	[O;*]~[C;*](~[C;*])~[C;*]	1	-	OC(C)C
+153	smarts	[!#6;!#1;*]~[C;*;H2]~[!#1;*]	1	-	QCH2A
+154	smarts	[C;*]=[O;*]	1	-	C=O
+155	smarts	[!#1;*]~;!@[C;*;H2]~;!@[!#1;*]	1	-	A!CH2!A: a CH2 joined to two heavy atoms by non-ring bonds
+156	smarts	[N;*]~[!#1;*](~[!#1;*])~[!#1;*]	1	-	NA(A)A
+157	smarts	[C;*]-[O;*]	1	-	C-O
+158	smarts	[C;*]-[N;*]	1	-	C-N
+159	count	[O;*]	2	-	O>1
+160	smarts	[C;*;H3]	1	-	CH3
+161	smarts	[N;*]	1	-	N
+162	smarts	[!#1;*;z4]	1	-	Aromatic
+163	smarts	[!#1;*;r6]	1	-	6M Ring
+164	smarts	[O;*]	1	-	O
+165	predicate	-	0	ring_present	Ring
+166	predicate	-	0	fragments_gt_1	Fragments

@@ -1,0 +1,427 @@
+# THE REACTION CORPUS.  One table, one id space, one API method: `mol.react(*others, reaction=...)`.
+#
+# A row is a row -- some name two groups, some name one, and which is true is `len(groups)`.  THE
+# OXIDATION/REDUCTION/INTERCONVERSION TAXONOMY IS NOT A COLUMN: nothing computes it or checks it, and making
+# it one would mean inventing a class for each of the multi-component rows.  It is the section
+# comments below and nothing else, which cost nothing and claim nothing.
+#
+# `groups` NAMES ROWS OF functional.tsv, comma separated, IN SLOT ORDER, and the slot decides the map
+# numbers the `product` column talks about: slot 0 keeps the group's own numbers, slot 1 has 100 added to
+# each, slot 2 has 200.  So `[A:1]-[A:101]` bonds the first group's atom 1 to the second group's atom 1.
+# `chython.reactions.compose_smirks(groups, product)` prints the SMIRKS a row composes to, which is the
+# thing to read when a row does not fire.
+#
+# THE SLOT ORDER IS NOT THE CALLER'S ARGUMENT ORDER, and nothing reorders the caller's molecules to make it
+# one.  `react()` hands every input to the matcher at once and the reactant side finds its components
+# wherever they are, so a row states the chemical roles once and `acid.react(amine)` and `amine.react(acid)`
+# are the same question.
+#
+# `ring_sizes` IS `<atom>:<sizes>` AND IT IS WHAT MAKES A ROW INTRAMOLECULAR.  A multi-slot row always
+# composes an intermolecular template, whose components are demanded to be in DIFFERENT molecule
+# components; filling `ring_sizes` composes a SECOND template demanding them in ONE, with the sizes as a
+# product-side `r` on the atom named.  `1:5,6,7` reads "the ring through product atom :1 is 5-, 6- or
+# 7-membered", and the atom must be one that lies on the new ring -- pick the wrong one and the row composes
+# fine and never fires.  The two templates are mutually exclusive, so a substrate never yields the same
+# product twice.  A ONE-SLOT ROW MAY NOT FILL IT: there is no intermolecular reading to distinguish such a
+# row from, so the constraint goes in `product` by hand and the loader refuses the column outright.  LEAVE
+# `ring_sizes` EMPTY UNLESS THE RING SIZE IS KNOWN -- an empty cell says "the intramolecular case of this
+# row is not in the corpus yet", which is honest, while a guessed range invents chemistry.
+#
+# `product` is the product side of a SMIRKS: explicit-only, so an unstated charge, isotope or radical is the
+# DEFAULT and not the matched atom's value.  `[A:N]` inherits the element of the atom it pairs with.  Every
+# reactant atom whose number is absent here is DELETED, along with whatever hung only off it -- which is how
+# a leaving group and its whole fragment go without being named.
+#
+# A CONFIGURATION AT THE REACTION CENTRE IS STATED IN `product` OR IT IS LOST.  A patch drops what it
+# rewrites, so a product side silent about its own centre yields an unconfigured atom -- right for the row
+# that racemizes, wrong for the row that inverts.  An atom the row merely mentions keeps what it had, so the
+# carbinol of an esterified secondary alcohol needs no token.  Three tokens carry the whole table:
+#
+#   `@~`    inverted -- the SN2 rows, at the carbon the nucleophile displaces:       `[A@~:1]`
+#   `@=`    kept     -- the alkenyl couplings, at the terminal that held the metal:  `[A@=:101]`
+#   `&<n>`  racemic  -- a centre a radical, a carbanion or a hydride makes or unmakes: `[A;&1:101]`
+#
+# A ROW STATES A CONFIGURATION WHEN ITS OWN PROBE'S PRODUCT HOLDS ONE, which is what makes sibling rows
+# differ: `21 appel` inverts a secondary alcohol and `20` has no centre to invert.  TWO FAMILIES ARE SILENT
+# BECAUSE THEIR GROUPS MAP THE REACTING ATOMS ALONE.  A drawn sign is relative to the order of its centre's
+# directions and so has to name three of them: `39 dihydroxylation` cannot state syn addition, the third
+# direction being a substituent `alkene` does not number, while `38` marks the one centre a terminal alkene
+# makes.  A geometry needs a mapped substituent on EACH terminal, which is why `53 alkyne_to_alkene`,
+# `279`/`280` (HWE), `282`/`283` (Wittig) and `284` (Knoevenagel) state none: `aldehyde` and `ketone` map the
+# carbonyl and nothing else.
+#
+# `probe` IS THE ROW'S OWN ACCEPTANCE TEST, `<reactants>>><product>`, and it is not optional.  A row that
+# composes cleanly and never fires is invisible -- an absent reaction and an unmatchable one are the same
+# empty result -- so `test/test_probes.py` fires every row on its own probe and demands the product back.
+# EACH SIDE IS ONE RECORD: the reactant side finds its components wherever they are, so `CCBr.Oc1ccccc1`
+# exercises the intermolecular template and a connected reactant side exercises the intramolecular one.
+# The probe also refuses an unknown hydrogen count, which is what an all-`:` product side leaves behind.
+#
+# `name` is the CHEMICAL name and is shared by every row that spells a variant of the same reaction; it is
+# what `reaction=` selects on, so the five amidation rows are one selectable reaction.
+#
+# PREFER ONE ROW WITH A `,` LIST TO SEVERAL ROWS THAT DIFFER BY AN ELEMENT: `aryl_halide` is `[Cl,Br,I;D1]`
+# in one group and one row.  The bound on the merge is CHEMICAL, not notational -- F is left out because it
+# does SNAr rather than couple, and `aryl_bromide_iodide` exists beside `aryl_halide` because a Sonogashira on
+# an aryl chloride is not a claim this table makes.  Merging two rows a chemist would distinguish is a wrong
+# row, not a tidy one.
+#
+# THE ROWS ABOVE THE APPENDED SECTION ARE A SEED, a spread across the reaction classes; the rows below it
+# are grown from measured frequency of use.  Neither is the whole of chemistry and the table says so by
+# being a table.
+#
+# ================================================================================================
+# MULTI-COMPONENT.  Two groups, in two molecules or in one -- see `ring_sizes`.
+# ================================================================================================
+id	name	groups	product	ring_sizes	probe	description
+1	amidation	carboxylic_acid,primary_amine	[A:1](=[A:2])-[A:101]-[A:102]	1:5,6,7	C(C)(=O)O.C(C)N>>C(=O)(NCC)C	RCOOH + R'NH2 -> RCONHR'
+2	amidation	carboxylic_acid,primary_aniline	[A:1](=[A:2])-[A:101]-[A:102]	1:5,6,7	C(C)(=O)O.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1	RCOOH + ArNH2 -> RCONHAr
+3	amidation	carboxylic_acid,secondary_amine	[A:1](=[A:2])-[A:101](-[A:102])-[A:103]	1:5,6,7	C(C)(=O)O.CNC>>N(C)(C(C)=O)C	RCOOH + R'2NH -> RCONR'2
+4	amidation	acyl_chloride,primary_amine	[A:1](=[A:2])-[A:101]-[A:102]	1:5,6,7	C(C)(=O)Cl.C(C)N>>C(=O)(NCC)C	RCOCl + R'NH2 -> RCONHR'
+5	amidation	acyl_chloride,secondary_amine	[A:1](=[A:2])-[A:101](-[A:102])-[A:103]	1:5,6,7	C(C)(=O)Cl.CNC>>N(C)(C(C)=O)C	RCOCl + R'2NH -> RCONR'2
+6	esterification	carboxylic_acid,primary_alcohol	[A:1](=[A:2])-[A:101]-[A:102]	1:5,6,7	C(C)(=O)O.C(C)O>>C(C)OC(C)=O	RCOOH + R'CH2OH -> RCOOCH2R'
+7	esterification	carboxylic_acid,secondary_alcohol	[A:1](=[A:2])-[A:101]-[A:102]	1:5,6,7	C(C)(=O)O.C(C)(O)C>>CC(OC(C)=O)C	RCOOH + R'2CHOH -> ester
+8	suzuki	aryl_halide,aryl_boronic_acid	[A:1]-[A:101]		c1c(Br)cccc1.B(O)(c1ccccc1)O>>c1cc(-c2ccccc2)ccc1	ArX + Ar'B(OH)2 -> Ar-Ar'
+9	suzuki	aryl_halide,aryl_boronic_ester	[A:1]-[A:101]		c1c(Br)cccc1.CC1(OB(c2ccccc2)OC1(C)C)C>>c1cc(-c2ccccc2)ccc1	ArX + Ar'Bpin -> Ar-Ar'
+10	suzuki	aryl_halide,alkyl_boronic_acid	[A:1]-[A:101]		c1c(Br)cccc1.B(O)(CCCC)O>>C(CC)Cc1ccccc1	ArX + RB(OH)2 -> Ar-R
+11	buchwald_hartwig	aryl_halide,primary_amine	[A:1]-[A:101]-[A:102]	1:5,6,7	c1c(Br)cccc1.C(C)N>>N(c1ccccc1)CC	ArX + R'NH2 -> ArNHR'
+12	buchwald_hartwig	aryl_halide,secondary_amine	[A:1]-[A:101](-[A:102])-[A:103]	1:5,6,7	c1c(Br)cccc1.CNC>>N(C)(c1ccccc1)C	ArX + R'2NH -> ArNR'2
+13	buchwald_hartwig	aryl_halide,primary_aniline	[A:1]-[A:101]-[A:102]	1:5,6,7	c1c(Br)cccc1.c1c(N)cccc1>>c1(Nc2ccccc2)ccccc1	ArX + Ar'NH2 -> ArNHAr'
+14	sonogashira	aryl_bromide_iodide,terminal_alkyne	[A:1]-[A:101]#[A:102]		c1c(Br)cccc1.C(#C)CC>>C(c1ccccc1)#CCC	ArBr/ArI + HC#CR -> ArC#CR; ArCl needs conditions this row does not claim
+15	n_alkylation	alkyl_halide,primary_amine	[A@~:1]-[A:101]-[A:102]	1:5,6	C[C@H](Br)CC.C(C)N>>C([C@H](NCC)C)C	RX + R'NH2 -> RNHR' (SN2)
+16	n_alkylation	alkyl_halide,secondary_amine	[A@~:1]-[A:101](-[A:102])-[A:103]	1:5,6	C[C@H](Br)CC.CNC>>C(C)[C@H](N(C)C)C	RX + R'2NH -> RNR'2 (SN2)
+17	williamson	alkyl_halide,phenol	[A@~:1]-[A:101]-[A:102]	1:5,6	C[C@H](Br)CC.c1c(O)cccc1>>c1ccccc1O[C@H](C)CC	RX + ArOH -> ArOR (Williamson)
+18	urea_synthesis	isocyanate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]		C(=NCC)=O.C(C)N>>N(CC)C(=O)NCC	RNCO + R'NH2 -> RNHC(=O)NHR'
+19	thioether_synthesis	alkyl_halide,thiol	[A@~:1]-[A:101]-[A:102]	1:5,6	C[C@H](Br)CC.C(C)S>>C([C@H](SCC)C)C	RX + R'SH -> RSR'
+#
+# ================================================================================================
+# INTERCONVERSIONS.  One group in, one out, and neither an oxidation nor a reduction: a halide
+# interchange, an electrophilic substitution, a ring opening.  The reagent is implicit -- a row says
+# Appel takes an alcohol to a bromide, not that CBr4 and PPh3 are in the flask.
+# ================================================================================================
+20	appel	primary_alcohol	[Br;D1]-[A:2]		C(C)O>>C(C)Br	RCH2OH -> RCH2Br (CBr4/PPh3)
+21	appel	secondary_alcohol	[Br;D1]-[A@~:2]		C[C@H](O)CC>>C(C)[C@H](Br)C	R2CHOH -> R2CHBr
+22	appel_chloride	primary_alcohol	[Cl;D1]-[A:2]		C(C)O>>C(C)Cl	RCH2OH -> RCH2Cl (CCl4/PPh3)
+23	appel_chloride	secondary_alcohol	[Cl;D1]-[A@~:2]		C[C@H](O)CC>>C(C)[C@H](Cl)C	R2CHOH -> R2CHCl
+24	borylation	aryl_bromide	[A:1]-[B](-[O;D1])-[O;D1]		c1c(Br)cccc1>>B(O)(c1ccccc1)O	ArBr -> ArB(OH)2 (Miyaura)
+25	borylation	aryl_iodide	[A:1]-[B](-[O;D1])-[O;D1]		c1c(I)cccc1>>B(O)(c1ccccc1)O	ArI -> ArB(OH)2
+26	borylation	aryl_chloride	[A:1]-[B](-[O;D1])-[O;D1]		c1c(Cl)cccc1>>B(O)(c1ccccc1)O	ArCl -> ArB(OH)2
+27	nitrile_hydrolysis	nitrile	[A:1]-[A:2]=[O]		C(CC)#N>>C(CC)(N)=O	RCN -> RCONH2, stopping at the amide
+28	nitration	arene_ch	[A:1]-[N;+](=[O])[O;-]		c1ccccc1>>c1c([N+]([O-])=O)cccc1	ArH -> ArNO2
+29	bromination	arene_ch	[A:1]-[Br;D1]		c1ccccc1>>c1c(Br)cccc1	ArH -> ArBr
+30	chlorination	arene_ch	[A:1]-[Cl;D1]		c1ccccc1>>c1c(Cl)cccc1	ArH -> ArCl
+31	iodination	arene_ch	[A:1]-[I;D1]		c1ccccc1>>c1c(I)cccc1	ArH -> ArI
+32	benzylic_bromination	benzylic_ch	[A:1](-[Br;D1])-[A:2]		c1cc(CC)ccc1>>C(C)(c1ccccc1)Br	ArCH2R -> ArCHBrR (NBS)
+33	epoxide_opening	epoxide	[A;D1:1]-[A:2]-[A@~:3]-[O;D1]		C[C@H]1O[C@@H]1C>>[C@H](C)(O)[C@@H](O)C	oxirane -> 1,2-diol; the ring O-C bond the product omits is deleted
+34	acid_chlorination	carboxylic_acid	[A:1](=[A:2])-[Cl;D1]		C(C)(=O)O>>C(C)(=O)Cl	RCOOH -> RCOCl (SOCl2, oxalyl chloride)
+#
+# ================================================================================================
+# OXIDATIONS.
+# ================================================================================================
+35	alcohol_to_aldehyde	primary_alcohol	[A:1]=[A:2]		C(C)O>>C(C)=O	RCH2OH -> RCHO (Swern, Dess-Martin, PCC)
+36	alcohol_to_ketone	secondary_alcohol	[A:1]=[A:2]		C(C)(O)C>>C(C)(=O)C	R2CHOH -> R2C=O
+37	aldehyde_to_acid	aldehyde	[A:1]=[A:2]-[O;D1]		C(CC)=O>>C(CC)(=O)O	RCHO -> RCOOH (Pinnick, Jones, KMnO4)
+38	dihydroxylation	terminal_alkene	[A:1](-[O;D1])-[A;&1:2]-[O;D1]		C(CC)=C>>[C@@H](CC)(O)CO |&1:0|	C=C -> 1,2-diol (OsO4, KMnO4)
+39	dihydroxylation	alkene	[A:1](-[O;D1])-[A:2]-[O;D1]		C(C)=CC>>CC(C(C)O)O	C=C -> 1,2-diol
+40	thioether_to_sulfoxide	thioether	[A;&1:1](=[O])(-[A:2])-[A:3]		CSCC>>C(C)[S@](C)=O |&1:2|	RSR' -> RS(=O)R' (mCPBA, H2O2, NaIO4)
+41	thioether_to_sulfone	thioether	[A:1](=[O])(=[O])(-[A:2])-[A:3]		CSC>>CS(=O)(C)=O	RSR' -> RSO2R' (excess mCPBA, Oxone)
+42	sulfoxide_to_sulfone	sulfoxide	[A:1](=[A:2])(=[O])(-[A:3])-[A:4]		CS(=O)C>>CS(=O)(C)=O	RS(=O)R' -> RSO2R'
+43	nitrogen_oxidation	tertiary_amine	[A;+;&1:1](-[O;-;D1])(-[A:2])(-[A:3])-[A:4]		CCN(C)CCC>>C(C[N@+](CC)([O-])C)C |&1:2|	R3N -> R3N+-O- (mCPBA, H2O2).  The three substituents are restated because `tertiary_amine` numbers them: a product side deletes by absence, so a product naming only :1 would return [NH3+][O-]
+44	nitrogen_oxidation	pyridine_n	[A;+:1]-[O;-;D1]		c1ccccn1>>c1[n+](cccc1)[O-]	pyridine -> pyridine N-oxide
+#
+# ================================================================================================
+# REDUCTIONS.
+# ================================================================================================
+45	aldehyde_to_alcohol	aldehyde	[A:1]-[A:2]		C(CC)=O>>C(O)CC	RCHO -> RCH2OH (NaBH4, LiAlH4)
+46	ketone_to_alcohol	ketone	[A:1]-[A;&1:2]		C(C)(=O)CC>>C(C)[C@H](O)C |&1:2|	R2C=O -> R2CHOH
+47	acid_to_alcohol	carboxylic_acid	[A:1]-[A:2]		C(C)(=O)O>>C(C)O	RCOOH -> RCH2OH (LiAlH4); the hydroxyl goes
+48	ester_to_alcohol	ester	[A:1]-[A:2]		O=C(C)OC>>C(C)O	RCOOR' -> RCH2OH (LiAlH4); the alkoxy fragment goes with it
+49	amide_to_amine	primary_amide	[A:1]-[A:2]		C(N)=O>>CN	RCONH2 -> RCH2NH2 (LiAlH4, BH3)
+50	amide_to_amine	secondary_amide	[A:1]-[A:2]		C(NC)=O>>CNC	RCONHR' -> RCH2NHR'
+51	nitrile_to_amine	nitrile	[A:1]-[A:2]		C(CC)#N>>C(N)CC	RCN -> RCH2NH2 (LiAlH4, H2/cat)
+52	nitro_to_amine	nitro	[A:1]		C(C)[N+]([O-])=O>>C(C)N	ArNO2 -> ArNH2 (H2/Pd, SnCl2, Fe/HCl); both oxygens go
+53	alkyne_to_alkene	alkyne	[A:1]=[A:2]		C(#CC)C>>C(C)=CC	C#C -> C=C (Lindlar)
+54	alkene_to_alkane	alkene	[A:1]-[A:2]		C(C)=CC>>C(C)CC	C=C -> C-C (H2/Pd)
+55	alkene_to_alkane	terminal_alkene	[A:1]-[A:2]		C(CC)=C>>C(C)CC	C=C -> C-C (H2/Pd)
+56	sulfoxide_to_thioether	sulfoxide	[A:1](-[A:3])-[A:4]		CS(=O)C>>CSC	RS(=O)R' -> RSR'; the oxygen goes
+#
+# ================================================================================================
+# MULTI-COMPONENT, GROWN FROM FREQUENCY.  Appended and never inserted: an id is frozen, so a new row
+# goes at the end and the sections above keep theirs.  The taxonomy sections above stop here.
+# ================================================================================================
+#
+# --- the aryl electrophile: displacement, Cu-mediated coupling, cross-electrophile coupling -----
+57	snar	aryl_fluoride,primary_alcohol	[A:1]-[A:101]-[A:102]		c1c(F)cccc1.C(C)O>>O(c1ccccc1)CC	Activated aryl fluoride displaced by a primary alcohol (SNAr)
+58	snar	aryl_fluoride,secondary_alcohol	[A:1]-[A:101]-[A:102]		c1c(F)cccc1.C(C)(O)C>>c1(ccccc1)OC(C)C	Activated aryl fluoride displaced by a secondary alcohol (SNAr)
+59	snar	aryl_fluoride,tertiary_alcohol	[A:1]-[A:101]-[A:102]		c1c(F)cccc1.C(C)(O)(C)C>>c1cccc(OC(C)(C)C)c1	Activated aryl fluoride displaced by a tertiary alcohol (SNAr)
+60	snar	aryl_halide,primary_alcohol	[A:1]-[A:101]-[A:102]		c1c(Br)cccc1.C(C)O>>O(c1ccccc1)CC	Aryl halide displaced by a primary alcohol (SNAr)
+61	snar	aryl_halide,secondary_alcohol	[A:1]-[A:101]-[A:102]		c1c(Br)cccc1.C(C)(O)C>>c1(ccccc1)OC(C)C	Aryl halide displaced by a secondary alcohol (SNAr)
+62	snar	aryl_halide,tertiary_alcohol	[A:1]-[A:101]-[A:102]		c1c(Br)cccc1.C(C)(O)(C)C>>c1cccc(OC(C)(C)C)c1	Aryl halide displaced by a tertiary alcohol (SNAr)
+63	snar	aryl_sulfonate,primary_alcohol	[A:1]-[A:101]-[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C(C)O>>O(c1ccccc1)CC	Aryl sulfonate displaced by a primary alcohol (SNAr)
+64	snar	aryl_sulfonate,secondary_alcohol	[A:1]-[A:101]-[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C(C)(O)C>>c1(ccccc1)OC(C)C	Aryl sulfonate displaced by a secondary alcohol (SNAr)
+65	snar	aryl_sulfonate,tertiary_alcohol	[A:1]-[A:101]-[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C(C)(O)(C)C>>c1cccc(OC(C)(C)C)c1	Aryl sulfonate displaced by a tertiary alcohol (SNAr)
+66	snar	aryl_fluoride,primary_amine	[A:1]-[A:101]-[A:102]		c1c(F)cccc1.C(C)N>>N(c1ccccc1)CC	Activated aryl fluoride displaced by a primary amine (SNAr)
+67	snar	aryl_fluoride,primary_aniline	[A:1]-[A:101]-[A:102]		c1c(F)cccc1.c1c(N)cccc1>>c1(Nc2ccccc2)ccccc1	Activated aryl fluoride displaced by a primary aniline (SNAr)
+68	snar	aryl_fluoride,secondary_amine	[A:1]-[A:101](-[A:102])-[A:103]		c1c(F)cccc1.CNC>>N(C)(c1ccccc1)C	Activated aryl fluoride displaced by a secondary amine (SNAr)
+69	snar	aryl_fluoride,secondary_aniline	[A:1]-[A:101](-[A:102])-[A:103]		c1c(F)cccc1.c1cc(NC)ccc1>>c1cccc(c1)N(C)c1ccccc1	Activated aryl fluoride displaced by a secondary aniline (SNAr)
+70	snar	aryl_fluoride,aziridine_nh	[A:1]-[A:101]		c1c(F)cccc1.C1NC1>>c1cc(ccc1)N1CC1	Activated aryl fluoride displaced by an aziridine NH (SNAr)
+71	snar	aryl_fluoride,primary_amide	[A:1]-[A:101]-[A:102]=[A:103]		c1c(F)cccc1.C(N)=O>>c1cccc(NC=O)c1	Activated aryl fluoride displaced by a primary amide (SNAr)
+72	snar	aryl_fluoride,secondary_amide	[A:1]-[A:101]-[A:102]=[A:103]		c1c(F)cccc1.C(NC)=O>>C(=O)N(C)c1ccccc1	Activated aryl fluoride displaced by a secondary amide (SNAr)
+73	snar	aryl_fluoride,phenol	[A:1]-[A:101]-[A:102]		c1c(F)cccc1.c1c(O)cccc1>>c1(Oc2ccccc2)ccccc1	Activated aryl fluoride displaced by a phenol (SNAr)
+74	snar	aryl_fluoride,thiol	[A:1]-[A:101]-[A:102]		c1c(F)cccc1.C(C)S>>S(c1ccccc1)CC	Activated aryl fluoride displaced by an alkyl thiol (SNAr)
+# --- cross-electrophile coupling, where both partners are electrophiles -------------------------
+75	xec	aryl_halide,alkyl_halide	[A:1]-[A;&1:101]		c1c(Br)cccc1.CCC(Br)C>>c1cc(ccc1)[C@H](C)CC |&1:6|	Aryl halide and alkyl halide coupled (cross-electrophile)
+76	xec	aryl_sulfonate,alkyl_halide	[A:1]-[A;&1:101]		O=S(C(F)(F)F)(Oc1ccccc1)=O.CCC(Br)C>>c1cc(ccc1)[C@H](C)CC |&1:6|	Aryl sulfonate and alkyl halide coupled (cross-electrophile)
+# --- aryl-O and aryl-S coupling -----------------------------------------------------------------
+77	ullmann_phenol	aryl_halide,phenol	[A:1]-[A:101]-[A:102]		c1c(Br)cccc1.c1c(O)cccc1>>c1(Oc2ccccc2)ccccc1	Aryl halide and a phenol, giving the diaryl ether (Ullmann)
+78	ullmann_phenol	aryl_sulfonate,phenol	[A:1]-[A:101]-[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.c1c(O)cccc1>>c1(Oc2ccccc2)ccccc1	Aryl sulfonate and a phenol, giving the diaryl ether (Ullmann)
+79	thioetherification	aryl_halide,thiol	[A:1]-[A:101]-[A:102]		c1c(Br)cccc1.C(C)S>>S(c1ccccc1)CC	Aryl halide and a thiol, giving the aryl thioether
+80	thioetherification	aryl_halide,aryl_thiol	[A:1]-[A:101]-[A:102]		c1c(Br)cccc1.c1c(S)cccc1>>c1(Sc2ccccc2)ccccc1	Aryl halide and an aryl thiol, giving the diaryl thioether
+81	thioetherification	aryl_sulfonate,thiol	[A:1]-[A:101]-[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C(C)S>>S(c1ccccc1)CC	Aryl sulfonate and a thiol, giving the aryl thioether
+82	thioetherification	aryl_sulfonate,aryl_thiol	[A:1]-[A:101]-[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.c1c(S)cccc1>>c1(Sc2ccccc2)ccccc1	Aryl sulfonate and an aryl thiol, giving the diaryl thioether
+# --- the lactam oxygen as the nucleophile -------------------------------------------------------
+# `azinone` numbers a ring atom besides the O, so these product sides restate it with the bond it
+# already has: a product naming only the O deletes it and opens the ring.
+83	snar	aryl_fluoride,azinone	[A:1]-[A:101]-[A:102](-[A:103])=[A:104]		c1c(F)cccc1.C1(Nc2c(C=C1)cccc2)=O>>n1c2c(cccc2)ccc1Oc1ccccc1	Activated aryl fluoride displaced by the lactam O of an azinone, giving the O-aryl azine (SNAr)
+84	ullmann_phenol	aryl_halide,azinone	[A:1]-[A:101]-[A:102](-[A:103])=[A:104]		c1c(Br)cccc1.C1(Nc2c(C=C1)cccc2)=O>>n1c2c(cccc2)ccc1Oc1ccccc1	Aryl halide and the lactam O of an azinone, giving the O-aryl azine (Ullmann)
+85	ullmann_phenol	aryl_sulfonate,azinone	[A:1]-[A:101]-[A:102](-[A:103])=[A:104]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C1(Nc2c(C=C1)cccc2)=O>>n1c2c(cccc2)ccc1Oc1ccccc1	Aryl sulfonate and the lactam O of an azinone, giving the O-aryl azine (Ullmann)
+#
+# --- the metal-mediated C-C couplings, by the nucleophilic partner ------------------------------
+86	stille	aryl_halide,aryl_stannane	[A:1]-[A:101]		c1c(Br)cccc1.c1(ccccc1)[Sn](C)(C)C>>c1cc(-c2ccccc2)ccc1	Aryl halide and an aryl stannane, giving the biaryl (Stille)
+87	stille	aryl_halide,alkenyl_stannane	[A:1]-[A@=:101]=[A:102]		c1c(Br)cccc1.C/C=C/[Sn](C)(C)C>>c1cccc(/C=C/C)c1	Aryl halide and an alkenyl stannane, giving the styrene (Stille)
+88	stille	aryl_halide,alkyl_stannane	[A:1]-[A:101]		c1c(Br)cccc1.C([Sn](C)(C)C)CCC>>C(CC)Cc1ccccc1	Aryl halide and an alkyl stannane, giving the alkylarene (Stille)
+89	stille	aryl_sulfonate,aryl_stannane	[A:1]-[A:101]		O=S(C(F)(F)F)(Oc1ccccc1)=O.c1(ccccc1)[Sn](C)(C)C>>c1cc(-c2ccccc2)ccc1	Aryl sulfonate and an aryl stannane, giving the biaryl (Stille)
+90	stille	aryl_sulfonate,alkenyl_stannane	[A:1]-[A@=:101]=[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C/C=C/[Sn](C)(C)C>>c1cccc(/C=C/C)c1	Aryl sulfonate and an alkenyl stannane, giving the styrene (Stille)
+91	stille	aryl_sulfonate,alkyl_stannane	[A:1]-[A:101]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C([Sn](C)(C)C)CCC>>C(CC)Cc1ccccc1	Aryl sulfonate and an alkyl stannane, giving the alkylarene (Stille)
+# --- the couplings that lose an atom by absence: the alcohol oxygen, and CO2 --------------------
+92	deoxygenative_coupling	primary_alcohol,aryl_halide	[A:2]-[A:101]		C(C)O.c1c(Br)cccc1>>c1cc(CC)ccc1	Primary alcohol and an aryl halide coupled, losing the oxygen
+93	deoxygenative_coupling	primary_alcohol,aryl_sulfonate	[A:2]-[A:101]		C(C)O.O=S(C(F)(F)F)(Oc1ccccc1)=O>>c1cc(CC)ccc1	Primary alcohol and an aryl sulfonate coupled, losing the oxygen
+94	deoxygenative_coupling	secondary_alcohol,aryl_halide	[A;&1:2]-[A:101]		CCC(O)C.c1c(Br)cccc1>>c1cc(ccc1)[C@H](C)CC |&1:6|	Secondary alcohol and an aryl halide coupled, losing the oxygen
+95	deoxygenative_coupling	secondary_alcohol,aryl_sulfonate	[A;&1:2]-[A:101]		CCC(O)C.O=S(C(F)(F)F)(Oc1ccccc1)=O>>c1cc(ccc1)[C@H](C)CC |&1:6|	Secondary alcohol and an aryl sulfonate coupled, losing the oxygen
+96	deoxygenative_coupling	tertiary_alcohol,aryl_halide	[A;&1:2]-[A:101]		CCC(C)(O)CCC.c1c(Br)cccc1>>c1cccc([C@@](C)(CC)CCC)c1 |&1:5|	Tertiary alcohol and an aryl halide coupled, losing the oxygen
+97	deoxygenative_coupling	tertiary_alcohol,aryl_sulfonate	[A;&1:2]-[A:101]		CCC(C)(O)CCC.O=S(C(F)(F)F)(Oc1ccccc1)=O>>c1cccc([C@@](C)(CC)CCC)c1 |&1:5|	Tertiary alcohol and an aryl sulfonate coupled, losing the oxygen
+98	decarboxylative_coupling	alkyl_carboxylic_acid,aryl_halide	[A;&1:3]-[A:101]		CCC(C)C(=O)O.c1c(Br)cccc1>>c1cc(ccc1)[C@H](C)CC |&1:6|	Alkyl carboxylic acid and an aryl halide coupled, losing CO2
+99	decarboxylative_coupling	alkyl_carboxylic_acid,aryl_sulfonate	[A;&1:3]-[A:101]		CCC(C)C(=O)O.O=S(C(F)(F)F)(Oc1ccccc1)=O>>c1cc(ccc1)[C@H](C)CC |&1:6|	Alkyl carboxylic acid and an aryl sulfonate coupled, losing CO2
+100	decarboxylative_coupling	aryl_carboxylic_acid,aryl_halide	[A:3]-[A:101]		c1(ccccc1)C(=O)O.c1c(Br)cccc1>>c1cc(-c2ccccc2)ccc1	Aryl carboxylic acid and an aryl halide coupled, losing CO2
+101	decarboxylative_coupling	aryl_carboxylic_acid,aryl_sulfonate	[A:3]-[A:101]		c1(ccccc1)C(=O)O.O=S(C(F)(F)F)(Oc1ccccc1)=O>>c1cc(-c2ccccc2)ccc1	Aryl carboxylic acid and an aryl sulfonate coupled, losing CO2
+102	decarboxylative_coupling	redox_active_ester,aryl_halide	[A;&1:1]-[A:101]		O(N1C(CCC1=O)=O)C(=O)C(C)CC.c1c(Br)cccc1>>c1cc(ccc1)[C@@H](C)CC |&1:6|	Redox-active ester and an aryl halide coupled, losing CO2
+103	decarboxylative_coupling	redox_active_ester,aryl_sulfonate	[A;&1:1]-[A:101]		O(N1C(CCC1=O)=O)C(=O)C(C)CC.O=S(C(F)(F)F)(Oc1ccccc1)=O>>c1cc(ccc1)[C@@H](C)CC |&1:6|	Redox-active ester and an aryl sulfonate coupled, losing CO2
+# --- the organometallic nucleophiles ------------------------------------------------------------
+104	negishi	aryl_halide,alkyl_zinc	[A:1]-[A:101]		c1c(Br)cccc1.C(C)[Zn]Br>>c1cc(CC)ccc1	Aryl halide and an alkyl organozinc, giving the alkylarene (Negishi)
+105	negishi	aryl_halide,aryl_zinc	[A:1]-[A:101]		c1c(Br)cccc1.c1cc([Zn]Br)ccc1>>c1cc(-c2ccccc2)ccc1	Aryl halide and an aryl organozinc, giving the biaryl (Negishi)
+106	negishi	aryl_halide,alkenyl_zinc	[A:1]-[A@=:101]=[A:102]		c1c(Br)cccc1.C/C=C/[Zn]Br>>c1cccc(/C=C/C)c1	Aryl halide and an alkenyl organozinc, giving the styrene (Negishi)
+107	negishi	aryl_sulfonate,alkyl_zinc	[A:1]-[A:101]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C(C)[Zn]Br>>c1cc(CC)ccc1	Aryl sulfonate and an alkyl organozinc, giving the alkylarene (Negishi)
+108	negishi	aryl_sulfonate,aryl_zinc	[A:1]-[A:101]		O=S(C(F)(F)F)(Oc1ccccc1)=O.c1cc([Zn]Br)ccc1>>c1cc(-c2ccccc2)ccc1	Aryl sulfonate and an aryl organozinc, giving the biaryl (Negishi)
+109	negishi	aryl_sulfonate,alkenyl_zinc	[A:1]-[A@=:101]=[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C/C=C/[Zn]Br>>c1cccc(/C=C/C)c1	Aryl sulfonate and an alkenyl organozinc, giving the styrene (Negishi)
+110	heck	aryl_halide,terminal_alkene	[A:1]-[A:101]=[A:102]		c1c(Br)cccc1.C(CC)=C>>C(CC)=Cc1ccccc1	Aryl halide and a terminal alkene, giving the styrene (Heck)
+111	heck	aryl_halide,alkene	[A:1]-[A:101]=[A:102]		c1c(Br)cccc1.C(C)=CC>>c1cccc(C(C)=CC)c1	Aryl halide and an internal alkene, giving the arylated alkene (Heck)
+112	heck	aryl_sulfonate,terminal_alkene	[A:1]-[A:101]=[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C(CC)=C>>C(CC)=Cc1ccccc1	Aryl sulfonate and a terminal alkene, giving the styrene (Heck)
+113	heck	aryl_sulfonate,alkene	[A:1]-[A:101]=[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C(C)=CC>>c1cccc(C(C)=CC)c1	Aryl sulfonate and an internal alkene, giving the arylated alkene (Heck)
+114	kumada	aryl_halide,alkyl_grignard	[A:1]-[A;&1:101]		c1c(Br)cccc1.C[C@H](CC)[Mg]Br>>c1cc(ccc1)[C@H](C)CC |&1:6|	Aryl halide and an alkyl Grignard, giving the alkylarene (Kumada)
+115	kumada	aryl_halide,aryl_grignard	[A:1]-[A:101]		c1c(Br)cccc1.c1cc([Mg]Br)ccc1>>c1cc(-c2ccccc2)ccc1	Aryl halide and an aryl Grignard, giving the biaryl (Kumada)
+116	kumada	aryl_halide,alkenyl_grignard	[A:1]-[A@=:101]=[A:102]		c1c(Br)cccc1.C/C=C/[Mg]Br>>c1cccc(/C=C/C)c1	Aryl halide and an alkenyl Grignard, giving the styrene (Kumada)
+117	kumada	aryl_sulfonate,alkyl_grignard	[A:1]-[A;&1:101]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C[C@H](CC)[Mg]Br>>c1cc(ccc1)[C@H](C)CC |&1:6|	Aryl sulfonate and an alkyl Grignard, giving the alkylarene (Kumada)
+118	kumada	aryl_sulfonate,aryl_grignard	[A:1]-[A:101]		O=S(C(F)(F)F)(Oc1ccccc1)=O.c1cc([Mg]Br)ccc1>>c1cc(-c2ccccc2)ccc1	Aryl sulfonate and an aryl Grignard, giving the biaryl (Kumada)
+119	kumada	aryl_sulfonate,alkenyl_grignard	[A:1]-[A@=:101]=[A:102]		O=S(C(F)(F)F)(Oc1ccccc1)=O.C/C=C/[Mg]Br>>c1cccc(/C=C/C)c1	Aryl sulfonate and an alkenyl Grignard, giving the styrene (Kumada)
+#
+# --- Cu-mediated N-arylation of an azole, including the activated lactam electrophiles ----------
+# The `pyrazole` and `imidazole` product sides restate the ring atoms between the two nitrogens:
+# the new bond goes to the `h0` nitrogen and the H moves to the other, and a derived hydrogen
+# count makes the two spellings one molecule.
+120	ullmann_pyrrole	aryl_fluoride,pyrrole	[A:1]-[A:101]		c1c(F)cccc1.c1c[nH]cc1>>n1(cccc1)-c1ccccc1	Activated aryl fluoride N-arylating a pyrrole (Ullmann)
+121	ullmann_pyrrole	aryl_fluoride,pyrazole	[A:1]-[A:102]:[A:101]		c1c(F)cccc1.n1[nH]ccc1>>c1ccn(-c2ccccc2)n1	Activated aryl fluoride N-arylating a pyrazole (Ullmann)
+122	ullmann_pyrrole	aryl_fluoride,imidazole	[A:1]-[A:103]:[A:102]:[A:101]		c1c(F)cccc1.n1c[nH]cc1>>n1ccn(-c2ccccc2)c1	Activated aryl fluoride N-arylating an imidazole (Ullmann)
+123	ullmann_pyrrole	aryl_halide,pyrrole	[A:1]-[A:101]		c1c(Br)cccc1.c1c[nH]cc1>>n1(cccc1)-c1ccccc1	Aryl halide N-arylating a pyrrole (Ullmann)
+124	ullmann_pyrrole	aryl_halide,pyrazole	[A:1]-[A:102]:[A:101]		c1c(Br)cccc1.n1[nH]ccc1>>c1ccn(-c2ccccc2)n1	Aryl halide N-arylating a pyrazole (Ullmann)
+125	ullmann_pyrrole	aryl_halide,imidazole	[A:1]-[A:103]:[A:102]:[A:101]		c1c(Br)cccc1.n1c[nH]cc1>>n1ccn(-c2ccccc2)c1	Aryl halide N-arylating an imidazole (Ullmann)
+126	ullmann_pyrrole	aryl_sulfonate,pyrrole	[A:1]-[A:101]		O=S(C(F)(F)F)(Oc1ccccc1)=O.c1c[nH]cc1>>n1(cccc1)-c1ccccc1	Aryl sulfonate N-arylating a pyrrole (Ullmann)
+127	ullmann_pyrrole	aryl_sulfonate,pyrazole	[A:1]-[A:102]:[A:101]		O=S(C(F)(F)F)(Oc1ccccc1)=O.n1[nH]ccc1>>c1ccn(-c2ccccc2)n1	Aryl sulfonate N-arylating a pyrazole (Ullmann)
+128	ullmann_pyrrole	aryl_sulfonate,imidazole	[A:1]-[A:103]:[A:102]:[A:101]		O=S(C(F)(F)F)(Oc1ccccc1)=O.n1c[nH]cc1>>n1ccn(-c2ccccc2)c1	Aryl sulfonate N-arylating an imidazole (Ullmann)
+129	ullmann_pyrrole	lactam_1_halide,pyrrole	[A:1]-[A:101]		C=1C(=O)N(C)C=CC=1Cl.c1c[nH]cc1>>n1(cccc1)C1=CC(N(C=C1)C)=O	Azine lactam halide at C4 of a 2-pyridinone N-arylating a pyrrole (Ullmann)
+130	ullmann_pyrrole	lactam_1_halide,pyrazole	[A:1]-[A:102]:[A:101]		C=1C(=O)N(C)C=CC=1Cl.n1[nH]ccc1>>C=1(n2nccc2)C=CN(C)C(=O)C=1	Azine lactam halide at C4 of a 2-pyridinone N-arylating a pyrazole (Ullmann)
+131	ullmann_pyrrole	lactam_1_halide,imidazole	[A:1]-[A:103]:[A:102]:[A:101]		C=1C(=O)N(C)C=CC=1Cl.n1c[nH]cc1>>n1(cncc1)C1=CC(N(C=C1)C)=O	Azine lactam halide at C4 of a 2-pyridinone N-arylating an imidazole (Ullmann)
+132	ullmann_pyrrole	lactam_2_halide,pyrrole	[A:1]-[A:101]		N1(C)C(=O)C=CC=C1Cl.c1c[nH]cc1>>C1(N(C(n2cccc2)=CC=C1)C)=O	Azine lactam halide at C6 of a 2-pyridinone N-arylating a pyrrole (Ullmann)
+133	ullmann_pyrrole	lactam_2_halide,pyrazole	[A:1]-[A:102]:[A:101]		N1(C)C(=O)C=CC=C1Cl.n1[nH]ccc1>>n1cccn1C1=CC=CC(=O)N1C	Azine lactam halide at C6 of a 2-pyridinone N-arylating a pyrazole (Ullmann)
+134	ullmann_pyrrole	lactam_2_halide,imidazole	[A:1]-[A:103]:[A:102]:[A:101]		N1(C)C(=O)C=CC=C1Cl.n1c[nH]cc1>>n1ccn(C=2N(C(=O)C=CC=2)C)c1	Azine lactam halide at C6 of a 2-pyridinone N-arylating an imidazole (Ullmann)
+135	ullmann_pyrrole	lactam_3_halide,pyrrole	[A:1]-[A:101]		C=1C(=O)C=CN(C)C=1Cl.c1c[nH]cc1>>C=1C(C=C(n2cccc2)N(C=1)C)=O	Azine lactam halide at C2 of a 4-pyridinone N-arylating a pyrrole (Ullmann)
+136	ullmann_pyrrole	lactam_3_halide,pyrazole	[A:1]-[A:102]:[A:101]		C=1C(=O)C=CN(C)C=1Cl.n1[nH]ccc1>>C=1C(C=CN(C=1n1nccc1)C)=O	Azine lactam halide at C2 of a 4-pyridinone N-arylating a pyrazole (Ullmann)
+137	ullmann_pyrrole	lactam_3_halide,imidazole	[A:1]-[A:103]:[A:102]:[A:101]		C=1C(=O)C=CN(C)C=1Cl.n1c[nH]cc1>>c1nccn1C1=CC(C=CN1C)=O	Azine lactam halide at C2 of a 4-pyridinone N-arylating an imidazole (Ullmann)
+138	ullmann_pyrrole	lactam_4_halide,pyrrole	[A:1]-[A:101]		O=C1N(C)C=CC=C1Cl.c1c[nH]cc1>>c1n(C2=CC=CN(C2=O)C)ccc1	Azine lactam halide at C3 of a 2-pyridinone N-arylating a pyrrole (Ullmann)
+139	ullmann_pyrrole	lactam_4_halide,pyrazole	[A:1]-[A:102]:[A:101]		O=C1N(C)C=CC=C1Cl.n1[nH]ccc1>>C=1N(C(=O)C(=CC=1)n1nccc1)C	Azine lactam halide at C3 of a 2-pyridinone N-arylating a pyrazole (Ullmann)
+140	ullmann_pyrrole	lactam_4_halide,imidazole	[A:1]-[A:103]:[A:102]:[A:101]		O=C1N(C)C=CC=C1Cl.n1c[nH]cc1>>C1(C(=CC=CN1C)n1cncc1)=O	Azine lactam halide at C3 of a 2-pyridinone N-arylating an imidazole (Ullmann)
+141	ullmann_pyrrole	lactam_5_halide,pyrrole	[A:1]-[A:101]		O=C1C(=CN(C)C=C1)Cl.c1c[nH]cc1>>C=1(C(=O)C=CN(C)C=1)n1cccc1	Azine lactam halide at C3 of a 4-pyridinone N-arylating a pyrrole (Ullmann)
+142	ullmann_pyrrole	lactam_5_halide,pyrazole	[A:1]-[A:102]:[A:101]		O=C1C(=CN(C)C=C1)Cl.n1[nH]ccc1>>C1(=O)C=CN(C)C=C1n1nccc1	Azine lactam halide at C3 of a 4-pyridinone N-arylating a pyrazole (Ullmann)
+143	ullmann_pyrrole	lactam_5_halide,imidazole	[A:1]-[A:103]:[A:102]:[A:101]		O=C1C(=CN(C)C=C1)Cl.n1c[nH]cc1>>N1(C)C=CC(=O)C(n2cncc2)=C1	Azine lactam halide at C3 of a 4-pyridinone N-arylating an imidazole (Ullmann)
+144	ullmann_pyrrole	lactam_6_halide,pyrrole	[A:1]-[A:101]		C1(=CN(C)C(=O)C=C1)Cl.c1c[nH]cc1>>C1=CC(N(C=C1n1cccc1)C)=O	Azine lactam halide at C5 of a 2-pyridinone N-arylating a pyrrole (Ullmann)
+145	ullmann_pyrrole	lactam_6_halide,pyrazole	[A:1]-[A:102]:[A:101]		C1(=CN(C)C(=O)C=C1)Cl.n1[nH]ccc1>>C1=C(n2cccn2)C=CC(N1C)=O	Azine lactam halide at C5 of a 2-pyridinone N-arylating a pyrazole (Ullmann)
+146	ullmann_pyrrole	lactam_6_halide,imidazole	[A:1]-[A:103]:[A:102]:[A:101]		C1(=CN(C)C(=O)C=C1)Cl.n1c[nH]cc1>>C1(N(C=C(n2cncc2)C=C1)C)=O	Azine lactam halide at C5 of a 2-pyridinone N-arylating an imidazole (Ullmann)
+#
+# --- the carbonyl electrophile toward nitrogen: carbamates and ureas ----------------------------
+147	carbamoylation	chloroformate,primary_amine	[A:3]-[A:1](=[A:2])-[A:101]-[A:102]		C(Cl)(OCC)=O.C(C)N>>C(NC(=O)OCC)C	Chloroformate carbamoylating a primary amine, giving the carbamate
+148	carbamoylation	chloroformate,primary_aniline	[A:3]-[A:1](=[A:2])-[A:101]-[A:102]		C(Cl)(OCC)=O.c1c(N)cccc1>>c1cc(ccc1)NC(=O)OCC	Chloroformate carbamoylating a primary aniline, giving the carbamate
+149	carbamoylation	chloroformate,secondary_amine	[A:3]-[A:1](=[A:2])-[A:101](-[A:102])-[A:103]		C(Cl)(OCC)=O.CNC>>C(OC(=O)N(C)C)C	Chloroformate carbamoylating a secondary amine, giving the carbamate
+150	carbamoylation	chloroformate,secondary_aniline	[A:3]-[A:1](=[A:2])-[A:101](-[A:102])-[A:103]		C(Cl)(OCC)=O.c1cc(NC)ccc1>>c1(ccccc1)N(C(OCC)=O)C	Chloroformate carbamoylating a secondary aniline, giving the carbamate
+151	carbamoylation	chloroformate,pyrrole	[A:3]-[A:1](=[A:2])-[A:101]		C(Cl)(OCC)=O.c1c[nH]cc1>>c1ccn(C(=O)OCC)c1	Chloroformate carbamoylating a pyrrole, giving the carbamate
+152	carbamoylation	chloroformate,aziridine_nh	[A:3]-[A:1](=[A:2])-[A:101]		C(Cl)(OCC)=O.C1NC1>>O=C(OCC)N1CC1	Chloroformate carbamoylating an aziridine NH, giving the carbamate
+153	carbamoylation	chloroformate,imidazole	[A:3]-[A:1](=[A:2])-[A:103]:[A:102]:[A:101]		C(Cl)(OCC)=O.n1c[nH]cc1>>O(C(n1ccnc1)=O)CC	Chloroformate carbamoylating an imidazole, giving the carbamate
+154	carbamoylation	fluoroformate,primary_amine	[A:3]-[A:1](=[A:2])-[A:101]-[A:102]		C(F)(OCC)=O.C(C)N>>C(NC(=O)OCC)C	Fluoroformate carbamoylating a primary amine, giving the carbamate
+155	carbamoylation	fluoroformate,primary_aniline	[A:3]-[A:1](=[A:2])-[A:101]-[A:102]		C(F)(OCC)=O.c1c(N)cccc1>>c1cc(ccc1)NC(=O)OCC	Fluoroformate carbamoylating a primary aniline, giving the carbamate
+156	carbamoylation	fluoroformate,secondary_amine	[A:3]-[A:1](=[A:2])-[A:101](-[A:102])-[A:103]		C(F)(OCC)=O.CNC>>C(OC(=O)N(C)C)C	Fluoroformate carbamoylating a secondary amine, giving the carbamate
+157	carbamoylation	fluoroformate,secondary_aniline	[A:3]-[A:1](=[A:2])-[A:101](-[A:102])-[A:103]		C(F)(OCC)=O.c1cc(NC)ccc1>>c1(ccccc1)N(C(OCC)=O)C	Fluoroformate carbamoylating a secondary aniline, giving the carbamate
+158	carbamoylation	fluoroformate,pyrrole	[A:3]-[A:1](=[A:2])-[A:101]		C(F)(OCC)=O.c1c[nH]cc1>>c1ccn(C(=O)OCC)c1	Fluoroformate carbamoylating a pyrrole, giving the carbamate
+159	carbamoylation	fluoroformate,aziridine_nh	[A:3]-[A:1](=[A:2])-[A:101]		C(F)(OCC)=O.C1NC1>>O=C(OCC)N1CC1	Fluoroformate carbamoylating an aziridine NH, giving the carbamate
+160	carbamoylation	fluoroformate,imidazole	[A:3]-[A:1](=[A:2])-[A:103]:[A:102]:[A:101]		C(F)(OCC)=O.n1c[nH]cc1>>O(C(n1ccnc1)=O)CC	Fluoroformate carbamoylating an imidazole, giving the carbamate
+161	carbamoylation	succinimidyl_carbonate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]		N1(C(=O)CCC1=O)OC(OCC)=O.C(C)N>>C(NC(=O)OCC)C	Succinimidyl carbonate carbamoylating a primary amine, giving the carbamate
+162	carbamoylation	succinimidyl_carbonate,primary_aniline	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]		N1(C(=O)CCC1=O)OC(OCC)=O.c1c(N)cccc1>>c1cc(ccc1)NC(=O)OCC	Succinimidyl carbonate carbamoylating a primary aniline, giving the carbamate
+163	carbamoylation	succinimidyl_carbonate,secondary_amine	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]		N1(C(=O)CCC1=O)OC(OCC)=O.CNC>>C(OC(=O)N(C)C)C	Succinimidyl carbonate carbamoylating a secondary amine, giving the carbamate
+164	carbamoylation	succinimidyl_carbonate,secondary_aniline	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]		N1(C(=O)CCC1=O)OC(OCC)=O.c1cc(NC)ccc1>>c1(ccccc1)N(C(OCC)=O)C	Succinimidyl carbonate carbamoylating a secondary aniline, giving the carbamate
+165	carbamoylation	succinimidyl_carbonate,pyrrole	[A:1]-[A:2](=[A:3])-[A:101]		N1(C(=O)CCC1=O)OC(OCC)=O.c1c[nH]cc1>>c1ccn(C(=O)OCC)c1	Succinimidyl carbonate carbamoylating a pyrrole, giving the carbamate
+166	carbamoylation	succinimidyl_carbonate,aziridine_nh	[A:1]-[A:2](=[A:3])-[A:101]		N1(C(=O)CCC1=O)OC(OCC)=O.C1NC1>>O=C(OCC)N1CC1	Succinimidyl carbonate carbamoylating an aziridine NH, giving the carbamate
+167	carbamoylation	succinimidyl_carbonate,imidazole	[A:1]-[A:2](=[A:3])-[A:103]:[A:102]:[A:101]		N1(C(=O)CCC1=O)OC(OCC)=O.n1c[nH]cc1>>O(C(n1ccnc1)=O)CC	Succinimidyl carbonate carbamoylating an imidazole, giving the carbamate
+168	carbamoylation	aryl_carbonate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]		C(Oc1ccccc1)(=O)OCC.C(C)N>>C(NC(=O)OCC)C	Aryl carbonate carbamoylating a primary amine, giving the carbamate
+169	carbamoylation	aryl_carbonate,primary_aniline	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]		C(Oc1ccccc1)(=O)OCC.c1c(N)cccc1>>c1cc(ccc1)NC(=O)OCC	Aryl carbonate carbamoylating a primary aniline, giving the carbamate
+170	carbamoylation	aryl_carbonate,secondary_amine	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]		C(Oc1ccccc1)(=O)OCC.CNC>>C(OC(=O)N(C)C)C	Aryl carbonate carbamoylating a secondary amine, giving the carbamate
+171	carbamoylation	aryl_carbonate,secondary_aniline	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]		C(Oc1ccccc1)(=O)OCC.c1cc(NC)ccc1>>c1(ccccc1)N(C(OCC)=O)C	Aryl carbonate carbamoylating a secondary aniline, giving the carbamate
+172	carbamoylation	aryl_carbonate,pyrrole	[A:1]-[A:2](=[A:3])-[A:101]		C(Oc1ccccc1)(=O)OCC.c1c[nH]cc1>>c1ccn(C(=O)OCC)c1	Aryl carbonate carbamoylating a pyrrole, giving the carbamate
+173	carbamoylation	aryl_carbonate,aziridine_nh	[A:1]-[A:2](=[A:3])-[A:101]		C(Oc1ccccc1)(=O)OCC.C1NC1>>O=C(OCC)N1CC1	Aryl carbonate carbamoylating an aziridine NH, giving the carbamate
+174	carbamoylation	aryl_carbonate,imidazole	[A:1]-[A:2](=[A:3])-[A:103]:[A:102]:[A:101]		C(Oc1ccccc1)(=O)OCC.n1c[nH]cc1>>O(C(n1ccnc1)=O)CC	Aryl carbonate carbamoylating an imidazole, giving the carbamate
+175	carbamoylation	imidazolyl_carbonate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]		O(C(n1ccnc1)=O)CC.C(C)N>>C(NC(=O)OCC)C	Imidazolyl carbonate carbamoylating a primary amine, giving the carbamate
+176	carbamoylation	imidazolyl_carbonate,primary_aniline	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]		O(C(n1ccnc1)=O)CC.c1c(N)cccc1>>c1cc(ccc1)NC(=O)OCC	Imidazolyl carbonate carbamoylating a primary aniline, giving the carbamate
+177	carbamoylation	imidazolyl_carbonate,secondary_amine	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]		O(C(n1ccnc1)=O)CC.CNC>>C(OC(=O)N(C)C)C	Imidazolyl carbonate carbamoylating a secondary amine, giving the carbamate
+178	carbamoylation	imidazolyl_carbonate,secondary_aniline	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]		O(C(n1ccnc1)=O)CC.c1cc(NC)ccc1>>c1(ccccc1)N(C(OCC)=O)C	Imidazolyl carbonate carbamoylating a secondary aniline, giving the carbamate
+179	carbamoylation	imidazolyl_carbonate,pyrrole	[A:1]-[A:2](=[A:3])-[A:101]		O(C(n1ccnc1)=O)CC.c1c[nH]cc1>>c1ccn(C(=O)OCC)c1	Imidazolyl carbonate carbamoylating a pyrrole, giving the carbamate
+180	carbamoylation	imidazolyl_carbonate,aziridine_nh	[A:1]-[A:2](=[A:3])-[A:101]		O(C(n1ccnc1)=O)CC.C1NC1>>O=C(OCC)N1CC1	Imidazolyl carbonate carbamoylating an aziridine NH, giving the carbamate
+181	carbamoylation	imidazolyl_carbonate,imidazole	[A:1]-[A:2](=[A:3])-[A:103]:[A:102]:[A:101]		O(C(n1ccnc1)=O)CC.Cc1c[nH]cn1>>O(C(=O)n1c(C)cnc1)CC	Imidazolyl carbonate carbamoylating an imidazole, giving the carbamate
+# Neither amine supplies the carbonyl, so the product side states it with NO map number -- which is
+# how V3 spells an atom no reactant provides, and why `[C](=[O])` names its elements outright.
+182	urea_from_amines	primary_amine,primary_amine	[A:1](-[A:2])-[C](=[O])-[A:101]-[A:102]		C(C)N.C(C)N>>N(CC)C(=O)NCC	Two primary amines and a carbonyl source, giving the urea
+183	urea_from_amines	primary_amine,primary_aniline	[A:1](-[A:2])-[C](=[O])-[A:101]-[A:102]		C(C)N.c1c(N)cccc1>>c1c(NC(NCC)=O)cccc1	A primary amine and a primary aniline with a carbonyl source, giving the mixed urea; the slot-swapped mirror would be the same row, since slot order is not caller order
+184	urea_from_amines	primary_aniline,primary_aniline	[A:1](-[A:2])-[C](=[O])-[A:101]-[A:102]		c1c(N)cccc1.c1c(N)cccc1>>C(Nc1ccccc1)(Nc1ccccc1)=O	Two primary anilines and a carbonyl source, giving the diaryl urea
+185	urea_from_carbamoyl	carbamoyl_chloride,primary_amine	[A:3]-[A:1](=[A:2])-[A:101]-[A:102]		C(N(C)C)(=O)Cl.C(C)N>>O=C(NCC)N(C)C	Carbamoyl chloride and a primary amine, giving the urea
+186	urea_from_carbamoyl	carbamoyl_chloride,primary_aniline	[A:3]-[A:1](=[A:2])-[A:101]-[A:102]		C(N(C)C)(=O)Cl.c1c(N)cccc1>>c1ccccc1NC(N(C)C)=O	Carbamoyl chloride and a primary aniline, giving the urea
+187	urea_from_carbamoyl	carbamoyl_chloride,secondary_amine	[A:3]-[A:1](=[A:2])-[A:101](-[A:102])-[A:103]		C(N(C)C)(=O)Cl.CNC>>C(N(C)C)(N(C)C)=O	Carbamoyl chloride and a secondary amine, giving the urea
+188	urea_from_carbamoyl	carbamoyl_chloride,secondary_aniline	[A:3]-[A:1](=[A:2])-[A:101](-[A:102])-[A:103]		C(N(C)C)(=O)Cl.c1cc(NC)ccc1>>c1cc(ccc1)N(C)C(=O)N(C)C	Carbamoyl chloride and a secondary aniline, giving the urea
+189	urea_from_carbamoyl	carbamoyl_chloride,aziridine_nh	[A:3]-[A:1](=[A:2])-[A:101]		C(N(C)C)(=O)Cl.C1NC1>>C(N(C)C)(N1CC1)=O	Carbamoyl chloride and an aziridine NH, giving the urea
+190	urea_from_carbamoyl	carbamoyl_fluoride,primary_amine	[A:3]-[A:1](=[A:2])-[A:101]-[A:102]		C(N(C)C)(=O)F.C(C)N>>O=C(NCC)N(C)C	Carbamoyl fluoride and a primary amine, giving the urea
+191	urea_from_carbamoyl	carbamoyl_fluoride,primary_aniline	[A:3]-[A:1](=[A:2])-[A:101]-[A:102]		C(N(C)C)(=O)F.c1c(N)cccc1>>c1ccccc1NC(N(C)C)=O	Carbamoyl fluoride and a primary aniline, giving the urea
+192	urea_from_carbamoyl	carbamoyl_fluoride,secondary_amine	[A:3]-[A:1](=[A:2])-[A:101](-[A:102])-[A:103]		C(N(C)C)(=O)F.CNC>>C(N(C)C)(N(C)C)=O	Carbamoyl fluoride and a secondary amine, giving the urea
+193	urea_from_carbamoyl	carbamoyl_fluoride,secondary_aniline	[A:3]-[A:1](=[A:2])-[A:101](-[A:102])-[A:103]		C(N(C)C)(=O)F.c1cc(NC)ccc1>>c1cc(ccc1)N(C)C(=O)N(C)C	Carbamoyl fluoride and a secondary aniline, giving the urea
+194	urea_from_carbamoyl	carbamoyl_fluoride,aziridine_nh	[A:3]-[A:1](=[A:2])-[A:101]		C(N(C)C)(=O)F.C1NC1>>C(N(C)C)(N1CC1)=O	Carbamoyl fluoride and an aziridine NH, giving the urea
+#
+# --- O-acylation and O-alkylation, and the ester opened by nitrogen -----------------------------
+195	williamson	alkyl_halide,primary_alcohol	[A@~:1]-[A:101]-[A:102]		C[C@H](Br)CC.C(C)O>>C([C@H](OCC)C)C	Alkyl halide etherifying a primary alcohol (Williamson)
+196	williamson	alkyl_halide,secondary_alcohol	[A@~:1]-[A:101]-[A:102]		C[C@H](Br)CC.C(C)(O)C>>C(C)(O[C@H](C)CC)C	Alkyl halide etherifying a secondary alcohol (Williamson)
+197	williamson	alkyl_halide,tertiary_alcohol	[A@~:1]-[A:101]-[A:102]		C[C@H](Br)CC.C(C)(O)(C)C>>O([C@@H](CC)C)C(C)(C)C	Alkyl halide etherifying a tertiary alcohol (Williamson)
+198	williamson	alkyl_sulfonate,phenol	[A@~:1]-[A:101]-[A:102]		C[C@@H](CC)OS(C)(=O)=O.c1c(O)cccc1>>c1ccccc1O[C@H](C)CC	Alkyl sulfonate etherifying a phenol (Williamson)
+199	williamson	alkyl_sulfonate,primary_alcohol	[A@~:1]-[A:101]-[A:102]		C[C@@H](CC)OS(C)(=O)=O.C(C)O>>C([C@H](OCC)C)C	Alkyl sulfonate etherifying a primary alcohol (Williamson)
+200	williamson	alkyl_sulfonate,secondary_alcohol	[A@~:1]-[A:101]-[A:102]		C[C@@H](CC)OS(C)(=O)=O.C(C)(O)C>>C(C)(O[C@H](C)CC)C	Alkyl sulfonate etherifying a secondary alcohol (Williamson)
+201	williamson	alkyl_sulfonate,tertiary_alcohol	[A@~:1]-[A:101]-[A:102]		C[C@@H](CC)OS(C)(=O)=O.C(C)(O)(C)C>>O([C@@H](CC)C)C(C)(C)C	Alkyl sulfonate etherifying a tertiary alcohol (Williamson)
+202	mitsunobu	primary_alcohol,phenol	[A:2]-[A:101]-[A:102]		C(C)O.c1c(O)cccc1>>O(c1ccccc1)CC	Primary alcohol inverted onto a phenol, giving the ether (Mitsunobu)
+203	mitsunobu	primary_alcohol,carboxylic_acid	[A:2]-[A:103]-[A:101](=[A:102])		C(C)O.C(C)(=O)O>>C(C)OC(C)=O	Primary alcohol inverted onto a carboxylic acid, giving the ester (Mitsunobu)
+204	mitsunobu	secondary_alcohol,phenol	[A@~:2]-[A:101]-[A:102]		C[C@H](O)CC.c1c(O)cccc1>>c1ccccc1O[C@H](C)CC	Secondary alcohol inverted onto a phenol, giving the ether (Mitsunobu)
+205	mitsunobu	secondary_alcohol,carboxylic_acid	[A@~:2]-[A:103]-[A:101](=[A:102])		C[C@H](O)CC.C(C)(=O)O>>O([C@@H](CC)C)C(=O)C	Secondary alcohol inverted onto a carboxylic acid, giving the ester (Mitsunobu)
+206	aminolysis	ester,primary_amine	[A:2](=[A:1])-[A:101]-[A:102]		O=C(C)OC.C(C)N>>C(=O)(NCC)C	Ester opened by a primary amine, giving the amide
+207	aminolysis	ester,primary_aniline	[A:2](=[A:1])-[A:101]-[A:102]		O=C(C)OC.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1	Ester opened by a primary aniline, giving the amide
+208	aminolysis	ester,secondary_amine	[A:2](=[A:1])-[A:101](-[A:102])-[A:103]		O=C(C)OC.CNC>>N(C)(C(C)=O)C	Ester opened by a secondary amine, giving the amide
+209	aminolysis	ester,secondary_aniline	[A:2](=[A:1])-[A:101](-[A:102])-[A:103]		O=C(C)OC.c1cc(NC)ccc1>>CN(c1ccccc1)C(C)=O	Ester opened by a secondary aniline, giving the amide
+210	aminolysis	ester,aziridine_nh	[A:2](=[A:1])-[A:101]		O=C(C)OC.C1NC1>>C(C)(N1CC1)=O	Ester opened by an aziridine NH, giving the amide
+211	acylation	acyl_chloride,primary_alcohol	[A:1](=[A:2])-[A:101]-[A:102]		C(C)(=O)Cl.C(C)O>>C(C)OC(C)=O	Acyl chloride esterifying a primary alcohol
+212	acylation	acyl_chloride,secondary_alcohol	[A:1](=[A:2])-[A:101]-[A:102]		C(C)(=O)Cl.C(C)(O)C>>CC(OC(C)=O)C	Acyl chloride esterifying a secondary alcohol
+213	acylation	acyl_chloride,phenol	[A:1](=[A:2])-[A:101]-[A:102]		C(C)(=O)Cl.c1c(O)cccc1>>c1(ccccc1)OC(C)=O	Acyl chloride esterifying a phenol
+# --- the lactam oxygen as the nucleophile -------------------------------------------------------
+214	williamson	alkyl_halide,azinone	[A@~:1]-[A:101]-[A:102](-[A:103])=[A:104]		C[C@H](Br)CC.C1(Nc2c(C=C1)cccc2)=O>>c1ccc2nc(ccc2c1)O[C@H](C)CC	Alkyl halide etherifying the lactam O of an azinone, giving the O-alkyl azine
+215	williamson	alkyl_sulfonate,azinone	[A@~:1]-[A:101]-[A:102](-[A:103])=[A:104]		C[C@@H](CC)OS(C)(=O)=O.C1(Nc2c(C=C1)cccc2)=O>>c1ccc2nc(ccc2c1)O[C@H](C)CC	Alkyl sulfonate etherifying the lactam O of an azinone, giving the O-alkyl azine
+216	mitsunobu	primary_alcohol,azinone	[A:2]-[A:101]-[A:102](-[A:103])=[A:104]		C(C)O.C1(Nc2c(C=C1)cccc2)=O>>C(Oc1ccc2c(n1)cccc2)C	Primary alcohol inverted onto the lactam O of an azinone (Mitsunobu)
+217	mitsunobu	secondary_alcohol,azinone	[A@~:2]-[A:101]-[A:102](-[A:103])=[A:104]		C[C@H](O)CC.C1(Nc2c(C=C1)cccc2)=O>>c1ccc2nc(ccc2c1)O[C@H](C)CC	Secondary alcohol inverted onto the lactam O of an azinone (Mitsunobu)
+218	acylation	acyl_chloride,azinone	[A:1](=[A:2])-[A:101]-[A:102](-[A:103])=[A:104]		C(C)(=O)Cl.C1(Nc2c(C=C1)cccc2)=O>>c12c(nc(cc2)OC(C)=O)cccc1	Acyl chloride acylating the lactam O of an azinone, giving the O-acyl azine
+#
+# --- sulfonylation, Chan-Lam amination, and the Weinreb amide in both directions ----------------
+219	sulfonamide_formation	sulfonyl_chloride,primary_amine	[A:1](=[A:2])(=[A:3])-[A:101]-[A:102]		CS(=O)(Cl)=O.C(C)N>>C(C)NS(C)(=O)=O	Sulfonyl chloride and a primary amine, giving the sulfonamide
+220	sulfonamide_formation	sulfonyl_chloride,primary_aniline	[A:1](=[A:2])(=[A:3])-[A:101]-[A:102]		CS(=O)(Cl)=O.c1c(N)cccc1>>c1c(NS(=O)(C)=O)cccc1	Sulfonyl chloride and a primary aniline, giving the sulfonamide
+221	sulfonamide_formation	sulfonyl_chloride,secondary_amine	[A:1](=[A:2])(=[A:3])-[A:101](-[A:102])-[A:103]		CS(=O)(Cl)=O.CNC>>N(C)(S(C)(=O)=O)C	Sulfonyl chloride and a secondary amine, giving the sulfonamide
+222	sulfonamide_formation	sulfonyl_chloride,secondary_aniline	[A:1](=[A:2])(=[A:3])-[A:101](-[A:102])-[A:103]		CS(=O)(Cl)=O.c1cc(NC)ccc1>>c1c(cccc1)N(C)S(C)(=O)=O	Sulfonyl chloride and a secondary aniline, giving the sulfonamide
+223	sulfonamide_formation	sulfonyl_chloride,aziridine_nh	[A:1](=[A:2])(=[A:3])-[A:101]		CS(=O)(Cl)=O.C1NC1>>C1N(S(C)(=O)=O)C1	Sulfonyl chloride and an aziridine NH, giving the sulfonamide
+224	sulfonamide_formation	sulfonyl_fluoride,primary_amine	[A:1](=[A:2])(=[A:3])-[A:101]-[A:102]		CS(=O)(F)=O.C(C)N>>C(C)NS(C)(=O)=O	Sulfonyl fluoride and a primary amine, giving the sulfonamide
+225	sulfonamide_formation	sulfonyl_fluoride,primary_aniline	[A:1](=[A:2])(=[A:3])-[A:101]-[A:102]		CS(=O)(F)=O.c1c(N)cccc1>>c1c(NS(=O)(C)=O)cccc1	Sulfonyl fluoride and a primary aniline, giving the sulfonamide
+226	sulfonamide_formation	sulfonyl_fluoride,secondary_amine	[A:1](=[A:2])(=[A:3])-[A:101](-[A:102])-[A:103]		CS(=O)(F)=O.CNC>>N(C)(S(C)(=O)=O)C	Sulfonyl fluoride and a secondary amine, giving the sulfonamide
+227	sulfonamide_formation	sulfonyl_fluoride,secondary_aniline	[A:1](=[A:2])(=[A:3])-[A:101](-[A:102])-[A:103]		CS(=O)(F)=O.c1cc(NC)ccc1>>c1c(cccc1)N(C)S(C)(=O)=O	Sulfonyl fluoride and a secondary aniline, giving the sulfonamide
+228	sulfonamide_formation	sulfonyl_fluoride,aziridine_nh	[A:1](=[A:2])(=[A:3])-[A:101]		CS(=O)(F)=O.C1NC1>>C1N(S(C)(=O)=O)C1	Sulfonyl fluoride and an aziridine NH, giving the sulfonamide
+# The amide nitrogen sulfonylates too, and the product side restates the carbonyl so it survives.
+229	sulfonamide_formation	sulfonyl_chloride,primary_amide	[A:1](=[A:2])(=[A:3])-[A:101]-[A:102]=[A:103]		CS(=O)(Cl)=O.C(N)=O>>C(NS(C)(=O)=O)=O	Sulfonyl chloride on the nitrogen of a primary amide, giving the N-sulfonyl amide
+230	sulfonamide_formation	sulfonyl_chloride,secondary_amide	[A:1](=[A:2])(=[A:3])-[A:101]-[A:102]=[A:103]		CS(=O)(Cl)=O.C(NC)=O>>C(N(C)S(C)(=O)=O)=O	Sulfonyl chloride on the nitrogen of a secondary amide, giving the N-sulfonyl amide
+231	sulfonamide_formation	sulfonyl_fluoride,primary_amide	[A:1](=[A:2])(=[A:3])-[A:101]-[A:102]=[A:103]		CS(=O)(F)=O.C(N)=O>>C(NS(C)(=O)=O)=O	Sulfonyl fluoride on the nitrogen of a primary amide, giving the N-sulfonyl amide
+232	sulfonamide_formation	sulfonyl_fluoride,secondary_amide	[A:1](=[A:2])(=[A:3])-[A:101]-[A:102]=[A:103]		CS(=O)(F)=O.C(NC)=O>>C(N(C)S(C)(=O)=O)=O	Sulfonyl fluoride on the nitrogen of a secondary amide, giving the N-sulfonyl amide
+233	weinreb_amidation	carboxylic_acid,NO_dialkylhydroxylamine	[A:1](=[A:2])-[A:101](-[A:102])-[A:103]-[A:104]		C(C)(=O)O.N(C)OC>>N(C)(OC)C(C)=O	Carboxylic acid and an N,O-dialkylhydroxylamine, giving the Weinreb amide
+234	weinreb_amidation	acyl_chloride,NO_dialkylhydroxylamine	[A:1](=[A:2])-[A:101](-[A:102])-[A:103]-[A:104]		C(C)(=O)Cl.N(C)OC>>N(C)(OC)C(C)=O	Acyl chloride and an N,O-dialkylhydroxylamine, giving the Weinreb amide
+235	chan_lam	aryl_boronic_acid,primary_amine	[A:1]-[A:101]-[A:102]		B(O)(c1ccccc1)O.C(C)N>>N(c1ccccc1)CC	Aryl boronic acid arylating a primary amine (Chan-Lam)
+236	chan_lam	aryl_boronic_acid,primary_aniline	[A:1]-[A:101]-[A:102]		B(O)(c1ccccc1)O.c1c(N)cccc1>>c1(Nc2ccccc2)ccccc1	Aryl boronic acid arylating a primary aniline (Chan-Lam)
+237	chan_lam	aryl_boronic_acid,secondary_amine	[A:1]-[A:101](-[A:102])-[A:103]		B(O)(c1ccccc1)O.CNC>>N(C)(c1ccccc1)C	Aryl boronic acid arylating a secondary amine (Chan-Lam)
+238	chan_lam	aryl_boronic_acid,secondary_aniline	[A:1]-[A:101](-[A:102])-[A:103]		B(O)(c1ccccc1)O.c1cc(NC)ccc1>>c1cccc(c1)N(C)c1ccccc1	Aryl boronic acid arylating a secondary aniline (Chan-Lam)
+239	chan_lam	aryl_boronic_acid,aziridine_nh	[A:1]-[A:101]		B(O)(c1ccccc1)O.C1NC1>>c1cc(ccc1)N1CC1	Aryl boronic acid arylating an aziridine NH (Chan-Lam)
+240	chan_lam	aryl_boronic_acid,phenol	[A:1]-[A:101]-[A:102]		B(O)(c1ccccc1)O.c1c(O)cccc1>>c1(Oc2ccccc2)ccccc1	Aryl boronic acid arylating a phenol, giving the diaryl ether (Chan-Lam)
+241	chan_lam	aryl_boronic_ester,primary_amine	[A:1]-[A:101]-[A:102]		CC1(OB(c2ccccc2)OC1(C)C)C.C(C)N>>N(c1ccccc1)CC	Aryl boronic ester arylating a primary amine (Chan-Lam)
+242	chan_lam	aryl_boronic_ester,primary_aniline	[A:1]-[A:101]-[A:102]		CC1(OB(c2ccccc2)OC1(C)C)C.c1c(N)cccc1>>c1(Nc2ccccc2)ccccc1	Aryl boronic ester arylating a primary aniline (Chan-Lam)
+243	chan_lam	aryl_boronic_ester,secondary_amine	[A:1]-[A:101](-[A:102])-[A:103]		CC1(OB(c2ccccc2)OC1(C)C)C.CNC>>N(C)(c1ccccc1)C	Aryl boronic ester arylating a secondary amine (Chan-Lam)
+244	chan_lam	aryl_boronic_ester,secondary_aniline	[A:1]-[A:101](-[A:102])-[A:103]		CC1(OB(c2ccccc2)OC1(C)C)C.c1cc(NC)ccc1>>c1cccc(c1)N(C)c1ccccc1	Aryl boronic ester arylating a secondary aniline (Chan-Lam)
+245	chan_lam	aryl_boronic_ester,aziridine_nh	[A:1]-[A:101]		CC1(OB(c2ccccc2)OC1(C)C)C.C1NC1>>c1cc(ccc1)N1CC1	Aryl boronic ester arylating an aziridine NH (Chan-Lam)
+246	chan_lam	aryl_boronic_ester,phenol	[A:1]-[A:101]-[A:102]		CC1(OB(c2ccccc2)OC1(C)C)C.c1c(O)cccc1>>c1(Oc2ccccc2)ccccc1	Aryl boronic ester arylating a phenol, giving the diaryl ether (Chan-Lam)
+247	weinreb	weinreb_amide,alkyl_grignard	[A:1]=[A:2]-[A:101]		N(C)(OC)C(C)=O.C(C)[Mg]Br>>C(C)C(C)=O	Weinreb amide and an alkyl Grignard, giving the ketone
+248	weinreb	weinreb_amide,aryl_grignard	[A:1]=[A:2]-[A:101]		N(C)(OC)C(C)=O.c1cc([Mg]Br)ccc1>>c1(C(C)=O)ccccc1	Weinreb amide and an aryl Grignard, giving the ketone
+249	weinreb	ester,alkyl_grignard	[A:1]=[A:2]-[A:101]		O=C(C)OC.C(C)[Mg]Br>>C(C)C(C)=O	Ester and an alkyl Grignard, giving the ketone
+250	weinreb	ester,aryl_grignard	[A:1]=[A:2]-[A:101]		O=C(C)OC.c1cc([Mg]Br)ccc1>>c1(C(C)=O)ccccc1	Ester and an aryl Grignard, giving the ketone
+251	weinreb	acyl_chloride,alkyl_grignard	[A:2]=[A:1]-[A:101]		C(C)(=O)Cl.C(C)[Mg]Br>>C(C)C(C)=O	Acyl chloride and an alkyl Grignard, giving the ketone
+252	weinreb	acyl_chloride,aryl_grignard	[A:2]=[A:1]-[A:101]		C(C)(=O)Cl.c1cc([Mg]Br)ccc1>>c1(C(C)=O)ccccc1	Acyl chloride and an aryl Grignard, giving the ketone
+253	hydrazide_formation	carboxylic_acid,alkyl_hydrazine	[A:1](=[A:2])-[A:101]-[A:102]-[A:103]		C(C)(=O)O.C(C)NN>>N(NCC)C(=O)C	Carboxylic acid and an alkyl hydrazine, giving the hydrazide
+254	hydrazide_formation	carboxylic_acid,aryl_hydrazine	[A:1](=[A:2])-[A:101]-[A:102]-[A:103]		C(C)(=O)O.c1cc(NN)ccc1>>c1(ccccc1)NNC(C)=O	Carboxylic acid and an aryl hydrazine, giving the hydrazide
+255	hydrazide_formation	acyl_chloride,alkyl_hydrazine	[A:1](=[A:2])-[A:101]-[A:102]-[A:103]		C(C)(=O)Cl.C(C)NN>>N(NCC)C(=O)C	Acyl chloride and an alkyl hydrazine, giving the hydrazide
+256	hydrazide_formation	acyl_chloride,aryl_hydrazine	[A:1](=[A:2])-[A:101]-[A:102]-[A:103]		C(C)(=O)Cl.c1cc(NN)ccc1>>c1(ccccc1)NNC(C)=O	Acyl chloride and an aryl hydrazine, giving the hydrazide
+# --- the lactam oxygen as the nucleophile -------------------------------------------------------
+257	chan_lam	aryl_boronic_acid,azinone	[A:1]-[A:101]-[A:102](-[A:103])=[A:104]		B(O)(c1ccccc1)O.C1(Nc2c(C=C1)cccc2)=O>>n1c2c(cccc2)ccc1Oc1ccccc1	Aryl boronic acid arylating the lactam O of an azinone, giving the O-aryl azine (Chan-Lam)
+258	chan_lam	aryl_boronic_ester,azinone	[A:1]-[A:101]-[A:102](-[A:103])=[A:104]		CC1(OB(c2ccccc2)OC1(C)C)C.C1(Nc2c(C=C1)cccc2)=O>>n1c2c(cccc2)ccc1Oc1ccccc1	Aryl boronic ester arylating the lactam O of an azinone, giving the O-aryl azine (Chan-Lam)
+#
+# --- the carbonyl as electrophile: reductive amination, addition, olefination, condensation -----
+259	reductive_amination	aldehyde,primary_amine	[A:2]-[A:101]-[A:102]		C(CC)=O.C(C)N>>C(CC)NCC	Aldehyde and a primary amine, reduced to the secondary amine
+260	reductive_amination	aldehyde,primary_aniline	[A:2]-[A:101]-[A:102]		C(CC)=O.c1c(N)cccc1>>c1cccc(c1)NCCC	Aldehyde and a primary aniline, reduced to the secondary arylamine
+261	reductive_amination	aldehyde,secondary_amine	[A:2]-[A:101](-[A:102])-[A:103]		C(CC)=O.CNC>>C(N(C)C)CC	Aldehyde and a secondary amine, reduced to the tertiary amine
+262	reductive_amination	aldehyde,secondary_aniline	[A:2]-[A:101](-[A:102])-[A:103]		C(CC)=O.c1cc(NC)ccc1>>c1ccc(N(CCC)C)cc1	Aldehyde and a secondary aniline, reduced to the tertiary arylamine
+263	reductive_amination	aldehyde,aziridine_nh	[A:2]-[A:101]		C(CC)=O.C1NC1>>C1N(CCC)C1	Aldehyde and an aziridine NH, reduced to the N-alkyl aziridine
+264	reductive_amination	ketone,primary_amine	[A;&1:2]-[A:101]-[A:102]		C(C)(=O)CC.C(C)N>>C([C@@H](NCC)C)C |&1:1|	Ketone and a primary amine, reduced to the secondary amine
+265	reductive_amination	ketone,primary_aniline	[A;&1:2]-[A:101]-[A:102]		C(C)(=O)CC.c1c(N)cccc1>>c1ccccc1N[C@@H](C)CC |&1:7|	Ketone and a primary aniline, reduced to the secondary arylamine
+266	reductive_amination	ketone,secondary_amine	[A;&1:2]-[A:101](-[A:102])-[A:103]		C(C)(=O)CC.CNC>>C(C)[C@@H](N(C)C)C |&1:2|	Ketone and a secondary amine, reduced to the tertiary amine
+267	reductive_amination	ketone,secondary_aniline	[A;&1:2]-[A:101](-[A:102])-[A:103]		C(C)(=O)CC.c1cc(NC)ccc1>>N(c1ccccc1)([C@H](CC)C)C |&1:7|	Ketone and a secondary aniline, reduced to the tertiary arylamine
+268	reductive_amination	ketone,aziridine_nh	[A;&1:2]-[A:101]		C(C)(=O)CC.C1NC1>>C[C@H](N1CC1)CC |&1:1|	Ketone and an aziridine NH, reduced to the N-alkyl aziridine
+# The four halide rows form the reagent in situ, so the halide is a slot beside the organometal.
+269	grignard	alkyl_grignard,aldehyde	[A:1]-[A;&1:102]-[A:101]		C(C)[Mg]Br.C(C)=O>>C(C)[C@H](O)C |&1:2|	Alkyl Grignard adding to an aldehyde, giving the secondary alcohol
+270	grignard	alkyl_grignard,ketone	[A:1]-[A;&1:102]-[A:101]		C(C)[Mg]Br.C(C)(=O)CCC>>C([C@](C)(O)CC)CC |&1:1|	Alkyl Grignard adding to a ketone, giving the tertiary alcohol
+271	grignard	aryl_grignard,aldehyde	[A:1]-[A;&1:102]-[A:101]		c1cc([Mg]Br)ccc1.C(CC)=O>>c1cccc([C@@H](CC)O)c1 |&1:5|	Aryl Grignard adding to an aldehyde, giving the secondary alcohol
+272	grignard	aryl_grignard,ketone	[A:1]-[A;&1:102]-[A:101]		c1cc([Mg]Br)ccc1.C(C)(=O)CC>>[C@](CC)(c1ccccc1)(C)O |&1:0|	Aryl Grignard adding to a ketone, giving the tertiary alcohol
+273	grignard	alkenyl_grignard,aldehyde	[A@=:1](=[A:2])-[A;&1:102]-[A:101]		C/C=C/[Mg]Br.C(CC)=O>>C(C)[C@@H](O)/C=C/C |&1:2|	Alkenyl Grignard adding to an aldehyde, giving the secondary alcohol
+274	grignard	alkenyl_grignard,ketone	[A@=:1](=[A:2])-[A;&1:102]-[A:101]		C/C=C/[Mg]Br.C(C)(=O)CC>>CC[C@@](O)(C)/C=C/C |&1:2|	Alkenyl Grignard adding to a ketone, giving the tertiary alcohol
+275	grignard	alkyl_halide,aldehyde	[A:1]-[A;&1:102]-[A:101]		C(Br)CC.C(CC)=O>>C([C@H](O)CC)CC |&1:1|	Alkyl halide adding to an aldehyde, giving the secondary alcohol
+276	grignard	alkyl_halide,ketone	[A:1]-[A;&1:102]-[A:101]		C(Br)CC.C(C)(=O)CC>>C([C@@](C)(O)CC)CC |&1:1|	Alkyl halide adding to a ketone, giving the tertiary alcohol
+277	grignard	aryl_halide,aldehyde	[A:1]-[A;&1:102]-[A:101]		c1c(Br)cccc1.C(CC)=O>>c1cccc([C@@H](CC)O)c1 |&1:5|	Aryl halide adding to an aldehyde, giving the secondary alcohol
+278	grignard	aryl_halide,ketone	[A:1]-[A;&1:102]-[A:101]		c1c(Br)cccc1.C(C)(=O)CC>>[C@](CC)(c1ccccc1)(C)O |&1:0|	Aryl halide adding to a ketone, giving the tertiary alcohol
+279	hwe	phosphonate,aldehyde	[A:1]=[A:102]		O(CC)P(=O)(C)OCC.C(CC)=O>>C(CC)=C	Phosphonate olefinating an aldehyde (Horner-Wadsworth-Emmons)
+280	hwe	phosphonate,ketone	[A:1]=[A:102]		O(CC)P(=O)(C)OCC.C(C)(=O)C>>C(=C)(C)C	Phosphonate olefinating a ketone (Horner-Wadsworth-Emmons)
+281	friedel_crafts	acyl_chloride,arene_ch	[A:1](=[A:2])-[A:101]		C(C)(=O)Cl.c1ccccc1>>c1(C(C)=O)ccccc1	Acyl chloride acylating an arene C-H (Friedel-Crafts)
+282	wittig	phosphonium_ylide,aldehyde	[A:1]=[A:102]		c1ccc(P(=C)(c2ccccc2)c2ccccc2)cc1.C(CC)=O>>C(CC)=C	Phosphonium ylide olefinating an aldehyde (Wittig)
+283	wittig	phosphonium_ylide,ketone	[A:1]=[A:102]		c1ccc(P(=C)(c2ccccc2)c2ccccc2)cc1.C(C)(=O)C>>C(=C)(C)C	Phosphonium ylide olefinating a ketone (Wittig)
+284	knoevenagel	active_methylene,aldehyde	[A:102]=[A:1](-[A:2])-[A:3]		C(OC(CC(=O)OCC)=O)C.C(CC)=O>>CCOC(=O)C(C(=O)OCC)=CCC	Active methylene condensing with an aldehyde (Knoevenagel)
+#
+# --- the ring formers, and the one four-component row -------------------------------------------
+# Every new ring is stated aromatic, and every ring atom carries a map number, so each keeps the
+# hydrogen count its reactant derived.
+285	imidazopyridine	aminopyridine,alpha_haloketone	[A:3]:1:[A:103]:[A:102]:[A:1]:[A:2]:1		c1cccnc1N.C(CBr)(C)=O>>c1n2cc(nc2ccc1)C	Aminopyridine and an alpha-haloketone, giving the imidazo[1,2-a]pyridine
+# `alpha_haloester` numbers its alkoxy oxygen, so this product side restates it on the new ring
+# carbon: a product naming only the ring deletes the ester tail with it.
+286	imidazopyridine	aminopyridine,alpha_haloester	[A:3]:1:[A:104]:[A:102](-[A:101]):[A:1]:[A:2]:1		c1cccnc1N.C(C(OCC)=O)Br>>n12c(cccc2)nc(OCC)c1	Aminopyridine and an alpha-haloester, giving the 2-alkoxyimidazo[1,2-a]pyridine
+287	benzimidazole	o_diaminoarene,aldehyde	[A:1]:1:[A:2]:[A:3]:[A:4]:[A:102]:1		c1(N)ccccc1N.C(CC)=O>>c1c2c(ccc1)[nH]c(n2)CC	o-Diaminoarene and an aldehyde, giving the benzimidazole
+288	benzimidazole	o_diaminoarene,carboxylic_acid	[A:1]:1:[A:2]:[A:3]:[A:4]:[A:101]:1		c1(N)ccccc1N.C(C)(=O)O>>c12ccccc1nc(C)[nH]2	o-Diaminoarene and a carboxylic acid, giving the benzimidazole
+289	cuaac	azide,terminal_alkyne	[A:1]:1:[A:2]:[A:3]:[A:102]:[A:101]:1		C(C)N=[N+]=[N-].C(#C)CC>>n1(CC)nnc(CC)c1	Azide and a terminal alkyne, giving the 1,4-triazole (CuAAC)
+290	paal_knorr	1_4_diketone,primary_amine	[A:101](:1:[A:2]:[A:3]:[A:4]:[A:5]:1)-[A:102]		C(CC(C)=O)C(C)=O.C(C)N>>C(C)n1c(ccc1C)C	1,4-Diketone and a primary amine, giving the pyrrole (Paal-Knorr)
+291	paal_knorr	1_4_diketone,primary_aniline	[A:101](:1:[A:2]:[A:3]:[A:4]:[A:5]:1)-[A:102]		C(CC(C)=O)C(C)=O.c1c(N)cccc1>>c1cc(n(-c2ccccc2)c1C)C	1,4-Diketone and a primary aniline, giving the N-aryl pyrrole (Paal-Knorr)
+# The only four-slot row: its product side reaches :301, and the carbonyl neither amine nor acid
+# supplies carries no map number.
+292	ugi_4cr	aldehyde,primary_amine,carboxylic_acid,isocyano	[A:201](=[A:202])-[A:101](-[A:102])-[A;&1:2]-[A:302](=[O])-[A:301]		C(CC)=O.C(C)N.C(C)(=O)O.[C-]#[N+]CC>>N(CC)C(=O)[C@H](N(C(C)=O)CC)CC |&1:5|	Aldehyde, amine, acid and isocyanide in one pot, giving the alpha-acylamino amide (Ugi)
+293	oxadiazole	hydrazide,carboxylic_acid	[A:3]:1:[A:2]:[A:1]:[A:101]:[A:4]:1		C(C)(NN)=O.C(C)(=O)O>>Cc1oc(C)nn1	Hydrazide and a carboxylic acid, giving the 1,3,4-oxadiazole
+294	oxadiazole	hydrazide,acyl_chloride	[A:3]:1:[A:2]:[A:1]:[A:101]:[A:4]:1		C(C)(NN)=O.C(C)(=O)Cl>>Cc1oc(C)nn1	Hydrazide and an acyl chloride, giving the 1,3,4-oxadiazole

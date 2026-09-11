@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One record per way a CML file can be wrong or can say something chython does not model.
+     Every molecule here must still BUILD - input is garbage by default and a reader never
+     drops a record for being chemically wrong - and every construct must put exactly one
+     line in the log. The two sides of the log convention are both represented on purpose:
+     `unsupported: ` means the file is fine and we are the limitation, any other prefix means
+     the file was broken and we read it anyway.
+
+       m1  a ragged array: three elements, two coordinates. Truncated to the shortest column,
+           because dropping the array would lose every atom over one bad column.
+       m2  attributes and children nothing models: mrvValence on an atom, <electron/> under
+           <molecule>, and an <atomArray> child with no builtin to name its column.
+       m3  order="partial12", a real CML bond order with no field in the arena.
+       m4  a bond naming an atom that is not in the document, and a second <name> for a
+           molecule that already has a title.
+       m5  both a drawing and a conformer: legal CML, one coordinate set in the container.
+       m6  spinMultiplicity="4", a quartet; the arena holds a boolean radical flag.
+       m7  elementType="cl", the case a molfile-derived converter leaves behind.
+       m8  three stereo statements that cannot be applied: an empty <bondStereo/> and an
+           <atomParity> naming three atoms instead of four, both damage; and a <bondStereo>
+           letter we do not know, which is NOT called damage - CML's bondStereo content is
+           dictionary-referenced, so an unknown letter may be a valid entry in a dictionary
+           we do not have, and only "we do not read this" is true either way. -->
+<cml xmlns="http://www.xml-cml.org/schema">
+  <molecule id="m1" title="ragged array">
+    <atomArray atomID="a1 a2 a3" elementType="C C O" x2="0.00 0.87" y2="0.00 0.50"/>
+    <bondArray atomRef1="a1" atomRef2="a2" order="1"/>
+  </molecule>
+  <molecule id="m2" title="constructs with no home">
+    <electron/>
+    <atomArray>
+      <stringArray>C O</stringArray>
+      <atom id="a1" elementType="C" mrvValence="4" x2="0.00" y2="0.00"/>
+      <atom id="a2" elementType="O" x2="0.87" y2="0.50"/>
+    </atomArray>
+    <bondArray>
+      <bond id="b1" atomRefs2="a1 a2" order="1"/>
+    </bondArray>
+  </molecule>
+  <molecule id="m3" title="a partial bond order">
+    <atomArray>
+      <atom id="a1" elementType="C" x2="0.00" y2="0.00"/>
+      <atom id="a2" elementType="O" x2="0.87" y2="0.50"/>
+    </atomArray>
+    <bondArray>
+      <bond id="b1" atomRefs2="a1 a2" order="partial12"/>
+    </bondArray>
+  </molecule>
+  <molecule id="m4" title="a dangling reference">
+    <name>a second name</name>
+    <atomArray>
+      <atom id="a1" elementType="C" x2="0.00" y2="0.00"/>
+      <atom id="a2" elementType="O" x2="0.87" y2="0.50"/>
+    </atomArray>
+    <bondArray>
+      <bond id="b1" atomRefs2="a1 a2" order="1"/>
+      <bond id="b2" atomRefs2="a2 a99" order="1"/>
+    </bondArray>
+  </molecule>
+  <molecule id="m5" title="a drawing and a conformer">
+    <atomArray>
+      <atom id="a1" elementType="C" x2="0.00" y2="0.00" x3="0.0000" y3="0.0000" z3="0.0000"/>
+      <atom id="a2" elementType="O" x2="0.87" y2="0.50" x3="1.4300" y3="0.0000" z3="0.0000"/>
+    </atomArray>
+    <bondArray>
+      <bond id="b1" atomRefs2="a1 a2" order="1"/>
+    </bondArray>
+  </molecule>
+  <molecule id="m6" title="a quartet">
+    <atomArray>
+      <atom id="a1" elementType="C" spinMultiplicity="4" x2="0.00" y2="0.00"/>
+    </atomArray>
+  </molecule>
+  <molecule id="m7" title="an upper-cased symbol">
+    <atomArray>
+      <atom id="a1" elementType="C" x2="0.00" y2="0.00"/>
+      <atom id="a2" elementType="cl" x2="0.87" y2="0.50"/>
+    </atomArray>
+    <bondArray>
+      <bond id="b1" atomRefs2="a1 a2" order="1"/>
+    </bondArray>
+  </molecule>
+  <molecule id="m8" title="broken stereo statements">
+    <atomArray>
+      <atom id="a1" elementType="C" x2="0.00" y2="0.00">
+        <atomParity atomRefs4="a2 a3 a4">1</atomParity>
+      </atom>
+      <atom id="a2" elementType="N" x2="-0.87" y2="0.50"/>
+      <atom id="a3" elementType="C" x2="0.00" y2="-1.00"/>
+      <atom id="a4" elementType="O" x2="0.87" y2="0.50"/>
+    </atomArray>
+    <bondArray>
+      <bond id="b1" atomRefs2="a1 a2" order="1"><bondStereo/></bond>
+      <bond id="b2" atomRefs2="a1 a3" order="1"><bondStereo>Q</bondStereo></bond>
+      <bond id="b3" atomRefs2="a1 a4" order="1"/>
+    </bondArray>
+  </molecule>
+</cml>

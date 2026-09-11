@@ -1,0 +1,24 @@
+# -*- coding: utf-8 -*-
+#
+#  Copyright 2026 Ramil Nugmanov <nougmanoff@protonmail.com>
+#  This file is part of chython.
+#
+#  chython is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation; either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with this program; if not, see <https://www.gnu.org/licenses/>.
+#
+"""Tests of properties that belong to no single subpackage.
+
+Every other `test/` directory in this tree sits beside the code it tests. The tests here have no such
+home because their subject is the distribution as a whole -- what the wheel contains, which packages may
+import which -- and asserting that from inside any one subpackage would put the claim in the wrong place.
+"""

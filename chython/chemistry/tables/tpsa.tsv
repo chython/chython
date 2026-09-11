@@ -1,0 +1,56 @@
+# tpsa.tsv -- topological polar surface area atomic contributions.
+# Ertl, Rohde, Selzer, J. Med. Chem. 2000, 43, 3714, Table 1.  All 43 published environments:
+# 26 nitrogen, 6 oxygen, 7 sulfur, 4 phosphorus.
+#
+# FIRST MATCH WINS, IN FILE ORDER.  the patterns overlap (an epoxide oxygen is also an ether
+# oxygen), so the order of this file is part of the descriptor.  every specific row precedes its
+# generic one; tests/test_tpsa_tsv.py pins the three pairs where it matters.
+#
+# element_class: NO = Ertl's published TPSA, which sums nitrogen and oxygen only.
+#                SP = the paper's optional sulfur and phosphorus extension, OFF by default.
+# an atom matching no row contributes 0 and is reported through `log=`.
+# the atom typed is the one mapped :1.  contributions are A^2.
+id	element_class	contribution	pattern	description
+1	NO	3.01	[N;D3;z1;h0;r3:1]	nitrogen, aziridine ring, three single bonds
+2	NO	21.94	[N;D2;z1;h1;r3:1]	nitrogen, aziridine ring, NH
+3	NO	3.24	[N;D3;z1;h0:1]	nitrogen, three single bonds
+4	NO	12.36	[N;D2;z2;h0:1]	nitrogen, one single one double
+5	NO	23.79	[N;D1;z3;h0:1]	nitrogen, nitrile
+6	NO	11.68	[N;D3;z5;h0:1]	nitrogen, one single two double, pentavalent nitro
+7	NO	13.60	[N;D2;z6;h0:1]	nitrogen, one double one triple
+8	NO	12.03	[N;D2;z1;h1:1]	nitrogen, NH, two single bonds
+9	NO	23.85	[N;D1;z2;h1:1]	nitrogen, NH, one double bond
+10	NO	26.02	[N;D1;z1;h2:1]	nitrogen, NH2, one single bond
+11	NO	0.00	[N;D4;z1;h0;+:1]	nitrogen cation, four single bonds
+12	NO	3.01	[N;D3;z2;h0;+:1]	nitrogen cation, two single one double
+13	NO	4.36	[N;D2;z3;h0;+:1]	nitrogen cation, one single one triple
+14	NO	4.44	[N;D3;z1;h1;+:1]	nitrogen cation, NH, three single bonds
+15	NO	13.97	[N;D2;z2;h1;+:1]	nitrogen cation, NH, one single one double
+16	NO	16.61	[N;D2;z1;h2;+:1]	nitrogen cation, NH2, two single bonds
+17	NO	25.59	[N;D1;z2;h2;+:1]	nitrogen cation, NH2, one double bond
+18	NO	27.64	[N;D1;z1;h3;+:1]	nitrogen cation, NH3
+19	NO	12.89	[N;D2;z4;h0:1]	nitrogen, aromatic, two ring bonds
+20	NO	4.41	[N;D3;z4;h0:1](:*)(:*):*	nitrogen, aromatic, three aromatic bonds
+21	NO	4.93	[N;D3;z4;h0:1](-*)(:*):*	nitrogen, aromatic, one exocyclic single bond
+22	NO	8.39	[N;D3;z4;h0:1](=*)(:*):*	nitrogen, aromatic, exocyclic double bond, N-oxide
+23	NO	15.79	[N;D2;z4;h1:1]	nitrogen, aromatic, NH
+24	NO	4.10	[N;D3;z4;h0;+:1](:*)(:*):*	nitrogen cation, aromatic, three aromatic bonds
+25	NO	3.88	[N;D3;z4;h0;+:1](-*)(:*):*	nitrogen cation, aromatic, exocyclic single bond
+26	NO	14.14	[N;D2;z4;h1;+:1]	nitrogen cation, aromatic, NH
+27	NO	12.53	[O;D2;z1;h0;r3:1]	oxygen, epoxide ring
+28	NO	9.23	[O;D2;z1;h0:1]	oxygen, two single bonds, ether and ester
+29	NO	17.07	[O;D1;z2;h0:1]	oxygen, one double bond, carbonyl
+30	NO	20.23	[O;D1;z1;h1:1]	oxygen, OH
+31	NO	23.06	[O;D1;z1;h0;-:1]	oxygen anion
+32	NO	13.14	[O;D2;z4;h0:1]	oxygen, aromatic, furan
+33	SP	25.30	[S;D2;z1;h0:1]	sulfur, two single bonds, thioether
+34	SP	32.09	[S;D1;z2;h0:1]	sulfur, one double bond, thiocarbonyl
+35	SP	19.21	[S;D3;z2;h0:1]	sulfur, two single one double, sulfoxide
+36	SP	8.38	[S;D4;z5;h0:1]	sulfur, two single two double, sulfone
+37	SP	38.80	[S;D1;z1;h1:1]	sulfur, SH
+38	SP	28.24	[S;D2;z4;h0:1]	sulfur, aromatic, thiophene
+39	SP	21.70	[S;D3;z4;h0:1](=*)(:*):*	sulfur, aromatic, exocyclic double bond
+40	SP	13.59	[P;D3;z1;h0:1]	phosphorus, three single bonds
+41	SP	34.14	[P;D2;z2;h0:1]	phosphorus, one single one double
+42	SP	9.81	[P;D4;z2;h0:1]	phosphorus, three single one double, phosphate
+43	SP	23.47	[P;D3;z2;h1:1]	phosphorus, PH, two single one double

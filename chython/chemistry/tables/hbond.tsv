@@ -1,0 +1,29 @@
+# hbond.tsv -- hydrogen bond donor and acceptor atom typing.  chython's own, and the vocabulary a
+# chemist argues about: an amide N donates and does not accept; a pyrrole N donates and does not
+# accept; a nitro O accepts nothing; a cation donates and does not accept.
+# the atom typed is the one mapped :1.  an atom is counted once however many rows match it.
+# roles: donor | acceptor.
+#
+# AN OXIDE OXYGEN ACCEPTS AND A NITRO OXYGEN DOES NOT, and `x` on the cationic centre separates them:
+# one heteroatom neighbour for an N-, P- or S-oxide, two for nitro and for azoxy.  row 13 exists because
+# an amine or pyridine N-oxide has no neutral spelling, so no other row can reach its oxygen; a
+# charge-separated sulfoxide has one, `standardize()` writes it, and row 2 types it there.
+#
+# AN AMIDE NITROGEN IS z1, THE SAME AS AN AMINE NITROGEN -- measured, not assumed.  so the amine rows
+# below exclude it by naming EVERY heavy neighbour and demanding an sp3-or-aromatic carbon, which an
+# amide's carbonyl carbon (z2) and a sulfonamide's sulfur both fail.  do not "simplify" rows 9, 10 and
+# 11 back into one `[N;D1,D2,D3;z1:1]`: that row types every amide and sulfonamide N as an acceptor.
+id	role	pattern	description
+1	donor	[N,O,S;*;H1,H2,H3,H4;^,!^:1]	any N, O or S carrying a hydrogen, at any charge
+2	acceptor	[O;D1;z2;h0;!^:1]=[C,S,P;*]	carbonyl, thiocarbonyl, sulfonyl, sulfoxide, phosphoryl oxygen
+3	acceptor	[O;D2;z1;!^:1](-[#6])-[#6]	ether and ester sp3 oxygen
+4	acceptor	[O;D0,D1;z1;h1,h2;!^:1]	hydroxyl, carboxyl OH and water oxygen
+5	acceptor	[O;z4;!^:1]	furan-type aromatic oxygen
+6	acceptor	[N;D1;z3;!^:1]#[#6]	nitrile nitrogen
+7	acceptor	[N;D2;z2;!^:1]=[#6]	imine and amidine sp2 nitrogen
+8	acceptor	[N;D2;z4;h0;!^:1]	pyridine-type aromatic nitrogen
+9	acceptor	[N;D1;z1;!^:1]-[C;*;z1,z4]	primary amine nitrogen
+10	acceptor	[N;D2;z1;!^:1](-[C;*;z1,z4])-[C;*;z1,z4]	secondary amine nitrogen
+11	acceptor	[N;D3;z1;!^:1](-[C;*;z1,z4])(-[C;*;z1,z4])-[C;*;z1,z4]	tertiary amine nitrogen
+12	acceptor	[S;D1;z2;!^:1]=[#6]	thiocarbonyl sulfur
+13	acceptor	[O;D1;-;!^:1]-[#7,#15,#16;+;x1]	dative oxide oxygen: amine and pyridine N-oxide, phosphine oxide, charge-separated sulfoxide

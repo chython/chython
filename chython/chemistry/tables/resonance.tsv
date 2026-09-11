@@ -1,0 +1,58 @@
+# The resonance endpoint collection: which atoms may give up an electron pair, which may take one, and
+# which look like they could but must not.  THIS FILE IS THE AUTHORITY: every test that decides the
+# question is a row here, not a chain of atomic-number comparisons in Python.
+#
+# A row is one CLAIM ABOUT AN ATOM, never a patch: nothing here says what to do, only which role an atom
+# may play.  The arithmetic -- walk an alternating path, move one unit of charge or pair two radicals,
+# re-derive the hydrogens -- is `chython/chemistry/_resonance.py`, and `chython/core/valence_rules.tsv` is
+# what vetoes an individual patch.
+#
+# COLUMNS
+#   id       the row's stable identity; it travels in every log record, so a report names a pattern rather
+#            than an index.
+#   role     one of six, and the loader refuses anything else:
+#              path            an atom a delocalisation path may pass through at all
+#              radical         an unpaired-electron endpoint
+#              donor           may give up an electron pair; its formal charge goes UP by one
+#              acceptor        may take an electron pair; its formal charge goes DOWN by one
+#              veto_donor      matches here and the atom is not a donor, whatever else matched
+#              veto_acceptor   matches here and the atom is not an acceptor
+#            Rows of one role are OR-ed.  A VETO BEATS EVERY ACCEPT ROW and is logged by id, so a user can
+#            see WHY an endpoint was declined instead of guessing.
+#   smarts   chython SMARTS.  The endpoint is the atom mapped `:1`, and every row must map exactly one -- a
+#            row may describe a neighbourhood (see veto_azide) without the neighbours becoming endpoints.
+#   probe    a SMILES the pattern MUST match, checked by `chython/chemistry/test/test_resonance_tsv.py`.  A
+#            pattern that silently matches nothing is this table's one dangerous failure and is invisible
+#            in review: the pass just stops recognizing an endpoint.
+#   comment  what the row claims, and where it came from.  Documentation only.
+#
+# THREE DIALECT TRAPS, all of which bite immediately.
+#
+# AN UNSTATED CHARGE IS NEUTRAL, not "any charge" -- `box_fill_defaults` in `core/_query_boxes.pxi`
+# constrains any span no primitive touched.  A pattern that must admit both writes the span explicitly as
+# `+0,!+0`, which is what the `path` rows do.
+#
+# AN UNSTATED RADICAL STATE IS NOT-A-RADICAL, for the same reason, and there is no in-bracket radical
+# primitive to negate -- the only spelling is the CXSMARTS `|^1:0|` tail.  So "either radical state" is two
+# rows, which is why `path` appears twice.
+#
+# z IS THE CORE'S 1..6 AND NOT chython 2's 1..3.  `veto_azide` reads `z5` where V2 read `hybridization ==
+# 3`: V2 saturates at 3, so its 3 covers both an azide terminus's two cumulated doubles and a genuine sp
+# carbon.  The core reports what it found, and two cumulated doubles is 5.  Transcribing that `3` unchanged
+# makes the row match sp atoms and miss every azide.
+id	role	smarts	probe	comment
+resonance:path	path	[B,C,N,O,Si,P,S,As,Se,Te;+0,!+0:1]	C=C	V2's `if a not in (B, C, N, O, Si, P, S, As, Se, Te): continue` -- the organic set, which is also V2's `transfer`/`constrains` set.  Any charge, not a radical
+resonance:path_radical	path	[B,C,N,O,Si,P,S,As,Se,Te;+0,!+0:1] |^1:0|	[CH3] |^1:0|	the same set in the radical state, which the bracket cannot say and the CXSMARTS tail can
+resonance:radical	radical	[B,C,N,O,Si,P,S,As,Se,Te;+0,!+0:1] |^1:0|	[CH3] |^1:0|	V2's `elif a.is_radical: rads.add(n)`.  Two of these joined by an odd-length alternating path pair up into a bond
+resonance:donor_anion	donor	[B,C,N,O,Si,P,S,As,Se,Te;-:1]	[CH3-]	V2's `elif a.charge == -1`.  An anion gives up its pair and comes back to neutral
+resonance:donor_amine	donor	[N;z1;D1,D2,D3:1]	CN(C)C	V2's saturation fixup, `a.hybridization == 1 and a.neighbors <= 3` -- an sp3 amine is an electron donor whether or not it is charged, so an adjacent cation is better drawn as an iminium
+resonance:acceptor_cation	acceptor	[B,C,N,O,Si,P,S,As,Se,Te;+:1]	C[CH2+]	V2's `elif a.charge == 1`.  A cation takes a pair and comes back to neutral
+resonance:acceptor_nitrile	acceptor	[N;z3;D1:1]	CC#N	V2's `elif a.hybridization == 3 and a.neighbors == 1`, commented `N#X-[X-] >> [N-]=X=X` -- a nitrile terminus takes an adjacent carbanion's charge onto nitrogen
+resonance:veto_hydroborate	veto_donor	[B;-;!H0:1]	C[BH-](C)C	V2's `if a == B and a.total_hydrogens: continue` -- a hydroborate's pair is a B-H bond, not a lone pair
+resonance:veto_borate	veto_donor	[B;-;D4:1]	C[B-](C)(C)C	V2's `elif (lb := len(bonds[n])) == 4 and a == B: continue` -- a four-coordinate borate has no pair to give and no room for a fifth bond
+resonance:veto_hexacoordinate_p	veto_donor	[P;-;D6:1]	F[P-](F)(F)(F)(F)F	V2's `elif lb == 6 and a == P: continue` -- hexafluorophosphate and its kin are coordinatively full
+resonance:veto_ammonium	veto_acceptor	[N;+;D4:1]	C[N+](C)(C)C	V2's `if lb == 4: continue  # skip ammonia` -- a quaternary ammonium has no empty orbital to take a pair into
+resonance:veto_azide	veto_acceptor	[N;+;D2;z5:1](=[N;-])=[A]	CN=[N+]=[N-]	V2's azide branch: two double bonds, one of them to an `[N-]`.  The 1,3-dipole is the correct drawing and moving its charge produces a diazonium that is not the same molecule
+resonance:veto_phosphonium	veto_acceptor	[P;+;D4:1]	C[P+](C)(C)C	V2's `elif a == P and lb == 4: continue` -- a quaternary phosphonium, for the ammonium's reason
+resonance:veto_sulfonium_ylide	veto_acceptor	[S;+;D2;z2:1]	C[S+]=NC	V2's `sulfur_cat`, commented `prevent X-[S+]=X >> X=S=X`.  V2 admitted this end and then allowed only an incoming single bond; refusing it outright is the same chemistry with one rule instead of two, and it is the only opt-out V2 ran WITHOUT a valence check
+resonance:veto_sulfonium	veto_acceptor	[S;+;D3;z1:1]	C[S+](C)C	V2's `elif lb == 3 and a.hybridization == 1: continue`, its `X-[S+](-X)-X` -- a trialkylsulfonium is coordinatively full

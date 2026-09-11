@@ -1,0 +1,60 @@
+# Hand-written PDBx/mmCIF, not an archive entry.
+#
+# What it demonstrates: an entry whose connectivity is entirely stated, by `_chem_comp_bond`.
+# One ethanol (EOH, a non-polymer entity) and one water (HOH), so the reader must come back with
+# 4 atoms, the ethanol's 2 bonds, and a log line saying one atom is touched by no stated bond.
+# `_cell` is present and unread, so the aggregated `unsupported:` category line has something to say.
+data_TESTEOH
+_entry.id   TESTEOH
+_struct.title   'ethanol and one water'
+#
+_cell.length_a      10.000
+_cell.length_b      10.000
+_cell.length_c      10.000
+_cell.angle_alpha   90.00
+_cell.angle_beta    90.00
+_cell.angle_gamma   90.00
+#
+loop_
+_entity.id
+_entity.type
+1 non-polymer
+2 water
+#
+loop_
+_chem_comp_bond.comp_id
+_chem_comp_bond.atom_id_1
+_chem_comp_bond.atom_id_2
+_chem_comp_bond.value_order
+_chem_comp_bond.pdbx_aromatic_flag
+EOH C1 C2 SING N
+EOH C2 O  SING N
+EOH C1 H11 SING N
+#
+loop_
+_atom_site.group_PDB
+_atom_site.id
+_atom_site.type_symbol
+_atom_site.label_atom_id
+_atom_site.label_alt_id
+_atom_site.label_comp_id
+_atom_site.label_asym_id
+_atom_site.label_entity_id
+_atom_site.label_seq_id
+_atom_site.pdbx_PDB_ins_code
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+_atom_site.occupancy
+_atom_site.B_iso_or_equiv
+_atom_site.pdbx_formal_charge
+_atom_site.auth_seq_id
+_atom_site.auth_comp_id
+_atom_site.auth_asym_id
+_atom_site.auth_atom_id
+_atom_site.pdbx_PDB_model_num
+HETATM 1 C C1 . EOH A 1 . ? 1.000 0.000 0.000 1.00 12.30 ? 501 EOH B C1 1
+HETATM 2 C C2 . EOH A 1 . ? 2.500 0.100 0.200 1.00 13.40 ? 501 EOH B C2 1
+HETATM 3 O O  . EOH A 1 . ? 3.100 1.300 0.100 1.00 15.60 ? 501 EOH B O  1
+HETATM 4 O O  . HOH C 2 . ? 8.000 8.000 8.000 1.00 30.00 ? 601 HOH W O  1
+#

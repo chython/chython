@@ -10,7 +10,7 @@ single `$.clean2d(tree)` global that MiniRacer evaluates from Python.
     npm run build
 
 `npm run build` bundles `src/index.js` with esbuild into
-`../chython/algorithms/calculate2d/clean2d.js` (IIFE, global `$`).
+`../chython/depict/layout/clean2d.js` (IIFE, global `$`).
 
 ## Deps
 

@@ -1,0 +1,8 @@
+REMARK   1 Hand written.  What it demonstrates: a legacy PDB with no CONECT, no SSBOND and no
+REMARK   1 LINK states no bonds at all.  The reader must return three atoms with all three
+REMARK   1 coordinates, zero bonds, and a log line naming the unbonded count.  The C-C distance
+REMARK   1 here is 1.52 A, which every toolkit would bond and this reader must not.
+ATOM      1  CA  GLY A   1       0.000   0.000   0.000  1.00  5.00           C
+ATOM      2  C   GLY A   1       1.520   0.000   0.000  1.00  5.10           C
+ATOM      3  O   GLY A   1       2.100   1.080   0.000  1.00  5.20           O
+END

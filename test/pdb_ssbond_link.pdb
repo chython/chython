@@ -1,0 +1,12 @@
+REMARK   1 Hand written.  What it demonstrates: a disulfide the file STATES with SSBOND, and a
+REMARK   1 metal contact it states with LINK.  Both are read because they are stated; neither
+REMARK   1 states an order, so both are single bonds and the log says so.  There is no CONECT
+REMARK   1 in this file at all, so the backbone stays unbonded and the log names that count.
+SSBOND   1 CYS A   10    CYS A   11                          1555   1555  2.03
+LINK         SG  CYS A  10                ZN    ZN B 300     1555   1555  2.30
+ATOM      1  CB  CYS A  10       1.950  -0.750   1.230  1.00  9.40           C
+ATOM      2  SG  CYS A  10       3.750  -0.900   1.300  1.00  9.50           S
+ATOM      3  CB  CYS A  11       3.600   3.600   1.240  1.00 10.00           C
+ATOM      4  SG  CYS A  11       4.200   2.100   1.900  1.00 10.10           S
+HETATM    5 ZN    ZN B 300       5.500  -1.200   2.000  1.00 11.00          ZN2+
+END

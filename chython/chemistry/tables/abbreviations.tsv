@@ -1,0 +1,93 @@
+# Contracted groups a drawing spells as text, and the fragment each one stands for.
+#
+# A file that draws one atom and labels it `OMe` has stated a methoxy group, not an atom: the label is the
+# structure. `expand_abbreviations()` replaces such an atom with the fragment named here. The label itself
+# survives as the atom's alias until it is expanded, so a label this table does not know costs nothing.
+#
+# COLUMNS
+#   label     the spelling as drawn, matched first exactly and then case-folded
+#   smiles    the fragment, with `*` marking the ONE atom the group hangs by
+#   synonyms  comma list of other spellings for the same group, or `-`
+#
+# THE `*` IS THE ATTACHMENT AND IT IS WHY THE HYDROGEN COUNTS COME OUT RIGHT. `*NS(=O)(=O)c1ccc(C)cc1`
+# gives the nitrogen one hydrogen and `*[N+](=O)[O-]` gives its nitrogen none, because each is the count
+# the SMILES states for an atom that already carries the bond to the rest of the molecule. A fragment
+# written without the marker would be the free compound -- `NS(=O)(=O)c1ccc(C)cc1` is toluenesulfonamide,
+# with two hydrogens on the nitrogen -- and every count would need a correction nothing states.
+#
+# ONE MARKER PER ROW. A group drawn as one atom and attached twice is a different fact from this one, and
+# the loader refuses a row with two markers rather than guessing which end is which.
+#
+# Spellings are the ones drawing packages emit, ChemDraw's and Marvin's included; a label whose expansion
+# depends on the record -- `R`, `X`, `Pol`, `Ar`, `PEG` -- is deliberately absent, because it names a
+# marker or a family and not a structure. Those stay R atoms carrying their alias.
+label	smiles	synonyms
+Me	*C	CH3,H3C
+Et	*CC	C2H5,Et-
+Pr	*CCC	n-Pr,nPr,C3H7
+iPr	*C(C)C	i-Pr,isoPr,iso-Pr
+Bu	*CCCC	n-Bu,nBu,C4H9
+iBu	*CC(C)C	i-Bu,isoBu
+sBu	*C(C)CC	s-Bu,secBu,sec-Bu
+tBu	*C(C)(C)C	t-Bu,tertBu,tert-Bu,Bu-t
+Cy	*C1CCCCC1	Chx,cHex,c-Hex
+Ph	*c1ccccc1	C6H5,Phenyl
+Bn	*Cc1ccccc1	Bzl,Benzyl
+Bz	*C(=O)c1ccccc1	Benzoyl
+PMB	*Cc1ccc(OC)cc1	MPM
+Trt	*C(c1ccccc1)(c1ccccc1)c1ccccc1	Tr,Trityl
+Ac	*C(C)=O	Acetyl
+Piv	*C(=O)C(C)(C)C	Pv
+Ts	*S(=O)(=O)c1ccc(C)cc1	Tos,Tosyl
+Ms	*S(C)(=O)=O	Mesyl
+Tf	*S(=O)(=O)C(F)(F)F	Triflyl
+Boc	*C(=O)OC(C)(C)C	t-Boc,tBoc
+Cbz	*C(=O)OCc1ccccc1	Z
+Fmoc	*C(=O)OCC1c2ccccc2-c2ccccc21	-
+TMS	*[Si](C)(C)C	SiMe3
+TES	*[Si](CC)(CC)CC	SiEt3
+TBS	*[Si](C)(C)C(C)(C)C	TBDMS
+TIPS	*[Si](C(C)C)(C(C)C)C(C)C	Si(iPr)3
+TBDPS	*[Si](c1ccccc1)(c1ccccc1)C(C)(C)C	-
+THP	*C1CCCCO1	-
+Allyl	*CC=C	All
+Vinyl	*C=C	Vin
+Propargyl	*CC#C	-
+CF3	*C(F)(F)F	F3C
+CCl3	*C(Cl)(Cl)Cl	Cl3C
+CHF2	*C(F)F	-
+CN	*C#N	NC,Nitrile,Cyano
+NO2	*[N+](=O)[O-]	O2N,Nitro
+CHO	*C=O	OHC,Formyl
+COOH	*C(=O)O	CO2H,HOOC,HO2C
+COOMe	*C(=O)OC	CO2Me,MeO2C,MeOOC,CO2ME
+COOEt	*C(=O)OCC	CO2Et,EtO2C,EtOOC
+CONH2	*C(N)=O	H2NOC,Carbamoyl
+OH	*O	HO,Hydroxy
+OMe	*OC	MeO,OCH3,CH3O
+OEt	*OCC	EtO,OC2H5
+OPr	*OCCC	PrO,OnPr
+OiPr	*OC(C)C	iPrO,O-iPr
+OtBu	*OC(C)(C)C	OBu-t,tBuO,O-tBu,OTbu
+OBn	*OCc1ccccc1	BnO,OBzl
+OAc	*OC(C)=O	AcO
+OTs	*OS(=O)(=O)c1ccc(C)cc1	TsO
+OTf	*OS(=O)(=O)C(F)(F)F	TfO
+OCF3	*OC(F)(F)F	F3CO
+NH2	*N	H2N,Amino
+NHMe	*NC	MeNH,NHCH3
+NMe2	*N(C)C	Me2N,N(CH3)2
+NEt2	*N(CC)CC	Et2N
+NHAc	*NC(C)=O	AcNH,AcHN
+NHBoc	*NC(=O)OC(C)(C)C	BocNH,BocHN
+NHTs	*NS(=O)(=O)c1ccc(C)cc1	TsNH,TsHN
+NHCbz	*NC(=O)OCc1ccccc1	CbzNH,CbzHN
+Mor	*N1CCOCC1	Morpholino,Morpholine
+Pip	*N1CCCCC1	Piperidino,Piperidine
+Pyrr	*N1CCCC1	Pyrrolidino,Pyrrolidine
+SH	*S	HS,Mercapto,Thiol
+SMe	*SC	MeS,SCH3
+SEt	*SCC	EtS
+SO3H	*S(=O)(=O)O	HO3S,Sulfo
+SO2Me	*S(C)(=O)=O	MeO2S
+SO2NH2	*S(N)(=O)=O	H2NO2S,Sulfamoyl

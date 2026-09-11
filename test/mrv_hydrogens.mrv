@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cml xmlns="http://www.chemaxon.com">
+  <MDocument>
+    <MChemicalStruct>
+      <molecule molID="m1" title="methylamine">
+        <atomArray>
+          <atom id="a1" elementType="C" x2="0.0000" y2="0.0000" hydrogenCount="3"/>
+          <atom id="a2" elementType="N" x2="1.2990" y2="0.7500" hydrogenCount="1"/>
+          <atom id="a3" elementType="H" x2="1.2990" y2="2.2500"/>
+        </atomArray>
+        <bondArray>
+          <bond id="b1" atomRefs2="a1 a2" order="1"/>
+          <bond id="b2" atomRefs2="a2 a3" order="1"/>
+        </bondArray>
+      </molecule>
+    </MChemicalStruct>
+  </MDocument>
+</cml>

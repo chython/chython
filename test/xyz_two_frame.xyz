@@ -1,0 +1,9 @@
+2
+first frame: two carbons (demonstrates multi-frame XYZ parsing)
+C 0.0 0.0 0.0
+C 1.54 0.0 0.0
+3
+second frame: water molecule
+O 0.0 0.0 0.0
+H 0.96 0.0 0.0
+H -0.24 0.93 0.0

@@ -1,0 +1,86 @@
+# qed_alerts.tsv -- the structural alerts QED counts as its eighth input.
+# Bickerton, Paolini, Besnard, Muresan, Hopkins, Nat. Chem. 2012, 4, 90.  The alert set QED weighs is
+# Brenk, Schipani, James, Krasowski, Gilbert, Frearson, Wyatt, ChemMedChem 2008, 3, 435, which names
+# 116 alerts.
+#
+# WHAT THIS TABLE IS, AND WHAT IT IS NOT.  it holds the alerts chython STATES: 63 substructures, each
+# written in chython SMARTS and each proved to fire by its own probe.  it is NOT the 116-row list, and
+# `chython.chemistry.qed`'s ALERTS term is therefore THIS table's count.  a score from chython and a
+# score from another implementation of QED are two numbers with the same name; neither is a reading of
+# the other.  the count is ratcheted by an equality in test_qed_alerts_tsv.py, so adding a row is a
+# two-file change and dropping one cannot pass unnoticed.
+# `name` and `description` are chython's labels for the alerted substructure.  a published alert name
+# is quoted only where the substructure is exactly what that name says.
+#
+# `probe` IS A SMILES AND A PUBLIC COMPOUND, never a SMARTS: the bracket-and-bond rules of the pattern
+# column do not apply to it.  a test asserts every row matches its own probe, because an alert that
+# matches nothing lowers no score and would go unnoticed for years.
+#
+# THE DIALECT, IN THREE RULES.  every bracket atom frees the charge (`*`) or states one -- an unstated
+# charge is charge ZERO.  every bond is written out, since an absent token matches SINGLE only and
+# `[C;*;z4][C;*;z4]` therefore matches no aromatic ring.  a ring or non-ring bond is `~;@` / `~;!@`.
+id	name	pattern	probe	description
+1	nitro group	[N;*;D3](=[O;*])=[O;*]	CN(=O)=O	nitro in its pentavalent drawing; the charge-separated drawing is the next row and both are needed, since chython stores what the file said
+2	nitro group charge separated	[N;+;D3](-[O;-])=[O;*]	[O-][N+](=O)C	nitro drawn with a formal charge pair
+3	azo group	[N;*]=[N;*]	CN=NC	azo
+4	aliphatic long chain	[C;*;z1]-[C;*;z1]-[C;*;z1]-[C;*;z1]-[C;*;z1]-[C;*;z1]-[C;*;z1]	CCCCCCC	seven chained sp3 carbons.  hexane is one short and trips nothing in this table, which is what makes the alkane gate a real gate
+5	aldehyde	[C;*;H1]=[O;*]	CC=O	aldehyde
+6	michael acceptor	[C;*]=[C;*]-[C;*]=[O;*]	C=CC=O	alpha,beta-unsaturated carbonyl
+7	epoxide	[O;*;r3]	C1CO1	three-membered ring oxygen
+8	aziridine	[N;*;r3]	C1CN1	three-membered ring nitrogen
+9	peroxide	[O;*]-[O;*]	COOC	peroxide
+10	disulfide	[S;*]-[S;*]	CSSC	disulfide
+11	isocyanate	[N;*]=[C;*]=[O;*]	CN=C=O	isocyanate
+12	thiocyanate	[S;*]-[C;*]#[N;*]	CSC#N	thiocyanate
+13	hydrazine	[N;*]-[N;*]	CNNC	hydrazine and hydrazide
+14	acyl halide	[C;*](=[O;*])-[F,Cl,Br,I;*]	CC(=O)Cl	acyl halide
+15	sulfonyl halide	[S;*](=[O;*])(=[O;*])-[F,Cl,Br,I;*]	CS(=O)(=O)Cl	sulfonyl halide
+16	azide	[N;*]=[N;*]=[N;*]	CN=[N+]=[N-]	azide
+17	imine	[C;*]=[N;*;H1,H2]	CC=N	imine bearing a hydrogen
+18	oxime	[C;*]=[N;*]-[O;*;H1]	CC=NO	oxime
+19	beta lactam	[N;*;r4]-[C;*;r4]=[O;*]	O=C1CCN1	four-membered lactam
+20	quaternary nitrogen	[N;+;D4](-[C;*])(-[C;*])(-[C;*])-[C;*]	C[N+](C)(C)C	quaternary ammonium.  the four carbons are what separate it from an amine oxide, whose nitrogen is also `[N;+;D4]`
+21	thiol	[S;*;H1]-[C;*]	CS	thiol
+22	catechol	[O;*;H1]-[C;*;z4]:[C;*;z4]-[O;*;H1]	Oc1ccccc1O	ortho dihydroxy arene.  the two ring bonds are `:`; `-[C;*;z4][C;*;z4]-` would demand a single bond and match no catechol
+23	hydroquinone	[O;*;H1]-[C;*;z4]:[C;*;z4]:[C;*;z4]:[C;*;z4]-[O;*;H1]	Oc1ccc(O)cc1	para dihydroxy arene
+24	polyene	[C;*]=[C;*]-[C;*]=[C;*]-[C;*]=[C;*]	C=CC=CC=C	three conjugated double bonds
+25	aniline	[N;*;H1,H2]-[C;*;z4]	Nc1ccccc1	an NH or NH2 on an aromatic carbon
+26	aryl ester	[C;*](=[O;*])-[O;*]-[C;*;z4]	CC(=O)Oc1ccccc1	ester whose alcohol half is aromatic
+27	thioester	[C;*](=[O;*])-[S;*]	CC(=O)SC	thioester
+28	thiocarbonyl	[C;*]=[S;*]	CC(C)=S	thiocarbonyl
+29	hydroxamic acid	[C;*](=[O;*])-[N;*]-[O;*;H1]	CC(=O)NO	hydroxamic acid
+30	amine N-oxide	[O;-]-[N;+](-[C;*])(-[C;*])-[C;*]	C[N+](C)(C)[O-]	tertiary amine oxide.  THREE carbons are demanded because a bare `[N;+]-[O;-]` is also every charge-separated nitro group, which is row 2's alert and not this one
+31	oxygen nitrogen single bond	[O;*]-[N;*]	CON	an N-O single bond anywhere
+32	sulfonamide	[S;*](=[O;*])(=[O;*])-[N;*]	CS(=O)(=O)N	sulfonamide
+33	sulfur nitrogen single bond	[S;*]-[N;*]	NS(=O)(=O)c1ccccc1	an S-N single bond anywhere; broader than the sulfonamide row above and published alongside it
+34	sulfonic acid	[S;*](=[O;*])(=[O;*])-[O;*;H1]	CS(=O)(=O)O	sulfonic acid
+35	sulfate ester	[O;*]-[S;*](=[O;*])(=[O;*])-[O;*]	COS(=O)(=O)OC	sulfate ester
+36	phosphorus	[P;*]	COP(=O)(OC)OC	any phosphorus
+37	phosphate ester	[O;*]-[P;*](=[O;*])(-[O;*])-[O;*]	COP(=O)(OC)OC	phosphate ester
+38	triple bond	[C;*]#[C;*]	CC#CC	carbon-carbon triple bond
+39	conjugated nitrile	[C;*]=[C;*]-[C;*]#[N;*]	C=CC#N	nitrile conjugated to a double bond
+40	cyanamide	[N;*]-[C;*]#[N;*]	NC#N	cyanamide
+41	acyl cyanide	[C;*](=[O;*])-[C;*]#[N;*]	CC(=O)C#N	acyl cyanide
+42	sulfonyl cyanide	[S;*](=[O;*])(=[O;*])-[C;*]#[N;*]	CS(=O)(=O)C#N	sulfonyl cyanide
+43	acyl hydrazine	[C;*](=[O;*])-[N;*]-[N;*]	CC(=O)NN	acyl hydrazine
+44	diazo group	[C;*]=[N;+]=[N;-]	C=[N+]=[N-]	diazo, drawn charge-separated
+45	N-nitroso	[N;*]-[N;*]=[O;*]	CN(C)N=O	N-nitrosoamine
+46	alkyl halide	[C;*;z1]-[Cl,Br,I;*]	CCCl	chloride, bromide or iodide on an sp3 carbon.  fluorine is left out: a C-F bond is not the leaving group the alert is about
+47	2-halopyridine	[F,Cl,Br,I;*]-[C;*;z4]:[N;*;z4]	Clc1ccccn1	halogen alpha to an aromatic nitrogen
+48	iodine	[I;*]	CI	any iodine
+49	silicon halogen	[Si;*]-[F,Cl,Br,I;*]	C[Si](C)(C)Cl	silicon-halogen bond
+50	triflate	[O;*]-[S;*](=[O;*])(=[O;*])-[C;*](-[F;*])(-[F;*])-[F;*]	COS(=O)(=O)C(F)(F)F	triflate ester
+51	perfluoroalkyl chain	[C;*](-[F;*])(-[F;*])-[C;*](-[F;*])(-[F;*])-[C;*](-[F;*])(-[F;*])	FC(F)(F)C(F)(F)C(F)(F)F	three consecutive carbons each carrying two or more fluorines
+52	stilbene	[C;*;z4]-[C;*]=[C;*]-[C;*;z4]	c1ccc(cc1)C=Cc1ccccc1	two arenes joined by a double bond
+53	enamine	[N;*]-[C;*]=[C;*]	C=CN(C)C	nitrogen on a double bond
+54	acyclic vinyl ether	[C;*]=;!@[C;*]-;!@[O;*]	C=COC	an enol ether outside a ring; the `!@` is the whole alert, since a ring enol ether is a different matter
+55	cyanohydrin	[N;*]#[C;*]-[C;*]-[O;*;H1]	CC(C)(O)C#N	nitrile and hydroxyl on the same carbon
+56	adjacent dicarbonyl	[C;*](=[O;*])-[C;*]=[O;*]	CC(=O)C(C)=O	two carbonyls on adjacent carbons
+57	anhydride	[C;*](=[O;*])-[O;*]-[C;*]=[O;*]	CC(=O)OC(C)=O	carboxylic anhydride
+58	ketene	[C;*]=[C;*]=[O;*]	C=C=O	ketene
+59	hydantoin	[N;*;r5]-[C;*;r5](=[O;*])-[N;*;r5]-[C;*;r5]=[O;*]	O=C1CNC(=O)N1	imidazolidine-2,4-dione core
+60	quinone	[O;*]=[C;*;r6]-[C;*;r6]=[C;*;r6]-[C;*;r6]=[O;*]	O=C1C=CC(=O)C=C1	cyclohexadienedione.  kekulized by construction: a quinone ring is not aromatic and `thiele()` leaves it alone
+61	ortho diaminobenzene	[N;*;H1,H2]-[C;*;z4]:[C;*;z4]-[N;*;H1,H2]	Nc1ccccc1N	two ring amines on adjacent aromatic carbons
+62	four-membered lactone	[O;*;r4]-[C;*;r4]=[O;*]	O=C1CCO1	beta-lactone
+63	thiirane	[S;*;r3]	C1CS1	three-membered ring sulfur
+64	aromatic N-oxide	[O;-]-[N;+;z4]	[O-][n+]1ccccc1	azine N-oxide.  `z4` is what keeps a nitro group out: an aryl nitro nitrogen is not itself aromatic

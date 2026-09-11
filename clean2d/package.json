@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist/clean2d.js",
   "scripts": {
-    "build": "esbuild src/index.js --bundle --format=iife --global-name=$ --minify --outfile=../chython/algorithms/calculate2d/clean2d.js"
+    "build": "esbuild src/index.js --bundle --format=iife --global-name=$ --minify --outfile=../chython/depict/layout/clean2d.js"
   },
   "dependencies": {
     "smiles-drawer": "2.4.1"

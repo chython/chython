@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8"><title>chython — QM field depiction</title>
+<style>
+  body { font: 15px/1.55 -apple-system, system-ui, sans-serif; margin: 0; padding: 2.5rem;
+         background: #fbfbfa; color: #1c1c1a; }
+  h1 { font-size: 1.5rem; margin: 0 0 .3rem; }
+  p.lead { color: #555; max-width: 62ch; margin: 0 0 2rem; }
+  .grid { display: grid; gap: 1.75rem; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  figure { margin: 0; background: #fff; border: 1px solid #e6e4e0; border-radius: 10px;
+            padding: 1rem; }
+  figure img { width: 100%; height: auto; display: block; }
+  figcaption { font-size: 13px; color: #555; margin-top: .75rem; }
+  figcaption b { color: #1c1c1a; font-weight: 600; }
+</style>
+<h1>QM property fields over a 2D depiction</h1>
+<p class="lead">Hückel π theory on each molecule's own adjacency matrix, contoured by
+<code>chython.depict.overlay.AtomField</code>. Azulene HOMO–LUMO gap
+0.878&nbsp;|β|, naphthalene 1.236&nbsp;|β|. Regenerate with
+<code>python docs/demo_qm/render_fields.py</code>.</p>
+<div class="grid">
+    <figure>
+      <img src="01_charge_azulene.svg" alt="01_charge_azulene">
+      <figcaption><b>01_charge_azulene</b><br>π charge on azulene — red electron-poor (seven-ring), blue electron-rich (five-ring). The dipole azulene is known for, as a field.</figcaption>
+    </figure>
+    <figure>
+      <img src="02_charge_azulene_lines.svg" alt="02_charge_azulene_lines">
+      <figcaption><b>02_charge_azulene_lines</b><br>The same field as line contours (fill=False) at stated levels. The level at 0 is the charge-neutral curve, and the legend draws rules rather than blocks because no interval of values was filled.</figcaption>
+    </figure>
+    <figure>
+      <img src="03_homo_naphthalene.svg" alt="03_homo_naphthalene">
+      <figcaption><b>03_homo_naphthalene</b><br>HOMO coefficients of naphthalene (RdBu). The two lobes meet along the nodal line through the fusion carbons, where the coefficient is exactly 0.</figcaption>
+    </figure>
+    <figure>
+      <img src="04_homo_naphthalene_node.svg" alt="04_homo_naphthalene_node">
+      <figcaption><b>04_homo_naphthalene_node</b><br>The node drawn as a contour: level 0.0 on mono is mid-grey, so it is visible where the diverging map paints it the page colour. Four lobes of alternating sign, nodes along the fusion axis and across it.</figcaption>
+    </figure>
+    <figure>
+      <img src="05_fukui_minus_azulene.svg" alt="05_fukui_minus_azulene">
+      <figcaption><b>05_fukui_minus_azulene</b><br>Azulene f⁻ (electrophilic attack, HOMO²), viridis, one-sided. Both panels carry the SAME domain 0–0.295, so the two are read against one scale — f⁻ peaks on the five-ring, f⁺ on the seven-ring.</figcaption>
+    </figure>
+    <figure>
+      <img src="06_fukui_plus_azulene.svg" alt="06_fukui_plus_azulene">
+      <figcaption><b>06_fukui_plus_azulene</b><br>Azulene f⁺ (nucleophilic attack, LUMO²), viridis, one-sided. Both panels carry the SAME domain 0–0.295, so the two are read against one scale — f⁻ peaks on the five-ring, f⁺ on the seven-ring.</figcaption>
+    </figure>
+    <figure>
+      <img src="07_polarizability_contoured.svg" alt="07_polarizability_contoured">
+      <figcaption><b>07_polarizability_contoured</b><br>Self-polarizability π_ii contoured — and this is the panel that should not be a contour. Range 0.330–0.443 |β|⁻¹: the interior is one flat colour and every band sits in the rim where the interpolation decays to zero.</figcaption>
+    </figure>
+    <figure>
+      <img src="08_polarizability_halo.svg" alt="08_polarizability_halo">
+      <figcaption><b>08_polarizability_halo</b><br>The same numbers as AtomHalo(encode='both') — radius AND colour per atom. A scalar with no spatial structure is a per-atom quantity, and this form does not invent one. The α positions are the polarizable ones.</figcaption>
+    </figure>
+    <figure>
+      <img src="09_clip_none.svg" alt="09_clip_none">
+      <figcaption><b>09_clip_none</b><br>clip=None — clip=None — the field's own cutoff closes it.</figcaption>
+    </figure>
+    <figure>
+      <img src="10_clip_hull.svg" alt="10_clip_hull">
+      <figcaption><b>10_clip_hull</b><br>clip='hull' — hull, drawn through the atoms: bands are sliced.</figcaption>
+    </figure>
+    <figure>
+      <img src="11_clip_box.svg" alt="11_clip_box">
+      <figcaption><b>11_clip_box</b><br>clip='box' — box over the label boxes.</figcaption>
+    </figure>
+    <figure>
+      <img src="12_combined.svg" alt="12_combined">
+      <figcaption><b>12_combined</b><br>AtomField + Highlight + ValueLabels, with only the four extreme atoms numbered. The field is dropped to opacity 0.55 so the numbers stay legible on it; the numbers wear the ink colour, never the band colour.</figcaption>
+    </figure>
+    <figure>
+      <img src="13_no_legend.svg" alt="13_no_legend">
+      <figcaption><b>13_no_legend</b><br>page.legend='none'. The bar is placed outside the content box, so withholding it moves no atom.</figcaption>
+    </figure>
+</div>

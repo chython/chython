@@ -1,78 +1,194 @@
-[tool.poetry]
+[build-system]
+requires = ['setuptools>=77', 'cython>=3.1']
+build-backend = 'setuptools.build_meta'
+
+[project]
 name = 'chython'
-version = '2.24'
+version = '3.0'
 description = 'Library for processing molecules and reactions in python way'
-authors = ['Ramil Nugmanov <nougmanoff@protonmail.com>']
-license = 'LGPLv3'
+authors = [{name = 'Ramil Nugmanov', email = 'nougmanoff@protonmail.com'}]
+license = 'LGPL-3.0-or-later'
+license-files = ['LICENSE']
 readme = 'README.md'
-homepage = 'https://github.com/chython/chython'
-documentation = 'https://chython.readthedocs.io'
-classifiers=[
+requires-python = '>=3.10'
+dependencies = [
+    # numpy is NOT here -- it is `chython[ml]`, below.  The budget is a serverless bundle, uploaded
+    # whole on every deploy: numpy 1.26.4 is 44 MB installed against 7.4 MB of chython runtime files.
+    # A drop and not a trim, since pruning everything a caller demonstrably does not import still
+    # leaves ~40 MB.
+    #
+    # Nothing on the representation path needs it -- parsing, writing, standardization, kekulization,
+    # stereo, canonical form, the reactor and depiction are pure Python and C over the arena.  What
+    # needs it is the surface that answers a numpy array by contract; `chython[ml]` enumerates that
+    # surface and `chython/test/test_optional_numpy.py` is the gate.  Nor is it a BUILD dependency:
+    # there is no `cimport numpy` and no `numpy.get_include()`, because the two matrix builders reach
+    # their output through typed memoryviews and the PEP 3118 buffer protocol, so `_core.so` carries
+    # no numpy symbol and `python -m build --wheel` succeeds under default isolation.
+    #
+    # JS engine for `clean2d_engine = 'smilesdrawer'`, the default 2D layout backend.  Required and
+    # not an extra: a default that works only once the user guesses an extra name is not a default.
+    # Affordable because the engine is QuickJS -- 0.5 MB on macOS/Windows, 2.4 MB on manylinux, and a
+    # 0.8 MB JS heap.
+    #
+    # `quickjs-ng` rather than `quickjs` for the wheel matrix: `cp310-abi3` means one wheel per
+    # platform serves every CPython from 3.10 onwards, over macOS arm64, manylinux and musllinux on
+    # x86_64/aarch64/i686, and win32/win_amd64.
+    'quickjs-ng>=0.16',
+]
+classifiers = [
     'Environment :: Plugins',
     'Intended Audience :: Science/Research',
-    'License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)',
     'Operating System :: OS Independent',
     'Programming Language :: Python',
     'Programming Language :: Python :: 3 :: Only',
+    # One line per interpreter the release workflow builds a wheel for, and `requires-python` above is
+    # the enforced statement -- these are what PyPI's filters read, so a missing line hides the project
+    # from a search for the version it actually supports.
     'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
     'Topic :: Scientific/Engineering',
     'Topic :: Scientific/Engineering :: Chemistry',
     'Topic :: Scientific/Engineering :: Information Analysis',
     'Topic :: Software Development',
     'Topic :: Software Development :: Libraries',
-    'Topic :: Software Development :: Libraries :: Python Modules'
+    'Topic :: Software Development :: Libraries :: Python Modules',
 ]
 
-include = [
-    {path = 'chython/*/*.pyd', format = 'wheel'},
-    {path = 'chython/*/*.so', format = 'wheel'},
-    {path = 'chython/files/libinchi/libinchi.*', format = 'wheel'}
-]
+[project.urls]
+homepage = 'https://github.com/chython/chython'
+documentation = 'https://chython.readthedocs.io'
 
-[tool.poetry.dependencies]
-python = ">=3.10"
-lazy-object-proxy = '>=1.6'
-numpy = ">=1.21.0"
-mini-racer = {version = '>=0.12.4', optional = true}
-py-mini-racer = {version = '>=0.6.0', optional = true}
-onnxruntime = {version = '>=1.16', optional = true}
-scipy = {version = '>=1.10', optional = true}
-chython-rxnmap = {version = '>=2.0', optional = true}
-rdkit = {version = '>=2025.9', optional = true}
-pyppeteer = {version = '>=2.0.0', optional = true}
-jpype1 = {version = '>=1.6.0', optional = true}
-openbabel-wheel = {version = '>=3.1.1.22', optional = true}
-cdpkit = {version = '>=1.2.3', optional = true}
-openclatura = {version = '>=0.2', optional = true, python = '>=3.11'}
-'epam.indigo' = {version = '>=1.45', optional = true}
+[project.optional-dependencies]
+# The public names that need numpy, and nothing else in the library does.  Without this extra each
+# raises ImportError naming it AT THE CALL -- `import chython` is unaffected.  The list is the count;
+# `chython/test/test_optional_numpy.py` holds the executable copy.
+#
+#   every `morgan_*` and `linear_*` method, `atom_invariants`, `adjacency_matrix`,
+#   `distance_matrix`, `eccentricities`, `wiener_index`, `graph_radius`, `graph_diameter`,
+#   `balaban_j`, `pharmacophore_invariants`, `maccs_keys`, `maccs_bit_set`.
+#
+# TWO GROUPS ARE NOT OBVIOUS FROM THEIR RETURN TYPES.  `morgan_bit_set`, `morgan_hash_set`,
+# `morgan_hash_counts`, their `linear_` counterparts and `maccs_bit_set` answer a plain set or dict and
+# still need numpy, every one of them building an array first.  And only the
+# DISTANCE-DERIVED descriptors are listed: `tpsa`, `crippen_logp`, `crippen_mr`, `bertz_ct`,
+# `randic_index`, `zagreb_index` and the atom and ring counts are numpy-free and stay available.
+#
+# Named `ml` for the consumer rather than the package: what a caller knows about themselves is that
+# they are feeding a model, not that the array library underneath is numpy.
+ml = ['numpy>=1.21.0']
+# numpy is named directly and NOT left to onnxruntime, which requires it: an extra that works only
+# because a sibling dependency happens to pull its requirement in is one that breaks when that sibling
+# changes.  NO SCIPY -- the shortest-path distances the encoding needs come from `state_view`, which is
+# C in the core, so the one dependency the mapper adds over `ml` is the runtime and the weights.
+mapping = ['numpy>=1.21.0', 'onnxruntime>=1.16', 'chython-rxnmap>=2.0']
+rdkit = ['rdkit>=2025.9']
+extra-clean2d = ['jpype1>=1.6.0', 'openbabel-wheel>=3.1.1.22', 'epam.indigo>=1.45']
+extra-clean3d = ['cdpkit>=1.2.3']
+iupac = ["openclatura>=0.2; python_version >= '3.11'"]
 
-[tool.poetry.extras]
-mapping = ['onnxruntime', 'scipy', 'chython-rxnmap']
-rdkit = ['rdkit']
-png = ['pyppeteer']
-racer-default = ['mini-racer']
-racer-deprecated = ['py-mini-racer']
-extra-clean2d = ['jpype1', 'openbabel-wheel', 'epam.indigo']
-extra-clean3d = ['cdpkit']
-iupac = ['openclatura']
+# PEP 735.  `uv sync --group dev` or `pip install --group dev`, replacing `poetry install --with dev`.
+# Not extras: a consumer of the library never wants these, and an extra is installable by a consumer.
+[dependency-groups]
+# `coverage[toml]` and not bare `coverage`: the settings are in `[tool.coverage]` below, and reading them
+# needs tomli before 3.11, which the extra is.
+dev = ['pytest>=7.4.3', 'coverage[toml]>=7.0']
+docs = ['sphinx>=7.0', 'furo>=2024.1']
 
-[tool.poetry.group.dev]
-optional = true
+[tool.setuptools]
+# Explicit, because at its default of `true` a wheel's data files are whatever `MANIFEST.in` swept
+# into the sdist, so the two distributions disagree about their contents for reasons neither file
+# states.  `false` means the wheel holds exactly what `[tool.setuptools.package-data]` below names and
+# `MANIFEST.in` describes only the sdist -- one file, one question.
+include-package-data = false
 
-[tool.poetry.group.dev.dependencies]
-pytest = '>=7.4.3'
+[tool.setuptools.packages.find]
+# `chython*` and nothing else: the repo root also holds `scripts/`, `mapping/`, `java/`, `pach/` and a
+# top-level `test/` of data files, none importable and all of which auto-discovery would otherwise
+# offer to package.  No `exclude` is needed -- every `chython*` package is a shipped one.
+include = ['chython*']
 
-[tool.poetry.group.docs]
-optional = true
+# Everything the installed package opens at runtime and cannot regenerate.  Nothing is globbed, so a
+# file omitted here is a file the wheel does not have.
+#
+#   clean2d.js     `depict/layout/molecule.py` reads it through `importlib.resources`; without it the
+#                  default 2D engine raises on first use rather than at import.
+#
+#   tables/*.tsv   `chemistry/_tables.py` opens each through `importlib.resources` the first time
+#                  anyone calls the pass that reads it -- `standardize()`, `fix_resonance()`, a salt
+#                  pass, a featurizer.  READ AT RUNTIME, so omitting one yields a wheel that imports
+#                  cleanly and raises on the first molecule; `_tables.py`'s FileNotFoundError names
+#                  this section.  No count is written here: the list below is the count.
+#
+#                  THE `tables/` PREFIX IS PART OF THE PATTERN, not a directory setuptools infers.
+#                  A package-data name is matched against the path relative to the package, so
+#                  `resonance.tsv` alone ships nothing when the file is a level down -- which is why
+#                  `test_packaging.py` compares relative paths and not bare filenames.
+#
+# libinchi IS DELIBERATELY ABSENT, the one runtime file that is.  `package_data` can only name files in
+# the SOURCE tree, so an entry here would oblige the build to write a binary into `chython/core/` and
+# make a wheel's contents a function of what lies in the checkout.  `setup.py` builds it into
+# `build/inchi/` and stages it into the wheel from there; `test_libinchi_staging.py` is its gate, since
+# this block's own gate (`test_packaging.py`) cannot be.
+#
+# `core`'s TSVs and RULES.md are not read at runtime.  They ship because `core/test/` ships and each
+# generator's `compile` verb is re-run against its TSV to prove the checked-in C tables are still that
+# file's output -- without the TSV that gate has no input.  RULES.md is what those tests cite.
+#
+# The pach corpora ship because they cannot be regenerated from this tree at all: every record was
+# written by an installed chython 2 (2.24 for v2, 1.42 for native v0), so they are the only surviving
+# specification of the legacy wire format `pack`/`unpack` read.  Without them `test_pach.py` is a
+# codec's acceptance test that cannot run and cannot be rebuilt.  `reaction_pach_v2_corpus.bin.gz` is
+# the same artefact one layer up, pinning the four header bytes `ReactionContainer.pack` prepends.
+#
+# `pach_v3_corpus.bin.gz` and `pach_v4_corpus.bin.gz` ship for the opposite reason: this tree CAN write
+# them, which is why they are frozen.  A fixture the test run regenerates pins no layout, so the
+# committed bytes are the artefact and `gen_pach3_corpus.py` is run by hand.
+#
+# `arena_v4_corpus.bin.gz` has the strongest reason of the three: it is arena `STRUCT_VERSION` 4, which
+# this tree no longer writes and no later build ever will, so `gen_v4_fixtures.py` cannot rerun.  It is
+# the only input to the migration gate that reads a pre-`SEG_PARITY` buffer.
+#
+# `modeling_view_corpus.json.gz` is a pin that CANNOT be rebuilt from this tree: it was recorded from
+# the dict-of-dicts union `modeling_view()` had before the array kernel, so regenerating it would
+# replace the pin with the thing being pinned.
+#
+# `golden_subset.smi` ships because the agreement floor in `reactions/test/test_attention.py` is a
+# number about a corpus, and a floor whose corpus the wheel lacks is a claim that cannot be rechecked
+# where it matters.  25 records of the public Golden benchmark, 10 kB; the full 1851 stay outside the
+# package and are run by `bench/bench_attention_mapping.py`.
+#
+# ONE ENTRY PER LINE, however long the line gets.  The reader of this block is a regex that needs it
+# flat: a wrapped list makes it take the continuation for a package name and fail on a path assembled
+# out of half a filename.
+[tool.setuptools.package-data]
+'chython.depict.layout' = ['clean2d.js']
+'chython.depict.metrics' = ['helvetica.tsv', 'times.tsv']
+'chython.core' = ['valence_rules.tsv', 'elements.tsv', 'isotopes.tsv', 'RULES.md']
+'chython.chemistry' = ['tables/abbreviations.tsv', 'tables/standardize_groups.tsv', 'tables/standardize_metals.tsv', 'tables/resonance.tsv', 'tables/salts.tsv', 'tables/acids.tsv', 'tables/sybyl_types.tsv', 'tables/residues.tsv', 'tables/rotatable.tsv', 'tables/hbond.tsv', 'tables/pharmacophore.tsv', 'tables/tpsa.tsv', 'tables/crippen.tsv', 'tables/covalent_radii.tsv', 'tables/maccs.tsv', 'tables/maccs_corpus.tsv', 'tables/qed_alerts.tsv']
+'chython.reactions' = ['tables/functional.tsv', 'tables/protective.tsv', 'tables/reactions.tsv', 'tables/roles.tsv']
+'chython.core.test' = ['pach_v2_corpus.bin.gz', 'pach_v0_corpus.bin.gz', 'pach_v0_native_corpus.bin.gz', 'reaction_pach_v2_corpus.bin.gz', 'arena_v4_corpus.bin.gz', 'pach_v3_corpus.bin.gz', 'pach_v4_corpus.bin.gz', 'modeling_view_corpus.json.gz']
+'chython.reactions.test' = ['golden_subset.smi']
+'chython.formats.ctfile' = ['CTFILE.md']
 
-[tool.poetry.group.docs.dependencies]
-sphinx = '>=7.0'
-furo = '>=2024.1'
+# THE HARNESS BEHIND THE README'S COVERAGE BADGE.  The `oracles` job in `.github/workflows/test.yml` runs
+# the suite under these settings and uploads the report; the same two commands reproduce the number:
+#
+#     python -m coverage run -m pytest chython/ -q --deselect chython/test/test_performance.py
+#     python -m coverage report
+#
+# IT MEASURES THE PYTHON LAYERS ONLY.  `chython.core._core` is one compiled translation unit and
+# coverage.py sees no lines in it, so `core/*.pxi` is in neither the numerator nor the denominator and the
+# badge is labelled `python coverage`.  What covers the core is the differential suite against chython 2
+# and RDKit, which reports agreement rather than lines.
+[tool.coverage.run]
+source = ['chython']
+# a test file's own lines are not a claim about the library, and every test in the tree lives in a `test/`
+omit = ['*/test/*']
+# paths as the repo writes them, so a reader outside the checkout -- the badge service -- can resolve one
+relative_files = true
 
-[build-system]
-requires = ['poetry-core', 'setuptools', 'cython>=3.1']
-build-backend = 'poetry.core.masonry.api'
-
-[tool.poetry.build]
-script = 'build.py'
-generate-setup-file = false
+[tool.coverage.report]
+precision = 2

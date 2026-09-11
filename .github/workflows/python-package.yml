@@ -1,5 +1,11 @@
 name: Build Python packages
 
+# Three jobs.  libinchi is per-OS and the wheel is per-OS AND per-interpreter: building the C library
+# once per OS and downloading it into the twenty wheel jobs costs four cmake runs instead of twenty.
+# `setup.py` calls the same builder and returns early when the binary is already present, so the
+# download is all the wheel jobs need -- they never run cmake.  The sdist is per-release, so it is
+# built once and by itself.
+
 on:
   release:
     types: [published]
@@ -17,13 +23,28 @@ jobs:
         submodules: true
     - name: Set up CMake
       uses: lukka/get-cmake@latest
+    - name: Set up Python 3.10
+      # THE OLDEST INTERPRETER IN THE WHEEL MATRIX, and pinned rather than left to the runner's default
+      # python because on macOS this choice sets the wheel's minimum OS version for every interpreter.
+      # `build_inchi.py` takes `CMAKE_OSX_DEPLOYMENT_TARGET` and `CMAKE_OSX_ARCHITECTURES` from
+      # `sysconfig.get_platform()`, and `wheel`'s `calculate_macosx_platform_tag` then RAISES the tag of
+      # any wheel carrying this dylib to cover it.  A dylib stamped with the runner image's macOS
+      # version tags all five mac wheels with that version; one built for the oldest floor in the matrix
+      # cannot raise any of them.
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
     - name: Build libinchi
       run: python build_inchi.py
     - name: Upload libinchi artifact
       uses: actions/upload-artifact@v4
       with:
         name: libinchi-${{ matrix.os }}
-        path: chython/files/libinchi/libinchi.*
+        # build/inchi/, not chython/core/: the binary is a build output and no longer enters the source
+        # tree.  `if-no-files-found: error` is what makes a silent no-InChI release impossible -- the
+        # builder warns and skips when cmake or the submodule are missing, which is right for a
+        # developer's machine and wrong here.
+        path: build/inchi/libinchi.*
         if-no-files-found: error
 
   binary:
@@ -41,17 +62,71 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: libinchi-${{ matrix.os }}
-        path: chython/files/libinchi/
+        path: build/inchi/
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip poetry twine
+        python -m pip install --upgrade pip build twine
     - name: Build wheel
+      # PEP 517, because the backend is setuptools: `poetry build` served the poetry backend this
+      # project used through 2.24 and would now build nothing at all.  `build` reads
+      # `[build-system] requires` and installs Cython itself, so there is no separate install step
+      # for it.
       run: |
-        poetry build -f wheel
+        python -m build --wheel
+    - name: Retag the Linux wheel for manylinux
+      if: runner.os == 'Linux'
+      # THE MIGRATION'S ONE SILENT CASUALTY.  poetry-core tagged wheels from `packaging.tags`, so 2.24
+      # published `manylinux_2_39_x86_64` and `manylinux_2_39_aarch64` with no repair step and nobody
+      # had to think about it.  setuptools' `bdist_wheel` does not: it emits `linux_x86_64`, which PyPI
+      # rejects outright, so without this step the first V3 release fails at upload on Linux only.
+      #
+      # The tag is computed rather than written down -- it is precisely what poetry-core computed -- so
+      # it tracks the runner's glibc instead of freezing 2.39 into a file that would then lie the day
+      # the runner image is bumped.  `auditwheel repair` is the stronger tool, since it verifies the
+      # claim against the binaries rather than asserting it; it is not used here because a wheel built
+      # on glibc 2.39 and tagged 2.39 cannot be overstating its requirement, and because auditwheel
+      # would also rewrite libinchi.so, which nothing links against and which is loaded by path.
+      run: |
+        python -m pip install --upgrade wheel
+        tag=$(python -c 'from packaging.tags import sys_tags; print(next(iter(sys_tags())).platform)')
+        echo "retagging as $tag"
+        python -m wheel tags --remove --platform-tag "$tag" dist/*.whl
     - name: Publish package
+      run: |
+        twine upload -u __token__ -p ${{ secrets.PYPI_API_TOKEN }} --non-interactive --skip-existing dist/*
+
+  sdist:
+    # WITHOUT THIS THE RELEASE IS WHEELS ONLY, and `pip install chython` outside the matrix above
+    # answers "no matching distribution": musl, FreeBSD, macOS x86_64, a CPython newer than the one
+    # this matrix was written for.  A source distribution turns each of those into a build from source.
+    #
+    # Once, not per matrix cell: an sdist is a property of the source and every cell would produce the
+    # same file.  `MANIFEST.in` is what makes it buildable -- the .pyx and .pxi layers and
+    # `build_inchi.py`, and not the generated .c, so an install from it cythonizes the sources it ships.
+    # It does NOT ship the INCHI submodule, so a build from the sdist warns and produces a wheel without
+    # InChI; `core/__init__.py` falls back silently and that surface raises at the call.
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip build twine
+    - name: Build sdist
+      run: |
+        python -m build --sdist
+    - name: Check metadata
+      # The sdist is what PyPI renders the project page from, and a README it cannot render is rejected
+      # at upload -- for the whole release, since `twine` uploads nothing when one file fails the check.
+      run: |
+        twine check dist/*
+    - name: Publish sdist
       run: |
         twine upload -u __token__ -p ${{ secrets.PYPI_API_TOKEN }} --non-interactive --skip-existing dist/*

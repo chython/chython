@@ -25,6 +25,10 @@ MANIFEST
 node_modules/
 _build/
 
+# specs, plans and research notes: working material for the tree, not part of the documentation Sphinx
+# builds out of `docs/`.
+docs/superpowers/
+
 # local scratch and benchmark artifacts (keep out of the public repo).
 # broad globs; already-tracked files stay tracked.
 *.pkl
@@ -37,3 +41,12 @@ _build/
 *.csv
 *.txt
 *.zip
+
+# ...except a corpus that is package data.  `golden_subset.smi` is named in
+# `[tool.setuptools.package-data]` and read by `reactions/test/test_attention.py`, whose agreement floor
+# is a number about it -- a floor whose corpus the repo hides is a claim nobody can recheck.
+!chython/reactions/test/golden_subset.smi
+
+# coverage's data file and the report the CI uploads; the settings are `[tool.coverage]` in pyproject.toml
+.coverage
+coverage.xml

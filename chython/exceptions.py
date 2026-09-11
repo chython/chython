@@ -114,7 +114,41 @@ class InvalidMolBlock(ValueError):
     """
 
 
-class SSSRTimeout(ValueError):
+class DirectionNotImplemented(NotImplementedError):
     """
-    SSSR ring perception exceeded the configured time limit
+    The format is known; this direction of it is not built.
+
+    Every format callable is bidirectional -- `smiles(str)` parses and `smiles(mol)` writes -- and
+    the direction is chosen by the argument.  Some halves do not exist: nothing writes an xyz matrix,
+    and chython reads no CDPKit molecule.  Those raise this rather than `TypeError`, because the two
+    say different things to a caller.  `TypeError` says "you passed the wrong thing"; this says "you
+    passed the right thing and that half is not built yet", which is the difference between a bug in
+    the caller and a gap in the library.
+
+    A `NotImplementedError` so that a caller probing for capability can catch the standard exception
+    without importing chython's own.
+    """
+
+
+class UnconvertibleType(TypeError):
+    """
+    Object is neither a chython container nor a type this converter reads.
+
+    The direction of a format callable is decided by testing for a chython container first, because
+    that is the only test available without importing a third-party toolkit.  Anything else is
+    offered to the import direction, and this is what that direction raises when the object is not
+    something it knows how to read.  The message names both types it accepts, so the answer to "what
+    was I supposed to pass?" is in the traceback rather than in the documentation.
+    """
+
+
+class ToolkitError(RuntimeError):
+    """
+    A third-party toolkit refused a conversion chython asked it to make.
+
+    Distinct from a reportable loss, which is the normal case: if a molecule can be converted at all
+    it is converted and what was dropped goes to the caller's `log`.  This is the other case -- the
+    toolkit itself rejected the structure or failed to sanitize it, so there is no molecule to hand
+    back and no partial answer worth inventing.  The toolkit's own message is preserved, because it
+    knows what it objected to and chython does not.
     """

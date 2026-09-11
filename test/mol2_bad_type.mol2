@@ -1,0 +1,18 @@
+# Malformed atom types: one atom with a bare element (no dot), one with an unknown type,
+# one with a valid element prefix but unrecognised hybridization tag.
+# Demonstrates: stored-and-logged posture for unrecognised SYBYL types.
+@<TRIPOS>MOLECULE
+bad_types
+ 4 3 0 0 0
+SMALL
+NO_CHARGES
+
+@<TRIPOS>ATOM
+      1 C1          0.0000    0.0000    0.0000 C       1 LIG 0.000
+      2 N1          1.4000    0.0000    0.0000 N.bogus  1 LIG 0.000
+      3 O1          2.1000    1.1200    0.0000 O.3     1 LIG 0.000
+      4 Br1         3.5000    1.1200    0.0000 Br      1 LIG 0.000
+@<TRIPOS>BOND
+     1     1     2    1
+     2     2     3    2
+     3     1     4    1

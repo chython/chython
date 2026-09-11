@@ -1,0 +1,138 @@
+# Protecting groups: what to look for, and what the molecule looks like once it is gone.
+#
+# EVERY ROW IS A SMIRKS ROW, and there is no separate list of atoms to keep or to add: `read_smirks`
+# deletes a reactant atom whose map number the product side does not mention, and builds a product atom
+# written without a map number.  So a deprotection goes through exactly the code path a reaction goes
+# through, and the two cannot disagree about what a pattern means.
+#
+# COLUMNS
+#   name        the chemist's shorthand, `<what it protects>_<the group>`.  `deprotect()` selects by it.
+#   protects    hydroxyl | diol | amine | thiol | carbonyl | carboxyl, comma-joined when a row reveals
+#               two things at once.  Checked against the kept atoms' elements by test_protective.py, so
+#               it is a claim the table verifies rather than a label.
+#   smarts      the reactant side: the protected group, with `:1` on the atom being unmasked (and
+#               `:2`.. on the others a multi-atom keep needs).
+#   product     the patch.  Usually `[A:1]` -- keep that one atom, delete everything else.  A row that
+#               keeps several atoms must RESTATE EVERY BOND BETWEEN THEM: a reactant bond whose two
+#               endpoints both survive is deleted unless the product side says it again, so `[A:1][A:2]`
+#               on a four-atom keep hands back fragments.
+#   protected   a worked example this row must match.
+#   cleaved     what it must turn `protected` into.  The pair is an acceptance test, not a comment.
+#   decoys      SMILES this row must NOT match, comma-joined.  Where a pattern was widened once and
+#               went too far, the thing it wrongly caught lives here.
+#
+# THE EXAMPLES ARE WRITTEN AROMATIZED AND STANDARDIZED, because the queries are: a pattern saying
+# `[C;a]:[C;a]` does not match a ring spelled `C1=CC=C...`, and one saying `[N+](=O)[O-]` does not match a
+# neutral nitro.  The same fact stated forwards for a caller: `deprotect()` sees an aromatic protecting
+# group only after `thiele()` has run, because that is when the molecule acquires the aromatic bonds the
+# query asks for.
+#
+# ORDER IN THIS FILE DOES NOT MATTER.  The loader sorts by reactant atom count descending, so the more
+# specific pattern always gets the site first -- `hydroxyl_tbu` matches the tert-butyl half of a Boc and
+# would strip it to a carbonate if it got there first -- and a row may be added anywhere.  Two rows of
+# equal size fall back to this order.
+#
+id	name	protects	smarts	product	protected	cleaved	decoys	description
+1	hydroxyl_thiocarbamate	hydroxyl	[O;D2:1]-;!@[C;x3;z2](=[S;D1])[N;D3;x0]([C;D1])[C;D1]	[A:1]	S=C(OC(C)C)N(C)C	C(C)(O)C		N,N-dimethylthiocarbamate, revealing an alcohol
+2	hydroxyl_fmoc	hydroxyl	[O;D2:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;x1;z1][C;D3;z1;x0;r5]1[C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2-[C;a;r6]:3:[C;D2]:[C;D2]:[C;D2]:[C;D2]:C1:3	[A:1]	c1cc2-c3ccccc3C(c2cc1)COC(=O)OC(C)C	C(C)(O)C		9-fluorenylmethyloxycarbonyl, revealing an alcohol
+3	hydroxyl_troc	hydroxyl	[O;D2:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2][C;D4;x3]([Cl;D1])([Cl;D1])[Cl;D1]	[A:1]	O(C(OC(C)C)=O)CC(Cl)(Cl)Cl	C(C)(O)C		2,2,2-trichloroethoxycarbonyl, revealing an alcohol
+4	hydroxyl_teoc	hydroxyl	[O;D2:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;z1;x1][C;D2;x1;z1][Si;D4;z1;x0]([C;D1])([C;D1])[C;D1]	[A:1]	O(C(OC(C)C)=O)CC[Si](C)(C)C	C(C)(O)C		2-(trimethylsilyl)ethoxycarbonyl, revealing an alcohol
+5	hydroxyl_alloc	hydroxyl	[O;D2:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]	[A:1]	O(CC=C)C(OC(C)C)=O	C(C)(O)C		allyloxycarbonyl, revealing an alcohol
+6	hydroxyl_tms	hydroxyl	[O;D2:1]-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D1]	[A:1]	CC(O[Si](C)(C)C)C	C(C)(O)C	CC(O[SiH](C)C)C,CC(O[Si](C)(OC)C)C,O([Si](CC)(C)C)C(C)C	trimethylsilyl, revealing an alcohol
+7	hydroxyl_tes	hydroxyl	[O;D2:1]-;!@[Si;D4;z1;x1]([C;D2;x1;z1][C;D1])([C;D2;x1;z1][C;D1])[C;D2;x1;z1][C;D1]	[A:1]	C([Si](OC(C)C)(CC)CC)C	C(C)(O)C	CC(O[SiH](C)C)C,CC(O[Si](C)(OC)C)C	triethylsilyl, revealing an alcohol
+8	hydroxyl_tbs	hydroxyl	[O;D2:1]-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]	[A:1]	CC(O[Si](C)(C(C)(C)C)C)C	C(C)(O)C	CC(O[SiH](C)C)C,CC(O[Si](C)(OC)C)C	tert-butyldimethylsilyl, revealing an alcohol
+9	hydroxyl_tips	hydroxyl	[O;D2:1]-;!@[Si;D4;z1;x1]([C;D3;z1;x1]([C;D1])[C;D1])([C;D3;z1;x1]([C;D1])[C;D1])[C;D3;z1;x1]([C;D1])[C;D1]	[A:1]	O([Si](C(C)C)(C(C)C)C(C)C)C(C)C	C(C)(O)C	CC(O[SiH](C)C)C,CC(O[Si](C)(OC)C)C	triisopropylsilyl, revealing an alcohol
+10	hydroxyl_tbdps	hydroxyl	[O;D2:1]-;!@[Si;D4;z1;x1]([C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)([C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]	[A:1]	c1ccc(cc1)[Si](c1ccccc1)(C(C)(C)C)OC(C)C	C(C)(O)C	CC(O[SiH](C)C)C,c1cc([Si](c2ccccc2)(C(C)(C)C)OC(C)C)ccc1C	tert-butyldiphenylsilyl, revealing an alcohol
+11	hydroxyl_o_nitrobenzyl	hydroxyl	[O;D2:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1ccc(COC(C)C)c([N+](=O)[O-])c1	C(C)(O)C	[O-][N+](=O)c1c(C(OC(C)C)OC)cccc1	ortho-nitrobenzyl, revealing an alcohol
+12	hydroxyl_methoxy_benzyl	hydroxyl	[O;D2:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1	[A:1]	O(Cc1ccc(OC)cc1)C(C)C	C(C)(O)C	CCOc1ccc(COC(C)C)cc1,O(c1cccc(COC(C)C)c1)C	4-methoxybenzyl (PMB), revealing an alcohol
+13	hydroxyl_dimethoxybenzyl	hydroxyl	[O;D2:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1	[A:1]	c1cc(COC(C)C)c(OC)cc1OC	C(C)(O)C		2,4-dimethoxybenzyl (DMB), revealing an alcohol
+14	hydroxyl_naphthyl	hydroxyl	[O;D2:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D3]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2:[C;D2]:[C;D2]:1	[A:1]	c1c2ccccc2ccc1COC(C)C	C(C)(O)C	c1(ccccc1)COC(C)C	2-naphthylmethyl, revealing an alcohol
+15	hydroxyl_bom	hydroxyl	[O;D2:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1cccc(COCOC(C)C)c1	C(C)(O)C		benzyloxymethyl, revealing an alcohol
+16	hydroxyl_piv	hydroxyl	[O;D2:1]-;!@[C;z2;x2](=O)-[C;D4;x0;z1]([C;D1])([C;D1])[C;D1]	[A:1]	CC(OC(C(C)(C)C)=O)C	C(C)(O)C		pivaloyl, revealing an alcohol
+17	hydroxyl_methoxy_benzoate	hydroxyl	[O;D2:1]-;!@[C;z2;x2](=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1	[A:1]	COc1ccc(C(OC(C)C)=O)cc1	C(C)(O)C	O=C(OC(C)C)c1ccccc1	4-methoxybenzoyl (anisoyl), revealing an alcohol
+18	hydroxyl_benzoate	hydroxyl	[O;D2:1]-;!@[C;z2;x2](=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	O=C(OC(C)C)c1ccccc1	C(C)(O)C	COc1ccc(C(OC(C)C)=O)cc1	benzoyl, revealing an alcohol
+19	hydroxyl_tfa	hydroxyl	[O;D2:1]-;!@[C;z2;x2](=O)-[C;D4;z1;x3](F)(F)F	[A:1]	FC(C(OC(C)C)=O)(F)F	C(C)(O)C		trifluoroacetyl, revealing an alcohol
+20	hydroxyl_mom	hydroxyl	[O;D2:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D1]	[A:1]	C(OC(C)C)OC	C(C)(O)C	CC(OC)OC(C)C	methoxymethyl, revealing an alcohol
+21	hydroxyl_mem	hydroxyl	[O;D2:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][O;D2;x0][C;D1]	[A:1]	O(CCOCOC(C)C)C	C(C)(O)C		2-methoxyethoxymethyl, revealing an alcohol
+22	hydroxyl_thp	hydroxyl	[O;D2:1]-;!@[C;D3;x2;z1;r6]1[O;D2][C;D2][C;D2][C;D2][C;D2]1	[A:1]	C1CCCC(OC(C)C)O1	C(C)(O)C		tetrahydropyranyl, revealing an alcohol
+23	hydroxyl_ee	hydroxyl	[O;D2:1]-;!@[C;D3;x2;z1]([O;D2;x0][C;D2;x1;z1][C;D1])[C;D1]	[A:1]	O(CC)C(C)OC(C)C	C(C)(O)C	C(C)OC(OC(C)C)CC	1-ethoxyethyl, revealing an alcohol
+24	hydroxyl_mop	hydroxyl	[O;D2:1]-;!@[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])[C;D1]	[A:1]	C(OC(C)C)(OC)(C)C	C(C)(O)C		2-methoxyprop-2-yl, revealing an alcohol
+25	hydroxyl_sem	hydroxyl	[O;D2:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][Si;D4;z1;x0]([C;D1])([C;D1])[C;D1]	[A:1]	C(C[Si](C)(C)C)OCOC(C)C	C(C)(O)C		2-(trimethylsilyl)ethoxymethyl, revealing an alcohol
+26	hydroxyl_tritil	hydroxyl	[O;D2:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1ccccc1C(OC(C)C)(c1ccccc1)c1ccccc1	C(C)(O)C	c1cccc(C(c2ccc(OC)cc2)(c2ccc(cc2)OC)OC(C)C)c1	triphenylmethyl (trityl), revealing an alcohol
+27	hydroxyl_dimetoxy_tritil	hydroxyl	[O;D2:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1cccc(C(c2ccc(OC)cc2)(c2ccc(cc2)OC)OC(C)C)c1	C(C)(O)C	c1ccccc1C(OC(C)C)(c1ccccc1)c1ccccc1	4,4′-dimethoxytrityl (DMT), revealing an alcohol
+28	hydroxyl_chloro_tritil	hydroxyl	[O;D2:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D3;x1]([Cl;D1]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	C(C)(OC(c1ccccc1)(c1ccccc1Cl)c1ccccc1)C	C(C)(O)C		2-chlorotrityl, revealing an alcohol
+29	hydroxyl_mmt	hydroxyl	[O;D2:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1c(OC)ccc(C(c2ccccc2)(OC(C)C)c2ccccc2)c1	C(C)(O)C	c1ccccc1C(OC(C)C)(c1ccccc1)c1ccccc1	4-methoxytrityl (MMT), revealing an alcohol
+30	hydroxyl_mpe	hydroxyl	[O;D2:1]-;!@[C;D4;x1;z1]([C;D1])([C;D2;x0;z1][C;D1])[C;D2;x0;z1][C;D1]	[A:1]	CC(CC)(CC)OC(C)C	C(C)(O)C		4-methoxyphenylethyl, revealing an alcohol
+31	hydroxyl_trifluoroethyl	hydroxyl	[O;D2:1]-;!@[C;D2;x1;z1][C;D4;x3;z1](F)(F)F	[A:1]	C(COC(C)C)(F)(F)F	C(C)(O)C		2,2,2-trifluoroethyl, revealing an alcohol
+32	hydroxyl_dmab_enamine	hydroxyl	[O;D2:1]-;!@[C;D2;x1;z1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1](:[C;D2]:[C;D2]:1)-[N;D2;x0;z1]-[C;z2;x1;D3]([C;D2;x0;z1][C;D3;x0;z1]([C;D1])[C;D1])=[C;D3;r6;x0;z2]1[C;x1;z2;D3](=O)[C;D2][C;D4;x0;z1]([C;D1])([C;D1])[C;D2][C;D3;x1;z2]1=O	[A:1]	C(C)(C)CC(Nc1ccc(cc1)COC(C)=O)=C1C(=O)CC(CC1=O)(C)C	C(C)(=O)O		Dmab, as the enamine tautomer, revealing an alcohol
+33	hydroxyl_dmab_imine	hydroxyl	[O;D2:1]-;!@[C;D2;x1;z1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1](:[C;D2]:[C;D2]:1)-[N;D2;x0;z2]=[C;x1;D3]([C;D2;x0;z1][C;D3;x0;z1]([C;D1])[C;D1])-[C;D3;r6;x0;z1]1[C;x1;z2;D3](=O)[C;D2][C;D4;x0;z1]([C;D1])([C;D1])[C;D2][C;D3;x1;z2]1=O	[A:1]	c1c(ccc(c1)COC(=O)C)N=C(CC(C)C)C1C(=O)CC(C)(CC1=O)C	C(C)(=O)O		Dmab, as the imine tautomer, revealing an alcohol
+34	diol_12_acetone	diol	[O;D2;x0;r5:1]1-;@[C;D4;x2;z1]([C;D1])([C;D1])-[O;D2;x0:2][C:3]-[C:4]1	[A:1][A:4][A:3][A:2]	O1CC(OC1(C)C)C	OC(C)CO		acetonide (isopropylidene acetal), revealing a 1,2-diol
+35	diol_13_acetone	diol	[O;D2;x0;r6:1]1-;@[C;D4;x2;z1]([C;D1])([C;D1])-[O;D2;x0:2][C:3][C:4]-[C:5]1	[A:1][A:5][A:4][A:3][A:2]	O1C(OC(CC1)C)(C)C	C(CC(O)C)O		acetonide (isopropylidene acetal), revealing a 1,3-diol
+36	hydroxyl_amine_acetone	hydroxyl,amine	[O;D2;x0;r5:1]1-;@[C;D4;x2;z1]([C;D1])([C;D1])-[N;z1:2][C:3]-[C:4]1	[A:1][A:4][A:3][A:2]	N1(C(C)=O)C(C)(OC(C1)C)C	O=C(NCC(O)C)C		acetonide across the amino alcohol, revealing an amino alcohol
+37	diol_12_formalin	diol	[O;D2;x0;r5:1]1-;@[C;D2;x2;z1]-[O;D2;x0:2][C:3]-[C:4]1	[A:1][A:4][A:3][A:2]	C1OC(C)CO1	OC(C)CO		methylene acetal, revealing a 1,2-diol
+38	diol_13_formalin	diol	[O;D2;x0;r6:1]1-;@[C;D2;x2;z1]-[O;D2;x0:2][C:3][C:4]-[C:5]1	[A:1][A:5][A:4][A:3][A:2]	C1CC(OCO1)C	C(CC(O)C)O		methylene acetal, revealing a 1,3-diol
+39	diol_12_cyclopentanone	diol	[O;D2;x0;r5:1]1-;@[C;D4;x2;z1]2([C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1]2)-[O;D2;x0:2][C:3]-[C:4]1	[A:1][A:4][A:3][A:2]	C1CCC2(OC(CO2)C)C1	OC(C)CO		cyclopentylidene acetal, revealing a 1,2-diol
+40	diol_13_cyclopentanone	diol	[O;D2;x0;r6:1]1-;@[C;D4;x2;z1]2([C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1]2)-[O;D2;x0:2][C:3][C:4]-[C:5]1	[A:1][A:5][A:4][A:3][A:2]	O1C2(OC(CC1)C)CCCC2	C(CC(O)C)O		cyclopentylidene acetal, revealing a 1,3-diol
+41	diol_12_cyclohexanone	diol	[O;D2;x0;r5:1]1-;@[C;D4;x2;z1]2([C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1]2)-[O;D2;x0:2][C:3]-[C:4]1	[A:1][A:4][A:3][A:2]	C1C2(CCCC1)OCC(C)O2	OC(C)CO		cyclohexylidene acetal, revealing a 1,2-diol
+42	diol_13_cyclohexanone	diol	[O;D2;x0;r6:1]1-;@[C;D4;x2;z1]2([C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1][C;D2;x0;z1]2)-[O;D2;x0:2][C:3][C:4]-[C:5]1	[A:1][A:5][A:4][A:3][A:2]	C1CCCC2(OCCC(C)O2)C1	C(CC(O)C)O		cyclohexylidene acetal, revealing a 1,3-diol
+43	diol_12_diacetal	diol	[O;D2;x0;r6:1]1-;@[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])-[O;D2;x0:2][C:3]-[C:4]1	[A:1][A:4][A:3][A:2]	O(C)C1(C)OC(C)COC1(OC)C	OC(C)CO		butane-2,3-diacetal (BDA), revealing a 1,2-diol
+44	diol_13_diacetal	diol	[O;D2;x0;r7:1]1-;@[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])[C;D4;x2;z1]([O;D2;x0][C;D1])([C;D1])-[O;D2;x0:2][C:3][C:4]-[C:5]1	[A:1][A:5][A:4][A:3][A:2]	CC1OC(OC)(C)C(OCC1)(OC)C	C(CC(O)C)O		butane-2,3-diacetal (BDA), revealing a 1,3-diol
+45	diol_12_benzylidene	diol	[O;D2;x0;r5:1]1-;@[C;D3;x2;z1]([C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)-[O;D2;x0:2][C:3]-[C:4]1	[A:1][A:4][A:3][A:2]	C1(OC(OC1)c1ccccc1)C	OC(C)CO		benzylidene acetal, revealing a 1,2-diol
+46	diol_13_benzylidene	diol	[O;D2;x0;r6:1]1-;@[C;D3;x2;z1]([C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2)-[O;D2;x0:2][C:3][C:4]-[C:5]1	[A:1][A:5][A:4][A:3][A:2]	c1ccccc1C1OCCC(C)O1	C(CC(O)C)O		benzylidene acetal, revealing a 1,3-diol
+47	carbonyl_dithiolane	carbonyl	[C;D3,D4;z1;x2;r5:1]1[S;D2;x0;z1][C;D2;x1;z1][C;D2;x1;z1][S;D2;x0;z1]1	[A:1]=O	S1C(SCC1)C	C(C)=O		1,3-dithiolane, revealing a ketone or aldehyde
+48	carbonyl_dithiane	carbonyl	[C;D3,D4;z1;x2;r6:1]1[S;D2;x0;z1][C;D2;x1;z1][C;D2;x0;z1][C;D2;x1;z1][S;D2;x0;z1]1	[A:1]=O	C1CSC(SC1)C	C(C)=O		1,3-dithiane, revealing a ketone or aldehyde
+49	carbonyl_dimethylsulfide	carbonyl	[C;D3,D4;z1;x2:1](-;!@[S;D2][C;D1])-;!@[S;D2][C;D1]	[A:1]=O	S(C)C(CC)SC	C(CC)=O		bis(methylthio) acetal, revealing a ketone or aldehyde
+50	carbonyl_dioxolane	carbonyl	[C;D3,D4;z1;x2;r5:1]1[O;D2;x0][C;D2;x1;z1][C;D2;x1;z1][O;D2;x0]1	[A:1]=O	O1C(OCC1)C	C(C)=O		1,3-dioxolane, revealing a ketone or aldehyde
+51	carbonyl_dioxane	carbonyl	[C;D3,D4;z1;x2;r6:1]1[O;D2;x0][C;D2;x1;z1][C;D2;x0;z1][C;D2;x1;z1][O;D2;x0]1	[A:1]=O	C1COC(OC1)C	C(C)=O		1,3-dioxane, revealing a ketone or aldehyde
+52	carbonyl_dimethoxy	carbonyl	[C;D3,D4;z1;x2:1](-;!@[O;D2;x0][C;D1])-;!@[O;D2;x0][C;D1]	[A:1]=O	O(C(OC)C)C	C(C)=O		dimethyl acetal, revealing a ketone or aldehyde
+53	carboxyl_trioxabicyclooctane	carboxyl	[C;D4;x3;r6:1]12-;@[O;D2][C;D2;x1;z1][C;D4;x0;z1]([C;D1])([C;D2;x1;z1][O;D2]1)[C;D2;x1;z1][O;D2]2	[A:1](=O)O	O1CC2(COC1(C(C)C)OC2)C	C(C(C)C)(=O)O	C1C2(COC(O1)(OC2)C(C)C)CC,CC(C12OCC(C)(C(C)O2)CO1)C	OBO ester (2,6,7-trioxabicyclo[2.2.2]octane), revealing a carboxylic acid
+54	amine_methylcarbamate	amine	[N;D2,D3:1]-;!@[C;z2;x3](=O)[O;D2;x0][C;D1]	[A:1]	O(C(=O)Nc1ccccc1)C	c1c(N)cccc1	c1cc(ccc1)NC(=O)OCC	methyl carbamate, revealing an amine
+55	amine_ethylcarbamate	amine	[N;D2,D3:1]-;!@[C;z2;x3](=O)[O;D2;x0][C;D2;x1;z1][C;D1]	[A:1]	c1cc(ccc1)NC(=O)OCC	c1c(N)cccc1		ethyl carbamate, revealing an amine
+56	amine_alloc	amine	[N;D2,D3:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]	[A:1]	C(C=C)OC(Nc1ccccc1)=O	c1c(N)cccc1	c1cc(ccc1)NC(=O)OCC=CC	allyloxycarbonyl, revealing an amine
+57	amine_teoc	amine	[N;D2,D3:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;z1;x1][C;D2;x1;z1][Si;D4;z1;x0]([C;D1])([C;D1])[C;D1]	[A:1]	c1cccc(NC(=O)OCC[Si](C)(C)C)c1	c1c(N)cccc1		2-(trimethylsilyl)ethoxycarbonyl, revealing an amine
+58	amine_sem	amine	[N;D2,D3:1]-;!@[C;D2;x2;z1][O;D2;x0]-[C;D2;z1;x1][C;D2;x1;z1][Si;D4;z1;x0]([C;D1])([C;D1])[C;D1]	[A:1]	N(C)(COCC[Si](C)(C)C)C	CNC		2-(trimethylsilyl)ethoxymethyl, revealing an amine
+59	amine_troc	amine	[N;D2,D3:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2][C;D4;x3]([Cl;D1])([Cl;D1])[Cl;D1]	[A:1]	ClC(Cl)(COC(Nc1ccccc1)=O)Cl	c1c(N)cccc1	ClC(C(OC(Nc1ccccc1)=O)C)(Cl)Cl	2,2,2-trichloroethoxycarbonyl, revealing an amine
+60	amine_cbz	amine	[N;D2,D3:1]-;!@[C;z2;x3](=O)-[O;D2;x0][C;D2;x1;z1][C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1ccccc1COC(Nc1ccccc1)=O	c1c(N)cccc1	O(C(=O)Nc1ccccc1)C(C)c1ccccc1	benzyloxycarbonyl (Cbz/Z), revealing an amine
+61	amine_chloro_cbz	amine	[N;D2,D3:1]-;!@[C;z2;x3](=O)-[O;D2;x0][C;D2;x1;z1][C;a;r6]:1:[C;D3;x1]([Cl;D1]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1(c(cccc1)COC(Nc1ccccc1)=O)Cl	c1c(N)cccc1	O(C(=O)Nc1ccccc1)C(C)c1ccccc1	4-chlorobenzyloxycarbonyl, revealing an amine
+62	amine_phenylsulfonyl	amine	[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1ccccc1NS(c1ccccc1)(=O)=O	c1c(N)cccc1		benzenesulfonyl, revealing an amine
+63	amine_tosyl	amine	[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x0]([C;D1]):[C;D2]:[C;D2]:1	[A:1]	c1c(ccc(c1)S(Nc1ccccc1)(=O)=O)C	c1c(N)cccc1		4-toluenesulfonyl (Ts), revealing an amine
+64	amine_nosyl	amine	[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	O=S(=O)(Nc1ccccc1)c1ccccc1[N+]([O-])=O	c1c(N)cccc1		nitrobenzenesulfonyl (Ns), revealing an amine
+65	amine_boc	amine	[N;D2,D3:1]-;!@[C;z2;x3](=O)-[O;D2;x0]-[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]	[A:1]	C(OC(C)(C)C)(Nc1ccccc1)=O	c1c(N)cccc1		tert-butoxycarbonyl, revealing an amine
+66	amine_tfa	amine	[N;D2,D3:1]-;!@[C;z2;x2](=O)-[C;D4;z1;x3](F)(F)F	[A:1]	FC(C(NC)=O)(F)F	CN		trifluoroacetyl, revealing an amine
+67	amine_fmoc	amine	[N;D2,D3:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;x1;z1][C;D3;z1;x0;r5]1[C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2-[C;a;r6]:3:[C;D2]:[C;D2]:[C;D2]:[C;D2]:C1:3	[A:1]	c1-2c(C(c3ccccc-23)COC(=O)Nc2ccccc2)cccc1	c1c(N)cccc1		9-fluorenylmethyloxycarbonyl, revealing an amine
+68	amine_pbf	amine	[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D3;x0]([C;D1]):[C;D3;x0]([C;D1]):[C;D3;x1]:2-[O;D2;x0;r5][C;D4;x1]([C;D1])([C;D1])[C;D2;x0;z1][C;D3]:2:[C;D3;x0]([C;D1]):1	[A:1]	Cc1c2OC(Cc2c(C)c(c1C)S(=O)(N(C)C)=O)(C)C	CNC		2,2,4,6,7-pentamethyldihydrobenzofuran-5-sulfonyl, revealing an amine
+69	amine_mtr	amine	[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D3;x0]([C;D1]):[C;D3;x0]([C;D1]):[C;D3;x1](-;!@[O;D2;x0][C;D1]):[C;D2]:[C;D3;x0]([C;D1]):1	[A:1]	CN(S(c1c(C)cc(OC)c(c1C)C)(=O)=O)C	CNC		4-methoxy-2,3,6-trimethylbenzenesulfonyl, revealing an amine
+70	amine_dde_enamine	amine	[N;D2,D3:1]-;!@[C;z2;x1;D3]([C;D1])=[C;D3;r6;x0;z2]1[C;x1;z2;D3](=O)[C;D2][C;D4;x0;z1]([C;D1])([C;D1])[C;D2][C;D3;x1;z2]1=O	[A:1]	O=C1CC(C)(CC(=O)C1=C(NC(C)C)C)C	C(C)(N)C		Dde, as the enamine tautomer, revealing an amine
+71	amine_dde_imine	amine	[N;D2:1]=;!@[C;x1;D3]([C;D1])-[C;D3;r6;x0;z1]1[C;x1;z2;D3](=O)[C;D2][C;D4;x0;z1]([C;D1])([C;D1])[C;D2][C;D3;x1;z2]1=O	[A:1]	C1(=O)CC(C)(CC(=O)C1C(C)=NC(C)C)C	C(C)(N)C		Dde, as the imine tautomer, revealing an amine
+72	amine_ivdde_enamine	amine	[N;D2,D3:1]-;!@[C;z2;x1;D3]([C;D2;x0;z1][C;D3;x0;z1]([C;D1])[C;D1])=[C;D3;r6;x0;z2]1[C;x1;z2;D3](=O)[C;D2][C;D4;x0;z1]([C;D1])([C;D1])[C;D2][C;D3;x1;z2]1=O	[A:1]	C1(CC(CC(C1=C(CC(C)C)NC(C)C)=O)(C)C)=O	C(C)(N)C		ivDde, as the enamine tautomer, revealing an amine
+73	amine_ivdde_imine	amine	[N;D2:1]=;!@[C;x1;D3]([C;D2;x0;z1][C;D3;x0;z1]([C;D1])[C;D1])-[C;D3;r6;x0;z1]1[C;x1;z2;D3](=O)[C;D2][C;D4;x0;z1]([C;D1])([C;D1])[C;D2][C;D3;x1;z2]1=O	[A:1]	CC(CC(C1C(=O)CC(CC1=O)(C)C)=NC(C)C)C	C(C)(N)C		ivDde, as the imine tautomer, revealing an amine
+74	amine_phth	amine	[N;D3:1]1[C;z2;x2;D3](=O)[C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2[C;z2;x2;D3]1=O	[A:1]	O=C1N(Cc2ccccc2)C(=O)c2ccccc21	c1cc(CN)ccc1		phthalimide, revealing an amine
+75	amine_benzyl	amine	[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1(ccccc1)CNC(C)C	C(C)(N)C		benzyl, revealing an amine
+76	amine_methoxy_benzyl	amine	[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1	[A:1]	c1(CNC(C)C)ccc(cc1)OC	C(C)(N)C		4-methoxybenzyl (PMB), revealing an amine
+77	amine_dimethoxybenzyl	amine	[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1	[A:1]	COc1c(CNC(C)C)ccc(OC)c1	C(C)(N)C		2,4-dimethoxybenzyl (DMB), revealing an amine
+78	amine_mtt	amine	[N;D2,D3:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x0]([C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1ccc(cc1)C(c1ccc(cc1)C)(c1ccccc1)NC(C)C	C(C)(N)C		4-methyltrityl (Mtt), revealing an amine
+79	amine_bhoc	amine	[N;D2,D3:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D3;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	N(C(OC(c1ccccc1)c1ccccc1)=O)C	CN		benzhydryloxycarbonyl, revealing an amine
+80	amine_tritil	amine	[N;D2,D3:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1ccccc1C(NC(C)C)(c1ccccc1)c1ccccc1	C(C)(N)C		triphenylmethyl (trityl), revealing an amine
+81	amine_chloro_tritil	amine	[N;D2,D3:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D3;x1]([Cl;D1]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	C(C)(NC(c1ccccc1)(c1ccccc1Cl)c1ccccc1)C	C(C)(N)C		2-chlorotrityl, revealing an amine
+82	amine_thp	amine	[N;D2,D3:1]-;!@[C;D3;x2;z1;r6]1[O;D2][C;D2][C;D2][C;D2][C;D2]1	[A:1]	C1OC(n2nccc2)CCC1	n1[nH]ccc1		tetrahydropyranyl, revealing an amine
+83	amine_sulfinyl	amine	[N;D2,D3:1]-;!@[S;D3;x2;z2](=O)[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]	[A:1]	c1ccc(cc1)NS(=O)C(C)(C)C	c1c(N)cccc1		tert-butanesulfinyl, revealing an amine
+84	amine_acyl	amine	[N;D2,D3:1]-;!@[C;z2;x2](=O)-[C;D1]	[A:1]	c1ccc(NC(=O)C)cc1	c1c(N)cccc1		acetyl, revealing an amine
+85	amine_benzhydrylidene	amine	[N;D2:1]=;!@[C;D3;z2;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2	[A:1]	c1cc(ccc1)N=C(c1ccccc1)c1ccccc1	c1c(N)cccc1		benzhydrylidene (benzophenone imine), revealing an amine
+86	amine_tbu	amine	[N;D2,D3:1]-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]	[A:1]	c1cccc(NC(C)(C)C)c1	c1c(N)cccc1		tert-butyl, revealing an amine
+87	amine_benzoate	amine	[N;D2,D3:1]-;!@[C;z2;x2](=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1cccc(NC(c2ccccc2)=O)c1	c1c(N)cccc1		benzoyl, revealing an amine
+88	thiol_tritil	thiol	[S;D2;x0;z1:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1ccccc1C(SC(C)C)(c1ccccc1)c1ccccc1	C(C)(S)C		triphenylmethyl (trityl), revealing a thiol
+89	thiol_mmt	thiol	[S;D2;x0;z1:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1ccccc1C(c1ccccc1)(SC(C)C)c1ccc(cc1)OC	C(C)(S)C		4-methoxytrityl (MMT), revealing a thiol
+90	thiol_dimetoxy_tritil	thiol	[S;D2;x0;z1:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1cc(ccc1OC)C(c1ccc(cc1)OC)(SC(C)C)c1ccccc1	C(C)(S)C		4,4′-dimethoxytrityl (DMT), revealing a thiol
+91	thiol_chloro_tritil	thiol	[S;D2;x0;z1:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D3;x1]([Cl;D1]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	C(C)(SC(c1ccccc1)(c1ccccc1Cl)c1ccccc1)C	C(C)(S)C		2-chlorotrityl, revealing a thiol
+92	thiol_benzyl	thiol	[S;D2;x0;z1:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1(ccccc1)CSC(C)C	C(C)(S)C		benzyl, revealing a thiol
+93	thiol_tbu	thiol	[S;D2;x0;z1:1]-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]	[A:1]	C(SC(C)C)(C)(C)C	C(C)(S)C		tert-butyl, revealing a thiol
+94	thiol_stbu	thiol	[S;D2;x1;z1:1]-;!@[S;D2;z1;x1]-[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]	[A:1]	S(C(C)(C)C)SC(C)C	C(C)(S)C		tert-butyl disulfide, revealing a thiol
+95	thiol_strimethoxyphenyl	thiol	[S;D2;x1;z1:1]-;!@[S;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]:1[O;D2;x0][C;D1]	[A:1]	O(c1c(SSC(C)C)c(OC)cc(OC)c1)C	C(C)(S)C		2,4,6-trimethoxyphenyl disulfide, revealing a thiol
+96	thiol_amine_dimethoxybenzyl	thiol,amine	[S;D2;r5;x0;z1:1]1[C:3][C:4][N;z1:2]-[C;D3;x2;z1]1-[C;a;r6]:1:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1	[A:1][A:3][A:4][A:2]	O(c1cc(ccc1C1SCC(C)N1)OC)C	C(CS)(C)N		2,4-dimethoxybenzylidene across the aminothiol, revealing an aminothiol
+97	hydroxyl_boc	hydroxyl	[O;D2:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]	[A:1]	C(OC(OC(C)C)=O)(C)(C)C	C(C)(O)C		tert-butoxycarbonyl, revealing an alcohol
+98	hydroxyl_tbu	hydroxyl	[O;D2:1]-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]	[A:1]	C(OC(C)C)(C)(C)C	C(C)(O)C		tert-butyl, revealing an alcohol
+99	hydroxyl_allyl	hydroxyl	[O;D2:1]-;!@[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]	[A:1]	C(COC(C)C)=C	C(C)(O)C		allyl, revealing an alcohol
+100	hydroxyl_benzyl	hydroxyl	[O;D2:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	c1(ccccc1)COC(C)C	C(C)(O)C	c1(cccc(c1)COC(C)C)C,c1cc(ccc1)C(C)OC(C)C	benzyl, revealing an alcohol
+101	hydroxyl_acyl	hydroxyl	[O;D2:1]-;!@[C;z2;x2](=O)-[C;D1]	[A:1]	CC(OC(C)=O)C	C(C)(O)C	O(C(=O)CC)C(C)C	acetyl, revealing an alcohol
+102	hydroxyl_methyl	hydroxyl	[O;D2:1]-;!@[C;D1]	[A:1]	CC(OC)C	C(C)(O)C	C(C)OC(C)C	methyl, revealing an alcohol
+103	hydroxyl_ethyl	hydroxyl	[O;D2:1]-;!@[C;D2;z1;x1]-[C;D1]	[A:1]	C(C)OC(C)C	C(C)(O)C		ethyl, revealing an alcohol

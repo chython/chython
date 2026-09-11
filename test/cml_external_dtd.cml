@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A CML 1 document with an EXTERNAL-only DOCTYPE, which is the shape a real 1990s CML file
+     has. It must be READ, not refused: nothing in this package ever fetches a URL, so the
+     external DTD is unreachable by construction and no entity it declares could be defined
+     anyway. The declaration is blanked in place - byte offsets preserved, so a later parse
+     error still points at the right column - and one log line says so.
+
+     This is the file that stops the entity policy from being "refuse every DOCTYPE", which
+     would refuse documents we can read perfectly. Compare test/cml_entity_bomb.cml, which
+     has an internal subset and is refused. -->
+<!DOCTYPE molecule SYSTEM "http://www.xml-cml.org/dtd/cml.dtd">
+<molecule id="m1" title="methanol">
+  <atomArray>
+    <stringArray builtin="atomID">a1 a2</stringArray>
+    <stringArray builtin="elementType">C O</stringArray>
+    <floatArray builtin="x2">0.00 0.87</floatArray>
+    <floatArray builtin="y2">0.00 0.50</floatArray>
+  </atomArray>
+  <bondArray>
+    <stringArray builtin="atomRef1">a1</stringArray>
+    <stringArray builtin="atomRef2">a2</stringArray>
+    <stringArray builtin="order">1</stringArray>
+  </bondArray>
+</molecule>

@@ -1,0 +1,141 @@
+name: Test
+
+# The suite on every push and pull request.  Free: this repository is public, so standard runners --
+# including Linux arm64, macOS and Windows -- carry no minute charge.
+#
+# `python-package.yml` publishes and runs only on `release: published`, which meant nothing checked a
+# commit.  The two files divide by question: that one asks whether the artifacts are right, this one
+# whether the code is.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same ref makes the first run's answer stale, so it is cancelled rather than
+# finished.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash                                    # one quoting dialect; the runners all provide it
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Every row runs: the interesting failure is which rows differ, and the first one to fail would
+      # otherwise cancel exactly the comparison that identifies the cause.
+      fail-fast: false
+      matrix:
+        include:
+        # THE OLDEST AND NEWEST INTERPRETERS on the platform everything else is compared against.
+        - {os: ubuntu-24.04, python: "3.10"}
+        - {os: ubuntu-24.04, python: "3.14"}
+        # THE ARCH THAT IS NOT LIKE THE OTHERS.  Plain `char` is unsigned here and signed everywhere
+        # else, and the flags that reconcile that (`chython/test/test_release_build.py`) are asserted
+        # from a declaration; this row is what runs the assertions on the arch itself.
+        - {os: ubuntu-24.04-arm, python: "3.12"}
+        # ONE ROW PER TOOLCHAIN: clang with an Apple SDK, and MSVC.
+        - {os: macos-latest, python: "3.12"}
+        - {os: windows-latest, python: "3.12"}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true                           # INCHI, or every InChI test skips
+    - name: Set up CMake
+      uses: lukka/get-cmake@latest
+    - name: Set up Python ${{ matrix.python }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python }}
+        cache: pip
+        cache-dependency-path: pyproject.toml
+    - name: Install the build tools
+      # Named here rather than left to build isolation because the next step calls `setup.py` directly.
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install "cython>=3.1" "setuptools>=77" wheel
+    - name: Build in place
+      # `pytest chython/` imports the package out of the source tree, so the extension has to be there;
+      # an editable install alone leaves that to `editable_wheel`'s internals.  This is also what stages
+      # libinchi beside the extension, which `core/__init__.py` loads relative to its own `__file__`.
+      run: python setup.py build_ext --inplace
+    - name: Install
+      # `--no-build-isolation` so this reuses the objects the step above compiled instead of compiling
+      # the translation unit a second time in an isolated environment.  The extras are the ones the
+      # suite reads: `ml` is numpy, without which the fingerprint and matrix tests skip, and `rdkit` is
+      # the differential oracle in `formats/test/oracles.py`.
+      run: python -m pip install -e ".[ml,rdkit]" --group dev --no-build-isolation
+    - name: Confirm libinchi loaded
+      # A LOUD FAILURE FOR A SILENT ONE.  Without the library about a hundred tests skip and the suite
+      # still passes, so a broken staging step or a missing submodule reads as green.
+      run: |
+        python -c "from chython import inchi_library_loaded; assert inchi_library_loaded(), 'libinchi did not load'"
+    - name: Test
+      # `test_performance.py` asserts RATIOS against RDKit, which is the right discipline for a
+      # developer's machine and still not one for a shared runner whose neighbour decides the numbers.
+      # It is a benchmark, run by hand; nothing else in the suite is timing-sensitive.
+      run: python -m pytest chython/ -q --deselect chython/test/test_performance.py
+
+  oracles:
+    # THE SAME SUITE WITH THE DIFFERENTIAL ORACLES, on one row and by itself: measured, they turn 584
+    # skips into tests and the run from 3m15s into 17m41s.  Paying that on all five rows would make the
+    # answer to "did I break the build" arrive five times later, so the matrix above stays the fast
+    # signal and this job runs beside it.
+    #
+    # `extra-clean2d` and `extra-clean3d` by name rather than their members, so the CI cannot drift from
+    # what a user installing them gets.  jpype comes with the first and its 63 tests still skip, needing
+    # a JChem jar that is licensed and not here; `CHYTHON_CDK_JAR` is unset, so 219 CDK comparisons skip
+    # too.
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Set up CMake
+      uses: lukka/get-cmake@latest
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: pip
+        cache-dependency-path: pyproject.toml
+    - name: Install the build tools
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install "cython>=3.1" "setuptools>=77" wheel
+    - name: Build in place
+      run: python setup.py build_ext --inplace
+    - name: Install
+      run: |
+        python -m pip install -e ".[ml,rdkit,extra-clean2d,extra-clean3d]" --group dev --no-build-isolation
+    - name: Confirm libinchi loaded
+      run: |
+        python -c "from chython import inchi_library_loaded; assert inchi_library_loaded(), 'libinchi did not load'"
+    - name: Test, under coverage
+      # THE README BADGE'S NUMBER COMES FROM THIS JOB, because this is the run where nothing skips for a
+      # missing toolkit: on a fast-matrix row `interop/_indigo.py` would read as uncovered rather than as
+      # never imported.  What it measures and what it omits are in `[tool.coverage]` in pyproject.toml,
+      # so the number is reproducible from a checkout.  Measured cost of the wrapper on this suite: 245s
+      # against 186s, about a third, paid on the job that is already the slow one.
+      run: |
+        python -m coverage run -m pytest chython/ -q --deselect chython/test/test_performance.py
+        python -m coverage report
+        python -m coverage xml
+    - name: Upload coverage
+      # Only from this repository -- a fork has no project to upload to -- and never fatal: a badge that
+      # went stale is not the suite going red, and the step above already asserted the suite.
+      if: github.repository == 'chython/chython'
+      uses: codecov/codecov-action@v5
+      with:
+        files: coverage.xml
+        fail_ci_if_error: false
+        # REQUIRED for the badge.  Codecov allows a tokenless upload from a pull request, including a
+        # fork's, but refuses one to the default branch -- `Token required because branch is protected`,
+        # which is its own rule and not GitHub's branch protection.  Unset, the badge reads `unknown`
+        # while this step still reports success, so the number's absence is read here and not in CI.
+        token: ${{ secrets.CODECOV_TOKEN }}

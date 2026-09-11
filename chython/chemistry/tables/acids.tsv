@@ -1,0 +1,37 @@
+# The acid/base endpoint collection: which charged atoms can give a proton away and which can take one.
+# Read by chython/chemistry/_tables.py, applied by chython/chemistry/_protomers.py.
+#
+# EVERY ROW IS A CHARGED SITE.  An `acid` row matches a cation holding an implicit hydrogen, a `base` row
+# an anion that can take one, and both ends come back NEUTRAL -- that is the whole of neutralize().  A
+# neutral acid (phenol, carboxylic acid) and a neutral base (amine, pyridine) are not here: protonating or
+# deprotonating one CREATES charge, which is `enumerate_charged_forms`' question and not this one.
+#
+# COLUMNS
+#   id       the row's stable identity; it travels in every log record, so a report names a pattern.
+#   role     `acid` (the proton comes off the `:1` atom) or `base` (the proton goes onto it).
+#   smarts   chython SMARTS.  The endpoint is the atom mapped `:1` and every row maps exactly one.
+#   probe    a SMILES the pattern MUST match, checked by chython/chemistry/test/test_acids_tsv.py.  A
+#            pattern matching nothing is invisible: the pass just stops recognizing that site.
+#   comment  what the row claims.  Documentation only.
+#
+# `h` COUNTS IMPLICIT HYDROGENS ONLY, so an `acid` row does not see `[N+]([H])([H])[H]` drawn with three
+# hydrogen ATOMS.  `implicify_hydrogens()` first; the pass says so in its docstring.
+#
+# AN UNSTATED CHARGE IS NEUTRAL, not "any charge", which is why nitrate has a row of its own: the anchor
+# oxygen's neighbour is `[N+]`, and `acids:alkoxide`'s `[C,N]` admits the neutral nitrogen alone.
+#
+# NO ROW ENCODES VALENCE.  `_protomers.py` puts the post-move state to `core.valence_check` and refuses the
+# site if the collection calls it a violation, so `[O-]` with no hydrogen is declined by the shared table
+# rather than by an `h` primitive here that would have to be right for every element in the list.
+id	role	smarts	probe	comment
+# --- acids: a cation with a proton to give ------------------------------------------------------- #
+acids:ammonium	acid	[N;+;h1,h2,h3,h4:1]	C[NH3+]	ammonium, iminium, amidinium, guanidinium, pyridinium: a cationic nitrogen holding an implicit hydrogen
+acids:oxonium	acid	[O,S,Se;+;h1,h2,h3:1]	C[OH2+]	oxonium, sulfonium, selenonium: a protonated chalcogen, including a protonated carbonyl
+# --- bases: an anion that can take one ----------------------------------------------------------- #
+acids:oxo-acid	base	[O,S,Se;D1;z1;-:1]-[C,N,P,S,Cl,Se,Br,I,Si]=O	CC(=O)[O-]	carboxylate, sulfonate, phosphate, perchlorate, nitrite and their S/Se analogues
+acids:thiophosphate	base	[O,S,Se;D1;-:1]-[P]=[S,Se]	COP(=S)([O-])OC	thio- and selenophosphate, which the oxo-acid row misses for want of a `=O`
+acids:alkoxide	base	[O,S,Se;D1;z1;-:1]-[C,N]	[O-]c1ccccc1	alkoxide, phenolate, thiolate, N-hydroxy anion
+acids:nitrate	base	[O;D1;z1;-:1]-[N+](-[O-])=O	[O-][N+](=O)[O-]	nitrate, drawn charge-separated as standardize() leaves it.  Both oxygens match; the second is refused by the overshoot guard, not by this row
+acids:amide	base	[N;D1,D2;z1;-:1]	CC(=O)[NH-]	amide, imide, sulfonamide and dialkylamide anions
+acids:halide	base	[F,Cl,Br,I;D0;-:1]	[Cl-]	a lone halide ion, the counterion of a hydrohalide salt
+acids:hydroxide	base	[O,S,Se;D0;-:1]	[OH-]	hydroxide, hydrosulfide and their Se analogue, as a lone ion

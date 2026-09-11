@@ -1,0 +1,33 @@
+# Hand-written PDBx/mmCIF, not an archive entry.
+#
+# What it demonstrates: `pdbx_PDB_model_num` states two models, and an NMR ensemble is a set of
+# alternative structures rather than one structure with its atoms duplicated -- so the reader must
+# yield two records, each holding its own model's atoms and its own copy of the stated bonds.
+data_TESTMODELS
+_entry.id   TESTMODELS
+#
+loop_
+_chem_comp_bond.comp_id
+_chem_comp_bond.atom_id_1
+_chem_comp_bond.atom_id_2
+_chem_comp_bond.value_order
+GLY N CA SING
+#
+loop_
+_atom_site.group_PDB
+_atom_site.id
+_atom_site.type_symbol
+_atom_site.label_atom_id
+_atom_site.label_alt_id
+_atom_site.label_comp_id
+_atom_site.label_asym_id
+_atom_site.label_seq_id
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+_atom_site.pdbx_PDB_model_num
+ATOM 1 N N  . GLY A 1 0.000 0.000 0.000 1
+ATOM 2 C CA . GLY A 1 1.450 0.000 0.000 1
+ATOM 3 N N  . GLY A 1 0.100 0.050 0.020 2
+ATOM 4 C CA . GLY A 1 1.470 0.030 0.010 2
+#

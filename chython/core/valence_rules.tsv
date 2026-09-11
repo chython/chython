@@ -1,0 +1,1089 @@
+# The valence rule collection.  THIS FILE IS THE AUTHORITY; the C tables in _valence.pxi are
+# compiled from it by `python chython/core/test/gen_valence_rules.py compile`.
+#
+# It answers a question about a MOLECULE -- is this a valence state chemistry is known to allow,
+# and how many hydrogens does it come with.  It is a collection of states that have been
+# observed, not a theory: it is neither complete nor ideal, it exists to catch bad input, and it
+# improves by adding rows with evidence behind them.  Nothing in chython may REJECT a structure
+# because of a verdict from this file.
+#
+# It is NOT the model that decides how many hydrogens a bracketless SMILES atom implies.  That is
+# a question about a notation, its authority is the OpenSMILES specification, and it lives in the
+# SMILES layer.  The two disagree on purpose -- a bare `S` with six single-bonded carbons is
+# legal SMILES implying zero hydrogens, and has no row here.  Merging them breaks both
+# directions; a test in each suite fails if anyone tries.
+#
+# ROW ORDER IS SEMANTICS, NOT COSMETICS.  Several rows can describe one `(element, charge,
+# radical, bonds)` key, and "how many hydrogens" answers with the FIRST of them that matches the
+# neighbourhood.  Rows are therefore stored in scan order: by key, and within a key `env=*` rows
+# before the rest.  `compile` reorders the file if it is not, and a test fails if a commit lands
+# it out of order.  Fifteen keys in the shipped data give different answers under a different
+# order, so this is load-bearing -- see test_row_order_within_a_key_is_observable.
+#
+# WHEN YOU ADD A ROW: an `env=*` row is consulted before every row with an environment at the
+# same key, so it will shadow them for the hydrogen count.  If you mean "only when X is present",
+# give it an environment.  "Is this legal" is unaffected -- that question accepts any matching
+# row, which is why the two are not each other's inverse.
+#
+# That ordering is also what lets the hydrogen count be precomputed into a dense table instead of
+# searched for, so `compile` refuses a file that breaks it, and refuses a row whose bonds, charge
+# or element leaves the extents the dense table covers (bonds 0..8, charge -4..4).  Widening those
+# is a one-line change in `gen_valence_rules.py`; it is guarded because it is a size change nobody
+# would otherwise notice.
+#
+# ALUMINIUM'S ROWS ARE NOT OUT OF ORDER -- DO NOT "FIX" THEM.  Nine elements carry both a hydride
+# ladder and a bare-atom row at one key.  Eight put the hydride first, so `[C]` is methane; Al puts
+# the bare atom first, which makes its ladder read as self-contradictory (nothing on it: 0 H, one
+# carbon on it: 2 H).  The difference is that Al is a METAL: a lone Al in a connectivity file is the
+# metal or its ion, while a substituted Al is an organoaluminium, where the hydride is ordinary and
+# load-bearing -- DIBAL-H is a two-coordinate aluminium with one.  A notation that means alane can
+# say so and is believed (`[AlH3]`); a file that states nothing is stating a metal.  Both readings
+# stay legal either way -- only the derived default differs, which is why this is an ordering
+# question at all.  Pinned by test_a_LONE_metal_is_the_metal_and_only_a_SUBSTITUTED_one_takes_hydrides.
+#
+# The same convention is why As Sb Ga In Tl Sn Pb Bi Po At have NO neutral hydride ladder: their
+# bare rows are metals, and a partially substituted one returns *unknown* rather than a guess, which
+# is reported and honest.  Filling those in needs a per-element valence default, and for exactly
+# these elements there are two -- R2Sn is a stannylene or R2SnH2, R-Tl is Tl(I) or Tl(III) -- so a
+# first-matching row there invents a compound.  Evidence first; this is not a gap to close by hand.
+#
+# Do not hand-edit `common` or `curated` rows: they are derived from chython 2 and a test
+# re-derives them.  Re-run `derive`, or add a row with a new provenance.
+
+element	charge	radical	bonds	implicit_h	env	provenance
+H	-1	0	0	0	*	curated
+H	0	0	1	0	*	common
+H	0	1	0	0	*	curated
+H	1	0	0	0	*	curated
+He	0	0	0	0	*	common
+Li	0	0	0	0	*	common
+Li	0	0	1	0	*	common
+Li	1	0	0	0	*	curated
+Be	0	0	0	0	*	common
+Be	0	0	2	0	*	common
+Be	2	0	0	0	*	curated
+B	-1	0	0	4	*	curated
+B	-1	0	1	3	*	curated
+B	-1	0	2	2	*	curated
+B	-1	0	3	1	*	curated
+B	-1	0	4	0	*	curated
+B	0	0	0	3	*	common
+B	0	0	0	0	*	curated
+B	0	0	1	2	*	common
+B	0	0	2	1	*	common
+B	0	0	3	0	*	common
+B	0	1	0	2	*	curated
+B	0	1	1	1	*	curated
+B	0	1	2	0	*	curated
+C	-1	0	0	3	*	curated
+C	-1	0	1	2	*	curated
+C	-1	0	2	1	*	curated
+C	-1	0	3	0	*	curated
+C	0	0	0	4	*	common
+C	0	0	0	0	*	curated
+C	0	0	1	3	*	common
+C	0	0	2	2	*	common
+C	0	0	3	1	*	common
+C	0	0	4	0	*	common
+C	0	1	0	3	*	curated
+C	0	1	1	2	*	curated
+C	0	1	2	1	*	curated
+C	0	1	3	0	*	curated
+C	1	0	0	3	*	curated
+C	1	0	1	2	*	curated
+C	1	0	2	1	*	curated
+C	1	0	3	0	*	curated
+N	-1	0	0	2	*	curated
+N	-1	0	1	1	*	curated
+N	-1	0	2	0	*	curated
+N	0	0	0	3	*	common
+N	0	0	1	2	*	common
+N	0	0	2	1	*	common
+N	0	0	3	0	*	common
+N	0	1	0	2	*	curated
+N	0	1	1	1	*	curated
+N	0	1	2	0	*	curated
+N	1	0	0	4	*	curated
+N	1	0	1	3	*	curated
+N	1	0	2	2	*	curated
+N	1	0	3	1	*	curated
+N	1	0	4	0	*	curated
+O	-2	0	0	0	*	curated
+O	-1	0	0	1	*	curated
+O	-1	0	1	0	*	curated
+O	0	0	0	2	*	common
+O	0	0	1	1	*	common
+O	0	0	2	0	*	common
+O	0	1	0	1	*	curated
+O	0	1	1	0	*	curated
+O	1	0	0	3	*	curated
+O	1	0	1	2	*	curated
+O	1	0	2	1	*	curated
+O	1	0	3	0	*	curated
+F	-1	0	0	0	*	curated
+F	0	0	0	1	*	common
+F	0	0	1	0	*	common
+Ne	0	0	0	0	*	common
+Na	0	0	0	0	*	common
+Na	0	0	1	0	*	common
+Na	1	0	0	0	*	curated
+Mg	0	0	0	0	*	common
+Mg	0	0	2	0	*	common
+Mg	1	0	1	0	-C	curated
+Mg	1	0	1	0	-O	curated
+Mg	1	0	1	0	-Br	curated
+Mg	1	0	1	0	-Cl	curated
+Mg	2	0	0	0	*	curated
+Al	-3	0	6	0	-F -F -F -F -F -F	curated
+Al	-1	0	0	4	*	curated
+Al	-1	0	1	3	*	curated
+Al	-1	0	2	2	*	curated
+Al	-1	0	3	1	*	curated
+Al	-1	0	4	0	*	curated
+Al	0	0	0	0	*	common
+Al	0	0	0	3	*	curated
+Al	0	0	1	2	*	curated
+Al	0	0	2	1	*	curated
+Al	0	0	3	0	*	curated
+Al	1	0	0	2	*	curated
+Al	1	0	1	1	*	curated
+Al	1	0	2	0	*	curated
+Al	2	0	0	1	*	curated
+Al	2	0	1	0	*	curated
+Al	3	0	0	0	*	curated
+Si	-2	0	6	0	-F -F -F -F -F -F	curated
+Si	0	0	0	4	*	common
+Si	0	0	0	0	*	curated
+Si	0	0	1	3	*	common
+Si	0	0	2	2	*	common
+Si	0	0	3	1	*	common
+Si	0	0	4	0	*	common
+P	-1	0	0	2	*	curated
+P	-1	0	1	1	*	curated
+P	-1	0	2	0	*	curated
+P	-1	0	6	0	-F -F -F -F -F -F	curated
+P	-1	0	6	0	-C -C -C -F -F -F	curated
+P	0	0	0	3	*	common
+P	0	0	0	0	*	curated
+P	0	0	1	2	*	common
+P	0	0	2	1	*	common
+P	0	0	3	0	*	common
+P	0	0	3	2	-O =O	curated
+P	0	0	4	1	-O -O =O	curated
+P	0	0	4	1	-C -C =O	curated
+P	0	0	4	1	-O =O	curated
+P	0	0	5	0	*	common
+P	0	0	5	0	-O -O =O	curated
+P	0	0	5	0	-C -C =O	curated
+P	0	0	5	0	-O =O	curated
+P	0	1	0	2	*	curated
+P	0	1	0	4	*	curated
+P	0	1	1	1	*	curated
+P	0	1	1	3	*	curated
+P	0	1	2	0	*	curated
+P	0	1	2	2	*	curated
+P	0	1	3	1	*	curated
+P	0	1	4	0	*	curated
+P	1	0	0	4	*	curated
+P	1	0	1	3	*	curated
+P	1	0	2	2	*	curated
+P	1	0	3	1	*	curated
+P	1	0	4	0	*	curated
+S	-2	0	0	0	*	curated
+S	-1	0	0	1	*	curated
+S	-1	0	1	0	*	curated
+S	0	0	0	2	*	common
+S	0	0	0	0	*	curated
+S	0	0	1	1	*	common
+S	0	0	2	0	*	common
+S	0	0	4	0	=O =O	curated
+S	0	0	4	0	=N =O	curated
+S	0	0	4	0	=N =N	curated
+S	0	0	4	0	=C =O	curated
+S	0	0	4	0	=C =C	curated
+S	0	0	4	0	=C =N	curated
+S	0	0	4	0	-O -O =O	curated
+S	0	0	4	0	-O -S =O	curated
+S	0	0	4	0	-N -O =O	curated
+S	0	0	4	0	-O -F =O	curated
+S	0	0	4	0	-O -Cl =O	curated
+S	0	0	4	0	-O -Br =O	curated
+S	0	0	4	0	-C -O =O	curated
+S	0	0	4	0	-N -N =O	curated
+S	0	0	4	0	-N -Cl =O	curated
+S	0	0	4	0	-C -N =O	curated
+S	0	0	4	0	-N -S =O	curated
+S	0	0	4	0	-Cl -Cl =O	curated
+S	0	0	4	0	-Br -Br =O	curated
+S	0	0	4	0	-S -S =O	curated
+S	0	0	4	0	-C -C =O	curated
+S	0	0	4	0	-C -F =O	curated
+S	0	0	4	0	-C -Cl =O	curated
+S	0	0	4	0	-C -Br =O	curated
+S	0	0	4	0	-C -S =O	curated
+S	0	0	4	0	-C -P =O	curated
+S	0	0	4	0	-F -F =N	curated
+S	0	0	4	0	-C -C =N	curated
+S	0	0	4	0	-C -O =N	curated
+S	0	0	4	0	-C -Cl =N	curated
+S	0	0	4	0	-C -S =N	curated
+S	0	0	4	0	-C -N =N	curated
+S	0	0	4	0	-N -N =N	curated
+S	0	0	4	0	-N -O =N	curated
+S	0	0	4	0	-O -O =N	curated
+S	0	0	4	0	-C -C =C	curated
+S	0	0	4	0	-C -F =C	curated
+S	0	0	4	0	-C -S =C	curated
+S	0	0	4	0	-C -N =C	curated
+S	0	0	4	0	-S -S =C	curated
+S	0	0	4	0	-N -S =C	curated
+S	0	0	4	0	-N -N =C	curated
+S	0	0	4	0	-O -O =C	curated
+S	0	0	4	0	-C -C =S	curated
+S	0	0	4	0	-C -O =S	curated
+S	0	0	4	0	-O -O =S	curated
+S	0	0	4	0	-C -N =S	curated
+S	0	0	4	0	-C -S =S	curated
+S	0	0	4	0	-N -F -F -F	curated
+S	0	0	4	0	-C -C -C -F	curated
+S	0	0	4	0	-C -F -F -F	curated
+S	0	0	4	0	-F -F -F -F	curated
+S	0	0	4	0	-C -C -C -O	curated
+S	0	0	4	0	-C -C -O -O	curated
+S	0	0	4	0	-C -O -O -O	curated
+S	0	0	4	0	-N -O -O -O	curated
+S	0	0	4	0	-C -N -O -O	curated
+S	0	0	4	0	-C -C -N -O	curated
+S	0	0	4	0	-C -C -Cl -Cl	curated
+S	0	0	4	0	-C -C -N -N	curated
+S	0	0	4	0	-C -C -C -S	curated
+S	0	0	4	0	-C -C -C -C	curated
+S	0	0	4	0	-C -C -C -I	curated
+S	0	0	6	0	=O =O =O	curated
+S	0	0	6	0	=C =O =O	curated
+S	0	0	6	0	-O -O =O =O	curated
+S	0	0	6	0	-N -O =O =O	curated
+S	0	0	6	0	-C -O =O =O	curated
+S	0	0	6	0	-O -S =O =O	curated
+S	0	0	6	0	-O -F =O =O	curated
+S	0	0	6	0	-O -Cl =O =O	curated
+S	0	0	6	0	-O -Br =O =O	curated
+S	0	0	6	0	-O -I =O =O	curated
+S	0	0	6	0	-N -N =O =O	curated
+S	0	0	6	0	-C -N =O =O	curated
+S	0	0	6	0	-N -S =O =O	curated
+S	0	0	6	0	-N -F =O =O	curated
+S	0	0	6	0	-N -Cl =O =O	curated
+S	0	0	6	0	-C -C =O =O	curated
+S	0	0	6	0	-C -S =O =O	curated
+S	0	0	6	0	-C -F =O =O	curated
+S	0	0	6	0	-C -Cl =O =O	curated
+S	0	0	6	0	-C -Br =O =O	curated
+S	0	0	6	0	-C -I =O =O	curated
+S	0	0	6	0	-F -F =O =O	curated
+S	0	0	6	0	-Cl -Cl =O =O	curated
+S	0	0	6	0	-F -Cl =O =O	curated
+S	0	0	6	0	-N -O =N =O	curated
+S	0	0	6	0	-N -N =N =O	curated
+S	0	0	6	0	-C -N =N =O	curated
+S	0	0	6	0	-O -O =N =O	curated
+S	0	0	6	0	-C -O =N =O	curated
+S	0	0	6	0	-C -C =N =O	curated
+S	0	0	6	0	-C -Cl =N =O	curated
+S	0	0	6	0	-C -F =N =O	curated
+S	0	0	6	0	-C -C =N =N	curated
+S	0	0	6	0	-C -C =C =O	curated
+S	0	0	6	0	-C -O =C =O	curated
+S	0	0	6	0	-N -O =C =O	curated
+S	0	0	6	0	-O -O =C =O	curated
+S	0	0	6	0	-C -N =C =O	curated
+S	0	0	6	0	-N -N =C =O	curated
+S	0	0	6	0	-C -O =C =N	curated
+S	0	0	6	0	-O -O =O =S	curated
+S	0	0	6	0	-C -O =O =S	curated
+S	0	0	6	0	-C -C =O =S	curated
+S	0	0	6	0	-O -O =S =S	curated
+S	0	0	6	0	-F -F -F -F -F -F	curated
+S	0	0	6	0	-O -F -F -F -F -F	curated
+S	0	0	6	0	-C -F -F -F -F -F	curated
+S	0	1	0	1	*	curated
+S	0	1	0	3	*	curated
+S	0	1	1	0	*	curated
+S	0	1	1	2	*	curated
+S	0	1	2	1	*	curated
+S	0	1	3	0	*	curated
+S	1	0	3	0	-C =C	curated
+S	1	0	3	0	-S =C	curated
+S	1	0	3	0	-C =N	curated
+S	1	0	3	0	-C -C -C	curated
+S	1	0	3	0	-B -C -C	curated
+S	1	0	3	0	-C -C -O	curated
+S	1	0	3	0	-C -C -N	curated
+S	1	0	5	0	-C -C -C =O	curated
+S	1	0	5	0	-C -C -N =O	curated
+Cl	-1	0	0	0	*	curated
+Cl	-1	0	2	0	-Cl -I	curated
+Cl	0	0	0	1	*	common
+Cl	0	0	1	0	*	common
+Cl	0	0	3	0	-O =O	curated
+Cl	0	0	3	0	-F -F -F	curated
+Cl	0	0	5	0	-O =O =O	curated
+Cl	0	0	5	0	-F -F -F -F -F	curated
+Cl	0	0	5	0	-F -F -F =O	curated
+Cl	0	0	5	0	-F =O =O	curated
+Cl	0	0	7	0	-O =O =O =O	curated
+Ar	0	0	0	0	*	common
+K	0	0	0	0	*	common
+K	0	0	1	0	*	common
+K	1	0	0	0	*	curated
+Ca	0	0	0	0	*	common
+Ca	0	0	2	0	*	common
+Ca	2	0	0	0	*	curated
+Sc	-3	0	6	0	-F -F -F -F -F -F	curated
+Sc	0	0	0	0	*	common
+Sc	0	0	3	0	*	common
+Sc	3	0	0	0	*	curated
+Ti	-2	0	6	0	-F -F -F -F -F -F	curated
+Ti	-2	0	6	0	-Cl -Cl -Cl -Cl -Cl -Cl	curated
+Ti	-2	0	6	0	-Br -Br -Br -Br -Br -Br	curated
+Ti	-2	0	6	0	-I -I -I -I -I -I	curated
+Ti	-2	0	6	0	-O -O -O -O -O -O	curated
+Ti	-2	0	6	0	-O -O -O -O =O	curated
+Ti	-2	0	6	0	-O -O =O =O	curated
+Ti	-2	0	6	0	=O =O =O	curated
+Ti	-2	0	6	0	-F -F -F -F =O	curated
+Ti	0	0	0	0	*	common
+Ti	0	0	2	0	-F -F	curated
+Ti	0	0	2	0	-Cl -Cl	curated
+Ti	0	0	2	0	-Br -Br	curated
+Ti	0	0	2	0	-I -I	curated
+Ti	0	0	2	0	-H -H	curated
+Ti	0	0	2	0	-O -O	curated
+Ti	0	0	2	0	=O	curated
+Ti	0	0	3	0	-F -F -F	curated
+Ti	0	0	3	0	-Cl -Cl -Cl	curated
+Ti	0	0	3	0	-Br -Br -Br	curated
+Ti	0	0	3	0	-I -I -I	curated
+Ti	0	0	3	0	-O -O -O	curated
+Ti	0	0	3	0	-O =O	curated
+Ti	0	0	3	0	-N -N -N	curated
+Ti	0	0	3	0	-N =N	curated
+Ti	0	0	3	0	#N	curated
+Ti	0	0	4	0	*	common
+Ti	2	0	2	0	=O	curated
+Ti	2	0	2	0	-O -O	curated
+Ti	4	0	0	0	*	curated
+V	0	0	0	0	*	common
+V	0	0	2	0	*	common
+V	0	0	3	0	-F -F -F	curated
+V	0	0	3	0	-Cl -Cl -Cl	curated
+V	0	0	3	0	-Br -Br -Br	curated
+V	0	0	3	0	-O =O	curated
+V	0	0	3	0	-Cl =O	curated
+V	0	0	4	0	-F -F -F -F	curated
+V	0	0	4	0	-Cl -Cl -Cl -Cl	curated
+V	0	0	4	0	-Br -Br -Br -Br	curated
+V	0	0	4	0	=O =O	curated
+V	0	0	4	0	-Cl -Cl =O	curated
+V	0	0	5	0	-F -F -F -F -F	curated
+V	0	0	5	0	-O =O =O	curated
+V	0	0	5	0	-S =S =S	curated
+V	0	0	5	0	-O -O -O =O	curated
+V	0	0	5	0	-F -F -F =O	curated
+V	0	0	5	0	-Cl -Cl -Cl =O	curated
+V	2	0	0	0	*	curated
+V	2	0	2	0	=O	curated
+V	3	0	0	0	*	curated
+Cr	0	0	0	0	*	common
+Cr	0	0	2	0	*	common
+Cr	0	0	3	0	*	common
+Cr	0	0	4	0	=O =O	curated
+Cr	0	0	4	0	-O -O =O	curated
+Cr	0	0	4	0	-F -F -F -F	curated
+Cr	0	0	4	0	-C -C -C -C	curated
+Cr	0	0	6	0	=O =O =O	curated
+Cr	0	0	6	0	-O -O =O =O	curated
+Cr	0	0	6	0	-O -Cl =O =O	curated
+Cr	0	0	6	0	-Cl -Cl =O =O	curated
+Cr	2	0	0	0	*	curated
+Cr	3	0	0	0	*	curated
+Mn	0	0	0	0	*	common
+Mn	0	0	2	0	*	common
+Mn	0	0	2	0	=O	curated
+Mn	0	0	3	0	-O =O	curated
+Mn	0	0	3	0	-O -O -O	curated
+Mn	0	0	4	0	=O =O	curated
+Mn	0	0	4	0	=O =O	curated
+Mn	0	0	6	0	-O -O =O =O	curated
+Mn	0	0	7	0	-O =O =O =O	curated
+Mn	2	0	0	0	*	curated
+Mn	3	0	0	0	*	curated
+Fe	0	0	0	0	*	common
+Fe	0	0	2	0	*	common
+Fe	0	0	3	0	*	common
+Fe	2	0	0	0	*	curated
+Fe	3	0	0	0	*	curated
+Co	-4	0	6	0	-O -O -O -O -O -O	curated
+Co	-3	0	5	0	-O -O -O =O	curated
+Co	-3	0	5	0	-Cl -Cl -Cl -Cl -Cl	curated
+Co	-3	0	6	0	-O -O -O -O -O -O	curated
+Co	-2	0	4	0	-F -F -F -F	curated
+Co	-2	0	4	0	-Cl -Cl -Cl -Cl	curated
+Co	-2	0	4	0	-Br -Br -Br -Br	curated
+Co	-2	0	4	0	-I -I -I -I	curated
+Co	-2	0	4	0	-O -O -O -O	curated
+Co	-2	0	6	0	-F -F -F -F -F -F	curated
+Co	-1	0	3	0	-F -F -F	curated
+Co	-1	0	3	0	-Cl -Cl -Cl	curated
+Co	-1	0	3	0	-O -O -O	curated
+Co	0	0	0	0	*	common
+Co	0	0	1	0	-H	curated
+Co	0	0	2	0	*	common
+Co	0	0	3	0	*	common
+Co	2	0	0	0	*	curated
+Co	2	0	1	0	-N	curated
+Co	3	0	0	0	*	curated
+Ni	0	0	0	0	*	common
+Ni	0	0	2	0	*	common
+Ni	0	0	3	0	-O =O	curated
+Ni	1	0	1	0	-C	curated
+Ni	2	0	0	0	*	curated
+Cu	-3	0	2	0	-S -S	curated
+Cu	-1	0	2	0	-Cl -Cl	curated
+Cu	0	0	0	0	*	common
+Cu	0	0	1	0	*	common
+Cu	0	0	2	0	*	common
+Cu	1	0	0	0	*	curated
+Cu	2	0	0	0	*	curated
+Zn	-2	0	4	0	-O -O -O -O	curated
+Zn	0	0	0	0	*	common
+Zn	0	0	2	0	*	common
+Zn	1	0	1	0	-C	curated
+Zn	2	0	0	0	*	curated
+Ga	-1	0	4	0	-H -H -H -H	curated
+Ga	-1	0	4	0	-F -F -F -F	curated
+Ga	-1	0	4	0	-Cl -Cl -Cl -Cl	curated
+Ga	-1	0	4	0	-Br -Br -Br -Br	curated
+Ga	-1	0	4	0	-I -I -I -I	curated
+Ga	0	0	0	0	*	common
+Ga	0	0	1	0	-Cl	curated
+Ga	0	0	1	0	-Br	curated
+Ga	0	0	1	0	-I	curated
+Ga	0	0	3	0	*	common
+Ga	3	0	0	0	*	curated
+Ge	-2	0	6	0	-F -F -F -F -F -F	curated
+Ge	0	0	0	4	*	common
+Ge	0	0	0	0	*	curated
+Ge	0	0	1	3	*	common
+Ge	0	0	2	2	*	common
+Ge	0	0	3	1	*	common
+Ge	0	0	4	0	*	common
+As	-1	0	6	0	-F -F -F -F -F -F	curated
+As	0	0	0	0	*	common
+As	0	0	3	0	*	common
+As	0	0	5	0	*	common
+As	1	0	0	4	*	curated
+As	1	0	1	3	*	curated
+As	1	0	2	2	*	curated
+As	1	0	3	1	*	curated
+As	1	0	4	0	*	curated
+Se	-2	0	0	0	*	curated
+Se	-1	0	0	1	*	curated
+Se	-1	0	1	0	*	curated
+Se	0	0	0	2	*	common
+Se	0	0	0	0	*	curated
+Se	0	0	1	1	*	common
+Se	0	0	2	0	*	common
+Se	0	0	4	0	=O =O	curated
+Se	0	0	4	0	=S =S	curated
+Se	0	0	4	0	=N =N	curated
+Se	0	0	4	0	-O -O =O	curated
+Se	0	0	4	0	-Cl -Cl =O	curated
+Se	0	0	4	0	-F -F =O	curated
+Se	0	0	4	0	-C -C =O	curated
+Se	0	0	4	0	-C -N =O	curated
+Se	0	0	4	0	-C -O =O	curated
+Se	0	0	4	0	-C -C =C	curated
+Se	0	0	4	0	-O -O =C	curated
+Se	0	0	4	0	-C -C -Cl -Cl	curated
+Se	0	0	4	0	-C -C -O -Cl	curated
+Se	0	0	4	0	-C -C -Br -Br	curated
+Se	0	0	4	0	-C -C -O -Br	curated
+Se	0	0	6	0	-O -O =O =O	curated
+Se	0	0	6	0	-Cl -Cl =O =O	curated
+Se	0	0	6	0	-C -C =O =O	curated
+Se	0	0	6	0	-C -O =O =O	curated
+Se	0	0	6	0	-C -C =N =O	curated
+Se	0	0	6	0	-C -O =N =O	curated
+Se	0	0	6	0	-F -F -F -F -F -F	curated
+Se	1	0	3	0	-C -C -C	curated
+Se	1	0	3	0	-C =C	curated
+Br	-1	0	0	0	*	curated
+Br	-1	0	2	0	-Br -I	curated
+Br	-1	0	2	0	-Br -Br	curated
+Br	-1	0	2	0	-Cl -Br	curated
+Br	-1	0	2	0	-Cl -Cl	curated
+Br	-1	0	2	0	-I -I	curated
+Br	0	0	0	1	*	common
+Br	0	0	1	0	*	common
+Br	0	0	3	0	-O =O	curated
+Br	0	0	3	0	-O -O -O	curated
+Br	0	0	3	0	-F -F -F	curated
+Br	0	0	5	0	-O =O =O	curated
+Br	0	0	5	0	-F -F -F -F -F	curated
+Br	0	0	5	0	-F -F -F =O	curated
+Br	0	0	5	0	-F =O =O	curated
+Br	0	0	7	0	-O =O =O =O	curated
+Br	0	0	7	0	-F =O =O =O	curated
+Kr	0	0	0	0	*	common
+Rb	0	0	0	0	*	common
+Rb	0	0	1	0	*	common
+Rb	1	0	0	0	*	curated
+Sr	0	0	0	0	*	common
+Sr	0	0	2	0	*	common
+Sr	2	0	0	0	*	curated
+Y	0	0	0	0	*	common
+Y	0	0	3	0	*	common
+Y	3	0	0	0	*	curated
+Zr	0	0	0	0	*	common
+Zr	0	0	2	0	-F -F	curated
+Zr	0	0	2	0	-Cl -Cl	curated
+Zr	0	0	2	0	-Br -Br	curated
+Zr	0	0	2	0	-I -I	curated
+Zr	0	0	2	0	-H -H	curated
+Zr	0	0	2	0	-H -Cl	curated
+Zr	0	0	2	0	-H -Br	curated
+Zr	0	0	2	0	-H -I	curated
+Zr	0	0	2	0	-C -C	curated
+Zr	0	0	2	0	-N -N	curated
+Zr	0	0	2	0	=N	curated
+Zr	0	0	3	0	-F -F -F	curated
+Zr	0	0	3	0	-Cl -Cl -Cl	curated
+Zr	0	0	3	0	-Br -Br -Br	curated
+Zr	0	0	3	0	-I -I -I	curated
+Zr	0	0	3	0	-N -N -N	curated
+Zr	0	0	3	0	-N =N	curated
+Zr	0	0	3	0	#N	curated
+Zr	0	0	4	0	*	common
+Nb	0	0	0	0	*	common
+Nb	0	0	2	0	=O	curated
+Nb	0	0	3	0	-O =O	curated
+Nb	0	0	3	0	#N	curated
+Nb	0	0	4	0	-F -F -F -F	curated
+Nb	0	0	4	0	-Cl -Cl -Cl -Cl	curated
+Nb	0	0	4	0	-Br -Br -Br -Br	curated
+Nb	0	0	4	0	=O =O	curated
+Nb	0	0	4	0	=S =S	curated
+Nb	0	0	5	0	-F -F -F -F -F	curated
+Nb	0	0	5	0	-Cl -Cl -Cl -Cl -Cl	curated
+Nb	0	0	5	0	-F -F -F =O	curated
+Nb	0	0	5	0	-Cl -Cl -Cl =O	curated
+Nb	0	0	5	0	-O =O =O	curated
+Nb	0	0	5	0	-O -O -O =O	curated
+Mo	0	0	0	0	*	common
+Mo	0	0	4	0	-F -F -F -F	curated
+Mo	0	0	4	0	-Cl -Cl -Cl -Cl	curated
+Mo	0	0	4	0	-Br -Br -Br -Br	curated
+Mo	0	0	4	0	=O =O	curated
+Mo	0	0	4	0	=S =S	curated
+Mo	0	0	5	0	-F -F -F -F -F	curated
+Mo	0	0	5	0	-Cl -Cl -Cl -Cl -Cl	curated
+Mo	0	0	5	0	-Br -Br -Br -Br -Br	curated
+Mo	0	0	6	0	=O =O =O	curated
+Mo	0	0	6	0	-O -O =O =O	curated
+Mo	0	0	6	0	-F -F -F -F -F -F	curated
+Mo	0	0	6	0	-F -F -F -F =O	curated
+Tc	0	0	0	0	*	common
+Tc	0	0	4	0	=O =O	curated
+Tc	0	0	4	0	=S =S	curated
+Ru	0	0	0	0	*	common
+Ru	0	0	4	0	-Cl -Cl =C	curated
+Ru	0	0	5	0	-C -Cl -Cl =C	curated
+Ru	0	0	7	0	-O =O =O =O	curated
+Ru	0	0	8	0	=O =O =O =O	curated
+Rh	-3	0	6	0	-Cl -Cl -Cl -Cl -Cl -Cl	curated
+Rh	-3	0	6	0	-O -O -O -O -O -O	curated
+Rh	-1	0	4	0	-Br -Br -Br -Br	curated
+Rh	0	0	0	0	*	common
+Rh	0	0	1	0	-H	curated
+Rh	0	0	1	0	-Cl	curated
+Rh	0	0	2	0	=O	curated
+Rh	0	0	2	0	-O -O	curated
+Rh	0	0	2	0	=S	curated
+Rh	0	0	2	0	-S -S	curated
+Rh	0	0	3	0	*	common
+Rh	0	0	4	0	*	common
+Rh	0	0	6	0	-F -F -F -F -F -F	curated
+Pd	-2	0	4	0	-O -O -O -O	curated
+Pd	-2	0	4	0	-F -F -F -F	curated
+Pd	-2	0	4	0	-Cl -Cl -Cl -Cl	curated
+Pd	0	0	0	0	*	common
+Pd	0	0	2	0	*	common
+Pd	1	0	1	0	-C	curated
+Pd	2	0	0	0	*	curated
+Ag	-1	0	2	0	-Cl -Cl	curated
+Ag	-1	0	2	0	-O -O	curated
+Ag	-1	0	2	0	-S -S	curated
+Ag	0	0	0	0	*	common
+Ag	0	0	1	0	*	common
+Ag	0	0	2	0	-F -F	curated
+Ag	1	0	0	0	*	curated
+Cd	-2	0	4	0	-O -O -O -O	curated
+Cd	0	0	0	0	*	common
+Cd	0	0	2	0	*	common
+Cd	2	0	0	0	*	curated
+In	0	0	0	0	*	common
+In	0	0	1	0	-Cl	curated
+In	0	0	1	0	-Br	curated
+In	0	0	1	0	-I	curated
+In	0	0	1	0	-O	curated
+In	0	0	3	0	*	common
+In	3	0	0	0	*	curated
+Sn	-2	0	6	0	-O -O -O -O -O -O	curated
+Sn	0	0	0	0	*	common
+Sn	0	0	2	0	=O	curated
+Sn	0	0	2	0	-O -O	curated
+Sn	0	0	2	0	=S	curated
+Sn	0	0	2	0	-Cl -Cl	curated
+Sn	0	0	3	1	-C -C -C	curated
+Sn	0	0	4	0	*	common
+Sn	0	0	4	0	-C -C -C	curated
+Sn	1	0	3	0	-C -C -C	curated
+Sn	2	0	0	0	*	curated
+Sb	-1	0	6	0	-F -F -F -F -F -F	curated
+Sb	0	0	0	0	*	common
+Sb	0	0	3	0	*	common
+Sb	0	0	5	0	*	common
+Sb	1	0	0	4	*	curated
+Sb	1	0	1	3	*	curated
+Sb	1	0	2	2	*	curated
+Sb	1	0	3	1	*	curated
+Sb	1	0	4	0	*	curated
+Te	-1	0	5	0	-C -O -Cl -Cl -Cl	curated
+Te	0	0	0	2	*	common
+Te	0	0	0	0	*	curated
+Te	0	0	1	1	*	common
+Te	0	0	2	0	*	common
+Te	0	0	4	0	=O =O	curated
+Te	0	0	4	0	-O -O =O	curated
+Te	0	0	4	0	-C -O =O	curated
+Te	0	0	4	0	-C -C =O	curated
+Te	0	0	4	0	-C -Cl -Cl -Cl	curated
+Te	0	0	4	0	-C -C -Cl -Cl	curated
+Te	0	0	4	0	-C -C -Br -Br	curated
+Te	0	0	4	0	-C -C -O -Cl	curated
+Te	0	0	4	0	-C -C -O -O	curated
+Te	0	0	4	0	-C -C -C -C	curated
+Te	0	0	4	0	-C -O -Cl -Cl	curated
+Te	0	0	4	0	-O -O -Cl -Cl	curated
+Te	0	0	6	0	-O -O =O =O	curated
+Te	0	0	6	0	-O -O -O -O -O -O	curated
+Te	0	0	6	0	-F -F -F -F -F -F	curated
+Te	0	0	6	0	-O -F -F -F -F -F	curated
+Te	1	0	3	0	-C -C -C	curated
+Te	1	0	3	0	-C =C	curated
+I	-1	0	0	0	*	curated
+I	-1	0	2	0	-I -I	curated
+I	-1	0	2	0	-Br -I	curated
+I	-1	0	2	0	-Cl -Cl	curated
+I	0	0	0	1	*	common
+I	0	0	1	0	*	common
+I	0	0	3	0	-O =O	curated
+I	0	0	3	0	-C =O	curated
+I	0	0	3	0	-C =C	curated
+I	0	0	3	0	-C =N	curated
+I	0	0	3	0	-O -O -O	curated
+I	0	0	3	0	-F -F -F	curated
+I	0	0	3	0	-Cl -Cl -Cl	curated
+I	0	0	3	0	-Br -Br -Br	curated
+I	0	0	3	0	-C -O -Cl	curated
+I	0	0	3	0	-C -C -O	curated
+I	0	0	3	0	-C -O -O	curated
+I	0	0	3	0	-C -N -O	curated
+I	0	0	3	0	-C -F -F	curated
+I	0	0	3	0	-C -Cl -Cl	curated
+I	0	0	3	0	-C -C -Cl	curated
+I	0	0	3	0	-C -C -C	curated
+I	0	0	3	0	-C -C -N	curated
+I	0	0	5	0	-O =O =O	curated
+I	0	0	5	0	-F -F -F -F -F	curated
+I	0	0	5	0	-F -F -F =O	curated
+I	0	0	5	0	-F =O =O	curated
+I	0	0	5	0	-C =O =O	curated
+I	0	0	5	0	-C -O -O =O	curated
+I	0	0	5	0	-C -O -O -O -O	curated
+I	0	0	7	0	-O =O =O =O	curated
+I	0	0	7	0	-O -O -O =O =O	curated
+I	0	0	7	0	-O -O -O -O -O =O	curated
+I	0	0	7	0	-F -F -F -F -F -F -F	curated
+I	0	0	7	0	-F -F -F -F -F =O	curated
+I	0	0	7	0	-F -F -F =O =O	curated
+I	0	0	7	0	-F =O =O =O	curated
+I	1	0	2	0	-C -C	curated
+Xe	0	0	0	0	*	common
+Xe	0	0	2	0	-F -F	curated
+Xe	0	0	4	0	-F -F -F -F	curated
+Xe	0	0	6	0	-F -F -F -F -F -F	curated
+Xe	0	0	6	0	=O =O =O	curated
+Xe	0	0	6	0	-F -F =O =O	curated
+Xe	0	0	6	0	-F -F -F -F =O	curated
+Xe	0	0	8	0	=O =O =O =O	curated
+Xe	0	0	8	0	-F -F =O =O =O	curated
+Xe	0	0	8	0	-O -O -O -O =O =O	curated
+Cs	0	0	0	0	*	common
+Cs	0	0	1	0	*	common
+Cs	1	0	0	0	*	curated
+Ba	0	0	0	0	*	common
+Ba	0	0	2	0	*	common
+Ba	2	0	0	0	*	curated
+La	0	0	0	0	*	common
+La	0	0	3	0	*	common
+La	3	0	0	0	*	curated
+Ce	0	0	0	0	*	common
+Ce	0	0	3	0	*	common
+Ce	0	0	4	0	-O -O -O -O	curated
+Ce	0	0	4	0	-F -F -F -F	curated
+Ce	0	0	4	0	-Cl -Cl -Cl -Cl	curated
+Ce	0	0	4	0	=O =O	curated
+Ce	3	0	0	0	*	curated
+Pr	0	0	0	0	*	common
+Pr	0	0	3	0	*	common
+Pr	0	0	4	0	-F -F -F -F	curated
+Pr	0	0	4	0	=O =O	curated
+Pr	3	0	0	0	*	curated
+Nd	0	0	0	0	*	common
+Nd	0	0	2	0	=O	curated
+Nd	0	0	2	0	-O -O	curated
+Nd	0	0	2	0	-F -F	curated
+Nd	0	0	2	0	-Cl -Cl	curated
+Nd	0	0	2	0	-Br -Br	curated
+Nd	0	0	2	0	-I -I	curated
+Nd	0	0	2	0	-F -Cl	curated
+Nd	0	0	2	0	-F -Br	curated
+Nd	0	0	2	0	-F -I	curated
+Nd	0	0	2	0	-C -C	curated
+Nd	0	0	2	0	-H -H	curated
+Nd	0	0	3	0	*	common
+Nd	0	0	4	0	-F -F -F -F	curated
+Nd	3	0	0	0	*	curated
+Pm	0	0	0	0	*	common
+Pm	0	0	3	0	*	common
+Pm	3	0	0	0	*	curated
+Sm	0	0	0	0	*	common
+Sm	0	0	2	0	-O -O	curated
+Sm	0	0	2	0	-F -F	curated
+Sm	0	0	2	0	-Cl -Cl	curated
+Sm	0	0	2	0	-Br -Br	curated
+Sm	0	0	2	0	-I -I	curated
+Sm	0	0	2	0	-F -Cl	curated
+Sm	0	0	2	0	-F -Br	curated
+Sm	0	0	2	0	-F -I	curated
+Sm	0	0	2	0	-C -C	curated
+Sm	0	0	2	0	-H -H	curated
+Sm	0	0	2	0	=O	curated
+Sm	0	0	3	0	*	common
+Sm	3	0	0	0	*	curated
+Eu	0	0	0	0	*	common
+Eu	0	0	2	0	-O -O	curated
+Eu	0	0	2	0	-F -F	curated
+Eu	0	0	2	0	-Cl -Cl	curated
+Eu	0	0	2	0	-Br -Br	curated
+Eu	0	0	2	0	-I -I	curated
+Eu	0	0	2	0	-F -Cl	curated
+Eu	0	0	2	0	-F -Br	curated
+Eu	0	0	2	0	-F -I	curated
+Eu	0	0	2	0	-C -C	curated
+Eu	0	0	2	0	-H -H	curated
+Eu	0	0	2	0	=O	curated
+Eu	0	0	3	0	*	common
+Eu	3	0	0	0	*	curated
+Gd	0	0	0	0	*	common
+Gd	0	0	3	0	*	common
+Gd	3	0	0	0	*	curated
+Tb	0	0	0	0	*	common
+Tb	0	0	3	0	*	common
+Tb	0	0	4	0	-F -F -F -F	curated
+Tb	0	0	4	0	=O =O	curated
+Tb	3	0	0	0	*	curated
+Dy	0	0	0	0	*	common
+Dy	0	0	3	0	*	common
+Dy	0	0	4	0	-F -F -F -F	curated
+Dy	0	0	4	0	=O =O	curated
+Dy	3	0	0	0	*	curated
+Ho	0	0	0	0	*	common
+Ho	0	0	2	0	-O -O	curated
+Ho	0	0	2	0	-F -F	curated
+Ho	0	0	2	0	-Cl -Cl	curated
+Ho	0	0	2	0	-Br -Br	curated
+Ho	0	0	2	0	-I -I	curated
+Ho	0	0	2	0	-F -Cl	curated
+Ho	0	0	2	0	-F -Br	curated
+Ho	0	0	2	0	-F -I	curated
+Ho	0	0	2	0	-C -C	curated
+Ho	0	0	2	0	-H -H	curated
+Ho	0	0	2	0	=O	curated
+Ho	0	0	3	0	*	common
+Ho	3	0	0	0	*	curated
+Er	0	0	0	0	*	common
+Er	0	0	3	0	*	common
+Er	3	0	0	0	*	curated
+Tm	0	0	0	0	*	common
+Tm	0	0	2	0	-O -O	curated
+Tm	0	0	2	0	-F -F	curated
+Tm	0	0	2	0	-Cl -Cl	curated
+Tm	0	0	2	0	-Br -Br	curated
+Tm	0	0	2	0	-I -I	curated
+Tm	0	0	2	0	-F -Cl	curated
+Tm	0	0	2	0	-F -Br	curated
+Tm	0	0	2	0	-F -I	curated
+Tm	0	0	2	0	-C -C	curated
+Tm	0	0	2	0	-H -H	curated
+Tm	0	0	2	0	=O	curated
+Tm	0	0	3	0	*	common
+Tm	3	0	0	0	*	curated
+Yb	0	0	0	0	*	common
+Yb	0	0	2	0	-O -O	curated
+Yb	0	0	2	0	-F -F	curated
+Yb	0	0	2	0	-Cl -Cl	curated
+Yb	0	0	2	0	-Br -Br	curated
+Yb	0	0	2	0	-I -I	curated
+Yb	0	0	2	0	-F -Cl	curated
+Yb	0	0	2	0	-F -Br	curated
+Yb	0	0	2	0	-F -I	curated
+Yb	0	0	2	0	-C -C	curated
+Yb	0	0	2	0	-H -H	curated
+Yb	0	0	2	0	=O	curated
+Yb	0	0	3	0	*	common
+Yb	3	0	0	0	*	curated
+Lu	0	0	0	0	*	common
+Lu	0	0	3	0	*	common
+Lu	3	0	0	0	*	curated
+Hf	0	0	0	0	*	common
+Hf	0	0	1	0	-Cl	curated
+Hf	0	0	2	0	-Br -Br	curated
+Hf	0	0	3	0	-Cl -Cl -Cl	curated
+Hf	0	0	3	0	-Br -Br -Br	curated
+Hf	0	0	3	0	-I -I -I	curated
+Hf	0	0	3	0	-N -N -N	curated
+Hf	0	0	3	0	-N =N	curated
+Hf	0	0	3	0	#N	curated
+Hf	0	0	4	0	*	common
+Ta	0	0	0	0	*	common
+Ta	0	0	5	0	-F -F -F -F -F	curated
+Ta	0	0	5	0	-Cl -Cl -Cl -Cl -Cl	curated
+Ta	0	0	5	0	-F -F -F =O	curated
+Ta	0	0	5	0	-Cl -Cl -Cl =O	curated
+Ta	0	0	5	0	-O =O =O	curated
+Ta	0	0	5	0	-O -O -O =O	curated
+W	0	0	0	0	*	common
+W	0	0	6	0	=O =O =O	curated
+W	0	0	6	0	-O -O =O =O	curated
+W	0	0	6	0	-F -F -F -F -F -F	curated
+W	0	0	6	0	-Cl -Cl -Cl -Cl -Cl -Cl	curated
+W	0	0	6	0	-F -F -F -F =O	curated
+Re	0	0	0	0	*	common
+Os	0	0	0	0	*	common
+Os	0	0	6	0	=O =O =O	curated
+Os	0	0	6	0	-O -O =O =O	curated
+Os	0	0	8	0	=O =O =O =O	curated
+Os	0	0	8	0	-O -O =O =O =O	curated
+Ir	-3	0	6	0	-Cl -Cl -Cl -Cl -Cl -Cl	curated
+Ir	0	0	0	0	*	common
+Ir	0	0	1	0	-O	curated
+Ir	0	0	1	0	-F	curated
+Ir	0	0	1	0	-Cl	curated
+Ir	0	0	1	0	-Br	curated
+Ir	0	0	1	0	-I	curated
+Ir	0	0	2	0	-Cl -Cl	curated
+Ir	0	0	2	0	-Br -Br	curated
+Ir	0	0	2	0	-I -I	curated
+Ir	0	0	2	0	-S -S	curated
+Ir	0	0	2	0	=S	curated
+Ir	0	0	3	0	*	common
+Ir	0	0	4	0	*	common
+Ir	0	0	5	0	-F -F -F -F -F	curated
+Ir	0	0	6	0	-F -F -F -F -F -F	curated
+Pt	0	0	0	0	*	common
+Pt	0	0	2	0	*	common
+Pt	0	0	4	0	-N -N -Cl -Cl	curated
+Pt	0	0	4	0	-N -N -O -O	curated
+Pt	0	0	4	0	=O =O	curated
+Pt	0	0	6	0	-F -F -F -F -F -F	curated
+Pt	0	0	6	0	=O =O =O	curated
+Pt	2	0	0	0	*	curated
+Au	-1	0	4	0	-Cl -Cl -Cl -Cl	curated
+Au	0	0	0	0	*	common
+Au	0	0	3	0	-Cl -Cl -Cl	curated
+Au	0	0	3	0	-O -Cl -Cl	curated
+Au	0	0	3	0	-Br -Br -Br	curated
+Au	1	0	0	0	*	curated
+Au	3	0	0	0	*	curated
+Hg	0	0	0	0	*	common
+Hg	0	0	2	0	*	common
+Hg	2	0	0	0	*	curated
+Tl	-3	0	6	0	-Cl -Cl -Cl -Cl -Cl -Cl	curated
+Tl	0	0	0	0	*	common
+Tl	0	0	1	0	*	common
+Tl	1	0	0	0	*	curated
+Tl	1	0	2	0	-C -C	curated
+Tl	3	0	0	0	*	curated
+Pb	-2	0	4	0	-O -O -O -O	curated
+Pb	-2	0	4	0	-O -O =O	curated
+Pb	0	0	0	0	*	common
+Pb	0	0	2	0	*	common
+Pb	0	0	4	0	=O =O	curated
+Pb	0	0	4	0	-O -O -O -O	curated
+Pb	0	0	4	0	-O -O =O	curated
+Pb	0	0	4	0	-F -F -F -F	curated
+Pb	0	0	4	0	-Cl -Cl -Cl -Cl	curated
+Pb	0	0	4	0	-C -C -C -C	curated
+Pb	2	0	0	0	*	curated
+Bi	0	0	0	0	*	common
+Bi	0	0	1	0	-Cl	curated
+Bi	0	0	1	0	-Br	curated
+Bi	0	0	2	0	-Cl -Cl	curated
+Bi	0	0	2	0	-Br -Br	curated
+Bi	0	0	2	0	-I -I	curated
+Bi	0	0	2	0	-S -S	curated
+Bi	0	0	2	0	=S	curated
+Bi	0	0	2	0	-Se -Se	curated
+Bi	0	0	2	0	=Se	curated
+Bi	0	0	3	0	*	common
+Bi	0	0	4	0	-Cl -Cl -Cl -Cl	curated
+Bi	0	0	4	0	=O =O	curated
+Bi	0	0	5	0	-F -F -F -F -F	curated
+Bi	0	0	5	0	-O =O =O	curated
+Bi	0	0	5	0	-O -O -O =O	curated
+Bi	3	0	0	0	*	curated
+Po	0	0	0	0	*	common
+Po	0	0	2	0	*	common
+Po	0	0	4	0	=O =O	curated
+Po	0	0	4	0	-Cl -Cl -Cl -Cl	curated
+Po	0	0	4	0	-Br -Br -Br -Br	curated
+Po	0	0	4	0	-I -I -I -I	curated
+Po	0	0	6	0	=O =O =O	curated
+Po	0	0	6	0	-F -F -F -F -F -F	curated
+At	-1	0	0	0	*	curated
+At	0	0	0	0	*	common
+At	0	0	1	0	*	common
+At	0	0	5	0	-O =O =O	curated
+At	1	0	0	0	*	curated
+Rn	0	0	0	0	*	common
+Rn	0	0	2	0	-F -F	curated
+Rn	1	0	1	0	-F	curated
+Fr	0	0	0	0	*	common
+Fr	0	0	1	0	*	common
+Fr	1	0	0	0	*	curated
+Ra	0	0	0	0	*	common
+Ra	0	0	2	0	*	common
+Ra	2	0	0	0	*	curated
+Ac	0	0	0	0	*	common
+Ac	0	0	3	0	*	common
+Ac	3	0	0	0	*	curated
+Th	0	0	0	0	*	common
+Th	0	0	2	0	-Br -Br	curated
+Th	0	0	2	0	-I -I	curated
+Th	0	0	2	0	-H -H	curated
+Th	0	0	3	0	-Br -Br -Br	curated
+Th	0	0	3	0	-I -I -I	curated
+Th	0	0	4	0	*	common
+Th	4	0	0	0	*	curated
+Pa	0	0	0	0	*	common
+Pa	0	0	2	0	=O	curated
+Pa	0	0	3	0	-H -H -H	curated
+Pa	0	0	4	0	*	common
+Pa	0	0	5	0	*	common
+Pa	4	0	0	0	*	curated
+U	0	0	0	0	*	common
+U	0	0	3	0	*	common
+U	0	0	4	0	*	common
+U	0	0	5	0	*	common
+U	0	0	6	0	*	common
+U	2	0	4	0	=O =O	curated
+U	3	0	0	0	*	curated
+U	4	0	0	0	*	curated
+Np	0	0	0	0	*	common
+Np	0	0	2	0	*	common
+Np	0	0	3	0	*	common
+Np	0	0	4	0	*	common
+Np	0	0	5	0	*	common
+Np	0	0	6	0	*	common
+Np	0	0	7	0	*	common
+Np	1	0	4	0	=O =O	curated
+Np	2	0	4	0	=O =O	curated
+Np	3	0	0	0	*	curated
+Np	4	0	0	0	*	curated
+Pu	0	0	0	0	*	common
+Pu	0	0	2	0	=Se	curated
+Pu	0	0	2	0	=S	curated
+Pu	0	0	2	0	=Te	curated
+Pu	0	0	2	0	=O	curated
+Pu	0	0	2	0	-Cl -Cl	curated
+Pu	0	0	2	0	-Br -Br	curated
+Pu	0	0	2	0	-I -I	curated
+Pu	0	0	2	0	-H -H	curated
+Pu	0	0	3	0	*	common
+Pu	0	0	4	0	*	common
+Pu	0	0	5	0	*	common
+Pu	0	0	6	0	*	common
+Pu	1	0	4	0	=O =O	curated
+Pu	2	0	4	0	=O =O	curated
+Pu	3	0	0	0	*	curated
+Pu	4	0	0	0	*	curated
+Am	0	0	0	0	*	common
+Am	0	0	2	0	*	common
+Am	0	0	3	0	*	common
+Am	0	0	4	0	*	common
+Am	3	0	0	0	*	curated
+Cm	0	0	0	0	*	common
+Cm	0	0	2	0	=O	curated
+Cm	0	0	2	0	-H -H	curated
+Cm	0	0	3	0	*	common
+Cm	0	0	4	0	*	common
+Bk	0	0	0	0	*	common
+Bk	0	0	2	0	*	common
+Bk	0	0	3	0	*	common
+Bk	0	0	4	0	*	common
+Bk	3	0	0	0	*	curated
+Bk	4	0	0	0	*	curated
+Cf	0	0	0	0	*	common
+Cf	0	0	2	0	*	common
+Cf	0	0	3	0	*	common
+Cf	0	0	4	0	*	common
+Cf	3	0	0	0	*	curated
+Es	0	0	0	0	*	common
+Es	0	0	2	0	*	common
+Es	0	0	3	0	*	common
+Es	3	0	0	0	*	curated
+Fm	0	0	0	0	*	common
+Fm	0	0	2	0	*	common
+Fm	0	0	3	0	*	common
+Fm	3	0	0	0	*	curated
+Md	0	0	0	0	*	common
+Md	0	0	2	0	*	common
+Md	0	0	3	0	*	common
+Md	3	0	0	0	*	curated
+No	0	0	0	0	*	common
+No	0	0	2	0	*	common
+No	0	0	3	0	*	common
+No	2	0	0	0	*	curated
+Lr	0	0	0	0	*	common
+Lr	0	0	3	0	*	common
+Lr	3	0	0	0	*	curated
+Rf	0	0	0	0	*	common
+Rf	0	0	4	0	*	common
+Rf	4	0	0	0	*	curated
+Db	0	0	0	0	*	common
+Sg	0	0	0	0	*	common
+Bh	0	0	0	0	*	common
+Hs	0	0	0	0	*	common
+Mt	0	0	0	0	*	common
+Ds	0	0	0	0	*	common
+Rg	0	0	0	0	*	common
+Cn	0	0	0	0	*	common
+Nh	0	0	0	0	*	common
+Fl	0	0	0	0	*	common
+Mc	0	0	0	0	*	common
+Lv	0	0	0	0	*	common
+Ts	0	0	0	0	*	common
+Og	0	0	0	0	*	common

@@ -1,0 +1,78 @@
+# Hand-written PDBx/mmCIF, not an archive entry.
+#
+# What it demonstrates: `_struct_conn` states a disulfide, and the reader builds it because the file
+# states it -- not because two sulphurs happen to be close.  Two CYS monomers of one polymer chain,
+# each fully bonded from `_chem_comp_bond` (5 bonds, one of them the C=O double), joined SG-SG.
+# It also demonstrates the boundary: the peptide bond between monomer 1 and monomer 2 is NOT stated
+# as a pair of atoms anywhere in mmCIF, so it is not built and the log says so.
+#
+# The coordinates are deliberately not a real geometry: CB and SG of monomer 2 are 3.8 A
+# apart, past every cutoff any toolkit uses, and the bond is still built.  Nothing in this
+# reader looks at a distance.
+data_TESTSS
+_entry.id   TESTSS
+_struct.title   'two cysteines, one stated disulfide'
+#
+loop_
+_entity.id
+_entity.type
+1 polymer
+#
+loop_
+_chem_comp_bond.comp_id
+_chem_comp_bond.atom_id_1
+_chem_comp_bond.atom_id_2
+_chem_comp_bond.value_order
+CYS N  CA SING
+CYS CA C  SING
+CYS C  O  DOUB
+CYS CA CB SING
+CYS CB SG SING
+#
+loop_
+_struct_conn.id
+_struct_conn.conn_type_id
+_struct_conn.ptnr1_label_asym_id
+_struct_conn.ptnr1_label_comp_id
+_struct_conn.ptnr1_label_seq_id
+_struct_conn.ptnr1_label_atom_id
+_struct_conn.ptnr1_symmetry
+_struct_conn.ptnr2_label_asym_id
+_struct_conn.ptnr2_label_comp_id
+_struct_conn.ptnr2_label_seq_id
+_struct_conn.ptnr2_label_atom_id
+_struct_conn.ptnr2_symmetry
+disulf1 disulf A CYS 1 SG 1_555 A CYS 2 SG 1_555
+#
+loop_
+_atom_site.group_PDB
+_atom_site.id
+_atom_site.type_symbol
+_atom_site.label_atom_id
+_atom_site.label_alt_id
+_atom_site.label_comp_id
+_atom_site.label_asym_id
+_atom_site.label_entity_id
+_atom_site.label_seq_id
+_atom_site.pdbx_PDB_ins_code
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+_atom_site.occupancy
+_atom_site.B_iso_or_equiv
+_atom_site.auth_seq_id
+_atom_site.auth_asym_id
+_atom_site.pdbx_PDB_model_num
+ATOM 1  N N  . CYS A 1 1 ? 0.000 0.000 0.000 1.00 9.00  10 A 1
+ATOM 2  C CA . CYS A 1 1 ? 1.450 0.000 0.000 1.00 9.10  10 A 1
+ATOM 3  C C  . CYS A 1 1 ? 2.000 1.410 0.000 1.00 9.20  10 A 1
+ATOM 4  O O  . CYS A 1 1 ? 1.300 2.400 0.000 1.00 9.30  10 A 1
+ATOM 5  C CB . CYS A 1 1 ? 1.950 -0.750 1.230 1.00 9.40  10 A 1
+ATOM 6  S SG . CYS A 1 1 ? 3.750 -0.900 1.300 1.00 9.50  10 A 1
+ATOM 7  N N  . CYS A 1 2 ? 3.320 1.510 0.000 1.00 9.60  11 A 1
+ATOM 8  C CA . CYS A 1 2 ? 4.000 2.800 0.000 1.00 9.70  11 A 1
+ATOM 9  C C  . CYS A 1 2 ? 5.500 2.650 0.000 1.00 9.80  11 A 1
+ATOM 10 O O  . CYS A 1 2 ? 6.100 1.580 0.000 1.00 9.90  11 A 1
+ATOM 11 C CB . CYS A 1 2 ? 3.600 3.600 1.240 1.00 10.00 11 A 1
+ATOM 12 S SG . CYS A 1 2 ? 4.200 -0.100 1.900 1.00 10.10 11 A 1
+#

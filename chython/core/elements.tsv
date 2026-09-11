@@ -1,0 +1,167 @@
+# The element table: one row per atomic number.  MAINTAINED BY HAND -- this file is the authority,
+# not a rendering of anything else.  After editing it run
+# `python chython/core/test/gen_element_tables.py`, which transposes it into `SYMBOLS` and
+# `MDL_ISOTOPE` in _elements.pxi; a test fails if the two ever disagree.
+#
+# `symbol` is the library's only symbol table (RULES.md §6).  Both directions are served from it:
+# `add_atom('Fe')` and a writer asking for the symbol of atomic number 26.
+#
+# `mdl_isotope` IS NOT AN ISOTOPE, despite the name it carries in every MDL document.  It is the
+# reference mass number the MDL formats measure their atom-block mass-difference field against, and
+# it is frequently not the element's abundant nuclide.  For many elements it is the rounded standard
+# atomic weight -- bromine's 80 is 79.904 rounded, where the abundant isotope is 79 -- and where an
+# element has no natural isotopes to average it is a convention: polonium's 209, tennessine's 297.
+#
+# So a row here can legitimately name a mass number that is radioactive, vanishingly rare, or --
+# for dubnium's 270 and tennessine's 297 -- not a known nuclide at all.  It still has to EXIST in
+# isotopes.tsv, because a file is entitled to state it and `element_mass` then has to answer; the
+# compile step refuses a pair of tables where it does not.
+#
+# `valence_electrons` IS A CONVENTION AND THE CONVENTION IS THE GROUP NUMBER: groups 1-12 state the
+# group number, groups 13-18 state the group number minus 10.  So zinc is 12 and not 2 -- the filled
+# d shell counts, the same way the 18-electron rule counts it -- and for every main-group element the
+# column is Kier and Hall's Zv: carbon 4, sulfur 6, chlorine 7.
+#
+# HELIUM IS THE ONE ROW THE FORMULA DOES NOT PRODUCE.  Group 18 minus 10 is 8, and helium states 2,
+# because its valence shell is 1s2 and holds no more -- period 1 has no p subshell to take the other
+# six.  2 is Kier and Hall's Zv for helium.  The formula is shorthand for the periodic table, so where
+# the two disagree the table wins and this is the only place they do.
+#
+# `?` SAYS CHYTHON STATES NO COUNT, not that the count is zero.  Cerium through lutetium and thorium
+# through lawrencium are `?`, 28 rows: the 4f and 5f electrons are neither reliably core nor reliably
+# valence, every convention disagrees, and a guessed number would put invented chemistry into every
+# descriptor built on this column.  Lanthanum and actinium are group 3 in every layout and state 3.
+# The column compiles to 0 for a `?` row, 0 being reserved because no element has zero valence
+# electrons, and the public surface refuses rather than returning it.
+#
+# `atomic_radius` IS THE CALCULATED RADIUS AND IT IS IN ANGSTROMS -- an SCF orbital measure, neither
+# covalent nor van der Waals.  It sizes a sphere in the 3D depiction and sets the threshold for
+# distance-based bond perception.  The 15-value Hall-Kier alpha table in _descriptors.pxi is
+# `r_cov / 0.77 - 1` per hybridization: a different quantity, and not substitutable for this one.
+#
+# THE PUBLISHED SET ENDS AT RADON, and the last 32 rows carry the group analogue one period up:
+# francium takes caesium's, radium takes barium's, rutherfordium through oganesson take hafnium
+# through radon's, and actinium through lawrencium take lutetium's.  Every row states a number and
+# `?` is refused here -- a sphere with no radius and a perception threshold of zero are both wrong
+# answers where naming the row is available.  The compile step bounds the column at 0.3-3.0, which
+# is what catches a value written in picometres.
+
+z	symbol	mdl_isotope	valence_electrons	atomic_radius
+1	H	1	1	0.53
+2	He	4	2	0.31
+3	Li	7	1	1.67
+4	Be	9	2	1.12
+5	B	11	3	0.87
+6	C	12	4	0.67
+7	N	14	5	0.56
+8	O	16	6	0.48
+9	F	19	7	0.42
+10	Ne	20	8	0.38
+11	Na	23	1	1.9
+12	Mg	24	2	1.45
+13	Al	27	3	1.18
+14	Si	28	4	1.11
+15	P	31	5	0.98
+16	S	32	6	0.87
+17	Cl	35	7	0.79
+18	Ar	40	8	0.71
+19	K	39	1	2.43
+20	Ca	40	2	1.94
+21	Sc	45	3	1.84
+22	Ti	48	4	1.76
+23	V	51	5	1.71
+24	Cr	52	6	1.66
+25	Mn	55	7	1.61
+26	Fe	56	8	1.56
+27	Co	59	9	1.52
+28	Ni	59	10	1.49
+29	Cu	64	11	1.45
+30	Zn	65	12	1.42
+31	Ga	70	3	1.36
+32	Ge	73	4	1.25
+33	As	75	5	1.14
+34	Se	79	6	1.03
+35	Br	80	7	0.94
+36	Kr	84	8	0.87
+37	Rb	85	1	2.65
+38	Sr	88	2	2.19
+39	Y	89	3	2.12
+40	Zr	91	4	2.06
+41	Nb	93	5	1.98
+42	Mo	96	6	1.9
+43	Tc	98	7	1.83
+44	Ru	101	8	1.78
+45	Rh	103	9	1.73
+46	Pd	106	10	1.69
+47	Ag	108	11	1.65
+48	Cd	112	12	1.61
+49	In	115	3	1.56
+50	Sn	119	4	1.45
+51	Sb	122	5	1.33
+52	Te	128	6	1.23
+53	I	127	7	1.15
+54	Xe	131	8	1.08
+55	Cs	133	1	2.98
+56	Ba	137	2	2.53
+57	La	139	3	2.12
+58	Ce	140	?	2.12
+59	Pr	141	?	2.47
+60	Nd	144	?	2.06
+61	Pm	145	?	2.05
+62	Sm	150	?	2.38
+63	Eu	152	?	2.31
+64	Gd	157	?	2.33
+65	Tb	159	?	2.25
+66	Dy	163	?	2.28
+67	Ho	165	?	2.26
+68	Er	167	?	2.26
+69	Tm	169	?	2.22
+70	Yb	173	?	2.22
+71	Lu	175	?	2.17
+72	Hf	178	4	2.08
+73	Ta	181	5	2.0
+74	W	184	6	1.93
+75	Re	186	7	1.88
+76	Os	190	8	1.85
+77	Ir	192	9	1.8
+78	Pt	195	10	1.77
+79	Au	197	11	1.74
+80	Hg	201	12	1.71
+81	Tl	204	3	1.56
+82	Pb	207	4	1.54
+83	Bi	209	5	1.43
+84	Po	209	6	1.35
+85	At	210	7	1.27
+86	Rn	222	8	1.2
+87	Fr	223	1	2.98
+88	Ra	226	2	2.53
+89	Ac	227	3	2.17
+90	Th	232	?	2.17
+91	Pa	231	?	2.17
+92	U	238	?	2.17
+93	Np	237	?	2.17
+94	Pu	244	?	2.17
+95	Am	243	?	2.17
+96	Cm	247	?	2.17
+97	Bk	247	?	2.17
+98	Cf	251	?	2.17
+99	Es	252	?	2.17
+100	Fm	257	?	2.17
+101	Md	258	?	2.17
+102	No	259	?	2.17
+103	Lr	260	?	2.17
+104	Rf	261	4	2.08
+105	Db	270	5	2.0
+106	Sg	269	6	1.93
+107	Bh	270	7	1.88
+108	Hs	270	8	1.85
+109	Mt	278	9	1.8
+110	Ds	281	10	1.77
+111	Rg	281	11	1.74
+112	Cn	285	12	1.71
+113	Nh	278	3	1.56
+114	Fl	289	4	1.54
+115	Mc	289	5	1.43
+116	Lv	293	6	1.35
+117	Ts	297	7	1.27
+118	Og	294	8	1.2

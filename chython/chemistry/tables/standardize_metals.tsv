@@ -1,0 +1,41 @@
+# The metal-organic standardization rules.  Same eight columns as `standardize_groups.tsv`, which documents
+# them.  These 19 rules break a covalent bond drawn to a metal and restore the charge-separated or dative
+# form -- a cyanide, a carbonyl, a ferrocene, an allyl, a phosphine, an amine or an ether ligand; `bonds_fix`
+# order 8 is the dative contact they install.  `tautomer` is 0 on every row: no metal repair moves a hydrogen
+# between heavy atoms.
+#
+# THEY RUN AFTER EVERY FUNCTIONAL-GROUP RULE, a table-level ordering the `after` column cannot express: a
+# nitrogen drawn with four single bonds to a metal is charged by `groups:10` first and only then seen by
+# `metals:16`.
+#
+# `[M;*;^,!^]` IS HOW EVERY ROW SPELLS THE METAL, and the two extra primitives are not decoration: a bare
+# `[M]` means a NEUTRAL non-radical metal exactly as `[C]` means a neutral non-radical carbon.  Thirteen rows
+# exist to repair `[Na+]` and `[Ti+4]`, so `*` withdraws the charge default and `^,!^` says "radical or not".
+#
+# THE DATIVE BOND IS `^` IN A PATTERN AND `~` IN A SMILES.  Two rows match a ligand already dative-bonded and
+# write `^` between the atoms; the `examples` column is SMILES and writes the same bond `~`.  A `^` INSIDE a
+# bracket is the radical primitive and never a bond -- a bond token is lexed between atoms.
+#
+# The examples are one metal with one ligand each.  Nine of the 19 rules are also exercised by real drawings,
+# in `test/_corpus.py`.
+
+id	smarts	atom_fix	bonds_fix	tautomer	after	examples	why
+metals:00	[M;*;^,!^:1]=[C:2]-1-[N;D3;x0;z1:3]-[C;z2:5]-,=[C;z2:6]-[N;D3;x0;z1:4]-1	2:-1:-;3:1:-	1:2:8;2:3:2	0	-	C=1N(C)C(=[Cu]I)N(C)C=1>>[C-]=1(N(C)C=C[N+]=1C)~[Cu]I	An N-heterocyclic carbene drawn with a covalent M=C double bond; the carbene carbon becomes the [C-] that donates to the metal and the imidazolium charge is restored on a ring nitrogen
+metals:01	[M;*;^,!^:3]-[C:1]#[N:2]	3:1:-;1:-1:-	1:3:8	0	-	C(#N)[Fe]>>[C-](#N)~[Fe+]	A cyanide ligand drawn with a covalent M-C bond; the carbon is [C-] donating its lone pair, so the bond becomes dative and the metal takes the matching charge
+metals:02	[M;*;^,!^:3]-[C-:1]#[N:2]	-	1:3:8	0	-	[C-](#N)[Fe]>>[C-](#N)~[Fe]	The same repair as metals:01 where the carbon already carries its charge, so only the bond becomes dative
+metals:03	[M;*;^,!^:1]-[O,S;D2:2]-[C:3]#[N:4]	1:1:-;4:-1:-	1:2:8;2:3:2;3:4:2	0	-	[Fe]OC#N>>C(=[N-])=[O]~[Fe+]	A cyanate or thiocyanate bound through its oxygen or sulfur and drawn covalently; the ligand becomes the cumulated [O,S]=C=[N-] donating to the metal
+metals:04	[M;*;^,!^:1]-[N:2]=[C:3]=[O,S;D1:4]	1:1:-;2:-1:-	1:2:8	0	-	[Fe]N=C=O>>C(=[N-]~[Fe+])=O	An isocyanate or isothiocyanate bound through nitrogen and drawn covalently; the nitrogen becomes the [N-] that donates to the metal
+metals:05	[M;*;^,!^:1]-[O,S;D2:2]-[N+:3]#[C-:4]	1:1:-;2:-1:-	1:2:8	0	-	[Fe]O[N+]#[C-]>>[C-]#[N+][O-]~[Fe+]	A fulminate bound through its oxygen or sulfur and drawn covalently; the donor atom takes the negative charge and its bond to the metal becomes dative
+metals:06	[M;*;^,!^:1]-[C:2]#[N+:3]-[O,S;D1-:4]	1:1:-;2:-1:-	1:2:8	0	-	[Fe]C#[N+][O-]>>[C-](#[N+][O-])~[Fe+]	A fulminate bound through its carbon and drawn covalently; the carbon becomes the [C-] that donates to the metal
+metals:07	[M;*;^,!^:3]-[C:1]#[O:2]	1:-1:-;2:1:-	1:3:8	0	-	C(#O)[Fe]>>[C-](#[O+])~[Fe]	A carbonyl drawn with a covalent M-C bond and a neutral C#O; the ligand is [C-]#[O+] and it donates rather than bonds
+metals:08	[M;*;^,!^:3]-[C:1]=[O:2] |^1:1|	1:-1:0;2:1:-	1:3:8;1:2:3	0	-	[C](=O)[Fe] |^1:0|>>[C-](#[O+])~[Fe]	A carbonyl drawn as a metal-bound acyl radical; the radical is cleared, the C-O becomes a triple bond and the ligand is [C-]#[O+]
+metals:09	[M;*;^,!^:3]-[C;D2:1]=[O:2]	1:-1:-;2:1:-	1:3:8;1:2:3	0	-	C(=O)[Fe](C=O)C=O>>[O+]#[C-]~[Fe](~[C-]#[O+])~[C-]#[O+]	A carbonyl drawn as a two-coordinate M-C=O; the C-O becomes a triple bond and the ligand is [C-]#[O+] donating to the metal
+metals:10	[M;*;^,!^:3]-[C:1](-[M;*;^,!^:4])=[O:2]	1:-1:-;2:1:-	1:3:8;1:4:8;1:2:3	0	-	C1(=O)[Fe]C(=O)[Fe]1>>[C-]~1(#[O+])~[Fe]~[C-](#[O+])~[Fe]~1	A carbonyl bridging two metals and drawn covalently to both; both M-C bonds become dative and the ligand is [C-]#[O+]
+metals:11	[M;*;^,!^:1]-1-2-3-4-[C:2]-5-[C:3]-1-,=[C:4]-2-[C:5]-3-,=[C:6]-4-5	1:1:-;2:-1:-	1:2:8;1:3:8;1:4:8;1:5:8;1:6:8;3:4:2;5:6:2	0	-	[Fe]1234C5C1C2C3C45>>[CH]1=2~[Fe+]~3~4~5~[CH]([CH-]1~3)=[CH]~4[CH]=2~5;[Fe]1234C5C1=C2C3=C45>>[CH]1=2~[Fe+]~3~4~5~[CH]([CH-]1~3)=[CH]~4[CH]=2~5	A cyclopentadienyl drawn with five covalent M-C single bonds and none, one or both of its ring double bonds; the ring gets both double bonds and its charge, and all five bonds become dative.  The half-drawn ring is a WIDENING over the two rows this replaced, which matched only the all-single and the both-double spellings
+metals:12	[M;*;^,!^:1]-1-2-3-4-[C:2]-5-[C:3]-1=[C:4]-2-[C:5]-3=[C:6]-4-5 |^1:1|	1:1:-;2:-1:0;3:0:0;4:0:0;5:0:0;6:0:0	1:2:8;1:3:8;1:4:8;1:5:8;1:6:8;3:4:2;5:6:2	0	-	[Fe]1234[C]5C1=C2C3=C45 |^1:1|>>[CH]1=2~[Fe+]~3~4~5~[CH]([CH-]1~3)=[CH]~4[CH]=2~5	The same ferrocene as metals:12 with a radical ring carbon; the radical is cleared and becomes the ring anion
+metals:13	[M;*;^,!^:1]-1-2-3-4-[C-:2]-5-[C:3]-1=[C:4]-2-[C:5]-3=[C:6]-4-5	-	1:2:8;1:3:8;1:4:8;1:5:8;1:6:8	0	-	[Fe]1234[C-]5C1=C2C3=C45>>[CH]1=2~[Fe]~3~4~5~[CH]([CH-]1~3)=[CH]~4[CH]=2~5	The same ferrocene as metals:12 where the ring carbon already carries its charge, so only the bonds become dative
+metals:14	[M;*;^,!^:1]^1^2^3^4^[C:2]-5-[C:3]^1=[C:4]^2-[C:5]^3=[C:6]^4-5 |^1:1|	1:1:-;2:-1:0;3:0:0;4:0:0;5:0:0;6:0:0	3:4:2;5:6:2	0	-	[Fe]~1~2~3~4~[C]5C~1=C~2C~3=C~45 |^1:1|>>[CH]1=2~[Fe+]~3~4~5~[CH]([CH-]1~3)=[CH]~4[CH]=2~5	A cyclopentadienyl already dative-bonded to the metal but drawn with a radical ring carbon; the radical becomes the ring anion and the metal takes the matching charge
+metals:15	[M;*;^,!^:1]^1^2^[C;z2:2]=[C:3]^1-[C:4]^2 |^1:3|	1:1:-;4:-1:0	-	0	-	[Fe]~1~2~C=C~1[C]~2 |^1:3|>>[CH2-]~1[CH]~2=[CH2]~[Fe+]~1~2	An allyl ligand drawn with a radical terminal carbon; the radical becomes the allyl anion and the metal takes the matching charge
+metals:16	[M;*;^,!^:1]-[P&D4&z1,N&z1;+:2]-C	1:1:-;2:-1:-	1:2:8	0	-	[Fe][P+](C)(C)C>>C[P](~[Fe+])(C)C;[Fe][NH+](C)C>>C[NH](~[Fe+])C	A phosphonium or an ammonium drawn with a covalent bond to the metal; the bond is the donor's lone pair, so it becomes dative and the charge moves to the metal
+metals:17	[M;*;^,!^:1]-[P&D4&z1,N&z1:2]-C	-	1:2:8	0	-	[Fe]P(C)(C)C>>C[P](~[Fe])(C)C;[Fe]N(C)C>>C[NH](~[Fe])C	The same repair for a neutral four-coordinate phosphine or a neutral amine, where only the bond changes
+metals:18	[M;*;^,!^:1]-[O;D3;+:2](-C)-C	1:1:-;2:-1:-	1:2:8	0	-	[Fe][O+](C)C>>C[O](~[Fe+])C	An oxonium ether drawn with a covalent bond to the metal; the bond is an oxygen lone pair, so it becomes dative and the charge moves to the metal

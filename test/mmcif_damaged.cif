@@ -1,0 +1,65 @@
+# Hand-written PDBx/mmCIF, not an archive entry.  Every line of damage here is deliberate.
+#
+# What it demonstrates, in order: a duplicated scalar item; an item with no value; a `loop_` whose
+# last row is short of its header; an atom with no element stated; a non-numeric coordinate; an
+# occupancy outside 0..1; a 5-character component id (which is NOT damage -- wwPDB issues them, and
+# no field here has a width); a `value_order` chython holds no bond for; a `_struct_conn` row naming
+# an atom that is not in the model; a hydrogen bond; and a partner under a symmetry operator whose
+# image is not among the deposited coordinates.
+#
+# None of it is grounds for rejecting the record.  Every one of them is a log line.
+data_TESTDAMAGE
+_entry.id   TESTDAMAGE
+_entry.id   TESTDAMAGE_AGAIN
+_struct.title
+_struct.pdbx_descriptor   'the title above has no value'
+#
+loop_
+_chem_comp_bond.comp_id
+_chem_comp_bond.atom_id_1
+_chem_comp_bond.atom_id_2
+_chem_comp_bond.value_order
+LIGXY C1 C2 SING
+LIGXY C2 O1 QUAD
+#
+loop_
+_struct_conn.id
+_struct_conn.conn_type_id
+_struct_conn.ptnr1_label_asym_id
+_struct_conn.ptnr1_label_comp_id
+_struct_conn.ptnr1_label_seq_id
+_struct_conn.ptnr1_label_atom_id
+_struct_conn.ptnr1_auth_asym_id
+_struct_conn.ptnr1_auth_seq_id
+_struct_conn.ptnr1_symmetry
+_struct_conn.ptnr2_label_asym_id
+_struct_conn.ptnr2_label_comp_id
+_struct_conn.ptnr2_label_seq_id
+_struct_conn.ptnr2_label_atom_id
+_struct_conn.ptnr2_auth_asym_id
+_struct_conn.ptnr2_auth_seq_id
+_struct_conn.ptnr2_symmetry
+c1 covale A LIGXY . C1 A 1 1_555 A LIGXY . NOSUCH A 1 1_555
+c2 hydrog A LIGXY . O1 A 1 1_555 A LIGXY . C1     A 1 1_555
+c3 metalc A LIGXY . O1 A 1 1_555 B FE    . FE     B 1 2_555
+#
+loop_
+_atom_site.group_PDB
+_atom_site.id
+_atom_site.type_symbol
+_atom_site.label_atom_id
+_atom_site.label_alt_id
+_atom_site.label_comp_id
+_atom_site.label_asym_id
+_atom_site.label_seq_id
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+_atom_site.occupancy
+_atom_site.Cartn_x_esd
+_atom_site.auth_seq_id
+_atom_site.auth_asym_id
+HETATM 1 C  C1 . LIGXY A . 0.000 0.000 0.000 1.00 0.005 1 A
+HETATM 2 ?  C2 . LIGXY A . 1.500 0.000 0.000 1.00 0.005 1 A
+HETATM 3 O  O1 . LIGXY A . middle 1.200 0.000 -0.50 0.005 1 A
+HETATM 4 FE FE . FE    B . 5.000 5.000 5.000

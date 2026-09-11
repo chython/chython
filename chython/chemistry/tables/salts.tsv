@@ -1,0 +1,162 @@
+# Salt knowledge: which atoms are cations, which may take the charge, and which whole components are
+# counterions, bases or solvates.  Read by chython/chemistry/_tables.py, applied by chython/chemistry/_salts.py.
+#
+# TWO MATCHING MECHANISMS, AND THE `role` COLUMN SELECTS.  A role an ATOM plays is a question about a
+# neighbourhood, so it is a SMARTS matched by embedding.  A component that IS a compound is that compound,
+# so it is a SMILES matched by key equality of the WHOLE component.  Neither can express the other's
+# question honestly: `[M;*:1]` would need 186 SMILES rows, and tartaric acid every hydrogen count spelled
+# out as SMARTS.
+#
+#   role         pattern is   matched by                                    used by
+#   cation       SMARTS       embedding; the `:1` atom is the cation        split_salts, decompose_salts*
+#   acceptor     SMARTS       embedding; the `:1` atom takes the -1        split_salts
+#   counterion   SMILES       key equality, whole component                 decompose_salts
+#   base         SMILES       key equality, whole component                 decompose_salts
+#   solvate      SMILES       key equality, whole component                 decompose_salts
+#
+#   * decompose_salts uses a cation row only when the whole component is that ONE atom -- a lone [Na+].
+#     All 93 metals the core's `[M]` accepts qualify, not the s-block alone.
+#
+# A SPECIES ROW IS COMPARED BY `format(component, '!s')` -- the canonical SMILES with stereo disabled,
+# after `thiele()` on both sides.  Stereo is out because a row names a CONSTITUTION: whether the tartrate
+# is L, D or meso does not change that it is the counterion.  `thiele()` is in because the writer writes
+# what is stored, so a Kekule toluene and an aromatic one are otherwise two different strings.  NOT
+# `standardize()`: that is a repair the caller did not ask for, so a mis-drawn nitric acid needs
+# `standardize()` first or a row of its own.
+#
+# A CONJUGATE IS NOT A ROW.  `decompose_salts` neutralizes before it matches, so `[Cl-]` is `Cl` and
+# `CC([O-])=O` is acetic acid by the time the key is taken.  Only a species that cannot be neutral gets
+# its own row: `salts:choline` is a quaternary ammonium and has nowhere to put the charge.
+#
+# A SPECIES THAT IS BOTH SOLVENT AND BASE IS TABULATED AS THE `base`.  When every component is tabulated,
+# `decompose_salts` takes the species rows as the parents and counts the solvates, so pyridine under
+# `solvate` would read pyridine hydrochloride as hydrochloric acid; under `base` that record answers with
+# both components as candidate parents, which a caller can see and reject.
+#
+# `charges` IS THE OVERCHARGE GUARD AND ONLY A `cation` ROW HAS ONE.  A cation cutting k bonds ends at
+# charge+k; the row lists every value that is allowed to be, and the whole atom is refused before anything
+# is cut -- all-or-nothing, never a partially split molecule.
+#
+# There is no `elements` column: `pattern` already names the elements a row applies to, and `keep=['Na']` is
+# resolved against the MOLECULE's atoms.
+id	role	pattern	charges	comment
+# --- cations -------------------------------------------------------------------------------------- #
+salts:metal	cation	[M;*:1]	1;2;3;4	any of the 93 metals `[M]` accepts, at any charge.  Generality is safe because every bond is cut or none is: see _salts.py
+# --- acceptors: the atom that keeps the electron pair when a cation lets go ----------------------- #
+salts:oxo-acid	acceptor	[O,S,Se;D2;z1:1]-[C,N,P,S,Cl,Se,Br,I,Si]=O	-	carboxylate, sulfonate, phosphate, perchlorate and their S/Se analogues
+salts:thiophosphate	acceptor	[O,S,Se;D2;z1:1]-[P]=[S,Se]	-	thio- and selenophosphate, which the oxo-acid row misses for want of a `=O`
+salts:phenolate	acceptor	[O,S,Se;D2;z1:1]-[C,N;a]	-	phenolate, thiophenolate, N-hydroxy azole
+salts:nitrate	acceptor	[O;D2;z1:1]-[N+](-[O-])=O	-	nitrate, drawn charge-separated as standardize() leaves it
+salts:halide-hydroxide	acceptor	[O,F,Cl,Br,I;D1;z1:1]	-	a terminal halogen or oxygen: halide, hydroxide, alkoxide
+# --- counterions, acidic: the mineral and organic acids ------------------------------------------- #
+salts:hf	counterion	F	-	hydrofluoric
+salts:hcl	counterion	Cl	-	hydrochloric
+salts:hbr	counterion	Br	-	hydrobromic
+salts:hi	counterion	I	-	hydroiodic
+salts:hno3	counterion	O[N+](=O)[O-]	-	nitric
+salts:hno2	counterion	ON=O	-	nitrous
+salts:h3po4	counterion	OP(O)(O)=O	-	phosphoric
+salts:dimethyl-phosphate	counterion	COP(O)(=O)OC	-	dimethyl phosphate
+salts:h2so4	counterion	OS(O)(=O)=O	-	sulfuric
+salts:mesylic	counterion	CS(O)(=O)=O	-	methanesulfonic
+salts:triflic	counterion	OS(=O)(=O)C(F)(F)F	-	trifluoromethanesulfonic
+salts:tosylic	counterion	CC1=CC=C(C=C1)S(O)(=O)=O	-	p-toluenesulfonic
+salts:h2co3	counterion	OC(O)=O	-	carbonic
+salts:formic	counterion	OC=O	-	formic
+salts:acetic	counterion	CC(O)=O	-	acetic
+salts:tfa	counterion	OC(=O)C(F)(F)F	-	trifluoroacetic
+salts:glycolic	counterion	OCC(O)=O	-	glycolic
+salts:lactic	counterion	CC(O)C(O)=O	-	lactic
+salts:oxalic	counterion	OC(=O)C(O)=O	-	oxalic
+salts:dichloroacetic	counterion	OC(=O)C(Cl)Cl	-	dichloroacetic
+salts:maleic	counterion	OC(=O)C=CC(O)=O	-	maleic and fumaric -- one row, the key being taken with stereo disabled
+salts:tartaric	counterion	OC(C(O)C(O)=O)C(O)=O	-	tartaric, any stereoisomer, for the same reason
+salts:hclo4	counterion	O[Cl](=O)(=O)=O	-	perchloric
+salts:citric	counterion	OC(=O)CC(O)(CC(O)=O)C(O)=O	-	citric
+salts:succinic	counterion	OC(=O)CCC(O)=O	-	succinic
+salts:malic	counterion	OC(CC(O)=O)C(O)=O	-	malic, any stereoisomer
+salts:malonic	counterion	OC(=O)CC(O)=O	-	malonic
+salts:glutaric	counterion	OC(=O)CCCC(O)=O	-	glutaric
+salts:adipic	counterion	OC(=O)CCCCC(O)=O	-	adipic
+salts:sebacic	counterion	OC(=O)CCCCCCCCC(O)=O	-	sebacic
+salts:mucic	counterion	OC(=O)C(O)C(O)C(O)C(O)C(O)=O	-	galactaric (mucic)
+salts:gluconic	counterion	OCC(O)C(O)C(O)C(O)C(O)=O	-	gluconic
+salts:ascorbic	counterion	OCC(O)C1OC(=O)C(O)=C1O	-	ascorbic
+salts:mandelic	counterion	OC(c1ccccc1)C(O)=O	-	mandelic
+salts:benzoic	counterion	OC(=O)c1ccccc1	-	benzoic
+salts:salicylic	counterion	OC(=O)c1ccccc1O	-	salicylic
+salts:gentisic	counterion	OC(=O)c1cc(O)ccc1O	-	gentisic
+salts:xinafoic	counterion	OC(=O)c1c(O)ccc2ccccc12	-	1-hydroxy-2-naphthoic (xinafoic)
+salts:pamoic	counterion	OC(=O)c1c(O)c(Cc2c(O)c(C(O)=O)c3ccccc3c2)cc4ccccc14	-	pamoic (embonic)
+salts:hippuric	counterion	OC(=O)CNC(=O)c1ccccc1	-	hippuric
+salts:nicotinic	counterion	OC(=O)c1cccnc1	-	nicotinic
+salts:orotic	counterion	OC(=O)C1=CC(=O)NC(=O)N1	-	orotic
+salts:pyroglutamic	counterion	OC(=O)C1CCC(=O)N1	-	pyroglutamic
+salts:aspartic	counterion	OC(=O)CC(N)C(O)=O	-	aspartic
+salts:glutamic	counterion	OC(=O)CCC(N)C(O)=O	-	glutamic
+salts:lauric	counterion	CCCCCCCCCCCC(O)=O	-	lauric (dodecanoic)
+salts:palmitic	counterion	CCCCCCCCCCCCCCCC(O)=O	-	palmitic (hexadecanoic)
+salts:stearic	counterion	CCCCCCCCCCCCCCCCCC(O)=O	-	stearic (octadecanoic)
+salts:oleic	counterion	CCCCCCCCC=CCCCCCCCC(O)=O	-	oleic
+salts:besylic	counterion	OS(=O)(=O)c1ccccc1	-	benzenesulfonic (besylic)
+salts:esylic	counterion	CCS(O)(=O)=O	-	ethanesulfonic (esylic)
+salts:napsylic	counterion	OS(=O)(=O)c1ccc2ccccc2c1	-	naphthalene-2-sulfonic (napsylic)
+salts:camsylic	counterion	CC1(C)C2CCC1(CS(O)(=O)=O)C(=O)C2	-	camphor-10-sulfonic (camsylic)
+salts:isethionic	counterion	OCCS(O)(=O)=O	-	2-hydroxyethanesulfonic (isethionic)
+salts:edisylic	counterion	OS(=O)(=O)CCS(O)(=O)=O	-	1,2-ethanedisulfonic (edisylic)
+salts:cyclamic	counterion	OS(=O)(=O)NC1CCCCC1	-	cyclohexylsulfamic (cyclamic)
+salts:thiocyanic	counterion	SC#N	-	thiocyanic
+# --- counterions, basic --------------------------------------------------------------------------- #
+salts:ammonia	base	N	-	ammonia, which the cation rows do not reach: `[M]` is 93 metals and nitrogen is not one
+salts:diethylamine	base	CCNCC	-	diethylamine
+salts:triethylamine	base	CCN(CC)CC	-	triethylamine
+salts:tert-butylamine	base	CC(C)(C)N	-	tert-butylamine
+salts:cyclohexylamine	base	NC1CCCCC1	-	cyclohexylamine
+salts:ethylenediamine	base	NCCN	-	ethylenediamine
+salts:piperazine	base	C1CNCCN1	-	piperazine
+salts:morpholine	base	C1COCCN1	-	morpholine
+salts:imidazole	base	c1cnc[nH]1	-	imidazole
+salts:pyridine	base	c1ccncc1	-	pyridine, a base rather than a solvate: see the header note on the two roles
+salts:guanidine	base	NC(N)=N	-	guanidine
+salts:hydrazine	base	NN	-	hydrazine
+salts:ethanolamine	base	OCCN	-	ethanolamine (olamine)
+salts:diethanolamine	base	OCCNCCO	-	diethanolamine
+salts:triethanolamine	base	OCCN(CCO)CCO	-	triethanolamine
+salts:deanol	base	CN(C)CCO	-	2-(dimethylamino)ethanol (deanol)
+salts:tromethamine	base	OCC(N)(CO)CO	-	tromethamine (TRIS)
+salts:meglumine	base	CNCC(O)C(O)C(O)C(O)CO	-	meglumine, any stereoisomer
+salts:choline	base	C[N+](C)(C)CCO	-	choline, tabulated charged: a quaternary ammonium cannot be neutralized
+salts:benzathine	base	C(c1ccccc1)NCCNCc1ccccc1	-	benzathine
+salts:procaine	base	CCN(CC)CCOC(=O)c1ccc(N)cc1	-	procaine
+salts:arginine	base	NC(CCCNC(N)=N)C(O)=O	-	arginine, any stereoisomer
+salts:lysine	base	NCCCCC(N)C(O)=O	-	lysine, any stereoisomer
+# --- solvates: present in the record, not part of the compound ------------------------------------ #
+salts:water	solvate	O	-	water of crystallization
+salts:methanol	solvate	CO	-	methanol
+salts:ethanol	solvate	CCO	-	ethanol
+salts:isopropanol	solvate	CC(C)O	-	2-propanol
+salts:acetone	solvate	CC(C)=O	-	acetone
+salts:acetonitrile	solvate	CC#N	-	acetonitrile
+salts:dmso	solvate	CS(C)=O	-	dimethyl sulfoxide
+salts:dmf	solvate	CN(C)C=O	-	N,N-dimethylformamide
+salts:thf	solvate	C1CCOC1	-	tetrahydrofuran
+salts:dioxane	solvate	C1COCCO1	-	1,4-dioxane
+salts:ethyl-acetate	solvate	CCOC(C)=O	-	ethyl acetate
+salts:diethyl-ether	solvate	CCOCC	-	diethyl ether
+salts:mtbe	solvate	COC(C)(C)C	-	methyl tert-butyl ether
+salts:dichloromethane	solvate	ClCCl	-	dichloromethane
+salts:chloroform	solvate	ClC(Cl)Cl	-	chloroform
+salts:toluene	solvate	Cc1ccccc1	-	toluene
+salts:benzene	solvate	c1ccccc1	-	benzene
+salts:hexane	solvate	CCCCCC	-	n-hexane
+salts:heptane	solvate	CCCCCCC	-	n-heptane
+salts:pentane	solvate	CCCCC	-	n-pentane
+salts:cyclohexane	solvate	C1CCCCC1	-	cyclohexane
+salts:butanol	solvate	CCCCO	-	1-butanol
+salts:tert-butanol	solvate	CC(C)(C)O	-	tert-butanol
+salts:mek	solvate	CCC(C)=O	-	2-butanone
+salts:nmp	solvate	CN1CCCC1=O	-	N-methyl-2-pyrrolidone
+salts:dma	solvate	CC(=O)N(C)C	-	N,N-dimethylacetamide
+salts:dme	solvate	COCCOC	-	1,2-dimethoxyethane
+salts:dichloroethane	solvate	ClCCCl	-	1,2-dichloroethane
+salts:anisole	solvate	COc1ccccc1	-	anisole

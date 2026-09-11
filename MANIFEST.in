@@ -1,0 +1,14 @@
+# What an sdist needs beyond the installed package, i.e. what it takes to BUILD rather than to run.
+#
+# `setup.py` cythonizes from source, so the .pyx modules and the .pxi layers they include must be in
+# the sdist or an install from it cannot compile.  `build_inchi.py` likewise: setup.py imports it.
+recursive-include chython *.pyx *.pxi
+include build_inchi.py
+
+# Generated C is excluded on purpose.  It is checked in for the developer loop, but shipping it lets
+# an sdist install compile a stale translation unit against fresh .pyx sources without saying so.
+recursive-exclude chython *.c
+
+# Nor do built artefacts belong in a source distribution -- that is the failure the migration away
+# from the copy-back build removed, and an sdist is the other door into it.
+recursive-exclude chython *.so *.pyd *.dylib *.dll

@@ -1,0 +1,22 @@
+HEADER    HAND-WRITTEN DAMAGE, NOT AN ENTRY       01-JAN-26   TSTD
+TITLE     EVERY MALFORMATION BELOW IS DELIBERATE
+REMARK   1 What this demonstrates, in order: a four-character residue name in columns 18-21;
+REMARK   1 an atom with nothing in the element columns 77-78; an element token that is not a
+REMARK   1 symbol; a negative occupancy; a B factor the six-column field cannot hold at the
+REMARK   1 two decimals the format asks for; two atoms sharing one serial; an ATOM line
+REMARK   1 truncated before its coordinates; one truncated before its serial; a CONECT naming
+REMARK   1 a serial that is not in the file; a CONECT pair stated a third time, past the
+REMARK   1 reciprocal statement the format asks for; and an SSBOND under a symmetry operator
+REMARK   1 whose image is not among the coordinates.  The lines end CRLF, as a deck punched on
+REMARK   1 one platform and read on another does.  None of it rejects the record.
+SSBOND   1 CYS A   10    CYS A   11                          1555   2555  2.03
+HETATM    1 C1   LIGXA 501       0.000   0.000   0.000  1.00 12.30           C  
+HETATM    2 C2   LIG A 501       1.500   0.000   0.000  1.00 13.40              
+HETATM    3 O1   LIG A 501       2.100   1.200   0.000  1.00 14.50          XX  
+HETATM    3 O2   LIG A 501       2.100  -1.200   0.000 -0.501234.5           O  
+HETATM    5 N1   LIG A 501       3.000  
+ATOM  
+CONECT    1    2   99
+CONECT    2    1
+CONECT    1    2
+END

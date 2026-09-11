@@ -1,0 +1,19 @@
+REMARK   1 Hand written, and the legacy half of a pair.  `test/mmcif_dipeptide.cif` states the
+REMARK   1 same structure -- one GLY-ALA dipeptide and one water -- in PDBx/mmCIF, and
+REMARK   1 `build_molecule` must return the same molecule from either.  The two files reach it by
+REMARK   1 different routes: this one states no bond at all, so every bond comes from the residue
+REMARK   1 table, while the mmCIF states its intra-residue bonds in `_chem_comp_bond` and they
+REMARK   1 must deduplicate against the table rather than doubling.  Neither states the peptide
+REMARK   1 bond, which both build from the consecutive residue numbering.
+ATOM      1 N    GLY A   1       1.000   0.000   0.000  1.00 20.00           N  
+ATOM      2 CA   GLY A   1       2.000   0.000   0.000  1.00 20.00           C  
+ATOM      3 C    GLY A   1       3.000   0.000   0.000  1.00 20.00           C  
+ATOM      4 O    GLY A   1       3.500   1.000   0.000  1.00 20.00           O  
+ATOM      5 N    ALA A   2       4.000   0.000   0.000  1.00 20.00           N  
+ATOM      6 CA   ALA A   2       5.000   0.000   0.000  1.00 20.00           C  
+ATOM      7 CB   ALA A   2       5.500   1.400   0.000  1.00 20.00           C  
+ATOM      8 C    ALA A   2       6.000   0.000   0.000  1.00 20.00           C  
+ATOM      9 O    ALA A   2       6.500   1.000   0.000  1.00 20.00           O  
+ATOM     10 OXT  ALA A   2       6.500  -1.000   0.000  1.00 20.00           O  
+HETATM   11 O    HOH B   1       9.000   9.000   9.000  1.00 20.00           O  
+END

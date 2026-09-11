@@ -1,0 +1,11 @@
+# rotatable.tsv -- rotatable bond definition.  CHYTHON'S OWN, not Lipinski's and not Veber's: an acyclic
+# single bond between two heavy atoms that each have another heavy neighbour, less the amide and sulfonamide
+# C-N/S-N bonds, whose rotation is restricted.
+# the bond counted is the one between the atoms mapped :1 and :2, counted ONCE however many ways the pattern
+# maps onto it -- row 1 is symmetric, so the matcher offers each bond twice.
+# charged and radical atoms are IN: `*;^,!^` withdraws both defaults, so nitrobenzene's aryl-N bond counts.
+# roles: rotatable | exclude.  every `exclude` match removes its (:1,:2) bond from the set.
+id	role	pattern	description
+1	rotatable	[A;*;^,!^;D2,D3,D4:1]-;!@[A;*;^,!^;D2,D3,D4:2]	acyclic single bond, neither atom terminal
+2	exclude	[N;*;D2,D3:1]-;!@[C,S;*;D2,D3:2]=[O,N;*]	amide, thioamide, amidine: restricted C-N rotation
+3	exclude	[N;*;D2,D3:1]-;!@[S;*;D4:2](=[O,N;*])=[O,N;*]	sulfonamide and sulfonimidamide

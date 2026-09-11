@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The alternative spellings CML has for the same facts. Everything in this file must be
+     READ, not logged: the point of the fixture is that one attribute table serves three
+     syntaxes, so a charge is parsed by one function however the file spelled it.
+
+       m1  acetic acid    - the CML 2 whitespace-column array form, on <atomArray> and
+                             <bondArray> attributes, plus a <propertyList>
+       m2  ethanol        - the CML 1 form, columns as <stringArray builtin="..."> and
+                             <floatArray builtin="..."> children
+       m3  chloromethane  - the CML 1 per-atom form, <string builtin="..."> children of
+                             <atom> and of <bond>
+       m4  13C-methanol-d - isotope="13" and elementType="D", the deuterium spelling a
+                             molfile-derived converter leaves behind
+       m5  13C methyl radical - isotopeNumber="13", the older spelling of the same field,
+                             and spinMultiplicity="2"; also a one-atom molecule, which real
+                             files write with no <bondArray> at all
+       m6  ammonium       - formalCharge="1" with hydrogenCount="4"; note hydrogenCount is
+                             the TOTAL hydrogen count, not the implicit one
+       m7  water          - x3/y3/z3 only, so the record is 3D and there is no drawing -->
+<cml xmlns="http://www.xml-cml.org/schema">
+  <molecule id="m1" title="acetic acid">
+    <propertyList>
+      <property dictRef="chython:origin" title="Origin"><scalar>hand-written fixture</scalar></property>
+      <property dictRef="chython:mp"><scalar dataType="xsd:double" units="unit:celsius">17</scalar></property>
+    </propertyList>
+    <atomArray atomID="a1 a2 a3 a4" elementType="C C O O"
+               x2="0.00 0.87 1.73 0.87" y2="0.00 0.50 0.00 1.50"/>
+    <bondArray atomRef1="a1 a2 a2" atomRef2="a2 a3 a4" order="1 2 1"/>
+  </molecule>
+  <molecule id="m2" title="ethanol">
+    <atomArray>
+      <stringArray builtin="atomID">a1 a2 a3</stringArray>
+      <stringArray builtin="elementType">C C O</stringArray>
+      <floatArray builtin="x2">0.00 0.87 1.73</floatArray>
+      <floatArray builtin="y2">0.00 0.50 0.00</floatArray>
+    </atomArray>
+    <bondArray>
+      <stringArray builtin="atomRef1">a1 a2</stringArray>
+      <stringArray builtin="atomRef2">a2 a3</stringArray>
+      <stringArray builtin="order">1 1</stringArray>
+    </bondArray>
+  </molecule>
+  <molecule id="m3" title="chloromethane">
+    <atomArray>
+      <atom id="a1"><string builtin="elementType">C</string></atom>
+      <atom id="a2"><string builtin="elementType">Cl</string></atom>
+    </atomArray>
+    <bondArray>
+      <bond id="b1" atomRefs2="a1 a2"><string builtin="order">1</string></bond>
+    </bondArray>
+  </molecule>
+  <molecule id="m4" title="13C-methanol-d">
+    <atomArray>
+      <atom id="a1" elementType="C" isotope="13" x2="0.00" y2="0.00"/>
+      <atom id="a2" elementType="O" x2="0.87" y2="0.50"/>
+      <atom id="a3" elementType="D" x2="1.73" y2="0.00"/>
+    </atomArray>
+    <bondArray>
+      <bond id="b1" atomRefs2="a1 a2" order="1"/>
+      <bond id="b2" atomRefs2="a2 a3" order="1"/>
+    </bondArray>
+  </molecule>
+  <molecule id="m5" title="13C methyl radical">
+    <atomArray>
+      <atom id="a1" elementType="C" isotopeNumber="13" spinMultiplicity="2" x2="0.00" y2="0.00"/>
+    </atomArray>
+  </molecule>
+  <molecule id="m6" title="ammonium">
+    <atomArray>
+      <atom id="a1" elementType="N" formalCharge="1" hydrogenCount="4" x2="0.00" y2="0.00"/>
+    </atomArray>
+  </molecule>
+  <molecule id="m7" title="water">
+    <atomArray>
+      <atom id="a1" elementType="O" x3="0.0000" y3="0.0000" z3="0.0000"/>
+      <atom id="a2" elementType="H" x3="0.7570" y3="0.5860" z3="0.0000"/>
+      <atom id="a3" elementType="H" x3="-0.7570" y3="0.5860" z3="0.0000"/>
+    </atomArray>
+    <bondArray>
+      <bond id="b1" atomRefs2="a1 a2" order="1"/>
+      <bond id="b2" atomRefs2="a1 a3" order="1"/>
+    </bondArray>
+  </molecule>
+</cml>

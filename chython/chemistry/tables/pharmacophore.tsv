@@ -1,0 +1,21 @@
+# pharmacophore.tsv -- 2D pharmacophore feature typing.  six types after Kutlushina, Khakimova,
+# Madzhidov, Polishchuk, Molecules 2018, 23, 3094 (the TYPE SCHEME only; the patterns are chython's).
+# `donor` and `acceptor` are NOT here: they are tables/hbond.tsv, read through hbond_atoms().
+# the atom typed is the one mapped :1.  roles are additive -- an atom may carry several.
+# roles: positive | negative | aromatic | hydrophobe.
+#
+# A FORMAL CHARGE IS NOT AN IONISATION STATE, which is why row 4 names the NEUTRAL carbon, phosphorus or
+# sulfur the oxygen hangs off.  An N-oxide, a nitro group and a charge-separated sulfoxide all spell an
+# `[O-]`, and none of the three is an anion -- the charge is valence bookkeeping on a neutral molecule, and
+# the cationic centre excludes itself by carrying the other half of it.  A model given a negative feature
+# there is looking for a counter-ion that does not exist.
+id	role	pattern	description
+1	positive	[N;D4;z1;+:1]	quaternary ammonium and protonated amine
+2	positive	[N;+,+2;h1,h2,h3:1]	protonated N of any degree
+3	positive	[N;D1,D2;z2;h0,h1,h2:1]=[C;*]-[N;*;h1,h2]	guanidine and amidine, basic at physiological pH
+4	negative	[O;D1;-:1]-[#6,#15,#16]	deprotonated O on a neutral C, P or S: carboxylate, phenoxide, alkoxide, phosphate, sulfonate
+5	negative	[O;D1;h0:1]=[C,S,P;*]-[O;D1;-]	the second, formally neutral O of a delocalised anion
+6	negative	[S;D1;-:1]	thiolate
+7	negative	[N;D1,D2;-:1]	deprotonated amide or sulfonamide N
+8	aromatic	[A;*;^,!^;z4:1]	any atom in an aromatic ring
+9	hydrophobe	[#6,#9,#17,#35,#53,#16;*;x0:1]	carbon, halogen or sulfur with no heteroatom neighbour

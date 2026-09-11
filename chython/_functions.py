@@ -18,9 +18,27 @@
 #
 from functools import wraps
 from itertools import product
+from warnings import warn
 
 
 _SENTINEL = object()
+
+
+def renamed_name(old, new):
+    """Announce a superseded attribute spelling, naming what replaced it.
+
+    ONE FUNCTION SO THE MESSAGE HAS ONE WORDING.  Every alias routes through here, so the text a
+    consumer greps for while porting is the same text in all of them, and the removal is one edit.
+
+    `stacklevel=3` charges the warning to the CALLER, which is the only person who can act on it: the
+    three frames are `warn` -> this function -> the property's fget or fset -> the consumer's line.
+    THE NUMBER IS MEASURED, NOT REASONED.  Its counterpart in the compiled core is 1 for the same
+    intent, because neither a `cdef` helper nor a compiled `def` pushes a Python frame; so the right
+    number is a property of the call chain rather than of the source, and both are asserted by a test
+    on the blamed line rather than trusted.
+    """
+    warn(f'`{old}` was renamed to `{new}` and will be removed in a later release; use `{new}`',
+         DeprecationWarning, stacklevel=3)
 
 
 def cached_method(func):
@@ -92,4 +110,4 @@ def lazy_product(*args):
             yield tuple(p[x] for x, p in zip(ind, pools))
 
 
-__all__ = ['cached_method', 'lazy_product']
+__all__ = ['cached_method', 'lazy_product', 'renamed_name']

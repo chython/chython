@@ -1,0 +1,13 @@
+REMARK   1 Hand written.  What it demonstrates: two MODEL blocks are two records, and the
+REMARK   1 CONECT records that follow the last ENDMDL apply to both of them.
+MODEL        1
+ATOM      1  N   GLY A   1       0.000   0.000   0.000  1.00  5.00           N
+ATOM      2  CA  GLY A   1       1.450   0.000   0.000  1.00  5.10           C
+ENDMDL
+MODEL        2
+ATOM      1  N   GLY A   1       0.100   0.050   0.020  1.00  5.00           N
+ATOM      2  CA  GLY A   1       1.470   0.030   0.010  1.00  5.10           C
+ENDMDL
+CONECT    1    2
+CONECT    2    1
+END

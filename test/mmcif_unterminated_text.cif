@@ -1,0 +1,28 @@
+# Hand-written PDBx/mmCIF, not an archive entry.
+#
+# What it demonstrates: a `;`-delimited text field that is never closed.  It swallows the rest of the
+# file -- that is what the grammar says it does -- and a reader pointed at untrusted input must report
+# that rather than hang, raise, or silently return an empty block.  The atoms before it survive; the
+# `_atom_site` loop after it does not exist as far as the grammar is concerned, and the log says why.
+data_TESTUNTERM
+_entry.id   TESTUNTERM
+#
+loop_
+_atom_site.group_PDB
+_atom_site.id
+_atom_site.type_symbol
+_atom_site.label_atom_id
+_atom_site.label_alt_id
+_atom_site.label_comp_id
+_atom_site.label_asym_id
+_atom_site.label_seq_id
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+HETATM 1 O O . HOH A . 0.000 0.000 0.000
+#
+_struct.title
+;a title whose closing semicolon was lost
+and this line, and every line after it, is part of the title
+_atom_site.group_PDB
+HETATM 2 O O . HOH B . 9.000 9.000 9.000

@@ -1,0 +1,146 @@
+# crippen.tsv -- Wildman-Crippen atomic contributions to logP and molar refractivity.
+# Wildman, Crippen, J. Chem. Inf. Comput. Sci. 1999, 39, 868, Table 1: 72 atom types in 73 rows, and the
+# publication is the authority for every number here.  Transcription was aided by RDKit's BSD-3 distribution
+# of the same table (`<RDDataDir>/Crippen.txt`) -- an aid, not a dependency: nothing in chython imports rdkit
+# and no expected value in any test comes from calling it.  Patterns are chython dialect, translated from the
+# paper's Daylight SMARTS rather than copied -- Daylight `X` counts hydrogens where chython `D` does not, so
+# `[CX4]` is `[C;z1]` and never `[C;D4]`.
+#
+# COLUMNS
+#   id, type   the published type; the id travels in every log record.
+#   role       heavy    = the atom mapped `:1` is the atom typed.
+#              hydrogen = the atom mapped `:1` is the CARRIER, and the contribution is multiplied by its
+#                         total hydrogen count.  chython molecules carry implicit hydrogens, so an H type is
+#                         a property of what the H hangs off -- which is also what makes `C` and
+#                         `[H]C([H])([H])[H]` give the same logP, as they must.
+#   logp, mr   the paper's two columns.  A blank `mr` (N10, N12, O12, Hal, Me2) is written `-`, stored as 0.0
+#              and flagged `mr_published=False`, because O7 and O9 carry a real published mr of 0.
+#   pattern    chython SMARTS; the atom typed is the one mapped `:1`.
+#   probe      one SMILES in which this row must WIN at least one atom, resolved first-match-wins over the
+#              rows of its own role.  It is the shadowing gate -- `test_every_type_wins_its_own_probe` -- and
+#              is `-` for the four catch-alls only, which nothing reaches until every row above has failed.
+#
+# ONE ROW PER TYPE, WITH ONE EXCEPTION, where the paper gives up to six alternative SMARTS for one type.
+# Collapsing them usually makes our pattern WIDER than the paper's, which is what forces the order flips
+# below.  Where a collapse would make one NARROWER the row is wrong and gets fixed rather than disclosed: a
+# type that cannot reach an environment the paper gives it contributes the block catch-all's number to that
+# atom for ever, and nothing in the file shows it.
+#
+# THE EXCEPTION IS S2, WHICH NEEDS TWO ROWS: its published alternatives are
+# `[S;-,-2,-3,-4,+1,+2,+3,+5,+6]` and `[S-0]=[N,O,P,S]` -- a bare charge test, and a test demanding a bond and
+# a neighbour -- and chython has no recursive SMARTS `$(...)`, so no single pattern is their disjunction.
+# Without the charge row the sulfur of `CS(C)=O` and of `C[S+]([O-])C`, one atom of one molecule drawn two
+# ways, differed by 0.65.  Both rows carry the same type, logP, MR and rule id `crippen:S2`, deliberately:
+# the id names the published TYPE, and a log reader has no use for which spelling fired.  The charge row
+# carries no `!z4`, so a charged aromatic S types S2 and not S3 -- the publication's own ordering, kept
+# rather than tidied.
+#
+# THE ANIONIC OXIDE OXYGEN IS O5 OR O6, WHICH IS WHY BOTH MAP `*` ON THE OXYGEN.  O7, "other anionic
+# oxygen", excludes a `#7` and a `#16` neighbour, so the publication routes an anionic oxygen on nitrogen to
+# O5 and one on sulfur to O6; O5's probe, `C[N+](=O)[O-]`, is a nitro compound for the same reason.  With
+# the charge unstated neither row could reach the atom both were written for, and an N-oxide's oxygen fell
+# past the OS catch-all -- charge-unstated too -- to untyped.  A phosphorus neighbour stays O7's: O7 excludes
+# nitrogen and sulfur and nothing else.
+#
+# A CATIONIC OXYGEN IS STILL UNTYPED, and no type is invented for it: `[OH3+]`, `C[OH2+]` and `C[O+](C)C`
+# reach no O row, the publication gives no cationic-oxygen type, and OS cannot answer for one while it
+# leaves its own charge unstated.
+#
+# THE HYDROGEN PRIMITIVE IS `H` AND NEVER `h`.  `H` is the total count and survives `explicify_hydrogens()`;
+# `h` is the implicit count alone and drops to zero the moment a caller makes hydrogens explicit.  A logP
+# that changed when a caller explicified would be reporting on the drawing.  For the same reason `O2` is
+# `H1,H2` and not `H1`: `[O;H1]` does not match water.
+#
+# AND `D` DOES NOT SURVIVE EXPLICIFYING EITHER -- an explicit hydrogen IS an atom in the graph, so methane's
+# carbon is D0 implicit and D4 explicit.  NO ROW MAY USE `D` TO COUNT SOMETHING HYDROGEN DECIDES: C2 says
+# `H0,H1` for "tertiary or quaternary" and not `D3,D4`, which once hydrogens were explicit claimed every C1
+# carbon in the table.  The `D`s that remain are on atoms whose row already pins H0 (N7, N8, O3, O4) or on a
+# doubly-bonded or anionic terminal oxygen that can carry no hydrogen at all (O5-O12) -- invariant for that
+# reason, not by luck.
+#
+# FIRST MATCH WINS, IN FILE ORDER, AND THE ORDER IS MOST-SPECIFIC-FIRST.  The paper's types overlap
+# deliberately, so file order IS the disambiguation between them, exactly as in
+# `chython/reactions/tables/protective.tsv`; a row that is a special case of a row above it never fires, and
+# nothing in the file shows it.  SO THE FILE ORDER IS NOT THE PUBLISHED NUMBERING.  Six rows move, all
+# measured: three because our collapse widened them (C8 and C2 before C1, H4 before H2, C26 before C6), two
+# because the paper's own numbering overlaps that way (O12 before O7, S2 before S1), and O9 because its
+# collapse was both too narrow and too wide, so it follows O10 and O11 and catches the rest.  Each element
+# block still ENDS in its catch-all (CS, HS, NS, OS); a catch-all moved earlier swallows its whole block.
+#
+# A PROBE PROVES A ROW IS REACHABLE; IT NEVER PROVES THE ROW ABOVE IT IS NOT TOO WIDE.  O10's probe is an
+# aromatic ALDEHYDE, which an O9 wide enough to take every aromatic KETONE still does not match, so such an
+# O9 leaves this gate green.  Name the two rows a probe is meant to discriminate when you choose it.
+id	type	role	logp	mr	pattern	probe	description
+1	C8	heavy	0.08452	2.464	[C;z1;x0;H3:1]-[C;z4]	Cc1ccccc1	primary aliphatic carbon attached to an aromatic carbon
+2	C2	heavy	0.0000	2.433	[C;z1;x0;H0,H1;!z4:1]	CC(C)(C)C	tertiary or quaternary aliphatic carbon bonded only to C and H
+3	C1	heavy	0.1441	2.503	[C;z1;x0;!z4:1]	CCCC	primary or secondary aliphatic carbon bonded only to C and H
+4	C3	heavy	-0.2035	2.753	[C;z1;!z4;H2,H3:1]-[N,O,P,S,F,Cl,Br,I;*;!z4]	CCO	sp3 carbon with one or two hydrogens attached to a heteroatom
+5	C4	heavy	-0.2051	2.731	[C;z1;!z4;H0,H1:1]-[N,O,P,S,F,Cl,Br,I;*;!z4]	CC(C)O	sp3 carbon with at most one hydrogen attached to a heteroatom
+6	C5	heavy	-0.2783	5.007	[C;!z4:1]=[!#6;!#1;!z4;*]	CC=O	carbon double bonded to an aliphatic heteroatom
+7	C26	heavy	0.2640	4.305	[C;!z4:1](=[C;*])-[A;*;z4]	C=Cc1ccccc1	aliphatic carbon double bonded to carbon and attached to an aromatic ring
+8	C6	heavy	0.1551	3.513	[C;!z4:1]=[C;!z4]	C=C	aliphatic carbon double bonded to another aliphatic carbon
+9	C7	heavy	0.0017	3.888	[C;z3;!z4:1]#[!#1;*]	CC#C	sp carbon of a triple bond
+10	C9	heavy	-0.1444	2.412	[C;z1;H3:1]-[N,O,S,P;z4]	Cn1cccc1	primary aliphatic carbon attached to an aromatic heteroatom
+11	C10	heavy	-0.0516	2.488	[C;z1;H2:1]-[N,O,S,P;z4]	CCn1cccc1	secondary aliphatic carbon attached to an aromatic heteroatom
+12	C11	heavy	0.1193	2.582	[C;z1;H1:1]-[N,O,S,P;z4]	CC(C)n1cccc1	tertiary aliphatic carbon attached to an aromatic heteroatom
+13	C12	heavy	-0.0967	2.576	[C;z1;H0:1]-[N,O,S,P;z4]	CC(C)(C)n1cccc1	quaternary aliphatic carbon attached to an aromatic heteroatom
+14	C13	heavy	-0.5443	4.041	[C;z4;H0:1]-[!#6;!#7;!#8;!#16;!#9;!#17;!#35;!#53;!#1;*;^,!^]	Bc1ccccc1	substituted aromatic carbon bonded to a heavy atom outside C/N/O/S and the halogens
+15	C14	heavy	0.0000	3.257	[C;z4:1]-[#9]	Fc1ccccc1	aromatic carbon bearing fluorine
+16	C15	heavy	0.2450	3.564	[C;z4:1]-[#17]	Clc1ccccc1	aromatic carbon bearing chlorine
+17	C16	heavy	0.1980	3.180	[C;z4:1]-[#35]	Brc1ccccc1	aromatic carbon bearing bromine
+18	C17	heavy	0.0000	3.104	[C;z4:1]-[#53]	Ic1ccccc1	aromatic carbon bearing iodine
+19	C18	heavy	0.1581	3.350	[C;z4;H1:1]	c1ccccc1	aromatic CH
+20	C19	heavy	0.2955	4.346	[C;z4:1](:[A;*;z4])(:[A;*;z4]):[A;*;z4]	c1ccc2ccccc2c1	aromatic bridgehead carbon, three aromatic bonds
+21	C20	heavy	0.2713	3.904	[C;z4:1](:[A;*;z4])(:[A;*;z4])-[A;*;z4]	c1ccccc1-c1ccccc1	aromatic carbon single bonded to another aromatic atom
+22	C21	heavy	0.1360	3.509	[C;z4:1](:[A;*;z4])(:[A;*;z4])-[C;!z4]	Cc1ccccc1	aromatic carbon bonded to an aliphatic carbon
+23	C22	heavy	0.4619	4.067	[C;z4:1](:[A;*;z4])(:[A;*;z4])-[N;!z4]	Nc1ccccc1	aromatic carbon bonded to an aliphatic nitrogen
+24	C23	heavy	0.5437	3.853	[C;z4:1](:[A;*;z4])(:[A;*;z4])-[O;!z4]	Oc1ccccc1	aromatic carbon bonded to an aliphatic oxygen
+25	C24	heavy	0.1893	2.673	[C;z4:1](:[A;*;z4])(:[A;*;z4])-[S;!z4]	Sc1ccccc1	aromatic carbon bonded to an aliphatic sulfur
+26	C25	heavy	-0.8186	3.135	[C;z4:1](:[A;*;z4])(:[A;*;z4])=[C,N,O;*;!z4]	O=c1cccc[nH]1	aromatic carbon double bonded to C, N or O
+27	C27	heavy	0.2148	2.693	[C;z1:1]-[!#6;!#7;!#8;!#15;!#16;!#9;!#17;!#35;!#53;!#1;*;^,!^]	C[Si](C)(C)C	sp3 carbon bonded to a heavy atom outside C/N/O/P/S and the halogens
+28	CS	heavy	0.08129	3.243	[C:1]	-	carbon, any environment not matched above
+29	H1	hydrogen	0.1230	1.057	[#6;H1,H2,H3,H4:1]	CCCC	hydrogen on carbon
+30	H4	hydrogen	0.2980	1.805	[O;H1;!z4:1]-[C,S,P;*;!z4](=[O;D1])	CC(=O)O	acidic hydrogen on a carboxyl, sulfonic or phosphonic oxygen
+31	H2	hydrogen	-0.2677	1.395	[O;H1,H2;!z4:1]	CCO	hydrogen on an alcohol or phenol oxygen
+32	H3	hydrogen	0.2142	0.9627	[N;H1,H2,H3:1]	CN	hydrogen on nitrogen
+33	HS	hydrogen	0.1125	1.112	[A;*;^,!^;H1,H2,H3,H4:1]	-	hydrogen on any other heavy atom
+34	N1	heavy	-1.0190	2.262	[N;H2;!z4:1]-[!#1;*;^,!^;!z4]	CN	primary aliphatic amine
+35	N2	heavy	-0.7096	2.173	[N;H1;!z4:1](-[!#1;*;^,!^;!z4])-[!#1;*;^,!^;!z4]	CNC	secondary aliphatic amine
+36	N3	heavy	-1.0270	2.827	[N;H2;!z4:1]-[A;*;z4]	Nc1ccccc1	primary aromatic amine
+37	N4	heavy	-0.5188	3.000	[N;H1;!z4:1](-[!#1;*;^,!^])-[A;*;z4]	CNc1ccccc1	secondary aromatic amine
+38	N5	heavy	0.08387	1.757	[N;H1;!z4:1]=[!#1;*;^,!^]	CC=N	imine with a hydrogen on nitrogen
+39	N6	heavy	0.1836	2.428	[N;H0;!z4:1](=[!#1;*;^,!^])-[!#1;*;^,!^]	CC=NC	substituted imine
+40	N7	heavy	-0.3187	1.839	[N;H0;!z4;D3:1](-[!#1;*;^,!^;!z4])(-[!#1;*;^,!^;!z4])-[!#1;*;^,!^;!z4]	CN(C)C	tertiary aliphatic amine
+41	N8	heavy	-0.4458	2.819	[N;H0;!z4;D3:1]-[A;*;z4]	CN(C)c1ccccc1	tertiary aromatic amine
+42	N9	heavy	0.01508	1.725	[N;!z4:1]#[!#1;*;^,!^]	CC#N	nitrile nitrogen
+43	N10	heavy	-1.9500	-	[N;+,+2,+3;H1,H2,H3:1]	C[NH3+]	protonated amine
+44	N11	heavy	-0.3239	2.202	[N;z4:1]	c1ccncc1	neutral aromatic nitrogen
+45	N12	heavy	-1.1190	-	[N;z4;+,+2,+3:1]	C[n+]1ccccc1	cationic aromatic nitrogen
+46	N13	heavy	-0.3396	0.2604	[N;H0;+,+2,+3;!z4:1]	C[N+](C)(C)C	quaternary nitrogen
+47	N14	heavy	0.2887	3.359	[N;-,-2,-3;!z4:1]	C[NH-]	anionic nitrogen
+48	NS	heavy	-0.4806	2.134	[N:1]	-	nitrogen, any environment not matched above
+49	O1	heavy	0.1552	1.0800	[O;z4:1]	c1ccoc1	aromatic oxygen
+50	O2	heavy	-0.2893	0.8238	[O;H1,H2;!z4:1]	CCO	alcohol, phenol or water oxygen
+51	O3	heavy	-0.0684	1.085	[O;H0;!z4;D2:1](-[!#1;*;^,!^;!z4])-[!#1;*;^,!^;!z4]	COC	aliphatic ether oxygen
+52	O4	heavy	-0.4195	1.182	[O;H0;!z4;D2:1]-[A;*;z4]	COc1ccccc1	aromatic ether oxygen
+53	O5	heavy	0.0335	3.367	[O;!z4;D1;*:1]~[#7,#8;*;^,!^]	C[N+](=O)[O-]	oxide oxygen on nitrogen or oxygen
+54	O6	heavy	-0.3339	0.7774	[O;!z4;D1;*:1]~[#16;*;^,!^]	CS(C)=O	oxide oxygen on sulfur
+55	O12	heavy	-1.3260	-	[O;-;D1;!z4:1]-[C;*](=[O;D1])	CC(=O)[O-]	carboxylate oxygen
+56	O7	heavy	-1.1890	0	[O;-,-2,-3;D1;!z4:1]-[!#1;!#7;!#16;*;^,!^]	C[O-]	other anionic oxygen
+57	O8	heavy	0.1788	3.135	[O;!z4;D1:1]=[C;z4]	O=c1cccc[nH]1	oxygen double bonded to an aromatic carbon
+58	O10	heavy	0.1129	0.2215	[O;!z4;D1:1]=[C;!z4]-[A;*;z4]	O=Cc1ccccc1	carbonyl oxygen on a carbon attached to an aromatic ring
+59	O11	heavy	0.4833	0.389	[O;!z4;D1:1]=[C;!z4](-[!#1;!#6;*;^,!^])-[!#1;!#6;*;^,!^]	NC(N)=O	carbonyl oxygen on a carbon carrying two heteroatoms
+60	O9	heavy	-0.1526	0	[O;!z4;D1:1]=[C;!z4]	CC=O	carbonyl oxygen on an aliphatic carbon, once O10 and O11 have had first refusal
+61	OS	heavy	-0.1188	0.6865	[O:1]	-	oxygen, any environment not matched above
+62	F	heavy	0.4202	1.108	[#9:1]	CF	neutral fluorine
+63	Cl	heavy	0.6895	5.853	[#17:1]	CCl	neutral chlorine
+64	Br	heavy	0.8456	8.927	[#35:1]	CBr	neutral bromine
+65	I	heavy	0.8857	14.02	[#53:1]	CI	neutral iodine
+66	Hal	heavy	-2.9960	-	[#9,#17,#35,#53;-:1]	[F-]	halide anion
+67	P	heavy	0.8612	6.920	[#15;*;^,!^:1]	OP(O)(O)=O	phosphorus
+68	S2	heavy	-0.0024	7.365	[S;-,-2,-3,-4,+,+2,+3,+5,+6:1]	C[S-]	ionic sulfur -- ANY charged S, aromatic included, exactly as the publication orders it ahead of S1 and S3
+69	S2	heavy	-0.0024	7.365	[S;!z4:1]=[N,O,P,S;*;!z4]	CS(C)=O	oxidized sulfur: the (pseudo-)ionic S=X form
+70	S1	heavy	0.6482	7.591	[S;*;!z4:1]	CSC	aliphatic sulfur
+71	S3	heavy	0.6237	6.691	[S;z4:1]	c1ccsc1	aromatic sulfur
+72	Me1	heavy	-0.3808	5.754	[#3,#11,#19,#37,#55,#4,#12,#20,#38,#56,#5,#13,#31,#49,#81,#14,#32,#50,#82,#33,#51,#83,#34,#52,#84;*;^,!^:1]	[Na+]	main-group metal or metalloid, Se and Te and Po included -- the publication's last Me1 alternative is [#34,#52,#84]
+73	Me2	heavy	-0.0025	-	[#21,#22,#23,#24,#25,#26,#27,#28,#29,#30,#39,#40,#41,#42,#43,#44,#45,#46,#47,#48,#72,#73,#74,#75,#76,#77,#78,#79,#80;*;^,!^:1]	[Fe]	transition metal

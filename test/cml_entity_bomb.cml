@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The billion-laughs attack, dressed as a CML file. Nine nested entity definitions, each
+     expanding the previous one ten times: &lol9; is 10^9 copies of "chython", which is a
+     gigabyte of memory from 700 bytes on disk.
+
+     This file exists to be REFUSED. chython/formats/xml/_tree.py refuses any document with
+     an internal DTD subset - the only place an XML entity can be declared - rather than
+     bounding how far one may expand, and it does so before a parser sees the document, so
+     the guarantee does not depend on whether defusedxml happens to be installed.
+
+     Kept small deliberately: nothing in the test suite ever expands this, so the file is
+     700 bytes and the attack it encodes is a gigabyte. -->
+<!DOCTYPE cml [
+  <!ENTITY lol "chython">
+  <!ENTITY lol1 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+  <!ENTITY lol2 "&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;">
+  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+  <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+  <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+  <!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
+  <!ENTITY lol7 "&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;">
+  <!ENTITY lol8 "&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;">
+  <!ENTITY lol9 "&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;">
+]>
+<cml xmlns="http://www.xml-cml.org/schema">
+  <molecule id="m1" title="&lol9;">
+    <atomArray>
+      <atom id="a1" elementType="C" x2="0.00" y2="0.00"/>
+    </atomArray>
+  </molecule>
+</cml>

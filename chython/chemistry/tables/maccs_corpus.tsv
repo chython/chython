@@ -1,0 +1,342 @@
+# maccs_corpus.tsv -- the acceptance corpus for tables/maccs.tsv.  ONE `set` row and ONE `unset` row
+# for each of the 165 keys that have a published definition; key 44 has none and therefore has no row.
+#
+# THIS FILE IS THE ORACLE.  every expectation is read off the published key description by hand.  no
+# other implementation is consulted and none may be: a bit that differs from another toolkit's is a
+# documented difference, not a failure of this table.
+#
+# THE `unset` ROW IS THE ONE THAT EARNS ITS KEEP.  a mis-transcribed key still parses and still matches
+# something, so a `set` row alone proves little.  each `unset` molecule is a NEAR MISS -- one bond order,
+# one hydrogen or one chain atom away from setting the key -- so that a pattern loosened by a slip fails
+# here.  every structure is a public compound.
+key	expectation	smiles	name
+1	set	[13CH4]	carbon-13 methane
+1	unset	C	methane
+2	set	[Db]	dubnium
+2	unset	[U]	uranium
+3	set	C[Se]C	dimethyl selenide
+3	unset	CSC	dimethyl sulfide
+4	set	[U]	uranium
+4	unset	[Nd]	neodymium
+5	set	[Ti]	titanium
+5	unset	[V]	vanadium
+6	set	[Nd]	neodymium
+6	unset	[Y]	yttrium
+7	set	[Mn]	manganese
+7	unset	[Fe]	iron
+8	set	C1CNC1	azetidine
+8	unset	C1CCC1	cyclobutane
+9	set	[Fe]	iron
+9	unset	[Mn]	manganese
+10	set	[Ca]	calcium
+10	unset	[Na]	sodium
+11	set	C1CCC1	cyclobutane
+11	unset	C1CCCC1	cyclopentane
+12	set	[Zn]	zinc
+12	unset	[Fe]	iron
+13	set	C[N+](C)(C)[O-]	trimethylamine N-oxide
+13	unset	CN(C)C	trimethylamine
+14	set	CSSC	dimethyl disulfide
+14	unset	CSC	dimethyl sulfide
+15	set	COC(=O)OC	dimethyl carbonate
+15	unset	COC	dimethyl ether
+16	set	C1CN1	aziridine
+16	unset	C1CC1	cyclopropane
+17	set	CC#CC	2-butyne
+17	unset	CC#N	acetonitrile
+18	set	OB(O)O	boric acid
+18	unset	CCO	ethanol
+19	set	C1CCCCCC1	cycloheptane
+19	unset	C1CCCCC1	cyclohexane
+20	set	C[Si](C)(C)C	tetramethylsilane
+20	unset	CC(C)(C)C	neopentane
+21	set	C=C(Cl)Cl	1,1-dichloroethylene
+21	unset	C=CCl	vinyl chloride
+22	set	C1CC1	cyclopropane
+22	unset	C1CCC1	cyclobutane
+23	set	NC(=O)OC	methyl carbamate
+23	unset	CC(=O)OC	methyl acetate
+24	set	NO	hydroxylamine
+24	unset	CN	methylamine
+25	set	NC(N)=N	guanidine
+25	unset	NC(N)=O	urea
+26	set	C1CCC2=C(C1)CCCC2	1,2,3,4,5,6,7,8-octahydronaphthalene
+26	unset	C1CCC=CC1	cyclohexene
+27	set	CI	iodomethane
+27	unset	CBr	bromomethane
+28	set	COCOC	dimethoxymethane
+28	unset	CCOCC	diethyl ether
+29	set	COP(=O)(OC)OC	trimethyl phosphate
+29	unset	COS(=O)(=O)OC	dimethyl sulfate
+30	set	C[N+](C)(C)C	tetramethylammonium
+30	unset	CN(C)C	trimethylamine
+31	set	ClS(Cl)(=O)=O	sulfuryl chloride
+31	unset	CCl	chloromethane
+32	set	CS(=O)(=O)N	methanesulfonamide
+32	unset	CSC	dimethyl sulfide
+33	set	CS(=O)(=O)N	methanesulfonamide
+33	unset	CS(C)=O	dimethyl sulfoxide
+34	set	C=C	ethylene
+34	unset	CC=CC	2-butene
+35	set	CC(=O)[O-].[Na+]	sodium acetate
+35	unset	CC(=O)O	acetic acid
+36	set	c1ccsc1	thiophene
+36	unset	CSc1ccccc1	thioanisole
+37	set	NC(N)=O	urea
+37	unset	CC(N)=O	acetamide
+38	set	CC(N)=N	acetamidine
+38	unset	CC(N)=O	acetamide
+39	set	COS(=O)(=O)OC	dimethyl sulfate
+39	unset	CS(C)=O	dimethyl sulfoxide
+40	set	CS(=O)(=O)O	methanesulfonic acid
+40	unset	CS(C)=O	dimethyl sulfoxide
+41	set	CC#N	acetonitrile
+41	unset	CC#CC	2-butyne
+42	set	CF	fluoromethane
+42	unset	CCl	chloromethane
+43	set	NS(=O)(=O)O	sulfamic acid
+43	unset	CS(=O)(=O)N	methanesulfonamide
+45	set	C=CN(C)C	N,N-dimethylvinylamine
+45	unset	CC=C	propene
+46	set	CBr	bromomethane
+46	unset	CCl	chloromethane
+47	set	c1cscn1	thiazole
+47	unset	c1ccsc1	thiophene
+48	set	COS(=O)(=O)OC	dimethyl sulfate
+48	unset	CS(C)=O	dimethyl sulfoxide
+49	set	CC(=O)[O-].[Na+]	sodium acetate
+49	unset	CC(=O)O	acetic acid
+50	set	CC(C)=C	isobutylene
+50	unset	CC=C	propene
+51	set	CS(C)=O	dimethyl sulfoxide
+51	unset	CSC	dimethyl sulfide
+52	set	NN	hydrazine
+52	unset	CN	methylamine
+53	set	OCCCO	1,3-propanediol
+53	unset	OCCO	ethylene glycol
+54	set	OCCO	ethylene glycol
+54	unset	OCCCO	1,3-propanediol
+55	set	CS(=O)(=O)O	methanesulfonic acid
+55	unset	CS(C)=O	dimethyl sulfoxide
+56	set	C[N+](=O)[O-]	nitromethane
+56	unset	CNO	N-methylhydroxylamine
+57	set	C1CCOC1	tetrahydrofuran
+57	unset	CCOCC	diethyl ether
+58	set	CS(=O)(=O)N	methanesulfonamide
+58	unset	CSC	dimethyl sulfide
+59	set	CSc1ccccc1	thioanisole
+59	unset	c1ccsc1	thiophene
+60	set	CS(C)=O	dimethyl sulfoxide
+60	unset	CSC	dimethyl sulfide
+61	set	CS(C)=O	dimethyl sulfoxide
+61	unset	CSC	dimethyl sulfide
+62	set	c1ccc(-c2ccccc2)cc1	biphenyl
+62	unset	c1ccc2ccccc2c1	naphthalene
+63	set	[O-][N+](=O)c1ccccc1	nitrobenzene
+63	unset	Nc1ccccc1	aniline
+64	set	CSc1ccccc1	thioanisole
+64	unset	c1ccsc1	thiophene
+65	set	c1ccncc1	pyridine
+65	unset	CC#N	acetonitrile
+66	set	CC(C)(C)C	neopentane
+66	unset	CC(C)C	isobutane
+67	set	CS(C)=O	dimethyl sulfoxide
+67	unset	CSC	dimethyl sulfide
+68	set	NN	hydrazine
+68	unset	CS(=O)(=O)N	methanesulfonamide
+69	set	CS(=O)(=O)N	methanesulfonamide
+69	unset	CCO	ethanol
+70	set	C[N+](=O)[O-]	nitromethane
+70	unset	NO	hydroxylamine
+71	set	NO	hydroxylamine
+71	unset	CN	methylamine
+72	set	COC(=O)OC	dimethyl carbonate
+72	unset	COC	dimethyl ether
+73	set	CS(C)=O	dimethyl sulfoxide
+73	unset	CSC	dimethyl sulfide
+74	set	CCC	propane
+74	unset	CCCC	butane
+75	set	CN1CCCC1	N-methylpyrrolidine
+75	unset	C1CCNC1	pyrrolidine
+76	set	CC(C)=C	isobutylene
+76	unset	CC=C	propene
+77	set	NC(N)=O	urea
+77	unset	CC(N)=O	acetamide
+78	set	CC(N)=N	acetamidine
+78	unset	CC(N)=O	acetamide
+79	set	NCCN	ethylenediamine
+79	unset	NC(N)=O	urea
+80	set	NCCCN	1,3-diaminopropane
+80	unset	NCCN	ethylenediamine
+81	set	CSc1ccccc1	thioanisole
+81	unset	CSC	dimethyl sulfide
+82	set	CCO	ethanol
+82	unset	CO	methanol
+83	set	C1CCNC1	pyrrolidine
+83	unset	C1CCCC1	cyclopentane
+84	set	CN	methylamine
+84	unset	CNC	dimethylamine
+85	set	CN(C)C	trimethylamine
+85	unset	CNC	dimethylamine
+86	set	CCOCC	diethyl ether
+86	unset	COC	dimethyl ether
+87	set	Clc1ccccc1	chlorobenzene
+87	unset	CCl	chloromethane
+88	set	CSC	dimethyl sulfide
+88	unset	COC	dimethyl ether
+89	set	OCCCO	1,3-propanediol
+89	unset	OCCO	ethylene glycol
+90	set	CCCCCO	1-pentanol
+90	unset	CCCO	1-propanol
+91	set	CCCCCCO	1-hexanol
+91	unset	CCCCO	1-butanol
+92	set	CC(N)=O	acetamide
+92	unset	CC(=O)O	acetic acid
+93	set	COC	dimethyl ether
+93	unset	CCO	ethanol
+94	set	NO	hydroxylamine
+94	unset	CN	methylamine
+95	set	OCCN	ethanolamine
+95	unset	CC(N)=O	acetamide
+96	set	C1CCCC1	cyclopentane
+96	unset	C1CCCCC1	cyclohexane
+97	set	NCCCO	3-amino-1-propanol
+97	unset	OCCN	ethanolamine
+98	set	C1CCNCC1	piperidine
+98	unset	C1CCCCC1	cyclohexane
+99	set	C=C	ethylene
+99	unset	CC	ethane
+100	set	CCN	ethylamine
+100	unset	CN	methylamine
+101	set	C1CCCCCCC1	cyclooctane
+101	unset	C1CCCCCC1	cycloheptane
+102	set	NO	hydroxylamine
+102	unset	CCO	ethanol
+103	set	CCl	chloromethane
+103	unset	CBr	bromomethane
+104	set	CCCO	1-propanol
+104	unset	CCO	ethanol
+105	set	c1ccc2ccccc2c1	naphthalene
+105	unset	c1ccccc1	benzene
+106	set	COC(OC)OC	trimethyl orthoformate
+106	unset	COCOC	dimethoxymethane
+107	set	CC(C)Cl	2-chloropropane
+107	unset	CCCl	chloroethane
+108	set	CCCCCCC	heptane
+108	unset	CCCCC	pentane
+109	set	CCO	ethanol
+109	unset	CO	methanol
+110	set	CC(N)=O	acetamide
+110	unset	OCCN	ethanolamine
+111	set	CCCN	1-propylamine
+111	unset	CCN	ethylamine
+112	set	CC(C)(C)C	neopentane
+112	unset	CC(C)C	isobutane
+113	set	COc1ccccc1	anisole
+113	unset	c1ccoc1	furan
+114	set	CCC	propane
+114	unset	CC	ethane
+115	set	CCCC	butane
+115	unset	CCC	propane
+116	set	CCCCC	pentane
+116	unset	CCCC	butane
+117	set	CC(N)=O	acetamide
+117	unset	OCCN	ethanolamine
+118	set	CCCCCC	hexane
+118	unset	CCCC	butane
+119	set	CC(N)=N	acetamidine
+119	unset	CC(N)=O	acetamide
+120	set	c1c[nH]cn1	imidazole
+120	unset	c1ccncc1	pyridine
+121	set	c1ccncc1	pyridine
+121	unset	Nc1ccccc1	aniline
+122	set	CN(C)C	trimethylamine
+122	unset	CNC	dimethylamine
+123	set	COCOC	dimethoxymethane
+123	unset	COC	dimethyl ether
+124	set	NN	hydrazine
+124	unset	OCCO	ethylene glycol
+125	set	c1ccc2ccccc2c1	naphthalene
+125	unset	c1ccccc1	benzene
+126	set	COC	dimethyl ether
+126	unset	C1CCOC1	tetrahydrofuran
+127	set	Oc1ccccc1	phenol
+127	unset	C1CCOC1	tetrahydrofuran
+128	set	CCCCCCCC	octane
+128	unset	CCCCCC	hexane
+129	set	CCCCCCC	heptane
+129	unset	CCCCC	pentane
+130	set	NS(=O)(=O)N	sulfamide
+130	unset	CS(C)=O	dimethyl sulfoxide
+131	set	OCCO	ethylene glycol
+131	unset	CCO	ethanol
+132	set	CCCO	1-propanol
+132	unset	CCO	ethanol
+133	set	Nc1ccccc1	aniline
+133	unset	c1ccncc1	pyridine
+134	set	CCl	chloromethane
+134	unset	CO	methanol
+135	set	Nc1ccccc1	aniline
+135	unset	c1ccncc1	pyridine
+136	set	CC(=O)OC(C)=O	acetic anhydride
+136	unset	CC(=O)O	acetic acid
+137	set	c1ccncc1	pyridine
+137	unset	c1ccccc1	benzene
+138	set	CCOCC	diethyl ether
+138	unset	CCCO	1-propanol
+139	set	CCO	ethanol
+139	unset	COC	dimethyl ether
+140	set	OCC(CO)(CO)CO	pentaerythritol
+140	unset	OCC(O)CO	glycerol
+141	set	CC(C)C	isobutane
+141	unset	CCC	propane
+142	set	NCCN	ethylenediamine
+142	unset	CN	methylamine
+143	set	Oc1ccccc1	phenol
+143	unset	C1CCOC1	tetrahydrofuran
+144	set	Cc1ccccc1C	o-xylene
+144	unset	Cc1ccccc1	toluene
+145	set	c1ccc2ccccc2c1	naphthalene
+145	unset	c1ccccc1	benzene
+146	set	OCC(O)CO	glycerol
+146	unset	OCCO	ethylene glycol
+147	set	CCCC	butane
+147	unset	CCC	propane
+148	set	CN(C)C	trimethylamine
+148	unset	CNC	dimethylamine
+149	set	CCC	propane
+149	unset	CCO	ethanol
+150	set	Cc1ccccc1C	o-xylene
+150	unset	Cc1ccccc1	toluene
+151	set	CN	methylamine
+151	unset	CN(C)C	trimethylamine
+152	set	CC(C)=O	acetone
+152	unset	CC=O	acetaldehyde
+153	set	CCCO	1-propanol
+153	unset	CO	methanol
+154	set	CC(C)=O	acetone
+154	unset	CCO	ethanol
+155	set	CCC	propane
+155	unset	C1CC1	cyclopropane
+156	set	CC(C)N	isopropylamine
+156	unset	CCN	ethylamine
+157	set	CCO	ethanol
+157	unset	CC=O	acetaldehyde
+158	set	CN	methylamine
+158	unset	CC#N	acetonitrile
+159	set	OCCO	ethylene glycol
+159	unset	CCO	ethanol
+160	set	CCO	ethanol
+160	unset	OCCO	ethylene glycol
+161	set	CN	methylamine
+161	unset	CO	methanol
+162	set	c1ccccc1	benzene
+162	unset	C1CCCCC1	cyclohexane
+163	set	C1CCCCC1	cyclohexane
+163	unset	C1CCCC1	cyclopentane
+164	set	CO	methanol
+164	unset	CN	methylamine
+165	set	C1CCCCC1	cyclohexane
+165	unset	CCCCCC	hexane
+166	set	CC(=O)[O-].[Na+]	sodium acetate
+166	unset	CC(=O)O	acetic acid

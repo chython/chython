@@ -1,0 +1,75 @@
+# SYBYL atom-type table for the MOL2 reader.
+#
+# Each type is documented by the Tripos MOL2 format specification.  The mapping is derived from the type
+# names themselves, which state their hybridization or environment directly, and cross-checked against
+# the archived Tripos documentation.  Nothing here was copied from another codebase; the derivation for
+# each row is either self-evident from the name or spelled out in the comment column.
+#
+# COLUMNS
+#   type          SYBYL type string as written in the ATOM block (e.g. "C.3")
+#   element       Element symbol (uppercase first letter).  EMPTY FOR PSEUDO-ATOMS (LP, Du, Du.C, and the
+#                 query wildcards Any/Hal/Het/Hev) -- they have no nucleus and MUST NOT become atoms in
+#                 the molecule graph.
+#   hybridization chython V3 code: 0=not set, 1=sp3, 2=sp2, 3=sp, 4=aromatic, 5=cumulated double bonds
+#                 (sulfone/sulfoxide environment, V3's z5).  0 for hydrogen, the dummy and wildcard
+#                 types, and the metal types whose suffix states a coordination geometry this code set
+#                 cannot spell.
+#
+# DERIVATION NOTES
+#   ".3" is the sp3 designator (the spec names it "tetrahedral"), ".2" sp2, ".1" sp, ".ar" aromatic.
+#   C.cat   cationic resonance carbon (guanidinium, iminium); trigonal-planar because the pi system is
+#           delocalized, so sp2.
+#   N.4     four bonds: quaternary ammonium, sp3.
+#   N.am    amide; planar by resonance, classified sp2 as N.2.
+#   N.pl3   planar + 3 bonds (e.g. guanidinium).  SYBYL distinguishes it from N.2 for delocalized cases;
+#           V3 has one code for both, 2.
+#   O.co2   carboxylate/carbonate; delocalized, sp2.
+#   O.spc / O.t3p   SPC and TIP3P water-model oxygens; tetrahedral model geometry, so sp3.
+#   S.o / S.O       sulfoxide sulfur, and S.o2 / S.O2 sulfone sulfur: cumulated, V3 z5.  BOTH CASINGS
+#           APPEAR IN REAL FILES and both are rows here.
+#   Cr.th / Cr.oh / Co.oh / Ru.oh   the four metal types the specification names, and the only SYBYL types
+#           whose suffix states a COORDINATION GEOMETRY ("th" tetrahedral, "oh" octahedral) rather than a
+#           hybridization.  chython's codes cover no coordination geometry, so the column is 0 and the
+#           MOL2 reader reports the geometry as unsupported -- it holds the list of these four for exactly
+#           that purpose.  Without the rows the reader falls back on the element prefix and reports a
+#           malformed hybridization tag for a type Tripos documents.
+#   H / H.spc / H.t3p   hydrogen; no meaningful hybridization, 0.
+type	element	hybridization
+C.3	C	1
+C.2	C	2
+C.1	C	3
+C.ar	C	4
+C.cat	C	2
+N.3	N	1
+N.2	N	2
+N.1	N	3
+N.ar	N	4
+N.4	N	1
+N.am	N	2
+N.pl3	N	2
+O.3	O	1
+O.2	O	2
+O.co2	O	2
+O.spc	O	1
+O.t3p	O	1
+S.3	S	1
+S.2	S	2
+S.o	S	5
+S.O	S	5
+S.o2	S	5
+S.O2	S	5
+P.3	P	1
+Cr.th	Cr	0
+Cr.oh	Cr	0
+Co.oh	Co	0
+Ru.oh	Ru	0
+H	H	0
+H.spc	H	0
+H.t3p	H	0
+LP		0
+Du		0
+Du.C		0
+Any		0
+Hal		0
+Het		0
+Hev		0

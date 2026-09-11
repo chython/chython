@@ -1,0 +1,119 @@
+# Hardcoded connectivity for the residues a PDB-family file is not worth guessing at.
+#
+# A legacy PDB file states essentially no intra-residue bonds and a distributed mmCIF entry file usually
+# carries no `_chem_comp_bond` either, so a protein read from either is a bag of atoms.  A distance cutoff
+# is prohibited in this library, and for these residues no search is warranted anyway: their connectivity
+# is a fact, not a derivation.  A general ligand is a different question and belongs to `saturate()`.
+#
+# COLUMNS
+#   name      the PDB chemical-component id, upper case: ALA, DA, HOH, ZN
+#   kind      one of amino_acid, nucleotide, water, ion
+#   atoms     comma list of NAME:ELEMENT or NAME:ELEMENT:CHARGE
+#   bonds     comma list of NAME_A-NAME_B-ORDER
+#   link_in   the atom in THIS residue that bonds to the PRECEDING residue, or empty
+#   link_out  the atom in THIS residue that bonds to the FOLLOWING residue, or empty
+#
+# A bond triple gives the order as an integer, never a glyph: the container stores 1/2/3/4/8, and `#` is
+# this file format's comment character.
+#
+# ORDERS ARE KEKULE, NEVER AROMATIC.  HIS, PHE, TRP, TYR and every nucleobase carry alternating 1/2 exactly
+# as the Chemical Component Dictionary's `value_order` states them.  A caller who wants aromatic rings runs
+# `thiele()`: aromatisation is an explicit later call and never something a read path performs.
+#
+# EVERY POLYMER ROW IS ELECTRICALLY NEUTRAL, so no `:CHARGE` field appears in one -- ASP and GLU are acids,
+# LYS a neutral amine, ARG a neutral guanidine, a nucleotide phosphate P(=O)(O)(O).  Each is a legal
+# neutral valence, and a PDB file never states a protonation state, so a charge here would be this table
+# inventing one.  Where the CCD carries the ion instead (HIS imidazolium, ARG guanidinium, LYS ammonium)
+# the table neutralises it; HIS is the neutral Nepsilon2-H tautomer, NE2 holding the hydrogen and ND1 the
+# imine nitrogen, with the same ring bond orders as the cation.  `:CHARGE` exists for the `ion` rows, where
+# the charge IS the knowledge: the difference between FE and FE2 is nothing else.
+#
+# NO HYDROGENS.  Whether a file carries them is a per-file fact and the implicit count comes from the
+# valence rules afterwards.  Heavy atoms only also makes the terminal cases come out by themselves: a
+# backbone N with two heavy neighbours derives one H, the same N at the N-terminus derives two, and no row
+# has to know which end of a chain it is on.
+#
+# THE ELEMENT IS IN THE TABLE ON PURPOSE.  A file's element column is authoritative when present, but old
+# legacy PDB files leave it blank and an atom name is not safely parseable -- the haem pyrrole nitrogens are
+# named NA, NB, NC, ND, and reading NA as sodium is a defect this project has been bitten by.  A template
+# element is a repair a later pass applies and logs.
+#
+# ATOM NAMES ARE SPELLED THE MODERN WAY, WITH AN APOSTROPHE: O3', C5', OP1.  Files from the 1990s write O3*
+# instead; `normalize_atom_name` folds that spelling into this one.
+#
+# THE POLYMER LINK IS TWO ATOM NAMES AND NOTHING ELSE: previous.C -- this.N for an amino acid, previous.O3' --
+# this.P for a nucleotide, order 1 either way.  There is no leaving group to model: a file carries OXT only on
+# the real C-terminal residue and a 5'-terminal nucleotide simply has no P.  The rule "apply a bond only when
+# both of its atoms are present" handles both terminals with no special case, and is why a nucleotide row may
+# carry OP3 without a mid-chain residue growing one.
+#
+# SCOPE IS CLOSED: the 20 standard amino acids plus MSE, DNA and RNA, three spellings of water, and the
+# monoatomic ions.  NOT SO4, PO4, GOL or HEM -- a polyatomic ligand is saturate()'s job.  The water rows
+# have no bonds at all; they earn their place by letting a caller tell "recognised, nothing to do" from
+# "unknown residue".
+name	kind	atoms	bonds	link_in	link_out
+#
+# --- amino acids ---
+ALA	amino_acid	N:N,CA:C,CB:C,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CA-C-1,C-O-2,C-OXT-1	N	C
+ARG	amino_acid	N:N,CA:C,CB:C,CG:C,CD:C,NE:N,CZ:C,NH1:N,NH2:N,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-CD-1,CD-NE-1,NE-CZ-1,CZ-NH1-2,CZ-NH2-1,CA-C-1,C-O-2,C-OXT-1	N	C
+ASN	amino_acid	N:N,CA:C,CB:C,CG:C,OD1:O,ND2:N,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-OD1-2,CG-ND2-1,CA-C-1,C-O-2,C-OXT-1	N	C
+ASP	amino_acid	N:N,CA:C,CB:C,CG:C,OD1:O,OD2:O,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-OD1-2,CG-OD2-1,CA-C-1,C-O-2,C-OXT-1	N	C
+CYS	amino_acid	N:N,CA:C,CB:C,SG:S,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-SG-1,CA-C-1,C-O-2,C-OXT-1	N	C
+GLN	amino_acid	N:N,CA:C,CB:C,CG:C,CD:C,OE1:O,NE2:N,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-CD-1,CD-OE1-2,CD-NE2-1,CA-C-1,C-O-2,C-OXT-1	N	C
+GLU	amino_acid	N:N,CA:C,CB:C,CG:C,CD:C,OE1:O,OE2:O,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-CD-1,CD-OE1-2,CD-OE2-1,CA-C-1,C-O-2,C-OXT-1	N	C
+GLY	amino_acid	N:N,CA:C,C:C,O:O,OXT:O	N-CA-1,CA-C-1,C-O-2,C-OXT-1	N	C
+HIS	amino_acid	N:N,CA:C,CB:C,CG:C,ND1:N,CD2:C,CE1:C,NE2:N,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-ND1-1,CG-CD2-2,ND1-CE1-2,CD2-NE2-1,CE1-NE2-1,CA-C-1,C-O-2,C-OXT-1	N	C
+ILE	amino_acid	N:N,CA:C,CB:C,CG1:C,CG2:C,CD1:C,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG1-1,CB-CG2-1,CG1-CD1-1,CA-C-1,C-O-2,C-OXT-1	N	C
+LEU	amino_acid	N:N,CA:C,CB:C,CG:C,CD1:C,CD2:C,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-CD1-1,CG-CD2-1,CA-C-1,C-O-2,C-OXT-1	N	C
+LYS	amino_acid	N:N,CA:C,CB:C,CG:C,CD:C,CE:C,NZ:N,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-CD-1,CD-CE-1,CE-NZ-1,CA-C-1,C-O-2,C-OXT-1	N	C
+MET	amino_acid	N:N,CA:C,CB:C,CG:C,SD:S,CE:C,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-SD-1,SD-CE-1,CA-C-1,C-O-2,C-OXT-1	N	C
+MSE	amino_acid	N:N,CA:C,CB:C,CG:C,SE:Se,CE:C,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-SE-1,SE-CE-1,CA-C-1,C-O-2,C-OXT-1	N	C
+PHE	amino_acid	N:N,CA:C,CB:C,CG:C,CD1:C,CD2:C,CE1:C,CE2:C,CZ:C,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-CD1-2,CG-CD2-1,CD1-CE1-1,CD2-CE2-2,CE1-CZ-2,CE2-CZ-1,CA-C-1,C-O-2,C-OXT-1	N	C
+PRO	amino_acid	N:N,CA:C,CB:C,CG:C,CD:C,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-CD-1,CD-N-1,CA-C-1,C-O-2,C-OXT-1	N	C
+SER	amino_acid	N:N,CA:C,CB:C,OG:O,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-OG-1,CA-C-1,C-O-2,C-OXT-1	N	C
+THR	amino_acid	N:N,CA:C,CB:C,OG1:O,CG2:C,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-OG1-1,CB-CG2-1,CA-C-1,C-O-2,C-OXT-1	N	C
+TRP	amino_acid	N:N,CA:C,CB:C,CG:C,CD1:C,CD2:C,NE1:N,CE2:C,CE3:C,CZ2:C,CZ3:C,CH2:C,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-CD1-2,CG-CD2-1,CD1-NE1-1,NE1-CE2-1,CD2-CE2-2,CD2-CE3-1,CE2-CZ2-1,CE3-CZ3-2,CZ2-CH2-2,CZ3-CH2-1,CA-C-1,C-O-2,C-OXT-1	N	C
+TYR	amino_acid	N:N,CA:C,CB:C,CG:C,CD1:C,CD2:C,CE1:C,CE2:C,CZ:C,OH:O,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG-1,CG-CD1-2,CG-CD2-1,CD1-CE1-1,CD2-CE2-2,CE1-CZ-2,CE2-CZ-1,CZ-OH-1,CA-C-1,C-O-2,C-OXT-1	N	C
+VAL	amino_acid	N:N,CA:C,CB:C,CG1:C,CG2:C,C:C,O:O,OXT:O	N-CA-1,CA-CB-1,CB-CG1-1,CB-CG2-1,CA-C-1,C-O-2,C-OXT-1	N	C
+#
+# --- nucleotides: DNA then RNA ---
+DA	nucleotide	OP3:O,P:P,OP1:O,OP2:O,O5':O,C5':C,C4':C,O4':O,C3':C,O3':O,C2':C,C1':C,N9:N,C8:C,N7:N,C5:C,C6:C,N6:N,N1:N,C2:C,N3:N,C4:C	P-OP1-2,P-OP2-1,P-OP3-1,P-O5'-1,O5'-C5'-1,C5'-C4'-1,C4'-O4'-1,C4'-C3'-1,C3'-O3'-1,C3'-C2'-1,C2'-C1'-1,C1'-O4'-1,C1'-N9-1,N9-C8-1,C8-N7-2,N7-C5-1,C5-C6-1,C6-N6-1,C6-N1-2,N1-C2-1,C2-N3-2,N3-C4-1,C4-C5-2,C4-N9-1	P	O3'
+DC	nucleotide	OP3:O,P:P,OP1:O,OP2:O,O5':O,C5':C,C4':C,O4':O,C3':C,O3':O,C2':C,C1':C,N1:N,C2:C,O2:O,N3:N,C4:C,N4:N,C5:C,C6:C	P-OP1-2,P-OP2-1,P-OP3-1,P-O5'-1,O5'-C5'-1,C5'-C4'-1,C4'-O4'-1,C4'-C3'-1,C3'-O3'-1,C3'-C2'-1,C2'-C1'-1,C1'-O4'-1,C1'-N1-1,N1-C2-1,C2-O2-2,C2-N3-1,N3-C4-2,C4-N4-1,C4-C5-1,C5-C6-2,C6-N1-1	P	O3'
+DG	nucleotide	OP3:O,P:P,OP1:O,OP2:O,O5':O,C5':C,C4':C,O4':O,C3':C,O3':O,C2':C,C1':C,N9:N,C8:C,N7:N,C5:C,C6:C,O6:O,N1:N,C2:C,N2:N,N3:N,C4:C	P-OP1-2,P-OP2-1,P-OP3-1,P-O5'-1,O5'-C5'-1,C5'-C4'-1,C4'-O4'-1,C4'-C3'-1,C3'-O3'-1,C3'-C2'-1,C2'-C1'-1,C1'-O4'-1,C1'-N9-1,N9-C8-1,C8-N7-2,N7-C5-1,C5-C6-1,C6-O6-2,C6-N1-1,N1-C2-1,C2-N2-1,C2-N3-2,N3-C4-1,C4-C5-2,C4-N9-1	P	O3'
+DT	nucleotide	OP3:O,P:P,OP1:O,OP2:O,O5':O,C5':C,C4':C,O4':O,C3':C,O3':O,C2':C,C1':C,N1:N,C2:C,O2:O,N3:N,C4:C,O4:O,C5:C,C7:C,C6:C	P-OP1-2,P-OP2-1,P-OP3-1,P-O5'-1,O5'-C5'-1,C5'-C4'-1,C4'-O4'-1,C4'-C3'-1,C3'-O3'-1,C3'-C2'-1,C2'-C1'-1,C1'-O4'-1,C1'-N1-1,N1-C2-1,C2-O2-2,C2-N3-1,N3-C4-1,C4-O4-2,C4-C5-1,C5-C7-1,C5-C6-2,C6-N1-1	P	O3'
+DU	nucleotide	OP3:O,P:P,OP1:O,OP2:O,O5':O,C5':C,C4':C,O4':O,C3':C,O3':O,C2':C,C1':C,N1:N,C2:C,O2:O,N3:N,C4:C,O4:O,C5:C,C6:C	P-OP1-2,P-OP2-1,P-OP3-1,P-O5'-1,O5'-C5'-1,C5'-C4'-1,C4'-O4'-1,C4'-C3'-1,C3'-O3'-1,C3'-C2'-1,C2'-C1'-1,C1'-O4'-1,C1'-N1-1,N1-C2-1,C2-O2-2,C2-N3-1,N3-C4-1,C4-O4-2,C4-C5-1,C5-C6-2,C6-N1-1	P	O3'
+A	nucleotide	OP3:O,P:P,OP1:O,OP2:O,O5':O,C5':C,C4':C,O4':O,C3':C,O3':O,C2':C,C1':C,O2':O,N9:N,C8:C,N7:N,C5:C,C6:C,N6:N,N1:N,C2:C,N3:N,C4:C	P-OP1-2,P-OP2-1,P-OP3-1,P-O5'-1,O5'-C5'-1,C5'-C4'-1,C4'-O4'-1,C4'-C3'-1,C3'-O3'-1,C3'-C2'-1,C2'-C1'-1,C1'-O4'-1,C2'-O2'-1,C1'-N9-1,N9-C8-1,C8-N7-2,N7-C5-1,C5-C6-1,C6-N6-1,C6-N1-2,N1-C2-1,C2-N3-2,N3-C4-1,C4-C5-2,C4-N9-1	P	O3'
+C	nucleotide	OP3:O,P:P,OP1:O,OP2:O,O5':O,C5':C,C4':C,O4':O,C3':C,O3':O,C2':C,C1':C,O2':O,N1:N,C2:C,O2:O,N3:N,C4:C,N4:N,C5:C,C6:C	P-OP1-2,P-OP2-1,P-OP3-1,P-O5'-1,O5'-C5'-1,C5'-C4'-1,C4'-O4'-1,C4'-C3'-1,C3'-O3'-1,C3'-C2'-1,C2'-C1'-1,C1'-O4'-1,C2'-O2'-1,C1'-N1-1,N1-C2-1,C2-O2-2,C2-N3-1,N3-C4-2,C4-N4-1,C4-C5-1,C5-C6-2,C6-N1-1	P	O3'
+G	nucleotide	OP3:O,P:P,OP1:O,OP2:O,O5':O,C5':C,C4':C,O4':O,C3':C,O3':O,C2':C,C1':C,O2':O,N9:N,C8:C,N7:N,C5:C,C6:C,O6:O,N1:N,C2:C,N2:N,N3:N,C4:C	P-OP1-2,P-OP2-1,P-OP3-1,P-O5'-1,O5'-C5'-1,C5'-C4'-1,C4'-O4'-1,C4'-C3'-1,C3'-O3'-1,C3'-C2'-1,C2'-C1'-1,C1'-O4'-1,C2'-O2'-1,C1'-N9-1,N9-C8-1,C8-N7-2,N7-C5-1,C5-C6-1,C6-O6-2,C6-N1-1,N1-C2-1,C2-N2-1,C2-N3-2,N3-C4-1,C4-C5-2,C4-N9-1	P	O3'
+U	nucleotide	OP3:O,P:P,OP1:O,OP2:O,O5':O,C5':C,C4':C,O4':O,C3':C,O3':O,C2':C,C1':C,O2':O,N1:N,C2:C,O2:O,N3:N,C4:C,O4:O,C5:C,C6:C	P-OP1-2,P-OP2-1,P-OP3-1,P-O5'-1,O5'-C5'-1,C5'-C4'-1,C4'-O4'-1,C4'-C3'-1,C3'-O3'-1,C3'-C2'-1,C2'-C1'-1,C1'-O4'-1,C2'-O2'-1,C1'-N1-1,N1-C2-1,C2-O2-2,C2-N3-1,N3-C4-1,C4-O4-2,C4-C5-1,C5-C6-2,C6-N1-1	P	O3'
+#
+# --- water ---
+HOH	water	O:O			
+DOD	water	O:O			
+WAT	water	O:O			
+#
+# --- monoatomic ions ---
+LI	ion	LI:Li:1			
+NA	ion	NA:Na:1			
+K	ion	K:K:1			
+RB	ion	RB:Rb:1			
+CS	ion	CS:Cs:1			
+MG	ion	MG:Mg:2			
+CA	ion	CA:Ca:2			
+SR	ion	SR:Sr:2			
+BA	ion	BA:Ba:2			
+MN	ion	MN:Mn:2			
+MN3	ion	MN:Mn:3			
+FE	ion	FE:Fe:3			
+FE2	ion	FE:Fe:2			
+CO	ion	CO:Co:2			
+NI	ion	NI:Ni:2			
+CU	ion	CU:Cu:2			
+CU1	ion	CU:Cu:1			
+ZN	ion	ZN:Zn:2			
+CD	ion	CD:Cd:2			
+HG	ion	HG:Hg:2			
+F	ion	F:F:-1			
+CL	ion	CL:Cl:-1			
+BR	ion	BR:Br:-1			
+IOD	ion	I:I:-1			
