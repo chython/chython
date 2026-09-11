@@ -63,6 +63,12 @@ def cmake_args() -> list[str]:
     * ``-fsigned-char`` -- plain `char` is unsigned on Linux ARM.  `setup.py` compiles the extension
       with the flag for the same reason, and InChI's own gcc option set lists it; its public types are
       `S_CHAR`, spelled `signed char`, so the flag is about the library's internal bare `char`.
+    * ``CMAKE_SHARED_LINKER_FLAGS=-Wl,-s`` on Linux -- ``INCHI_API/libinchi/src/CMakeLists.txt`` gives
+      gcc-like compilers ``-g;-O1`` through ``target_compile_options``, which lands after
+      ``CMAKE_C_FLAGS`` and after the ``Release`` config's own flags, so neither ``CMAKE_BUILD_TYPE``
+      nor a ``-g0`` above can cancel it.  A link-time strip can: measured on 3.0's Linux wheel,
+      ``.debug*`` was 3.05 MB of a 4.36 MB ``libinchi.so`` whose ``.text`` is 1.00 MB.  Linux only --
+      ld64 deprecates ``-s`` and the linked Mach-O carries no DWARF to begin with.
     * ``CMAKE_OSX_ARCHITECTURES`` -- a universal2 interpreter needs both slices, or InChI is absent on
       the arch the dylib lacks while `import chython` still succeeds and every InChI test skips.
     * ``CMAKE_OSX_DEPLOYMENT_TARGET`` -- ``wheel``'s ``calculate_macosx_platform_tag`` raises the
@@ -78,6 +84,8 @@ def cmake_args() -> list[str]:
     if platform.startswith('win'):
         return []                                       # MSVC's `char` is signed and the rest is mac
     args = ['-DCMAKE_C_FLAGS=-fsigned-char']
+    if platform.startswith('linux'):
+        args.append('-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-s')
     parts = platform.split('-')
     if platform.startswith('macosx') and len(parts) == 3:
         _, target, arch = parts

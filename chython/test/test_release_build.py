@@ -45,6 +45,7 @@ from ast import Assign, Constant, List, Name, parse, walk
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from re import M, finditer
+from struct import unpack_from
 
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -52,6 +53,13 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 # The one flag that makes a negative `char` negative on every platform this ships to.  gcc and clang
 # both take it; MSVC's default is already signed and its switch (`/J`) is the opposite one.
 SIGNED_CHAR = '-fsigned-char'
+
+# The two that keep DWARF out of the Linux wheel: `-g0` cancels the `-g` distutils inherits from
+# CPython's `CFLAGS`, and the link-time strip is the only thing that reaches the `-g` InChI's own
+# CMakeLists gives gcc.  Neither has a macOS or MSVC counterpart -- those toolchains put debug info in a
+# `.dSYM` and a `.pdb`, outside the wheel either way.
+NO_DEBUG_INFO = '-g0'
+STRIP = '-Wl,-s'
 
 
 def _build_inchi():
@@ -166,7 +174,8 @@ def test_the_linux_build_is_told_nothing_about_architectures():
     not something this file expresses."""
     module = _build_inchi()
     module.get_platform = lambda: 'linux-aarch64'
-    assert module.cmake_args() == ['-DCMAKE_C_FLAGS=%s' % SIGNED_CHAR], module.cmake_args()
+    assert module.cmake_args() == ['-DCMAKE_C_FLAGS=%s' % SIGNED_CHAR, '-DCMAKE_SHARED_LINKER_FLAGS=%s' % STRIP], \
+        module.cmake_args()
 
 
 def test_the_libinchi_job_pins_the_interpreter_it_reads_the_platform_from():
@@ -180,6 +189,84 @@ def test_the_libinchi_job_pins_the_interpreter_it_reads_the_platform_from():
         'the libinchi job builds with the runner image\'s default python.  `build_inchi.py` reads '
         '`sysconfig.get_platform()`, so on macOS that interpreter decides the minimum OS version of '
         'every wheel carrying this dylib.')
+
+
+# --- debug info stays out of the wheel -------------------------------------------------------------
+
+def test_the_linux_extension_asks_for_no_debug_info():
+    """distutils compiles an extension with CPython's own `CFLAGS`, and those carry `-g`.
+
+    Measured on 3.0's cp312 Linux wheel: `.debug*` was 17.50 MB of a 20.82 MB `_core.so` whose `.text` is
+    2.52 MB, against a 2.18 MB `.pyd` for the same code on Windows.  These flags are appended after
+    CPython's and gcc takes the last of `-g`/`-g0`, which is what lets a flag here cancel one from there.
+    """
+    linux = [flags for flags in _extra_compile_args() if '-O3' in flags]
+    assert len(linux) == 1, \
+        'setup.py no longer has exactly one -O3 branch, so the Linux branch is not identifiable here'
+    assert NO_DEBUG_INFO in linux[0], (
+        'the Linux extension is compiled without %s, so the `-g` in CPython\'s CFLAGS stands and the '
+        'wheel ships DWARF -- 84%% of `_core.so` when this was last measured' % NO_DEBUG_INFO)
+
+
+def test_libinchi_is_stripped_at_link_time_on_linux_and_nowhere_else():
+    """`CMAKE_BUILD_TYPE=Release` does not remove InChI's `-g`, because InChI's own CMakeLists adds it.
+
+    `INCHI_API/libinchi/src/CMakeLists.txt` gives gcc-like compilers `-g;-O1` through
+    `target_compile_options`, which lands after both `CMAKE_C_FLAGS` and the config's flags -- so a `-g0`
+    passed in cannot win and only a link-time strip reaches it.  3.05 MB of a 4.36 MB `libinchi.so`.
+    """
+    module = _build_inchi()
+    for platform, wanted in (('linux-x86_64', True), ('linux-aarch64', True),
+                             ('macosx-10.9-universal2', False), ('macosx-11.0-arm64', False),
+                             ('win-amd64', False)):
+        module.get_platform = lambda p=platform: p
+        stripping = any(STRIP in flag for flag in module.cmake_args())
+        assert stripping is wanted, (
+            '%s: cmake_args() %s the link-time strip.  Without it on Linux libinchi carries 3 MB of '
+            'DWARF into every wheel; with it on macOS, ld64 deprecates `-s` and the linked Mach-O has no '
+            'DWARF to remove.' % (platform, 'lacks' if wanted else 'should not pass'))
+
+
+def _elf_debug_bytes(data):
+    """(total, `.debug*` bytes) for an ELF image, or None when it is not one.
+
+    `struct` and not `readelf`: the property is worth checking on any Linux row of the test matrix, and a
+    binutils dependency would make it skip instead.
+    """
+    if data[:4] != b'\x7fELF' or data[4] != 2:            # ELF64 only; nothing here builds 32-bit
+        return None
+    shoff, = unpack_from('<Q', data, 0x28)
+    shentsize, shnum, shstrndx = unpack_from('<HHH', data, 0x3a)
+    names = unpack_from('<Q', data, shoff + shstrndx * shentsize + 24)[0]
+    debug = 0
+    for i in range(shnum):
+        offset, = unpack_from('<I', data, shoff + i * shentsize)
+        name = data[names + offset:data.index(b'\0', names + offset)]
+        if name.startswith(b'.debug'):
+            debug += unpack_from('<Q', data, shoff + i * shentsize + 32)[0]
+    return len(data), debug
+
+
+def test_a_built_linux_binary_carries_no_dwarf():
+    """The property the two flags above are for, against build output whenever there is some.
+
+    Vacuous off Linux and on a checkout nobody has built -- said out loud, because a silent pass for a
+    structural reason is what the declarations above are the guard against.  This is the assertion that
+    would survive a gcc that ignored `-g0` or a cmake that dropped the linker flag.
+    """
+    offenders = []
+    for path in [*(ROOT / 'chython' / 'core').glob('_core*.so'), ROOT / 'build' / 'inchi' / 'libinchi.so']:
+        if not path.exists():
+            continue
+        measured = _elf_debug_bytes(path.read_bytes())
+        if measured and measured[1]:
+            offenders.append('%s: %.2f MB of %.2f MB is .debug*'
+                             % (path.name, measured[1] / 1048576, measured[0] / 1048576))
+    assert not offenders, (
+        'these binaries would ship their debug info inside the wheel:\n  %s\n'
+        'The extension takes `%s` from setup.py and libinchi takes `%s` from build_inchi.py; a build '
+        'that predates either needs redoing before it is measured.' % ('\n  '.join(offenders),
+                                                                      NO_DEBUG_INFO, STRIP))
 
 
 # --- the source distribution -----------------------------------------------------------------------

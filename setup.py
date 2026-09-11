@@ -56,11 +56,18 @@ from build_inchi import build as build_libinchi, libname_for_platform  # noqa: E
 # is what makes the arm wheel the same program as the one the tests ran against; it is a no-op on
 # x86-64, which is why it is not conditional within Linux.  MSVC needs nothing (its default is signed;
 # `/J` is the opposite switch), and the InChI build gets the same flag from `build_inchi.py`.
+#
+# `-g0` ON LINUX ONLY, because distutils compiles an extension with CPython's own `CFLAGS` and those
+# carry `-g`: measured on 3.0's cp312 wheel, `.debug*` was 17.50 MB of a 20.82 MB `_core.so` whose
+# `.text` is 2.52 MB.  These flags are appended after CPython's and gcc takes the last of `-g`/`-g0`,
+# which is what makes a flag here able to cancel one from there.  `.symtab` is not debug info and
+# survives, so a C-level backtrace keeps its function names.  Nothing to do on the other two: clang
+# leaves DWARF in the `.o` files and emits a `.dSYM` only when asked, and MSVC writes a separate `.pdb`.
 platform = get_platform()
 if platform == 'win-amd64':
     extra_compile_args = ['/O2']
 elif platform.startswith('linux'):
-    extra_compile_args = ['-O3', '-fsigned-char']
+    extra_compile_args = ['-O3', '-g0', '-fsigned-char']
 else:
     extra_compile_args = ['-fsigned-char']
 
