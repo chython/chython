@@ -366,6 +366,38 @@ def test_a_transformation_creates_the_atom_it_needs():
     assert found['appel_chloride'] == {smiles('CCCl')}
 
 
+def test_the_transition_state_of_an_outcome_holds_what_left_and_what_arrived():
+    """The reactor numbers a pair and leaves a leaving or an arriving atom at 0, so the ML view of an
+    outcome has to place an unmapped atom rather than count it.
+
+    Buchwald-Hartwig on aziridine and bromobenzene.  The aryl carbon has three heavy neighbours before
+    and three after -- two ring carbons and the bromine, then two ring carbons and the nitrogen -- and
+    the C-Br bond has to be in the union for that to be true.  Without it, every aryl halide of one
+    ring gives the same transition state.
+    """
+    out = next(iter(smiles('N1CC1') @ smiles('c1ccccc1Br')))
+    view = out.reaction.modeling_view()
+    assert view.unmapped == {'reactants': 1, 'products': 0}
+    aryl = next(n for n, state in view.states.items() if state[:3] == (6, 0, 3))
+    assert view.states[aryl][3:] == (0, 3), 'three heavy neighbours after as well'
+    leaving = [n for n, state in view.states.items() if state[0] == 35]
+    assert len(leaving) == 1, 'the bromine that left is one row of the union'
+    assert view.union_bonds[tuple(sorted((aryl, leaving[0])))] == (1, 0), 'C-Br broken'
+
+
+def test_a_created_atom_reaches_the_transition_state_too():
+    """The mirror: pyridine N-oxidation creates the oxygen, so the reactor leaves it at 0.
+
+    Dropped, this record's transition state has no bond change at all -- an oxidation that looks inert.
+    """
+    out = next(iter(smiles('c1ccccn1').react(reaction='nitrogen_oxidation')))
+    view = out.reaction.modeling_view()
+    assert view.unmapped == {'reactants': 0, 'products': 1}
+    arriving = [n for n, state in view.states.items() if state[0] == 8]
+    assert len(arriving) == 1, 'the oxide oxygen is one row of the union'
+    assert [orders for orders in view.union_bonds.values() if orders[0] != orders[1]] == [(0, 1)]
+
+
 def test_a_ring_bond_the_product_omits_is_deleted():
     """Epoxide hydrolysis: the product names three atoms in a chain, so the closing bond goes.
 

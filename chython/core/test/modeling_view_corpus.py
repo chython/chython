@@ -60,7 +60,7 @@ SMILES = {
     # the mirror: 5..8 exist only on the product side
     'tert_butyl_esterification': '[CH3:1][C:2](=[O:3])[OH:9]'
                                  '>>[CH3:1][C:2](=[O:3])[O:4][C:5]([CH3:6])([CH3:7])[CH3:8].[OH2:9]',
-    # one unmapped atom on each side, counted and left out of the union
+    # two unmapped atoms on each side, counted and placed on the side they came from
     'esterification_partly_mapped': '[CH3:1][C:2](=[O:3])[OH:4].CO'
                                     '>>[CH3:1][C:2](=[O:3])[O:4]C.O',
     # two atoms sharing map number 1 on the reactant side: the union merges them and says so
@@ -74,7 +74,7 @@ SMILES = {
     # a salt on the product side: two molecules, one of them a single mapped ion
     'saponification': '[CH3:1][C:2](=[O:3])[O:4][CH3:5].[OH-:6].[Na+:7]'
                       '>>[CH3:1][C:2](=[O:3])[O-:4].[Na+:7].[CH3:5][OH:6]',
-    # no mapping at all: every atom is unmapped, the union is empty, and that is a record
+    # no mapping at all: every atom is on one side only, so nothing is conserved, and that is a record
     'unmapped_hydrogenation': 'C=C.[H][H]>>CC',
     # an empty product side, which is a record and not an error
     'empty_products': '[CH3:1][CH3:2]>>',

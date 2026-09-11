@@ -683,21 +683,39 @@ def mol_transition_view(MoleculeContainer molecule not None, TensorEncoding enco
 DEF ML_NO_INDEX = 0xffffffff
 
 
-# `uidx` is `map_number -> union index`, valid only for touched slots.  `rseen` / `pseen` mark which
-# side already claimed a map number.  `keep` is indexed by running ordinal over all atoms of both
-# sides (left first, then right); the atom passes write 1 for an atom that took a union slot and 0 for
-# one that was unmapped or rejected; the bond passes read it for both endpoints.  `head` / `link` are a
-# per-atom singly linked list over bond slots, keyed on the lower union index of the pair.  `side`
-# codes: 1 = reactant-only, 2 = product-only, 3 = both.  The uidx table is max map number + 1, at most
-# 10000 slots -- initialized slot by slot, not memset, because a three-atom record must not pay for all.
+# `uidx` is `map_number -> union index`, valid only for touched slots, and it is what PAIRS the two
+# sides -- an unmapped atom therefore takes a union row without an entry in it.  `rseen` / `pseen` mark
+# which side already claimed a map number.  `urow` is indexed by running ordinal over all atoms of both
+# sides (left first, then right) and holds the union row the atom took, or `ML_NO_INDEX` for a rejected
+# collision; the bond passes read it for both endpoints, which is why they need no map number of their
+# own.  `head` / `link` are a per-atom singly linked list over bond slots, keyed on the lower union index
+# of the pair.  `side` codes: 1 = reactant-only, 2 = product-only, 3 = both.  The uidx table is max map
+# number + 1, at most 10000 slots -- initialized slot by slot, not memset, because a three-atom record
+# must not pay for all.
 cdef struct ml_merge_t:
     uint32_t *uidx
     uint8_t *rseen
     uint8_t *pseen
     uint8_t *side              # 1 = reactant-only, 2 = product-only, 3 = both
-    uint8_t *keep              # 1 = atom took a union slot, 0 = unmapped or collided
+    uint32_t *urow             # union row per atom ordinal; ML_NO_INDEX = a rejected collision
     uint32_t *head
     uint32_t *link
+
+
+cdef inline void _ml_union_row(ml_union_t *g, ml_merge_t *merge, uint32_t row, atom_t *at,
+                               uint32_t mn, uint8_t side) noexcept nogil:
+    """One union row from one atom, on the side that atom came from.
+
+    `h_after` is written equal to `h_before`, which a paired product atom then overwrites.  An atom on
+    one side only keeps it -- the convention `ReactionModelingView.states` states -- and an unmapped
+    atom is one of those, the record having said nothing that would pair it.
+    """
+    merge.side[row] = side
+    merge.head[row] = ML_NO_INDEX
+    g.element[row] = at.element
+    g.h_before[row] = at.hydrogens & 0x0f
+    g.h_after[row] = at.hydrogens & 0x0f
+    g.map_number[row] = <uint16_t> mn
 
 
 cdef void _ml_union_degrees(ml_union_t *union_graph, ml_merge_t *merge) noexcept nogil:
@@ -744,9 +762,16 @@ def reaction_transition_view(reactants, products, TensorEncoding encoding=None):
     AGENTS ARE EXCLUDED BY NOT BEING PASSED.  The caller hands over the two sides it wants unioned, so
     there is no side-kind test inside the kernel to keep in step with the container's notion of one.
 
-    A BADLY MAPPED RECORD IS REPORTED.  An unmapped atom is counted and left out; a map number claimed
-    twice on one side is listed in `collisions` and the first claim keeps the slot.  Refusals live at
-    the answer boundary and this is not one.
+    AN UNMAPPED ATOM IS PLACED ON THE SIDE IT CAME FROM, as reactant-only or product-only, and counted
+    in `unmapped`.  Left out, it takes the degree of every neighbour that stayed down with it: an aryl
+    bromide whose bromine carries no number reads two heavy neighbours before the coupling and three
+    after, so every aryl halide of one ring gives the same transition state.  The price is that an atom
+    the record leaves bare on BOTH sides is two rows rather than one, nothing in the record pairing
+    them, and `unmapped` is what a consumer that cannot accept that reads.
+
+    A BADLY MAPPED RECORD IS REPORTED.  A map number claimed twice on one side is listed in `collisions`
+    and the first claim keeps the row; the second contributes nothing, since a union cannot hold two
+    atoms at one key.  Refusals live at the answer boundary and this is not one.
     """
     require_numpy()
     if encoding is None:
@@ -787,7 +812,7 @@ def reaction_transition_view(reactants, products, TensorEncoding encoding=None):
                         + align8(<size_t> slots)                             # rseen
                         + align8(<size_t> slots)                             # pseen
                         + align8(<size_t> cap_atoms)                         # side
-                        + align8(<size_t> cap_atoms)                         # keep
+                        + align8(<size_t> cap_atoms * sizeof(uint32_t))      # urow
                         + align8(<size_t> cap_atoms * sizeof(uint32_t))      # head
                         + align8(<size_t> cap_bonds * sizeof(uint32_t))      # link
                         + <size_t> 4 * cap_atoms                             # element + h_before + n_before + h_after
@@ -806,7 +831,7 @@ def reaction_transition_view(reactants, products, TensorEncoding encoding=None):
     merge.rseen = <uint8_t *> cursor; cursor += align8(<size_t> slots)
     merge.pseen = <uint8_t *> cursor; cursor += align8(<size_t> slots)
     merge.side = <uint8_t *> cursor; cursor += align8(<size_t> cap_atoms)
-    merge.keep = <uint8_t *> cursor; cursor += align8(<size_t> cap_atoms)
+    merge.urow = <uint32_t *> cursor; cursor += align8(<size_t> cap_atoms * sizeof(uint32_t))
     merge.head = <uint32_t *> cursor; cursor += align8(<size_t> cap_atoms * sizeof(uint32_t))
     merge.link = <uint32_t *> cursor; cursor += align8(<size_t> cap_bonds * sizeof(uint32_t))
     union_graph.element = <uint8_t *> cursor; cursor += cap_atoms
@@ -826,7 +851,7 @@ def reaction_transition_view(reactants, products, TensorEncoding encoding=None):
     cdef uint32_t n_union = 0, n_bonds = 0
     cdef uint32_t unmapped_r = 0, unmapped_p = 0
     cdef list collisions_r = [], collisions_p = []
-    cdef uint32_t k, mn, mm, n, m, e, base, right_base
+    cdef uint32_t k, mn, n, m, e, base, right_base
     cdef uint32_t edge_to
     cdef uint8_t order
     try:
@@ -853,26 +878,20 @@ def reaction_transition_view(reactants, products, TensorEncoding encoding=None):
             for i in range(n_mol):
                 at = atoms + i
                 mn = at.map_number
-                if not mn:
+                if mn:
+                    if merge.rseen[mn]:
+                        collisions_r.append(mn)
+                        merge.urow[base + i] = ML_NO_INDEX
+                        continue
+                    merge.rseen[mn] = 1
+                    merge.uidx[mn] = n_union
+                else:
                     unmapped_r += 1
-                    merge.keep[base + i] = 0
-                    continue
-                if merge.rseen[mn]:
-                    collisions_r.append(mn)
-                    merge.keep[base + i] = 0
-                    continue
-                merge.rseen[mn] = 1
-                merge.uidx[mn] = n_union
-                merge.side[n_union] = 1
-                merge.head[n_union] = ML_NO_INDEX
-                merge.keep[base + i] = 1
-                union_graph.element[n_union] = at.element
-                union_graph.h_before[n_union] = at.hydrogens & 0x0f
-                union_graph.h_after[n_union] = at.hydrogens & 0x0f
-                union_graph.map_number[n_union] = <uint16_t> mn
+                _ml_union_row(&union_graph, &merge, n_union, at, mn, 1)
+                merge.urow[base + i] = n_union
                 n_union += 1
             base += n_mol
-        right_base = base  # starting ordinal for product atoms in the keep array
+        right_base = base  # starting ordinal for product atoms in the urow array
 
         # product atoms: a known map number reads its after state onto the existing row, a new one
         # appends -- which is what keeps a component contiguous in the union order
@@ -883,54 +902,42 @@ def reaction_transition_view(reactants, products, TensorEncoding encoding=None):
             for i in range(n_mol):
                 at = atoms + i
                 mn = at.map_number
-                if not mn:
-                    unmapped_p += 1
-                    merge.keep[base + i] = 0
-                    continue
-                if merge.pseen[mn]:
-                    collisions_p.append(mn)
-                    merge.keep[base + i] = 0
-                    continue
-                merge.pseen[mn] = 1
-                if merge.rseen[mn]:
-                    n = merge.uidx[mn]
-                    merge.side[n] = 3
-                    union_graph.h_after[n] = at.hydrogens & 0x0f
-                    merge.keep[base + i] = 1
-                else:
+                if mn:
+                    if merge.pseen[mn]:
+                        collisions_p.append(mn)
+                        merge.urow[base + i] = ML_NO_INDEX
+                        continue
+                    merge.pseen[mn] = 1
+                    if merge.rseen[mn]:
+                        n = merge.uidx[mn]
+                        merge.side[n] = 3
+                        union_graph.h_after[n] = at.hydrogens & 0x0f
+                        merge.urow[base + i] = n
+                        continue
                     merge.uidx[mn] = n_union
-                    merge.side[n_union] = 2
-                    merge.head[n_union] = ML_NO_INDEX
-                    merge.keep[base + i] = 1
-                    union_graph.element[n_union] = at.element
-                    union_graph.h_before[n_union] = at.hydrogens & 0x0f
-                    union_graph.h_after[n_union] = at.hydrogens & 0x0f
-                    union_graph.map_number[n_union] = <uint16_t> mn
-                    n_union += 1
+                else:
+                    unmapped_p += 1
+                _ml_union_row(&union_graph, &merge, n_union, at, mn, 2)
+                merge.urow[base + i] = n_union
+                n_union += 1
             base += n_mol
 
-        # reactant bonds, both endpoints mapped and kept: appended in reactant order, `n < m`.
-        # The `n >= m` guard also stops a bond between two atoms sharing one map number from
-        # becoming a self-loop -- that is load-bearing, not incidental.
+        # reactant bonds, both endpoints holding a union row: appended in reactant order, `n < m`, so
+        # the `n >= m` guard is what visits each bond once.
         base = 0
         for mol in left:
             structure = mol._structure
-            atoms = structure.atoms()
             ptr = csr_ptr(structure)
             edges = csr_edges(structure)
             n_mol = structure.header.atom_count
             for i in range(n_mol):
-                if not merge.keep[base + i]:
+                n = merge.urow[base + i]
+                if n == ML_NO_INDEX:
                     continue
-                mn = atoms[i].map_number
-                n = merge.uidx[mn]
                 for k in range(ptr[i], ptr[i + 1]):
                     edge_to = edges[k].to
-                    if not merge.keep[base + edge_to]:
-                        continue
-                    mm = atoms[edge_to].map_number
-                    m = merge.uidx[mm]
-                    if n >= m:
+                    m = merge.urow[base + edge_to]
+                    if m == ML_NO_INDEX or n >= m:
                         continue
                     union_graph.bond_i[n_bonds] = n
                     union_graph.bond_j[n_bonds] = m
@@ -945,22 +952,17 @@ def reaction_transition_view(reactants, products, TensorEncoding encoding=None):
         base = right_base
         for mol in right:
             structure = mol._structure
-            atoms = structure.atoms()
             ptr = csr_ptr(structure)
             edges = csr_edges(structure)
             n_mol = structure.header.atom_count
             for i in range(n_mol):
-                if not merge.keep[base + i]:
+                n = merge.urow[base + i]
+                if n == ML_NO_INDEX:
                     continue
-                mn = atoms[i].map_number
-                n = merge.uidx[mn]
                 for k in range(ptr[i], ptr[i + 1]):
                     edge_to = edges[k].to
-                    if not merge.keep[base + edge_to]:
-                        continue
-                    mm = atoms[edge_to].map_number
-                    m = merge.uidx[mm]
-                    if n >= m:
+                    m = merge.urow[base + edge_to]
+                    if m == ML_NO_INDEX or n >= m:
                         continue
                     order = edges[k].order
                     e = merge.head[n]

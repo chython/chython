@@ -40,6 +40,13 @@ def _bonds_by_map(view):
             for (i, j), b, a in zip(view.bonds.tolist(), view.bond_before, view.bond_after)}
 
 
+def _columns(view):
+    """Every column but `map_numbers`: what the record states, apart from how it numbers it."""
+    return (view.elements.tolist(), view.h_before.tolist(), view.h_after.tolist(),
+            view.n_before.tolist(), view.n_after.tolist(), view.bonds.tolist(),
+            view.bond_before.tolist(), view.bond_after.tolist())
+
+
 def test_a_fully_mapped_substitution_reports_both_sides_of_every_atom():
     view = read_reaction_smiles('[CH3:1][Br:2].[OH-:3]>>[CH3:1][OH:3].[Br-:2]').transition_view()
     assert _by_map(view) == {
@@ -112,10 +119,36 @@ def test_an_agent_contributes_no_atom_and_no_bond():
     assert sorted(view.map_numbers.tolist()) == [1, 2, 3, 4, 5, 6]
 
 
-def test_an_unmapped_atom_is_counted_and_left_out_of_the_union():
+def test_an_unmapped_atom_is_counted_and_placed_on_the_side_it_came_from():
+    """A record that names one atom still has a whole transition state.
+
+    `[CH3:1]Br>>[CH3:1]O` states the carbon and nothing else.  The bromine is reactant-only and the
+    oxygen product-only, so the C-Br bond breaks, the C-O bond forms, and the carbon counts one heavy
+    neighbour on each side rather than none.  `map_numbers` carries 0 for a row the record does not
+    number: the column is the record's own numbering and this view invents no entry in it.
+    """
+    view = read_reaction_smiles('[CH3:1]Br>>[CH3:1]O').transition_view()
+    assert view.map_numbers.tolist() == [1, 0, 0]
+    assert view.elements.tolist() == [6, 35, 8]
+    assert view.n_before.tolist() == [1, 1, 0]
+    assert view.n_after.tolist() == [1, 0, 1]
+    assert view.bonds.tolist() == [[0, 1], [0, 2]]
+    assert view.bond_before.tolist() == [1, 0]
+    assert view.bond_after.tolist() == [0, 1]
+    assert view.unmapped == {'reactants': 1, 'products': 1}
+
+
+def test_an_unmapped_atom_on_both_sides_is_two_rows_and_not_one():
+    """The price of placing them, and the reason `unmapped` is still reported.
+
+    Methanol's carbon and oxygen are unmapped on both sides of this esterification.  Nothing in the
+    record says the left pair and the right pair are the same two atoms, so the union holds four rows:
+    the reactant methanol leaves and the product methyl arrives.  A consumer that cannot accept that
+    reads `unmapped` and refuses the record.
+    """
     view = read_reaction_smiles('[CH3:1][C:2](=[O:3])[OH:4].CO'
                                 '>>[CH3:1][C:2](=[O:3])[O:4]C.O').transition_view()
-    assert sorted(view.map_numbers.tolist()) == [1, 2, 3, 4]
+    assert view.map_numbers.tolist() == [1, 2, 3, 4, 0, 0, 0, 0]
     assert view.unmapped == {'reactants': 2, 'products': 2}
 
 
@@ -125,19 +158,107 @@ def test_a_colliding_map_number_is_reported_and_not_refused():
     assert view.map_numbers.tolist() == [1, 2, 3]
 
 
-def test_a_bond_whose_endpoint_is_unmapped_is_not_a_union_bond():
-    """Half a bond cannot be placed in the union, and inventing an endpoint would be worse."""
+def test_a_bond_to_an_unmapped_atom_is_a_union_bond():
+    """Both endpoints have a row, so the bond has one: the union is over atoms, not over numbers."""
     view = read_reaction_smiles('[CH3:1]CO>>[CH3:1]C=O').transition_view()
-    assert view.bonds.shape == (0, 2)
-    assert view.map_numbers.tolist() == [1]
+    assert view.map_numbers.tolist() == [1, 0, 0, 0, 0]
+    assert view.bonds.tolist() == [[0, 1], [1, 2], [0, 3], [3, 4]]
+    assert view.bond_before.tolist() == [1, 1, 0, 0]
+    assert view.bond_after.tolist() == [0, 0, 1, 2]
 
 
-def test_a_reaction_with_no_mapping_at_all_gives_an_empty_union():
+def test_a_reaction_with_no_mapping_at_all_is_every_atom_on_one_side():
+    """No number anywhere is a record, and the union it gives is the two sides side by side.
+
+    Nothing is conserved, because nothing in the record says anything is.  `unmapped` counts every
+    atom, which is the signal a pipeline refuses on.
+    """
     view = read_reaction_smiles('C=C.[H][H]>>CC').transition_view()
-    assert view.elements.shape == (0,)
-    assert view.bonds.shape == (0, 2)
-    assert view.distances.shape == (0, 0)
+    assert view.map_numbers.tolist() == [0] * 6
+    assert view.elements.tolist() == [6, 6, 1, 1, 6, 6]
+    assert view.bond_before.tolist() == [2, 1, 0]
+    assert view.bond_after.tolist() == [0, 0, 1]
     assert view.unmapped == {'reactants': 4, 'products': 2}
+
+
+def test_a_changing_atom_moves_its_hydrogens_and_its_bond_order():
+    """`C-OH >> C=O`, the change that needs no atom to leave or arrive.
+
+    Both atoms of the reaction centre lose a hydrogen and the bond between them goes single to double.
+    No degree moves and `unmapped` is zero: a change is a statement about one atom on two sides, so it
+    takes a map number to state at all.
+    """
+    view = read_reaction_smiles('[CH3:1][CH2:2][OH:3]>>[CH3:1][CH:2]=[O:3]').transition_view()
+    assert view.h_before.tolist() == [3, 2, 1]
+    assert view.h_after.tolist() == [3, 1, 0]
+    assert view.n_before.tolist() == [1, 2, 1]
+    assert view.n_after.tolist() == [1, 2, 1], 'nothing left and nothing arrived'
+    assert _bonds_by_map(view) == {(1, 2): (1, 1), (2, 3): (1, 2)}
+    assert view.unmapped == {'reactants': 0, 'products': 0}
+
+
+def test_a_leaving_atom_reads_the_same_numbered_or_not():
+    """Being on one side only and being unnumbered are two different facts about an atom.
+
+    The bromine is reactant-only either way; the number changes its key and nothing else.  `unmapped`
+    is the only column that separates the two records, which is what makes it the signal to refuse on.
+    """
+    numbered = read_reaction_smiles('[CH3:1][Br:2]>>[CH4:1]').transition_view()
+    bare = read_reaction_smiles('[CH3:1]Br>>[CH4:1]').transition_view()
+    assert _columns(numbered) == _columns(bare)
+    assert numbered.map_numbers.tolist() == [1, 2]
+    assert bare.map_numbers.tolist() == [1, 0]
+    assert numbered.unmapped == {'reactants': 0, 'products': 0}
+    assert bare.unmapped == {'reactants': 1, 'products': 0}
+    assert bare.n_before.tolist() == [1, 1], 'the carbon has the bromine before'
+    assert bare.n_after.tolist() == [0, 0], 'and the bromine left alone, so it counts nobody after'
+    assert bare.bond_before.tolist() == [1] and bare.bond_after.tolist() == [0]
+
+
+def test_an_arriving_atom_reads_the_same_numbered_or_not():
+    """The mirror: a product-only atom, numbered or not, is one row whose bonds read `(0, order)`."""
+    numbered = read_reaction_smiles('[CH4:1]>>[CH3:1][Br:2]').transition_view()
+    bare = read_reaction_smiles('[CH4:1]>>[CH3:1]Br').transition_view()
+    assert _columns(numbered) == _columns(bare)
+    assert bare.map_numbers.tolist() == [1, 0]
+    assert bare.unmapped == {'reactants': 0, 'products': 1}
+    assert bare.h_before.tolist() == [4, 0] and bare.h_after.tolist() == [3, 0]
+    assert bare.n_before.tolist() == [0, 0] and bare.n_after.tolist() == [1, 1]
+    assert bare.bond_before.tolist() == [0] and bare.bond_after.tolist() == [1]
+
+
+def test_one_record_that_leaves_arrives_and_changes_at_once():
+    """Every branch in one union: two changing atoms, a leaving one, an arriving one, four moved bonds.
+
+    Maps 2 and 3 are the `C-OH >> C=O` pair.  Map 4 (bromine) is reactant-only.  Map 6 (water oxygen)
+    is product-only.  Map 5 is on both sides and loses its only neighbour, so it gains a hydrogen and
+    drops to a degree of 0 -- a paired atom reads the departure of an unpaired one.
+    """
+    view = read_reaction_smiles('[CH3:1][CH2:2][OH:3].[Br:4][CH3:5]'
+                                '>>[CH3:1][CH:2]=[O:3].[CH4:5].[OH2:6]').transition_view()
+    assert view.map_numbers.tolist() == [1, 2, 3, 4, 5, 6]
+    assert view.elements.tolist() == [6, 6, 8, 35, 6, 8]
+    assert view.h_before.tolist() == [3, 2, 1, 0, 3, 2]
+    assert view.h_after.tolist() == [3, 1, 0, 0, 4, 2]
+    assert view.n_before.tolist() == [1, 2, 1, 1, 1, 0]
+    assert view.n_after.tolist() == [1, 2, 1, 0, 0, 0]
+    assert _bonds_by_map(view) == {(1, 2): (1, 1), (2, 3): (1, 2), (4, 5): (1, 0)}
+    assert view.unmapped == {'reactants': 0, 'products': 0}
+
+
+def test_the_same_record_reads_the_same_where_it_numbers_nothing():
+    """The record above with its bromine and its water unnumbered: one union, two keyings.
+
+    The leaving atom and the arriving one lose their numbers, and every column but `map_numbers` and
+    `unmapped` is unchanged -- including the degree of map 5, which the bromine's row is what preserves.
+    """
+    numbered = read_reaction_smiles('[CH3:1][CH2:2][OH:3].[Br:4][CH3:5]'
+                                    '>>[CH3:1][CH:2]=[O:3].[CH4:5].[OH2:6]').transition_view()
+    bare = read_reaction_smiles('[CH3:1][CH2:2][OH:3].Br[CH3:5]'
+                                '>>[CH3:1][CH:2]=[O:3].[CH4:5].O').transition_view()
+    assert _columns(numbered) == _columns(bare)
+    assert bare.map_numbers.tolist() == [1, 2, 3, 0, 5, 0]
+    assert bare.unmapped == {'reactants': 1, 'products': 1}
 
 
 def test_an_empty_product_side_is_a_record():

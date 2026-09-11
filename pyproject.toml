@@ -4,7 +4,7 @@ build-backend = 'setuptools.build_meta'
 
 [project]
 name = 'chython'
-version = '3.0.1'
+version = '3.0.2'
 description = 'Library for processing molecules and reactions in python way'
 authors = [{name = 'Ramil Nugmanov', email = 'nougmanoff@protonmail.com'}]
 license = 'LGPL-3.0-or-later'

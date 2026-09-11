@@ -405,7 +405,9 @@ is one matrix row of ``-1``, and one matrix covers the union rather than a per-s
 The sodium is the third row, ``-1`` everywhere off its own diagonal, and the map numbers show the union
 order: reactant atoms in container order — the sodium among them — then whatever only the products carry.
 
-A badly mapped record is reported and not refused:
+A badly mapped record is reported and not refused. An atom the record does not number is **placed on the
+side it came from** — reactant-only or product-only, which is all an unmapped atom can be — and counted
+in ``unmapped``. ``map_numbers`` carries ``0`` for its row, that column being the record's own numbering:
 
 .. testcode::
 
@@ -414,11 +416,24 @@ A badly mapped record is reported and not refused:
     view = smiles('[CH3:1][C:2](=[O:3])[OH:4].CO>>[CH3:1][C:2](=[O:3])[O:4]C.O').transition_view()
     print(view.unmapped)
     print(view.map_numbers.tolist())
+    print(view.n_before.tolist())
+    print(view.n_after.tolist())
 
 .. testoutput::
 
     {'reactants': 2, 'products': 2}
-    [1, 2, 3, 4]
+    [1, 2, 3, 4, 0, 0, 0, 0]
+    [1, 3, 1, 1, 1, 1, 0, 0]
+    [1, 3, 1, 2, 1, 1, 1, 0]
+
+Map ``4``, the acid's hydroxyl oxygen, reads one heavy neighbour before and two after: the arriving methyl
+is a row, so its bond is a bond. Dropping the unnumbered atoms instead would leave that ``2`` a ``1`` and
+would make an aryl chloride, bromide and iodide the same transition state.
+
+The price is on the other side of the same record. Nothing says methanol's carbon and oxygen are the
+product's methyl and water, so they are four rows rather than two — the reactant pair leaves and the
+product pair arrives. ``unmapped`` is what a consumer that cannot accept that reads, and it is nonzero
+here for exactly that reason.
 
 ``collisions`` lists a map number claimed twice on one side. The first claim keeps its union row; the
 second contributes no state and no bond, because a union cannot hold two atoms at one key.
@@ -443,6 +458,119 @@ second contributes no state and no bond, because a union cannot hold two atoms a
 one per atom — and ``union_bonds`` is ``{(n, m): (order_before, order_after)}`` with ``n < m``. It takes no
 encoding: the hydrogen count is ``H_UNKNOWN`` where the record does not state one, so nothing here is
 shifted, clamped or padded.
+
+A dict needs one key per atom, so an unmapped one is keyed **negatively**, ``-1`` onwards in union order.
+Zero would put every such atom on one entry and a positive key would be indistinguishable from a number
+the record stated:
+
+.. testcode::
+
+    from chython import smiles
+
+    view = smiles('[CH3:1]Br>>[CH3:1]O').modeling_view()
+    print(view.states)
+    print(view.union_bonds)
+
+.. testoutput::
+
+    {1: (6, 3, 1, 3, 1), -1: (35, 0, 1, 0, 0), -2: (8, 1, 0, 1, 1)}
+    {(-1, 1): (1, 0), (-2, 1): (0, 1)}
+
+The record names one atom and the transition state is still whole: the C–Br bond breaks, the C–O bond
+forms, and the carbon counts one heavy neighbour on each side.
+
+What a record can state
+-----------------------
+
+Every difference between the two sides lands in one of these six places, and reading a transition state
+is reading those columns against each other:
+
+======================== ===============================================================================
+the record states        where the view puts it
+======================== ===============================================================================
+an atom on both sides    one row; the halves differ wherever that atom changed
+a leaving atom           one row, present on the reactant side only; each of its bonds reads
+                         ``(order, 0)``
+an arriving atom         the mirror, each bond reading ``(0, order)``
+a hydrogen count change  ``h_before != h_after`` on that row
+a degree change          ``n_before != n_after`` on that row
+a bond order change      one bond row carrying two orders, neither of them ``0``
+======================== ===============================================================================
+
+Being on one side only is not the same thing as being unnumbered. An atom is reactant-only when the
+products do not carry it — which is most records, since a record is free to omit its byproducts — and
+whether it was numbered changes its key and nothing else. The three columns below are identical for
+``[CH3:1][Br:2]>>[CH4:1]`` and ``[CH3:1]Br>>[CH4:1]``; only ``map_numbers`` and ``unmapped`` differ.
+
+An oxidation moves hydrogens and one bond order and nothing else:
+
+.. testcode::
+
+    from chython import smiles
+
+    view = smiles('[CH3:1][CH2:2][OH:3]>>[CH3:1][CH:2]=[O:3]').transition_view()
+    print(view.h_before.tolist(), view.h_after.tolist())
+    print(view.n_before.tolist(), view.n_after.tolist())
+    print(view.bond_before.tolist(), view.bond_after.tolist())
+    print(view.unmapped)
+
+.. testoutput::
+
+    [3, 2, 1] [3, 1, 0]
+    [1, 2, 1] [1, 2, 1]
+    [1, 1] [1, 2]
+    {'reactants': 0, 'products': 0}
+
+The carbon and the oxygen each lose a hydrogen and the bond between them goes single to double. No
+degree moves, because nothing left and nothing arrived.
+
+A leaving atom keeps the state it had in the fragment it left with: ``n_after`` counts the neighbours
+that left beside it, while those same bonds read ``(order, 0)``. The degree columns describe the atom as
+its own side drew it — the byproduct is still a molecule — and the bond columns describe the union:
+
+.. testcode::
+
+    from chython import smiles
+
+    view = smiles('[CH3:1][C:2](=[O:3])[O:4][C:5]([CH3:6])([CH3:7])[CH3:8].[OH2:9]'
+                  '>>[CH3:1][C:2](=[O:3])[OH:9]').transition_view()
+    print(view.map_numbers.tolist())
+    print(view.n_before.tolist())
+    print(view.n_after.tolist())
+
+.. testoutput::
+
+    [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    [1, 3, 1, 2, 4, 1, 1, 1, 0]
+    [1, 3, 1, 1, 4, 1, 1, 1, 1]
+
+Map ``4``, the ester oxygen, drops from two heavy neighbours to one: the bond to the carbonyl carbon
+breaks and the bond to the tert-butyl carbon leaves with it. Map ``5`` keeps all four, all four of its
+neighbours having left with it. Map ``9``, the water oxygen, gains one and loses a hydrogen.
+
+One record reaches all of it — a leaving atom, an arriving one, a changing one, a bond broken and a bond
+formed:
+
+.. testcode::
+
+    from chython import smiles
+
+    view = smiles('[cH:1]1[cH:2][cH:3][cH:4][cH:5][c:6]1Br.[NH:7]1[CH2:8][CH2:9]1'
+                  '>>[cH:1]1[cH:2][cH:3][cH:4][cH:5][c:6]1[N:7]1[CH2:8][CH2:9]1.Br').modeling_view()
+    print(view.unmapped)
+    print(view.states[6], view.states[7])
+    print({k: v for k, v in view.union_bonds.items() if v[0] != v[1]})
+
+.. testoutput::
+
+    {'reactants': 1, 'products': 1}
+    (6, 0, 3, 0, 3) (7, 1, 2, 0, 3)
+    {(-1, 6): (1, 0), (6, 7): (0, 1)}
+
+The bromide leaves, hydrogen bromide arrives, and the aziridine nitrogen loses its hydrogen and gains a
+neighbour. The aryl carbon is the row to check: three heavy neighbours before and three after, the
+bromine counted on one side and the nitrogen on the other. Neither bromine is numbered, so nothing pairs
+them — ``-1`` leaves and ``-2`` arrives, and ``unmapped`` counts one on each side.
 
 Measured cost
 -------------

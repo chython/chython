@@ -291,20 +291,46 @@ def test_an_unstated_hydrogen_count_reports_the_sentinel_not_zero():
     assert view.states[1][1] == 3, 'and a stated count is still the stated count'
 
 
-def test_unmapped_atoms_are_counted_rather_than_silently_merged():
-    """Leaving unmapped atoms undefined means, in a training set, silent corruption at whatever rate
-    the corpus happens to contain.  Counted here, so a pipeline can refuse at ITS boundary."""
+def test_unmapped_atoms_are_counted_and_keyed_negatively():
+    """Placed on the side they came from, and keyed apart from the record's own numbering.
+
+    A negative key is allocated in union order for an atom the record does not number.  Zero cannot be
+    the key -- two unmapped atoms would land on one entry, and a caller who means "map number 0" says
+    nothing -- and a positive one would be indistinguishable from a number the record stated.
+    """
     rxn = ReactionContainer([read_smiles('[CH3:1][CH2:2]O')], [read_smiles('[CH3:1][CH:2]=O')])
     view = rxn.modeling_view()
     assert view.unmapped == {'reactants': 1, 'products': 1}
-    assert 0 not in view.states, 'map number 0 is not an atom identity'
+    assert list(view.states) == [1, 2, -1, -2], 'union order, and 0 is not an atom identity'
+    assert view.states[-1] == (8, 1, 1, 1, 0), 'the hydroxyl leaves: one neighbour before, none after'
+    assert view.states[-2] == (8, 0, 0, 0, 1), 'the carbonyl oxygen arrives'
     assert view.collisions == {'reactants': (), 'products': ()}
 
 
-def test_a_bond_to_an_unmapped_atom_is_left_out_of_the_union():
+def test_a_bond_to_an_unmapped_atom_is_a_union_bond():
+    """Its endpoint has a row, so the bond has one, and the alcohol's oxidation is visible."""
     rxn = ReactionContainer([read_smiles('[CH3:1][CH2:2]O')], [read_smiles('[CH3:1][CH:2]=O')])
     view = rxn.modeling_view()
-    assert set(view.union_bonds) == {(1, 2)}
+    assert view.union_bonds == {(1, 2): (1, 1), (-1, 2): (1, 0), (-2, 2): (0, 2)}
+
+
+def test_a_leaving_an_arriving_and_a_changing_atom_read_in_one_dict():
+    """Aziridine on bromobenzene, the record numbering neither bromine: every branch in one union.
+
+    The bromide leaves (`-1`), hydrogen bromide arrives (`-2`), the nitrogen loses its hydrogen and
+    gains a neighbour, and the aryl carbon keeps three heavy neighbours on both sides -- the bromine
+    counted before, the nitrogen after.  Dropping the two bromines would read that carbon as 2 -> 3.
+    """
+    view = read_reaction_smiles('[cH:1]1[cH:2][cH:3][cH:4][cH:5][c:6]1Br.[NH:7]1[CH2:8][CH2:9]1'
+                                '>>[cH:1]1[cH:2][cH:3][cH:4][cH:5][c:6]1[N:7]1[CH2:8][CH2:9]1'
+                                '.Br').modeling_view()
+    assert view.unmapped == {'reactants': 1, 'products': 1}
+    assert view.states[6] == (6, 0, 3, 0, 3), 'the aryl carbon swaps a neighbour, it does not gain one'
+    assert view.states[7] == (7, 1, 2, 0, 3), 'the nitrogen is the changing atom'
+    assert view.states[-1] == (35, 0, 1, 0, 0), 'the bromide leaves'
+    assert view.states[-2] == (35, 1, 0, 1, 0), 'and hydrogen bromide arrives, unpaired with it'
+    assert {k: v for k, v in view.union_bonds.items() if v[0] != v[1]} == \
+        {(-1, 6): (1, 0), (6, 7): (0, 1)}, 'one bond breaks and one forms; the ring is untouched'
 
 
 def test_colliding_map_numbers_are_reported():
@@ -453,8 +479,8 @@ def test_chython_two_invents_map_numbers_where_this_container_reports_none(index
     chython 2 hands it 8, the next number after the seven that were stated, indistinguishable from part
     of the map.  Reaction 2 is mapped nowhere and comes back mapped throughout.
 
-    This is why `modeling_view` counts unmapped atoms rather than folding them into the union.  If the
-    numbers were believable there would be nothing to count.
+    This is why `modeling_view` counts unmapped atoms and keys them apart from the stated ones.  If the
+    numbers were believable there would be nothing to count and nothing to keep apart.
     """
     reference = _oracle(REACTIONS[index])[0]
     rxn = _rebuild(REACTIONS[index])

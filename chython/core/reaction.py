@@ -202,8 +202,8 @@ class ReactionModelingView:
     number is the only thing that identifies "the same atom" across the arrow -- keying by atom number
     works only where a reader makes the two coincide.
 
-    IT REPORTS WHAT IT COULD NOT PLACE instead of producing an undefined union.  Calling unmapped
-    atoms and colliding map numbers "undefined results" means, for a training set, silent corruption at
+    IT REPORTS WHAT THE RECORD DID NOT STATE instead of leaving it undefined.  Calling unmapped atoms
+    and colliding map numbers "undefined results" means, for a training set, silent corruption at
     whatever rate the corpus happens to contain.  Here they land in :attr:`unmapped` and
     :attr:`collisions`, both empty for a well-mapped reaction, so a pipeline can decide -- and a
     refusal, if one is wanted, happens at the pipeline's boundary rather than inside a container that
@@ -219,7 +219,11 @@ class ReactionModelingView:
 
     @property
     def states(self) -> dict[int, tuple]:
-        """`{map_number: (element, h_before, n_before, h_after, n_after)}`.
+        """`{map_number: (element, h_before, n_before, h_after, n_after)}`, in union order.
+
+        A NEGATIVE KEY IS AN ATOM THE RECORD DOES NOT NUMBER, allocated `-1` onwards in that order.  It
+        is placed like any other atom, as reactant-only or product-only; the negative key says the
+        pairing is this view's reading of an absence rather than something the record stated.
 
         `element` is the atomic number.  `h_*` are IMPLICIT hydrogen counts per side and `n_*` are
         heavy-atom neighbour counts per side -- the per-side hydrogen count being the thing the
@@ -253,9 +257,11 @@ class ReactionModelingView:
     def unmapped(self) -> dict[str, int]:
         """How many atoms carried no map number, per side: `{'reactants': n, 'products': n}`.
 
-        Not an error and not silently dropped.  An unmapped atom cannot be placed in a union keyed by
-        map number, so it is counted and left out, and a consumer that requires a fully mapped
-        reaction checks this rather than discovering the hole in its loss curve.
+        Not an error and not a refusal.  Each is placed on the side it came from and keyed negatively in
+        :attr:`states`, so no neighbour of one loses a degree; what the count is for is the atom the
+        record leaves bare on BOTH sides, which becomes two rows because nothing pairs them.  A consumer
+        that requires a fully mapped reaction checks this rather than discovering the hole in its loss
+        curve.
         """
         return self._unmapped
 
@@ -577,18 +583,28 @@ class ReactionContainer:
         that is also a drawing.  Stated rather than assumed, because it is the kind of choice a model
         silently trains around.
 
+        AN UNMAPPED ATOM IS KEYED NEGATIVELY, `-1` onwards in union order, and still counted in
+        `unmapped`.  It holds a union row like any other atom -- on the side it came from -- so the key
+        is only the identity handle a dict needs: 0 would put every such atom on one entry, and a
+        positive one would be indistinguishable from a number the record stated.
+
         A COLLIDING MAP NUMBER KEEPS ITS FIRST CLAIM.  The second atom to claim a number is counted in
         `collisions` and contributes no state and no bond; a union cannot hold two atoms at one key.
         """
         view = reaction_transition_view(self._reactants, self._products,
                                         TensorEncoding(unknown_h=H_UNKNOWN))
-        map_numbers = view.map_numbers.tolist()
+        keys, bare = [], 0
+        for mn in view.map_numbers.tolist():
+            if not mn:
+                bare -= 1
+                mn = bare
+            keys.append(mn)
         states = {mn: (int(view.elements[i]), int(view.h_before[i]), int(view.n_before[i]),
                        int(view.h_after[i]), int(view.n_after[i]))
-                  for i, mn in enumerate(map_numbers)}
+                  for i, mn in enumerate(keys)}
         union = {}
         for (i, j), before, after in zip(view.bonds.tolist(), view.bond_before, view.bond_after):
-            a, b = map_numbers[i], map_numbers[j]
+            a, b = keys[i], keys[j]
             union[(a, b) if a < b else (b, a)] = (int(before), int(after))
         return ReactionModelingView(states, union, view.unmapped, view.collisions)
 
