@@ -137,7 +137,12 @@ def _run_probe(*, tags=None):
 
     `python` is shimmed onto PATH because that is the name the workflow uses and a developer's machine
     need not have it.  `tags` replaces `packaging.tags` with a stub yielding exactly those platforms.
+
+    POSIX only: the shim is a symlink with no `.exe`, which Git Bash cannot exec, and PATH there is
+    `;`-joined.  Nothing is lost -- the step this probes carries `if: runner.os == 'Linux'`.
     """
+    if system() == 'Windows':
+        skip('the retag step is Linux-only and this probe shims `python` the POSIX way')
     with TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         (tmp / 'bin').mkdir()
