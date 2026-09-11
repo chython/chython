@@ -44,8 +44,15 @@ the suite's `needs_inchi` marks skip.  Every assertion is therefore about declar
 build output that is checked only if build output exists.
 """
 from ast import Call, Constant, Dict, Name, parse, walk
+from os import environ
 from pathlib import Path
+from platform import system
+from pytest import skip
 from re import DOTALL, finditer, search
+from subprocess import check_output
+from sys import executable
+from tempfile import TemporaryDirectory
+from textwrap import dedent
 
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -103,6 +110,51 @@ def _workflow():
     """
     text = (ROOT / '.github/workflows/python-package.yml').read_text(encoding='utf-8')
     return '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('#'))
+
+
+def _retag_probe():
+    """The Linux retag step's shell, dedented as YAML hands it to bash, minus its two effects.
+
+    `pip install` and the `wheel tags` call are dropped by name -- and asserted present, so a rename
+    cannot turn this into a probe of nothing -- which leaves the tag COMPUTATION, side-effect free and
+    runnable here.  The step's own `echo` is what reports the answer, in this probe and in the CI log.
+    """
+    step = search(r'- name: Retag[^\n]*\n(.*?)(?=\n    - name:|\Z)', _workflow(), DOTALL)
+    assert step, 'the release workflow has no Retag step'
+    body = search(r'run: \|\n(.*)', step.group(1), DOTALL)
+    assert body, 'the Retag step has no `run:` block'
+    script = dedent(body.group(1))
+    assert 'python -m wheel tags' in script or 'auditwheel' in script, \
+        'no retag or repair step for Linux: setuptools emits linux_x86_64 and PyPI rejects it'
+    assert 'pip install --upgrade wheel' in script and 'dist/*.whl' in script, \
+        'the retag step no longer installs wheel, or no longer retags dist/*.whl'
+    return '\n'.join(line for line in script.splitlines()
+                     if 'pip install' not in line and 'dist/*.whl' not in line)
+
+
+def _run_probe(*, tags=None):
+    """Run the probe under bash and return the platform tag it chose.
+
+    `python` is shimmed onto PATH because that is the name the workflow uses and a developer's machine
+    need not have it.  `tags` replaces `packaging.tags` with a stub yielding exactly those platforms.
+    """
+    with TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        (tmp / 'bin').mkdir()
+        (tmp / 'bin' / 'python').symlink_to(executable)
+        env = {**environ, 'PATH': '%s:%s' % (tmp / 'bin', environ['PATH'])}
+        if tags is not None:
+            (tmp / 'packaging').mkdir()
+            (tmp / 'packaging' / '__init__.py').write_text('')
+            (tmp / 'packaging' / 'tags.py').write_text(
+                'class Tag:\n'
+                '    def __init__(self, platform):\n'
+                '        self.platform = platform\n'
+                '\n'
+                'def sys_tags():\n'
+                '    return [Tag(p) for p in %r]\n' % (tuple(tags),), encoding='utf-8')
+            env['PYTHONPATH'] = str(tmp)
+        return check_output(['bash', '-e'], input=_retag_probe(), text=True, env=env).split()[-1]
 
 
 # --- the mechanism ---------------------------------------------------------------------------------
@@ -195,19 +247,31 @@ def test_the_workflow_builds_with_the_declared_backend():
     assert 'python -m build' in text, 'the workflow has no PEP 517 build step'
 
 
-def test_the_linux_wheel_is_retagged_for_manylinux():
-    """setuptools tags Linux wheels `linux_x86_64`, which PyPI rejects; poetry-core did not.
+def test_the_linux_wheel_is_retagged_by_prefix_and_not_by_the_first_tag_offered():
+    """The step's tag is RUN here, because a step that names `manylinux` need not compute one.
 
-    2.24 published `manylinux_2_39_*` with no repair step because poetry-core took its platform tag from
-    `packaging.tags`.  `bdist_wheel` does not, so the backend migration silently removed the only reason
-    the Linux uploads worked -- a failure that appears at `twine upload`, on Linux only, during a
-    release.
+    `sys_tags()` is ordered best-first, and since packaging 26.3 the best Linux tag is the native
+    `linux_x86_64` rather than a manylinux one (packaging #160).  So `next(iter(sys_tags())).platform`
+    returns the tag PyPI rejects, `wheel tags --platform-tag linux_x86_64` renames nothing, and the step
+    reports success -- the whole failure being one line of the log reading `retagging as linux_x86_64`.
+    The stub is that ordering; the assertion is that the highest manylinux tag is picked out of it.
     """
-    text = _workflow()
-    assert 'wheel tags' in text or 'auditwheel' in text, \
-        'no retag or repair step for Linux: setuptools emits linux_x86_64 and PyPI rejects it'
-    assert 'sys_tags' in text or 'manylinux' in text, \
-        'the retag step does not name a manylinux tag or compute one'
+    assert _run_probe(tags=('linux_x86_64', 'manylinux_2_39_x86_64', 'manylinux_2_5_x86_64')) == \
+        'manylinux_2_39_x86_64', 'the retag step takes the first tag `sys_tags()` offers, which on Linux ' \
+        'is the bare `linux_x86_64` PyPI rejects; select the tag by its `manylinux` prefix instead'
+
+
+def test_the_retag_step_finds_a_manylinux_tag_on_the_platform_it_runs_on():
+    """The same computation against the real `packaging`, which is what the stub above stands in for.
+
+    Linux only: this is the platform the step has an `if` for, and the one every other wheel in the
+    matrix is already tagged correctly on.
+    """
+    if system() != 'Linux':
+        skip('the retag step runs on Linux only')
+    tag = _run_probe()
+    assert tag.startswith('manylinux'), \
+        'the retag step computes %r on this runner; PyPI rejects it and twine fails the release' % tag
 
 
 # --- the staging itself, when there is build output to look at -------------------------------------

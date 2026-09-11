@@ -51,6 +51,10 @@ jobs:
     needs: libinchi
     runs-on: ${{ matrix.os }}
     strategy:
+      # Every row runs.  `--skip-existing` below makes each upload idempotent, so the release is
+      # published incrementally and re-running the workflow completes it; cancelling nineteen rows over
+      # one row's failure only drops wheels that would have built, and hides which platforms are wrong.
+      fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-24.04, ubuntu-24.04-arm]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
@@ -79,20 +83,28 @@ jobs:
         python -m build --wheel
     - name: Retag the Linux wheel for manylinux
       if: runner.os == 'Linux'
-      # THE MIGRATION'S ONE SILENT CASUALTY.  poetry-core tagged wheels from `packaging.tags`, so 2.24
-      # published `manylinux_2_39_x86_64` and `manylinux_2_39_aarch64` with no repair step and nobody
-      # had to think about it.  setuptools' `bdist_wheel` does not: it emits `linux_x86_64`, which PyPI
-      # rejects outright, so without this step the first V3 release fails at upload on Linux only.
+      # setuptools' `bdist_wheel` emits `linux_x86_64`, which PyPI rejects outright: without this step the
+      # release fails at upload on Linux only, and on Linux only because every other platform in the
+      # matrix is tagged acceptably by the build itself.
       #
-      # The tag is computed rather than written down -- it is precisely what poetry-core computed -- so
-      # it tracks the runner's glibc instead of freezing 2.39 into a file that would then lie the day
-      # the runner image is bumped.  `auditwheel repair` is the stronger tool, since it verifies the
-      # claim against the binaries rather than asserting it; it is not used here because a wheel built
-      # on glibc 2.39 and tagged 2.39 cannot be overstating its requirement, and because auditwheel
-      # would also rewrite libinchi.so, which nothing links against and which is loaded by path.
+      # THE TAG IS SELECTED BY PREFIX, NEVER BY POSITION.  `sys_tags()` is ordered best-first and since
+      # packaging 26.3 the best Linux tag is the native `linux_x86_64` rather than a manylinux one
+      # (packaging #160), so `next(iter(sys_tags())).platform` yields the tag PyPI rejects while
+      # `wheel tags` reports success having renamed nothing.  It is computed rather than written down so
+      # that it tracks the runner's glibc instead of freezing 2.39 into a file that lies the day the
+      # runner image is bumped; `grep -m1` takes the highest, and fails the step where there is no
+      # manylinux tag at all rather than letting a bare `linux_*` wheel reach twine.
+      # `chython/test/test_libinchi_staging.py` runs this computation, since a step that merely names
+      # `manylinux` need not produce one.
+      #
+      # `auditwheel repair` is the stronger tool, since it verifies the claim against the binaries rather
+      # than asserting it; it is not used here because a wheel built on glibc 2.39 and tagged 2.39 cannot
+      # be overstating its requirement, and because auditwheel would also rewrite libinchi.so, which
+      # nothing links against and which is loaded by path.
       run: |
         python -m pip install --upgrade wheel
-        tag=$(python -c 'from packaging.tags import sys_tags; print(next(iter(sys_tags())).platform)')
+        supported=$(python -c 'from packaging.tags import sys_tags; print(*(t.platform for t in sys_tags()))')
+        tag=$(echo "$supported" | tr ' ' '\n' | grep -m1 '^manylinux')
         echo "retagging as $tag"
         python -m wheel tags --remove --platform-tag "$tag" dist/*.whl
     - name: Publish package
