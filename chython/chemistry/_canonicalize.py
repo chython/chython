@@ -62,9 +62,13 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     needing the aromatic form.
 
     CHARGES ARE PAIRED OFF, not preserved atom by atom: glycine's zwitterion and its neutral drawing
-    share a key, because step 4 runs `neutralize()`.  The NET charge is untouched, so sodium acetate
-    stays sodium acetate -- there is no proton in it to move -- while ammonium acetate becomes acetic
-    acid and ammonia, both drawings of one salt.
+    share a key, because step 4 runs `neutralize()`.  `neutralize()` leaves the NET charge untouched, so
+    sodium acetate stays sodium acetate -- there is no proton in it to move -- while ammonium acetate
+    becomes acetic acid and ammonia, both drawings of one salt.
+
+    One stage does move the net charge, `standardize()`'s organometallic completion: a zinc or magnesium
+    holding one carbon and no halide is charged rather than left as a neutral one-coordinate metal.  It
+    is the only place in the pipeline where the total changes, and it says so in the log.
     """
     # A refusal at the answer boundary, which is the only place one belongs.  `smiles()` returns
     # whichever container its string describes, so a `>>` in a structure column arrives here as a

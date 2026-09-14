@@ -177,7 +177,7 @@ def test_the_whole_corpus_is_reachable_without_a_molecule():
     import chython
 
     functional, protective = chython.functional_rules(), chython.protective_rules()
-    assert len(functional) == 249 and len(protective) == 103
+    assert len(functional) == 253 and len(protective) == 103
     assert all(isinstance(k, str) and v.name == k for k, v in functional.items())
     assert all(isinstance(k, str) and v.name == k for k, v in protective.items())
     assert functional['carboxylic_acid'].smarts and protective['amine_boc'].protects == ('amine',)

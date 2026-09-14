@@ -1132,6 +1132,55 @@ def test_the_q_descriptor_states_no_determination_and_is_not_a_loss():
     assert len(log) == 1 and log[0].rule == 'smiles:cip-undetermined'
 
 
+def test_a_stated_descriptor_puts_its_centre_in_the_absolute_collection():
+    # `A<i>=<letter>` is TWO statements about the centre: somebody's completed determination, and that
+    # the centre is absolutely configured -- nothing determines a descriptor for a member of an OR or
+    # AND collection.  The dialect has no `a:` field beside a descriptor, so the collection is read off
+    # the descriptor, which is the statement that survives a reader who does not want the letter.
+    log = []
+    mol = read_smiles('CC(=O)c1cc2CN(C(=O)OC(C)(C)C)[C@H](C)Cn2n1 {A15=R}', log)
+    assert not log, log
+    assert mol.atom_cips() == {16: 'R'}
+    assert mol.stereo_groups() == {(STEREO_ABS, 0): [16]}
+    # and it is the same collection the pipe dialect spells, so nothing downstream sees two kinds of ABS
+    assert mol.stereo_groups() == read_smiles(
+        'CC(=O)c1cc2CN(C(=O)OC(C)(C)C)[C@H](C)Cn2n1 |a:15|').stereo_groups()
+
+
+def test_a_descriptor_never_moves_a_centre_out_of_the_collection_a_field_named():
+    # the group fields are the stronger statement and field ORDER must not decide it, so the reading
+    # above applies only where no field of the block named a group for that atom at all.
+    assert read_smiles(BRACE_OR).stereo_groups() == {(STEREO_OR, 1): [20, 23]}
+    for s in ('F[C@H](Cl)Br {o1:1;A1=R}', 'F[C@H](Cl)Br {A1=R;o1:1}'):
+        assert read_smiles(s).stereo_groups() == {(STEREO_OR, 1): [2]}, s
+
+
+def test_only_a_configured_centre_is_made_absolute_by_its_descriptor():
+    # the collection is the READER's inference and not the input's words, so it is drawn only where
+    # there is a configuration to be absolute about.  Otherwise a block that states a descriptor for a
+    # methyl carbon puts an `a` beside a methyl in every depiction of it.
+    assert read_smiles('C[C@H](N)C {A0=R}').stereo_groups() == {}      # `A0` is the methyl
+    assert read_smiles('C[C@?H](N)O {A1=R}').stereo_groups() == {}     # `@?`: no configuration stated
+    assert read_smiles('C[C@H](N)O {A1=q}').stereo_groups() == {}      # `q`: no determination stated
+    assert read_smiles('C[C@H](N)C {A1=E}').stereo_groups() == {}      # refused, so nothing to infer from
+
+
+def test_the_absolute_collection_a_descriptor_implies_is_written_but_is_not_identity():
+    # a configured atom in no collection already means absolute, so the two molecules below are one
+    # compound: they compare and hash EQUAL, the collection not being part of the canonical form.  This
+    # is the test that fails if ABS ever enters the canonical bytes.
+    a, b = read_smiles('F[C@H](Cl)Br'), read_smiles('F[C@H](Cl)Br {A1=R}')
+    a.canonicalize()
+    b.canonicalize()
+    assert a == b and hash(a) == hash(b)
+    # and the writer states the collection anyway, so what the input said survives a round trip.  The
+    # cost is here and only here: one compound, two strings, so a cache keyed on the TEXT stores both
+    # while one keyed on the container does not.
+    assert format(a, '') == '[C@@H](F)(Cl)Br'
+    assert format(b, '') == '[C@@H](F)(Cl)Br |a:0|'
+    assert format(read_smiles(format(b, '')), '') == format(b, '')
+
+
 def test_the_cx_relative_flag_is_a_loss_only_where_it_stands_alone():
     # `r` carries no atom list. Beside an `&`/`o` group it restates the group -- the output is
     # byte-identical to the same string without it -- and alone it is the only statement that the

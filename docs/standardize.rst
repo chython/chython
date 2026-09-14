@@ -19,7 +19,7 @@ The Pipeline
 pass                      writes                                           returns
 ========================= ================================================ ==========================
 ``kekule()``              definite bond orders; **repairs** to find a form ``KekuleResult``
-``standardize()``         group and metal-ligand rule tables               ``bool``
+``standardize()``         group and metal-ligand tables, reagents rejoined ``bool``
 ``implicify_hydrogens()`` hydrogen atoms folded into counts                ``int``, the count removed
 ``neutralize()``          charges paired off                               ``bool``
 ``thiele()``              the aromatic form; **refuses**, never repairs    ``ThieleResult``
@@ -113,8 +113,8 @@ already canonical is ``False`` even though the output SMILES walks the atoms in 
     False c1(ccccc1)C(=O)O
 
 Charges are **paired off, not preserved atom by atom**, because step 4 runs ``neutralize()``. Glycine's
-zwitterion and its neutral drawing therefore share a key, while the NET charge is untouched — sodium
-acetate stays sodium acetate, having no proton in it to move:
+zwitterion and its neutral drawing therefore share a key, while ``neutralize()`` leaves the NET charge
+untouched — sodium acetate stays sodium acetate, having no proton in it to move:
 
 .. testcode::
 
@@ -368,6 +368,71 @@ stay written.
 
 A row's ``tautomer`` column marks it as one of the local repairs ``fix_tautomers=False`` withholds; the
 rest run either way.
+
+
+Reagents Drawn Apart
+--------------------
+
+``standardize()`` closes with one stage that is **not** a rule table. A one-coordinate zinc or magnesium
+holding a carbon is an incomplete drawing, and the stage completes it: a free halide in the record is
+bonded to the metal, and a metal left without one is charged. All four charge spellings are accepted,
+including the two that do not conserve net charge — a lone ``[Zn+]`` beside a neutral halogen sits at
+``+1`` — because the drawing dropped a sign rather than meaning a cation and a radical. The record says
+which way the total moved.
+
+.. testcode::
+
+    mol = smiles('CC[Zn+].[Cl-]')
+    print(mol.functional_groups())
+    mol.standardize()
+    print(mol, mol.functional_groups())
+
+.. testoutput::
+
+    {'metalate_carbanion': 1}
+    C(C)[Zn]Cl {'alkyl_zinc': 1}
+
+It cannot be a row, for two reasons. ``bonds_fix`` changes the order of a bond that already exists, and
+a table applies whichever match the isomorphism search returned first — so a drawing offering several
+free halides would be settled by its atom order. **The result never depends on input order.** Two
+orderings decide it, and a tie is left tied because equal-ranked candidates are automorphic:
+
+======================= ======================================================================
+side                     order
+======================= ======================================================================
+halide                   ``Cl > Br > I > F``, a fact about the reagents and not about the graph
+metal                    canonical rank, so two different reagents sharing one halide agree
+======================= ======================================================================
+
+.. testcode::
+
+    for s in ('CC[Zn+].[Cl-].[Br-]', '[Br-].[Cl-].CC[Zn+]'):   # the chloride wins either way
+        mol = smiles(s)
+        mol.standardize()
+        print(mol)
+
+.. testoutput::
+
+    C(C)[Zn]Cl.[Br-]
+    C(C)[Zn]Cl.[Br-]
+
+A metal that goes without is **charged** instead, zinc and magnesium alike: a neutral one-coordinate
+metal is not a species, so the halide is taken to be missing from the drawing rather than from the
+compound. This is the one place ``standardize()`` moves net charge, and it is a separate record —
+``organometallics:charge`` rather than ``organometallics:unite`` — so a consumer can filter out the
+halide nobody drew while keeping the ones that were drawn.
+
+.. testcode::
+
+    for s in ('CC[Zn]', 'C[Zn].CC[Zn].[Cl-]'):       # nothing to pair with, then one chloride short
+        mol = smiles(s)
+        mol.standardize()
+        print(mol, [r.rule for r in mol.log if r.rule.startswith('organometallics')])
+
+.. testoutput::
+
+    C(C)[Zn+] ['organometallics:charge']
+    C(C)[Zn]Cl.C[Zn+] ['organometallics:unite', 'organometallics:charge']
 
 
 Hydrogens
@@ -1025,3 +1090,78 @@ processes; ``canonical_bytes`` is it as bytes, and is what the container hashes.
 
 The pass has to run on **every** side of the comparison. Canonicalizing one and not the other compares a
 canonical form against a drawing, which is not a weaker answer but a wrong one.
+
+
+Screening a Record
+------------------
+
+A screen asks a different question from a repair — not "what did this drawing get wrong" but "should
+this record be registered at all". Two of the questions a screen asks are already answered by the
+pipeline above, so neither needs knowledge of its own.
+
+**A charge that survives the pipeline is a charge that could not be paired off.** ``neutralize()`` moves
+a proton between components and never creates or destroys one, so a species with nowhere to put its
+charge keeps it while a salt drawn apart does not:
+
+.. testcode::
+
+    for s in ('C[N+](C)(C)C.[Cl-]',       # quaternary ammonium: nowhere to put the charge
+              'C[N+](C)(C)[O-]',          # an N-oxide is charge-separated by construction
+              'CN=[N+]=[N-]',             # so is an azide
+              'C[NH3+].CC(=O)[O-]',       # ammonium acetate: two components, one salt
+              'C(C(=O)[O-])[NH3+]',       # glycine's zwitterion
+              'c1cc[nH+]cc1.[Cl-]'):      # pyridine hydrochloride
+        m = smiles(s)
+        m.canonicalize()
+        print(sum(1 for a in m.atoms() if a.charge), m)
+
+.. testoutput::
+
+    2 C[N+](C)(C)C.[Cl-]
+    2 C[N+]([O-])(C)C
+    2 CN=[N+]=[N-]
+    0 C(O)(C)=O.NC
+    0 C(CN)(=O)O
+    0 c1ccccn1.Cl
+
+"Does this record carry an unexpected charge" is therefore ``any(a.charge for a in mol.atoms())`` after
+the pass, and the roster of legitimately charged groups a screen looks like it needs is a consequence of
+``acids.tsv`` rather than a table on its own.
+
+**A radical is a drawing error unless the corpus names it.** ``functional.tsv`` names the persistent
+ones, with the substituents that make each isolable written into the pattern — so a transient radical is
+one of that row's decoys and not a match — and every radical row covers exactly one radical atom. That
+makes the question a count:
+
+.. testcode::
+
+    RADICALS = ('nitroxide', 'hindered_aryloxyl', 'hydrazyl', 'triarylmethyl_radical')
+
+    for s in ('CC1(C)CCCC(C)(C)N1[O] |^1:10|',                    # TEMPO
+              '[C](c1ccccc1)(c1ccccc1)c1ccccc1 |^1:0|',           # the trityl radical
+              'CC1(C)CCCC(C)(C)N1[O].C[CH2] |^1:10,11|',          # TEMPO and one stray
+              'C[CH2] |^1:1|'):                                   # a primary alkyl radical
+        m = smiles(s)
+        m.canonicalize()
+        groups = m.functional_groups()
+        named = sum(groups.get(name, 0) for name in RADICALS)
+        total = sum(1 for a in m.atoms() if a.is_radical)
+        print(total, named, total == named)
+
+.. testoutput::
+
+    1 1 True
+    1 1 True
+    2 1 False
+    1 0 False
+
+``functional_group_hits()`` is the same answer carrying each row's id, for a screen that records *why*
+it accepted a record.
+
+What is deliberately absent is the rest of a screen. An element allow-list, a cap on how many components
+a record may have, a size above which a component stops being small enough to be a counterion: each is a
+threshold about one collection rather than a fact about a molecule. Residual charge is the same past a
+point — it separates the salt drawn apart from the species that cannot be neutral, but a lone
+``[C-]#C.[Na+]`` and a lone ``[CH3-].[Na+]`` both keep their charges, and which of the two is a
+plausible record is a claim about the collection. ``decompose_salts()`` above answers the salt half of a
+screen by name.

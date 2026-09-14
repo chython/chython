@@ -862,8 +862,8 @@ One per-atom question, three whole-molecule ones, and the stated CIP descriptors
 
     chiral.is_chiral(2)         # does atom 2 anchor a stereogenic unit?  Labelled or not.
     chiral.is_asymmetric()      # is the automorphism group trivial?
-    chiral.has_stereo_groups    # any OR/AND enhanced stereo present
-    chiral.stereo_groups()      # {id: (kind, group)}
+    chiral.has_stereo_groups    # any enhanced-stereo collection present, ABS included
+    chiral.stereo_groups()      # {(kind, group): [id, ...]}
     chiral.stereo_truncated     # True when the symmetry search ran out of budget, so the
                                 # stereogenic sets above are an over-approximation
 

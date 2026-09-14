@@ -87,6 +87,7 @@ salts:benzoic	counterion	OC(=O)c1ccccc1	-	benzoic
 salts:salicylic	counterion	OC(=O)c1ccccc1O	-	salicylic
 salts:gentisic	counterion	OC(=O)c1cc(O)ccc1O	-	gentisic
 salts:xinafoic	counterion	OC(=O)c1c(O)ccc2ccccc12	-	1-hydroxy-2-naphthoic (xinafoic)
+salts:oxynaphthoic	counterion	OC(=O)c1cc2ccccc2cc1O	-	3-hydroxy-2-naphthoic (beta-oxynaphthoic, BON).  Same formula as `salts:xinafoic` and a different constitution, so the key mechanism keeps them apart and both are needed
 salts:pamoic	counterion	OC(=O)c1c(O)c(Cc2c(O)c(C(O)=O)c3ccccc3c2)cc4ccccc14	-	pamoic (embonic)
 salts:hippuric	counterion	OC(=O)CNC(=O)c1ccccc1	-	hippuric
 salts:nicotinic	counterion	OC(=O)c1cccnc1	-	nicotinic

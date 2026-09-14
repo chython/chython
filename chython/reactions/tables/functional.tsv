@@ -44,6 +44,12 @@
 # it).  A sulfone/sulfonyl/nitro centre is `z5`, but a row already writing both `=[O]` out has stated
 # that, so the rows below do not repeat it.  `x` counts heteroatom neighbours, and B, S, Si, Sn and Mg
 # all count -- a CF3 carbon bonded to sulfur is `x4`, not `x3`.
+#
+# THE RADICAL STATE IS THE CXSMARTS `|^1:0|` TAIL, there being no in-bracket radical primitive, so a
+# radical row carries one and its `example` carries the matching CXSMILES tail.  EACH RADICAL ROW COVERS
+# EXACTLY ONE RADICAL ATOM, which is what lets a caller ask whether every radical in a record is named: the
+# radical rows' counts sum to the radical atom count when they are, and fall short when one is a drawing
+# error.  A `decoys` cell splits on commas, so a decoy's tail may name one atom only.
 id	name	smarts	example	decoys	description
 1	terminal_alkene	[C;z2;x0;D1:1]=[C;z2;x0;D2,D3:2]	C=CCC	CC=CC,C=CN	monosubstituted C=C
 2	alkene	[C;z2;x0;D2,D3:1]=[C;z2;x0;D2,D3:2]	CC=CC	C=CCC,CC=CO	internal C=C, no heteroatom on either carbon
@@ -308,3 +314,8 @@ id	name	smarts	example	decoys	description
 247	lactam_4_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]=1-[C;D3;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C,N;z2;M]=1	O=C1N(C)C=CC=C1Cl	O=C1N(C)C=CC(Cl)=C1	Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C3 of a 2-pyridinone, adjacent to the carbonyl
 248	lactam_5_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C;D3;z2;M]1	O=C1C(Cl)=CN(C)C=C1	O=C1C=C(Cl)N(C)C=C1	Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C3 of a 4-pyridinone, adjacent to the carbonyl
 249	lactam_6_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1	O=C1N(C)C=C(Cl)C=C1	O=C1N(C)C(Cl)=CC=C1	Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C5 of a 2-pyridinone
+# --- the persistent radicals, where the substituents are what make the radical isolable ---
+250	nitroxide	[O;D1;h0;z1:1]-[N;D3;z1:2](-[C;z1,z4;D3,D4:3])-[C;z1,z4;D3,D4:4] |^1:0|	CC1(C)CCCC(C)(C)N1[O] |^1:10|	CC1(C)CCCC(C)(C)N1O,CC1(C)CCCC(C)(C)[N+]1=O,C[N]([O])C |^1:2|	R2N-O•, the radical on oxygen -- TEMPO and its kin.  `D3,D4` on both alpha carbons is the isolability: a nitroxide with an alpha hydrogen disproportionates, so dimethylnitroxide is a decoy and not a match.  The hydroxylamine and the oxoammonium cation are the same skeleton at the other two oxidation states
+251	hindered_aryloxyl	[O;D1;h0;z1:1]-[C;a:2](:[C;a:3]-[C;D4;z1:4]):[C;a:5]-[C;D4;z1:6] |^1:0|	[O]c1c(C(C)(C)C)cc(C(C)(C)C)cc1C(C)(C)C |^1:0|	[O]c1ccccc1 |^1:0|,Oc1c(C(C)(C)C)cc(C)cc1C(C)(C)C	Ar-O• with a quaternary carbon at BOTH ortho positions, which is what makes it isolable; the unhindered phenoxyl radical is a decoy
+252	hydrazyl	[N;D2;h0;z1:1](-[C;a:2])-[N;D3;z1:3](-[C;a:4])-[C;a:5] |^1:0|	[N](N(c1ccccc1)c1ccccc1)c1c([N+](=O)[O-])cc([N+](=O)[O-])cc1[N+](=O)[O-] |^1:0|	c1ccccc1N(c1ccccc1)Nc1ccccc1,C[N]N(C)C |^1:1|	Ar2N-N•-Ar, the DPPH class: three aryl rings to delocalise over, and the trialkyl hydrazyl with none of them is a decoy
+253	triarylmethyl_radical	[C;D3;h0;z1:1](-[C;a:2])(-[C;a:3])-[C;a:4] |^1:0|	[C](c1ccccc1)(c1ccccc1)c1ccccc1 |^1:0|	C(c1ccccc1)(c1ccccc1)c1ccccc1,[C+](c1ccccc1)(c1ccccc1)c1ccccc1,C[C](C)c1ccccc1 |^1:1|	Ar3C•, Gomberg's radical and the trityl spin labels.  `_radical` is in the name because `protective.tsv`'s trityl rows are this skeleton without one

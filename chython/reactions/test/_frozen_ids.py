@@ -26,7 +26,7 @@ and read the diff.  A new line is a new row; a CHANGED line is a renumber, which
 means.  Never hand-edit a line to make the ratchet pass.
 """
 
-#: `functional.tsv`: 249 rows, id -> the row it names.
+#: `functional.tsv`: 253 rows, id -> the row it names.
 FUNCTIONAL = {
     'functional:1': 'terminal_alkene',
     'functional:2': 'alkene',
@@ -277,6 +277,10 @@ FUNCTIONAL = {
     'functional:247': 'lactam_4_halide',
     'functional:248': 'lactam_5_halide',
     'functional:249': 'lactam_6_halide',
+    'functional:250': 'nitroxide',
+    'functional:251': 'hindered_aryloxyl',
+    'functional:252': 'hydrazyl',
+    'functional:253': 'triarylmethyl_radical',
 }
 
 #: `protective.tsv`: 103 rows, id -> the row it names.

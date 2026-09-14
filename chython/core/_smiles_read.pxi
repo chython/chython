@@ -1936,6 +1936,26 @@ cdef int smi_marks(smi_parse_t *p, MoleculeContainer mol, object log) except -1:
                     refused.append(mc_record('smiles:cip-refused', (),
                                              'atom %d: the CIP descriptor the `{...}` block names '
                                              'cannot be stored (%s)' % (i + 1, e), mc_lost()))
+                else:
+                    # A STORED DESCRIPTOR PUTS ITS CENTRE IN THE ABSOLUTE COLLECTION.  The field states
+                    # two things -- somebody's completed determination, and that the centre is one such a
+                    # determination could be made about -- and the dialect has no `a:` to spell the second
+                    # with.  The descriptor alone is the weaker half: beside a drawing it is one letter,
+                    # while the collection is what says the configuration is THIS one and not one of a set.
+                    #
+                    # Two guards, both because this reading is the READER'S and not the input's words.
+                    # `sg_kind` must be unnamed, a group field being the input saying so directly and the
+                    # stronger statement wherever the block spells it -- `{A19=r;A22=r;o1:19,22}` keeps its
+                    # OR collection, and would in either field order, the loop above having settled every
+                    # group before this line runs for any atom.  And the configuration must be STATED: `@?`
+                    # and a bare `C` have nothing to be absolute about, and marking them would draw an `a`
+                    # beside a methyl in every depiction.
+                    #
+                    # Identity is untouched -- a configured atom in no collection already means absolute,
+                    # so the canonical form does not separate the two -- and `set_stereo_group` cannot
+                    # refuse ABS: it forces the group to 0 and validates only the stable id.
+                    if not a.sg_kind and (a.chiral == SMI_CHIRAL_AT or a.chiral == SMI_CHIRAL_ATAT):
+                        mol.set_stereo_group(a.sid, <int> SMI_SG_ABS, 0)
     log.extend(refused)
     return 0
 

@@ -24,7 +24,7 @@ name a molecule carries, and :doc:`reactions` documents it where it is applied.
 Functional groups
 -----------------
 
-249 functional groups, alphabetically.  The name is the key
+253 functional groups, alphabetically.  The name is the key
 :meth:`chython.MoleculeContainer.functional_groups` returns and the key
 :func:`chython.functional_rules` is keyed on; the id is what a consumer stores.
 
@@ -604,6 +604,10 @@ Functional groups
      - ``functional:187``
      - ``[O;D1;z1;x0;h1:1]-[C;z1;x2:2]-[O;D2;z1:3]``
      - HO-C(-OR), the ring-opened sugar form
+   * - ``hindered_aryloxyl``
+     - ``functional:251``
+     - ``[O;D1;h0;z1:1]-[C;a:2](:[C;a:3]-[C;D4;z1:4]):[C;a:5]-[C;D4;z1:6] |^1:0|``
+     - Ar-O• with a quaternary carbon at BOTH ortho positions, which is what makes it isolable; the unhindered phenoxyl radical is a decoy
    * - ``hydrazide``
      - ``functional:161``
      - ``[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]``
@@ -616,6 +620,10 @@ Functional groups
      - ``functional:142``
      - ``[C;z2:1]=[N;D2;z2;x1:2]-[N;D2;z1;x1:3]``
      - C=N-NH-R
+   * - ``hydrazyl``
+     - ``functional:252``
+     - ``[N;D2;h0;z1:1](-[C;a:2])-[N;D3;z1:3](-[C;a:4])-[C;a:5] |^1:0|``
+     - Ar2N-N•-Ar, the DPPH class: three aryl rings to delocalise over, and the trialkyl hydrazyl with none of them is a decoy
    * - ``hydroxamic_acid``
      - ``functional:160``
      - ``[O;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]``
@@ -724,6 +732,10 @@ Functional groups
      - ``functional:108``
      - ``[N;D2;z2:1]=[O;D1:2]``
      - R-N=O
+   * - ``nitroxide``
+     - ``functional:250``
+     - ``[O;D1;h0;z1:1]-[N;D3;z1:2](-[C;z1,z4;D3,D4:3])-[C;z1,z4;D3,D4:4] |^1:0|``
+     - R2N-O•, the radical on oxygen -- TEMPO and its kin.  ``D3,D4`` on both alpha carbons is the isolability: a nitroxide with an alpha hydrogen disproportionates, so dimethylnitroxide is a decoy and not a match.  The hydroxylamine and the oxoammonium cation are the same skeleton at the other two oxidation states
    * - ``o_aminobenzaldehyde``
      - ``functional:149``
      - ``[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[C;D2;z2;x1:4]=[O:5]``
@@ -1000,6 +1012,10 @@ Functional groups
      - ``functional:165``
      - ``[C;-;D1:1]#[N;+;D2:2]-[C;D2,D3;z1;x2:3]-[S;D4;x2](=[O])=[O]``
      - TosMIC, the Van Leusen oxazole reagent
+   * - ``triarylmethyl_radical``
+     - ``functional:253``
+     - ``[C;D3;h0;z1:1](-[C;a:2])(-[C;a:3])-[C;a:4] |^1:0|``
+     - Ar3C•, Gomberg's radical and the trityl spin labels.  ``_radical`` is in the name because ``protective.tsv``'s trityl rows are this skeleton without one
    * - ``trifluoromethoxy``
      - ``functional:207``
      - ``[F:1][C;D4;z1;x4:2]([F:3])([F:4])-[O;D2:5]``

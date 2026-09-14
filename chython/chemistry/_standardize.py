@@ -22,9 +22,15 @@ A repair pass the caller asks for -- no reader or writer runs it.  The patch lan
 charge delta and an optional absolute radical flag per matched atom, plus a new order in {1,2,3,8}
 per matched bond; no rule touches the atom or bond set, an isotope, an aromatic order or a hydrogen
 count.  A patch is validated in full before any of it is written.
+
+`standardize()` closes with one stage that is not a table row, `_organometallics`: completing a
+one-coordinate zinc or magnesium adds a bond, and which halide joins which metal is a question about
+every candidate at once, neither of which a rule table can state.  It is also the one stage that moves
+net charge, a metal nobody drew a halide for being charged instead.
 """
 from collections.abc import MutableSequence
 from ._implicit import calc_implicit
+from ._organometallics import unite_organometallics
 from ._tables import Rule, groups_rules, metals_rules
 from ..core import LogRecord, MoleculeContainer, recording
 
@@ -128,7 +134,9 @@ def standardize(molecule: MoleculeContainer, *, fix_hydrogens: bool = True,
                 fix_tautomers: bool = True) -> bool:
     """Repair mis-drawn functional groups and metal-organic bonding in place.  Did anything change?
 
-    Runs the functional-group rules and then the metal-organic ones, then recomputes the implicit
+    Runs the functional-group rules, then the metal-organic ones, then completes any organozinc or
+    Grignard that arrived one-coordinate -- bonding a free halide to it, or charging it when the drawing
+    offers none -- then recomputes the implicit
     hydrogen count of every atom a patch wrote -- charge, radical state and bond order all change what
     the valence collection gives an atom.  `fix_hydrogens=False` skips that recompute, for a caller about
     to kekulise anyway.  `molecule.log` takes a record per patch applied and per patch refused.
@@ -141,6 +149,9 @@ def standardize(molecule: MoleculeContainer, *, fix_hydrogens: bool = True,
     with recording(molecule, stage='standardize') as lg:
         written = _pass(molecule, groups_rules(), lg, fix_tautomers)
         written |= _pass(molecule, metals_rules(), lg, fix_tautomers)
+        # last, and the order is not observable: no `metals:` row matches a sigma metal-carbon bond, so
+        # none of them can see either the ion pair this reads or the covalent form it writes.
+        written |= unite_organometallics(molecule, lg)
     if not written:
         return False
     if fix_hydrogens:

@@ -470,6 +470,24 @@ def test_an_alias_is_written_as_the_tail_s_label_field():
     assert write_smiles(m, '!x') == 'C(C)C'
 
 
+def test_the_abs_collection_is_written_alone_and_beside_another_one():
+    # `a:` is written wherever an atom carries the ABS kind, so what the input stated survives the round
+    # trip.  Alone it says nothing new about the STRUCTURE -- a configured atom in no collection already
+    # means absolute -- which is why only an EXPLICIT kind reaches the field: the last line is the
+    # negative control that a plain configured centre still writes bare.
+    assert write_smiles(read_smiles('F[C@H](Cl)Br |a:1|')) == '[C@@H](F)(Cl)Br |a:0|'
+    assert write_smiles(read_smiles('F[C@H](Cl)Br {a:1}')) == '[C@@H](F)(Cl)Br |a:0|'
+    # beside an AND or OR collection it keeps its older job as well, naming the centres NOT in one
+    text = write_smiles(read_smiles('C[C@H](O)[C@H](N)[C@H](F)C |a:1,&1:3,o1:5|'))
+    assert text == 'C[C@@H](F)[C@H]([C@@H](O)C)N |a:4,&1:3,o1:1|'
+    # a fixed point, which is the round trip stated without naming a stable id: reading the string back
+    # and writing it again reproduces it, so every collection landed on the atom it named
+    assert write_smiles(read_smiles(text)) == text
+    # and `!x` suppresses this field with the rest of the block
+    assert write_smiles(read_smiles('F[C@H](Cl)Br |a:1|'), '!x') == '[C@@H](F)(Cl)Br'
+    assert write_smiles(read_smiles('F[C@H](Cl)Br')) == '[C@@H](F)(Cl)Br'
+
+
 def test_an_alias_survives_a_round_trip_through_the_string():
     # the atoms are re-ordered canonically, so what a round trip preserves is the PAIRING of a label
     # to its atom, which is what comparing the two molecules asserts

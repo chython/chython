@@ -2318,12 +2318,18 @@ cdef str smw_tail_text(tuple t, list fgroups=None):
         parts.append('$%s$' % ';'.join(group))
     if radicals:
         parts.append('^1:' + ','.join(map(str, sorted(radicals))))
-    if abs_atoms and (and_groups or or_groups):
-        # ONLY BESIDE AN AND OR OR COLLECTION, where it says which centres are NOT in one.  Alone it
-        # says only "these centres are absolute", which is what a configured atom outside any
-        # collection already means, so the field would separate two spellings of one structure -- a
-        # molfile that named STEABS and a SMILES that had nowhere to name it.  The cost is that a
-        # round trip through SMILES turns a lone explicit ABS kind into an unspecified one.
+    if abs_atoms:
+        # WHENEVER AN ATOM CARRIES THE ABS KIND, alone or beside an AND or OR collection, so the field
+        # round-trips: an explicit ABS collection is what the arena was told, and a writer that dropped
+        # it would answer "unspecified" to a reader who asked what the input said.  Only an EXPLICIT
+        # kind reaches `abs_atoms` -- `smw_tail_parts` collects `kind == 1` and a configured atom in no
+        # collection is kind 0 -- so a plain `F[C@H](Cl)Br` still writes bare.
+        #
+        # The cost, and it is the reason this field was once suppressed alone: a configured atom in no
+        # collection ALREADY means absolute, so `a:` states nothing new about the structure and two
+        # spellings of one compound now write two strings.  They still compare and hash EQUAL, the
+        # collection not being part of the canonical form, so the split is in the text only -- and a
+        # cache keyed on the string rather than on the container will store both.
         parts.append('a:' + ','.join(map(str, sorted(abs_atoms))))
     for key in sorted(and_groups):
         parts.append('&%d:%s' % (key, ','.join(map(str, sorted(and_groups[key])))))
