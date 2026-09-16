@@ -1201,6 +1201,82 @@ def test_tetrahedral_centres_are_not_suppressed_by_ring_size():
 
 
 # ----------------------------------------------------------------------------------------------
+# The alternating-cycle rule for cis/trans units (SU_SHIFTABLE)
+# ----------------------------------------------------------------------------------------------
+# A double bond an alternating cycle runs through is a Kekule choice: another form of the same
+# compound writes it single.  Perception flags those units SU_SHIFTABLE from the constitution and
+# `mark_stereogenic`'s decision 0 answers SG_NO, so the unit is still a candidate -- the bond is
+# still where a configuration would be written -- and nothing is stereogenic on it.  The rule is
+# about the DRAWING and not the ring size: it refuses an eight-ring alternation and admits a lone
+# eight-ring double bond, and the cycle it finds may be bigger than any ring of the molecule.
+
+def _annulene(ring_size):
+    """A single carbocycle of `ring_size` atoms spelled alternating, one hydrogen per atom."""
+    atoms = 'C' * ring_size
+    bonds = [(i, (i + 1) % ring_size, 2 if i % 2 == 0 else 1) for i in range(ring_size)]
+    return _mol(atoms=atoms, bonds=bonds, hydrogens=[1] * ring_size)
+
+
+def _dibenzocyclooctatetraene():
+    """Dibenzo[a,e]cyclooctatetraene in the form whose benzo rings hold their own double bonds.
+
+    Benzo A is 0..5 and benzo B is 6..11, each fused to the eight-ring by its 0-1 and 6-7 bond;
+    12=13 and 14=15 are the eight-ring's two bridges.  The alternating cycle through a bridge is
+    the 16-atom PERIMETER and not the eight-ring, which holds two double bonds out of four.
+    """
+    bonds = [(0, 1, 2), (1, 2, 1), (2, 3, 2), (3, 4, 1), (4, 5, 2), (5, 0, 1),
+             (6, 7, 2), (7, 8, 1), (8, 9, 2), (9, 10, 1), (10, 11, 2), (11, 6, 1),
+             (1, 12, 1), (12, 13, 2), (13, 6, 1), (7, 14, 1), (14, 15, 2), (15, 0, 1)]
+    return _mol(atoms='C' * 16, bonds=bonds,
+                hydrogens=[0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1])
+
+
+def test_cyclooctatetraene_bonds_are_candidates_and_none_is_stereogenic():
+    """Every one of the four double bonds is an alternation away from being single."""
+    m, _ = _annulene(8)
+    units = [u for u in m.stereo_units() if u['kind'] == 1]
+    assert len(units) == 4, 'all four ring double bonds must still be emitted as candidates'
+    assert not any(u['stereogenic'] for u in units)
+
+
+def test_a_lone_eight_ring_double_bond_is_still_stereogenic():
+    """Cyclooctene: eight atoms and one double bond, which no alternating cycle reaches."""
+    m, _ = _cyclic_alkene(8)
+    units = [u for u in m.stereo_units() if u['kind'] == 1]
+    assert len(units) == 1
+    assert units[0]['stereogenic']
+
+
+def test_two_ring_double_bonds_no_alternation_joins_are_stereogenic():
+    """1,5-cyclooctadiene: the walk out of either double bond dies on the first CH2."""
+    m, _ = _mol(atoms='C' * 8,
+                bonds=[(0, 1, 2), (1, 2, 1), (2, 3, 1), (3, 4, 1),
+                       (4, 5, 2), (5, 6, 1), (6, 7, 1), (7, 0, 1)],
+                hydrogens=[1, 1, 2, 2, 1, 1, 2, 2])
+    units = [u for u in m.stereo_units() if u['kind'] == 1]
+    assert len(units) == 2
+    assert all(u['stereogenic'] for u in units)
+
+
+def test_the_alternating_cycle_may_be_bigger_than_any_ring():
+    """The eight-ring is two double bonds short of alternating and its bridges are refused anyway."""
+    m, _ = _dibenzocyclooctatetraene()
+    units = [u for u in m.stereo_units() if u['kind'] == 1]
+    assert len(units) == 2, 'only the two bridges are candidates: the benzo bonds are small-ring'
+    assert not any(u['stereogenic'] for u in units)
+
+
+def test_a_configuration_stated_on_a_shiftable_bond_is_not_justified():
+    """Which is what lets `canonicalize()` drop it and store one form of the two."""
+    ring_size = 8
+    bonds = [(i, (i + 1) % ring_size, 2 if i % 2 == 0 else 1) for i in range(ring_size)]
+    m, sids = _mol(atoms='C' * ring_size, bonds=bonds, hydrogens=[1] * ring_size,
+                   parities={0: 1, 1: 1})
+    assert m.validate_stereo() == sorted(sids[:2])
+    assert not any(m.parity_of(s) for s in sids)
+
+
+# ----------------------------------------------------------------------------------------------
 # deferred validation: every stated configuration is stored, and judged once afterwards
 # ----------------------------------------------------------------------------------------------
 

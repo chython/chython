@@ -78,7 +78,7 @@ def test_probe_both_optional_segments_absent():
     assert p['wsg_off'] is None
     assert p['wxy_esz'] is None
     assert p['wsg_esz'] is None
-    # cip has no gate, so it is present even here: work, live, newidx, edits, wedge, cip
+    # cip has no gate: work, live, newidx, edits, wedge, cip
     offs = _present_offsets(p)
     assert len(offs) == 6, f'expected 6 present regions, got {len(offs)}'
 
@@ -136,9 +136,9 @@ def test_probe_sufficiency_each_region_fits_its_data():
         f"wxy region too small: off={p['wxy_off']}, req={r_wxy}, next={p['wsg_off']}"
     assert p['wsg_off']    + r_wsg    <= p['cip_off'],    \
         f"wsg region too small: off={p['wsg_off']}, req={r_wsg}, next={p['cip_off']}"
-    # The CIP region is sized by BONDS and is unconditional -- no `want_` gate, because a region that
-    # is sometimes absent is how an index that is right for one version goes wrong for another.
-    assert p['cip_off']    + _req(e, p['cip_esz']) <= p['total'], \
+    # CIP is unconditional -- no `want_` gate -- and LAST in the block; the sufficiency chain must be
+    # tight all the way to total.
+    assert p['cip_off']    + _req(e, p['cip_esz'])    <= p['total'], \
         f"cip region too small: off={p['cip_off']}, total={p['total']}"
 
 
@@ -158,7 +158,7 @@ def test_probe_sufficiency_without_optional_segments():
     assert p['newidx_off'] + r_newidx <= p['edits_off']
     assert p['edits_off']  + r_edits  <= p['wedge_off']
     assert p['wedge_off']  + r_wedge  <= p['cip_off']
-    assert p['cip_off']    + _req(e, p['cip_esz']) <= p['total']
+    assert p['cip_off']    + _req(e, p['cip_esz'])    <= p['total']
 
 
 def test_probe_region_ends_are_within_total():
@@ -222,9 +222,9 @@ def test_probe_wpar_sits_between_wsg_and_cip():
 def test_probe_wpar_sufficiency_and_total():
     n, e, w = 4, 3, 2
     p = _structure._apply_scratch_probe(n, e, w, True, True, False, True)
-    assert p['wsg_off']  + _req(n, p['wsg_esz'])  <= p['wpar_off']
-    assert p['wpar_off'] + _req(n, p['wpar_esz']) <= p['cip_off']
-    assert p['cip_off']  + _req(e, p['cip_esz'])  <= p['total']
+    assert p['wsg_off']    + _req(n, p['wsg_esz'])    <= p['wpar_off']
+    assert p['wpar_off']   + _req(n, p['wpar_esz'])   <= p['cip_off']
+    assert p['cip_off']    + _req(e, p['cip_esz'])    <= p['total']
     assert p['total'] % 8 == 0
 
 
@@ -233,3 +233,4 @@ def test_probe_wpar_zero_counts_keep_room_for_one():
     assert p['wsg_off'] is None
     assert p['wpar_off'] is not None
     assert p['wpar_off'] + p['wpar_esz'] <= p['cip_off']
+    assert p['cip_off']  + p['cip_esz']  <= p['total']

@@ -2693,8 +2693,84 @@ cdef int smw_random_positions(smw_scratch_t *s, uint32_t n) except -1:
     return 0
 
 
-cdef dict smw_prepare(MoleculeContainer molecule, smw_scratch_t *s,
-                      smw_opts_t *o, smw_cuts_t *cuts, smw_sticky_t *sticky):
+cdef dict smw_group_atoms(MoleculeContainer molecule, Structure structure, smw_scratch_t *s,
+                          list log):
+    """`canonical_stereo_groups()` inverted to {n: (kind, id)}, one atom per collection member.
+
+    An axis is NAMED on two atoms and a CXSMILES collection holds one index per member, so one owner has
+    to speak for it.  BOTH HALVES OF THE CHOICE READ `pos` AND OWNERSHIP, never the anchor: the anchor is
+    the arena's slot choice, and taking it here would put the creation order into the tail through the
+    side door -- note 3 at the top of this file; muconic acid with both axes in AND 1 is the case
+    pinned by `test_a_bond_group_tail_is_the_same_from_three_creation_orders`.
+
+    An owner naming EXACTLY ONE unit is what a reader resolves back to this member; where both owners
+    name a second unit as well, no single atom says which element is meant, so the lower canonical
+    position is written anyway -- note 4, a token is never suppressed on a prediction -- and the axis
+    goes on `log`.  A member whose every owner is already claimed as a tail entry is on `log` too,
+    since one index cannot carry two spellings.
+
+    Singles claim their atom first and axes second, both in canonical-position order, so which member
+    holds a contested atom is a function of `pos` and not of the order the members were stored in.
+    """
+    cdef dict index = molecule._index_of
+    cdef dict groups = {}
+    cdef list rows = [], members
+    cdef tuple row
+    cdef object gkey, member, lo, hi, pick
+    cdef uint32_t plo, phi
+    for gkey, members in molecule.canonical_stereo_groups().items():
+        for member in members:
+            if isinstance(member, int):
+                groups[member] = gkey
+                continue
+            lo = (<tuple> member)[0]
+            hi = (<tuple> member)[1]
+            plo = s.pos[<uint32_t> index[lo]]
+            phi = s.pos[<uint32_t> index[hi]]
+            if plo > phi:
+                lo, hi, plo, phi = hi, lo, phi, plo
+            rows.append((plo, phi, lo, hi, gkey))
+    rows.sort()
+    for row in rows:
+        lo = row[2]
+        hi = row[3]
+        gkey = row[4]
+        pick = None
+        for member in (lo, hi):
+            if member not in groups and stereo_owner_unit_count(structure,
+                                                                <uint32_t> index[member]) == 1:
+                pick = member
+                break
+        if pick is None:
+            for member in (lo, hi):
+                if member not in groups:
+                    pick = member
+                    break
+        if pick is None:
+            if log is not None:
+                if groups[lo] == gkey and groups[hi] == gkey:
+                    log.append(mc_record('smiles:stereo-group-axis-ambiguous', (lo, hi),
+                                         'atoms %s and %s each already speak for %s as a single '
+                                         'member, so the axis has no index left in the tail'
+                                         % (lo, hi, gkey), mc_lost()))
+                else:
+                    log.append(mc_record('smiles:stereo-group-axis-ambiguous', (lo, hi),
+                                         'atoms %s and %s name an axis in %s and both already state a '
+                                         'collection of their own (%s and %s), so the tail has no index '
+                                         'left for it' % (lo, hi, gkey, groups[lo], groups[hi]),
+                                         mc_lost()))
+            continue
+        if log is not None and stereo_owner_unit_count(structure, <uint32_t> index[pick]) != 1:
+            log.append(mc_record('smiles:stereo-group-axis-ambiguous', (lo, hi),
+                                 'atoms %s and %s each name a second stereo element, so the tail '
+                                 'writes atom %s for the axis in %s and cannot say which element of '
+                                 'that atom the collection is on' % (lo, hi, pick, gkey), mc_lost()))
+        groups[pick] = gkey
+    return groups
+
+
+cdef dict smw_prepare(MoleculeContainer molecule, smw_scratch_t *s, smw_opts_t *o,
+                      smw_cuts_t *cuts, smw_sticky_t *sticky, list log=None):
     """Fill `pos`, `bypos`, the adjacency, the traversal and the closure numbers.
 
     Everything between "here is a molecule" and "here is a fully decided traversal", so that
@@ -2710,13 +2786,14 @@ cdef dict smw_prepare(MoleculeContainer molecule, smw_scratch_t *s,
     function of `pos` as any other, with two atoms' places in it forced.  It is not canonical, because
     canonical means "the same for every way of building this molecule" and this one also depends on
     which atoms the caller named.
+
+    `log` is the caller's loss list where it has one, and it reaches exactly one decision:
+    `smw_group_atoms`' report of an axis the tail's per-atom indices cannot name.
     """
     cdef Structure structure = molecule._structure
     cdef uint32_t n = s.n
     cdef uint32_t i
     cdef dict groups = None
-    cdef object gkey, gsid
-    cdef list gsids
 
     if cuts is not NULL:
         # FIRST, before the canonical order: the order is the expensive part of a write and a refused
@@ -2753,13 +2830,10 @@ cdef dict smw_prepare(MoleculeContainer molecule, smw_scratch_t *s,
         for i in range(n):
             s.pos[i] = i
     if o.canonical and structure.header.segments[SEG_STEREO_GROUPS].length:
-        # {(kind, canonical_id): [n, ...]} inverted to {n: (kind, id)}: the
-        # writer asks per atom, the view answers per group, and the inversion is total because
-        # an atom belongs to at most one group.
-        groups = {}
-        for gkey, gsids in molecule.canonical_stereo_groups().items():
-            for gsid in gsids:
-                groups[gsid] = gkey
+        # {(kind, canonical_id): [member, ...]} inverted to {n: (kind, id)}: the writer asks per atom,
+        # the view answers per group, and a member spelled as an owner pair is an axis that one of its
+        # two atoms has to speak for -- which owner, and why not the anchor, is `smw_group_atoms`'.
+        groups = smw_group_atoms(molecule, structure, s, log)
     for i in range(n):
         s.bypos[s.pos[i]] = i
     smw_sort_adjacency(structure, s)
@@ -2971,7 +3045,8 @@ def smw_traversal(MoleculeContainer molecule not None, str spec='', cuts=None, r
             'unknown_h': tuple(unknown_h), 'attachments': tuple(attachments)}
 
 
-def write_smiles(MoleculeContainer molecule not None, str spec='', bint return_order=False):
+def write_smiles(MoleculeContainer molecule not None, str spec='', bint return_order=False,
+                 list log=None):
     """The molecule as a SMILES string.
 
     Canonical by default: the same molecule written from any creation order gives the same string,
@@ -2991,7 +3066,13 @@ def write_smiles(MoleculeContainer molecule not None, str spec='', bint return_o
     an order that does not describe the string in hand.  The consumers that cannot be served by the
     string alone are the CXSMILES tail of a REACTION, whose radical and stereo indices count atoms
     across every molecule in it, and `smiles_atoms_order`.
+
+    `log` is the writer's loss list, the one every other writer takes: a fact the string cannot carry
+    is appended to it and never spelled into the text.  `str(mol)` and `format(mol, spec)` pass none,
+    so a caller who wants the losses calls this function.
     """
+    if log is None:
+        log = []                      # a caller who did not ask for the losses still gets a list
     molecule._require_clean()
     cdef Structure structure = molecule._structure
     cdef uint32_t n = structure.header.atom_count
@@ -3014,7 +3095,7 @@ def write_smiles(MoleculeContainer molecule not None, str spec='', bint return_o
     b.cap = 0
     b.oom = False
     try:
-        groups = smw_prepare(molecule, &s, &o, NULL, NULL)
+        groups = smw_prepare(molecule, &s, &o, NULL, NULL, log)
         smw_emit(structure, &s, &b, &o, NULL)
         if o.cxsmiles:
             smw_cxsmiles(structure, &s, &b, groups, molecule.aliases)
@@ -3045,7 +3126,7 @@ def write_smiles(MoleculeContainer molecule not None, str spec='', bint return_o
 # detached fragment does for `DetachedSmiles.join`; the aggregation below is the same aggregation that
 # method performs, for the same reason and with the same renumbering.
 
-cdef tuple smw_reaction_part(MoleculeContainer molecule, smw_opts_t *o):
+cdef tuple smw_reaction_part(MoleculeContainer molecule, smw_opts_t *o, list log=None):
     """One molecule of a reaction: `(text, ids, tail parts, components, map numbers)`, ids and map
     numbers both in WRITTEN order.
 
@@ -3077,7 +3158,7 @@ cdef tuple smw_reaction_part(MoleculeContainer molecule, smw_opts_t *o):
     b.cap = 0
     b.oom = False
     try:
-        groups = smw_prepare(molecule, &s, o, NULL, NULL)
+        groups = smw_prepare(molecule, &s, o, NULL, NULL, log)
         smw_emit(structure, &s, &b, o, NULL)
         if b.oom:
             raise MemoryError()
@@ -3154,7 +3235,7 @@ cdef dict smw_merge_groups(list pending):
     return out
 
 
-def write_reaction_smiles(rxn not None, str spec=''):
+def write_reaction_smiles(rxn not None, str spec='', list log=None):
     """The reaction as a reaction SMILES: `reactants>agents>products`, with one CXSMILES tail.
 
     **Each side\'s molecules are sorted by their own string**, so the same reaction assembled in any
@@ -3166,7 +3247,13 @@ def write_reaction_smiles(rxn not None, str spec=''):
     name the components of every molecule that has more than one -- so `[Na+].[Cl-]` on one side comes
     back as one reactant and not two.  A tail carrying `^1:` and `f:` alone drops enhanced stereo
     groups from every reaction it writes.  `!x` suppresses the whole block.
+
+    `log` is the writer's loss list, the one every other writer takes: a fact the string cannot carry
+    is appended to it and never spelled into the text.  `str(rxn)`, `format(rxn, spec)` and
+    `rxn.smiles` pass none, so a caller who wants the losses calls this function.
     """
+    if log is None:
+        log = []                      # a caller who did not ask for the losses still gets a list
     cdef smw_opts_t o
     cdef bint keep = '!c' in spec
     smw_parse_spec(spec.replace('!c', ''), &o)
@@ -3183,7 +3270,7 @@ def write_reaction_smiles(rxn not None, str spec=''):
     for side in (rxn.reactants, rxn.agents, rxn.products):
         rows = []
         for mol in side:
-            rows.append(smw_reaction_part(<MoleculeContainer> mol, &o))
+            rows.append(smw_reaction_part(<MoleculeContainer> mol, &o, log))
         if not keep:
             # SORTED ON THE TEXT ALONE, with the position as the tiebreaker, and never on the rows
             # themselves: a row holds the tail\'s dicts, and two equal molecules in one side would
@@ -3395,7 +3482,7 @@ cdef class DetachedSmiles:
 
 
 def detached_smiles(MoleculeContainer molecule not None, cuts not None, str spec='',
-                    reserve=None):
+                    reserve=None, log=None):
     """The molecule minus the dropped side of every cut, with the cut bonds as open ring bonds.
 
     `cuts` is `{attachment_id: (keep_n, drop_n)}`.  ORDERED pairs, because there is
@@ -3412,7 +3499,12 @@ def detached_smiles(MoleculeContainer molecule not None, cuts not None, str spec
     an empty retained set.  The last two are one rule -- the cut list must be exactly the boundary --
     and it is what makes the dropped side a decision of the caller's rather than a consequence of
     graph reachability, so a salt keeps its counter-ion.
+
+    `log` is the writer's loss list, as in `write_smiles`: a fact the string cannot carry is appended
+    to it and never spelled into the text.
     """
+    if log is None:
+        log = []                      # a caller who did not ask for the losses still gets a list
     molecule._require_clean()
     cdef Structure structure = molecule._structure
     cdef uint32_t n = structure.header.atom_count
@@ -3439,7 +3531,7 @@ def detached_smiles(MoleculeContainer molecule not None, cuts not None, str spec
     b.cap = 0
     b.oom = False
     try:
-        groups = smw_prepare(molecule, &s, &o, &c, NULL)
+        groups = smw_prepare(molecule, &s, &o, &c, NULL, log)
         smw_emit(structure, &s, &b, &o, NULL)
         if b.oom:
             raise MemoryError()

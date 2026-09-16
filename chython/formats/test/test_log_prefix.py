@@ -48,6 +48,10 @@ _WHITELIST = (
     ('_v3000.py', 'positional field'),
     # A bond CFG value outside the legal V3000 wedge-code set is a malformed field.
     ('_v3000.py', 'not a V3000 wedge code, ignored'),
+    # A collection whose member list names the object its own type does not: `STEBREL1 ATOMS=(...)`
+    # says bonds in the tag and atoms in the list.  Both member syntaxes are modelled, so this is the
+    # file contradicting itself rather than a construct chython declines to read.
+    ('_v3000.py', 'where its type names'),
     ('_sdf.py', 'data outside any field'),
     # An IMPL_H S-group naming several atoms, or carrying no datum, contradicts its own extension.
     ('_hydrogens.py', 'expected one of each, ignored'),

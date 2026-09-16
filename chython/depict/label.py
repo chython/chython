@@ -250,9 +250,18 @@ def _place_annotations(mol, plane, out: dict[int, Label], style: DepictStyle) ->
     label = style.label
     segments = _bond_segments(mol, plane, out, style)
     boxes = [lb.box for lb in out.values() if lb.text is not None]
+    # Build anchor map once: draw one mark per collection member, at the anchor its byte lives at.
+    # Same shape as the MRV writer (int member = anchor; pair = resolve through anchor_of), but
+    # using stereo_groups() so the displayed group id matches the stored byte, not the canonical id.
+    group_marks = {}
+    if style.atom.stereo_groups and mol.has_stereo_groups:
+        for (kind, group), members in mol.stereo_groups().items():
+            for member in members:
+                anchor = member if isinstance(member, int) else mol.stereo_group_anchor_of(member)
+                group_marks[anchor] = (kind, group)
     for atom in mol.atoms():
         rows = []
-        stereo = _stereo_runs(atom, style)
+        stereo = _stereo_runs(atom, style, group_marks)
         if stereo:
             rows.append((stereo, style.atom.default_colour, label.annotation_rise * label.size,
                          label.size * label.stereo_scale))
@@ -453,7 +462,7 @@ def _crowding(column: tuple[Text, ...], segments, boxes) -> float:
     return cost
 
 
-def _stereo_runs(atom, style) -> list:
+def _stereo_runs(atom, style, group_marks) -> list:
     """The stereo row's runs: the stored CIP descriptor, then the enhanced-stereo group mark.
 
     One `Text` and not two, because `(R)&1` is one statement about one centre and reads as one line.  The
@@ -466,19 +475,23 @@ def _stereo_runs(atom, style) -> list:
         runs.append(TextRun(f'({atom.cip})', family=label.family, size=size,
                             style='italic' if label.stereo_italic else 'normal'))
     if style.atom.stereo_groups:
-        mark = _stereo_group_mark(atom)
+        mark = _stereo_group_mark(atom.n, group_marks)
         if mark is not None:
             runs.append(TextRun(mark, family=label.family, size=size))
     return runs
 
 
-def _stereo_group_mark(atom) -> str | None:
-    """`&N` for AND, `oN` for OR, `a` for ABS, or None when the atom is in no collection.
+def _stereo_group_mark(atom_n, group_marks) -> str | None:
+    """`&N` for AND, `oN` for OR, `a` for ABS, or None when the atom is not a collection anchor.
 
-    ABS carries group 0, so it draws bare.  No `has_stereo_groups` gate: an unspecified atom answers
-    `(STEREO_UNSPECIFIED, 0)` through the same O(1) lookup, and a bare `@` sets no collection at all.
+    One mark per collection member, at the anchor its byte lives at -- the one atom
+    `stereo_group_anchor_of` returns.  `group_marks` is the per-depiction anchor dict built by
+    `_place_annotations`; an O(1) lookup for the label path.
     """
-    kind, group = atom.stereo_group
+    result = group_marks.get(atom_n)
+    if result is None:
+        return None
+    kind, group = result
     if kind == STEREO_ABS:
         return 'a'
     mark = _GROUP_MARKS.get(kind)

@@ -26,7 +26,7 @@ is thin and everything else is written out inline.
 
 from pytest import raises
 
-from .._ctab import STEREO_AND, STEREO_OR
+from .._ctab import STEREO_AND, STEREO_OR, axis_spelling
 from .._errors import MalformedCtfile, UnsupportedCtfile
 from .._v2000 import emit_v2000, parse_v2000
 from .._hydrogens import MRV_IMPLICIT_H
@@ -397,6 +397,54 @@ def test_an_unknown_collection_is_ignored_by_name():
     assert any('HILITE' in x for x in log), log
 
 
+def test_bond_collections_are_read():
+    """STEBRAC is a racemate -- both configurations -- so it is AND; STEBREL is OR.
+
+    One namespace, so the collection a BONDS= line states is the collection `stereo_groups()` reports,
+    its member spelled as the atom pair the axis is named on; `bond_stereo_groups()` is that view.
+    """
+    mol, _, _ = _read(_record('COUNTS 4 3 0 0 0',
+                              'BEGIN ATOM',
+                              '1 C 0 0 0 0', '2 C 0 0 0 0', '3 C 0 0 0 0', '4 C 0 0 0 0',
+                              'END ATOM',
+                              'BEGIN BOND', '1 1 1 2', '2 2 2 3', '3 1 3 4', 'END BOND',
+                              'BEGIN COLLECTION',
+                              'MDLV30/STEBRAC1 BONDS=(1 2)',
+                              'END COLLECTION'))
+    n, m = mol.bond_stereo_groups()[(3, 1)][0]
+    assert sorted((n, m)) == [2, 3]
+    assert mol.stereo_groups() == {(3, 1): [(2, 3)]}
+
+
+def test_bond_collection_carrying_atoms_is_a_loss_not_a_refusal():
+    log = []
+    mol, _, _ = _read_with_log(_record('COUNTS 2 1 0 0 0',
+                                       'BEGIN ATOM', '1 C 0 0 0 0', '2 C 0 0 0 0', 'END ATOM',
+                                       'BEGIN BOND', '1 2 1 2', 'END BOND',
+                                       'BEGIN COLLECTION', 'MDLV30/STEBREL1 ATOMS=(1 1)', 'END COLLECTION'),
+                                log)
+    assert mol.bond_stereo_groups() == {}
+    assert any(r.rule == 'v3000:collection-wrong-object' for r in log)
+
+
+def test_bond_collection_group_id_renumbers_in_one_namespace():
+    """An id is a label: out of range it is renumbered.  One id space covers both prefixes, so a
+    `STERAC1` beside the out-of-range bond collection makes 1 taken and the bond one lands on 2."""
+    log = []
+    mol, _, _ = _read_with_log(_record('COUNTS 4 3 0 0 0',
+                                       'BEGIN ATOM',
+                                       '1 C 0 0 0 0', '2 C 0 0 0 0', '3 C 0 0 0 0', '4 C 0 0 0 0',
+                                       'END ATOM',
+                                       'BEGIN BOND', '1 1 1 2', '2 2 2 3', '3 1 3 4', 'END BOND',
+                                       'BEGIN COLLECTION',
+                                       'MDLV30/STERAC1 ATOMS=(1 1)',
+                                       'MDLV30/STEBRAC1384 BONDS=(1 2)',
+                                       'END COLLECTION'),
+                                log)
+    assert mol.bond_stereo_groups() == {(3, 2): [(2, 3)]}, mol.stereo_groups()
+    assert any(r.rule == 'v3000:collection-group-renumbered' for r in log)
+
+
 # writing and back
 
 def test_read_write_read_is_identical():
@@ -744,3 +792,208 @@ def test_a_non_utf8_title_is_emitted_as_the_byte_it_was_v3000():
     lines, log = emit_v3000(mol)
     assert not log, log
     assert lines[0].encode('utf8', 'surrogateescape') == b'caf\xe9'
+
+
+def test_an_or_bond_collection_clears_the_chiral_flag():
+    """An OR bond collection contradicts one known enantiomer as an atom one does.
+
+    The flag is asserted BEFORE the group as well: `endswith(' 0')` also holds for a molecule with no
+    configured centre at all, so without the first assertion the test would pass on a fixture that never
+    set the flag in the first place.
+    """
+    m = read_smiles('C[C@H](O)/C=C/C')
+    counts = next(x for x in emit_v3000(m)[0] if 'COUNTS' in x)
+    assert counts.endswith(' 1'), f'the fixture must start chiral, got {counts!r}'
+
+    pair = next((b.n, b.m) for b in m.bonds() if b.order == 2)
+    with m.edit() as e:
+        e.set_bond_stereo_group(pair[0], pair[1], 2, 1)
+    counts = next(x for x in emit_v3000(m)[0] if 'COUNTS' in x)
+    assert counts.endswith(' 0'), f'expected chiral=0 in COUNTS line, got {counts!r}'
+
+
+# the two member syntaxes of one namespace: the midpoint on write, its inverse on read
+
+def test_an_allene_collection_is_written_on_its_midpoint_atom():
+    """V3000's member list is `ATOMS=` or `BONDS=` and never both, so an axis is named by its
+    MIDPOINT -- an atom when the chain has an odd atom count, a bond when even.  `CC=C=CC` has the odd
+    count: the container spells this axis `(2, 4)`, its two chain terminals, which are not bonded, and
+    the file spells it as atom 3, the midpoint, which is also the slot the byte lives at.
+    """
+    mol = read_smiles('CC=C=CC')
+    mol.set_stereo_group(3, 3, 1)               # the anchor; `stereo_groups()` reads back `(2, 4)`
+    assert mol.bond_stereo_groups() == {(3, 1): [(2, 4)]}, mol.stereo_groups()
+    lines = emit_v3000(mol)[0]
+    assert any('MDLV30/STERAC1 ATOMS=(1 3)' in x for x in lines), lines
+    assert not any('STEBRAC' in x for x in lines), lines
+
+
+def test_a_cumulene_collection_is_written_on_its_midpoint_bond():
+    """An even chain has no midpoint atom, so the middle BOND carries it.  `CC=C=C=CC`'s owners are 2
+    and 5, three bonds apart, so the container spells the axis as that pair and the file spells it as
+    bond 3, the middle of the chain -- a bond neither owner is an endpoint of.
+    """
+    mol = read_smiles('CC=C=C=CC')
+    axis = next(iter(mol.chiral_bonds()))
+    assert axis == (2, 5), axis
+    with mol.edit() as e:
+        e.set_bond_stereo_group(axis[0], axis[1], 3, 1)
+    lines = emit_v3000(mol)[0]
+    assert any('MDLV30/STEBRAC1 BONDS=(1 3)' in x for x in lines), lines
+    assert not any('STERAC' in x for x in lines), lines
+
+
+def test_a_cumulene_collection_round_trips_through_the_midpoint_bond():
+    """The bond the writer names is owned by nothing, and the round trip still closes:
+    `set_bond_stereo_group` resolves any chain bond to the axis owners, so the reader hands it the pair
+    the file stated and the container walks.  What this caught was the writer emitting an empty member
+    list, `BONDS=(0 )`, having no bond of the owner pair to name.
+    """
+    mol = read_smiles('CC=C=C=CC')
+    axis = next(iter(mol.chiral_bonds()))
+    with mol.edit() as e:
+        e.set_bond_stereo_group(axis[0], axis[1], 3, 1)
+    back, _, _ = _read(emit_v3000(mol)[0])
+    assert back.bond_stereo_groups() == {(3, 1): [(2, 5)]}, back.stereo_groups()
+
+
+def test_a_plain_double_bond_collection_is_its_own_midpoint():
+    """The common case must not walk anywhere: a conjugated diene's two axes are separate collections,
+    and a walk that crossed the single bond between them would merge them into one.
+    """
+    mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = list(mol.chiral_bonds())
+    assert len(pairs) == 2, pairs
+    with mol.edit() as e:
+        e.set_bond_stereo_group(pairs[0][0], pairs[0][1], 3, 1)
+        e.set_bond_stereo_group(pairs[1][0], pairs[1][1], 3, 2)
+    back, _, _ = _read(emit_v3000(mol)[0])
+    assert back.bond_stereo_groups() == {(3, 1): [pairs[0]], (3, 2): [pairs[1]]}, back.stereo_groups()
+
+
+def test_a_collection_holding_a_centre_and_an_axis_splits_and_says_so():
+    """One collection, two member lists, and no V3000 syntax for that -- so it splits, renumbered
+    apart, and the log states what is lost: not a member, but the statement that the two halves were
+    one mixture.
+    """
+    mol = read_smiles('C[C@H](O)/C=C/C')
+    centre = next(iter(mol.chiral_atoms()))
+    axis = next(iter(mol.chiral_bonds()))
+    with mol.edit() as e:
+        e.set_stereo_group(centre, 3, 1)
+        e.set_stereo_group(axis, 3, 1)
+    assert len(mol.stereo_groups()) == 1, mol.stereo_groups()
+    log = []
+    lines, _ = emit_v3000(mol, log=log)
+    assert any('MDLV30/STERAC1 ATOMS=' in x for x in lines), lines
+    assert any('MDLV30/STEBRAC2 BONDS=' in x for x in lines), lines
+    assert 'v3000:collection-split' in [r.rule for r in log], log
+
+
+#: One stereocentre and one alkene axis: atoms C1-C2(-O3)-C4=C5-C6, the double bond at BOND INDEX 3
+#: so a member list can name it without also being a position in atom order.
+_CENTRE_AND_AXIS = ('COUNTS 6 5 0 0 0',
+                    'BEGIN ATOM',
+                    '1 C 0 0 0 0', '2 C 1 0 0 0', '3 O 1 1 0 0', '4 C 2 0 0 0', '5 C 3 0 0 0',
+                    '6 C 4 0 0 0',
+                    'END ATOM',
+                    'BEGIN BOND',
+                    '1 1 1 2', '2 1 2 3', '3 2 4 5', '4 1 2 4', '5 1 5 6',
+                    'END BOND')
+
+
+def test_an_atom_and_a_bond_collection_sharing_an_id_stay_two_collections():
+    """READ-SIDE MERGE.  `STERAC1` and `STEBRAC1` arrive as two collections and the container has one
+    id space, so the bond one is renumbered apart rather than absorbed -- a file that used both meant
+    two mixtures, and merging them would state a chemistry the file did not.
+
+    Which half moves is the rule, not an implementation detail: the ATOM half keeps id 1, because that
+    is the id an unsplit collection writes.
+    """
+    log = []
+    mol, _, _ = _read_with_log(_record(*_CENTRE_AND_AXIS,
+                                       'BEGIN COLLECTION',
+                                       'MDLV30/STERAC1 ATOMS=(1 2)',
+                                       'MDLV30/STEBRAC1 BONDS=(1 3)',
+                                       'END COLLECTION'),
+                               log)
+    assert mol.stereo_groups() == {(3, 1): [2], (3, 2): [(4, 5)]}, mol.stereo_groups()
+    assert 'v3000:collection-namespaces-merged' in [r.rule for r in log], log
+
+
+def test_the_same_id_out_of_range_on_both_prefixes_is_one_collection():
+    """The other half of the rule, and it is mechanical rather than chemical: the out-of-range pass is
+    keyed by `(kind, group)` and not by the prefix, so both spellings of one unstorable id take one new
+    id.  An id no file could have meant says nothing about a partition; an in-range id a file chose
+    twice does, which is why the test above splits and this one does not.
+    """
+    log = []
+    mol, _, _ = _read_with_log(_record(*_CENTRE_AND_AXIS,
+                                       'BEGIN COLLECTION',
+                                       'MDLV30/STERAC1384 ATOMS=(1 2)',
+                                       'MDLV30/STEBRAC1384 BONDS=(1 3)',
+                                       'END COLLECTION'),
+                               log)
+    assert mol.stereo_groups() == {(3, 1): [2, (4, 5)]}, mol.stereo_groups()
+    assert 'v3000:collection-namespaces-merged' not in [r.rule for r in log], log
+
+
+def test_a_bond_collection_whose_only_member_was_dropped_is_not_announced():
+    """A merge record names a group a caller can then find.  Bond index 99 is not in the block, so the
+    collection reaches the molecule with no member at all and the id it would have moved to does not
+    exist -- so no renumbering is announced for it.
+    """
+    log = []
+    mol, _, _ = _read_with_log(_record(*_CENTRE_AND_AXIS,
+                                       'BEGIN COLLECTION',
+                                       'MDLV30/STERAC1 ATOMS=(1 2)',
+                                       'MDLV30/STEBRAC1 BONDS=(1 99)',
+                                       'END COLLECTION'),
+                               log)
+    assert mol.stereo_groups() == {(3, 1): [2]}, mol.stereo_groups()
+    assert 'v3000:collection-bond-ref' in [r.rule for r in log], log
+    assert 'v3000:collection-namespaces-merged' not in [r.rule for r in log], log
+
+
+def test_a_cumulated_chain_closed_into_a_cycle_is_read_rather_than_hung_on():
+    """Three carbons and three bonds, all three stated order 2: garbage, and storable garbage.  A
+    reader walking such a chain for the axis owners never leaves it, so the pair goes to the setter as
+    the file spelled it and the container's own capped walk answers.  No unit owns that bond, so the
+    collection survives as a label and the seal says so.
+    """
+    mol, _, _ = _read(_record('COUNTS 3 3 0 0 0',
+                              'BEGIN ATOM', '1 C 0 0 0 0', '2 C 1 0 0 0', '3 C 2 0 0 0', 'END ATOM',
+                              'BEGIN BOND', '1 2 1 2', '2 2 2 3', '3 2 3 1', 'END BOND',
+                              'BEGIN COLLECTION', 'MDLV30/STEBRAC1 BONDS=(1 1)', 'END COLLECTION'))
+    assert mol.stereo_groups() == {(3, 1): [1]}, mol.stereo_groups()
+    assert mol.bond_stereo_groups() == {}
+    assert 'edit:stereo-group-not-an-axis' in [r.rule for r in mol.log], list(mol.log)
+
+
+def test_axis_spelling_gives_up_at_the_atom_count():
+    """`axis_spelling` walks the cumulated chain and the pair it is handed is caller input, so the walk
+    is capped as the core's is.  Atom 7 hangs off an all-double six-ring by a single bond: from atom 2
+    the chain leads only around the ring, and the answer is the documented `None` for "no chain joins
+    the two".
+    """
+    mol = read_smiles('C1=C=C=C=C=C=1')
+    with mol.edit() as e:
+        tail = e.add_atom('C')
+        e.add_bond(1, tail, 1)
+    assert axis_spelling(mol, 1, tail) == ('bond', (1, tail)), 'bonded owners are their own midpoint'
+    assert axis_spelling(mol, 2, tail) is None
+
+
+def test_a_bond_collection_on_a_bond_no_unit_owns_keeps_the_collection():
+    """A carbonyl is a bond a group can be STATED on and no unit owns.  The collection's kind and id
+    survive as a label on the lower-numbered atom, logged by the seal -- the input posture: a garbage
+    member costs its spelling, never the collection.
+    """
+    mol, _, _ = _read(_record('COUNTS 4 3 0 0 0',
+                              'BEGIN ATOM',
+                              '1 C 0 0 0 0', '2 C 1 0 0 0', '3 O 2 0 0 0', '4 C 3 0 0 0',
+                              'END ATOM',
+                              'BEGIN BOND', '1 1 1 2', '2 2 2 3', '3 1 2 4', 'END BOND',
+                              'BEGIN COLLECTION', 'MDLV30/STEBRAC1 BONDS=(1 2)', 'END COLLECTION'))
+    assert list(mol.stereo_groups()) == [(3, 1)], mol.stereo_groups()
+    assert mol.bond_stereo_groups() == {}, 'nothing owns that bond, so it is not an axis'

@@ -942,6 +942,35 @@ def test_the_colorbar_never_overlaps_the_structure():
     assert legend.min_x >= content.max_x or legend.max_y <= content.min_y
 
 
+def _diene_with_a_bond_group():
+    """A drawn (2E,4E)-hexa-2,4-dienedioic acid with its first skeletal C=C in AND group 1.
+
+    The bond is selected by its ends' element, not by index: an index test also keeps a carboxyl C=O.
+    """
+    mol = smiles('OC(=O)/C=C/C=C/C(=O)O')
+    mol.clean2d()
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C' and mol.atom(b.m).atomic_symbol == 'C']
+    assert len(pairs) == 2, pairs
+    with mol.edit() as e:
+        e.set_bond_stereo_group(pairs[0][0], pairs[0][1], 3, 1)
+    return mol
+
+
+def test_a_bond_group_depict_log_is_empty():
+    """A bond AND/OR mark is drawn at the anchor atom; no loss record is owed."""
+    log = []
+    _diene_with_a_bond_group().depict(log=log)
+    assert not any(r.rule == 'depict:bond-stereo-groups-not-drawn' for r in log)
+
+
+def test_the_marks_being_off_reports_nothing():
+    """With `atom.stereo_groups` off the drawing states neither plane, so nothing is asymmetric."""
+    log = []
+    _diene_with_a_bond_group().depict(log=log, style=DepictStyle().tuned(**{'atom.stereo_groups': False}))
+    assert log == []
+
+
 def _flatten(scene):
     out = []
 

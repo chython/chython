@@ -245,25 +245,22 @@ def test_a_buffer_whose_order_and_aromatic_flag_disagree_is_refused():
 def test_a_reserved_halfedge_flag_bit_is_refused():
     """Every bit above the defined mask is reserved, and reserved means rejected rather than ignored.
 
-    The flags field is 16 bits. Five are defined -- in_ring, aromatic, and three of CIP code -- and
-    silently masking the rest would make a future flag unversioned: a v4 reader would accept a v5
-    buffer and answer as though the flag were absent, which is exactly the failure the version field
-    exists to prevent.
+    The flags field is 16 bits. Thirteen are defined -- in_ring, aromatic, three CIP bits, and eight
+    enhanced-stereo-group bits -- and silently masking the rest would make a future flag unversioned:
+    a v4 reader would accept a v5 buffer and answer as though the flag were absent, which is exactly
+    the failure the version field exists to prevent.
 
-    THE MASK MOVED ONCE ALREADY, when the CIP code took bits 2-4, and this test is why that was safe
-    to do: it is written against the mask rather than against a bit number, so widening the defined
-    region moves which bits it probes and does not weaken what it proves.
+    THE MASK MOVED TWICE: first when the CIP code took bits 2-4, then when the stereo-group byte took
+    bits 5-12.  This test is written against the mask rather than against bit numbers, so widening the
+    defined region moves which bits it probes and does not weaken what it proves.
     """
     raw = benzene()[0].to_bytes()
+    # Bits 13-15 (high-byte bits 5-7) are still reserved after adding the SG byte.
     for bit in (0x20, 0x40, 0x80):
         forged = bytearray(raw)
-        forged[_halfedge_offsets(raw)[0] + 6] |= bit
+        forged[_halfedge_offsets(raw)[0] + 7] |= bit
         with raises(ValueError, match='reserved'):
             MoleculeContainer.from_bytes(bytes(forged))
-    forged = bytearray(raw)
-    forged[_halfedge_offsets(raw)[0] + 7] |= 1           # the high half of the same field
-    with raises(ValueError, match='reserved'):
-        MoleculeContainer.from_bytes(bytes(forged))
 
 
 def test_a_halfedge_cip_code_outside_the_domain_is_refused():

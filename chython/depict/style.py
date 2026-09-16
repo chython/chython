@@ -105,7 +105,7 @@ class AtomStyle:
     radicals: bool = True
     map_numbers: bool = True              # drawn only where `map_number` is non-zero
     stereo_labels: bool = False           # the stored CIP descriptor beside a centre
-    stereo_groups: bool = True            # `&N` (AND), `oN` (OR), `a` (ABS) from `atom.stereo_group`
+    stereo_groups: bool = True            # `&N` (AND), `oN` (OR), `a` (ABS) at each member's anchor
     query_marks: bool = True              # a query atom's primitives
     colour_by_element: bool = True
     carbon_colour: str = '#000000'

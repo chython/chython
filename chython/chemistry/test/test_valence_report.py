@@ -17,6 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 """`check_valence`: a report whose two verdicts, `violation` and `unknown`, are not the same claim."""
+from chython.chemistry._hydrogens import implicify_hydrogens
 from chython.chemistry._implicit import check_valence
 from chython.core import H_UNKNOWN, read_smiles
 
@@ -82,6 +83,25 @@ def test_an_unknown_count_is_not_read_as_a_count():
     mol.set_hydrogens(2, H_UNKNOWN)
     assert mol.implicit_h_of(2) is None
     assert check_valence(mol) == []
+
+
+def test_FOLDING_HYDROGENS_INTO_A_COUNT_does_not_change_the_verdict():
+    """The same compound, drawn and counted, and the report has to agree with itself about it.
+
+    `implicify_hydrogens()` is on the deduplication path -- `[H][Ca][H]` and `[CaH2]` do not hash
+    equal until it has run -- so the counted spelling is what `canonicalize()` leaves behind.  The
+    metal hydrides are where it bites: their rows are written against drawn hydrogens, so a report
+    reading only the count called every one of them a violation the pipeline had just created.
+    """
+    for drawn, counted in [('[H][Ca][H]', '[CaH2]'), ('[H][Na]', '[NaH]'), ('[H][Ti][H]', '[TiH2]'),
+                           ('[H][Sn]([H])([H])[H]', '[SnH4]')]:
+        for string in (drawn, counted):
+            mol = read_smiles(string)
+            assert check_valence(mol) == [], string
+            implicify_hydrogens(mol)
+            assert check_valence(mol) == [], f'{string} after implicify'
+        assert read_smiles(drawn).canonical_bytes != read_smiles(counted).canonical_bytes, \
+            f'{drawn} is the unfolded spelling, so the pair must need the fold to converge'
 
 
 def test_the_report_never_edits_the_molecule():

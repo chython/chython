@@ -82,6 +82,8 @@ def check_valence(molecule: MoleculeContainer) -> list[tuple[int, str]]:
     Merging them is how a coverage hole gets mistaken for bad input, so they stay apart.
 
     An aromatic atom is a violation only when neither Kekule reading has a row, since a claim about
-    the molecule must survive every form the ring could take.  Never raises and never edits.
+    the molecule must survive every form the ring could take.  A hydrogen is read the same way,
+    drawn or counted: `[H][Ca][H]` and the `[CaH2]` that `canonicalize()` folds it into are one
+    compound and get one verdict.  Never raises and never edits.
     """
     return valence_report(molecule)

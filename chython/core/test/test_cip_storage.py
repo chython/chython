@@ -31,10 +31,12 @@ goes in and comes back out; that is the arena's posture everywhere and it is del
 """
 
 import struct
+from itertools import combinations
 
 import pytest
 
 from chython.core import MoleculeContainer
+from chython.core._core import read_smiles as smiles
 
 
 # every value the two domains accept, which is also the whole encodable range
@@ -718,3 +720,121 @@ def test_a_union_drops_the_descriptors_and_logs_it():
     joined = mol.union(other)
     assert joined.atom_cips() == {}
     assert any('dropped' in line for line in joined.cip_log)
+
+
+# ------------------------------------------------------------------------------------------------
+# canonical bond stereo group ids
+# ------------------------------------------------------------------------------------------------
+
+def test_canonical_bond_ids_are_permutation_invariant():
+    """The stored id is an opaque label, so a molecule's canonical bond ids do not depend on it."""
+    answers = set()
+    for a, b in ((1, 2), (2, 1), (7, 19), (63, 4)):
+        mol = smiles('OC(=O)/C=C/C=C/C(=O)O')
+        with mol.edit() as e:
+            e.set_bond_stereo_group(4, 5, 2, a)
+            e.set_bond_stereo_group(6, 7, 2, b)
+        groups = mol.canonical_bond_stereo_groups()
+        answers.add(tuple(sorted((key, tuple(sorted(v))) for key, v in groups.items())))
+    assert len(answers) == 1, answers
+
+
+def test_canonical_bond_ids_are_dense_from_one_per_kind():
+    mol = smiles('OC(=O)/C=C/C=C/C(=O)O')
+    with mol.edit() as e:
+        e.set_bond_stereo_group(4, 5, 2, 40)
+        e.set_bond_stereo_group(6, 7, 3, 40)
+    assert sorted(mol.canonical_bond_stereo_groups()) == [(2, 1), (3, 1)]
+
+
+# The Frucht graph, LCF notation [-5,-2,-4,2,5,-2,2,5,-2,-5,4,2]: a 3-regular graph on twelve
+# vertices whose automorphism group is trivial.  Both halves are needed here and neither is
+# available from a molecule: REGULAR, so nothing but the group bytes themselves distinguishes the
+# twelve carbons, which is what lets two collections share a label and reach the id tiebreak; and
+# ASYMMETRIC, so the canonical order is pinned and the tiebreak's answer is therefore checkable.
+_FRUCHT_CHORDS = [-5, -2, -4, 2, 5, -2, 2, 5, -2, -5, 4, 2]
+FRUCHT = [(i, (i + 1) % 12) for i in range(12)]
+FRUCHT += sorted({tuple(sorted((i, (i + d) % 12))) for i, d in enumerate(_FRUCHT_CHORDS)})
+# Creation orders that vary the encoding and nothing else: the cycle read backwards, rotated by
+# half, and with every neighbouring pair transposed.
+FRUCHT_ORDERS = [tuple(range(12)), tuple(reversed(range(12))),
+                 (6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5),
+                 (1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10)]
+
+
+def _frucht(order, first, second):
+    """The Frucht skeleton as CH carbons in one creation `order`, AND 1 and AND 2 on two bonds' atoms.
+
+    One namespace, so a collection covering a bond is stated as the collection of its two atoms --
+    which is what a CTfile AND group of two centres says too, and unlike a group on a bond that
+    anchors no unit it names the same molecule in every creation order.
+    """
+    mol = MoleculeContainer()
+    numbers = [0] * 12
+    with mol.edit() as e:
+        for slot in order:
+            numbers[slot] = e.add_atom('C', implicit_h=1)
+        for a, b in FRUCHT:
+            e.add_bond(numbers[a], numbers[b], 1)
+    with mol.edit() as e:
+        for group, bond in ((1, first), (2, second)):
+            for vertex in bond:
+                e.set_stereo_group(numbers[vertex], 3, group)
+    return mol, numbers
+
+
+def _frucht_view(mol, numbers):
+    """(kind, id) -> the members as SKELETON vertices, so two creation orders can be compared."""
+    slot = {number: k for k, number in enumerate(numbers)}
+    return tuple(sorted((key, tuple(sorted(slot[a] for a in members)))
+                        for key, members in mol.canonical_stereo_groups().items()))
+
+
+def test_a_tied_group_id_is_a_function_of_the_canonical_order_alone():
+    """The tiebreak between two collections of one label is the LOWEST canonical position of any
+    MEMBER, so creation order cannot reach it.
+
+    Two-group fixture: AND 1 and AND 2 on two disjoint bonds each.  The group byte feeds atom
+    refinement, so on this skeleton the marks separate almost every pair; `((5, 6), (10, 11))` is
+    the one pair refinement leaves tied, and there the tiebreak decides.  See also the companion
+    test below, which exercises the path where marks separate no pairs.
+    """
+    tied = []
+    for first, second in combinations(FRUCHT, 2):
+        if set(first) & set(second):
+            continue
+        views = set()
+        for order in FRUCHT_ORDERS:
+            mol, numbers = _frucht(order, first, second)
+            views.add(_frucht_view(mol, numbers))
+            if mol.canonical_stereo_group_ambiguities():
+                tied.append((first, second))
+        assert len(views) == 1, f'{first} and {second}: {views}'
+    assert tied == [((5, 6), (10, 11))] * len(FRUCHT_ORDERS), \
+        'the sweep must reach the tiebreak, and only where the labels really tie'
+
+
+def test_a_single_collection_on_all_vertices_is_stable_across_creation_order():
+    """Same invariance with marks that do not separate: all twelve Frucht vertices in one AND group.
+
+    One-group fixture: all atoms carry the same AND kind byte, so group refinement contributes a
+    uniform signal and the canonical order (structure alone) assigns all positions.  Where the
+    two-group fixture exercises the tiebreak path for one pair of collections, this one exercises
+    the uniform-seed path where the tiebreak is never invoked between groups.
+    """
+    views = set()
+    for order in FRUCHT_ORDERS:
+        mol = MoleculeContainer()
+        numbers = [0] * 12
+        with mol.edit() as e:
+            for slot in order:
+                numbers[slot] = e.add_atom('C', implicit_h=1)
+            for a, b in FRUCHT:
+                e.add_bond(numbers[a], numbers[b], 1)
+        with mol.edit() as e:
+            for slot in range(12):
+                e.set_stereo_group(numbers[slot], 3, 1)
+        assert not mol.canonical_stereo_group_ambiguities(), \
+            'one group has no peer to be ambiguous against'
+        views.add(_frucht_view(mol, numbers))
+    assert len(views) == 1, f'view changed across creation orders: {views}'

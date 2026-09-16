@@ -345,7 +345,8 @@ cdef enum:
     SF_NOTHING = 0x80        # the record states nothing here, so it constrains no group
 
 
-cdef uint8_t _stereo_geometry_flips(matcher_t *m, qstereo_t *qs, uint8_t *group_out) noexcept nogil:
+cdef uint8_t _stereo_geometry_flips(matcher_t *m, qstereo_t *qs,
+                                    uint8_t *group_out) noexcept nogil:
     """The SU_CIS_TRANS half of _stereo_record_flips: which states of one drawn geometry satisfy it.
 
     A `/` and `\\` pair states the geometry OUTRIGHT, so the demand is in the record (`spare`'s high
@@ -394,8 +395,7 @@ cdef uint8_t _stereo_geometry_flips(matcher_t *m, qstereo_t *qs, uint8_t *group_
             # the query marks a substituent the unit does not carry on that terminal, so there is no
             # frame to read the geometry in
             return SF_REFUSE
-    if m.stereo_groups is not NULL:
-        group_out[0] = m.stereo_groups[u.anchor]
+    group_out[0] = _sg_byte_raw(m.stereo_groups, u)
     translated = <uint8_t> translate_parity(parity, perm)
     demand = <uint8_t> (qs.spare >> 8)
     out = 0
@@ -406,7 +406,8 @@ cdef uint8_t _stereo_geometry_flips(matcher_t *m, qstereo_t *qs, uint8_t *group_
     return out
 
 
-cdef uint8_t _stereo_record_flips(matcher_t *m, qstereo_t *qs, uint8_t *group_out) noexcept nogil:
+cdef uint8_t _stereo_record_flips(matcher_t *m, qstereo_t *qs,
+                                  uint8_t *group_out) noexcept nogil:
     """Which configurations of one query stereo record's anchor satisfy it, as an SF_* mask.
 
     Called once per record per candidate acceptance by stereo_admits, and again per record at a
@@ -547,8 +548,7 @@ cdef uint8_t _stereo_record_flips(matcher_t *m, qstereo_t *qs, uint8_t *group_ou
     # three-neighbour query matches a centre whose fourth direction is a lone pair the same way
     # it matches one whose fourth is a hydrogen, unless the query says `h`.  The `h` primitive is
     # an ordinary box screen and decides that case on its own, before this function runs at all.
-    if m.stereo_groups is not NULL:
-        group_out[0] = m.stereo_groups[anchor]
+    group_out[0] = _sg_byte_raw(m.stereo_groups, u)
     # sign_mask holds QSIGN_CW, QSIGN_CCW or both by here (QSIGN_FREE and 0 returned above), and
     # translate_parity returns 1 or 2, so this is a bit test.  Both bits set means two different
     # boxes admitted the candidate demanding opposite configurations, which either one satisfies.
@@ -583,8 +583,9 @@ cdef bint stereo_admits(matcher_t *m, uint32_t position) noexcept nogil:
       only the question of which configuration was taken is deferred.
     """
     cdef uint32_t r
-    # group_byte is initialised here only to satisfy the control-flow analysis: it is an out-parameter
-    # of _stereo_record_flips, which writes it before any early return, and Cython cannot see that.
+    # group_byte is initialised here only to satisfy the control-flow analysis: it is an
+    # out-parameter of _stereo_record_flips, which writes it before any early return, and Cython
+    # cannot see that.
     cdef uint8_t flips, kind, group_byte = 0
 
     for r in range(m.stereo_count):
@@ -622,6 +623,9 @@ cdef bint stereo_groups_admit(matcher_t *m) noexcept nogil:
     out empty.  Group numbers are 1..63 (set_stereo_group's range) and 0 is what ABS and unspecified
     carry, so one uint64_t covers every group a molecule can have and bit 0 is never an OR member's.
 
+    ONE TRIPLE, because there is ONE NAMESPACE: a group byte sits at its unit's anchor slot, so an
+    OR 1 on a centre and an OR 1 on an axis are one collection and one intersection.
+
     A record that states nothing (SF_NOTHING) constrains no group, including one whose other members
     do constrain it: '[C@,N]' matching the nitrogen is a disjunct that made no claim, and a group must
     not be cornered by a claim that was not made.  A record that refuses outright cannot appear here
@@ -629,9 +633,12 @@ cdef bint stereo_groups_admit(matcher_t *m) noexcept nogil:
     changed since -- but is handled anyway, and in the safe direction: it clears both of its group's
     bits, so the group, and with it the mapping, fails.
     """
-    cdef uint64_t seen = 0, plain = 0, flipped = 0, bit
+    cdef uint64_t seen = 0
+    cdef uint64_t plain = 0
+    cdef uint64_t flipped = 0
+    cdef uint64_t bit
     cdef uint32_t r
-    cdef uint8_t flips, group_byte = 0      # written by the callee; see stereo_admits
+    cdef uint8_t flips, group_byte = 0   # written by the callee; see stereo_admits
 
     for r in range(m.stereo_count):
         flips = _stereo_record_flips(m, m.stereo + r, &group_byte)

@@ -620,6 +620,46 @@ def test_the_labels_are_concatenated_on_a_join_and_not_shifted():
     assert str(DetachedSmiles.join(left, right)) == 'C%10.C%10O |$Me;;OH$|'
 
 
+def _bond_group_fixture():
+    """(E)-2-butene with its C=C in AND 1, and a methyl for the cut to drop.
+
+    No parity is stated: the group is what these tests are about, and a configuration would bring the
+    cut's own refusals into a test that is not about them.
+    """
+    m, sids = build([(6, 3), (6, 1), (6, 1), (6, 3)], [(0, 1, 1), (1, 2, 2), (2, 3, 1)])
+    with m.edit() as e:
+        e.set_bond_stereo_group(sids[1], sids[2], 3, 1)
+    return m, sids
+
+
+def test_a_fragments_tail_states_a_bond_group_on_its_anchor_atom():
+    """The tail's `&<n>:` slot takes fragment positions, and an axis is named by its unit's anchor.
+
+    The cut drops the methyl, so the axis's anchor is the fragment's first atom and the AND 1 slot
+    holds position 0.  Nothing is lost, so `log` stays empty -- through the function and through the
+    method, which forwards the same list.
+    """
+    m, sids = _bond_group_fixture()
+    log = []
+    f = detached_smiles(m, {10: (sids[1], sids[0])}, log=log)
+    assert str(f) == 'C%10=CC |&1:0|'
+    assert f.tail == ([], [], {1: [0]}, {}, []), 'AND 1 holds the anchor position'
+    assert log == []
+    method_log = []
+    assert str(m.detached_smiles({10: (sids[1], sids[0])}, log=method_log)) == 'C%10=CC |&1:0|'
+    assert method_log == [], 'the container forwards the list'
+
+
+def test_a_fragments_suppressed_tail_writes_no_bond_group():
+    """`!x` writes no tail, so the collection goes unspelled -- silently, which is what the key asks."""
+    m, sids = _bond_group_fixture()
+    log = []
+    f = detached_smiles(m, {10: (sids[1], sids[0])}, '!x', log=log)
+    assert str(f) == 'C%10=CC'
+    assert f.tail == ([], [], {}, {}, [])
+    assert log == []
+
+
 def test_no_tail_is_written_under_the_no_cxsmiles_key():
     m, sids = build([(6, 3), (6, 2), (8, 0)], [(0, 1, 1), (1, 2, 1)])
     m.set_radical(sids[2], True)

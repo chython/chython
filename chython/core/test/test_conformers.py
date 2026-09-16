@@ -347,14 +347,15 @@ def test_a_declared_length_that_disagrees_with_the_model_count_is_refused():
 def test_the_journal_op_is_on_the_public_op_map():
     """`set_xyz` is in `JOURNAL_OPS`, which is how a test names an op without restating its number.
 
-    `drop_conformer` is the highest op: `_apply` range-checks against `OP_HIGHEST`, and adding an op
-    without raising that bound left the arm that would handle it raising `NotImplementedError`.
+    `set_bond_stereo_group` is the highest op: `_apply` range-checks against `OP_HIGHEST`, and adding
+    an op without raising that bound left the arm that would handle it raising `NotImplementedError`.
     A number pinned in two places is pinned in neither.
     """
     from chython.core._core import JOURNAL_OPS
     assert 'set_xyz' in JOURNAL_OPS
     assert 'add_conformer' in JOURNAL_OPS and 'drop_conformer' in JOURNAL_OPS
-    assert JOURNAL_OPS['drop_conformer'] == max(JOURNAL_OPS.values())
+    assert 'set_bond_stereo_group' in JOURNAL_OPS
+    assert JOURNAL_OPS['set_bond_stereo_group'] == max(JOURNAL_OPS.values())
 
 
 def test_the_journal_record_reports_the_fourth_payload_word():

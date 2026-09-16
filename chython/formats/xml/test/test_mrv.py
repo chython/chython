@@ -1248,3 +1248,25 @@ def test_an_r_atom_round_trips_through_this_dialect():
     r = next(a for a in again.atoms() if a.is_r)
     assert r.r_index == 7
     assert [a.atomic_symbol for a in again.atoms()] == [a.atomic_symbol for a in mol.atoms()]
+
+
+def test_mrv_writes_a_bond_group_on_its_anchor_atom():
+    """`mrvStereoGroup` is an atomArray column, so an axis is named by its unit's anchor -- and this
+    dialect's atom ids are the stable ids, so the round trip gives the pair back.
+
+    Nothing is lost, so nothing is logged.  The muconate's first C=C is anchored at atom 4, which is
+    the only atom the column appears on.
+    """
+    mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C' and mol.atom(b.m).atomic_symbol == 'C']
+    assert len(pairs) == 2, pairs
+    with mol.edit() as e:
+        e.set_bond_stereo_group(pairs[0][0], pairs[0][1], 3, 1)
+    log = []
+    text = write_mrv(mol, log=log)
+    assert log == []
+    assert '<atom id="a4" elementType="C" hydrogenCount="1" mrvStereoGroup="and1" />' in text, text
+    assert text.count('mrvStereoGroup') == 1, text
+    again, = read_mrv(text, log=[])
+    assert again.bond_stereo_groups() == {(3, 1): [(4, 5)]}

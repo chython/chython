@@ -850,11 +850,27 @@ configured" is a filter on this list and not a second accessor:
     [u for u in mol.stereogenic_units() if u['parity']]        # configured
     [u for u in mol.stereogenic_units() if not u['parity']]    # stereogenic but unsigned
 
+A candidate on a double bond an **alternating cycle** can move is never stereogenic: another Kekule form
+of the same compound writes that bond single, so a configuration there would be the drawing's and not the
+compound's. Cyclooctatetraene's four ring bonds are all candidates and none of them holds a geometry;
+``standardize_kekule()`` is what picks between the two alternations (:doc:`standardize`). The cycle is
+walked wherever it runs, so it may be a fused perimeter rather than a ring — which is how both drawings of
+dibenzo[a,e]cyclooctatetraene come out with no geometry on their eight-ring.
+
+.. testcode::
+
+    cot = smiles('C1=CC=CC=CC=C1')
+    print(len(cot.chiral_bonds()), len([u for u in cot.stereo_units() if u['kind'] == 1]))
+
+.. testoutput::
+
+    0 4
+
 ``chiral_atoms()`` answers RDKit's ``FindPotentialStereo`` question -- every site whose configuration
 this record's identity depends on, labelled or not. The labelled ones are **not** subtracted; for the
 sites still needing a sign, filter on the parity.
 
-One per-atom question, three whole-molecule ones, and the stated CIP descriptors:
+One per-atom question, three whole-molecule ones, and the CIP descriptors:
 
 .. testcode::
 
@@ -863,16 +879,79 @@ One per-atom question, three whole-molecule ones, and the stated CIP descriptors
     chiral.is_chiral(2)         # does atom 2 anchor a stereogenic unit?  Labelled or not.
     chiral.is_asymmetric()      # is the automorphism group trivial?
     chiral.has_stereo_groups    # any enhanced-stereo collection present, ABS included
-    chiral.stereo_groups()      # {(kind, group): [id, ...]}
+    chiral.stereo_groups()      # {(kind, group): [member, ...]} -- a centre is an id, an axis a pair
     chiral.stereo_truncated     # True when the symmetry search ran out of budget, so the
                                 # stereogenic sets above are an over-approximation
 
-    chiral.atom_cips()          # {id: descriptor} -- STATED descriptors only, never derived
-    chiral.bond_cips()
+    # the axis-only view of the same collections (double bonds, allenes, atropisomer axes):
+    chiral.has_bond_stereo_groups            # True when any collection has an axis member
+    chiral.stereo_group_of((2, 3))           # (kind, group) for that axis, or (0, 0) if unset
+    chiral.bond_stereo_groups()              # {(kind, group): [(n, m), ...]}
+    chiral.canonical_bond_stereo_groups()    # same dict with canonical group ids
+    chiral.canonical_bond_stereo_group_ambiguities()  # tuple of (kind, id) keys that may permute
+    chiral.stereo_group_anchor_of((2, 3))    # anchor atom id -- what an atom-only format names
+
+    chiral.assign_cip()         # compute R/S and store it; True when a descriptor was written
+    chiral.atom_cips()          # {id: descriptor} -- computed, overriding whatever the input stated
+    chiral.bond_cips()          # STATED only: the bond descriptors are a later phase
     chiral.cip_log              # what an edit dropped, and why
 
     # the sites still needing a sign
     [n for n in chiral.chiral_atoms() if chiral.parity_of(n) == 0]
+
+``assign_cip()`` decides what CIP rules 1a, 1b and 2 decide -- atomic number, a duplicate's distance from
+the root, and mass. A tetrahedral site those three tie, and any site with an aromatic bond in reach,
+gets **no** descriptor and one ``cip:undecided`` line in ``log.by_stage('cip')``: the rules that settle
+those sites are rule 3 and up. So ``atom_cips()`` returning ``{}`` for a configured centre is an answer,
+and the log says which one. Three rules reach ``log.by_stage('cip')``:
+
+=============================================  ==========================================================
+Rule                                           When
+=============================================  ==========================================================
+``cip:assigned`` (``INFO``)                    every run, naming how many descriptors were written
+``cip:undecided`` (``REFUSED``)                per site rules 1a/1b/2 tie, or with an aromatic bond in
+                                               reach; that site keeps no descriptor
+``cip:disagreed`` (``REPAIRED``)               per site whose stated descriptor differs from the
+                                               computed one, which overwrites it
+=============================================  ==========================================================
+
+A stated descriptor is never read as a hint or a tie-break, so a disagreement is a record and not a
+refusal:
+
+.. testcode::
+
+    stated = smiles('[C@H](F)(Cl)Br')
+    stated.set_atom_cip(1, 'R')
+    print(stated.assign_cip(), stated.atom_cips())
+    print([(r.rule, r.severity) for r in stated.log.by_stage('cip')])
+
+.. testoutput::
+
+    True {1: 'S'}
+    [('cip:disagreed', 'repaired'), ('cip:assigned', 'info')]
+
+``set_bond_stereo_group(n, m, kind, group)`` is the edit-session setter — ``kind`` is 1 ABS, 2 OR,
+3 AND; ``group`` is 1..63 for OR and AND, 0 for ABS.  ``kind`` 0 clears a bond's group and ignores
+``group``.  The canonical methods renumber stored ids to a stable order; where
+``canonical_bond_stereo_group_ambiguities()`` is non-empty the renumbering may be arbitrary — read it
+before hashing.  ``set_stereo_group`` takes either spelling -- a bare atom id or an owner pair --
+and ``set_bond_stereo_group`` is the pair spelling under its own name.
+For the three kinds, the one id namespace, and the per-format encoding table, see :doc:`stereo`.
+
+.. testcode::
+
+    diene = smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(b.n, b.m) for b in diene.bonds()
+             if b.order == 2 and diene.atom(b.n).atomic_symbol == 'C'
+             and diene.atom(b.m).atomic_symbol == 'C']
+    with diene.edit() as e:
+        for n, m in pairs:
+            e.set_bond_stereo_group(n, m, 3, 1)
+    print(len(diene.canonical_bond_stereo_groups()[(3, 1)]))
+
+.. testoutput::
+
+    2
 
 
 Setting
@@ -1010,6 +1089,21 @@ readable back. The lossy record has its own call, ``pack()``:
 .. testoutput::
 
     True
+
+Lossless is of this build's own arena. A buffer written by a build whose arena states a field this one
+does not model still loads -- nothing is refused -- and what was narrowed goes on
+``mol.log.by_stage('read')`` as ``LOST``:
+
+=============================================  ==========================================================
+Rule                                           When
+=============================================  ==========================================================
+``container:conformer-narrowed``               the buffer's conformer records carry three words this
+                                               build does not model; each model keeps its coordinates
+                                               and the number the file gave it
+``container:bond-group-bits-dropped``          bonds set a reserved half-edge flag; a stereo group is
+                                               stored at its unit's anchor (:doc:`stereo`), so those
+                                               bits are ignored
+=============================================  ==========================================================
 
 **Warning**: avoid modifying a molecule (standardize, aromatize, add or remove atoms) after placing it
 in a set or a dict. Every edit changes the canonical form, so the hash changes and the lookup breaks.

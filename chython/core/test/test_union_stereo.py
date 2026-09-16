@@ -16,12 +16,13 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""`union` carries the SECOND molecule's stereo, which for a while it did not.
+"""`union` carries the SECOND molecule's stereo, which is the half that has to be carried.
 
-`union` is `copy()` of the left side plus a rebuild of the right one through `add_atom`/`add_bond`,
-so everything the left side had came along for free and everything the right side had was silently
-dropped: `reactant1.union(reactant2)` racemised reactant 2.  A reaction driver unions its inputs
-before it patches them, so that loss was one call away from every stereospecific reaction.
+`union` is `copy()` of the left side plus a rebuild of the right one through `add_atom`/`add_bond`, so
+the left side's stereo arrives with its buffer and the right side's has to be written across
+explicitly.  A gap there racemises reactant 2 of every `reactant1.union(reactant2)`, and a reaction
+driver unions its inputs before it patches them, which puts that loss one call from every
+stereospecific reaction.
 
 The assertions compare CANONICAL BYTES of the split components against the originals rather than
 SMILES strings, per the design's N9: a formatted string is not the identity of a stereo-bearing
@@ -30,7 +31,7 @@ molecule.
 import pytest
 
 from chython.core import MoleculeContainer
-from chython.core._core import read_smiles as smiles
+from chython.core._core import read_smiles as smiles, read_smarts as smarts
 
 
 def _round_trip(left, right):
@@ -165,3 +166,126 @@ def test_a_molecule_unioned_with_itself_keeps_both_copies_configured():
     assert len(parts) == 2
     assert {p.canonical_bytes for p in parts} == {a.canonical_bytes}
     assert u.parity_of(2) == u.parity_of(6) == a.parity_of(2)
+
+
+def test_a_centre_and_an_axis_of_the_same_number_are_one_collection():
+    """OR 1 is OR 1: one id namespace, so a centre and an axis given the same number are one group.
+
+    The two members are spelled differently -- a centre is its own atom, an axis is its owner pair --
+    and both live in one dict under one key.  A query that states no geometry is unaffected by the
+    collection either way, which is why the merge is a storage change and not a matching change.
+    """
+    # `C[C@H](O)/C=C/C`: atom 2 is the tetrahedral centre, atoms 4-5 are the double bond.
+    query = smarts('[C;z2]=[C;z2]')
+    mol = smiles('C[C@H](O)/C=C/C')
+    with mol.edit() as e:
+        e.set_stereo_group(2, 2, 1)          # OR 1 on the tetrahedral centre
+        e.set_bond_stereo_group(4, 5, 2, 1)  # OR 1 on the double bond
+    assert mol.stereo_groups() == {(2, 1): [2, (4, 5)]}
+    assert mol.bond_stereo_groups() == {(2, 1): [(4, 5)]}
+    assert list(query.get_mapping(mol))
+
+
+def test_allene_group_is_the_byte_at_the_units_anchor():
+    """SU_ALLENE has no partner bond -- `chiral_atoms` already yields it beside SU_TETRA.
+
+    Its anchor is the chain midpoint, so a group named on that atom is the group of the axis, and
+    reads back as the terminal pair the axis is named on.
+    """
+    # `CC=C=CC`: the chain centre (atom 3) is the allene anchor; `chiral_atoms()` keys on it.
+    mol = smiles('CC=C=CC')
+    centre = next(n for n in mol.chiral_atoms())
+    with mol.edit() as e:
+        e.set_stereo_group(centre, 2, 1)
+    assert mol.stereo_group_of(centre) == (2, 1)
+    assert mol.bond_stereo_groups() == {(2, 1): [(2, 4)]}
+
+
+def test_cis_trans_unit_with_an_or_group_on_its_anchor_is_a_mixture():
+    """A cis/trans unit's group is the byte at its anchor, whatever spelling stated it.
+
+    CXSMILES `|o1:|` and V3000 `STEREL ATOMS=` state the OR collection on atoms, and an atom that
+    anchors the unit is exactly where the byte belongs, so `_sg_byte_raw` reads it there.
+    Both query geometries must match because the OR group makes the molecule a mixture.
+    """
+    mol = smiles('C/C=C/C')
+    with mol.edit() as e:
+        e.set_stereo_group(2, 2, 1)   # atom OR 1 on the double-bond anchor
+    assert smarts('C/C=C/C').is_substructure(mol)    # same geometry matches
+    assert smarts('C/C=C\\C').is_substructure(mol)   # opposite geometry also matches
+
+
+def test_bond_only_or_group_gates_stereo_groups_admit():
+    """A molecule whose only OR groups are stated on AXES must still run `stereo_groups_admit`.
+
+    `has_or_group` scans the one group segment, and an axis's byte sits at its unit's anchor like any
+    other, so the scan finds it: that is the gate deciding whether `stereo_groups_admit` is consulted
+    at all.  A gate left False on this molecule wrongly accepts a query that can only satisfy one
+    member of a multi-member OR group.
+
+    The molecule is `F/C=C/C=C/F` (E,E diene) with both double bonds in OR group 1, stated through
+    the pair spelling; the mixture is {E,E} and {Z,Z}.  A query demanding E on one bond and Z on the
+    other has no consistent assignment and must be refused.
+    """
+    mol = smiles('F/C=C/C=C/F')    # E,E diene; double bonds 2-3 and 4-5
+    with mol.edit() as e:
+        e.set_bond_stereo_group(2, 3, 2, 1)   # OR 1 on the first axis
+        e.set_bond_stereo_group(4, 5, 2, 1)   # OR 1 on the second axis (same group)
+    # A consistent assignment (both E) must succeed.
+    assert smarts('F/C=C/C=C/F').is_substructure(mol)
+    # No consistent assignment for E on bond 1 and Z on bond 2: must be refused.
+    assert not smarts('F/C=C/C=C\\F').is_substructure(mol)
+
+
+def test_every_spelling_of_one_cumulene_axis_reads_the_same_group():
+    """ONE AXIS, ONE BYTE, at the unit's anchor -- reached by every honest way of naming the axis.
+
+    `F/C(=C=C=C/C)Cl` has a stereogenic SU_CIS_TRANS unit whose owners are the chain terminals C2 and
+    C5, three bonds apart: atoms F=1, C=2, C=3, C=4, C=5, C=6, Cl=7 with chain double bonds 2-3, 3-4
+    and 4-5.  The owner pair, any chain bond of it, and the anchor atom alone all name that unit, so
+    all four spellings store one group at one slot and the molecule becomes a mixture either way.
+
+    Control first: without a group the unit is configured and the opposite geometry is refused.
+    """
+    assert not smarts('F/C(=C=C=C\\C)Cl').is_substructure(smiles('F/C(=C=C=C/C)Cl'))
+    for spelling in ((2, 5), (2, 3), (3, 4), (4, 5)):
+        mol = smiles('F/C(=C=C=C/C)Cl')
+        with mol.edit() as e:
+            e.set_bond_stereo_group(spelling[0], spelling[1], 2, 1)
+        assert mol.stereo_groups() == {(2, 1): [(2, 5)]}, spelling
+        assert smarts('F/C(=C=C=C\\C)Cl').is_substructure(mol), spelling
+    mol = smiles('F/C(=C=C=C/C)Cl')
+    with mol.edit() as e:
+        e.set_stereo_group(2, 2, 1)               # the anchor atom, a bare int
+    assert mol.stereo_groups() == {(2, 1): [(2, 5)]}
+    assert smarts('F/C(=C=C=C\\C)Cl').is_substructure(mol)
+
+
+def test_canonical_bond_ids_correct_for_disconnected_molecule_n_gt_n_edges():
+    """Canonical group ids are permutation-invariant when n > n_edges (disconnected molecule).
+
+    `F/C=C/Cl.C/C=C/C` plus 15 isolated [NH4+] gives n=23 atoms and 12 half-edges.  A member is one
+    group byte at one anchor slot, so `canonical_stereo_group_ids` writes at most n members into a
+    region of 2n class slots; a shape with more grouped atoms than half-edges is the one where a
+    region sized off the edge count would run into `par`, the parity-code array laid out after it.
+
+    The assertion is PERMUTATION INVARIANCE -- the two axes' canonical ids must not depend on which
+    stored id each carries.  It is the guarantee `test_canonical_bond_ids_are_permutation_invariant`
+    states for a connected molecule, on the n > n_edges shape.  The axes' stored ids stay clear of the
+    ammonium ions' OR 1: with one namespace an axis given id 1 would JOIN that collection, which is a
+    different molecule rather than a permutation of this one.
+    """
+    base = 'F/C=C/Cl.C/C=C/C.' + '.'.join(['[NH4+]'] * 15)
+    answers = set()
+    for a, b in ((2, 3), (3, 2), (7, 19), (63, 4)):
+        mol = smiles(base)
+        with mol.edit() as e:
+            for i in range(9, 24):            # atoms 9-23 are the 15 [NH4+] ions
+                e.set_stereo_group(i, 2, 1)   # OR 1 on each
+            e.set_bond_stereo_group(2, 3, 2, a)   # OR on the F/C=C/Cl axis
+            e.set_bond_stereo_group(6, 7, 2, b)   # OR on the C/C=C/C axis
+        answers.add((tuple(sorted((k, tuple(sorted(v))) for k, v in
+                                  mol.canonical_bond_stereo_groups().items())),
+                     tuple(sorted((k, tuple(sorted(map(str, v)))) for k, v in
+                                  mol.canonical_stereo_groups().items()))))
+    assert len(answers) == 1, answers

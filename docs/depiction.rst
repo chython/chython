@@ -356,7 +356,7 @@ not:
   the alternating lines are already there to read.
 * ``atom.map_numbers`` is ``True``, and a number is drawn only where ``map_number`` is non-zero, so an
   unmapped structure stays clean.
-* ``atom.stereo_groups`` is ``True``: an enhanced-stereo collection is written beside its centre as
+* ``atom.stereo_groups`` is ``True``: an enhanced-stereo collection is written beside the member's anchor as
   ``&N`` (AND -- racemic here), ``oN`` (OR -- one of these) or ``a`` (ABS).  Hiding it would draw a single
   enantiomer where the file said otherwise.  A plain ``[C@H]`` is in no collection and gets no mark.
 

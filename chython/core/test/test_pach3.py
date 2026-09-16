@@ -28,7 +28,8 @@ import tracemalloc
 from pytest import mark, raises
 
 from chython.core import H_UNKNOWN, MoleculeContainer, pach_load, pach_record_length, read_smiles
-from .pach3_corpus import BUILDERS, V3_PATH, V4_PATH, answers, drawn, load_corpus
+from .pach3_corpus import (BGROUP_BUILDERS, BGROUP_NAMES, BGROUP_PATH, BUILDERS, V3_PATH, V4_PATH,
+                           answers, answers_bgroup, drawn, load_corpus)
 from .pach3_corpus import _BIPHENYL_BONDS, _BIPHENYL_H, _BUTANE_XY, _chlorofluorobiphenyl, _drawn_butane
 from .pach_corpus import V0_NATIVE_PATH, V0_PATH, V2_PATH
 
@@ -266,10 +267,10 @@ def test_the_atom_block_being_short_returns_no_molecule_and_says_so():
 
 
 def test_a_reserved_flag_bit_is_reported_and_ignored():
-    raw = _v3_header(4, flags=0x02, atoms=1) + bytes([6, 0, 0x44])
+    raw = _v3_header(4, flags=0x04, atoms=1) + bytes([6, 0, 0x44])
     mol, problems = pach_load(raw, compressed=False)
     assert mol is not None
-    assert any('flags' in p for p in problems)
+    assert any('reserved' in p for p in problems)
 
 
 def test_an_element_byte_outside_the_domain_reads_as_a_bare_r():
@@ -1141,12 +1142,13 @@ def test_a_zero_atom_record_is_an_empty_molecule():
     assert len(mol) == 0
 
 
-def test_the_reserved_header_bytes_are_reported_and_ignored():
+def test_bgroups_header_field_is_read_and_disagreement_is_reported():
+    """Bytes 10-11 are the bond-group count; a non-zero count without flag bit 1 is reported."""
     raw = bytearray(_v3_header(4, atoms=1) + bytes([6, 0, 0x44]))
-    raw[10] = 0x01
+    raw[10] = 0x01                                     # bgroups = 1, but flag bit 1 not set
     mol, problems = pach_load(bytes(raw), compressed=False)
     assert len(mol) == 1
-    assert any('reserved' in p for p in problems)
+    assert any('bond-group' in p for p in problems)
 
 
 def test_trailing_bytes_belong_to_the_next_record():
@@ -1393,3 +1395,171 @@ def test_a_two_unnamed_direction_list_is_not_stereogenic():
     unit, = [u for u in mol.stereo_units() if u['anchor'] == mol.atom_numbers[1]]
     assert sum(1 for r in unit['refs'] if r is None) == 2
     assert not unit['stereogenic'] and not unit['parity']
+
+
+def test_a_bond_stereo_group_is_refused_by_the_legacy_encoder_unless_dropped():
+    """`stereo_groups` is the one drop key, so it covers an axis's collection too."""
+    mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C' and mol.atom(b.m).atomic_symbol == 'C']
+    assert len(pairs) == 2, pairs
+    with mol.edit() as e:
+        e.set_bond_stereo_group(pairs[0][0], pairs[0][1], 3, 1)
+    with raises(ValueError, match='stereo_groups'):
+        mol.pack(compressed=False, version=2)
+    mol.pack(compressed=False, version=2, drop=['stereo_groups'])  # must not raise
+
+
+# ----- compatibility statement: what every stored record declares -----
+
+def test_every_committed_record_declares_no_bond_groups():
+    """THE COMPATIBILITY STATEMENT. Header bytes 10-11 were reserved and every stored record has them
+    at 0, so consuming them for a count cannot change the bytes of a record that already exists."""
+    for path in (V3_PATH, V4_PATH):
+        for name, raw, _answers in load_corpus(path):
+            assert raw[10] == 0 and raw[11] == 0, name
+            assert raw[1] & ~0x01 == 0, name  # 0x01 mirrors PACH3_FLAG_MAP
+
+
+# ----- bond-group block -----
+
+def test_bond_groups_round_trip_through_v3_and_v4():
+    mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C'
+             and mol.atom(b.m).atomic_symbol == 'C']
+    assert len(pairs) == 2, pairs
+    with mol.edit() as e:
+        for n, m in pairs:
+            e.set_bond_stereo_group(n, m, 3, 1)
+    # `version=3` writes the coordinates the molecule HAS, so an undrawn one writes a version 4 record
+    # and the loop below would cover version 4 twice.  `raw[0]` is what holds that.
+    mol = drawn(mol)
+    for version in (3, 4):
+        raw = mol.pack(compressed=False, version=version)
+        assert raw[0] == version, version                      # drawn() → v3 is really v3
+        assert raw[1] & 0x02, version                          # PACH3_FLAG_BGROUP
+        assert (raw[10] | raw[11] << 8) == len(pairs), version
+        back, problems = pach_load(raw, compressed=False)
+        assert problems == [], (version, problems)
+        assert (sorted(sorted(p) for p in back.bond_stereo_groups()[(3, 1)])
+                == sorted(sorted(p) for p in pairs)), version
+
+
+def test_a_flag_and_count_that_disagree_are_reported():
+    """The bit and the count are one fact written twice, so the decoder checks they agree."""
+    mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C'
+             and mol.atom(b.m).atomic_symbol == 'C']
+    with mol.edit() as e:
+        e.set_bond_stereo_group(pairs[0][0], pairs[0][1], 3, 1)
+    raw = bytearray(mol.pack(compressed=False, version=3))
+    raw[1] &= ~0x02
+    back, problems = pach_load(bytes(raw), compressed=False)
+    assert any('bond-group' in p for p in problems)
+
+
+def test_drop_stereo_groups_suppresses_bond_group_block():
+    mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C'
+             and mol.atom(b.m).atomic_symbol == 'C']
+    with mol.edit() as e:
+        for n, m in pairs:
+            e.set_bond_stereo_group(n, m, 3, 1)
+    raw = mol.pack(compressed=False, version=4, drop=['stereo_groups'])
+    assert raw[1] & 0x02 == 0                      # PACH3_FLAG_BGROUP cleared
+    assert raw[10] == 0 and raw[11] == 0            # bgroups count is zero
+
+
+def test_drop_stereo_suppresses_bond_group_block():
+    mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C'
+             and mol.atom(b.m).atomic_symbol == 'C']
+    with mol.edit() as e:
+        for n, m in pairs:
+            e.set_bond_stereo_group(n, m, 3, 1)
+    raw = mol.pack(compressed=False, version=4, drop=['stereo'])
+    assert raw[1] & 0x02 == 0                      # PACH3_FLAG_BGROUP cleared
+    assert raw[10] == 0 and raw[11] == 0            # bgroups count is zero
+
+
+def test_a_record_with_map_numbers_and_bond_groups_carries_both():
+    """1-chloropropene, whose C=C really is a unit: a bond entry is written for an AXIS and for
+    nothing else, so a fixture whose bond anchors no unit would carry the group as an atom entry."""
+    mol = read_smiles('[CH3:1]/[CH:2]=[CH:3]/[Cl:4]')
+    n, m = next(iter(mol.chiral_bonds()))
+    with mol.edit() as e:
+        e.set_bond_stereo_group(n, m, 3, 1)
+    raw = mol.pack(compressed=False, version=4)
+    assert raw[1] & 0x01                           # PACH3_FLAG_MAP
+    assert raw[1] & 0x02                           # PACH3_FLAG_BGROUP
+    back, problems = pach_load(raw, compressed=False)
+    assert problems == [], problems
+    assert (3, 1) in back.bond_stereo_groups()
+    # PER ATOM, not the set of all four: the block this record gained sits BEFORE the map block, so what
+    # a wrong offset produces is each atom holding its neighbour's number, which a set cannot see.
+    assert [(back.atom(k).atomic_symbol, back.map_number_of(k)) for k in back.atom_numbers] \
+        == [('C', 1), ('C', 2), ('C', 3), ('Cl', 4)]
+
+
+def test_a_repeated_bond_group_entry_is_reported_and_the_first_kept():
+    mol = read_smiles('C/C=C/C')
+    n, m = next(iter(mol.chiral_bonds()))
+    with mol.edit() as e:
+        e.set_bond_stereo_group(n, m, 3, 1)
+    raw = bytearray(mol.pack(compressed=False, version=4))
+    entry = bytearray(raw[-5:])                    # the single bond-group entry, AND 1
+    # A DIFFERENT group in the repeat, not a copy of the byte: with two identical entries "the first
+    # was kept" and "the second overwrote it" are the same record, so the name would test nothing.
+    entry[4] = 0x82                                # kind 2 (OR), group 2
+    raw += entry                                   # the same pair, a second time
+    raw[10] = 2                                    # bgroups count: 1 -> 2
+    back, problems = pach_load(bytes(raw), compressed=False)
+    assert any('repeat' in p for p in problems), problems
+    assert list(back.bond_stereo_groups()) == [(3, 1)], back.bond_stereo_groups()
+
+
+# ----- bond-group corpus: pinned records and their answers -----
+
+def test_bgroup_fixture_is_present_and_holds_every_builder():
+    records = load_corpus(BGROUP_PATH)
+    assert [name for name, _, _ in records] == BGROUP_NAMES
+    assert {data[0] for _, data, _ in records} == {3, 4}
+
+
+def test_bgroup_writer_reproduces_every_pinned_record():
+    built = dict(BGROUP_BUILDERS)
+    for name, data, _ in load_corpus(BGROUP_PATH):
+        version = data[0]
+        base = name[:-3]                           # strip '_v4' or '_v3'
+        mol = built[base]()
+        if version == 3:
+            mol = drawn(mol)
+        assert mol.pack(compressed=False, version=version) == data, name
+
+
+def test_bgroup_every_record_has_flag_bit_1_set_and_count_nonzero():
+    for name, data, _ in load_corpus(BGROUP_PATH):
+        assert data[1] & 0x02, name                   # PACH3_FLAG_BGROUP
+        assert data[10] | data[11] << 8, name          # bgroups count non-zero
+
+
+def test_bgroup_every_record_decodes_with_no_problems_and_right_groups():
+    for name, data, expected in load_corpus(BGROUP_PATH):
+        mol, problems = pach_load(data, compressed=False)
+        assert problems == [], name
+        assert answers_bgroup(mol) == expected, name
+
+
+def test_bgroup_decoding_and_re_encoding_is_byte_identical():
+    for name, data, _ in load_corpus(BGROUP_PATH):
+        mol, _ = pach_load(data, compressed=False)
+        assert mol.pack(compressed=False, version=data[0]) == data, name
+
+
+def test_bgroup_record_length_agrees_with_the_true_length():
+    for name, data, _ in load_corpus(BGROUP_PATH):
+        assert pach_record_length(data, compressed=False) == len(data), name

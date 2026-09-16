@@ -149,6 +149,9 @@ DEF VAL_NO_RULE = -1     # `val_implicit_h`: no row covers this state.  Distinct
 DEF VAL_ANY_H = -1       # `val_scan`: report the first matching row's count, do not filter by it
 DEF VAL_ENV_SHIFT = 8    # a VAL_ENV entry is (bond order << VAL_ENV_SHIFT) | atomic number
 DEF VAL_ORDER_MAX = 3    # the highest bond order any row's environment mentions
+DEF VAL_DRAWN_MAX = 32   # `val_check`'s drawn reading: 16 entries is the context walk's environment
+                         # ceiling and 15 the largest count the arena's nibble holds.  A longer
+                         # environment from Python is truncated, the way that walk truncates
 
 # The dense hydrogen table's domain, and the third sentinel in it.  Mirrored in the generator as
 # H_*, which fails the compile if a new row leaves these extents -- they are the collection's
@@ -996,16 +999,41 @@ cdef int val_implicit_h(uint32_t z, int charge, bint radical, uint32_t order_sum
 
 cdef int val_check(uint32_t z, int charge, bint radical, uint32_t order_sum,
                    const uint16_t *env, uint32_t env_len, uint32_t implicit_h) noexcept nogil:
-    """VAL_VALID, VAL_VIOLATION or VAL_UNKNOWN for this exact state.  Never a reason to reject.
+    """VAL_VALID, VAL_VIOLATION or VAL_UNKNOWN for this state.  Never a reason to reject.
 
     Not `val_implicit_h(...) == implicit_h`: see the scanner's note on why a legal count need not
     be the chosen one.
+
+    EITHER SPELLING OF THE HYDROGENS ACQUITS, the way either Kekule reading acquits in
+    `hyd_check_atom`.  A count and a drawn hydrogen atom are the same hydrogen, so the state is
+    asked twice: as given, and again with every implicit hydrogen moved into the bond-order sum and
+    the environment.  Only the second reading reaches the rows written against a hydrogen
+    neighbour -- `Ti 0 0 2 0 -H -H`, `Ga -1 0 4 0 -H -H -H -H` -- and only it reaches the metals
+    whose ladder is a bare bond count, `Ca 0 0 2 0 *` being calcium hydride among other things.
+    `implicify_hydrogens()` is on the deduplication path, so with one reading `[H][Ca][H]` is valid
+    and `canonicalize()`'s own output for it, `[CaH2]`, is a violation.  The drawn reading is the
+    permissive one in every state where the two differ, which is what
+    `test_a_hydrogen_is_the_same_hydrogen_drawn_or_counted` sweeps the collection for.
     """
+    cdef uint16_t drawn[VAL_DRAWN_MAX]
+    cdef uint32_t i, kept
     if implicit_h > H_NIBBLE_MAX:
         # unstorable rather than merely unknown, and no row could accept it
         return VAL_VIOLATION if val_described(z, charge, radical) else VAL_UNKNOWN
     if val_scan(z, charge, radical, order_sum, env, env_len, <int> implicit_h) != VAL_NO_RULE:
         return VAL_VALID
+    if implicit_h:
+        kept = env_len
+        if kept > VAL_DRAWN_MAX - implicit_h:
+            kept = VAL_DRAWN_MAX - implicit_h
+        for i in range(kept):
+            drawn[i] = env[i]
+        for i in range(implicit_h):
+            drawn[kept + i] = <uint16_t> ((1 << VAL_ENV_SHIFT) | 1)
+        # nothing is left in the count, so the row's own count must be 0 and not VAL_ANY_H
+        if val_scan(z, charge, radical, order_sum + implicit_h, drawn, kept + implicit_h,
+                    0) != VAL_NO_RULE:
+            return VAL_VALID
     if val_described(z, charge, radical):
         return VAL_VIOLATION
     return VAL_UNKNOWN

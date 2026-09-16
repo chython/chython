@@ -351,12 +351,14 @@ def test_a_group_on_a_double_bond_is_an_e_z_mixture(smirks):
     A vinyl substitution with no geometric control gives an E/Z mixture, which is the same statement a
     racemate is and wants the same notation.  The group moves onto the unit's anchor whichever terminal
     the template named it on, because the parity and the group byte are one statement about one unit
-    and the matcher reads both off the anchor -- so the two spellings give one answer.
+    and the matcher reads both off the anchor -- so the two spellings give one answer, reported as the
+    unit's owner pair.  The CXSMILES tail names the axis by an owner of its own choosing, which is why
+    one index answers for both spellings without being the anchor's.
     """
     product = product_of(smirks, 'C/C=C/Br')
 
-    assert format(product, 'x') == 'C/C=C/O |&1:1|'
-    assert product.stereo_groups() == {(3, 1): [2]}
+    assert format(product, 'x') == 'C/C=C/O |&1:2|'
+    assert product.stereo_groups() == {(3, 1): [(2, 3)]}
 
 
 def test_a_group_fabricates_the_geometry_the_substrate_never_drew():
@@ -369,15 +371,16 @@ def test_a_group_fabricates_the_geometry_the_substrate_never_drew():
     product = product_of('[C:1]=[C:2][Br;D1]>>[C:1]=[C;&1:2][O;D1;h1:3]', 'CC=CBr')
 
     assert product.parity_of(2) != 0
-    assert product.stereo_groups() == {(3, 1): [2]}
+    assert product.stereo_groups() == {(3, 1): [(2, 3)]}
 
 
 def test_an_allene_is_grouped_on_its_centre_and_only_there():
-    """An allene is named on ONE atom (`stereo_unit_partner`), so its group has one place to go.
+    """An allene's group has ONE place to go, the chain midpoint its unit is anchored at.
 
-    Not an inconsistency with the double bond's two spellings: which atoms name a unit is a fact about
-    the kind, and the same rule sends `@~` to the same atom.  A group on a terminal reaches nothing and
-    is logged away with everything else that names no stereogenic unit.
+    Not an inconsistency with the double bond's two spellings: which atom of a template may name a
+    unit is a fact about the kind, and the same rule sends `@~` to the same atom.  A group on a
+    terminal reaches nothing and is logged away with everything else that names no stereogenic unit.
+    The collection reports the chain TERMINALS, which is how an axis member is spelled.
     """
     axis = '[C:1]=[C:2]=[C:3][Br;D1]>>[C:1]=[C;&1:2]=[C:3][O;D1;h1:4]'
     end = '[C:1]=[C:2]=[C:3][Br;D1]>>[C;&1:1]=[C:2]=[C:3][O;D1;h1:4]'
@@ -385,7 +388,7 @@ def test_an_allene_is_grouped_on_its_centre_and_only_there():
 
     product = product_of(axis, 'CC(F)=[C]=C(F)Br')
     assert product.parity_of(4) != 0
-    assert product.stereo_groups() == {(3, 1): [4]}
+    assert product.stereo_groups() == {(3, 1): [(2, 5)]}
 
     assert product_of(end, 'CC(F)=[C]=C(F)Br', log=log).stereo_groups() == {}
     assert len(log) == 1 and 'no stereogenic unit' in log[0].message

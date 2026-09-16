@@ -33,7 +33,8 @@ from ...core.wedge import assign_parities
 
 __all__ = ['Ctab', 'CtabAtom', 'CtabBond', 'WEDGE_FROM_V2000', 'WEDGE_FROM_V3000',
            'WEDGE_TO_V2000', 'WEDGE_TO_V3000', 'STEREO_FROM_COLLECTION', 'STEREO_TO_COLLECTION',
-           'STORABLE_ORDERS', 'QUERY_BOND_TYPES', 'LABEL_ELEMENT', 'order_from_bond_type']
+           'STEREO_TO_BOND_COLLECTION', 'STORABLE_ORDERS', 'QUERY_BOND_TYPES', 'LABEL_ELEMENT',
+           'order_from_bond_type', 'axis_spelling']
 
 
 # What an atom becomes when the file's symbol field holds free text -- a drawn label like `Me`, a
@@ -59,6 +60,11 @@ WEDGE_TO_V3000 = {WEDGE_NONE: 0, WEDGE_UP: 1, WEDGE_EITHER: 2, WEDGE_DOWN: 3}
 # of unknown absolute configuration, which is OR.  Same partition as CXSMILES `|&N:|` and `|oN:|`.
 STEREO_FROM_COLLECTION = {'ABS': STEREO_ABS, 'RAC': STEREO_AND, 'REL': STEREO_OR}
 STEREO_TO_COLLECTION = {STEREO_ABS: 'STEABS', STEREO_AND: 'STERAC', STEREO_OR: 'STEREL'}
+# The bond-shaped spelling of the same collections.  A V3000 member list is `ATOMS=` or `BONDS=` and
+# never both, so these are the second of two member syntaxes rather than a second namespace:
+# `axis_spelling` picks one per member, and a file's `STERAC1` beside its `STEBRAC1` is two
+# collections because the reader renumbers the bond one, not because the ids live apart.
+STEREO_TO_BOND_COLLECTION = {STEREO_ABS: 'STEBABS', STEREO_AND: 'STEBRAC', STEREO_OR: 'STEBREL'}
 
 # Bond orders a CTfile can state and this reader stores as stated.  Order 4 is in the set: a file
 # that says aromatic is stored aromatic and one that says Kekule is stored Kekule.  Nothing here
@@ -69,6 +75,42 @@ STORABLE_ORDERS = frozenset((1, 2, 3, 4, 8))
 # has nowhere to go in a structure container.  A record containing one is refused by name -- a refusal
 # at the answer boundary -- so the caller can reach for a query reader instead of guessing why.
 QUERY_BOND_TYPES = {5: 'single or double', 6: 'single or aromatic', 7: 'double or aromatic'}
+
+
+def axis_spelling(mol, a, b):
+    """Where V3000 names the axis owned by `a` and `b`: ``('atom', sid)`` or ``('bond', (n, m))``.
+
+    THE MIDPOINT, which always exists.  A cumulated double-bond chain with an odd atom count has a
+    middle atom (an allene, an even number of double bonds); one with an even count has a middle bond
+    (an extended cis/trans unit, an odd number).  Two bonded owners are their own midpoint bond, which
+    is what a plain cis/trans unit and an atropisomer have in common -- the atropisomer's pivot is
+    single, so the chain walk would not find it.
+
+    ``None`` when no chain joins the two, which a degraded record can produce; the caller logs it and
+    names an atom instead.  Never raises: a writer's job is to write what it was handed.  The walk is
+    capped at the atom count, as the core's is, because the pair is caller input and an all-double
+    cycle is storable.
+    """
+    if b in mol.neighbors_of(a):
+        return 'bond', (a, b)
+    chain = [a]
+    previous = None
+    current = a
+    while len(chain) <= len(mol):
+        following = next((n for n in mol.neighbors_of(current)
+                          if n != previous and mol.order_of(current, n) == 2), None)
+        if following is None:
+            return None
+        chain.append(following)
+        if following == b:
+            break
+        previous, current = current, following
+    else:
+        return None
+    half = len(chain) // 2
+    if len(chain) % 2:
+        return 'atom', chain[half]
+    return 'bond', (chain[half - 1], chain[half])
 
 
 def order_from_bond_type(type_, where, log):
@@ -203,7 +245,8 @@ class CtabBond:
 class Ctab:
     """A parsed connection table, version- and surface-independent."""
     __slots__ = ('title', 'program', 'comment', 'dimensionality', 'chiral', 'atoms', 'bonds',
-                 'sgroups', 'groups', 'aliases', 'log', 'meta', 'unknown_hydrogens', 'channels')
+                 'sgroups', 'groups', 'bond_groups', 'aliases', 'log', 'meta', 'unknown_hydrogens',
+                 'channels')
 
     def __init__(self):
         self.title = ''
@@ -214,9 +257,14 @@ class Ctab:
         self.atoms = []
         self.bonds = []
         self.sgroups = []
-        # atom position -> (stereo kind, group id).  Populated from V3000 COLLECTION, V2000's
-        # enhanced-stereo Sgroup encoding, or MRV's @mrvStereoGroup -- one model, three spellings.
+        # atom position -> (stereo kind, group id).  Populated from a V3000 COLLECTION block or MRV's
+        # `@mrvStereoGroup` -- one model, two spellings.  V2000 fills neither this nor `bond_groups`:
+        # it has one chiral bit for the whole record and no collection of either shape.
         self.groups = {}
+        # (atom position a, atom position b) -> (stereo kind, group id).  The bond-shaped half of the
+        # same namespace as `groups`, whose ids the reader renumbers off the atom half, so a file using
+        # group 1 for both `STERAC1` and `STEBRAC1` still lands as two collections.
+        self.bond_groups = {}
         self.aliases = {}
         self.log = []
         #: Record metadata the dialect that filled this table collected -- an SDF's data fields, a CML
@@ -411,6 +459,20 @@ class Ctab:
                     except ValueError as e:
                         log.append(LogRecord('ctab:stereo-group-dropped', (),
                                              f'stereo group on atom {pos + 1} dropped: {e}', LOST))
+
+        # The axis half of the same namespace, translated from Ctab positions into stable ids the same
+        # way.  The bond a collection names need not be the pair the axis is owned by -- a longer
+        # cumulated chain is named on a middle bond -- and the pair goes to the setter as it stands:
+        # `set_bond_stereo_group` resolves any chain bond to the axis owners itself.  A bond no unit
+        # owns becomes a label on one of its atoms, which the seal logs.
+        if self.bond_groups:
+            with mol.edit():
+                for (pa, pb), (kind, group) in self.bond_groups.items():
+                    try:
+                        mol.set_bond_stereo_group(sids[pa], sids[pb], kind, group)
+                    except (KeyError, ValueError) as e:
+                        log.append(LogRecord('ctab:stereo-group-dropped', (),
+                                             f'bond stereo group on bond {pa + 1}-{pb + 1} dropped: {e}', LOST))
 
         if not ignore_stereo:
             # The atom parity field is measured in the file's own atom-block order, so the positions

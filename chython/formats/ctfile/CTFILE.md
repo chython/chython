@@ -256,20 +256,33 @@ M  V30 BEGIN COLLECTION
 M  V30 MDLV30/STEABS ATOMS=(n a1 a2 ...)
 M  V30 MDLV30/STERAC1 ATOMS=(n a1 a2 ...)
 M  V30 MDLV30/STEREL1 ATOMS=(n a1 a2 ...)
+M  V30 MDLV30/STEBABS BONDS=(n b1 b2 ...)
+M  V30 MDLV30/STEBRAC1 BONDS=(n b1 b2 ...)
+M  V30 MDLV30/STEBREL1 BONDS=(n b1 b2 ...)
 M  V30 END COLLECTION
 ```
 
-| Collection name | Meaning |
-|-----------------|---------|
-| `MDLV30/STEABS` | **Absolute** (ABS): configuration is exactly as drawn, a single known enantiomer |
-| `MDLV30/STERACn` | **Racemic** (AND group n): relative config known, mixture of both enantiomers present |
-| `MDLV30/STERELn` | **Relative** (OR group n): relative config known, one enantiomer present, which one unknown |
+| Collection name | Plane | Meaning |
+|-----------------|-------|---------|
+| `MDLV30/STEABS` | atom | **Absolute** (ABS): configuration is exactly as drawn, a single known enantiomer |
+| `MDLV30/STERACn` | atom | **Racemic** (AND group n): relative config known, mixture of both enantiomers present |
+| `MDLV30/STERELn` | atom | **Relative** (OR group n): relative config known, one enantiomer present, which unknown |
+| `MDLV30/STEBABS` | bond | Absolute: bond configuration exactly as drawn |
+| `MDLV30/STEBRACn` | bond | AND group n for double bonds and atropisomer axial bonds |
+| `MDLV30/STEBRELn` | bond | OR group n for double bonds and atropisomer axial bonds |
 
 - `n` is an integer >= 1 identifying the group
 - Multiple, independently flipping groups can coexist (e.g. STERAC1, STERAC2, STEREL1)
-- Within one group all atoms flip together — their relative configuration is fixed
-- Atoms not listed in any collection default to ABS
-- ATOMS list format: `(count atom_index atom_index ...)`
+- Within one group all atoms (or bonds) flip together — their relative configuration is fixed
+- Atoms not listed in any atom collection default to ABS; same for bonds
+- List format: `(count index index ...)` — the first integer is the count, followed by that many indices
+- **Atom and bond namespaces are independent**: `STERAC1` and `STEBRAC1` are two separate collections
+  and can coexist on one molecule
+- chython anchors an allene configuration on its central atom and names the unit by the two chain
+  terminals, so an allene's group is written as an atom collection on that atom, never as a collection
+  over the two axis bonds. Both spellings reach the same unit and emit the same line: on
+  `FC(Br)=[C@]=C(F)Br`, `set_stereo_group(4, 3, 1)` and `set_bond_stereo_group(2, 4, 3, 1)` — a chain
+  bond, which resolves to the unit that owns the chain — each write `MDLV30/STERAC1 ATOMS=(1 4)`
 
 ### 2.7 Sgroup Block
 
@@ -454,6 +467,12 @@ defines stereo.
 Groups of stereocenters with a stated epistemic relationship: ABS, AND (`STERAC`) and OR (`STEREL`),
 per the table in §2.6. Typical sources: a single known enantiomer for ABS, a racemate for AND, a
 natural-product isolate of unassigned absolute configuration for OR.
+
+Bonds carry the same three relationships in their own collections, `STEBABS`, `STEBRAC` and
+`STEBREL`, over double bonds and atropisomer axial bonds. The two prefixes are independent in the
+format. chython holds **one** id space, so a file that uses `STERAC1` and `STEBRAC1` for two different
+mixtures has the bond half read under a free id and logs `v3000:collection-namespaces-merged`; a
+collection needing both spellings on write is split the same way, logging `v3000:collection-split`.
 
 ### 7.4 V2000 vs V3000 Bond Stereo Value Mapping
 

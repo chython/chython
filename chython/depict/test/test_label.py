@@ -581,6 +581,53 @@ def test_an_atom_in_no_stereo_group_gets_no_mark():
     assert marks == {}, marks
 
 
+def test_an_axis_group_mark_appears_once_at_the_anchor():
+    """One mark per axis member, at the anchor its group byte lives at -- not at both owner atoms.
+
+    A trans-butene axis has two owners; both answer `stereo_group_of` as the anchor does.  The mark
+    belongs at the anchor only.
+    """
+    mol = smiles('C/C=C/C')
+    mol.clean2d()
+    double_bond = next(b for b in mol.bonds() if b.order == 2)
+    mol.set_stereo_group((double_bond.n, double_bond.m), 2, 1)
+    assert mol.bond_stereo_groups(), 'premise: the axis carries OR 1'
+    out = {}
+    for sid, lbl in labels(mol, mol.coordinates(), DepictStyle()).items():
+        for ann in lbl.annotations:
+            text = ''.join(r.text for r in ann.runs)
+            if text and not text.isdigit():
+                out[sid] = text
+    assert list(out.values()) == ['o1'], out
+    log = []
+    mol.depict(log=log)
+    assert not any(r.rule == 'depict:bond-stereo-groups-not-drawn' for r in log)
+
+
+def test_an_allene_group_mark_appears_once_at_the_midpoint():
+    """One mark per allene member, at the midpoint anchor -- not at the two terminal owners.
+
+    The allene anchor is the central cumulated atom; both owner atoms and the midpoint answer
+    `stereo_group_of`, but only the midpoint is the anchor.
+    """
+    mol = smiles('CC=C=CC')
+    mol.clean2d()
+    # penta-2,3-diene: the midpoint atom appears in both double bonds; the owners flank it
+    db_atoms = {a for b in mol.bonds() if b.order == 2 for a in (b.n, b.m)}
+    mid = next(a for a in db_atoms if sum(1 for b in mol.bonds() if b.order == 2 and a in (b.n, b.m)) == 2)
+    owners = tuple(sorted(db_atoms - {mid}))
+    assert len(owners) == 2, f'expected two owner carbons, got {owners}'
+    mol.set_stereo_group(owners, 2, 1)
+    assert mol.bond_stereo_groups(), 'premise: the allene carries OR 1'
+    out = {}
+    for sid, lbl in labels(mol, mol.coordinates(), DepictStyle()).items():
+        for ann in lbl.annotations:
+            text = ''.join(r.text for r in ann.runs)
+            if text and not text.isdigit():
+                out[sid] = text
+    assert list(out.values()) == ['o1'], out
+
+
 def test_the_cip_descriptor_and_the_group_read_as_one_line():
     """one `Text`, two runs: `(R)&1` is one statement about one centre, and the row holds one
 

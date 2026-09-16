@@ -27,7 +27,8 @@ import gzip
 import json
 from struct import pack
 
-from .pach3_corpus import BUILDERS, V3_PATH, V4_PATH, answers, drawn
+from .pach3_corpus import (BGROUP_BUILDERS, BGROUP_PATH, BUILDERS, V3_PATH, V4_PATH,
+                           answers, answers_bgroup, drawn)
 
 
 def _write(path, version):
@@ -44,6 +45,25 @@ def _write(path, version):
     print('%s: %d records, %d bytes' % (path.name, len(BUILDERS), len(out)))
 
 
+def _write_bgroup(path):
+    """Each builder contributes both a v4 record and a drawn v3 record."""
+    entries = [(name + sfx, build, 4 if sfx == '_v4' else 3)
+               for name, build in BGROUP_BUILDERS
+               for sfx in ('_v4', '_v3')]
+    out = bytearray(pack('<I', len(entries)))
+    for name, build, version in entries:
+        mol = build()
+        if version == 3:
+            mol = drawn(mol)
+        record = mol.pack(compressed=False, version=version)
+        blob = json.dumps(answers_bgroup(mol), sort_keys=True).encode()
+        payload = name.encode()
+        out += pack('<III', len(payload), len(record), len(blob)) + payload + record + blob
+    gzip.open(path, 'wb').write(bytes(out))
+    print('%s: %d records, %d bytes' % (path.name, len(entries), len(out)))
+
+
 if __name__ == '__main__':
     _write(V3_PATH, 3)
     _write(V4_PATH, 4)
+    _write_bgroup(BGROUP_PATH)

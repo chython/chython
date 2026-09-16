@@ -1300,14 +1300,13 @@ def test_the_fixpoint_runs_past_a_third_round_when_the_molecule_needs_it():
         check(*_ring(order, (1, 1, 1, 1, 1, 2), partition), f'creation order {order}')
 
 
-def test_a_forged_unspecified_byte_reads_the_same_in_both_views():
+def test_a_numbered_unspecified_byte_never_reaches_a_view():
     """The canonical view renumbers OR and AND and passes every other kind through unchanged.
 
-    `set_stereo_group` forces the number to 0 for kinds 0 and 1, so a nonzero number under kind 0
-    can only arrive from a forged buffer -- `from_bytes` checks the segment's LENGTH and not its
-    bytes.  When it does, `canonical_stereo_groups()` must report the same key `stereo_groups()`
-    does: the view's job is to renumber the two numbered kinds, and reporting (0, 0) for a stored
-    (0, 5) would be the view inventing a normalisation of a byte it does not own (ruling F79).
+    Kinds 0 and 1 carry no number, in `set_stereo_group` and in `from_bytes` alike, so the view is
+    never handed a stored (0, 5) to decide about -- a normalisation of a byte it does not own (ruling
+    F79) is not one of its options.  The pass-through itself is stated on ABS, the numberless kind a
+    caller can reach.
     """
     m = MoleculeContainer()
     with m.edit():
@@ -1320,13 +1319,23 @@ def test_a_forged_unspecified_byte_reads_the_same_in_both_views():
     buffer = bytearray(m.to_bytes())
     assert buffer.count(165) == 1, 'forged buffer: the group byte has to be the only 165 in it'
     buffer[buffer.index(165)] = 5                       # kind 0, number 5: unreachable via the API
-    forged = MoleculeContainer.from_bytes(bytes(buffer))
-    assert forged.stereo_groups() == {(SG_UNSPECIFIED, 5): [sids[0]]}, 'the byte survived the trip'
-    assert forged.canonical_stereo_groups() == {(SG_UNSPECIFIED, 5): [sids[0]]}, \
-        'so the canonical view has to agree with it'
-    assert forged.canonical_stereo_group_ambiguities() == (), 'and nothing is ambiguous here'
+    with pytest.raises(ValueError, match='only kinds 2 and 3 are numbered'):
+        MoleculeContainer.from_bytes(bytes(buffer))
     assert m.canonical_stereo_groups() == {(SG_OR, 1): [sids[0]]}, \
-        'while a real OR group IS renumbered, so the pass-through is not just inaction'
+        'a numbered kind IS renumbered, so the pass-through below is not just inaction'
+
+    abs_m = MoleculeContainer()
+    with abs_m.edit():
+        sids = [abs_m.add_atom('C', implicit_h=1), abs_m.add_atom('C', implicit_h=3),
+                abs_m.add_atom('Cl'), abs_m.add_atom('F'), abs_m.add_atom('Br')]
+        for s in sids[1:]:
+            abs_m.add_bond(sids[0], s, 1)
+        abs_m.set_parity(sids[0], 1)
+        abs_m.set_stereo_group(sids[0], SG_ABS, 0)
+    assert abs_m.stereo_groups() == {(SG_ABS, 0): [sids[0]]}
+    assert abs_m.canonical_stereo_groups() == {(SG_ABS, 0): [sids[0]]}, \
+        'an unnumbered kind passes through the canonical view unchanged'
+    assert abs_m.canonical_stereo_group_ambiguities() == (), 'and nothing is ambiguous here'
 
 
 # --- the word IV screen -------------------------------------------------------------------------
@@ -1615,11 +1624,14 @@ def _kind_view(m, sids, spec, anchors):
     Member ids cannot be compared across two creation orders -- they ARE the relabelling -- and the
     stored bytes must not be compared either, since they are the one thing that legitimately differs
     between two encodings of one molecule.  What each group HOLDS is a fact about the molecule.
+
+    An AXIS member is the pair of atoms the unit is named on, both in one component, so either end
+    names the component; a centre member is a bare id.
     """
     n = len(spec[0])
     parities = _component_parities(m, sids, spec, anchors)
     slot = {s: k for k, s in enumerate(sids)}
-    return {key: sorted(parities[slot[a] // n] for a in members)
+    return {key: sorted(parities[slot[a[0] if isinstance(a, tuple) else a] // n] for a in members)
             for key, members in m.canonical_stereo_groups().items()}
 
 

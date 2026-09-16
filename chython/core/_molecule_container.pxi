@@ -61,7 +61,8 @@ cdef enum:
     # Both are intercepted in the replay before `_work_index`, which would read `a` as a stable id.
     OP_ADD_CONFORMER = 21
     OP_DROP_CONFORMER = 22
-    OP_HIGHEST = OP_DROP_CONFORMER
+    OP_SET_BOND_STEREO_GROUP = 23
+    OP_HIGHEST = OP_SET_BOND_STEREO_GROUP
 
 
 # deliberately NOT packed: natural alignment gives exactly 20 bytes and aligned loads
@@ -661,6 +662,29 @@ cdef object _isomers_fn():
         raise ImportError('isomer placement is implemented in `chython.chemistry`, which registers '
                           'it on import; `import chython.chemistry` (or `import chython`) first.')
     return _isomers_impl
+
+
+cdef object _kekule_form_impl = None
+
+
+def _set_kekule_form_fn(fn):
+    """Register the Kekule-form pass.  `chython.chemistry` calls this at its own init.
+
+    `fn` must have signature `fn(molecule) -> bool` and must mutate `molecule` in place.  A setter of
+    its own for the reason the one above has one: which Kekule form a molecule is stored in decides what
+    `thiele` can aromatise, and a caller wanting that decision without the rest of `canonicalize()` is
+    an ordinary caller.
+    """
+    global _kekule_form_impl
+    _kekule_form_impl = fn
+
+
+cdef object _kekule_form_fn():
+    global _kekule_form_impl
+    if _kekule_form_impl is None:
+        raise ImportError('the Kekule-form pass is implemented in `chython.chemistry`, which registers '
+                          'it on import; `import chython.chemistry` (or `import chython`) first.')
+    return _kekule_form_impl
 
 
 cdef object _reconstruct_impl = None
@@ -1282,6 +1306,58 @@ cdef class MoleculeContainer:
                               <int> (u.spare >> SU_UNNAMED_SHIFT)))
         return snapshots if snapshots else None
 
+    cdef list _harvest_stereo_group_owners(self):
+        """Every group byte that sits at a UNIT's anchor, as `(anchor slot, owner slot, other or -1)`.
+
+        Slots of the OLD molecule, which is what `_apply`'s `newidx` translates.  A byte is carried by
+        slot and the fresh constitution decides anchors again, so what identifies the unit across the
+        edit is its OWNERS -- constitution, and the same key a bond statement resolves through.  The
+        one-owner rows are carried so the apply can skip them by their own answer rather than by a
+        rule stated twice.
+
+        None when nothing can move: no segment, no byte, or no unit under a byte -- the common edit,
+        which then allocates nothing.  Perceives UNMARKED and therefore reallocates the old arena
+        (rulings F60, F70), so it runs before any pointer into it is taken.
+        """
+        cdef uint32_t n_atoms = self._structure.header.atom_count
+        cdef stereo_unit_t *units
+        cdef stereo_unit_t *u
+        cdef uint8_t *sg
+        cdef atom_t *atoms
+        cdef uint32_t *ptr
+        cdef halfedge_t *edges
+        cdef uint32_t k, count, a = 0, b = 0
+        cdef bint any_byte = False
+        cdef list out = []
+        if not n_atoms or not structure_has(self._structure, SEG_STEREO_GROUPS):
+            return None
+        sg = structure_stereo_groups(self._structure)
+        for k in range(n_atoms):
+            if sg[k]:
+                any_byte = True
+                break
+        if not any_byte:
+            return None
+        ensure_stereo_units_unmarked(self._structure)
+        count = structure_stereo_unit_count(self._structure)
+        if not count:
+            return None
+        # RE-FETCHED, all of them: the perceive above moved the arena.
+        sg = structure_stereo_groups(self._structure)
+        units = structure_stereo_units(self._structure)
+        atoms = self._structure.atoms()
+        ptr = csr_ptr(self._structure)
+        edges = csr_edges(self._structure)
+        for k in range(count):
+            u = &units[k]
+            if not sg[u.anchor]:
+                continue
+            if stereo_unit_owners(atoms, ptr, edges, u, &a, &b) == 2:
+                out.append((<int> u.anchor, <int> a, <int> b))
+            else:
+                out.append((<int> u.anchor, <int> a, -1))
+        return out if out else None
+
     cdef int _replay_parities(self, list snapshots) except -1:
         """Re-base or drop each harvested sign against the rebuilt arena.
 
@@ -1388,12 +1464,20 @@ cdef class MoleculeContainer:
         cdef uint32_t jn = self._journal_len
         cdef journal_t *jr = self._journal
         cdef uint32_t i, k, wi, wj, n_add = 0, e_add = 0, w_add = 0
+        # THE TWO GROUP OPS RESOLVE AT THE SEAL, so `_apply` walks the journal a second time after
+        # `rebuild_derived`: `ni_src`/`ni_dst` (declared with the other work-index cursors below)
+        # carry a statement's atoms into the fresh indexing and `anchor` is the slot the unit table
+        # gives it.
+        cdef uint32_t anchor
+        cdef stereo_unit_t *sgu
         cdef uint8_t jop
         # The anchors the journal states a parity for itself.  Built here rather than in the
         # harvest because this loop is already reading every record, and left None when there is no
         # such record so that the common edit allocates nothing.
         cdef set touched = None
         cdef list snapshots = None
+        cdef list sg_owners = None
+        cdef tuple sg_row
         for i in range(jn):
             jop = jr[i].op
             if jop == OP_ADD_ATOM:
@@ -1410,6 +1494,8 @@ cdef class MoleculeContainer:
                 conf_drops += 1
             elif jop == OP_SET_WEDGE:
                 w_add += 1
+            elif jop == OP_SET_BOND_STEREO_GROUP:
+                want_sg = True
             elif jop == OP_SET_STEREO_GROUP:
                 want_sg = True
             elif jop == OP_WANT_PARITY:
@@ -1521,7 +1607,7 @@ cdef class MoleculeContainer:
         else:
             scratch.wpar = NULL
         _bp += _sz.wpar
-        scratch.cip = <cip_edit_t *> _bp
+        scratch.cip = <cip_edit_t *> _bp;  _bp += _sz.cip
 
         cdef atom_t *work = scratch.work
         cdef uint8_t *live = scratch.live
@@ -1566,6 +1652,8 @@ cdef class MoleculeContainer:
             # OLD molecule's units, which reallocates it (ruling F60).  Inside the `try` so that a
             # failure here still discards the journal, like every other failure in the apply.
             snapshots = self._harvest_parities(touched)
+            if want_sg:
+                sg_owners = self._harvest_stereo_group_owners()
             if n_atoms_old:
                 memcpy(work, self._structure.atoms(), n_atoms_old * sizeof(atom_t))
             if n_add:
@@ -1760,8 +1848,12 @@ cdef class MoleculeContainer:
                     # `wedge_of()` / `wedges()` read the wedge segment directly.  The parity
                     # will be derived from (wedge code, coordinates, reference order) by the
                     # wedge-ingestion work.
-                elif op == OP_SET_STEREO_GROUP:
-                    wsg[wi] = sg_pack(<uint8_t> rec.v, <uint8_t> rec.b)
+                elif op == OP_SET_STEREO_GROUP or op == OP_SET_BOND_STEREO_GROUP:
+                    # BOTH GROUP OPS RESOLVE AFTER THE REBUILD, in the walk below `rebuild_derived`:
+                    # neither spelling determines its own slot without the fresh unit table, so
+                    # neither writes `wsg[]` here.  Named in this chain so the "no replay arm" guard
+                    # keeps naming a genuinely unhandled op.
+                    pass
                 elif op == OP_SET_ATOM_CIP:
                     # `wi` came from `_work_index`, which raises for an atom the journal has not added
                     # yet -- so a descriptor op that precedes its atom's ADD_ATOM fails here rather
@@ -1947,6 +2039,100 @@ cdef class MoleculeContainer:
                 he_set_cip(he, cg.code)
 
             rebuild_derived(fresh)
+
+            # EVERY GROUP STATEMENT RESOLVES HERE, after the rebuild, and it can only resolve here:
+            # neither spelling determines its own slot.  An axis's owners do not give its anchor -- an
+            # allene's is the midpoint BETWEEN them, and a relocated atropisomer axis is anchored at
+            # whichever pivot was free (ruling F45) -- and a bare atom resolves through the unit
+            # anchored at it or, failing that, the unit that owns it.  Both need the fresh molecule's
+            # unit table, and the table needs the fresh CSR.
+            #
+            # ONE WALK FOR BOTH OPS, so journal order decides: two statements about one stereocentre
+            # in one scope leave the last one standing, whichever spelling each used.
+            if want_sg:
+                # CARRIED-OVER BYTES FIRST, before any statement of this session, so a fresh statement
+                # about the same unit still lands last.  A byte travels with its SLOT through the copy
+                # above, and the fresh constitution decides anchors again: an atropisomer axis
+                # re-anchors to whichever pivot is free (ruling F45), so the slot that held the byte can
+                # end up anchoring nothing.  Read from there the collection is a LABEL ON AN ATOM, a
+                # different member from the axis it was stated on, and `bond_stereo_groups()` has lost
+                # it -- silently, since the byte is still stored.
+                #
+                # THE UNIT IS IDENTIFIED BY ITS OWNERS and never by "some unit this atom owns": a pivot
+                # can own two units, so a first match would move the collection onto whichever element
+                # the fresh table lists first.  The owners are constitution, harvested from the old
+                # molecule, and `structure_owner_pair_anchor` resolves them here exactly as it resolves
+                # a bond statement below.
+                if sg_owners is not None:
+                    ensure_stereo_units_unmarked(fresh)
+                    fsg = structure_stereo_groups(fresh)
+                    for sg_row in sg_owners:
+                        ni = newidx[<uint32_t> sg_row[0]]
+                        if ni < 0 or sg_row[2] < 0:
+                            # the anchor atom is gone and its byte with it, or the unit has one owner
+                            # and is anchored at it, so no edit can strand the byte
+                            continue
+                        ni_src = newidx[<uint32_t> sg_row[1]]
+                        ni_dst = newidx[<uint32_t> sg_row[2]]
+                        if ni_src < 0 or ni_dst < 0:
+                            continue      # an owner is gone, so the unit is not this unit any more
+                        anchor = structure_owner_pair_anchor(fresh, <uint32_t> ni_src,
+                                                             <uint32_t> ni_dst)
+                        if anchor == SU_NO_REF or anchor == <uint32_t> ni:
+                            # the unit is gone -- its byte stays a label on the atom, which is what a
+                            # group stated on a pair nothing owns already degrades to -- or it is
+                            # anchored where it was and there is nothing to move
+                            continue
+                        if fsg[anchor]:
+                            # One byte per slot, and the anchor's is already spent on a collection of
+                            # its own.  NEVER DROPPED: the stranded byte keeps the atom it is on, as a
+                            # label, and the axis spelling is what this edit lost.
+                            self._log_event('edit:stereo-group-anchor-taken', 'edit',
+                                            'the edit re-anchored the unit owned by atoms %d and %d to '
+                                            'an atom that already states a collection, so the group on '
+                                            'atom %d is kept as a label there'
+                                            % (numbers[ni_src], numbers[ni_dst], numbers[ni]),
+                                            mc_lost())
+                            continue
+                        fsg[anchor] = fsg[ni]
+                        fsg[ni] = 0
+                for i in range(jn):
+                    if jr[i].op == OP_SET_STEREO_GROUP:
+                        ni_src = newidx[self._work_index(jr[i].a, n_atoms_old)]
+                        ni_dst = ni_src
+                    elif jr[i].op == OP_SET_BOND_STEREO_GROUP:
+                        ni_src = newidx[self._work_index(jr[i].a, n_atoms_old)]
+                        ni_dst = newidx[self._work_index(jr[i].b, n_atoms_old)]
+                    else:
+                        continue
+                    if ni_src < 0 or ni_dst < 0:
+                        continue      # an atom of the statement was deleted; the group goes with it
+                    ensure_stereo_units_unmarked(fresh)
+                    if ni_src == ni_dst:
+                        # A BARE ATOM, resolved as `stereo_group_anchor_of` reads it: the unit
+                        # anchored here outranks a unit that merely owns this atom, because that is
+                        # where the byte would have to live to be read back.
+                        sgu = stereo_unit_of(fresh, <uint32_t> ni_src)
+                        anchor = sgu.anchor if sgu is not NULL \
+                            else _owning_unit_anchor(fresh, <uint32_t> ni_src)
+                        if anchor == SU_NO_REF:
+                            anchor = <uint32_t> ni_src      # a label on an atom that owns no unit
+                        structure_stereo_groups(fresh)[anchor] = sg_pack(<uint8_t> jr[i].v,
+                                                                        <uint8_t> jr[i].b)
+                        continue
+                    anchor = stereo_group_pair_anchor(fresh, <uint32_t> ni_src, <uint32_t> ni_dst)
+                    if anchor == SU_NO_REF:
+                        # NEVER DROPPED.  A group is a label, so a pair the sealed constitution gives
+                        # no unit degrades to a label on the lower-numbered of the two atoms and says
+                        # so: the collection, its kind and its id survive, and what is lost is the
+                        # axis spelling of a statement nothing supports.
+                        anchor = <uint32_t> (ni_src if jr[i].a < jr[i].b else ni_dst)
+                        self._log_event('edit:stereo-group-not-an-axis', 'edit',
+                                        'atoms %d and %d own no stereo unit in the sealed molecule, '
+                                        'so the group stated on them is kept as a label on atom %d'
+                                        % (jr[i].a, jr[i].b, min(jr[i].a, jr[i].b)), mc_repaired())
+                    structure_stereo_groups(fresh)[anchor] = sg_pack(<uint8_t> jr[i].v,
+                                                                    <uint8_t> jr[i].w)
 
             index_of = {}
             for i in range(n_new):
@@ -2728,20 +2914,21 @@ cdef class MoleculeContainer:
                              remove_right=remove_right, keep_bond_left=keep_bond_left,
                              keep_bond_right=keep_bond_right)
 
-    def detached_smiles(self, cuts not None, str spec='', reserve=None):
+    def detached_smiles(self, cuts not None, str spec='', reserve=None, log=None):
         """This molecule minus the dropped side of every cut, the cut bonds left as open ring bonds.
 
         `cuts` is `{attachment_id: (keep_n, drop_n)}` -- ORDERED pairs, nothing in `C-C` saying which
         half the caller wants -- and `reserve` withholds the other fragments' attachment ids so several
         fragments can be written for one join.  Answers a `DetachedSmiles`.  The module-level
         `detached_smiles` in `_smiles_write.pxi` owns the rules and the four refusals; this forwards.
+        `log` is the writer's loss list, the one `write_smiles` takes.
 
         NOT CANONICAL AND NOT CACHED, for `sticky_smiles`' reason and one of its own: the cuts and the
         reserved ids are the caller's, so no spec identifies the result.  That is also why it is a
         method rather than a `format()` key -- `format(mol, spec)` promises a pure function of the
         molecule and the spec, and this takes two arguments neither of them can carry.
         """
-        return detached_smiles(self, cuts, spec, reserve)
+        return detached_smiles(self, cuts, spec, reserve, log)
 
     def as_query(self):
         """This molecule as a `QueryContainer` that matches it and its supergraphs.
@@ -3716,7 +3903,7 @@ cdef class MoleculeContainer:
                         p_xyz = oxyz + <size_t> model * o_atoms + i
                         mol.set_xyz(<uint32_t> new_of_slot[i], xyz_read_x(p_xyz),
                                     xyz_read_y(p_xyz), xyz_read_z(p_xyz), model=model)
-            for i in range(other._structure.header.atom_count):
+            for i in range(o_atoms):
                 for k in range(ptr[i], ptr[i + 1]):
                     if edges[k].wedge:
                         mol.set_wedge(<uint32_t> new_of_slot[i],
@@ -4331,6 +4518,75 @@ cdef class MoleculeContainer:
                             BOND_CIP_CODES[code]
         return out
 
+    def assign_cip(self):
+        """Compute this molecule's CIP descriptors and store them.  True when one was written.
+
+        RECOMPUTES.  A stored descriptor is never read as a hint, a tie-break or a cache, and the
+        computed answer overwrites what an input stated (RULES.md 1.5).  This phase writes R and S where
+        CIP rules 1a, 1b and 2 decide the site; every other configured site is left with no descriptor
+        and one `cip:undecided` line in `log.by_stage('cip')`.
+
+        A site with no parity gets no descriptor and no line: a ranking without a configuration is not a
+        descriptor, and a molecule that states nothing is not a molecule with a problem.
+        """
+        self._require_clean()
+        cdef Structure structure = self._structure
+        cdef cip_ctx_t ctx
+        cdef stereo_unit_t *units
+        cdef stereo_unit_t *u
+        cdef atom_t *atoms
+        cdef uint32_t count, i
+        cdef uint32_t order[4]
+        cdef uint8_t parity, code, stored
+        cdef int decided
+        cdef uint32_t written = 0
+        cdef list numbers = self._numbers
+        # BEFORE ANY POINTER INTO THE ARENA: this appends SEG_STEREO_UNIT and so may move the buffer
+        ensure_stereo_units(structure)
+        atoms = structure.atoms()
+        units = structure_stereo_units(structure)
+        count = structure_stereo_unit_count(structure)
+        cip_ctx_init(&ctx, structure)
+        try:
+            for i in range(count):
+                u = &units[i]
+                if u.kind != SU_TETRA or not (u.spare & SU_STEREOGENIC):
+                    continue
+                parity = structure_parity_at(structure, u.anchor)
+                if parity == 0:
+                    continue
+                try:
+                    decided = cip_rank_directions(&ctx, u, order)
+                except OverflowError:
+                    # a node wider than CIP_KIDS_MAX or a branch deeper than CIP_DEPTH_MAX: refuse the
+                    # site through the same channel a tie takes, and go on to the next one
+                    decided = 1
+                if decided:
+                    self._log_event('cip:undecided', 'cip',
+                                    'atom %d: rules 1a/1b/2 do not settle the site'
+                                    % numbers[u.anchor], mc_refused())
+                    continue
+                if translate_parity(parity, order) == CIP_R_PARITY:
+                    code = CIP_CODE_R
+                else:
+                    code = CIP_CODE_S
+                stored = at_cip(&atoms[u.anchor])
+                if stored and stored != code:
+                    self._log_event('cip:disagreed', 'cip',
+                                    'atom %d: stated %s, computed %s'
+                                    % (numbers[u.anchor], ATOM_CIP_CODES[stored],
+                                       ATOM_CIP_CODES[code]), mc_repaired())
+                at_set_cip(&atoms[u.anchor], code)
+                written += 1
+        finally:
+            cip_ctx_free(&ctx)
+        if written:
+            # the nibble is outside the canonical form, the feature words and every derived segment, so
+            # writing it on the sealed arena is sound; the bump only over-invalidates the caches
+            self._gen += 1
+        self._log_event('cip:assigned', 'cip', '%d descriptor(s) computed' % written, mc_info())
+        return written > 0
+
     def wedges(self):
         self._require_clean()
         cdef uint32_t *ptr = csr_ptr(self._structure)
@@ -4345,8 +4601,27 @@ cdef class MoleculeContainer:
                     out.append((self._numbers[i], self._numbers[e.to], e.wedge))
         return out
 
-    def set_stereo_group(self, uint32_t n, int kind, int group=0):
-        self._require(n)
+    def set_stereo_group(self, element, int kind, int group=0):
+        """State an enhanced-stereo collection on `element`.
+
+        FORGIVING IN.  `element` is `int | (int, int)`: an atom number, or the two atoms an axis is
+        named on -- its terminals for a cis/trans or allene chain, its pivots for an atropisomer --
+        in either order, adjacent or not.  A chain bond of a cumulene names the axis it belongs to.
+        The byte is stored at the unit's ANCHOR slot, which for an allene is the midpoint between the
+        two atoms named here.
+
+        A bare `int` resolves the same way `stereo_group_anchor_of` reads it -- the unit ANCHORED
+        there if one is, else the anchor of a unit that OWNS the atom, else the atom's own slot -- so
+        the far end of a double bond names the same collection member its near end does, which is
+        what one namespace means.  An atom that anchors nothing and owns nothing keeps the byte at
+        its own slot: a collection stated where this build's perception finds no unit is stored, not
+        judged.  A PAIR that owns no unit degrades the same way -- the
+        byte goes to the lower-numbered of the two atoms and `stereo_groups()` reports `n` rather
+        than `(n, m)`, logged `edit:stereo-group-not-an-axis`.  A pair that is neither a bond nor any
+        unit's owners raises `KeyError((n, m))`: two unrelated atoms name no element at all, which is
+        a caller error and not a garbage input.
+        """
+        cdef uint32_t n, m
         if kind < 0 or kind > 3:
             raise ValueError('kind must be 0 unspecified, 1 abs, 2 or, 3 and')
         if kind == 2 or kind == 3:
@@ -4354,40 +4629,185 @@ cdef class MoleculeContainer:
                 raise ValueError('OR and AND groups must have a group id in 1..%d' % STEREO_GROUP_MAX)
         else:
             group = 0
-        self._append(OP_SET_STEREO_GROUP, n, <uint32_t> group, kind)
+        if isinstance(element, tuple):
+            if len(element) != 2:
+                raise ValueError('an element is an atom number or a pair of them, not %r' % (element,))
+            n = <uint32_t> element[0]
+            m = <uint32_t> element[1]
+            self._require(n)
+            self._require(m)
+            # OUTSIDE A SESSION the answer is available now, so a pair naming no element at all is
+            # refused here -- the two spellings that DO name something are a bond and a unit's owners.
+            # Inside a session the sealed molecule does not exist yet and the same pair is resolved,
+            # and reported, by the seal.  Both refusals keep `KeyError((n, m))`, the ledger-13 witness.
+            if n == m or (self._scope_depth == 0 and not self._has_bond(n, m)
+                          and self.stereo_group_anchor_of((n, m)) is None):
+                raise KeyError((n, m))
+            self._append(OP_SET_BOND_STEREO_GROUP, n, m, kind, <uint32_t> group)
+        elif isinstance(element, int) and not isinstance(element, bool):
+            n = <uint32_t> element
+            self._require(n)
+            self._append(OP_SET_STEREO_GROUP, n, <uint32_t> group, kind)
+        else:
+            raise TypeError('an element is an atom number or a pair of them, not %r' % (element,))
         self._maybe_apply()
+
+    def set_bond_stereo_group(self, uint32_t n, uint32_t m, int kind, int group=0):
+        """`set_stereo_group((n, m), kind, group)`: the pair spelling, for a caller that has two
+        atom numbers rather than a tuple.  `n` and `m` need not be bonded -- a cumulene's owners are
+        three bonds apart -- and any chain bond of the axis names it.
+        """
+        self.set_stereo_group((n, m), kind, group)
 
     @property
     def has_stereo_groups(self):
         self._require_clean()
         return structure_has(self._structure, SEG_STEREO_GROUPS)
 
-    def stereo_group_of(self, uint32_t n):
+    def stereo_group_of(self, element):
+        """`(kind, group)` for any spelling `set_stereo_group` accepts; `(0, 0)` where none is stated.
+
+        CANONICAL OUT is `stereo_groups()`'s business; this answers the byte at the slot `element`
+        resolves to via `stereo_group_anchor_of`.  For a BARE ATOM: when the atom ANCHORS a unit, the
+        byte at its own slot is read; when it anchors nothing but OWNS a unit, the byte is read at that
+        unit's anchor instead -- so after the collision edit on the biaryl, `stereo_group_of(18)`
+        resolves to slot 17 (where atom 18's ring unit is anchored) and reads `(0, 0)`, while the AND 1
+        byte stranded at slot 18 is NOT read.  An atom that neither anchors nor owns reads its own slot.
+        For a two-owner unit, the PAIR spelling reads the byte without ownership resolution:
+        `stereo_group_of((1, 18))`.  A PAIR has no slot of its own: one naming no axis answers
+        `(0, 0)`, the byte the write degraded onto the lower atom being readable as that atom.
+        """
         self._require_clean()
-        cdef uint32_t i = <uint32_t> self._index_of[n]
+        cdef object anchor = self.stereo_group_anchor_of(element)
+        if anchor is None:
+            if isinstance(element, tuple):
+                return (STEREO_UNSPECIFIED, 0)
+            anchor = element
         if not structure_has(self._structure, SEG_STEREO_GROUPS):
             return (STEREO_UNSPECIFIED, 0)
+        cdef uint32_t i = <uint32_t> self._index_of[anchor]
         cdef uint8_t v = structure_stereo_groups(self._structure)[i]
         return (sg_kind(v), sg_group(v))
 
+    def stereo_group_anchor_of(self, element):
+        """The stable id a group stated on `element` is STORED at, or None when nothing owns it.
+
+        `element` is `int | (int, int)`: an atom number, or the two atoms an axis is NAMED on -- the
+        terminals of its double-bond chain, for every axial kind.  A PAIR IS NOT A BOND: those
+        terminals are the bond's own two ends only for a plain cis/trans bond, and are non-adjacent
+        for any longer cumulene.  A chain bond of that cumulene is accepted too and reaches the same
+        slot, so every honest spelling of one axis answers one anchor.  A writer needs this read
+        because an allene's byte lives at the chain midpoint, an atom that is neither owner, so no
+        arithmetic over the pair reaches it.
+
+        AN ANCHOR OUTRANKS AN OWNERSHIP.  A bare `int` names the unit ANCHORED at that atom when one
+        is, because that is where the byte would be written; an atom that anchors nothing but owns
+        something resolves to the thing it owns.  So an axis whose lower owner anchors some other
+        unit is reachable only as a pair, which is the reason the pair spelling exists.
+        Stereogenicity is not consulted -- `set_stereo_group` stores a byte at any atom's slot, so a
+        candidate resolves to its own anchor and this read is never narrower than the write it mirrors.
+        """
+        self._require_clean()
+        cdef uint32_t i, j
+        cdef uint32_t anchor
+        cdef stereo_unit_t *u
+        cdef Structure structure = self._structure
+        if isinstance(element, tuple):
+            if len(element) != 2:
+                raise ValueError('an element is an atom number or a pair of them, not %r' % (element,))
+            if element[0] == element[1]:
+                raise ValueError('an axis is named on two different atoms, not %r' % (element,))
+            i = <uint32_t> self._index_of[element[0]]
+            j = <uint32_t> self._index_of[element[1]]
+        elif isinstance(element, int) and not isinstance(element, bool):
+            i = <uint32_t> self._index_of[element]
+            j = i
+        else:
+            raise TypeError('an element is an atom number or a pair of them, not %r' % (element,))
+        # REALLOCATES THE ARENA: nothing above holds a pointer into it, and nothing below is taken
+        # before this line.
+        ensure_stereo_units_unmarked(structure)
+        if i == j:
+            u = stereo_unit_of(structure, i)
+            if u is not NULL:
+                return self._numbers[u.anchor]
+            anchor = _owning_unit_anchor(structure, i)
+        else:
+            anchor = stereo_group_pair_anchor(structure, i, j)
+        return None if anchor == SU_NO_REF else self._numbers[anchor]
+
     def stereo_groups(self):
+        """`{(kind, id): [member, ...]}` over ONE id namespace.
+
+        A member is an `int` for a one-owner element and an ascending `(a, b)` for an axis -- the
+        atoms the configuration is NAMED on, which for an allene are the chain terminals rather than
+        the midpoint the byte is stored at.  A slot carrying a byte that anchors no unit is a bare
+        `int`: the collection a file stated there is kept as stated.
+
+        ONE NAMESPACE, and that is the merge: an AND 1 on a centre and an AND 1 on an axis are one
+        collection here, because a collection is a set of stereocentres and both are stereocentres.
+        """
         self._require_clean()
         if not structure_has(self._structure, SEG_STEREO_GROUPS):
             return {}
-        cdef uint8_t *sg = structure_stereo_groups(self._structure)
-        cdef uint32_t i
+        cdef Structure structure = self._structure
+        # REALLOCATES THE ARENA: every pointer below is taken after it.
+        ensure_stereo_units_unmarked(structure)
+        cdef uint8_t *sg = structure_stereo_groups(structure)
+        cdef atom_t *atoms = structure.atoms()
+        cdef uint32_t *ptr = csr_ptr(structure)
+        cdef halfedge_t *edges = csr_edges(structure)
+        cdef list numbers = self._numbers
+        cdef stereo_unit_t *u
+        cdef uint32_t i, a = 0, b = 0
         cdef dict out = {}
-        for i in range(self._structure.header.atom_count):
-            if sg[i]:
-                out.setdefault((sg_kind(sg[i]), sg_group(sg[i])), []).append(
-                    self._numbers[i])
+        cdef object member
+        for i in range(structure.header.atom_count):
+            if not sg[i]:
+                continue
+            u = stereo_unit_of(structure, i)
+            if u is not NULL and stereo_unit_owners(atoms, ptr, edges, u, &a, &b) == 2:
+                member = tuple(sorted((numbers[a], numbers[b])))
+            else:
+                member = numbers[i]
+            out.setdefault((sg_kind(sg[i]), sg_group(sg[i])), []).append(member)
+        return out
+
+    @property
+    def has_bond_stereo_groups(self):
+        """Does any AXIS carry a group?  The subset `bond_stereo_groups()` reports, as a predicate.
+
+        Reads the unit table: knowing which anchors carry an AXIS group requires identifying each
+        anchor's unit, which determines whether the slot is a two-owner axis rather than a centre.
+        """
+        self._require_clean()
+        return bool(self.bond_stereo_groups())
+
+    def bond_stereo_groups(self):
+        """The AXIS members of `stereo_groups()`, a view of the same dict and the same ids.
+
+        Not a namespace of its own.  A format whose collection syntax is per-atom (CXSMILES `|&1:|`,
+        MRV `mrvStereoGroup`) writes the anchor of each member here; a format with a bond syntax
+        (V3000 `STEBRAC`) spells the axis its own way.  `{}` when no axis carries a group.
+        """
+        cdef dict out = {}
+        cdef object key, member
+        cdef list members, axes
+        for key, members in self.stereo_groups().items():
+            axes = []
+            for member in members:
+                if isinstance(member, tuple):
+                    axes.append(member)
+            if axes:
+                out[key] = axes
         return out
 
     def canonical_stereo_groups(self):
         """`stereo_groups()` with the opaque stored ids replaced by canonical ones.
 
-        Returns {(kind, canonical_id): [n, ...]}, the same shape `stereo_groups()` returns
-        and with the same memberships -- only the second half of each key moves.  Two molecules that
+        Returns {(kind, canonical_id): [member, ...]}, the same shape `stereo_groups()` returns --
+        a member is an `int` or an ascending pair, spelled exactly as there -- and with the same
+        memberships: only the second half of each key moves.  Two molecules that
         are the same molecule with the same stereo groups get the same dict here whatever ids their
         input files happened to use AND whatever order their atoms were created in, UP TO the
         permutation `canonical_stereo_group_ambiguities()` reports: where that tuple is empty -- the
@@ -4439,13 +4859,28 @@ cdef class MoleculeContainer:
         if not structure_has(self._structure, SEG_STEREO_GROUPS):
             return {}
         cdef uint8_t ids[256]
-        canonical_stereo_group_ids(self._structure, ids, NULL)
-        cdef uint8_t *sg = structure_stereo_groups(self._structure)
-        cdef uint32_t i
+        cdef Structure structure = self._structure
+        canonical_stereo_group_ids(structure, ids, NULL)
+        # REALLOCATES THE ARENA (the call above already did): every pointer below is taken after it.
+        ensure_stereo_units_unmarked(structure)
+        cdef uint8_t *sg = structure_stereo_groups(structure)
+        cdef atom_t *atoms = structure.atoms()
+        cdef uint32_t *ptr = csr_ptr(structure)
+        cdef halfedge_t *edges = csr_edges(structure)
+        cdef list numbers = self._numbers
+        cdef stereo_unit_t *u
+        cdef uint32_t i, a = 0, b = 0
         cdef dict out = {}
-        for i in range(self._structure.header.atom_count):
-            if sg[i]:
-                out.setdefault((sg_kind(sg[i]), ids[sg[i]]), []).append(self._numbers[i])
+        cdef object member
+        for i in range(structure.header.atom_count):
+            if not sg[i]:
+                continue
+            u = stereo_unit_of(structure, i)
+            if u is not NULL and stereo_unit_owners(atoms, ptr, edges, u, &a, &b) == 2:
+                member = tuple(sorted((numbers[a], numbers[b])))
+            else:
+                member = numbers[i]
+            out.setdefault((sg_kind(sg[i]), ids[sg[i]]), []).append(member)
         return out
 
     def canonical_stereo_group_ambiguities(self):
@@ -4515,6 +4950,56 @@ cdef class MoleculeContainer:
             out.append(frozenset(classes[number]))
         return tuple(out)
 
+    def canonical_bond_stereo_groups(self):
+        """A view of `canonical_stereo_groups()`: its AXIS members, under the same ids.
+
+        Not a namespace of its own and not a second pass.  A group byte sits at its unit's anchor
+        slot, so a centre and an axis stated as one collection are one key here as well, and this
+        answers that key's pair members alone.  Same guarantee and same limit as
+        `canonical_stereo_groups()` -- comparable key by key exactly where
+        `canonical_bond_stereo_group_ambiguities()` is empty -- and NOT a persistence format.
+
+        Returns {(kind, canonical_id): [(n, m), ...]}, the atoms each axis is NAMED on, which for an
+        allene are the chain terminals rather than the midpoint the byte is stored at.
+
+        A READ (ruling F79).  Raises `AutomorphismBudgetExceeded` for the same reason
+        `canonical_order` does, and by the same route: there is no degraded canonical id.
+        """
+        cdef dict out = {}
+        cdef object key, member
+        cdef list members, axes
+        for key, members in self.canonical_stereo_groups().items():
+            axes = []
+            for member in members:
+                if isinstance(member, tuple):
+                    axes.append(member)
+            if axes:
+                out[key] = axes
+        return out
+
+    def canonical_bond_stereo_group_ambiguities(self):
+        """The classes of `canonical_stereo_group_ambiguities()` that name a key holding an axis.
+
+        A view, for the same reason `canonical_bond_stereo_groups()` is one: there is one namespace,
+        so there is one ambiguity report, and this is the part of it a caller reading axes needs.  A
+        class is kept WHOLE where any of its keys holds an axis -- an ambiguity is a permutation of
+        the ids inside a class and dropping a key from it would understate what may move.
+
+        An empty tuple is a guarantee that every axis key compares; a non-empty one is an upper bound
+        on what moves.  The classes are ordered by their smallest `(kind, canonical_id)` (ruling F92),
+        so the tuple itself compares.
+
+        A read, and it does the same work as `canonical_stereo_group_ambiguities()`: call one or the
+        other, not both, if the cost matters.  Raises `AutomorphismBudgetExceeded` on the same path.
+        """
+        cdef object axis_keys = frozenset(self.canonical_bond_stereo_groups())
+        cdef list out = []
+        cdef object cls
+        for cls in self.canonical_stereo_group_ambiguities():
+            if cls & axis_keys:
+                out.append(cls)
+        return tuple(out)
+
     cdef dict _unit_dict(self, stereo_unit_t *u):
         cdef list numbers = self._numbers
         cdef uint32_t k, r
@@ -4523,10 +5008,24 @@ cdef class MoleculeContainer:
             r = u.refs[k]
             refs.append(None if r == SU_NO_REF else numbers[r])
         cdef int live_parity
+        cdef uint32_t a = 0, b = 0
+        cdef object owners
         # Parity is read from SEG_PARITY at the anchor's slot.
         live_parity = structure_parity_at(self._structure, u.anchor)
+        if stereo_unit_owners(self._structure.atoms(), csr_ptr(self._structure),
+                              csr_edges(self._structure), u, &a, &b) == 1:
+            owners = numbers[a]
+        else:
+            owners = tuple(sorted((numbers[a], numbers[b])))
         return {'kind': u.kind, 'parity': live_parity, 'n_refs': u.n_refs,
                 'anchor': numbers[u.anchor], 'refs': tuple(refs),
+                # THE WIRE'S KEY beside memory's.  `anchor` is the slot the parity and the stereo
+                # group byte live at; `owners` is the atom or atom PAIR the configuration is named
+                # on, which is what a pach entry, a V3000 collection and a CXSMILES member list
+                # spell.  An `int` for a one-owner kind, an ascending pair for an axis.  They differ:
+                # an allene's owners are its chain terminals and its anchor is the midpoint between
+                # them.
+                'owners': owners,
                 # The high nibble only, not the flag bits sharing the byte with it.  A MASK of which
                 # `refs` slots hold an unnamed direction, not a count (ruling F41) -- renamed from
                 # `unnamed_directions` so that no consumer reads the new value as the old one.
@@ -4542,7 +5041,7 @@ cdef class MoleculeContainer:
     def stereo_units(self):
         """Every place in this molecule that COULD carry a configuration, as a list of dicts.
 
-        A unit is `{kind, parity, n_refs, anchor, refs, unnamed_mask, stereogenic}`.  `anchor` is the stable id
+        A unit is `{kind, parity, n_refs, anchor, owners, refs, unnamed_mask, stereogenic}`.  `anchor` is the stable id
         the parity is stored against.  `refs` is always a 4-tuple naming the anchor's directions,
         laid out per kind: an ATOM kind (tetrahedral) packs four directions in one order -- heavy
         neighbours in CSR ascending order, then explicit hydrogens ascending, then `None` for each
@@ -4830,14 +5329,15 @@ cdef class MoleculeContainer:
         answers it cannot.  This asks nothing and judges nothing: a caller reaching for it has already
         decided that what the molecule says about configuration is not to be kept.
 
-        FOUR KINDS OF STATE, and clearing only the parities is the trap:
+        FIVE KINDS OF STATE, and clearing only the parities is the trap:
 
         * the atom parities -- ALL of them, justified or not;
         * the WEDGES on the edges.  Not optional: `chython/formats/ctfile` writes back the wedges a
           molecule carries rather than re-deriving them, and its reader derives parities FROM wedges,
           so a wipe that left them behind would be undone by one molfile round trip;
-        * the ABS/AND/OR STEREO GROUP membership.  An AND-group membership with no parity inside it
-          names a configuration that no longer exists;
+        * the ABS/AND/OR STEREO GROUP membership -- every group, whichever kind of unit stated it,
+          because one byte per anchor slot is the whole of that state.  An AND-group membership with
+          no parity inside it names a configuration that no longer exists;
         * the stored CIP DESCRIPTORS on atoms and bonds.  An `(R)` on an atom with no parity is
           actively wrong, and stored CIP exists for external consumers, so it would be trusted.
 
@@ -4859,15 +5359,16 @@ cdef class MoleculeContainer:
         empty -- so `{}` means "this molecule had no stereo at all" and the return value is falsy
         exactly then.  `validate_stereo`'s flat list of stable ids is not extended because it cannot
         be: that method reports one kind of state, where a list of ids says everything there is to
-        say, while this one touches five readers, and a union list would tell a caller that atom 2
+        say, while this one touches six readers, and a union list would tell a caller that atom 2
         "had something" without saying what.  Each value is the corresponding reader's own answer,
         taken before the wipe and unchanged in shape:
 
-            {'parities':      [n, ...],                    # ascending stable ids, as `validate_stereo`
-             'wedges':        [(narrow, wide, wedge), ...],  # `wedges()`
-             'stereo_groups': {(kind, group): [n, ...]},     # `stereo_groups()`
-             'atom_cips':     {n: descriptor},               # `atom_cips()`
-             'bond_cips':     {(n, m): descriptor}}          # `bond_cips()`
+            {'parities':           [n, ...],                    # ascending stable ids, as `validate_stereo`
+             'wedges':             [(narrow, wide, wedge), ...],  # `wedges()`
+             'stereo_groups':      {(kind, group): [member, ...]},     # `stereo_groups()` -- member is id or pair
+             'bond_stereo_groups': {(kind, group): [(n, m), ...]},   # `bond_stereo_groups()`
+             'atom_cips':          {n: descriptor},               # `atom_cips()`
+             'bond_cips':          {(n, m): descriptor}}          # `bond_cips()`
 
         NOTHING IS APPENDED TO `cip_log`.  That log exists for a descriptor lost as a SIDE EFFECT of
         an edit, where the event is unrecoverable from the bytes afterwards; here the drop is the
@@ -4903,6 +5404,7 @@ cdef class MoleculeContainer:
         if parities:
             report['parities'] = parities
         for key, value in (('wedges', self.wedges()), ('stereo_groups', self.stereo_groups()),
+                           ('bond_stereo_groups', self.bond_stereo_groups()),
                            ('atom_cips', self.atom_cips()), ('bond_cips', self.bond_cips())):
             if value:
                 report[key] = value
@@ -6071,6 +6573,29 @@ cdef class MoleculeContainer:
         """
         return _isomers_fn()(self)
 
+    def standardize_kekule(self):
+        """Store the Kekule form whose double bonds sit inside the small rings.  Did any order move?
+
+        THE STAGE THAT MAKES `thiele` INDEPENDENT OF THE DRAWING.  A compound with several Kekule forms
+        has one aromatic form per form otherwise, because `thiele` refuses a candidate ring whose atom
+        holds its double bond outside the ring: in `C1=CC2=CC=C3C=CC=CC3=CC=C2C=C1` the benzo rings lend
+        those bonds to the eight-ring they are fused to and neither aromatises, while
+        `C1=CC=C2C=CC3=CC=CC=C3C=CC2=C1` is the same compound with both of them aromatic.
+
+        RUN ON THE KEKULE FORM AND BEFORE `thiele`, which is the order `canonicalize()` runs them in.  A
+        ring already aromatic is a ring this pass leaves alone, so on an aromatic molecule the answer is
+        `False` and nothing moves.
+
+        Neither a repair nor a refusal, `thiele`'s single-purpose rule being left exactly as it is: every
+        form involved kekulises and holds the same atoms, hydrogens and charges, and the one kept is the
+        one with the most double bonds inside a ring of 5 to 7 atoms.  A stated cis/trans parity pins the
+        bond it is stated on: a form that cannot carry it is not a candidate.
+
+        Like `standardize()`, the body lives in `chython.chemistry` and arrives by registration rather
+        than import, and the return is a bool.  Records land on `self.log` as `INFO`.
+        """
+        return _kekule_form_fn()(self)
+
     def check_valence(self):
         """`[(atom, verdict)]` for every atom the valence collection does not call valid.  A REPORT.
 
@@ -6859,6 +7384,7 @@ cdef class MoleculeContainer:
         cdef uint32_t i, k
         cdef bint is_wedge_narrow
         cdef bint adopt = False
+        cdef uint32_t legacy_groups = 0
         # READ BEFORE THE CALL.  `structure_from_bytes` normalises an older buffer's header into the
         # current version in place, so afterwards the version byte no longer says where the parities
         # are.  Guarded on the length because boundscheck is off in this module and the call below is
@@ -6925,6 +7451,18 @@ cdef class MoleculeContainer:
                     # molecule's own `to_bytes` unreadable by its own `from_bytes`.
                     atoms[i].flags &= <uint8_t> ~ATOM_FLAGS_RESERVED
 
+        # BITS 5-12 OF EVERY HALF-EDGE ARE RESERVED AND IGNORED (see HE_FLAGS_LEGACY_GROUP).  A buffer
+        # that sets them loads -- refusing it would make a record written by another build
+        # unreadable -- and loses them here, before any derived segment is built from the graph.
+        norm_ptr = csr_ptr(structure)
+        norm_edges = csr_edges(structure)
+        for i in range(structure.header.atom_count):
+            for k in range(norm_ptr[i], norm_ptr[i + 1]):
+                if norm_edges[k].flags & <uint16_t> HE_FLAGS_LEGACY_GROUP:
+                    if norm_edges[k].to > i:
+                        legacy_groups += 1
+                    norm_edges[k].flags &= <uint16_t> ~(<uint16_t> HE_FLAGS_LEGACY_GROUP)
+
         rebuild_derived(structure)
         # Ruling F60: rebuild_derived appends derived segments and so REALLOCATES the arena.
         # `atoms` above points into the pre-rebuild buffer, which may now be freed, so it is
@@ -6960,6 +7498,11 @@ cdef class MoleculeContainer:
                            'and the number the file gave it'
                            % (int(structure_conformer_count(structure)), int(src_version)),
                            mc_lost())
+        if legacy_groups:
+            mol._log_event('container:bond-group-bits-dropped', 'read',
+                           '%d bond(s) carried a reserved half-edge flag in bits 5-12; a stereo '
+                           'group is stored at its unit anchor in SEG_STEREO_GROUPS and these bits '
+                           'are ignored' % legacy_groups, mc_lost())
         return mol
 
     def may_contain(self, MoleculeContainer other not None):
@@ -7257,6 +7800,7 @@ with cython.warn.undeclared(False):
                    'set_stereo': OP_SET_STEREO, 'set_xy': OP_SET_XY,
                    'set_xyz': OP_SET_XYZ,
                    'set_wedge': OP_SET_WEDGE, 'set_stereo_group': OP_SET_STEREO_GROUP,
+                   'set_bond_stereo_group': OP_SET_BOND_STEREO_GROUP,
                    'set_element': OP_SET_ELEMENT,
                    'set_r_index': OP_SET_R_INDEX, 'add_conformer': OP_ADD_CONFORMER,
                    'drop_conformer': OP_DROP_CONFORMER}
@@ -7374,6 +7918,93 @@ def _rebase_parity_probe(MoleculeContainer mol not None, uint32_t n, int kind, i
         refs[i] = SU_NO_REF if old_refs[i] is None else <uint32_t> mol._index_of[old_refs[i]]
     return rebase_parity(mol._structure, <uint32_t> mol._index_of[n], <uint8_t> kind,
                          <uint8_t> parity, refs, <uint8_t> old_unnamed_mask)
+
+
+def _cip_ring_systems_probe(MoleculeContainer mol not None):
+    """`{id: ring-system id}`, 0 for an atom on no ring.  A test door onto `cip_ring_systems`."""
+    mol._require_clean()
+    cdef uint32_t n = mol._structure.header.atom_count
+    cdef list numbers = mol._numbers
+    cdef uint32_t i
+    cdef dict out = {}
+    cdef uint32_t *ids = <uint32_t *> malloc(<size_t> (n if n else 1) * sizeof(uint32_t))
+    if ids is NULL:
+        raise MemoryError()
+    try:
+        cip_ring_systems(mol._structure, ids)
+        for i in range(n):
+            out[numbers[i]] = ids[i]
+    finally:
+        free(ids)
+    return out
+
+
+def _cip_rank_word_probe(MoleculeContainer mol not None, uint32_t n, bint duplicate=False,
+                         uint32_t back=0):
+    """The rank word of one atom, as a digraph node would carry it.  A test door."""
+    return cip_rank_word(mol._atom(n), duplicate, back)
+
+
+def _cip_subtree_probe(MoleculeContainer mol not None, tuple pairs, bint keys=False):
+    """The interned ids -- or the canonical unfoldings -- of several `(branch, anchor)` branches.
+
+    ONE context for all of them, because an id is a counter in its own pool and two contexts number
+    independently: equal ids here are a statement about sharing.  `keys=True` unfolds each branch into
+    nested tuples instead, which is what compares across molecules.  A test door.
+    """
+    mol._require_clean()
+    cdef cip_ctx_t ctx
+    cdef list out = []
+    cdef uint32_t ns, ps, id_
+    cdef halfedge_t *e
+    cdef tuple pair
+    cip_ctx_init(&ctx, mol._structure)
+    try:
+        for pair in pairs:
+            ns = mol._slot(pair[0])
+            ps = mol._slot(pair[1])
+            e = csr_find(mol._structure, ps, ns)
+            if e is NULL:
+                raise KeyError('atoms %r and %r are not bonded' % (pair[1], pair[0]))
+            id_ = cip_branch(&ctx, ns, ps, e.order)
+            out.append(_cip_node_key(&ctx, id_) if keys else id_)
+    finally:
+        cip_ctx_free(&ctx)
+    return out
+
+
+def _cip_rank_probe(MoleculeContainer mol not None, uint32_t n):
+    """The unit anchored at `n`, its NAMED directions in descending CIP priority, as stable ids.
+
+    `None` when rules 1a/1b/2 do not settle the unit.  Raises `KeyError` when `n` anchors no unit.  Every
+    CANDIDATE ranks, marked or not -- ranking reads constitution and the marks say nothing about it -- so
+    an unresolved site is a refusal here rather than a missing record.  A test door onto
+    `cip_rank_directions`.
+    """
+    mol._require_clean()
+    cdef uint32_t slot = mol._slot(n)
+    cdef cip_ctx_t ctx
+    cdef stereo_unit_t *u
+    cdef uint32_t i
+    cdef uint32_t order[4]
+    cdef bint undecided
+    cdef list numbers = mol._numbers
+    cdef list out = []
+    ensure_stereo_units(mol._structure)
+    u = stereo_unit_of(mol._structure, slot)
+    if u is NULL:
+        raise KeyError('atom %d anchors no stereo unit' % n)
+    cip_ctx_init(&ctx, mol._structure)
+    try:
+        undecided = cip_rank_directions(&ctx, u, order) != 0
+    finally:
+        cip_ctx_free(&ctx)
+    if undecided:
+        return None
+    for i in range(4):
+        if u.refs[order[i]] != SU_NO_REF:
+            out.append(numbers[u.refs[order[i]]])
+    return tuple(out)
 
 
 def _from_bytes(data, meta=None):

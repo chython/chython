@@ -156,7 +156,11 @@ cdef class Atom:
 
     @property
     def cip(self):
-        """The stored CIP descriptor -- 'R' 'S' 'r' 's' 'M' 'P' 'm' 'p' -- or None.  Storage only."""
+        """The CIP descriptor -- 'R' 'S' 'r' 's' 'M' 'P' 'm' 'p' -- or None.
+
+        What the input stated, until `assign_cip()` runs and overwrites the sites it decides.  It decides
+        tetrahedral centres, so 'R' and 'S' are computed and the other six are still whatever was
+        stated."""
         return ATOM_CIP_CODES[at_cip(self._ptr())]
 
     @property
@@ -378,7 +382,8 @@ cdef class Bond:
 
     @property
     def cip(self):
-        """The stored CIP descriptor of this bond -- 'E' 'Z' 'M' 'P' -- or None.  Storage only."""
+        """The CIP descriptor of this bond -- 'E' 'Z' 'M' 'P' -- or None.  What the input stated; the
+        bond kinds are `assign_cip()`'s later phase, so nothing in the core computes one yet."""
         return BOND_CIP_CODES[he_cip(self._ptr())]
 
     def __int__(self):

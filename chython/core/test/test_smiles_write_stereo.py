@@ -40,8 +40,8 @@ from random import Random
 
 from pytest import importorskip, mark
 
-from chython.core import MoleculeContainer
-from chython.core._core import smw_stereo_seed_labels, smw_traversal, write_smiles
+from chython.core import MoleculeContainer, ReactionContainer, read_smiles
+from chython.core._core import smw_stereo_seed_labels, smw_traversal, write_reaction_smiles, write_smiles
 
 
 # ------------------------------------------------------------------------------------------------
@@ -557,3 +557,173 @@ def test_a_random_creation_order_sample_agrees_with_the_exhaustive_sweep():
         configure(m, sids[1], _frame(sids, (0, 2, 4, None)), 2)
         seen.add(write_smiles(m))
     assert len(seen) == 1, sorted(seen)[:4]
+
+
+# ------------------------------------------------------------------------------------------------
+# CXSMILES TAIL: an axis group is spelled by one OWNER atom of the unit it is stated on, the one of
+# lowest canonical position that speaks for exactly that unit -- never the anchor, which is a slot
+# choice and would put the creation order into the tail.
+def _diene_with_bond_groups():
+    """(2E,4E)-hexa-2,4-dienedioic acid with both C=C bonds in AND group 1.
+
+    The two bonds are selected by their ends' element and not by index: an index test also keeps a
+    carboxyl C=O, which anchors no unit, so its group would degrade to a label on one of its atoms
+    and the fixture would state something other than two axes.
+    """
+    mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C' and mol.atom(b.m).atomic_symbol == 'C']
+    assert len(pairs) == 2, pairs
+    with mol.edit() as e:
+        for n, m in pairs:
+            e.set_bond_stereo_group(n, m, 3, 1)
+    return mol
+
+
+def test_cxsmiles_writes_a_bond_group_as_an_owner_atom():
+    """`&<n>:` takes atom indices, and an axis is named by the owner of lowest canonical position.
+
+    Nothing is lost, so nothing is logged.  Two axes, so two indices -- one per member, picked by
+    canonical position and not by output order, which is why the second axis is 5 rather than 4.
+    """
+    log = []
+    text = write_smiles(_diene_with_bond_groups(), 'x', log=log)
+    assert text == 'O=C(/C=C/C=C/C(=O)O)O |&1:2,5|', text
+    assert log == []
+
+
+def test_a_suppressed_tail_writes_no_group_and_still_logs_nothing():
+    """`!x` asks for no tail, and a caller asking for no tail loses the group silently.
+
+    The tail is where a member list can be spelled at all, so suppressing it drops the collection --
+    that is the switch's meaning and not a loss the writer reports.
+    """
+    log = []
+    text = write_smiles(_diene_with_bond_groups(), '!x', log=log)
+    assert text == 'O=C(/C=C/C=C/C(=O)O)O', text
+    assert log == []
+
+
+def test_a_reaction_carries_a_bond_group_in_its_components_tail():
+    """One tail per reaction, and a component's axis group reaches it through the component's atoms."""
+    rxn = ReactionContainer([_diene_with_bond_groups()], [], [read_smiles('CCO')])
+    log = []
+    text = write_reaction_smiles(rxn, 'x', log=log)
+    assert text == 'O=C(/C=C/C=C/C(=O)O)O>C(C)O> |&1:2,5|', text
+    assert log == []
+
+
+def test_a_reaction_with_a_suppressed_tail_reports_nothing():
+    """`!x` suppresses the whole block, so the per-molecule record is not owed either."""
+    rxn = ReactionContainer([_diene_with_bond_groups()], [], [read_smiles('CCO')])
+    log = []
+    write_reaction_smiles(rxn, '!x', log=log)
+    assert log == []
+
+
+def test_an_axis_group_round_trips_through_cxsmiles_as_an_owner_atom():
+    """CXSMILES `|&N:|` takes atom indices, so an axis is named by one owner -- and the READER needs no
+    rule for it, because a bare atom index resolves to the unit that atom owns as well as to the unit
+    anchored there.  The two halves of the merge meet here: the writer's owner pick and the setter's
+    resolution are one rule.
+
+    The reader numbers atoms in the order the text spells them, so the members are compared against the
+    axis this molecule is read back with rather than against the stable ids the writer was given.
+    """
+    mol = read_smiles('C/C=C/C')
+    axis = next(iter(mol.chiral_bonds()))
+    with mol.edit() as e:
+        e.set_stereo_group(axis, 3, 1)
+    text = write_smiles(mol, 'x')
+    back = read_smiles(text)
+    assert back.bond_stereo_groups() == {(3, 1): list(back.chiral_bonds())}, (text, back.stereo_groups())
+    assert back.stereo_groups() == back.bond_stereo_groups(), 'the axis is the collection, whole'
+
+
+def test_an_allene_group_round_trips_through_an_owner_and_through_its_anchor():
+    """THE CASE THAT CANNOT WORK BY ACCIDENT.  An allene's owners are its chain terminals, 2 and 4, and
+    its byte lives on the midpoint atom 3, which is neither.  The write names an owner, so the group set
+    on the anchor has to reach an index two bonds away; the read takes EITHER spelling, because an atom
+    index resolves both to the unit it owns and to the unit anchored there.
+    """
+    mol = read_smiles('CC=C=CC')
+    mol.set_stereo_group(3, 2, 1)               # the anchor, a bare int naming the unit anchored there
+    assert mol.stereo_groups() == {(2, 1): [(2, 4)]}, mol.stereo_groups()
+    assert mol.bond_stereo_groups() == {(2, 1): [(2, 4)]}, 'an allene IS an axis member'
+    assert mol.stereo_group_anchor_of((2, 4)) == 3
+    text = write_smiles(mol, 'x')
+    assert text == 'CC=C=CC |o1:3|', text
+    assert read_smiles(text).stereo_groups() == {(2, 1): [(2, 4)]}, text
+    assert read_smiles('CC=C=CC |o1:2|').stereo_groups() == {(2, 1): [(2, 4)]}, 'the anchor still reads'
+
+
+def test_a_bond_group_tail_is_the_same_from_three_creation_orders():
+    """CREATION-ORDER INVARIANCE FOR THE TAIL, the sweep the per-atom fixtures above do not reach.
+
+    A group member is an owner PAIR and the tail has one index per member, so the writer picks one of
+    the two -- and picking by anything the arena decided (the unit's anchor slot, the storage order of
+    the members) makes the tail a function of how the molecule was built.  Muconic acid with both C=C
+    axes in AND 1 is the smallest case with two axes to confuse: three spellings of it, one string.
+    """
+    seen = set()
+    for text in ('OC(=O)/C=C/C=C/C(=O)O', 'O=C(O)/C=C/C=C/C(=O)O', r'C(=C/C=C/C(=O)O)\C(=O)O'):
+        mol = read_smiles(text)
+        with mol.edit() as e:
+            for pair in mol.chiral_bonds():
+                e.set_stereo_group(pair, 3, 1)
+        log = []
+        seen.add(write_smiles(mol, 'x', log=log))
+        assert log == [], text
+    assert seen == {'O=C(/C=C/C=C/C(=O)O)O |&1:2,5|'}, sorted(seen)
+
+
+def test_an_atropisomer_group_is_a_fixed_point_of_three_write_read_cycles():
+    """ROUND-TRIP INVARIANCE.  A tail index the next write would not pick again oscillates, and the
+    second cycle is where it shows: with the group written on the anchor this molecule alternated
+    `|&1:3|` and `|&1:9|` for ever, so a two-cycle test passes on a string that never settles.
+
+    Three cycles, and the string is compared to the previous one rather than to a spelled constant, so
+    the invariant the test states is stability and not one canonical form.
+
+    The axis is unnameable without loss here -- both biaryl pivots also own a ring double bond, so
+    neither index says which of that atom's two elements AND 1 is on -- and the writer reports that on
+    every cycle while still writing the tail (note 4 at the top of `_smiles_write.pxi`).
+    """
+    mol = read_smiles('C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12')
+    with mol.edit() as e:
+        e.set_stereo_group(next(iter(mol.chiral_bonds())), 3, 1)
+    previous = None
+    for cycle in range(3):
+        log = []
+        text = write_smiles(mol, 'x', log=log)
+        assert text.endswith(' |&1:3|'), (cycle, text)
+        assert previous is None or text == previous, (cycle, previous, text)
+        assert [r.rule for r in log] == ['smiles:stereo-group-axis-ambiguous'], (cycle, log)
+        previous = text
+        mol = read_smiles(text)
+        assert list(mol.stereo_groups()) == [(3, 1)], (cycle, mol.stereo_groups())
+        assert mol.bond_stereo_groups() == mol.stereo_groups(), 'the axis is the whole collection'
+        assert list(mol.log) == [], (cycle, list(mol.log))
+
+
+def test_both_owners_in_same_collection_is_reported():
+    """AN AXIS WITH NO INDEX LEFT IS REPORTED, and the report does not depend on which collection
+    exhausted its owners.  Three members of one collection -- two labels and the axis those two atoms
+    own -- take both owners as tail indices, so the axis has no atom to speak for it.  Both owners name
+    THIS collection rather than a foreign one, which is the arm where the tail carries fewer members
+    than the collection states.
+
+    The written string is unchanged -- note 4, a token is never suppressed on a prediction, and the
+    axis has no index left either way.
+    """
+    mol = read_smiles('CC=C=CC')
+    mol.set_stereo_group(3, 3, 1)                         # AND 1 on the allene anchor -> axis (2, 4)
+    with mol.edit() as e:
+        e.set_stereo_group((2, 5), 3, 1)                  # not a bond, so it needs a session; the
+        #                                                   pair names no axis and degrades to atom 2
+    mol.set_stereo_group((4, 5), 3, 1)                    # a bond, and likewise degrades, to atom 4
+    assert mol.stereo_groups() == {(3, 1): [2, (2, 4), 4]}, mol.stereo_groups()
+    log = []
+    text = write_smiles(mol, 'x', log=log)
+    assert text == 'CC=C=CC |&1:1,3|', text
+    assert [r.rule for r in log] == ['smiles:stereo-group-axis-ambiguous'], log

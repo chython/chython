@@ -24,9 +24,9 @@ endpoints, S-group atom lists, collection members) is resolved through a map and
 position.  Treating an index as a position works on almost every file, then builds a different one.
 """
 
-from ._ctab import (Ctab, CtabAtom, CtabBond, order_from_bond_type, LABEL_ELEMENT,
-                    STEREO_FROM_COLLECTION, STEREO_TO_COLLECTION, WEDGE_FROM_V3000,
-                    WEDGE_TO_V3000)
+from ._ctab import (Ctab, CtabAtom, CtabBond, axis_spelling, order_from_bond_type, LABEL_ELEMENT,
+                    STEREO_FROM_COLLECTION, STEREO_TO_BOND_COLLECTION, STEREO_TO_COLLECTION,
+                    WEDGE_FROM_V3000, WEDGE_TO_V3000)
 from ._errors import MalformedCtfile, UnsupportedCtfile
 from ._hydrogens import (MRV_IMPLICIT_H, ZERO_VALENCE, apply_mrv_implicit_h, implicit_h_records,
                          valence_for_write)
@@ -88,8 +88,13 @@ _INDEX_VALUED = {
     'OBJ3DS': 'object',
 }
 
-# The three enhanced-stereo collection prefixes, and the tag this library maps each onto.
-_COLLECTION_PREFIXES = (('STEABS', 'ABS'), ('STERAC', 'RAC'), ('STEREL', 'REL'))
+# The enhanced-stereo collection prefixes: the tag this library maps each onto, and whether the
+# collection names atoms or bonds.  The BOND prefixes are matched FIRST -- `STEBABS` does not start
+# with `STEABS`, but keeping the longer family ahead of the shorter one makes that independent of the
+# spelling and of a future prefix.
+_COLLECTION_PREFIXES = (('STEBABS', 'ABS', 'bond'), ('STEBRAC', 'RAC', 'bond'),
+                        ('STEBREL', 'REL', 'bond'), ('STEABS', 'ABS', 'atom'),
+                        ('STERAC', 'RAC', 'atom'), ('STEREL', 'REL', 'atom'))
 
 #: The highest group id the arena stores beside a kind in one byte, mirrored from the core's
 #: `STEREO_GROUP_MAX` (`core/_molecule_arena.pxi`), which a Python layer cannot read from a `DEF`.
@@ -284,7 +289,7 @@ def parse_ctab_block(logical, log=None):
         # After the S-groups exist and not before: a stated hydrogen count arrives as one of them.
         apply_mrv_implicit_h(ctab, log)
     if collection_lines:
-        _parse_collections(collection_lines, ctab, index_of, log)
+        _parse_collections(collection_lines, ctab, index_of, bond_of, log)
 
     if declared:
         _check_counts(declared, ctab, log)
@@ -550,18 +555,20 @@ def _parse_sgroups(body, ctab, index_of, bond_of, log):
     normalize_indices(ctab.sgroups, log)
 
 
-def _parse_collections(body, ctab, index_of, log):
-    """Read the collection block into ``ctab.groups`` as ``position -> (kind, group)``.
+def _parse_collections(body, ctab, index_of, bond_of, log):
+    """Read the collection block into ``ctab.groups`` (atoms) and ``ctab.bond_groups`` (bonds).
 
-    **A group id is a label, so an out-of-range one is renumbered rather than dropped.** What a
-    collection states is which atoms share a group and of which kind; the number naming it carries
-    nothing further, which is why the stored id is opaque (`core/_stereo.pxi`, ruling F79). The arena
+    **A group id is a label, so an out-of-range one is renumbered rather than dropped.**  The arena
     holds 1..63 beside the kind in one byte and files exceed it -- ``MDLV30/STERAC1384`` occurs in the
-    wild -- so the id is mapped to a free one of its own kind, in file order, consistently for
-    every line naming it. Only a record already holding 63 groups of that kind has nothing free left.
+    wild -- so the id is mapped to a free one of its own kind, in file order, consistently for every
+    line naming it.  Only a record already holding 63 groups of that kind has nothing free left.
+
+    A file that uses group 1 for both ``STERAC1`` and ``STEBRAC1`` keeps them as two collections, and
+    it keeps them by RENUMBERING: the two prefixes share one id space, so the bond one is moved to a
+    free id of its kind before anything is applied.
     """
     parsed = []
-    taken = {}                                  # kind -> the in-range ids the file itself states
+    taken = {}              # kind -> the in-range ids the file states, both prefixes at once
     for line in body:
         tokens = tokenize(line, log)
         if not tokens:
@@ -575,7 +582,7 @@ def _parse_collections(body, ctab, index_of, log):
         if matched is None:
             log.append(LogRecord('v3000:collection-unknown', (), f'unsupported: collection MDLV30/{tag} ignored', LOST))
             continue
-        prefix, suffix = matched
+        prefix, suffix, obj = matched
         kind = STEREO_FROM_COLLECTION[suffix]
         if suffix == 'ABS':
             group = 0  # ABS is one bucket, not a numbered group
@@ -588,24 +595,76 @@ def _parse_collections(body, ctab, index_of, log):
                 group = 1
             if group <= _MAX_STEREO_GROUP:
                 taken.setdefault(kind, set()).add(group)
-        positions = []
+        refs = []
+        expected_key = 'ATOMS' if obj == 'atom' else 'BONDS'
         for token in tokens[1:]:
             key, value = _split_kv(token)
-            if key != 'ATOMS':
+            if key != expected_key:
+                if key in ('ATOMS', 'BONDS'):
+                    log.append(LogRecord(
+                        'v3000:collection-wrong-object', (),
+                        f'collection MDLV30/{tag} names {key.lower()} where its type names '
+                        f'{obj}s, ignored', LOST))
                 continue
             for item in parse_list(value, log):
                 idx = _int(item, -1)
-                if idx in index_of:
-                    positions.append(index_of[idx])
+                if obj == 'atom':
+                    if idx in index_of:
+                        refs.append(index_of[idx])
+                    else:
+                        log.append(LogRecord(
+                            'v3000:collection-atom-ref', (),
+                            f'collection MDLV30/{tag} references unknown atom index {item}', LOST))
                 else:
-                    log.append(LogRecord(
-                        'v3000:collection-atom-ref', (),
-                        f'collection MDLV30/{tag} references unknown atom index {item}', LOST))
-        parsed.append((kind, group, tag, positions))
+                    if idx in bond_of:
+                        refs.append(bond_of[idx])
+                    else:
+                        log.append(LogRecord(
+                            'v3000:collection-bond-ref', (),
+                            f'collection MDLV30/{tag} references unknown bond index {item}', LOST))
+        parsed.append((kind, group, tag, obj, refs))
+
+    # TWO PREFIXES, ONE ID SPACE.  `STERAC1` and `STEBRAC1` are two collections in the file and the
+    # container numbers centres and axes together, so a shared IN-RANGE id is renumbered apart rather
+    # than absorbed: a file that could have numbered the two apart and did not meant two mixtures.  The
+    # BOND prefix moves, because the atom prefix is the one an unsplit collection writes.  ABS never
+    # collides -- it carries no id.  This runs BEFORE the out-of-range renumbering so that pass sees
+    # the ids it consumed; an out-of-range id is never in `stated`, so the two never contend for a line.
+    #
+    # Only a collection that still has a resolvable member is merged: one whose every reference was
+    # dropped is not in the molecule, so announcing its new id would name a group no caller can find.
+    stated = {}             # (kind, obj) -> the in-range ids that prefix states with a member
+    for kind, group, tag, obj, refs in parsed:
+        if refs and group <= _MAX_STEREO_GROUP:
+            stated.setdefault((kind, obj), set()).add(group)
+    moved = {}
+    for kind in sorted({k for k, _ in stated}):
+        shared = stated.get((kind, 'atom'), frozenset()) & stated.get((kind, 'bond'), frozenset())
+        for group in sorted(shared):
+            free = taken[kind]
+            new = next((i for i in range(1, _MAX_STEREO_GROUP + 1) if i not in free), None)
+            if new is None:
+                log.append(LogRecord(
+                    'v3000:collection-namespaces-merged', (),
+                    f'collections {STEREO_TO_COLLECTION[kind]}{group} and '
+                    f'{STEREO_TO_BOND_COLLECTION[kind]}{group} share group {group} and all '
+                    f'{_MAX_STEREO_GROUP} ids of that kind are taken, so they are read as one '
+                    f'collection', LOST))
+            else:
+                free.add(new)
+                moved[(kind, group)] = new
+                log.append(LogRecord(
+                    'v3000:collection-namespaces-merged', (),
+                    f'collections {STEREO_TO_COLLECTION[kind]}{group} and '
+                    f'{STEREO_TO_BOND_COLLECTION[kind]}{group} share group {group} in one id space; '
+                    f'the bond one is read as group {new}', REPAIRED))
 
     renumbered = {}
-    for kind, group, tag, positions in parsed:
+    for kind, group, tag, obj, refs in parsed:
         if group > _MAX_STEREO_GROUP:
+            # Keyed by `(kind, group)` and not by the prefix, so `STERAC1384` and `STEBRAC1384` take
+            # ONE new id: an out-of-range id is a number no file could have meant, where an in-range
+            # id shared by the two prefixes is a number a file chose twice.
             key = (kind, group)
             if key not in renumbered:
                 free = taken.setdefault(kind, set())
@@ -626,8 +685,15 @@ def _parse_collections(body, ctab, index_of, log):
             group = renumbered[key]
             if group is None:
                 continue
-        for position in positions:
-            ctab.groups[position] = (kind, group)
+        elif obj == 'bond':
+            # `moved` holds in-range ids only, so an out-of-range id can never need it.
+            group = moved.get((kind, group), group)
+        if obj == 'atom':
+            for position in refs:
+                ctab.groups[position] = (kind, group)
+        else:
+            for pair in refs:
+                ctab.bond_groups[pair] = (kind, group)
 
 
 def _coord(value):
@@ -752,14 +818,65 @@ def emit_v3000(mol, sgroups=None, *, title=None, program='', comment='',
             body.append(_emit_sgroup(record, i, position, bond_position, out, renumber))
         body.append('END SGROUP')
 
-    if groups:
+    # ONE NAMESPACE IN, TWO SPELLINGS OUT.  A member list is tagged `ATOMS=` or `BONDS=` and never
+    # both, so a collection holding a centre and an axis whose midpoint is a bond has no single
+    # spelling.  It splits, with the bond half renumbered off the atom half, and the log says what is
+    # lost: not a member, but the statement that the two halves were one mixture.  ABS needs no
+    # renumbering -- `STEABS` and `STEBABS` carry no id and mean the same thing.  Lines are collected
+    # rather than appended because one collection can emit two of them; the block itself is absent
+    # exactly when the molecule carries no collection at all.
+    collection_lines = []
+    taken = {}
+    for kind, group in groups:
+        taken.setdefault(kind, set()).add(group)
+    for (kind, group), members in sorted(groups.items()):
+        atom_refs = []
+        bond_refs = []
+        for member in members:
+            if not isinstance(member, tuple):
+                if member in position:
+                    atom_refs.append(position[member])
+                continue
+            spelling = axis_spelling(mol, member[0], member[1])
+            if spelling is None:
+                out.append(LogRecord(
+                    'v3000:collection-axis-unspelled', (),
+                    f'the collection on the axis of atoms {member[0]} and {member[1]} names atom '
+                    f'{min(member)}: no chain joins them in this structure', REPAIRED))
+                atom_refs.append(position[min(member)])
+            elif spelling[0] == 'atom':
+                atom_refs.append(position[spelling[1]])
+            else:
+                bond_refs.append(bond_position[spelling[1]])
+        bond_group = group
+        if atom_refs and bond_refs and kind != 1:
+            free = taken[kind]
+            bond_group = next((i for i in range(1, _MAX_STEREO_GROUP + 1) if i not in free), None)
+            if bond_group is None:
+                bond_group = group
+                out.append(LogRecord(
+                    'v3000:collection-split', (),
+                    f'collection {STEREO_TO_COLLECTION[kind]}{group} holds both atom and bond '
+                    f'members and all {_MAX_STEREO_GROUP} ids of its kind are taken, so both '
+                    f'halves keep id {group} and read back as one collection', LOST))
+            else:
+                free.add(bond_group)
+                out.append(LogRecord(
+                    'v3000:collection-split', (),
+                    f'collection {STEREO_TO_COLLECTION[kind]}{group} holds both atom and bond '
+                    f'members, which V3000 cannot state as one; its bond members are written as '
+                    f'{STEREO_TO_BOND_COLLECTION[kind]}{bond_group}', LOST))
+        if atom_refs:
+            tag = STEREO_TO_COLLECTION[kind] + ('' if kind == 1 else str(group))
+            listed = ' '.join(str(i) for i in sorted(atom_refs))
+            collection_lines.append(f'MDLV30/{tag} ATOMS=({len(atom_refs)} {listed})')
+        if bond_refs:
+            tag = STEREO_TO_BOND_COLLECTION[kind] + ('' if kind == 1 else str(bond_group))
+            listed = ' '.join(str(i) for i in sorted(bond_refs))
+            collection_lines.append(f'MDLV30/{tag} BONDS=({len(bond_refs)} {listed})')
+    if collection_lines:
         body.append('BEGIN COLLECTION')
-        for (kind, group), members in sorted(groups.items()):
-            tag = STEREO_TO_COLLECTION[kind]
-            if kind != 1:
-                tag = f'{tag}{group}'
-            listed = ' '.join(str(position[m]) for m in sorted(members) if m in position)
-            body.append(f'MDLV30/{tag} ATOMS=({len(members)} {listed})')
+        body.extend(collection_lines)
         body.append('END COLLECTION')
 
     body.insert(0, 'BEGIN CTAB')

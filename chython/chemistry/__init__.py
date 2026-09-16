@@ -36,6 +36,7 @@ from ._crippen import crippen_logp, crippen_mr
 from ._hydrogens import explicify_hydrogens, implicify_hydrogens
 from ._implicit import calc_implicit, check_valence
 from ._isomers import standardize_isomers
+from ._kekule_form import standardize_kekule
 from ._maccs import maccs_bit_set, maccs_keys
 from ._perceive import perceive_bonds
 from ._pharmacophore import pharmacophore_invariants
@@ -56,8 +57,9 @@ from ._tables import (ACID_ROLES, AbbreviationRow, AcidRow, Endpoint, RESONANCE_
                       salts_table_text, standardize_rules)
 from ._tpsa import tpsa
 from ..core._core import (_set_canonicalize_fn, _set_featurizer_fns, _set_hydrogens_fns,
-                          _set_isomers_fn, _set_protomers_fn, _set_resonance_fn, _set_salts_fns,
-                          _set_standardize_fn, _set_valence_fn)
+                          _set_isomers_fn, _set_kekule_form_fn, _set_protomers_fn,
+                          _set_resonance_fn, _set_salts_fns, _set_standardize_fn,
+                          _set_valence_fn)
 
 
 __all__ = ['ACID_ROLES', 'AbbreviationRow', 'LogRecord', 'SALT_ROLES', 'SaltComposition',
@@ -68,12 +70,14 @@ __all__ = ['ACID_ROLES', 'AbbreviationRow', 'LogRecord', 'SALT_ROLES', 'SaltComp
            'hydrogen_bond_donors_count', 'implicify_hydrogens', 'maccs_bit_set', 'maccs_keys',
            'neutralize', 'perceive_bonds', 'pharmacophore_invariants', 'qed', 'qed_properties',
            'rotatable_bonds_count',
-           'saturate', 'split_salts', 'standardize', 'standardize_isomers', 'tpsa']
+           'saturate', 'split_salts', 'standardize', 'standardize_isomers',
+           'standardize_kekule', 'tpsa']
 
 _set_standardize_fn(standardize)
 _set_canonicalize_fn(canonicalize)
 _set_hydrogens_fns(implicify_hydrogens, explicify_hydrogens)
 _set_isomers_fn(standardize_isomers)
+_set_kekule_form_fn(standardize_kekule)
 _set_valence_fn(check_valence)
 _set_salts_fns(split_salts=split_salts, decompose_salts=decompose_salts)
 _set_protomers_fn(neutralize)

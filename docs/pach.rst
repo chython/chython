@@ -153,7 +153,8 @@ drops the drawing, which ``drop=['coordinates']`` says more plainly, and that wa
 whatever ``version=`` asked for.  ``drop=`` waives the writer's refusals by name — ``map_number``,
 ``title``, ``meta``, ``sgroups``, ``cip``, ``wedges``, ``stereo_groups``, ``stereo``, ``coordinates``,
 and ``conformers`` — or ``'*'`` for all of them, and an unrecognised name is refused rather than
-ignored.
+ignored.  ``stereo_groups`` (or equivalently ``stereo``) suppresses both the atom enhanced-stereo block
+and the bond-group block.
 
 .. testcode::
 
@@ -193,15 +194,16 @@ Header, 12 bytes
 .. code-block:: text
 
      0      version    u8    3 | 4
-     1      flags      u8    bit 0 = map block present; bits 1-7 reserved, must be 0
+     1      flags      u8    bit 0 = map block present; bit 1 = bond-group block present;
+                             bits 2-7 reserved, must be 0
      2-3    atoms      u16
      4-5    bonds      u16
      6-7    stereo     u16   configuration records
-     8-9    sgroups    u16   enhanced-stereo entries
-     10-11  reserved   u16   must be 0
+     8-9    sgroups    u16   atom enhanced-stereo entries
+     10-11  bgroups    u16   bond enhanced-stereo entries
 
-The blocks follow in that order — atoms, bonds, stereo, enhanced stereo, map — each one a count from
-the header times a constant stride, so a record's length is arithmetic:
+The blocks follow in that order — atoms, bonds, stereo, enhanced stereo, bond-group, map — each one
+a count from the header times a constant stride, so a record's length is arithmetic:
 
 .. code-block:: text
 
@@ -210,11 +212,24 @@ the header times a constant stride, so a record's length is arithmetic:
             + bonds   * 5
             + stereo  * 9
             + sgroups * 3
+            + bgroups * 5
             + (flags & 1 ? atoms * 2 : 0)
 
-The header is the one place slack is deliberate: seven free flag bits and two reserved bytes.  A
+The header is the one place slack is deliberate: six free flag bits and no reserved bytes.  A
 future block needs a *count*, and the header is the only structure whose size cannot grow without
 moving every offset.  A reader ignores a reserved bit it does not know, and reports that it did.
+
+.. testcode::
+
+    forged = bytearray(smiles('CCO').pack(compressed=False))
+    forged[1] |= 0x80                             # a flag bit this reader has no meaning for
+
+    back, problems = pach_load(bytes(forged), compressed=False)
+    print(back, problems)                         # the record still reads
+
+.. testoutput::
+
+    C(C)O ['header flags is 0x80; bits 0 and 1 are defined, bits 2-7 are reserved']
 
 Atom block
 ~~~~~~~~~~
@@ -349,14 +364,104 @@ Enhanced stereo block, 3 bytes
 .. code-block:: text
 
      bytes 0-1  atom  u16 LE, atom index
-     byte 2     group 6 | kind 2
+     byte 2     kind 2 | group 6
 
 ``kind`` is 0 unspecified, 1 abs, 2 or, 3 and; ``group`` is 1..63 for OR and AND and 0 otherwise.
 The block is sparse and counted, so it costs nothing when unused.
 
 It is its own block rather than a field in a configuration record because a group is a fact about an
-*atom*: it can be set on an atom that owns no configuration, and for a bond configuration there is a
-group at each end.
+*atom*: it can be set on an atom that owns no configuration.
+
+.. testcode::
+
+    from chython import STEREO_OR
+
+    flat = smiles('CC(N)O')                       # no configuration anywhere
+    flat.set_stereo_group(2, STEREO_OR, 5)        # OR 5 on an atom that owns no stereo record
+    raw = flat.pack(compressed=False)
+
+    at = 12 + 4 * 3 + 3 * 5                       # the block follows the atom and bond blocks
+    # stereo records, enhanced-stereo entries, and 12 + 4*3 + 3*5 + 1*3 bytes all told
+    print(int.from_bytes(raw[6:8], 'little'), int.from_bytes(raw[8:10], 'little'), len(raw))
+    print(int.from_bytes(raw[at:at + 2], 'little'), raw[at + 2] >> 6, raw[at + 2] & 0x3f)
+    print(MoleculeContainer.unpack(raw, compressed=False).stereo_groups())
+
+.. testoutput::
+
+    0 1 42
+    1 2 5
+    {(2, 5): [2]}
+
+The entry addresses atom *index* 1, which is atom number 2 — the second atom of the atom block, per
+its load-bearing order.
+
+Bond-group block, 5 bytes
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: text
+
+     bytes 0-1  a     u16 LE, atom index
+     bytes 2-3  b     u16 LE, atom index
+     byte 4     kind 2 | group 6
+
+``kind`` is 0 unspecified, 1 abs, 2 or, 3 and; ``group`` is 1..63 for OR and AND and 0 otherwise.
+Atom indices rather than a bond position, so resolving a reference needs no count of another block.
+The block is sparse and counted, so it costs nothing when unused.
+
+One namespace.  A bond ``group`` numbered 1 and an atom ``group`` numbered 1 are one collection with
+members in both blocks; the split between the blocks is by owner count, not by id space.  One entry
+per member states the collection, so a group of two axes is two entries carrying one number.  Entries
+are emitted in **anchor order**, the order a decode writes the bytes back in, so a decode and
+re-encode is byte-identical; owner order is not well defined against it, since an atropisomer axis
+relocated to its higher pivot can precede an axis with numerically smaller owners.
+
+.. testcode::
+
+    diene = smiles('F/C=C/C=C/F')                 # E,E: two cis/trans records
+    diene.set_bond_stereo_group(2, 3, STEREO_AND, 1)
+    diene.set_bond_stereo_group(4, 5, STEREO_AND, 1)      # one collection, two member bonds
+    raw = diene.pack(compressed=False)
+
+    bgroups = int.from_bytes(raw[10:12], 'little')
+    print(raw[1], bgroups, len(raw))              # flags bit 1 set, 2 entries, 12+6*3+5*5+2*9+2*5
+    at = 12 + 6 * 3 + 5 * 5 + 2 * 9               # after the atom, bond and stereo blocks
+    for i in range(bgroups):
+        e = raw[at + 5 * i:at + 5 * i + 5]
+        print(int.from_bytes(e[:2], 'little'), int.from_bytes(e[2:4], 'little'), e[4] >> 6, e[4] & 0x3f)
+    print(MoleculeContainer.unpack(raw, compressed=False).bond_stereo_groups())
+
+    print(MoleculeContainer.unpack(diene.pack(drop=['stereo_groups'])).bond_stereo_groups())
+    try:                                          # neither version 0 nor version 2 has the field
+        diene.pack(version=2)
+    except ValueError as err:
+        print('stereo_groups' in str(err))
+
+.. testoutput::
+
+    2 2 83
+    1 2 3 1
+    3 4 3 1
+    {(3, 1): [(2, 3), (4, 5)]}
+    {}
+    True
+
+The two entries name atom indices 1-2 and 3-4, which are atom numbers 2-3 and 4-5 counted from 0.  A
+molecule carrying only bond groups still sets flag bit 1 and leaves ``sgroups`` at 0: the two blocks
+are counted apart and dropped together, because they are two blocks in one namespace.
+
+The entry is keyed by the owner pair, which for an allene is two atoms with no bond between them:
+
+.. testcode::
+
+    allene = smiles('CC=C=CC')                    # owners 2 and 4, anchor 3, and 2-4 is not a bond
+    allene.set_stereo_group(3, STEREO_OR, 1)
+    print(allene.stereo_groups())
+    print(MoleculeContainer.unpack(allene.pack()).stereo_groups())
+
+.. testoutput::
+
+    {(2, 1): [(2, 4)]}
+    {(2, 1): [(2, 4)]}
 
 Map block, 2 bytes per atom
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -494,11 +599,11 @@ What versions 0 and 2 cannot carry
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Beyond the version 3 list above, all of which still applies: map numbers, wedges, enhanced stereo
-groups, and every configuration that is not tetrahedral, allene or cis/trans — an atropisomer's parity
-has nowhere to go.  Four hard ceilings have no ``drop=`` spelling because the record would be a lie
-rather than a subset: an atom number above 4095, an atom with more than 15 neighbours, an implicit
-hydrogen count above 6 (the field is 3 bits and 7 is the sentinel), and an isotope more than 15 mass
-units from its element's MDL reference.
+groups (atom or bond), and every configuration that is not tetrahedral, allene or cis/trans — an
+atropisomer's parity has nowhere to go.  Four hard ceilings have no ``drop=`` spelling because the
+record would be a lie rather than a subset: an atom number above 4095, an atom with more than 15
+neighbours, an implicit hydrogen count above 6 (the field is 3 bits and 7 is the sentinel), and an
+isotope more than 15 mass units from its element's MDL reference.
 
 **The coordinate is degraded rather than refused**, since refusing it would refuse every drawn
 molecule there is.  A float16 carries about three significant decimal digits, so ``1.2001953125`` comes

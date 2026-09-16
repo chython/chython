@@ -41,12 +41,17 @@
 #   2. NO EXOCYCLIC DOUBLE OR TRIPLE BOND on a ring atom.  An atom that spent its pi electron
 #      outside the ring is not donating it to the ring; this is what refuses p-benzoquinone, fulvene
 #      and both pyridones.
-#   3. HUCKEL, BUT ONLY ON AN ISOLATED CYCLE.  pi = one per MUST + two per lone-pair donor + zero per
-#      empty-orbital atom, and the count must be 2 mod 4.  PER RING IT IS WRONG -- azulene's
-#      five-ring has five MUST atoms and no donor and azulene is aromatic -- because a fused system's
-#      matching spans its rings.  On a component of the aromatic edge set that is a single cycle it is
-#      exactly right, and it is the only thing that refuses 1H-azepine (six MUST + an N donor = 8 pi)
-#      and the cyclopentadienyl cation (four MUST + an empty C+ = 4 pi).
+#   3. HUCKEL, ON AN ISOLATED CYCLE AND ON A RING THAT OWNS NO DOUBLE BOND.  pi = one per MUST + two
+#      per lone-pair donor + zero per empty-orbital atom, and the count must be 2 mod 4.  PER RING IT
+#      IS WRONG IN GENERAL -- azulene's five-ring has five MUST atoms and no donor and azulene is
+#      aromatic -- because a fused system's matching spans its rings.  It is exactly right on a
+#      component of the aromatic edge set that is a single cycle, the only thing that refuses
+#      1H-azepine (six MUST + an N donor = 8 pi) and the cyclopentadienyl cation (four MUST + an empty
+#      C+ = 4 pi).  It is exactly right per ring too where the ring holds no double bond of its own,
+#      every double bond it has being shared with a fused neighbour: there its whole pi is borrowed,
+#      an ortho-fusion pair lends two electrons in either Kekule form, and the count is what separates
+#      dibenzofuran's central ring (6) from dibenzo-p-dioxin's (8) without asking how the benzo rings
+#      were drawn.
 #
 # Condition 3 is stated in general and not as a special case: allowing a seven-ring whose one non-sp2
 # atom is BORON is the same parity rule with the general case filed off, neutral boron being the
@@ -96,6 +101,7 @@ cdef struct thiele_t:
     void *block
     uint8_t *ring_ok           # [nrings]  1 while the ring is still a candidate
     uint8_t *he_arom           # [nhalf]   1 when this half-edge is in the candidate edge set
+    uint8_t *he_share          # [nhalf]   rings of the basis holding this half-edge, saturating at 2
     uint8_t *cand              # [n]       1 when the atom is in a candidate ring
     uint8_t *cls               # [n]       AROM_MUST / AROM_MAY / AROM_MUST_NOT / THIELE_INVALID
     int32_t *comp              # [n]       component label over the candidate edge set, -1 outside
@@ -112,7 +118,7 @@ cdef int arom_thiele_alloc(thiele_t *t, uint32_t n, uint32_t nhalf, uint32_t nri
     # PyMem_Malloc may return NULL, which this function would report as MemoryError
     cdef size_t half_u8 = align8(<size_t> (nhalf if nhalf else 1) * sizeof(uint8_t))
     cdef size_t ring_u8 = align8(<size_t> (nrings if nrings else 1) * sizeof(uint8_t))
-    cdef size_t total = ring_u8 + half_u8 + 2 * n_u8 + n_i32 + 2 * n_u32
+    cdef size_t total = ring_u8 + 2 * half_u8 + 2 * n_u8 + n_i32 + 2 * n_u32
     cdef char *block = <char *> PyMem_Malloc(total if total else 1)
     if block is NULL:
         raise MemoryError('aromatisation scratch allocation failed')
@@ -121,6 +127,7 @@ cdef int arom_thiele_alloc(thiele_t *t, uint32_t n, uint32_t nhalf, uint32_t nri
     cdef size_t off = 0
     t.ring_ok = <uint8_t *> (block + off); off += ring_u8
     t.he_arom = <uint8_t *> (block + off); off += half_u8
+    t.he_share = <uint8_t *> (block + off); off += half_u8
     t.cand = <uint8_t *> (block + off); off += n_u8
     t.cls = <uint8_t *> (block + off); off += n_u8
     t.comp = <int32_t *> (block + off); off += n_i32
@@ -242,8 +249,36 @@ cdef inline void arom_thiele_bonds(Structure structure, uint32_t i, uint32_t *nb
             aromatics[0] += 1
 
 
+cdef void arom_thiele_share(Structure structure, thiele_t *t, uint32_t *rings,
+                            uint32_t nrings) noexcept nogil:
+    """How many rings of the basis hold each half-edge, saturating at two.
+
+    Two is all `arom_thiele_ring_ok` asks -- own bond or shared one -- so the counter saturates and
+    a bond in five rings cannot overflow it.  Over the whole basis and not the candidate rings: which
+    ring a fused system's double bond was drawn in is a property of the graph, and it is read before
+    candidacy is known.
+    """
+    cdef uint32_t base = 2 + nrings
+    cdef uint32_t i, k, u, v, size, slot
+    cdef uint32_t *ptr = csr_ptr(structure)
+    cdef halfedge_t *edges = csr_edges(structure)
+    memset(t.he_share, 0, ptr[structure.header.atom_count] * sizeof(uint8_t))
+    for i in range(nrings):
+        size = rings[2 + i] - rings[1 + i]
+        for k in range(size):
+            u = rings[base + rings[1 + i] + k]
+            v = rings[base + rings[1 + i] + (k + 1 if k + 1 < size else 0)]
+            for slot in range(ptr[u], ptr[u + 1]):
+                if edges[slot].to == v and t.he_share[slot] < 2:
+                    t.he_share[slot] += 1
+            for slot in range(ptr[v], ptr[v + 1]):
+                if edges[slot].to == u and t.he_share[slot] < 2:
+                    t.he_share[slot] += 1
+
+
 cdef bint arom_thiele_ring_ok(Structure structure, uint32_t *ring, uint32_t size,
-                              uint8_t *cls_out, uint8_t *why, uint32_t *culprit) noexcept nogil:
+                              const uint8_t *he_share, uint8_t *cls_out, uint8_t *why,
+                              uint32_t *culprit) noexcept nogil:
     """The per-ring pre-filter: is this ring worth putting into the candidate edge set at all?
 
     On a `False` return `why[0]` is a `THIELE_WHY_*` code, and `THIELE_WHY_NONE` for the three exits
@@ -273,7 +308,7 @@ cdef bint arom_thiele_ring_ok(Structure structure, uint32_t *ring, uint32_t size
 
     Over-donation is still refused, one layer down: three donors in an isolated five-ring is eight pi
     electrons and `arom_thiele_check`'s Huckel test throws it out.  A FUSED component gets no Huckel
-    test, and there the matching is the whole of the guarantee.
+    test of its own; there the matching and the borrowed-sextet count below are the guarantee.
 
     WHICH LEAVES ONE THING THE CAP WAS DOING BY ACCIDENT, and it has to be said on purpose: a ring
     every one of whose atoms is a donor has NO double bond, and the matching check passes it
@@ -281,16 +316,43 @@ cdef bint arom_thiele_ring_ok(Structure structure, uint32_t *ring, uint32_t size
     nitrogens donate a pair each and its three borons contribute an empty orbital, which is six pi
     over six atoms and passes Huckel, so nothing downstream refuses it and `B1NBNBN1` came out as
     six aromatic bonds.  It is not a Kekule form of an aromatic six-ring -- an aromatic six-ring's
-    Kekule form has three double bonds -- and the requirement below says so directly.  Note that
-    this is the weaker per-RING statement and not per-component: a ring whose every double bond
-    belongs to a fused neighbour is refused here even though the component has double bonds to
-    spare.  No such ring appears in any fixture, and refusing an exotic one is the conservative
-    direction; ring A of `N1C=CN2C=CC=C12` is not one of them, since its `C=C` is its own.
+    Kekule form has three double bonds -- and the requirement below says so directly: some atom of the
+    ring must carry a double bond, wherever it points.
+
+    AND THE SAME STATEMENT ONE STEP IN: a donor needs a pi NEIGHBOUR.  A donor whose two ring
+    neighbours are both donors has no p orbital to overlap with on either side, so a run of three
+    donors is not a Kekule aromatic however many double bonds the rest of the ring holds.  This is what
+    refuses the `O-P-O` of a cyclic phosphite and the `O-B-O` of a catechol boronic ester -- saturated
+    three-atom bridges closing a ring onto an aromatic system, whose electrons neither the requirement
+    above nor the count below can tell from a sextet of the bridge's own.  Every donor in pyrrole,
+    furan, indolizine and both rings of `N1C=CN2C=CC=C12` is flanked by an atom carrying a double bond,
+    so the rule costs none of them.
+
+    A BORROWED SEXTET IS COUNTED, and this is the one place Huckel is applied per ring.  A ring holds pi
+    of its own when one of its bonds is a double bond that no other ring of the basis contains, and such
+    a ring is exempt from the count -- which is what keeps azulene's five-ring (five MUST atoms) and
+    ring A of `N1C=CN2C=CC=C12` (seven pi) aromatic, per-ring parity being wrong for them.  A ring with
+    no such bond holds nothing of its own: every double bond it has is a fusion bond, so which of the
+    two rings drew it decides nothing, and the ring's electrons are what its neighbours lend it.  Count
+    them -- one per ring atom carrying a double bond, two per donor, none per empty orbital -- and
+    require 2 mod 4.
+
+    That count is the central ring of the dibenzo tricyclics, and it splits them.  Dibenzofuran,
+    carbazole and dibenzothiophene borrow four electrons from the two benzo rings and add the donor's
+    pair: six, aromatic.  Dibenzo-p-dioxin, phenoxathiine, thianthrene and phenothiazine have two
+    donors: eight, refused, their central ring being a pair of diaryl ethers, thioethers or amines.
+    Both answers hold in EITHER Kekule form of the benzo rings, which is the point of counting rather
+    than looking for a double bond -- the fusion bond is one of the ring's own bonds, so looking finds
+    it in one form and not the other.  An ortho-fusion pair lends exactly two electrons either way:
+    draw the fusion bond double and both atoms carry it, draw it single and each carries a double inside
+    its own benzo ring.
     """
     cdef uint32_t i, idx, k, nxt
     cdef uint32_t *ptr = csr_ptr(structure)
     cdef halfedge_t *edges = csr_edges(structure)
-    cdef bint ring_double = False
+    cdef uint32_t pi = 0
+    cdef bint carrier = False             # some ring atom carries a double bond, wherever it points
+    cdef bint donor[7]                    # `size` is 5..7 by the gate below; no double bond here
     # initialised at the declaration although `arom_thiele_bonds` fills all four: it fills them
     # through pointers, which Cython cannot see, and the module compiles with warn.undeclared
     cdef uint32_t nbrs = 0, doubles = 0, triples = 0, aromatics = 0
@@ -324,6 +386,7 @@ cdef bint arom_thiele_ring_ok(Structure structure, uint32_t *ring, uint32_t size
             return False                  # already aromatic here; not a Kekule ring
         if nbrs > 3:
             return False                  # over-coordinated for a ring atom, or a spiro atom
+        donor[i] = doubles == 0
         if doubles == 1 and not triples:
             continue
         invalid = 0
@@ -332,17 +395,24 @@ cdef bint arom_thiele_ring_ok(Structure structure, uint32_t *ring, uint32_t size
         if invalid or cls_out[idx] == AROM_MUST:
             return False
 
-    # at least one of the ring's OWN bonds is a double bond; see the docstring's borazine paragraph
+    # no donor is flanked by two donors; see the docstring's paragraph on the phosphite bridge
+    for i in range(size):
+        if donor[i] and donor[size - 1 if i == 0 else i - 1] and donor[0 if i + 1 == size else i + 1]:
+            return False
+
+    # the ring holds pi of its own, or borrows a sextet; see the docstring's last two paragraphs
     for i in range(size):
         idx = ring[i]
         nxt = ring[i + 1 if i + 1 < size else 0]
+        pi += arom_thiele_pi(atoms + idx, not donor[i])
+        if not donor[i]:
+            carrier = True
         for k in range(ptr[idx], ptr[idx + 1]):
-            if edges[k].to == nxt and edges[k].order == 2:
-                ring_double = True
+            if edges[k].to == nxt:
+                if edges[k].order == 2 and he_share[k] < 2:
+                    return True           # a double bond of the ring's own: nothing is borrowed
                 break
-        if ring_double:
-            break
-    return ring_double
+    return carrier and pi % 4 == 2
 
 
 cdef void arom_thiele_mark(Structure structure, thiele_t *t, uint32_t *rings,
@@ -502,9 +572,10 @@ def thiele(MoleculeContainer mol not None):
     The rule is that the molecule in hand must be a Kekule form of the aromatic edge set this
     returns, checked against `arom_classify_atom` -- the same table `kekule()` classifies with, so
     the two directions cannot drift apart.  Necessary but not sufficient, so three more conditions
-    apply: ring size 5 to 7, no exocyclic double or triple bond on a ring atom, and Huckel's 4n+2 on
-    a candidate system that is a single cycle.  The header of this file has the two molecules that
-    prove the matching alone is not enough and the two that prove Huckel cannot be applied per ring.
+    apply: ring size 5 to 7, no exocyclic double or triple bond on a ring atom, and Huckel's 4n+2 on a
+    candidate system that is a single cycle and on any ring whose every double bond belongs to a fused
+    neighbour as well.  The header of this file has the two molecules that prove the matching alone is
+    not enough and the two that prove Huckel cannot be applied per ring in general.
 
     Tautomers are not touched.  Shifting a pyrrole hydrogen around a condensed ring while aromatising,
     or patching `N1C=Cn2cccc12` with a SMARTS list, moves an atom's hydrogen count: a tautomer decision,
@@ -557,9 +628,10 @@ def thiele(MoleculeContainer mol not None):
     cdef uint8_t why = THIELE_WHY_NONE
     cdef uint32_t culprit = 0
     cdef list ring_ids
+    arom_thiele_share(structure, t, rings, nrings)
     for i in range(nrings):
         size = rings[2 + i] - rings[1 + i]
-        if arom_thiele_ring_ok(structure, rings + base + rings[1 + i], size, t.cls,
+        if arom_thiele_ring_ok(structure, rings + base + rings[1 + i], size, t.he_share, t.cls,
                                &why, &culprit):
             t.ring_ok[i] = 1
             any_ring = True

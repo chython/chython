@@ -427,6 +427,24 @@ def test_a_label_ending_in_a_hyphen_does_not_swallow_the_rest_of_the_ctab():
     assert again.sgroups[0]['fields'] == sup['fields']
 
 
+def test_bond_collection_round_trips_through_v3000():
+    """A bond AND group survives a V3000 round trip: the STEBRAC collection is written and read back."""
+    from ....core import read_smiles
+
+    # `OC(=O)/C=C/C=C/C(=O)O`: atoms O1-C2-O3-C4-C5-C6-C7-C8-O9-O10.
+    # The two C=C bonds are (4, 5) and (6, 7); a filter by order alone reaches three double bonds.
+    m = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(4, 5), (6, 7)]  # the two alkene bonds
+    with m.edit() as e:
+        for n, mv in pairs:
+            e.set_bond_stereo_group(n, mv, 3, 1)
+    text = mol(m, version=3000)
+    assert 'MDLV30/STEBRAC1 BONDS=(2 ' in text
+    back = mol(text)
+    assert (sorted(sorted(p) for p in back.bond_stereo_groups()[(3, 1)])
+            == sorted(sorted(p) for p in pairs))
+
+
 def test_an_unrecognised_v2000_property_line_is_dropped_and_says_so():
     """A declared gap: an unrecognised V2000 property line is not preserved.
 

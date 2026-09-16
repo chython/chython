@@ -55,6 +55,9 @@ Fragments, in include order:
                       extremal labelling of the refinement tree (mol_canonical_order)
   _stereo             the derived stereo unit table (SEG_STEREO_UNIT) and the perception that
                       fills it: which atoms and bonds could carry a configuration
+  _cip                CIP descriptor assignment: the shared hash-consed digraph, the rule 1a/1b/2
+                      ranking of a stereo unit's directions, and the letter that ranking implies.
+                      AFTER _stereo, whose unit table it reads and whose translate_parity it calls
   _inchi              the libinchi bridge: the vendored structs, the loader, and the two directions
                       (molecule to InChI and InChIKey, InChI back to a molecule)
   _query_arena        the query arena: enums, structs, Query class, query_alloc, segment accessors
@@ -136,6 +139,7 @@ include "_sssr.pxi"
 include "_morgan.pxi"
 include "_canonical.pxi"
 include "_stereo.pxi"
+include "_cip.pxi"
 include "_inchi.pxi"
 include "_query_arena.pxi"
 include "_query_boxes.pxi"

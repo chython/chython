@@ -143,8 +143,8 @@ cdef enum:
 
 # The same four kinds on the PYTHON surface, because `stereo_units()` hands out `{'kind': <int>}`
 # and until now there was no name for the integer it hands out.  Both toolkit converters in
-# `chython/chimera/` independently grew their own by-value copy of this enum -- each commented as
-# avoiding an import of the extension that `chimera/_iupac.py` makes routinely -- and a by-value
+# `chython/interop/` independently grew their own by-value copy of this enum -- each commented as
+# avoiding an import of the extension that `interop/_iupac.py` makes routinely -- and a by-value
 # copy of a domain is a domain that drifts silently, since nothing compares the two.  Published
 # from the enum itself so there is one statement of it, beside the field it names (RULES.md 6).
 #
@@ -164,9 +164,10 @@ globals()['SU_HELICAL'] = SU_HELICAL
 
 # `stereo_unit_t.spare` is one byte shared between two owners, and the split is the reason nothing
 # may ever assign it wholesale:
-#   * the LOW nibble is flag bits -- SU_STEREOGENIC = 1.  Values 2, 4, 8 are free for a future task
-#     that needs them; a writer must set them with `|=` so that a plain `=` cannot erase the mask above.
-#     See the comment on SU_STEREOGENIC about the future value that §4.6 once reserved here.
+#   * the LOW nibble is flag bits -- SU_STEREOGENIC = 1 and SU_SHIFTABLE = 4.  Values 2 and 8 are
+#     free for a future task that needs them; a writer past `_stereo_emit` must set them with `|=` so
+#     that a plain `=` cannot erase the mask above.  See the comment on SU_STEREOGENIC about the
+#     future value that §4.6 once reserved here.
 #   * the HIGH nibble is a 4-BIT MASK OF WHICH `refs` SLOTS HOLD AN UNNAMED DIRECTION, written here,
 #     read as `spare >> SU_UNNAMED_SHIFT`.  Bit i set means slot i is a direction with no atom of its
 #     own; bit i clear with `refs[i] == SU_NO_REF` means slot i is not a direction at all.  Four
@@ -204,7 +205,11 @@ cdef enum:
     # sanctioned exception to "`_stereo_emit` is the only writer of `spare`", and only for this
     # nibble: a plain assignment would erase the unnamed-direction mask sharing the byte.
     SU_STEREOGENIC = 1      # the unit really is stereogenic: no automorphism is a witness for it
-    # Values 2, 4, 8 are free.  §4.6 once allocated value 2 for a geometric-realizability mark
+    SU_SHIFTABLE = 4        # a cis/trans unit whose double bond an alternating cycle can move, so the
+                            # bond it is written on is a Kekule choice: set by perception's pass 2 from
+                            # the CONSTITUTION, read by `mark_stereogenic`'s decision 0.  See
+                            # `_double_bond_shifts`.
+    # Values 2 and 8 are free.  §4.6 once allocated value 2 for a geometric-realizability mark
     # (SU_UNREALIZABLE) on small-ring cis/trans units.  That stage proved provably empty on a
     # Kekulé-only arena: `mark_unrealizable` would call `_terminals_share_small_ring` on exactly
     # the units that already survived `_terminals_share_small_ring` in perception's pass 2, so the
@@ -493,7 +498,7 @@ cdef inline stereo_unit_t *stereo_unit_of(Structure structure, uint32_t slot) no
 
 cdef inline int _stereo_emit(stereo_unit_t *out, Py_ssize_t *count, uint8_t *anchored,
                              uint8_t kind, uint32_t anchor, uint32_t *refs,
-                             uint8_t n_refs, uint8_t unnamed) noexcept nogil:
+                             uint8_t n_refs, uint8_t unnamed, uint8_t flags) noexcept nogil:
     """Append one record, refusing a second unit on an anchor that already has one.
 
     Returns 0, or -1 when the anchor is taken -- the caller turns that into a raise.  Every kind
@@ -501,9 +506,12 @@ cdef inline int _stereo_emit(stereo_unit_t *out, Py_ssize_t *count, uint8_t *anc
     layout depends on, and a kind that appended a record by hand would bypass it.
 
     `unnamed` is the mask of `refs` slots holding a direction with no atom of its own -- bit i for
-    slot i, ruling F41.  It goes in the high nibble of `spare`, leaving the low nibble to the flag
-    nibble (of which `SU_STEREOGENIC` is bit 0); it is zero here, so this is the one place `spare`
-    may be assigned rather than or-ed.  A consumer that wants a scalar count takes its popcount.
+    slot i, ruling F41.  It goes in the high nibble of `spare`; `flags` goes in the low one, which is
+    why this is the one place `spare` may be assigned rather than or-ed -- both owners of the byte are
+    named in the same expression.  A consumer that wants a scalar count takes the mask's popcount.
+
+    The only flag a caller passes is SU_SHIFTABLE, which perception knows and nothing later can
+    recompute cheaply; SU_STEREOGENIC is `mark_stereogenic`'s and reaches the byte through `|=`.
     """
     cdef stereo_unit_t *u
     cdef int k
@@ -515,7 +523,7 @@ cdef inline int _stereo_emit(stereo_unit_t *out, Py_ssize_t *count, uint8_t *anc
     u.kind = kind
     u.parity = 0          # always 0: the anchor's SEG_PARITY byte is the parity
     u.n_refs = n_refs
-    u.spare = <uint8_t> ((unnamed & SU_UNNAMED_MASK) << SU_UNNAMED_SHIFT)
+    u.spare = <uint8_t> (((unnamed & SU_UNNAMED_MASK) << SU_UNNAMED_SHIFT) | (flags & SU_FLAG_MASK))
     u.anchor = anchor
     for k in range(4):
         u.refs[k] = refs[k]
@@ -638,6 +646,17 @@ cdef inline bint _pi_directions_indistinguishable(atom_t *p, atom_t *q) noexcept
 #     three-ring cannot hold one.  `SU_UNREALIZABLE` (value 2 in the flag nibble) is the mechanism
 #     for that question; this build does not take that stage, and the flag nibble's own enum comment
 #     on value 2 records why.
+#
+# THE SECOND RING RULE IS ABOUT THE DRAWING AND NOT THE RING SIZE.  Above SU_MIN_STEREO_RING a ring
+# double bond is admitted, and for a FULLY CONJUGATED ring that leaves one candidate per drawn double
+# bond -- on a molecule whose drawing is one of two.  Dibenzo[a,e]cyclooctatetraene is the case: its
+# eight-ring carries four double bonds in one Kekule form and two in the other, so a stated cis/trans
+# parity there is a statement about which form the file drew.  So a candidate whose double bond lies on
+# an ALTERNATING CYCLE is flagged SU_SHIFTABLE here and refused by `mark_stereogenic`'s decision 0.
+# The predicate is the shift itself rather than "the ring is conjugated", which is not the same test:
+# cycloocta-2,6-diene-1,5-dione has a fully conjugated ring and no shift -- its alternation dies at a
+# carbon whose double bond is the exocyclic ketone -- and its enedione E/Z is real.  See
+# `_double_bond_shifts` for the walk, its soundness and the aromatic-arena gap.
 #
 # WHY THE WALK TERMINATES.  It starts only from an atom with exactly one chain bond and refuses to
 # step onto an atom with more than two, so every walked vertex has chain-degree at most two: the
@@ -821,6 +840,89 @@ cdef inline bint _terminals_share_small_ring(Structure structure, atom_t *atoms,
                                     <uint64_t> 1 << bit) < SU_MIN_STEREO_RING:
                 return True
             shared &= shared - 1
+    return False
+
+
+cdef inline uint32_t _shift_partner(uint32_t *ptr, halfedge_t *edges, uint32_t a) noexcept nogil:
+    """The atom at the other end of `a`'s one localised double bond; SU_NO_REF for none or for two.
+
+    Two is refused rather than resolved: an atom carrying two of them is a cumulene interior, and a
+    shift round a cycle through it would have to decide which of the two moves.  What is left is a
+    MATCHING -- at most one double bond per atom -- which is what makes the walk below sound.
+    """
+    cdef uint32_t k
+    cdef uint32_t partner = SU_NO_REF
+    for k in range(ptr[a], ptr[a + 1]):
+        if _is_chain_bond(&edges[k]):
+            if partner != SU_NO_REF:
+                return SU_NO_REF
+            partner = edges[k].to
+    return partner
+
+
+cdef inline bint _double_bond_shifts(uint32_t *ptr, halfedge_t *edges, uint32_t a, uint32_t b,
+                                     uint32_t *stamp, uint32_t *queue,
+                                     uint32_t mark) noexcept nogil:
+    """Does an ALTERNATING CYCLE run through the double bond `a=b` -- double, single, double, ... and
+    back onto `a` through a single bond?
+
+    Such a cycle IS a Kekule shift: spelling each of its double bonds single and each single one
+    double gives the same constitution back, atom for atom, with the same hydrogen counts and the same
+    charges.  So which of the two spellings the arena holds is a property of the drawing, and a
+    cis/trans parity written on a bond the other spelling makes single states something about the
+    drawing rather than about the molecule.  `mark_stereogenic` is what acts on that; this only
+    answers it, because perception is where the walk is already paid for.
+    THE ANSWER IS A CONSTITUTION FACT -- bond orders and nothing else.
+    dibenzo[a,e]cyclooctatetraene is the case that names the rule: one Kekule form puts four double
+    bonds in the eight-ring and the other two, and the sixteen-atom perimeter is the alternating cycle
+    that carries either one into the other.
+
+    WHAT IS NOT REFUSED, and each is a molecule whose E/Z this must keep: cyclooctene and
+    1,5-cyclooctadiene (a cycle through their CH2 groups cannot alternate), cycloocta-2,6-diene-1,5-
+    dione (its ring alternation dies at a carbon whose double bond is the exocyclic ketone), and every
+    acyclic alkene, oxime and azo compound -- a closed walk through `a=b` means the bond is in a ring,
+    so an acyclic bond cannot reach this answer at all.
+
+    THE WALK.  `stamp` and `queue` are one uint32_t per atom, `stamp` zeroed by perception's caller and
+    `mark` a value no earlier walk used (pass 2 passes the terminal's slot plus one).  A node is an
+    atom REACHED ALONG A DOUBLE BOND: from it the cycle must leave by a single bond, and the double
+    bond at that bond's far end is then forced, so one BFS step is "single bond, then the partner's
+    double bond".  Reaching `a` by a single bond closes the cycle.
+
+    SOUND, and incomplete in the safe direction.  Both ends of a double bond are stamped together, so
+    a cycle this finds uses each double bond at most once -- which is what rules out the degenerate
+    closed walk that crosses one double bond twice, alternating round an ODD cycle where no shift
+    exists (bi(cycloprop-2-en-1-ylidene) is the smallest such graph).  The same pairing is why the walk
+    can miss a cycle that would have to re-enter a double bond another branch already spent; missing
+    one keeps a candidate, which is the cheap direction (see the fragment header).
+
+    AN AROMATIC-WRITTEN SYSTEM DOES NOT TAKE PART: `_is_chain_bond` excludes an aromatic bond from the
+    double role and only order 1 serves as the single one, so a cycle whose alternation would have to
+    run through an aromatic ring is not found.  `canonicalize()` decides Kekule form and stereo before
+    `thiele()` for this reason -- there the whole arena is localised -- and an arena that has already
+    been aromatized keeps a candidate the localised drawing of the same molecule refuses.
+    """
+    cdef uint32_t head = 0, tail = 1
+    cdef uint32_t cur, k, w, nxt
+    stamp[a] = mark
+    stamp[b] = mark
+    queue[0] = b
+    while head < tail:
+        cur = queue[head]
+        head += 1
+        for k in range(ptr[cur], ptr[cur + 1]):
+            if edges[k].order != 1:
+                continue                    # the step out of a node is the cycle's SINGLE bond
+            w = edges[k].to
+            if w == a:
+                return True                 # ...and this one closes the cycle onto `a=b`
+            nxt = _shift_partner(ptr, edges, w)
+            if nxt == SU_NO_REF or stamp[nxt] == mark:
+                continue
+            stamp[w] = mark                 # one visit per DOUBLE BOND, both ends at once
+            stamp[nxt] = mark
+            queue[tail] = nxt
+            tail += 1                       # at most one enqueue per atom, so `queue` cannot overrun
     return False
 
 
@@ -1101,12 +1203,19 @@ cdef bint _is_atropisomer_axis(Structure structure, halfedge_t *e, uint32_t a,
             and _atropisomer_end(atoms, ptr, edges, b, a, refs_b))
 
 
-cdef Py_ssize_t _perceive_stereo_units(Structure structure, stereo_unit_t *out,
-                                       uint8_t *anchored) noexcept nogil:
-    """Fill `out` with the molecule's stereo units and return how many there are; -1 on a
-    collision (see `_stereo_emit`).
+cdef struct su_scratch_t:
+    # Perception's whole working set, one PyMem_Malloc (RULES.md 5.2), carved by
+    # `ensure_stereo_units_unmarked` -- the one caller, which also zeroes what has to arrive zeroed.
+    void *block
+    stereo_unit_t *units    # one record per atom: the anchor no-collision invariant's bound
+    uint8_t *anchored       # one flag per atom, ZEROED
+    uint32_t *stamp         # pass 2's alternating-cycle visit stamps, one per atom, ZEROED
+    uint32_t *queue         # ...and that walk's BFS queue, one slot per atom
 
-    `out` must have room for one record per atom and `anchored` must be a zeroed byte per atom.
+
+cdef Py_ssize_t _perceive_stereo_units(Structure structure, su_scratch_t *scratch) noexcept nogil:
+    """Fill `scratch.units` with the molecule's stereo units and return how many there are; -1 on a
+    collision (see `_stereo_emit`).
 
     Three passes, one per kind that has its own walk: tetrahedral over atoms, cumulene over
     double-bond chains, atropisomer over bonds.  THE RESULTING UNIT ORDER IS NOT PROMISED and
@@ -1117,6 +1226,11 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, stereo_unit_t *out,
     cdef atom_t *atoms = structure.atoms()
     cdef uint32_t *ptr = csr_ptr(structure)
     cdef halfedge_t *edges = csr_edges(structure)
+    # bound once each, and `out`/`anchored` keep the names the three passes read them by (RULES.md 2.1)
+    cdef stereo_unit_t *out = scratch.units
+    cdef uint8_t *anchored = scratch.anchored
+    cdef uint32_t *stamp = scratch.stamp
+    cdef uint32_t *queue = scratch.queue
     cdef atom_t *a
     cdef halfedge_t *e
     cdef uint32_t n = structure.header.atom_count
@@ -1130,6 +1244,7 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, stereo_unit_t *out,
     cdef int n_ref, n_h, n_unnamed, spent, pi_count, unnamed_mask, near_mask, far_mask
     cdef uint32_t pivot, other_pivot
     cdef bint refused, any_aromatic
+    cdef uint8_t su_flags
     cdef Py_ssize_t count = 0
 
     for i in range(n):
@@ -1240,7 +1355,7 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, stereo_unit_t *out,
         # starting where the named ones stopped, and its popcount is that count.  Ruling F41 is about
         # bond kinds; this spelling is the same information.
         unnamed_mask = ((1 << n_unnamed) - 1) << (n_ref + n_h)
-        if _stereo_emit(out, &count, anchored, SU_TETRA, i, refs, 4, <uint8_t> unnamed_mask):
+        if _stereo_emit(out, &count, anchored, SU_TETRA, i, refs, 4, <uint8_t> unnamed_mask, 0):
             return -1
 
     # Pass 2: cumulenes.  Each chain is walked from whichever terminal has the lower slot, so
@@ -1268,7 +1383,7 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, stereo_unit_t *out,
         if chain_len & 1:
             if _stereo_emit(out, &count, anchored, SU_ALLENE,
                             _chain_nth(ptr, edges, i, chain_len >> 1), refs, 4,
-                            <uint8_t> n_unnamed):
+                            <uint8_t> n_unnamed, 0):
                 return -1
         # The small-ring cut applies to cis/trans ONLY -- ruling F44, argued in the fragment comment:
         # its "the ring path holds them cis" premise is not a statement about an axial unit, whose
@@ -1298,8 +1413,24 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, stereo_unit_t *out,
         # free in the flag nibble) becomes meaningful.  That is the condition under which to revisit.
         elif _terminals_share_small_ring(structure, atoms, i, far):
             continue
-        elif _stereo_emit(out, &count, anchored, SU_CIS_TRANS, i, refs, 4, <uint8_t> n_unnamed):
-            return -1
+        else:
+            # SU_SHIFTABLE IS FLAGGED HERE AND ACTED ON IN `mark_stereogenic`, and the two halves are
+            # deliberately not one: whether an alternating cycle can move this double bond is a fact
+            # about the CONSTITUTION, which is what this pass answers, while "so the parity is not a
+            # configuration" is a stereogenicity verdict and belongs beside the other two chemistry
+            # refusals (decision 0).  The candidate itself stands: `stereo_units()` still reports the
+            # bond, with `stereogenic` False, and a caller asking what the drawing named gets an answer.
+            #
+            # ONLY A TWO-ATOM CHAIN.  For a longer even chain -- butatriene and up -- the cycle would
+            # have to name which of the chain's double bonds it moves, and the walk's matching says at
+            # most one per atom, so a cumulene interior stops it anyway.  `chain_len` is the gate rather
+            # than the walk's own refusal so that the reason is stated where it is decided.
+            su_flags = 0
+            if chain_len == 2 and _double_bond_shifts(ptr, edges, i, far, stamp, queue, i + 1):
+                su_flags = SU_SHIFTABLE
+            if _stereo_emit(out, &count, anchored, SU_CIS_TRANS, i, refs, 4,
+                            <uint8_t> n_unnamed, su_flags):
+                return -1
 
     # Pass 3: atropisomers, over bonds taken from their lower-indexed end, so each axis is seen once.
     for i in range(n):
@@ -1346,7 +1477,7 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, stereo_unit_t *out,
             # leads, which is what makes the relocation above meaning-preserving.
             _atropisomer_end(atoms, ptr, edges, pivot, other_pivot, &refs[0])
             _atropisomer_end(atoms, ptr, edges, other_pivot, pivot, &refs[2])
-            if _stereo_emit(out, &count, anchored, SU_ATROPISOMER, pivot, refs, 4, 0):
+            if _stereo_emit(out, &count, anchored, SU_ATROPISOMER, pivot, refs, 4, 0, 0):
                 return -1
     return count
 
@@ -1660,17 +1791,14 @@ PERM_ODD_4[:] = [[0, 1, 3, 2], [0, 2, 1, 3], [0, 3, 2, 1], [1, 0, 2, 3],
                  [2, 3, 1, 0], [3, 0, 1, 2], [3, 1, 2, 0], [3, 2, 0, 1]]
 
 
-cdef uint32_t stereo_unit_partner(Structure structure, stereo_unit_t *u) noexcept nogil:
-    """The other atom a BOND kind is named on -- the far cis/trans terminal, the other biaryl pivot
-    -- or SU_NO_REF for a kind that is named on one atom.
+cdef inline uint32_t _stereo_partner_raw(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
+                                          stereo_unit_t *u) noexcept nogil:
+    """The other atom a BOND kind is named on, from raw CSR pointers.
 
-    An atom kind has no partner and neither has SU_ALLENE, whose anchor is the chain's centre and
-    whose name is that one atom (spec 3.2); `chiral_bonds` keys on this and `chiral_atoms` gets the
-    rest, which is why the allene lands with the atoms.
+    Returns SU_NO_REF for the kinds no bond names (SU_TETRA, SU_ALLENE, SU_HELICAL).  This is the single
+    implementation that both `stereo_unit_partner` (Structure wrapper) and the matcher's cached-CSR
+    path call -- one derivation, two thin entry points.
     """
-    cdef atom_t *atoms = structure.atoms()
-    cdef uint32_t *ptr = csr_ptr(structure)
-    cdef halfedge_t *edges = csr_edges(structure)
     cdef uint32_t far = 0, far_prev = 0, chain_len = 0
     cdef uint32_t k, j
     if u.kind == SU_CIS_TRANS:
@@ -1690,6 +1818,217 @@ cdef uint32_t stereo_unit_partner(Structure structure, stereo_unit_t *u) noexcep
                 return j
         return SU_NO_REF
     return SU_NO_REF
+
+
+cdef uint32_t stereo_unit_partner(Structure structure, stereo_unit_t *u) noexcept nogil:
+    """The other atom a BOND kind is named on -- the far cis/trans terminal, the other biaryl pivot
+    -- or SU_NO_REF for a kind that is named on one atom.
+
+    A one-owner kind has no partner and neither has SU_ALLENE: its two owners are the chain terminals,
+    which are not bonded, so no bond names it and `stereo_unit_owners` is what gives the pair.
+    `chiral_bonds` keys on this and `chiral_atoms` gets the rest, which is why the allene lands with
+    the atoms -- reported at its midpoint, the atom the byte and the parity live at.
+    """
+    cdef atom_t *atoms = structure.atoms()
+    cdef uint32_t *ptr = csr_ptr(structure)
+    cdef halfedge_t *edges = csr_edges(structure)
+    return _stereo_partner_raw(atoms, ptr, edges, u)
+
+
+cdef inline uint32_t _chain_far(uint32_t *ptr, halfedge_t *edges, uint32_t cur,
+                                uint32_t prev) noexcept nogil:
+    """The terminal the chain reaches from `cur` walking away from `prev`.
+
+    `_cumulene_walk` answers this from a TERMINAL and validates the chain on the way; this one starts
+    in the MIDDLE, which is where an allene's anchor sits, and validates nothing -- the unit's
+    existence is already the proof that the chain is one.
+
+    Unbounded, and safe only because of its caller: perception reaches an allene by walking in from a
+    chain TERMINAL, which a chain closed into a cycle does not have, so no unit is ever anchored inside
+    one.  A cyclic chain of double bonds would spin here and cannot be reached.
+    """
+    cdef uint32_t nxt
+    while True:
+        nxt = _chain_next(ptr, edges, cur, prev)
+        if nxt == SU_NO_REF:
+            break
+        prev = cur
+        cur = nxt
+    return cur
+
+
+cdef inline uint32_t _chain_far_capped(uint32_t *ptr, halfedge_t *edges, uint32_t cur, uint32_t prev,
+                                       uint32_t limit) noexcept nogil:
+    """`_chain_far` for a walk whose start is CALLER INPUT: the far end, or wherever `limit` steps
+    reach.  A chain closed into a cycle has no far end, and one atom slot per step is past every open
+    chain there is.
+    """
+    cdef uint32_t nxt
+    while limit:
+        nxt = _chain_next(ptr, edges, cur, prev)
+        if nxt == SU_NO_REF:
+            break
+        prev = cur
+        cur = nxt
+        limit -= 1
+    return cur
+
+
+cdef inline int stereo_unit_owners(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
+                                   stereo_unit_t *u, uint32_t *a, uint32_t *b) noexcept nogil:
+    """The atom slots a unit is NAMED on, ascending by slot; the count, 1 or 2.
+
+    Two keys, deliberately: MEMORY keys a group at `u.anchor`, a WIRE keys it on the owners, because
+    a pach entry, a V3000 collection and a CXSMILES member list are all written before the reader has
+    a unit table to consult.  The two are not the same atom:
+
+    | Kind | Owners | Anchor |
+    | --- | --- | --- |
+    | SU_TETRA, SU_HELICAL | the centre | the centre |
+    | SU_CIS_TRANS | the two chain terminals | the lower of them |
+    | SU_ALLENE | the two chain terminals | the chain's MIDPOINT, which is neither owner |
+    | SU_ATROPISOMER | the two pivots | one pivot, and not always the lower (ruling F45) |
+
+    The last two rows are why `structure_owner_pair_anchor` inverts this through the table instead of
+    arithmetically: no function of the pair reaches an allene's midpoint, and a relocated axis breaks
+    `min()` even where the anchor IS an owner.
+    """
+    cdef uint32_t p, n1, n2, k
+    if u.kind == SU_ALLENE:
+        n1 = SU_NO_REF
+        n2 = SU_NO_REF
+        for k in range(ptr[u.anchor], ptr[u.anchor + 1]):
+            if _is_chain_bond(&edges[k]):
+                if n1 == SU_NO_REF:
+                    n1 = edges[k].to
+                else:
+                    n2 = edges[k].to
+                    break
+        if n2 == SU_NO_REF:
+            # not a chain interior after all: name the anchor alone rather than half a pair
+            a[0] = u.anchor
+            b[0] = SU_NO_REF
+            return 1
+        n1 = _chain_far(ptr, edges, n1, u.anchor)
+        n2 = _chain_far(ptr, edges, n2, u.anchor)
+        a[0] = n1 if n1 < n2 else n2
+        b[0] = n2 if n1 < n2 else n1
+        return 2
+    p = _stereo_partner_raw(atoms, ptr, edges, u)
+    if p == SU_NO_REF:
+        a[0] = u.anchor
+        b[0] = SU_NO_REF
+        return 1
+    a[0] = u.anchor if u.anchor < p else p
+    b[0] = p if u.anchor < p else u.anchor
+    return 2
+
+
+cdef inline uint32_t structure_owner_pair_anchor(Structure structure, uint32_t i,
+                                                 uint32_t j) noexcept nogil:
+    """The anchor slot of the unit whose OWNERS are `{i, j}`; SU_NO_REF when no unit owns that pair.
+
+    The inverse of `stereo_unit_owners`, and the whole write path for an axis spelling.  The unit
+    table is the caller's to build first.
+    """
+    cdef atom_t *atoms = structure.atoms()
+    cdef uint32_t *ptr = csr_ptr(structure)
+    cdef halfedge_t *edges = csr_edges(structure)
+    cdef stereo_unit_t *units = structure_stereo_units(structure)
+    cdef uint32_t count = structure_stereo_unit_count(structure)
+    cdef uint32_t k, a = 0, b = 0
+    cdef uint32_t lo = i if i < j else j
+    cdef uint32_t hi = j if i < j else i
+    for k in range(count):
+        if stereo_unit_owners(atoms, ptr, edges, &units[k], &a, &b) == 2 and a == lo and b == hi:
+            return units[k].anchor
+    return SU_NO_REF
+
+
+cdef inline uint32_t stereo_group_pair_anchor(Structure structure, uint32_t i,
+                                             uint32_t j) noexcept nogil:
+    """`structure_owner_pair_anchor`, forgiving a CHAIN BOND: any double bond of a cumulene chain
+    names the axis that chain carries.  SU_NO_REF when neither question has an answer.
+
+    A wire and a caller both spell an axis by its owners, the chain's two terminals, and a caller
+    holding a BOND spells the bond -- which is the owner pair for a plain cis/trans axis and is not for
+    anything longer.  So a pair the exact inverse rejects is walked out to its terminals once and asked
+    again: `CC=C=C=CC`'s middle bond (3, 4) reaches the axis owned by (2, 5).
+
+    The walk is capped at the atom count because the pair is CALLER INPUT: a chain closed into a cycle
+    has no terminal, perception never anchors a unit inside one, and `C1=C=C=C=C=C=1` is storable.
+    """
+    cdef uint32_t anchor = structure_owner_pair_anchor(structure, i, j)
+    if anchor != SU_NO_REF:
+        return anchor
+    cdef uint32_t *ptr = csr_ptr(structure)
+    cdef halfedge_t *edges = csr_edges(structure)
+    cdef uint32_t k, ti, tj
+    for k in range(ptr[i], ptr[i + 1]):
+        if edges[k].to != j:
+            continue
+        if not _is_chain_bond(&edges[k]):
+            return SU_NO_REF
+        ti = _chain_far_capped(ptr, edges, i, j, structure.header.atom_count)
+        tj = _chain_far_capped(ptr, edges, j, i, structure.header.atom_count)
+        if ti == i and tj == j:
+            return SU_NO_REF      # a lone double bond: the pair asked about above is all there is
+        return structure_owner_pair_anchor(structure, ti, tj)
+    return SU_NO_REF
+
+
+cdef inline uint32_t _owning_unit_anchor(Structure structure, uint32_t slot) noexcept nogil:
+    """The anchor of a unit that OWNS `slot` without being anchored there; SU_NO_REF when there is
+    none.  The higher terminal of a cis/trans axis and either terminal of an allene reach a unit only
+    through this.  First match wins: one slot can be an owner of at most one unit of each kind, and a
+    caller that needs to tell two apart spells the pair.
+    """
+    cdef atom_t *atoms = structure.atoms()
+    cdef uint32_t *ptr = csr_ptr(structure)
+    cdef halfedge_t *edges = csr_edges(structure)
+    cdef stereo_unit_t *units = structure_stereo_units(structure)
+    cdef uint32_t count = structure_stereo_unit_count(structure)
+    cdef uint32_t k, a = 0, b = 0
+    for k in range(count):
+        if stereo_unit_owners(atoms, ptr, edges, &units[k], &a, &b) == 2 and (a == slot or b == slot):
+            return units[k].anchor
+    return SU_NO_REF
+
+
+cdef inline uint32_t stereo_owner_unit_count(Structure structure, uint32_t slot) noexcept nogil:
+    """How many units name `slot` among their OWNERS.
+
+    Ownership is a function of the constitution, so a count of 1 identifies the unit in ANY slot order:
+    a reader reaching that atom -- through the unit anchored there, or through the unit that merely owns
+    it -- reaches the one unit either way.  A count of 2 is the case a per-ATOM collection syntax cannot
+    spell, because the atom names two elements and the index says nothing about which; the biaryl pivot
+    of `C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12` is both, an atropisomer owner and a ring cis/trans terminal.
+    """
+    cdef atom_t *atoms = structure.atoms()
+    cdef uint32_t *ptr = csr_ptr(structure)
+    cdef halfedge_t *edges = csr_edges(structure)
+    cdef stereo_unit_t *units = structure_stereo_units(structure)
+    cdef uint32_t count = structure_stereo_unit_count(structure)
+    cdef uint32_t k, a = 0, b = 0, total = 0
+    for k in range(count):
+        stereo_unit_owners(atoms, ptr, edges, &units[k], &a, &b)
+        if a == slot or b == slot:
+            total += 1
+    return total
+
+
+cdef inline uint8_t _sg_byte_raw(uint8_t *groups, stereo_unit_t *u) noexcept nogil:
+    """A unit's `sg_pack` byte: the one at its ANCHOR slot, as its parity is.
+
+    One namespace and one slot.  Nothing in CTfile ties `STERAC1` to `STEBRAC1`, so a file can hand a
+    reader two collections that share a number; the reader MERGES them, because a collection is a set
+    of stereocentres and a centre and an axis are both stereocentres.  Which spelling a format uses
+    on the way out is the writer's business (V3000 spells an axis by its chain midpoint), never the
+    storage's.
+    """
+    if groups is NULL:
+        return 0
+    return groups[u.anchor]
 
 
 cdef inline int _induced_permutation(uint32_t *sigma, stereo_unit_t *v, stereo_unit_t *w,
@@ -1839,7 +2178,9 @@ cdef int mark_stereogenic(Structure structure) except -1:
     cheaper ones did not settle:
 
       0. CHEMISTRY, which the automorphism group cannot see.  Two directions with no atom of their
-         own in one list are indistinguishable, and a hydrogen on a group-15/16 anchor inverts.
+         own in one list are indistinguishable, a hydrogen on a group-15/16 anchor inverts, and a
+         double bond an alternating cycle can move (SU_SHIFTABLE) is a Kekule choice rather than a
+         configuration.
       1. A TRIVIAL GROUP.  No automorphism at all, so no witness: every survivor is stereogenic,
          and this is where nearly every real molecule is decided.
       2. SEPARATED REFINEMENT CLASSES.  An automorphism preserves the refinement, so a unit whose
@@ -1954,6 +2295,14 @@ cdef int mark_stereogenic(Structure structure) except -1:
             elif _anchor_is_protic(atoms, u):
                 verdict[k] = SG_NO  # still a parity carrier as far as the GRAPH is concerned, so it
                                     # keeps constraining -- the refusal is chemistry, not symmetry
+            elif u.spare & SU_SHIFTABLE:
+                # An alternating cycle moves this double bond, so the bond it is written on is a Kekule
+                # choice and a sign on it names the drawing.  Perception decided the constitutional
+                # half (`_double_bond_shifts`); this is the verdict.  It keeps constraining for the
+                # same reason the protic case does -- the parity is still in SEG_PARITY until
+                # `validate_stereo` clears it, and a witness that contradicted it would be one found
+                # against input the molecule still carries.
+                verdict[k] = SG_NO
             else:
                 undecided += 1
 
@@ -2249,8 +2598,9 @@ cdef int ensure_stereo_units_unmarked(Structure structure) except -1:
     """Fill SEG_STEREO_UNIT with PERCEPTION ONLY, leaving the marks undecided; idempotent.
 
     Ruling F70.  The table this leaves behind is pure constitution -- `kind`, `anchor`, `refs`,
-    `n_refs` and `spare`'s unnamed-direction nibble -- and its header says so: word `[2]` is 0, which
-    is how `ensure_stereo_units` knows the marking pass still owes it a run.  Word `[1]` is 0 too,
+    `n_refs`, `spare`'s unnamed-direction nibble and its SU_SHIFTABLE bit, which is bond orders and
+    nothing else -- and its header says so: word `[2]` is 0, which is how `ensure_stereo_units` knows
+    the marking pass still owes it a run.  Word `[1]` is 0 too,
     because a truncation answer only exists once a search has been asked for one.
 
     FOR CALLERS THAT READ CONSTITUTION AND NOTHING ELSE.  Three of them exist.
@@ -2284,25 +2634,32 @@ cdef int ensure_stereo_units_unmarked(Structure structure) except -1:
     is not known until the walk is over, the segment cannot be sized before that, and a walk that
     held arena pointers across the append would be walking freed memory.
 
-    The scratch is one record per atom, which is exact rather than generous -- see the anchor
+    The record region is one record per atom, which is exact rather than generous -- see the anchor
     no-collision invariant in the fragment comment, which `_stereo_emit` asserts and which this
-    bound is the third consumer of.
+    bound is the third consumer of.  The other three regions are one word or one byte per atom, and
+    all four are carved from ONE block (RULES.md 5.2); `su_scratch_t` says which of them arrive zeroed.
     """
     if structure_has(structure, SEG_STEREO_UNIT):
         return 0
     cdef uint32_t n = structure.header.atom_count
     cdef size_t slots = <size_t> n if n else 1
     cdef Py_ssize_t count = 0
-    cdef stereo_unit_t *scratch = <stereo_unit_t *> PyMem_Malloc(slots * sizeof(stereo_unit_t))
-    cdef uint8_t *anchored = <uint8_t *> PyMem_Malloc(slots)
-    if scratch is NULL or anchored is NULL:
-        PyMem_Free(scratch)
-        PyMem_Free(anchored)
+    cdef su_scratch_t scratch
+    cdef size_t units_len = align8(slots * sizeof(stereo_unit_t))
+    cdef size_t anchored_len = align8(slots)
+    cdef size_t words_len = align8(slots * sizeof(uint32_t))
+    scratch.block = PyMem_Malloc(units_len + anchored_len + 2 * words_len)
+    if scratch.block is NULL:
         raise MemoryError('stereo unit scratch allocation failed')
+    scratch.units = <stereo_unit_t *> scratch.block
+    scratch.anchored = (<uint8_t *> scratch.block) + units_len
+    scratch.stamp = <uint32_t *> ((<uint8_t *> scratch.block) + units_len + anchored_len)
+    scratch.queue = <uint32_t *> ((<uint8_t *> scratch.block) + units_len + anchored_len + words_len)
     try:
-        memset(anchored, 0, slots)
+        memset(scratch.anchored, 0, slots)
+        memset(scratch.stamp, 0, slots * sizeof(uint32_t))       # pass 2's marks start at 1
         with nogil:
-            count = _perceive_stereo_units(structure, scratch, anchored)
+            count = _perceive_stereo_units(structure, &scratch)
         if count < 0:
             # The walk runs in `nogil` and cannot raise, so it reports the refusal as a negative
             # count and this is where it becomes an exception.
@@ -2320,11 +2677,10 @@ cdef int ensure_stereo_units_unmarked(Structure structure) except -1:
         (<uint32_t *> structure.segment(SEG_STEREO_UNIT))[2] = 0    # marked: `ensure_stereo_units`
         (<uint32_t *> structure.segment(SEG_STEREO_UNIT))[3] = 0    # reserved
         if count:
-            memcpy(structure_stereo_units(structure), scratch,
+            memcpy(structure_stereo_units(structure), scratch.units,
                    <size_t> count * sizeof(stereo_unit_t))
     finally:
-        PyMem_Free(scratch)
-        PyMem_Free(anchored)
+        PyMem_Free(scratch.block)
     return 0
 
 
@@ -2788,9 +3144,9 @@ def _stereo_anchor_collision_probe():
     cdef int k
     for k in range(4):
         refs[k] = SU_NO_REF
-    if _stereo_emit(scratch, &count, &anchored, SU_TETRA, 0, refs, 4, 0x0F):
+    if _stereo_emit(scratch, &count, &anchored, SU_TETRA, 0, refs, 4, 0x0F, 0):
         raise AssertionError('the first unit on a free anchor was refused')
-    if _stereo_emit(scratch, &count, &anchored, SU_CIS_TRANS, 0, refs, 2, 0) == 0:
+    if _stereo_emit(scratch, &count, &anchored, SU_CIS_TRANS, 0, refs, 2, 0, 0) == 0:
         raise AssertionError('a second unit on a taken anchor was accepted')
     raise RuntimeError(SU_ANCHOR_COLLISION_MSG)
 
@@ -3080,7 +3436,14 @@ _canon_prepare_hook = _canon_stereo_prepare
 
 cdef inline bint _sg_key_less(uint32_t b1, uint32_t b2, uint32_t *count, uint32_t *off,
                               uint32_t *memb) noexcept nogil:
-    """Is group byte b1's membership key below b2's?  Key = (member count, member classes ascending).
+    """Is group byte b1's membership key below b2's?  Key = (member count, member class PAIRS
+    ascending).
+
+    Each member occupies TWO consecutive uint32_t in `memb` -- the classes of the atoms it is NAMED
+    on, the smaller first, and one class twice for a one-owner member -- so `off[b]` points at a
+    region of `2 * count[b]` values and pairs are compared lexicographically pair by pair.  One
+    member spelling for both, because there is one namespace: an axis contributes the classes of its
+    two owners and a centre contributes its own twice.
 
     A total order on the keys and nothing else: the byte values themselves are never compared, so two
     groups with the same key stay tied and one canonical id cannot depend on which id the caller
@@ -3089,10 +3452,44 @@ cdef inline bint _sg_key_less(uint32_t b1, uint32_t b2, uint32_t *count, uint32_
     cdef uint32_t i
     if count[b1] != count[b2]:
         return count[b1] < count[b2]
-    for i in range(count[b1]):
+    for i in range(2 * count[b1]):
         if memb[off[b1] + i] != memb[off[b2] + i]:
             return memb[off[b1] + i] < memb[off[b2] + i]
     return False
+
+
+cdef void _sg_spread_by_owner(Structure structure, atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
+                              uint8_t *sg, uint32_t *label, uint32_t *term_out, uint32_t n):
+    """Each grouped slot's seed term, written onto the atoms its collection NAMES.
+
+    `label` maps a stored byte to this round's label; NULL asks for the byte's KIND instead, which is
+    round 0's term.  A term left at the ANCHOR would not be sigma-equivariant: which end of a
+    two-owner unit anchors it is a slot-order choice (ruling F45) and an allene anchors at a midpoint
+    the collection never names, so a term read there is a fact about the caller's atom order.  That is
+    ruling F95's standing requirement, applied to the group byte exactly as `_frame_free_parity_seed`
+    applies it to the parity byte.
+
+    Terms of several collections on one atom are OR-ed -- the fold is deliberate, as a sum collides
+    exactly as the OR does (1 + 2 == 3, 1 | 2 == 3).  A collision can only MERGE classes; a merge
+    either separates in a later round or survives as an ambiguity class.  An encoding-dependent term
+    would instead answer differently for one molecule, which is the failure ruling F95 forbids.
+
+    In round 0 the term is a KIND, so OR stays inside 0..3 and the seed's documented 0..15 span
+    holds.  In later rounds the term is a LABEL and the OR is not injective.
+    """
+    cdef uint32_t i, oa = 0, ob = 0, v
+    cdef stereo_unit_t *u
+    memset(term_out, 0, <size_t> n * sizeof(uint32_t))
+    for i in range(n):
+        if not sg[i]:
+            continue
+        v = label[sg[i]] if label is not NULL else sg_kind(sg[i])
+        u = stereo_unit_of(structure, i)
+        if u is not NULL and stereo_unit_owners(atoms, ptr, edges, u, &oa, &ob) == 2:
+            term_out[oa] |= v
+            term_out[ob] |= v
+        else:
+            term_out[i] |= v
 
 
 cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
@@ -3103,6 +3500,12 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
     byte no atom of this molecule carries.  Indexing by the whole byte rather than by the group
     number keeps the kinds apart: OR 1 and AND 1 are different groups that share a group number, and
     they get their own canonical ids.
+
+    ONE NAMESPACE FOR EVERY KIND OF STEREOCENTRE.  A group byte sits at its unit's anchor slot, so a
+    centre and an axis in the same collection share a byte and are ranked together here; a MEMBER is
+    one such slot and its key is the pair of atoms it is NAMED on -- an axis's two owners, a centre's
+    own atom twice.  The owners and not the anchor, because an allene's byte lives at the chain
+    midpoint, which the collection never names.
 
     `amb_out`, when not NULL, receives the AMBIGUITY CLASSES: a 1-based class number per stored byte,
     0 for a byte whose canonical id is pinned.  Two bytes sharing a class number are groups this
@@ -3137,7 +3540,7 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
        encoding-invariant -- stated as a standing requirement in the ruling F95 block above.
 
     2. Groups of one kind are ordered by their MEMBERSHIP KEY -- member count, then the members'
-       refinement classes ascending -- and only inside one key by their smallest member position.
+       refinement-class PAIRS ascending -- and only inside one key by their smallest member position.
        The key leads so that each tied block of groups takes a CONTIGUOUS run of ids, which is what
        `canonical_stereo_group_ambiguities` promises its caller: a key outside every class may be
        compared on its own, and a class may be renumbered inside itself without stepping over an id
@@ -3212,9 +3615,14 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
         return 0
 
     cdef uint8_t *sg = structure_stereo_groups(structure)
+    cdef atom_t *atoms
+    cdef uint32_t *ptr
+    cdef halfedge_t *edges
     cdef stereo_unit_t *units
+    cdef stereo_unit_t *u
     cdef uint32_t nunits
-    cdef uint32_t i, j, best, kind, c, nlab, nsel, span, nmemb
+    cdef uint32_t i, j, k, best, kind, c, nlab, nsel, span, nmemb
+    cdef uint32_t oa = 0, ob = 0, lo, hi
     cdef int b
     cdef uint32_t min_pos[256]
     cdef uint32_t count[256]
@@ -3244,12 +3652,19 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
     # taken, and `sg` -- taken above for the any_group scan -- is re-borrowed after it (ruling F60).
     ensure_stereo_units_unmarked(structure)
     sg = structure_stereo_groups(structure)
+    atoms = structure.atoms()
+    ptr = csr_ptr(structure)
+    edges = csr_edges(structure)
     units = structure_stereo_units(structure)
     nunits = structure_stereo_unit_count(structure)
 
     # cls, two seed buffers to alternate between, the round's classes, the order, the members
     # grouped by byte, this round's parity codes, and each unit's partner atom.
-    cdef uint32_t *cls = <uint32_t *> PyMem_Malloc(<size_t> (8 * <size_t> n + 1)
+    #
+    # `memb` takes 2n and not n: a member occupies TWO slots, the classes of the atoms it is named on.
+    # The MEMBER count is bounded by n -- a member is one group byte at one anchor slot -- so 2n is
+    # exact rather than generous, and the total is 8n + 2n + 1.
+    cdef uint32_t *cls = <uint32_t *> PyMem_Malloc(<size_t> (10 * <size_t> n + 1)
                                                    * sizeof(uint32_t))
     if cls is NULL:
         raise MemoryError()
@@ -3257,9 +3672,10 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
     cdef uint32_t *sb = sa + n
     cdef uint32_t *cur = sb + n
     cdef uint32_t *order = cur + n
-    cdef uint32_t *memb = order + n         # each group's member classes, grouped by stored byte
-    cdef uint32_t *par = memb + n           # ruling F95's parity code per atom, 0..3
+    cdef uint32_t *memb = order + n         # each group's member class PAIRS, grouped by stored byte
+    cdef uint32_t *par = memb + 2 * n       # ruling F95's parity code per atom, 0..3
     cdef uint32_t *partner = par + n        # per UNIT, and nunits <= n by the anchor invariant
+    cdef uint32_t *gterm = partner + n      # `_sg_spread_by_owner`'s group term per ATOM
     cdef uint32_t *seed_in = sa
     cdef uint32_t *seed_out = sb
     cdef uint32_t *swap
@@ -3281,10 +3697,15 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
         # coarser.  It is kept because it is free, and because "the seed is the colouring plus the
         # parity read in that colouring" is one rule for every round rather than one plus an exception.
         _frame_free_parity_seed(structure, units, nunits, partner, cls, par, n)
+        atoms = structure.atoms()
+        ptr = csr_ptr(structure)
+        edges = csr_edges(structure)
+        _sg_spread_by_owner(structure, atoms, ptr, edges, sg, NULL, gterm, n)
         for i in range(n):
-            # 0..15: (F95 parity code 0..3) * 4 + kind 0..3.  The stored group NUMBER is deliberately
-            # absent, and so is the stored parity BYTE (ruling F95, argued above the helpers).
-            seed_in[i] = (cls[i] * 4 + par[i]) * 4 + sg_kind(sg[i])
+            # 0..15: (F95 parity code 0..3) * 4 + kind 0..3, the kind taken at the atoms the
+            # collection NAMES.  The stored group NUMBER is deliberately absent, and so is the stored
+            # parity BYTE (ruling F95, argued above the helpers).
+            seed_in[i] = (cls[i] * 4 + par[i]) * 4 + gterm[i]
 
         # Step 3's fixpoint.  TERMINATION, stated because the loop has no other guard: the quantity
         # that grows is `classes`, the number of refinement classes of the round's partition.  Each
@@ -3306,6 +3727,9 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
             # Re-borrowed per round rather than held across the call (ruling F60).  Nothing in
             # compute_atoms_order appends a segment today; the rule is about what a reader may assume.
             sg = structure_stereo_groups(structure)
+            atoms = structure.atoms()
+            ptr = csr_ptr(structure)
+            edges = csr_edges(structure)
             units = structure_stereo_units(structure)
 
             memset(count, 0, sizeof(count))
@@ -3314,20 +3738,42 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
                     count[sg[i]] += 1
             off[0] = 0
             for b in range(256):
-                off[b + 1] = off[b] + count[b]
+                off[b + 1] = off[b] + 2 * count[b]      # two slots per member
                 cursor[b] = off[b]
+            # A MEMBER IS AN ANCHOR SLOT AND ITS KEY IS THE PAIR OF ATOMS IT IS NAMED ON.  A one-owner
+            # unit -- and a slot that anchors no unit at all, which a stated collection may sit on --
+            # contributes its own class twice; an axis contributes its two owners' classes, ascending.
+            # The owners and not the anchor: an allene's byte lives at the chain midpoint, an atom
+            # neither owner, and keying on it would rank the group by an atom the collection never
+            # names.
             for i in range(n):
-                if sg[i]:
-                    memb[cursor[sg[i]]] = cur[i]
-                    cursor[sg[i]] += 1
-            for b in range(256):            # each group's classes ascending, so equal multisets
-                for i in range(off[b] + 1, off[b + 1]):     # compare element by element
-                    c = memb[i]
-                    j = i
-                    while j > off[b] and memb[j - 1] > c:
-                        memb[j] = memb[j - 1]
-                        j -= 1
-                    memb[j] = c
+                if not sg[i]:
+                    continue
+                u = stereo_unit_of(structure, i)
+                if u is not NULL and stereo_unit_owners(atoms, ptr, edges, u, &oa, &ob) == 2:
+                    lo = cur[oa]
+                    hi = cur[ob]
+                    if lo > hi:
+                        lo, hi = hi, lo
+                else:
+                    lo = cur[i]
+                    hi = lo
+                memb[cursor[sg[i]]] = lo
+                memb[cursor[sg[i]] + 1] = hi
+                cursor[sg[i]] += 2
+            for b in range(256):            # each group's pairs ascending, so equal multisets
+                for i in range(1, count[b]):                # compare pair by pair
+                    c = memb[off[b] + 2 * i]
+                    j = memb[off[b] + 2 * i + 1]
+                    k = i
+                    while k > 0 and (memb[off[b] + 2 * (k - 1)] > c or
+                                     (memb[off[b] + 2 * (k - 1)] == c and
+                                      memb[off[b] + 2 * (k - 1) + 1] > j)):
+                        memb[off[b] + 2 * k] = memb[off[b] + 2 * (k - 1)]
+                        memb[off[b] + 2 * k + 1] = memb[off[b] + 2 * (k - 1) + 1]
+                        k -= 1
+                    memb[off[b] + 2 * k] = c
+                    memb[off[b] + 2 * k + 1] = j
             # Labels are handed out in ASCENDING KEY ORDER, key = (member count, member classes
             # ascending), and never in stored-byte order.  Both consumers of `seed` document that
             # they read its equality classes only, but the class numbering compute_atoms_order builds
@@ -3354,15 +3800,18 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
                 else:
                     nlab += 1
                     label[sel[i]] = nlab
-            # (class, co-member multiset, the parity read in THIS round's colouring) as one integer.
+            # (class, co-member multiset, the parity read in THIS round's colouring) as one integer,
+            # the label term taken at the atoms the collection NAMES (`_sg_spread_by_owner`).
             # A label is handed out per PRESENT BYTE, of any kind -- step 4 makes a forged kind-0 byte
-            # reportable, so all 255 nonzero bytes can be present -- hence nlab <= 255 and span <=
-            # 256; with the parity code's four values under it, `(cur[i] * span + label) * 4` stays
-            # inside uint32 for any molecule under 2**32 / 1024 = 4.19 M atoms.
-            span = nlab + 1
+            # reportable, so all 255 nonzero bytes can be present -- hence nlab <= 255 and the span is
+            # 256, which also covers the OR of two labels one atom may carry; with the parity code's
+            # four values under it, `(cur[i] * 256 + term) * 4` stays inside uint32 for any molecule
+            # under 2**32 / 1024 = 4.19 M atoms.
+            span = 256
             _frame_free_parity_seed(structure, units, nunits, partner, cur, par, n)
+            _sg_spread_by_owner(structure, atoms, ptr, edges, sg, label, gterm, n)
             for i in range(n):
-                seed_out[i] = (cur[i] * span + label[sg[i]]) * 4 + par[i]
+                seed_out[i] = (cur[i] * span + gterm[i]) * 4 + par[i]
             swap = seed_in
             seed_in = seed_out
             seed_out = swap
@@ -3393,9 +3842,25 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
         # segment -- but the rule is about what a reader may assume, not about what today's callee
         # happens to do.
         sg = structure_stereo_groups(structure)
+        atoms = structure.atoms()
+        ptr = csr_ptr(structure)
+        edges = csr_edges(structure)
+        units = structure_stereo_units(structure)
+        # The smallest canonical position of ANY ATOM A MEMBER IS NAMED ON, per stored byte.  Both
+        # owners of an axis, for the reason the pair key gives: the anchor is the lower ARENA index of
+        # a cis/trans pair and that is the atom creation order, so taking one atom alone would make
+        # the tiebreak a function of how the molecule was built.  For a one-owner member this is the
+        # member's own position, which is what the pass answered before there was a pair.
         for i in range(n):
-            if sg[i] and order[i] < min_pos[sg[i]]:
-                min_pos[sg[i]] = order[i]
+            if not sg[i]:
+                continue
+            u = stereo_unit_of(structure, i)
+            if u is not NULL and stereo_unit_owners(atoms, ptr, edges, u, &oa, &ob) == 2:
+                c = order[oa] if order[oa] < order[ob] else order[ob]
+            else:
+                c = order[i]
+            if c < min_pos[sg[i]]:
+                min_pos[sg[i]] = c
     finally:
         PyMem_Free(cls)
 

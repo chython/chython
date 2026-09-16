@@ -291,6 +291,14 @@ DEF ATOM_RESERVED_DEFINED = 0x00000fff
 # domain, exactly as for the hydrogen nibbles above.
 DEF HE_CIP_SHIFT = 2
 DEF HE_CIP_MASK  = 0x001c
+# Bits 5-12 of `halfedge_t.flags` are RESERVED AND IGNORED.  An enhanced-stereo group is one fact
+# about a stereo unit, so it is stored once, at the unit's anchor slot in SEG_STEREO_GROUPS, exactly
+# as SEG_PARITY stores a parity -- and an axis's unit is named on two atoms that need not be bonded,
+# which a per-bond field cannot address at all (hexa-2,3,4-triene's owners are three bonds apart).
+#
+# The mask stays inside HE_FLAG_DEFINED rather than moving above it: a buffer written by a build that
+# used these bits must still LOAD.  `MoleculeContainer.from_bytes` clears them and says so once.
+DEF HE_FLAGS_LEGACY_GROUP = 0x1fe0
 DEF ATOM_FLAGS_RESERVED = 0x82   # bits 1 and 7
 
 
@@ -354,7 +362,7 @@ cdef str ALLOWED_ORDERS_MSG = 'order must be 1, 2, 3, 4 (aromatic) or 8'
 # something.  Without this check the top fourteen bits of every half-edge were dead payload: a
 # byte-flip sweep over the frozen v3 records found them to be the only non-padding bytes in a
 # persistent segment that no reader could see.
-DEF HE_FLAG_DEFINED = 0x1f         # HE_IN_RING | HE_AROMATIC | HE_CIP_MASK
+DEF HE_FLAG_DEFINED = 0x1fff       # HE_IN_RING | HE_AROMATIC | HE_CIP_MASK | HE_FLAGS_LEGACY_GROUP
 
 # "No atom index" in SEG_SGROUP_INDEX.  Only a CSTATE pair uses it: a CSTATE whose bond index did not
 # resolve on read keeps its whole value as opaque text, and the pair slots have to say that rather
@@ -2216,6 +2224,7 @@ cdef Structure structure_from_bytes(const char *data, size_t length):
     # the bonds can have changed -- here, and in `csr_build` -- rather than maintained incrementally,
     # so it cannot drift out of step with the orders it counts.
     cdef uint32_t aromatic_halves = 0
+    cdef uint8_t sgb
     if src.atom_count:
         if src_ptr[0] != 0:
             raise ValueError('csr pointer array does not start at zero')
@@ -2378,6 +2387,20 @@ cdef Structure structure_from_bytes(const char *data, size_t length):
         if n in seen_ids:
             raise ValueError('stable id %d appears twice' % n)
         seen_ids.add(n)
+
+    cdef const uint8_t *src_sg
+    if seg_count > SEG_STEREO_GROUPS and src.segments[SEG_STEREO_GROUPS].length:
+        src_sg = <const uint8_t *> (data + src.segments[SEG_STEREO_GROUPS].offset)
+        for i in range(src.atom_count):
+            # THE FIELD IS WIDER THAN THE DOMAIN, so the width is not the check: the group is six bits
+            # and 0..63 is its whole domain, all four kinds are defined, and the one illegal pairing is
+            # a group number under an unnumbered kind.  One byte per atom slot holds every collection,
+            # whichever kind of unit is anchored there, so this is the only place the rule is stated.
+            sgb = src_sg[i]
+            if sg_group(sgb) and sg_kind(sgb) < 2:
+                raise ValueError('atom %d has stereo group kind %d with group number %d; only kinds '
+                                 '2 and 3 are numbered'
+                                 % (int(i), int(sg_kind(sgb)), int(sg_group(sgb))))
 
     cdef const uint8_t *src_par
     if persistent_limit > SEG_PARITY and seg_count > SEG_PARITY and src.segments[SEG_PARITY].length:

@@ -31,19 +31,22 @@ numbers.
 Container format: `pach_corpus.load_corpus` reads it, so it is that module's, byte for byte.
 
 PUBLIC COMPOUNDS ONLY: ethanol, benzene, pyridine, aspirin, caffeine, sodium acetate, alanine,
-2-butene, an allene, 2-chloro-2'-fluorobiphenyl, butane.
+2-butene, an allene, 2-chloro-2'-fluorobiphenyl, butane, dimethyl maleate, muconic acid, BINOL,
+fumaric acid.
 """
 from pathlib import Path
 
-from chython.core import H_UNKNOWN, MoleculeContainer, STEREO_AND, read_smiles
+from chython.core import H_UNKNOWN, MoleculeContainer, STEREO_AND, STEREO_OR, read_smiles
 from .pach_corpus import load_corpus
 
 
-__all__ = ['BUILDERS', 'V3_PATH', 'V4_PATH', 'answers', 'drawn', 'load_corpus']
+__all__ = ['BUILDERS', 'BGROUP_BUILDERS', 'BGROUP_NAMES', 'V3_PATH', 'V4_PATH', 'BGROUP_PATH',
+           'answers', 'answers_bgroup', 'drawn', 'load_corpus']
 
 
 V3_PATH = Path(__file__).parent / 'pach_v3_corpus.bin.gz'
 V4_PATH = Path(__file__).parent / 'pach_v4_corpus.bin.gz'
+BGROUP_PATH = Path(__file__).parent / 'pach_bond_group_corpus.bin.gz'
 
 # 2-chloro-2'-fluorobiphenyl.  Built rather than parsed: SMILES has no atropisomer notation.
 _BIPHENYL_BONDS = [(0, 1, 2), (1, 2, 1), (2, 3, 2), (3, 4, 1), (4, 5, 2), (5, 0, 1),
@@ -143,6 +146,104 @@ BUILDERS = [
     ('grouped_alanine', _grouped_alanine),
     ('mapped_methanol', lambda: read_smiles('[CH3:1][OH:2]')),
 ]
+
+
+def _maleate_rel1():
+    """Dimethyl (2Z)-but-2-enedioate (dimethyl maleate) -- one C=C bond in OR group 1.
+
+    STEBREL1: a single-bond correlation across one double bond.
+    """
+    mol = read_smiles('COC(=O)/C=C\\C(=O)OC')
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C'
+             and mol.atom(b.m).atomic_symbol == 'C']
+    assert len(pairs) == 1, pairs
+    with mol.edit() as e:
+        e.set_bond_stereo_group(pairs[0][0], pairs[0][1], STEREO_OR, 1)
+    return mol
+
+
+def _muconate_and1():
+    """(2E,4E)-hexa-2,4-dienedioic acid -- two C=C bonds in AND group 1.
+
+    STEBRAC1: a two-bond correlation.
+    """
+    mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C'
+             and mol.atom(b.m).atomic_symbol == 'C']
+    assert len(pairs) == 2, pairs
+    with mol.edit() as e:
+        for n, m in pairs:
+            e.set_bond_stereo_group(n, m, STEREO_AND, 1)
+    return mol
+
+
+def _binol_and1():
+    """1,1'-binaphthalene-2,2'-diol -- axial bond in AND group 1.
+
+    STEBRAC1 on the biaryl single bond, the prototypical atropisomer correlation.  The one C-C
+    single bond in BINOL is the inter-ring axis; every other C-C bond in the two naphthalene
+    systems is aromatic (order 4).
+    """
+    mol = read_smiles('Oc1ccc2ccccc2c1-c1c(O)ccc2ccccc12')
+    inter = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 1 and mol.atom(b.n).atomic_symbol == 'C'
+             and mol.atom(b.m).atomic_symbol == 'C']
+    assert len(inter) == 1, inter
+    n, m = inter[0]
+    with mol.edit() as e:
+        e.set_bond_stereo_group(n, m, STEREO_AND, 1)
+    return mol
+
+
+def _alanine_fumarate_one_collection():
+    """Alanine's centre and fumarate's axis in ONE AND 1 collection, in a two-component record.
+
+    One namespace in one fixture: a collection is a set of stereocentres, and a centre and an axis are
+    both stereocentres, so `stereo_groups()` answers one key with two members and
+    `bond_stereo_groups()` answers the axis alone.  Fumarate carries the axis because alanine has no
+    stereogenic double bond -- a carbonyl is a bond a group can be STATED on and no unit owns.
+    """
+    mol = read_smiles('N[C@@H](C)C(=O)O.OC(=O)/C=C/C(=O)O')
+    ids = list(mol.atom_numbers)
+    mol.set_stereo_group(ids[1], STEREO_AND, 1)
+    axis = [p for p, u in mol.chiral_bonds().items() if u['kind'] == 1]
+    assert len(axis) == 1, axis
+    with mol.edit() as e:
+        e.set_bond_stereo_group(axis[0][0], axis[0][1], STEREO_AND, 1)
+    return mol
+
+
+BGROUP_BUILDERS = [
+    ('maleate_rel1', _maleate_rel1),
+    ('muconate_and1', _muconate_and1),
+    ('binol_and1', _binol_and1),
+    ('alanine_fumarate_one_collection', _alanine_fumarate_one_collection),
+]
+
+BGROUP_NAMES = [name + sfx for name, _ in BGROUP_BUILDERS for sfx in ('_v4', '_v3')]
+
+
+def answers_bgroup(mol):
+    """Enhanced-stereo answers for `BGROUP_BUILDERS`: what the decoder must reproduce.
+
+    Version-independent: an axis's entry is the same in a v3 and a v4 record, so one answer serves
+    both of a builder's records.  ONE NAMESPACE, so `stereo_groups()` holds both member spellings and
+    `bond_stereo_groups()` is its axis-only view; both are checked, and every member is spelled as a
+    list of atom-list positions -- one long for a centre, two for an axis -- so the answers survive a
+    renumbering and sort against each other.
+    """
+    index = {k: i for i, k in enumerate(mol.atom_numbers)}
+
+    def spell(member):
+        return sorted(index[n] for n in member) if isinstance(member, tuple) else [index[member]]
+
+    return {
+        'groups': {str(k): sorted(spell(m) for m in v) for k, v in mol.stereo_groups().items()},
+        'bond_groups': {str(k): sorted(spell(m) for m in v)
+                        for k, v in mol.bond_stereo_groups().items()},
+    }
 
 
 def answers(mol, with_drawing):

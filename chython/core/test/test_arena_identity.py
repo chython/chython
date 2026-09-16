@@ -45,7 +45,7 @@ unable to see.
 from base64 import b64decode
 from pytest import mark, raises
 
-from chython.core import MoleculeContainer
+from chython.core import MoleculeContainer, smiles
 
 from .v3_fixtures import V3_FIXTURES
 
@@ -365,3 +365,28 @@ def test_the_aromatic_harness_can_fail():
     assert mol.kekule().changed
     assert mol.to_bytes() != before
     assert mol.aromatic_bond_count == 0
+
+
+def test_numbered_group_on_unnumbered_kind_refused():
+    """Kinds 0 and 1 are not numbered, so a byte pairing one with a group number is not an encoding.
+
+    One byte per atom slot holds every group, an axis's at its unit's anchor, and it is validated on
+    the way in.  Located by diffing two buffers that differ only in the group NUMBER, so the position
+    is the `SEG_STEREO_GROUPS` byte and not a coincidental match elsewhere.
+    """
+    one = smiles('C[C@H](N)C(=O)O')
+    with one.edit() as e:
+        e.set_stereo_group(2, 3, 1)     # AND 1 -> 0xc1
+    two = smiles('C[C@H](N)C(=O)O')
+    with two.edit() as e:
+        e.set_stereo_group(2, 3, 2)     # AND 2 -> 0xc2
+    raw = bytearray(one.to_bytes())
+    other = two.to_bytes()
+    offs = [i for i in range(len(other)) if raw[i] != other[i]]
+    assert offs == [i for i in offs if raw[i] == 0xc1 and other[i] == 0xc2], 'not the group byte'
+    assert len(offs) == 1, 'one atom carries the group, so one byte differs'
+    # The legal bytes round-trip: the refusal below is about the encoding, not about the segment.
+    assert MoleculeContainer.from_bytes(bytes(raw)).stereo_groups() == one.stereo_groups()
+    raw[offs[0]] = 0x01                 # kind 0, group 1 -- not an encoding of anything
+    with raises(ValueError, match='only kinds 2 and 3 are numbered'):
+        MoleculeContainer.from_bytes(bytes(raw))

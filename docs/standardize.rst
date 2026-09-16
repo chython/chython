@@ -19,12 +19,14 @@ The Pipeline
 pass                      writes                                           returns
 ========================= ================================================ ==========================
 ``kekule()``              definite bond orders; **repairs** to find a form ``KekuleResult``
+``validate_stereo()``     drops the signs the constitution cannot justify  ``list``, the ids it dropped
 ``standardize()``         group and metal-ligand tables, reagents rejoined ``bool``
 ``implicify_hydrogens()`` hydrogen atoms folded into counts                ``int``, the count removed
 ``neutralize()``          charges paired off                               ``bool``
+``standardize_kekule()``  the Kekule form the small rings hold             ``bool``
 ``thiele()``              the aromatic form; **refuses**, never repairs    ``ThieleResult``
-``standardize_isomers()`` canonical placement of a mobile hydrogen         ``bool``
-``canonicalize()``        all six, to a fixed point                        ``bool``
+``standardize_isomers()`` canonical placement of a mobile hydrogen/charge  ``bool``
+``canonicalize()``        all eight, to a fixed point                      ``bool``
 ========================= ================================================ ==========================
 
 Every pass mutates in place and writes to ``mol.log``. No pass takes a ``log=`` argument and nothing is
@@ -37,18 +39,20 @@ sequence — get the order wrong and two drawings of one compound stop agreeing:
 .. testcode::
 
     from chython import (smiles, standardize, implicify_hydrogens, neutralize,
-                         standardize_isomers)
+                         standardize_kekule, standardize_isomers)
 
     a = smiles('Oc1ccccn1')
     a.canonicalize()
 
     b = smiles('Oc1ccccn1')
     b.kekule()                    # 1. definite orders, so the group rules can match
-    standardize(b)                # 2. repair the drawing
-    implicify_hydrogens(b)        # 3. hydrogen ATOMS are a key difference, so they go
-    neutralize(b)                 # 4. pair off the charges acids.tsv can pair off
-    b.thiele()                    # 5. back to the aromatic form
-    standardize_isomers(b)        # 6. canonical mobile-hydrogen placement
+    b.validate_stereo()           # 2. drop a sign the constitution cannot justify
+    standardize(b)                # 3. repair the drawing
+    implicify_hydrogens(b)        # 4. hydrogen ATOMS are a key difference, so they go
+    neutralize(b)                 # 5. pair off the charges acids.tsv can pair off
+    standardize_kekule(b)         # 6. which Kekule form step 7 gets to read
+    b.thiele()                    # 7. back to the aromatic form
+    standardize_isomers(b)        # 8. canonical mobile-hydrogen placement
 
     print(a == b, a)
 
@@ -74,7 +78,7 @@ Canonicalize
 
 ``canonicalize()`` brings a molecule to the representation two drawings of one compound share, so that
 ``canonical_bytes``, ``__hash__`` and ``__eq__`` answer "same compound" rather than "same drawing".
-The stage order above is a correctness constraint, not taste, and steps 2 to 6 run **to a fixed point**
+The stage order above is a correctness constraint, not taste, and steps 2 to 7 run **to a fixed point**
 rather than once: the placement stage can unblock a repair, a hydroxy-azine whose mobile hydrogen sits
 on the very ring nitrogen the repair rule needs free being the shape that needs the second round. Five
 rounds is the cap, and a molecule still changing at five is logged ``canonicalize:rounds`` as ``LOST``
@@ -299,6 +303,104 @@ stays, because undoing a repair is not aromatization's job:
 .. testoutput::
 
     c1[n+](cccc1)[O-]
+
+``standardize_kekule()`` picks the form ``thiele()`` reads
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``thiele()`` reads the drawing it is handed, so a compound with more than one Kekule form has one
+aromatic form per form. A candidate ring fused to a ring outside the 5–7 window — an eight-ring, a
+four-ring — can absorb its neighbour's fusion carbons' double bonds, and the neighbour is then refused
+for holding its double bonds outside itself. ``standardize_kekule()`` chooses first, keeping the form
+with the most double bonds inside a ring ``thiele()`` considers, so the exocyclic rule stays what it
+says:
+
+.. testcode::
+
+    a = smiles('C1=CC2=CC=C3C=CC=CC3=CC=C2C=C1')   # dibenzo[a,e]cyclooctatetraene, benzo doubles lent
+    b = smiles('C1=CC=C2C=CC3=CC=CC=C3C=CC2=C1')   # the same compound, benzo doubles held
+
+    print(a.standardize_kekule(), b.standardize_kekule())
+    a.thiele()
+    b.thiele()
+    print(a == b, a)
+
+.. testoutput::
+
+    True False
+    True c1cc2c(C=Cc3ccccc3C=C2)cc1
+
+Every form it chooses between is a valid molecule, so the two choice records are ``INFO`` and nothing
+here is a repair: a trial whose kekulisation had to move a hydrogen or a charge is a failed trial. The
+stage is ``kekule-form`` and each record names the ring it acted on:
+
+=============================================  ==========================================================
+Rule                                           When
+=============================================  ==========================================================
+``kekule-form:ring-filled`` (``INFO``)         the ring was given the double bonds its atoms held
+                                               outside it
+``kekule-form:ring-phase`` (``INFO``)          the ring's double bonds were shifted by one bond, the
+                                               alternation with the smaller canonical form
+``kekule-form:budget`` (``LOST``)              512 kekulisations were tried; the ring named and the
+                                               ones after it were not
+=============================================  ==========================================================
+
+.. testcode::
+
+    lent = smiles('C1=CC2=CC=C3C=CC=CC3=CC=C2C=C1')
+    lent.standardize_kekule()
+    print([(r.rule, r.severity) for r in lent.log.by_stage('kekule-form')])
+
+.. testoutput::
+
+    [('kekule-form:ring-filled', 'info')]
+
+``kekule-form:budget`` is ``LOST`` because the molecule keeps whichever form it had reached: on that
+record alone, two drawings of one compound may store different forms, so the convergence the rest of
+this section describes does not hold for it.
+
+A ring **outside** that window gets a canonical alternation instead of a score, nothing downstream
+collapsing its two: the bond-shift drawings of 1,2-dimethylcyclooctatetraene are one compound, and the
+one stored is the alternation with the smaller canonical form. The rings offered a phase are
+``mol.rings``, the SSSR — naphthalene's two six-rings are inside the window and its ten-atom perimeter is
+not in the set, so both Kekule spellings of it are left exactly as drawn and ``thiele()`` decides them.
+
+.. testcode::
+
+    a = smiles('CC1=CC=CC=CC=C1C')      # 1,2-dimethylcyclooctatetraene, C1=C2 written single
+    b = smiles('CC1=C(C)C=CC=CC=C1')    # the same compound, C1=C2 written double
+
+    print(a.standardize_kekule(), b.standardize_kekule())
+    print(a == b, a)
+
+.. testoutput::
+
+    True False
+    True C1(=C(C=CC=CC=C1)C)C
+
+A cis/trans sign on such a bond is not a geometry the pass has to carry. A double bond an alternating
+cycle can move is a Kekule choice, so no configuration is stereogenic on it and ``validate_stereo()``
+drops the sign — which is step 2 of the pipeline, and why the two spellings above converge whether or
+not either states one. Every parity the constitution *does* justify pins its bond, and a form that
+cannot carry one is a failed trial.
+
+That rule is **wider than the phase stage**: the cycle is walked wherever it runs, so a fused perimeter
+counts as one. Dibenzo[a,e]cyclooctatetraene states four parities in the drawing that lends its benzo
+double bonds and two in the drawing that holds them, whose eight-ring alternates around the sixteen-atom
+perimeter rather than around itself; none of the six is stereogenic, so no parity decides which of the two
+forms is stored.
+
+.. testcode::
+
+    lent = smiles(r'C1=C/C2=C/C=C3/C=CC=C/C/3=C/C=C\2/C=C1')
+    print([u['parity'] for u in lent.stereo_units()])
+    print([u['stereogenic'] for u in lent.stereo_units()])
+    print(lent.validate_stereo())
+
+.. testoutput::
+
+    [1, 1, 2, 2]
+    [False, False, False, False]
+    [3, 5, 11, 13]
 
 
 Functional Groups
@@ -639,8 +741,8 @@ matched row can still refuse:
     acids:hydroxide atom 1 was left charged: neutral with 1 implicit hydrogen(s) is a valence violation
 
 
-Mobile Hydrogens
-----------------
+Mobile Hydrogens and Charges
+----------------------------
 
 ``standardize_isomers()`` places a mobile hydrogen canonically, so two drawings of one compound store
 the same molecule. It decides three shapes: an aromatic ring system, a ring system stored Kekule as a
@@ -653,6 +755,26 @@ ring, so requiring the aromatic form would put the whole lactam family out of re
     for a, b in [('Cc1cnc[nH]1', 'Cc1c[nH]cn1'),           # aromatic: 4-methylimidazole
                  ('CC1=CC=NC(=O)N1', 'CC1=NC(=O)NC=C1'),   # Kekule: 4-methylpyrimidin-2-one
                  ('CC(N)=NC', 'CC(=N)NC')]:                # acyclic: N-methylacetamidine
+        ma, mb = smiles(a), smiles(b)
+        ma.standardize_isomers()
+        mb.standardize_isomers()
+        assert ma.canonical_bytes == mb.canonical_bytes, (a, b)
+
+A charge is as mobile as a hydrogen and moves the same way, both signs and on all three shapes: which
+nitrogen of a guanidinium carries the ``+``, or which one of a deprotonated guanidine carries the
+``-``, is a fact about the drawing and not about the ion. The two are dealt separately, because they do
+not always travel together: a substituted nitrogen takes a charge and never a hydrogen, which is what
+makes ``Cn1cc[nH+]c1`` and ``C[n+]1cc[nH]c1`` one ion. Net charge is a different question and stays
+``neutralize()``'s: the hydrogens and charges a group arrived holding are dealt back over that group's
+own sites, so the formula and every component's charge are conserved by construction.
+
+.. testcode::
+
+    for a, b in [('Cc1c[nH+]c[nH]1', 'Cc1c[nH]c[nH+]1'),   # aromatic: 4-methylimidazolium
+                 ('Cn1cc[nH+]c1', 'C[n+]1cc[nH]c1'),       # the charge alone: 1-methylimidazolium
+                 ('NC(=[NH2+])N', '[NH3+]C(=N)N'),         # acyclic cation: guanidinium
+                 ('CN(C)C(=[NH2+])N', 'C[NH+](C)C(=N)N'),  # a tertiary nitrogen holds a cation's H
+                 ('CC(=N)[NH-]', 'CC(N)=[N-]')]:           # acyclic anion: acetamidate
         ma, mb = smiles(a), smiles(b)
         ma.standardize_isomers()
         mb.standardize_isomers()

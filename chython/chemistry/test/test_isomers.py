@@ -17,6 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 """`standardize_isomers`: the placement is a choice, and two spellings must make the same one."""
+from itertools import permutations, product
 from chython.chemistry._canonicalize import canonicalize
 from chython.chemistry._implicit import check_valence
 from chython.chemistry._isomers import standardize_isomers
@@ -230,12 +231,18 @@ def test_a_ring_with_an_sp3_carbon_is_refused_whole():
 
 #: One amidine or guanidine written two ways.  No ring, so no kekuliser: which nitrogen may take the
 #: double bond is decided by its valence and nothing else.
+#:
+#: The last three are the shape where two units share a nitrogen: the bridge is single-bonded to both
+#: carbons, so each unit alone would accept it, and only one of them may.
 AMIDINE_PAIRS = [
     ('CC(N)=NC', 'CC(=N)NC', 'N-methylacetamidine'),
     ('CCN=C(N)NC', 'CCNC(=NC)N', 'N-ethyl-N-methylguanidine'),
     ('COC(=N)NC', 'COC(N)=NC', 'O-methyl-N-methylisourea'),
     ('CNC(N)=NC(=N)NC', 'CNC(=N)NC(=N)NC', 'a biguanide, two amidines in one molecule'),
     ('CC(=NC)NCC', 'CC(NC)=NCC', 'N,N-disubstituted, so both nitrogens carry one hydrogen'),
+    ('N=C(N)NC(=N)N', 'NC(=N)N=C(N)N', 'biguanide, the bridge single-bonded to both carbons'),
+    ('CN(C)C(=N)NC(=N)N', 'CN(C)C(N)=NC(=N)N', 'metformin'),
+    ('N=C(N)NC(=N)NCCc1ccccc1', 'NC(=N)N=C(N)NCCc1ccccc1', 'phenformin'),
 ]
 
 
@@ -255,6 +262,38 @@ def test_the_amidine_path_conserves_the_formula_and_is_idempotent():
             assert not standardize_isomers(mol), f'{label}: not idempotent from {string}'
 
 
+def test_two_amidines_sharing_a_nitrogen_do_not_both_double_bond_it():
+    """A bridging nitrogen may accept one C=N, so the two units are one placement problem.
+
+    Decided as two, each unit picks the bridge -- it is the acceptor its own ranking prefers -- and the
+    plan writes two double bonds onto one nitrogen.
+    """
+    for a, b, label in AMIDINE_PAIRS:
+        for string in (a, b):
+            mol = read_smiles(string)
+            standardize_isomers(mol)
+            assert not check_valence(mol), f'{label}: {string} became {mol}'
+
+
+#: An amidine hung on a ring whose own hydrogen is mobile -- the two paths' gates do not overlap, but
+#: their answers do, each mobile hydrogen sitting in the frame that ranks the other's placements.
+COUPLED = [
+    ('NC(=N)Nc1nc[nH]n1', 'NC(=N)Nc1n[nH]cn1', '3-guanidino-1H-1,2,4-triazole'),
+    ('NC(=N)NC(=N)Nc1cc[nH]n1', 'NC(=N)NC(=N)Nc1n[nH]cc1', '1-(1H-pyrazol-3-yl)biguanide'),
+]
+
+
+def test_a_ring_and_an_amidine_on_it_are_decided_in_one_frame():
+    """Two frames make the pass depend on its own output: idempotence is what catches that."""
+    for a, b, label in COUPLED:
+        for string in (a, b):
+            mol = read_smiles(string)
+            standardize_isomers(mol)
+            assert not standardize_isomers(mol), f'{label}: not idempotent from {string}'
+        ma, mb, same = converge(a, b)
+        assert same, f'{label}: {a} and {b} still differ, {ma} vs {mb}'
+
+
 def test_an_amide_is_not_an_amidine():
     """The double bond has to go to a nitrogen this group may move it to.
 
@@ -271,6 +310,217 @@ def test_an_amide_is_not_an_amidine():
         before = mol.canonical_bytes
         standardize_isomers(mol)
         assert mol.canonical_bytes == before, f'{label}: {string} became {mol}'
+
+
+#: One ion, two drawings.  A charged nitrogen's hydrogen is as mobile as a neutral one's, and the charge
+#: moves with it: which nitrogen of a guanidinium carries the `+` is a fact about the spelling and not
+#: about the ion, so a placement has to choose the charge as well as the hydrogen.  Both paths, the ring
+#: and the amidine, and both signs.
+CHARGED_PAIRS = [
+    ('NC(=[NH2+])N', '[NH3+]C(=N)N', 'guanidinium'),
+    ('CNC(=[NH2+])N', 'CN=C([NH3+])N', 'N-methylguanidinium'),
+    ('CNC(=[NH2+])N', 'C[NH2+]C(=N)N', 'N-methylguanidinium, the charge on the substituted nitrogen'),
+    ('CC(=[NH2+])N', 'CC(=N)[NH3+]', 'acetamidinium'),
+    ('CN(C)C(=[NH2+])NC(=N)N', 'CN(C)C(=N)NC(=[NH2+])N', 'metformin, protonated as it is at pH 7'),
+    ('CN(C)C(=[NH2+])NC(=N)N', 'CN(C)C(=N)N=C(N)[NH3+]', 'metformin cation, the charge at the far end'),
+    ('NC(=N)[NH-]', '[N-]=C(N)N', 'guanidide'),
+    ('CC(=N)[NH-]', 'CC(N)=[N-]', 'acetamidate'),
+    ('NC(=N)NC(=N)[NH-]', '[N-]=C(N)NC(=N)N', 'biguanidide, the anion two units away'),
+    ('CN(C)C(=[NH2+])N', 'C[NH+](C)C(=N)N', 'N,N-dimethylguanidinium, the charge on the tertiary nitrogen'),
+    ('CN(C)C(=[NH2+])NC(=N)N', 'C[NH+](C)C(=N)NC(=N)N', 'metformin cation, the charge on the tertiary N'),
+    ('Cc1c[nH+]c[nH]1', 'Cc1c[nH]c[nH+]1', '4-methylimidazolium'),
+    ('Cn1cc[nH+]c1', 'C[n+]1cc[nH]c1', '1-methylimidazolium: the charge is mobile where the H is not'),
+    ('Cn1ccc[nH+]1', 'C[n+]1ccc[nH]1', '1-methylpyrazolium, the same on adjacent nitrogens'),
+    ('c1[nH+]c[nH]n1', 'c1[nH]c[nH+]n1', '1,2,4-triazolium'),
+    ('Cc1cc[nH+][nH]1', 'Cc1cc[nH][nH+]1', '3-methylpyrazolium'),
+    ('c1cc2[nH+]ncc2cn1', 'c1cc2n[nH+]cc2cn1', 'pyrazolo[3,4-c]pyridinium'),
+]
+
+#: A charge this pass does not own, on an atom no placement may reach: too many neighbours for a site,
+#: an element whose hydrogen is never mobile here, or a component with no site in it at all.
+FIXED_CHARGES = [
+    ('C[N+](C)(C)CCNC(=N)N', 'a quaternary ammonium beside a guanidine'),
+    ('NC(=N)NCC(=O)[O-]', 'a carboxylate beside a guanidine -- oxygen to nitrogen is not this pass'),
+    ('C[N+](=O)[O-]', 'nitromethane, a charge-separated group and not a placement'),
+    ('CC(=O)[O-].NC(=N)N', 'a salt: the anion is in the component without the sites'),
+]
+
+
+def test_two_drawings_of_one_ion_store_the_same_molecule():
+    """The point of the neutral pairs, for an ion: a guanidinium at pH 7 is one compound, not three."""
+    for a, b, label in CHARGED_PAIRS:
+        ma, mb, same = converge(a, b)
+        assert same, f'{label}: {a} and {b} still differ, {ma} vs {mb}'
+
+
+def test_a_charged_placement_is_idempotent_from_either_end():
+    for a, b, label in CHARGED_PAIRS:
+        for string in (a, b):
+            mol = read_smiles(string)
+            standardize_isomers(mol)
+            assert not standardize_isomers(mol), f'{label}: not idempotent from {string}'
+
+
+def test_a_charged_placement_conserves_the_formula_and_every_component_charge():
+    """A charge may move between the sites of one system and nowhere else.
+
+    Net charge is `neutralize()`'s business and this pass has none of it: the count of charges and their
+    signs are read off the group and put back, so a component's charge is an invariant here.
+    """
+    for a, b, label in CHARGED_PAIRS + [('CC(=O)[O-].NC(=[NH2+])N', '', 'guanidinium acetate')]:
+        for string in (a, b) if b else (a,):
+            mol = read_smiles(string)
+            formula = mol.brutto_formula
+            charges = sorted(sum(mol.charge_of(n) for n in c) for c in mol.connected_components)
+            standardize_isomers(mol)
+            assert mol.brutto_formula == formula, f'{label}: {string} became {mol.brutto_formula}'
+            assert sorted(sum(mol.charge_of(n) for n in c)
+                          for c in mol.connected_components) == charges, \
+                f'{label}: {string} moved a charge between components, {mol}'
+
+
+def test_a_charged_placement_adds_no_valence_error():
+    """Judged on the kekule form, because `valence_rules.tsv` has no row for an aromatic `[nH+]`:
+    `check_valence` answers `unknown` for `c1cc[nH+]cc1` as read and `[]` for its kekule form, so the
+    aromatic spelling cannot tell a placement a nitrogen can carry from one it cannot.
+
+    The kinds and not the atoms, and no better than the input: a fused pyrazolium kekulises to a form the
+    table already objects to whichever nitrogen holds its `+`.  A nitrogen asked for a hydrogen or a charge
+    it has no room for is what this catches -- 1-methylpyrazolium handing its hydrogen to its methylated
+    nitrogen, four bonds on a neutral nitrogen, which `kekule()` finds a form for and does not object to.
+    """
+    for a, b, label in CHARGED_PAIRS:
+        for string in (a, b):
+            mol, placed = read_smiles(string), read_smiles(string)
+            mol.kekule()
+            before = sorted(kind for _, kind in check_valence(mol))
+            standardize_isomers(placed)
+            placed.kekule()
+            assert sorted(kind for _, kind in check_valence(placed)) == before, \
+                f'{label}: {string} became {placed}, {check_valence(placed)}'
+
+
+def test_a_charge_the_pass_does_not_own_stays_on_its_atom():
+    """Mobile means mobile over the sites of one system, and a charge elsewhere is somebody else's."""
+    for string, label in FIXED_CHARGES:
+        mol = read_smiles(string)
+        before = {n: mol.charge_of(n) for n in mol.atom_numbers if mol.charge_of(n)}
+        standardize_isomers(mol)
+        after = {n: mol.charge_of(n) for n in mol.atom_numbers if mol.charge_of(n)}
+        assert after == before, f'{label}: {string} moved a charge, {before} -> {after}'
+
+
+#: Species whose EVERY drawing has to collapse, enumerated rather than listed: a pair test only ever
+#: covers the two spellings somebody thought of, and the ones that split were the ones nobody drew.  The
+#: count is what `redrawings` finds today, asserted as a floor so a narrowed space cannot quietly make
+#: this test pass by enumerating one drawing.
+EXHAUSTIVE = [
+    ('NC(=[NH2+])N', 2, 'guanidinium'),
+    ('CC(=[NH2+])N', 2, 'acetamidinium'),
+    ('CC(=N)[NH-]', 2, 'acetamidate'),
+    ('NC(=N)[NH-]', 2, 'guanidide'),
+    ('CC(N)=NC', 2, 'N-methylacetamidine'),
+    ('NC(=N)NC(N)=N', 2, 'biguanide'),
+    ('NC(=N)NC(N)=[NH2+]', 7, 'biguanidinium'),
+    ('NC(=N)NC([NH-])=N', 6, 'biguanidide'),
+    ('NC(=N)NC(=N)NC(=N)N', 5, 'triguanide, the flip-flop chain'),
+    ('CN(C)C(=[NH2+])NC(N)=N', 16, 'metformin cation, a tertiary nitrogen among the sites'),
+    ('C[N+](C)(C)CCNC(N)=N', 2, 'a quaternary ammonium beside a guanidine'),
+    ('NC(=N)NCC(=O)[O-]', 2, 'a carboxylate beside a guanidine'),
+    ('Cc1cnc[nH]1', 2, '4-methylimidazole'),
+    ('Cc1c[nH+]c[nH]1', 2, '4-methylimidazolium'),
+    ('Cc1cc[nH+][nH]1', 2, '3-methylpyrazolium'),
+    ('Cn1cc[nH+]c1', 2, '1-methylimidazolium, a mobile charge on a substituted nitrogen'),
+    ('Cn1ccc[nH+]1', 2, '1-methylpyrazolium, the same on adjacent nitrogens'),
+    ('CCn1cc[n+](C)c1', 2, '1-ethyl-3-methylimidazolium: both nitrogens substituted, only the + moves'),
+    ('c1[nH+]c[nH]n1', 3, '1,2,4-triazolium'),
+    ('c1n[n-]cn1', 2, '1,2,4-triazolide'),
+    ('c1cc2[nH]ncc2cn1', 3, 'pyrazolo[3,4-c]pyridine'),
+    ('c1cc2[nH+]ncc2cn1', 9, 'pyrazolo[3,4-c]pyridinium'),
+    ('Cc1n[nH]c2nc3[nH]nc(C)c3nc12', 7, 'a bis-pyrazolo fused system with two mobile hydrogens'),
+]
+
+
+def redrawings(string):
+    """Every valid redrawing of one species: the same skeleton, the same charges over its nitrogens in any
+    arrangement, the same nitrogen-bound hydrogen count in any distribution, and every double bond an
+    acyclic amidine carbon could hold.  Aromatic as read, so a ring's bond orders are free too.
+
+    Valid means the kekule form is no worse than the source's under `check_valence` -- which is the
+    independent half, and the half that catches a hydrogen a nitrogen has no room for -- and that
+    `kekule()` did not have to rewrite the counts to get there, since a form it repaired into existence is
+    a form of another molecule.  Two exclusions, both deliberate: an arrangement changing the charge
+    MULTISET invents a charge separation, which is `fix_resonance()`'s to remove, and one costing the
+    source its aromatic ring is the flip out of an aromatic ring onto an sp3 nitrogen -- 4-methyl-
+    imidazolium with both hydrogens on one nitrogen -- which no shape here decides.
+    """
+    base = read_smiles(string)
+    reference = base.copy()
+    reference.kekule()
+    kinds = sorted(kind for _, kind in check_valence(reference))
+    aromatic = base.aromatic_rings_count
+    sites = tuple(n for n in base.atom_numbers if base.element_of(n) == 7 and not base.radical_of(n))
+    charges = set(permutations([base.charge_of(n) for n in sites]))
+    hydrogens = sum(base.implicit_h_of(n) or 0 for n in sites)
+    amidines = []
+    for c in base.atom_numbers:
+        if base.element_of(c) != 6:
+            continue
+        near = tuple(n for n in base.neighbors_of(c) if n in sites and not base.bond_in_ring(c, n))
+        if len(near) > 1:
+            amidines.append((c, near))
+    out = {}
+    for qs, hs in product(charges, _spread(len(sites), hydrogens)):
+        for choice in product(*([None, *near] for _, near in amidines)):
+            taken = [n for n in choice if n is not None]
+            if len(taken) != len(set(taken)):
+                continue                  # one nitrogen cannot take two double bonds
+            work = base.copy()
+            with work.edit():
+                for c, near in amidines:
+                    for n in near:
+                        work.set_order(c, n, 1)
+                for (c, _), n in zip(amidines, choice):
+                    if n is not None:
+                        work.set_order(c, n, 2)
+                for n, h, q in zip(sites, hs, qs):
+                    work.set_charge(n, q)
+                    work.set_hydrogens(n, h)
+            asked = {n: (h, q) for n, h, q in zip(sites, hs, qs)}
+            if work.kekule().unresolved:
+                continue
+            if any((work.implicit_h_of(n) or 0, work.charge_of(n)) != state for n, state in asked.items()):
+                continue                  # kekulised only because it was repaired
+            if sorted(kind for _, kind in check_valence(work)) != kinds:
+                continue
+            work.thiele()
+            if work.aromatic_rings_count == aromatic:
+                out[work.canonical_bytes] = work
+    return list(out.values())
+
+
+def _spread(sites, total):
+    """Every way of distributing `total` hydrogens over `sites` nitrogens, at most three each."""
+    if sites == 1:
+        if total <= 3:
+            yield (total,)
+        return
+    for h in range(min(3, total) + 1):
+        for tail in _spread(sites - 1, total - h):
+            yield (h, *tail)
+
+
+def test_every_drawing_of_one_species_makes_the_same_placement():
+    """The claim the pair tests only sample: over the whole space of valid drawings, one form comes out."""
+    for string, count, label in EXHAUSTIVE:
+        drawings = redrawings(string)
+        assert len(drawings) >= count, f'{label}: {len(drawings)} drawings of {string}, expected {count}'
+        placed = {}
+        for mol in drawings:
+            drawn = mol.smiles
+            standardize_isomers(mol)
+            placed.setdefault(mol.canonical_bytes, []).append(drawn)
+        assert len(placed) == 1, f'{label}: {string} splits {len(placed)} ways, {list(placed.values())}'
 
 
 def test_the_method_on_the_container_is_the_registered_pass():

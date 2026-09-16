@@ -301,6 +301,11 @@ cdef uint8_t arom_classify_atom(uint32_t element, int charge, bint radical, uint
             if nbrs == 3:
                 return AROM_MUST_NOT
             if nbrs == 2:
+                if stated_h == 1:
+                    return AROM_MUST_NOT      # three bonds is all an ion of carbon has: a stated
+                if stated_h > 1:              # hydrogen spends the one a ring double would take
+                    invalid[0] = 1
+                    return AROM_MUST_NOT
                 return AROM_MAY               # benzene cation/anion, or a charged pyrrole
             invalid[0] = 1
             return AROM_MUST_NOT

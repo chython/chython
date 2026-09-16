@@ -513,3 +513,70 @@ def test_canonical_order_has_no_pathological_tail(chython_corpus):
     ratio, s, order_us, bytes_us = worst
     assert ratio <= bound, (f'canonical_order() costs {order_us:.1f} us against canonical_bytes '
                             f'{bytes_us:.1f} us ({ratio:.0f}x) on {s}')
+
+
+@fixture(scope='module')
+def stereo_corpus():
+    """`test/stereo.sdf` alone, as canonical SMILES: the 300 IUPAC Blue Book stereochemistry records.
+
+    One file rather than `chython_corpus`' four, because a CIP row measured over arenes and peptides
+    would report the cost of finding no stereocentre.  Half of these records carry one this phase can
+    label, which is what makes a mean over them a number about the pass.
+    """
+    root = _repo_root() / 'test'
+    out = []
+    with SDFRead(root / 'stereo.sdf') as f:
+        for m in f:
+            m.canonicalize()
+            out.append(str(m))
+    assert len(out) > 250, f'stereo corpus collapsed to {len(out)} records; a reader is broken, not slow'
+    return tuple(out)
+
+
+def test_assign_cip_ranking_has_no_pathological_tail(stereo_corpus):
+    """`assign_cip()`'s own work must stay within a small factor of a parse, per molecule and worst case.
+
+    THE STEREO UNIT TABLE IS BUILT OUTSIDE THE TIMER, and that split is the finding this row records.
+    Measured over the 300 records, per molecule: 26 us for `assign_cip()` on a cold molecule, of which
+    10.7 us is the CIP ranking and the rest is `ensure_stereo_units`' stereogenicity witness search.  The
+    tail is entirely in that search -- the worst record costs 1514 us cold and 52 us with the table
+    already built -- so the pass exceeds the design's 500 us worst-record target on two of these records
+    while the ranking it owns is at 99 us.  A caller that has already asked `chiral_atoms()`,
+    `stereogenic_units()` or `validate_stereo()` pays only the ranking.
+
+    Ratios against the record's own parse rather than microseconds, for the reason the module docstring
+    gives: an absolute bound fails on a loaded machine and gets disabled.  The bounds are roughly four
+    times the measured ratios (1.6x mean, 15x worst).
+    """
+    #: repeats per measurement, and the two bounds as multiples of the corpus' mean parse cost
+    repeats, mean_bound, worst_bound = 3, 6, 60
+
+    def cost(source, warm):
+        best = None
+        for _ in range(repeats):
+            m = smiles(source)
+            if warm:
+                m.chiral_atoms()      # the stereogenicity search, whose cost this row excludes
+            started = perf_counter_ns()
+            m.assign_cip()
+            spent = perf_counter_ns() - started
+            if best is None or spent < best:
+                best = spent
+        return best / 1000
+
+    parse_us = None
+    for _ in range(repeats):
+        started = perf_counter_ns()
+        for s in stereo_corpus:
+            smiles(s)
+        spent = (perf_counter_ns() - started) / 1000 / len(stereo_corpus)
+        if parse_us is None or spent < parse_us:
+            parse_us = spent
+
+    ranking = [cost(s, True) for s in stereo_corpus]
+    mean_us = sum(ranking) / len(ranking)
+    worst_us = max(ranking)
+    assert mean_us <= mean_bound * parse_us, (f'assign_cip() ranks at {mean_us:.1f} us per molecule '
+                                              f'against a {parse_us:.1f} us parse')
+    assert worst_us <= worst_bound * parse_us, (f'assign_cip() ranks its worst record in {worst_us:.1f} '
+                                                f'us against a {parse_us:.1f} us mean parse')

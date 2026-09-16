@@ -192,6 +192,55 @@ NAPHTHOQUINONE = ([('C', 0)] * 2 + [('C', 1)] * 4 + [('C', 0), ('C', 1), ('C', 1
 # biphenyl: two systems, one molecule, and the bond between them must stay single
 BIPHENYL = ([('C', 0)] + [('C', 1)] * 5 + [('C', 0)] + [('C', 1)] * 5,
             ring(6, '=-=-=-') + ring(6, '=-=-=-', offset=6) + [(0, 6, 1)])
+# 2-methyl-1,3,2-benzodioxaborole, a catechol boronic ester: a saturated `O-B-O` bridge closing a
+# five-ring onto a benzene.  The electron count admits the ring -- two donor pairs, an empty boron
+# orbital and one carbon borrowed from each end of the fusion bond, six -- so what refuses it is that
+# boron's two ring neighbours are both donors.  The fusion bond is drawn DOUBLE here and the test flips
+# it, since a rule about the bridge may not depend on which form the benzene is in.
+BENZODIOXABOROLE = ([('C', 0), ('C', 0)] + [('C', 1)] * 4 + [('O', 0), ('B', 0), ('C', 3), ('O', 0)],
+                    [(0, 1, 2), (1, 2, 1), (2, 3, 2), (3, 4, 1), (4, 5, 2), (5, 0, 1),
+                     (0, 6, 1), (6, 7, 1), (7, 8, 1), (7, 9, 1), (9, 1, 1)])
+# the same bridge one atom longer: 6-methoxydibenzo[d,f][1,3,2]dioxaphosphepine, the ring a biaryl
+# diol phosphite ligand closes.  A SEVEN-ring with two of its own double bonds, one from each benzene
+BIARYL_PHOSPHITE = ([('C', 0), ('C', 0)] + [('C', 1)] * 4 + [('C', 0), ('C', 0)] + [('C', 1)] * 4
+                    + [('O', 0), ('P', 0), ('O', 0), ('C', 3), ('O', 0)],
+                    [(0, 1, 2), (1, 2, 1), (2, 3, 2), (3, 4, 1), (4, 5, 2), (5, 0, 1),
+                     (6, 7, 2), (7, 8, 1), (8, 9, 2), (9, 10, 1), (10, 11, 2), (11, 6, 1),
+                     (0, 6, 1), (1, 12, 1), (12, 13, 1), (13, 16, 1), (16, 7, 1),
+                     (13, 14, 1), (14, 15, 1)])
+
+
+# --- the dibenzo tricyclics, whose central ring holds no double bond of its own: both fusion bonds
+# belong to a benzo ring as well, so the ring's pi is borrowed and counted.  Built rather than written
+# out because the claim IS the pair -- one verdict from either Kekule form of the benzo rings -- and a
+# hand-typed pair of 15-bond fixtures per compound would hide a slip in exactly that difference.
+def dibenzo(bridge, fused):
+    """Atoms 0, 1 and 2, 3 are the two fusion pairs, 4 to 11 the CH carbons, 12 up the bridge.
+
+    `bridge` is the bridging atoms of the central ring in ring order: one gives the five-ring family,
+    two the six-ring.  `fused` is the order of both fusion bonds and so fixes the benzo rings' Kekule
+    form; every other bond of the central ring is single in both forms, which is the point.
+    """
+    other = 1 if fused == 2 else 2
+    return ([('C', 0)] * 4 + [('C', 1)] * 8 + list(bridge),
+            [(0, 1, fused), (1, 4, other), (4, 5, fused), (5, 6, other), (6, 7, fused), (7, 0, other),
+             (2, 3, fused), (3, 8, other), (8, 9, fused), (9, 10, other), (10, 11, fused),
+             (11, 2, other)]
+            + ([(0, 12, 1), (1, 2, 1), (3, 12, 1)] if len(bridge) == 1
+               else [(0, 12, 1), (1, 13, 1), (2, 13, 1), (3, 12, 1)]))
+
+
+BENZO_RINGS = [(0, 1, 4, 5, 6, 7), (2, 3, 8, 9, 10, 11)]    # the two benzo rings and nothing else
+# four borrowed electrons whichever form is in hand, plus two per donor: six with one bridging atom and
+# eight with two.  So the five-ring family comes out aromatic throughout and the six-ring family keeps
+# a central ring that is a pair of diaryl ethers, thioethers or amines -- `O1c2c(Oc3c1cccc3)cccc2`.
+TRICYCLICS = [('dibenzofuran', [('O', 0)], ALL),
+              ('carbazole', [('N', 1)], ALL),
+              ('dibenzothiophene', [('S', 0)], ALL),
+              ('dibenzo-p-dioxin', [('O', 0), ('O', 0)], BENZO_RINGS),
+              ('thianthrene', [('S', 0), ('S', 0)], BENZO_RINGS),
+              ('phenothiazine', [('S', 0), ('N', 1)], BENZO_RINGS),
+              ('phenoxathiine', [('S', 0), ('O', 0)], BENZO_RINGS)]
 
 # --- mixtures.  Two components in one container, which is the only way a REFUSED system can be a
 # proper subset of the molecule -- and that is what gives the refusal sweep below any resolution.
@@ -218,8 +267,9 @@ P_BENZOQUINONE = ([('C', 0), ('C', 1), ('C', 1), ('C', 0), ('C', 1), ('C', 1),
 # borazine, all single bonds: no Kekule form to match at all.  IT IS THE ONE NEGATIVE THE MATCHING
 # CHECK CANNOT SEE -- three N donors want no ring double bond and find none, three neutral borons
 # contribute an empty orbital, and six pi over six atoms passes Huckel.  What refuses it is the
-# pre-filter's requirement that a candidate ring hold at least one double bond of its own, which is
-# the same sentence as "the caller is holding a Kekule form".
+# pre-filter's requirement that some atom of a candidate ring carry a double bond somewhere, which is
+# the same sentence as "the caller is holding a Kekule form".  A ring that borrows every one of its
+# double bonds from a fused neighbour still satisfies it; borazine's atoms have none to borrow.
 BORAZINE = ([('B', 1), ('N', 1)] * 3, ring(6, '------'))
 # 1,4-dihydropyridine and 2H-pyran: a donor heteroatom AND an sp3 carbon.  What refuses them is not a
 # count of non-sp2 atoms -- PYRROLOIMIDAZOLE above has two and is aromatic -- but the sp3 carbon
@@ -252,7 +302,11 @@ POSITIVE = [('benzene', BENZENE, ALL),
             ('pyrrolo[1,2-a]imidazole', PYRROLOIMIDAZOLE, ALL),
             ('tetralin', TETRALIN, [range(6)]),
             ('naphthoquinone', NAPHTHOQUINONE, [range(6)]),
-            ('biphenyl', BIPHENYL, [range(6), range(6, 12)])]
+            ('biphenyl', BIPHENYL, [range(6), range(6, 12)]),
+            ('2-methyl-1,3,2-benzodioxaborole', BENZODIOXABOROLE, [range(6)]),
+            ('a biaryl diol phosphite', BIARYL_PHOSPHITE, [range(6), range(6, 12)])] + \
+           [(f'{name}, fusion bonds {"double" if fused == 2 else "single"}', dibenzo(bridge, fused),
+             want) for name, bridge, want in TRICYCLICS for fused in (2, 1)]
 
 NEGATIVE = [('cyclobutadiene', CYCLOBUTADIENE),
             ('cyclooctatetraene', CYCLOOCTATETRAENE),
@@ -442,6 +496,68 @@ def test_borole_is_refused_where_borepine_is_accepted():
     _, _, accept, borepine, wanted = expect(*BOREPINE, ALL)
     assert borole == set() and not refusal.changed
     assert borepine == wanted and accept.changed
+
+
+def test_a_saturated_bridge_is_not_aromatic_on_the_ring_it_borrows_a_double_bond_from():
+    """A donor flanked by two donors has no p orbital to overlap with, whatever the rest holds.
+
+    `O-B-O` and `O-P-O` bridges closing a ring onto an aromatic system: every atom passes the classify
+    gate as a donor, and the electron count passes too -- two pairs and a borrowed carbon on each side
+    is six for the five-ring, ten for the seven -- on electrons the fused system is holding.  The bridge
+    atom's neighbourhood is the whole of what says no, and it says it on the bond orders, so the answer
+    does not depend on which Kekule form the fusion bond got.
+    """
+    for name, fixture, want, bridge in [
+            ('benzodioxaborole', BENZODIOXABOROLE, [range(6)], (6, 7, 9)),
+            ('biaryl phosphite', BIARYL_PHOSPHITE, [range(6), range(6, 12)], (12, 13, 16))]:
+        mol, ids, result, got, wanted = expect(*fixture, want)
+        assert got == wanted, name
+        assert all(mol.order_of(ids[i], ids[j]) == 1
+                   for i in bridge for j in bridge if i < j
+                   and mol.order_of(ids[i], ids[j]) is not None), f'{name}: the bridge stayed single'
+        # silent, not refused: a saturated bridge is not a Kekule aromatic anybody can fix
+        assert notices(result) == [] and result.refused == [], name
+
+    # the other Kekule form of the benzene, where the fusion bond is single: one answer either way
+    atoms, bonds = BENZODIOXABOROLE
+    flipped = [(i, j, 1 if o == 2 else 2) if {i, j} <= {0, 1, 2, 3, 4, 5} else (i, j, o)
+               for i, j, o in bonds]
+    mol, ids, result, got, wanted = expect(atoms, flipped, [range(6)])
+    assert got == wanted, 'the benzene is aromatic from either Kekule form'
+
+
+def test_a_BORROWED_SEXTET_is_counted_and_it_splits_the_dibenzo_TRICYCLICS():
+    """The central ring of a dibenzo tricyclic holds no double bond of its own, so its pi is counted.
+
+    Four electrons from the two benzo rings, two per bridging donor.  One bridging atom is six and the
+    tricycle is aromatic throughout -- dibenzofuran, carbazole, dibenzothiophene.  Two is eight and the
+    central ring is refused -- dibenzo-p-dioxin, thianthrene, phenothiazine, phenoxathiine, whose
+    central ring is a pair of diaryl ethers, thioethers or amines.
+
+    BOTH ANSWERS FROM EITHER KEKULE FORM of the benzo rings, which is why the count is the rule and
+    "the ring has a double bond" is not: the fusion bonds are the ring's own bonds too, so drawing them
+    double would admit dibenzo-p-dioxin's central ring and drawing them single would refuse
+    dibenzofuran's.  An ortho-fusion pair lends exactly two either way -- fusion bond double and both
+    atoms carry it, fusion bond single and each carries a double inside its own benzo ring.
+    """
+    for name, bridge, want in TRICYCLICS:
+        forms = {}
+        for fused in (2, 1):
+            mol, ids, result, got, wanted = expect(*dibenzo(bridge, fused), want)
+            assert got == wanted, f'{name}, fusion bonds {"double" if fused == 2 else "single"}'
+            # silent: a ring whose electron count is not a sextet is not a candidate, the way a
+            # four-ring is not, and nothing about it is fixable
+            assert notices(result) == [] and result.refused == [], name
+            forms[fused] = got
+        assert forms[2] == forms[1], f'{name} depends on the benzo rings\' Kekule form'
+
+    # and the split is real: the five-ring family's bridge bonds come out aromatic and the six-ring
+    # family's stay as drawn, in the form that draws the fusion bonds double
+    furan = expect(*dibenzo([('O', 0)], 2), ALL)[3]
+    dioxin = expect(*dibenzo([('O', 0), ('O', 0)], 2), BENZO_RINGS)[3]
+    assert {frozenset((0, 12)), frozenset((3, 12)), frozenset((1, 2))} <= furan
+    assert not ({frozenset((0, 12)), frozenset((3, 12)), frozenset((1, 13)), frozenset((2, 13))}
+                & dioxin)
 
 
 # ------------------------------------------------------------------------------------------------

@@ -22,12 +22,13 @@
 #
 # Header, 12 bytes:
 #    0      version   u8    3 | 4
-#    1      flags     u8    bit 0 = map block present; bits 1-7 reserved, must be 0
+#    1      flags     u8    bit 0 = map block present; bit 1 = bond-group block present;
+#                           bits 2-7 reserved, must be 0
 #    2-3    atoms     u16
 #    4-5    bonds     u16
 #    6-7    stereo    u16
-#    8-9    sgroups   u16   enhanced-stereo entries
-#    10-11  reserved  u16   must be 0
+#    8-9    sgroups   u16   atom enhanced-stereo entries
+#    10-11  bgroups   u16   bond enhanced-stereo entries
 #
 # Every count is in the header and every stride is constant, so a record's length is arithmetic and
 # `pach_record_length` is O(1).  The header is the one place slack is deliberate: a future block needs
@@ -44,6 +45,16 @@ DEF PACH3_STEREO_LEN = 9
 DEF PACH3_SGROUP_LEN = 3
 DEF PACH3_MAP_LEN = 2
 DEF PACH3_FLAG_MAP = 0x01
+DEF PACH3_FLAG_BGROUP = 0x02
+
+# One entry per BOND in a bond enhanced-stereo collection.  Atom indices and five bytes rather than
+# a bond position and three: the atom-group block references indices, `PACH3_BOND_LEN` is already 5
+# for the same pair-plus-byte shape, and `docs/pach.rst` is a layout a third party implements
+# against -- resolving a reference should not require counting positions in another block.
+#    0-1   u16   atom index a
+#    2-3   u16   atom index b
+#    4     u8    the sg_pack byte: kind 2 | group 6
+DEF PACH3_BGROUP_LEN = 5
 # The isotope field is 6 bits spelling `MDL_ISOTOPE[z] - 32 + value` for value 1..63, and 0 for unset:
 # mass numbers 31 below the element's MDL reference to 31 above it.  Measured maximum shift over
 # chython's 436 nuclides is 8, so the field cannot fill.
@@ -93,13 +104,14 @@ cdef inline void _p3_put_i24(unsigned char *p, int32_t v) noexcept nogil:
 
 
 cdef inline Py_ssize_t _pach3_size(uint32_t atoms, uint32_t bonds, uint32_t stereo, uint32_t sgroups,
-                                  bint want_xy, bint want_map) noexcept nogil:
+                                  uint32_t bgroups, bint want_xy, bint want_map) noexcept nogil:
     """The length arithmetic the header states, from the counts rather than from a buffer."""
     cdef Py_ssize_t out = PACH3_HEADER_LEN \
         + <Py_ssize_t> atoms * (PACH3_ATOM_XY_LEN if want_xy else PACH3_ATOM_FLAT_LEN) \
         + <Py_ssize_t> bonds * PACH3_BOND_LEN \
         + <Py_ssize_t> stereo * PACH3_STEREO_LEN \
-        + <Py_ssize_t> sgroups * PACH3_SGROUP_LEN
+        + <Py_ssize_t> sgroups * PACH3_SGROUP_LEN \
+        + <Py_ssize_t> bgroups * PACH3_BGROUP_LEN
     if want_map:
         out += <Py_ssize_t> atoms * PACH3_MAP_LEN
     return out
@@ -114,15 +126,16 @@ cdef Py_ssize_t _pach3_length(const unsigned char *data, Py_ssize_t length) noex
     if length < PACH3_HEADER_LEN:
         return -1
     return _pach3_size(_p3_u16(data + 2), _p3_u16(data + 4), _p3_u16(data + 6), _p3_u16(data + 8),
-                       data[0] == PACH3_VERSION_XY, (data[1] & PACH3_FLAG_MAP) != 0)
+                       _p3_u16(data + 10), data[0] == PACH3_VERSION_XY,
+                       (data[1] & PACH3_FLAG_MAP) != 0)
 
 
 cdef int _pach3_refuse_losses(MoleculeContainer mol, uint32_t drop_mask) except -1:
     """Everything the arena holds that versions 3 and 4 have no field for, refused by name.
 
     A conformer set is one of them: the coordinate block is 2D display geometry, so a 3D conformer is
-    a loss this asks about rather than a coordinate it could write. Map numbers, wedges, stereo groups
-    and stereo each have a block of their own and are not asked about here.
+    a loss this asks about rather than a coordinate it could write. Map numbers, wedges, atom and bond
+    stereo groups and stereo each have a block of their own and are not asked about here.
     """
     cdef Structure structure = mol._structure
     cdef atom_t *atoms = structure.atoms()
@@ -360,8 +373,10 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask):
     cdef halfedge_t *rev
     cdef xy_t *xy
     cdef uint8_t *groups
+    cdef stereo_unit_t *u
+    cdef uint32_t oa = 0, ob = 0
     cdef uint32_t n, nb, i, j, k, a1, a2
-    cdef uint32_t unit_count, stereo_count, sgroup_count
+    cdef uint32_t unit_count, stereo_count, sgroup_count, bgroup_count
     cdef uint8_t sg_value
     cdef bint want_xy
     cdef bint want_map
@@ -397,21 +412,30 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask):
     unit_count = 0
     if not (drop_mask & PACH_DROP_STEREO):
         unit_count = structure_stereo_unit_count(structure)
-    # EITHER NAME DROPS THIS BLOCK.  `drop=['stereo']` drops it along with the configurations, a caller
-    # asking for a record without stereo meaning without stereo; `drop=['stereo_groups']` drops it alone
-    # and is the name the version 0 and 2 writers' own refusal tells a caller to pass.
+    # EITHER NAME DROPS BOTH BLOCKS.  `drop=['stereo']` drops them along with the configurations, a
+    # caller asking for a record without stereo meaning without stereo; `drop=['stereo_groups']` drops
+    # them alone and is the name the version 0 and 2 writers' own refusal tells a caller to pass.
     # `drop=['sgroups']` is a different field -- `_pach3_refuse_losses` asks about the CTfile S-group
     # records, which have no block here at all.
+    # THE SPLIT IS BY OWNER COUNT, not by where the byte is stored -- every group byte is at a unit's
+    # anchor slot.  A one-owner unit's group is an atom entry; an axis's is a bond entry keyed on the
+    # two atoms the axis is NAMED on, which for an allene are the chain terminals rather than the
+    # midpoint the byte sits at, and which need not be bonded (hexa-2,3,4-triene's are three bonds
+    # apart).
     groups = NULL
     sgroup_count = 0
+    bgroup_count = 0
     if structure_has(structure, SEG_STEREO_GROUPS) \
             and not (drop_mask & (PACH_DROP_STEREO | PACH_DROP_STEREO_GROUPS)):
         groups = structure_stereo_groups(structure)
         for i in range(n):
-            if groups[i]:
+            if not groups[i]:
+                continue
+            u = stereo_unit_of(structure, i)
+            if u is not NULL and stereo_unit_owners(atoms, ptr, edges, u, &oa, &ob) == 2:
+                bgroup_count += 1
+            else:
                 sgroup_count += 1
-        if not sgroup_count:
-            groups = NULL
 
     want_map = False
     if not (drop_mask & PACH_DROP_MAP_NUMBER):
@@ -423,17 +447,18 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask):
     # many records there are is known only once they are written.  The stereo block is written in
     # place at its own offset and the record is the prefix `buf[:at]`, which is what a scratch buffer
     # and a memcpy would otherwise be for.
-    alloc = _pach3_size(n, nb, unit_count, sgroup_count, want_xy, want_map)
+    alloc = _pach3_size(n, nb, unit_count, sgroup_count, bgroup_count, want_xy, want_map)
     buf = <unsigned char *> PyMem_Malloc(alloc)
     if buf is NULL:
         raise MemoryError('pach record allocation failed')
     try:
         memset(buf, 0, alloc)
         buf[0] = PACH3_VERSION_XY if want_xy else PACH3_VERSION_FLAT
-        buf[1] = PACH3_FLAG_MAP if want_map else 0
+        buf[1] = (PACH3_FLAG_MAP if want_map else 0) | (PACH3_FLAG_BGROUP if bgroup_count else 0)
         _p3_put_u16(buf + 2, n)
         _p3_put_u16(buf + 4, nb)
         _p3_put_u16(buf + 8, sgroup_count)
+        _p3_put_u16(buf + 10, bgroup_count)
         at = PACH3_HEADER_LEN
         for i in range(n):
             _pach3_put_atom(&atoms[i], buf + at)
@@ -486,17 +511,46 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask):
             _pach3_stereo_block(structure, buf + at, &stereo_count)
             _p3_put_u16(buf + 6, stereo_count)
             at += <Py_ssize_t> stereo_count * PACH3_STEREO_LEN
-        # ENHANCED STEREO, three bytes an entry and only for an atom that carries one: `atom u16` and
-        # the arena's own packed group byte, kind in bits 7-6 and group in bits 5-0.  Its own block
-        # rather than a field in a stereo record because `set_stereo_group` accepts ANY atom, so an
-        # atom owning no unit has no record to hold it.
-        if groups is not NULL:
+        # ATOM ENHANCED STEREO, three bytes an entry and only for an atom that carries one: `atom u16`
+        # and the arena's own packed group byte, kind in bits 7-6 and group in bits 5-0.  Its own
+        # block rather than a field in a stereo record because `set_stereo_group` accepts ANY atom,
+        # so an atom owning no unit has no record to hold it.
+        if sgroup_count:
             for i in range(n):
                 sg_value = groups[i]
-                if sg_value:
-                    _p3_put_u16(buf + at, i)
-                    buf[at + 2] = sg_value
-                    at += PACH3_SGROUP_LEN
+                if not sg_value:
+                    continue
+                u = stereo_unit_of(structure, i)
+                if u is not NULL and stereo_unit_owners(atoms, ptr, edges, u, &oa, &ob) == 2:
+                    continue
+                _p3_put_u16(buf + at, i)
+                buf[at + 2] = sg_value
+                at += PACH3_SGROUP_LEN
+        # BOND ENHANCED STEREO, five bytes an entry: the axis's owner pair and the sg_pack byte.  In
+        # ANCHOR order, which is the order a decode writes the bytes back in, so a decode and re-encode
+        # is byte-identical.  Owner order would not be well defined against it: an atropisomer axis
+        # anchored at its higher pivot can precede an axis whose owners are numerically smaller.
+        if bgroup_count:
+            # THE MEMORY-SAFE HALF ONLY.  The allocation above is the stereo block's upper bound, so a
+            # molecule holding an unconfigured unit has slack this check passes through: `O=C=O` with a
+            # short `_pach3_size` raises here, `CC` carries two unconfigured units and 18 bytes of slack
+            # and writes a record whose declared length is wrong instead -- which is what
+            # `test_bgroup_record_length_agrees_with_the_true_length` compares.
+            if at + <Py_ssize_t> bgroup_count * PACH3_BGROUP_LEN > alloc:
+                raise ValueError('the pach bond-group write loop would exceed the allocated buffer '
+                                 '(%d bytes at offset %d, %d bytes allocated); `_pach3_size` and '
+                                 'this loop disagree'
+                                 % (<Py_ssize_t> bgroup_count * PACH3_BGROUP_LEN, at, alloc))
+            for i in range(n):
+                if not groups[i]:
+                    continue
+                u = stereo_unit_of(structure, i)
+                if u is NULL or stereo_unit_owners(atoms, ptr, edges, u, &oa, &ob) != 2:
+                    continue
+                _p3_put_u16(buf + at, oa)
+                _p3_put_u16(buf + at + 2, ob)
+                buf[at + 4] = groups[i]
+                at += PACH3_BGROUP_LEN
         if want_map:
             for i in range(n):
                 _p3_put_u16(buf + at, atoms[i].map_number)
@@ -537,9 +591,11 @@ cdef MoleculeContainer _pach3_build(pach3_atom_t *pa, uint32_t atoms_count, edge
     price of asking the earlier question is one byte per atom on a record whose every configuration is
     then dropped.
 
-    `groups` is one packed group byte per atom in atom order, or NULL when no entry survived reading --
-    the enhanced-stereo block names an atom rather than a unit, so the caller resolves it against the
-    atom block alone and hands the finished row over.
+    `groups` is one packed group byte per atom in atom order, or NULL when the record asks for no group
+    segment at all -- the enhanced-stereo block names an atom rather than a unit, so the caller resolves
+    it against the atom block alone and hands the finished row over.  An all-zero row is a record whose
+    only entries are bond-group ones, which resolve to their anchors after the seal and write into this
+    same segment.
 
     `maps` is a map number per atom in atom order, or NULL when all atoms are unmapped -- written
     beside `atoms[i].n` as a persistent field no derived segment reads.
@@ -897,10 +953,11 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
     cdef edge_edit_t *edits
     cdef uint8_t *wedges
     cdef edge_edit_t *e
-    cdef uint32_t nb, nb_declared, ns_declared, nsg_declared, nm_declared, k, a1, a2, order, wedge
-    cdef uint32_t nb_have, ns_have, nsg_have, nm_have
-    cdef uint32_t slot, value, kind, group
-    cdef Py_ssize_t bonds_at, stereo_at, groups_at, map_at
+    cdef uint32_t nb, nb_declared, ns_declared, nsg_declared, nbg_declared, nm_declared
+    cdef uint32_t k, a1, a2, order, wedge
+    cdef uint32_t nb_have, ns_have, nsg_have, nbg_have, nm_have
+    cdef uint32_t slot, value, kind, group, anchor
+    cdef Py_ssize_t bonds_at, stereo_at, groups_at, bgroups_at, map_at
     cdef size_t pa_len, edits_len, wedges_len, sg_len, maps_len
     cdef uint8_t *sg
     cdef uint16_t *maps = NULL
@@ -921,12 +978,10 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
     nb_declared = _p3_u16(data + 4)
     ns_declared = _p3_u16(data + 6)
     nsg_declared = _p3_u16(data + 8)
-    if flags & ~<unsigned char> PACH3_FLAG_MAP:
-        problems.append('header flags is 0x%02x and only bit 0 is defined; the rest are ignored'
+    nbg_declared = _p3_u16(data + 10)
+    if flags & ~<unsigned char> (PACH3_FLAG_MAP | PACH3_FLAG_BGROUP):
+        problems.append('header flags is 0x%02x; bits 0 and 1 are defined, bits 2-7 are reserved'
                         % flags)
-    if _p3_u16(data + 10):
-        problems.append('header bytes 10-11 are reserved and must be 0; %d is ignored'
-                        % _p3_u16(data + 10))
     if PACH3_HEADER_LEN + <Py_ssize_t> n * stride > length:
         problems.append('the header declares %d atoms and the atom block does not fit in %d byte(s)'
                         % (n, length))
@@ -942,6 +997,9 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
         if nsg_declared:
             problems.append('the header declares %d enhanced-stereo entr(ies) and no atoms for them to '
                             'name; none were read' % nsg_declared)
+        if nbg_declared:
+            problems.append('the header declares %d bond-group entr(ies) and no atoms for them to '
+                            'name; none were read' % nbg_declared)
         try:
             return (_pach3_build(NULL, 0, NULL, 0, want_xy, False, NULL, NULL), problems)
         except ValueError as err:
@@ -957,7 +1015,9 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
     pa_len = align8(n * sizeof(pach3_atom_t))
     edits_len = align8(nb_have * sizeof(edge_edit_t))
     wedges_len = align8(nb_have * sizeof(uint8_t))
-    sg_len = align8(n * sizeof(uint8_t)) if nsg_declared else 0
+    # A BOND-GROUP ENTRY LANDS IN THE SAME SEGMENT, so a record declaring one and no atom entry still
+    # needs the row: the build lays the persistent segments out once and is told by this row alone.
+    sg_len = align8(n * sizeof(uint8_t)) if nsg_declared or nbg_declared else 0
     maps_len = align8(n * sizeof(uint16_t)) if flags & PACH3_FLAG_MAP else 0
     block = <unsigned char *> PyMem_Malloc(pa_len + edits_len + wedges_len + sg_len + maps_len)
     if block is NULL:
@@ -1013,10 +1073,11 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
         # reads its own `*_have`, so a shortfall costs the records that did not arrive and leaves the
         # offsets of every block behind it where the header states them.  `_pach3_length` answers from
         # the same arithmetic.  A `*_declared` is what the header says and nothing reassigns one, which
-        # is what these three offsets rest on.
+        # is what these four offsets rest on.
         stereo_at = bonds_at + <Py_ssize_t> nb_declared * PACH3_BOND_LEN
         groups_at = stereo_at + <Py_ssize_t> ns_declared * PACH3_STEREO_LEN
-        map_at = groups_at + <Py_ssize_t> nsg_declared * PACH3_SGROUP_LEN
+        bgroups_at = groups_at + <Py_ssize_t> nsg_declared * PACH3_SGROUP_LEN
+        map_at = bgroups_at + <Py_ssize_t> nbg_declared * PACH3_BGROUP_LEN
         nm_declared = 0
         if flags & PACH3_FLAG_MAP:
             nm_declared = n                            # the map block states one number per atom
@@ -1110,6 +1171,10 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
                 continue
             sg[slot] = <uint8_t> value
             sg_any = True
+        nbg_have = _p3_present(bgroups_at, length, nbg_declared, PACH3_BGROUP_LEN)
+        if nbg_have < nbg_declared:
+            problems.append('the header declares %d bond-group entr(ies) and the buffer holds %d; '
+                            'the rest of the block was not read' % (nbg_declared, nbg_have))
         nm_have = _p3_present(map_at, length, nm_declared, PACH3_MAP_LEN)
         if nm_have < nm_declared:
             problems.append('the header declares %d map number(s) and the buffer holds %d; the rest of '
@@ -1128,12 +1193,65 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
             map_any = True
         try:
             mol = _pach3_build(pa, n, edits, nb, want_xy, _p3_u16(data + 6) != 0,
-                               sg if sg_any else NULL, maps if map_any else NULL)
+                               sg if sg_any or nbg_have else NULL, maps if map_any else NULL)
         except ValueError as err:
             _pach_derivation_lost(problems, err)
             return (None, problems)
         _pach3_apply_wedges(mol, edits, wedges, nb)
         _pach3_apply_stereo(mol, data, stereo_at, ns_have, n, problems)
+        # BOND-GROUP BLOCK applied after build: resolving an owner pair to the anchor slot its group
+        # byte lives at needs the unit table.
+        ensure_stereo_units_unmarked(mol._structure)
+        at = bgroups_at
+        for k in range(nbg_have):
+            a1 = _p3_u16(data + at)
+            a2 = _p3_u16(data + at + 2)
+            value = data[at + 4]
+            at += PACH3_BGROUP_LEN
+            if a1 >= n or a2 >= n:
+                problems.append('bond-group entry %d names atom index %d and this record has %d '
+                                'atom(s); the entry was dropped' % (k, a2 if a2 >= n else a1, n))
+                continue
+            kind = sg_kind(<uint8_t> value)
+            group = sg_group(<uint8_t> value)
+            if kind == 0:
+                if group:
+                    problems.append('bond-group entry %d states no kind and group index %d; '
+                                    'the entry was dropped' % (k, group))
+                continue
+            if kind == 1:
+                if group:
+                    problems.append('bond-group entry %d is abs and carries group index %d, '
+                                    'which only or and and take; read as abs with none'
+                                    % (k, group))
+                    value = sg_pack(1, 0)
+            elif group == 0:
+                problems.append('bond-group entry %d is %s and states no group index, and 1 '
+                                'to 63 is what one takes; the entry was dropped'
+                                % (k, 'or' if kind == 2 else 'and'))
+                continue
+            anchor = stereo_group_pair_anchor(mol._structure, a1, a2)
+            if anchor == SU_NO_REF:
+                # DEGRADED, NOT DROPPED, and the same degradation the setter performs: a record whose
+                # entry names a pair this build's perception gives no unit keeps its collection as a
+                # label on the lower-index atom.  A record written by a build that stored a group on
+                # any bond it was handed -- a carbonyl, say -- reads back with its kind and id intact.
+                anchor = a1 if a1 < a2 else a2
+                problems.append('bond-group entry %d names atoms %d and %d, which own no stereo unit '
+                                'in this record; it was kept as a group on atom %d'
+                                % (k, a1, a2, anchor))
+            elif structure_stereo_groups(mol._structure)[anchor]:
+                problems.append('bond-group entry %d repeats the unit at atom %d; the repeat was '
+                                'dropped' % (k, anchor))
+                continue
+            structure_stereo_groups(mol._structure)[anchor] = <uint8_t> value
+        # THE FLAG BIT AND THE COUNT ARE ONE FACT WRITTEN TWICE, so they must agree.  The bit is
+        # redundant on its own terms and earns its place elsewhere: a reader written against the
+        # published layout reports an unknown flag bit as a problem, which is the loudest signal a
+        # decoder that never raises can give.
+        if (nbg_declared != 0) != ((flags & PACH3_FLAG_BGROUP) != 0):
+            problems.append('bond-group block: flags bit %d and the count %d disagree'
+                            % (1 if flags & PACH3_FLAG_BGROUP else 0, nbg_declared))
         # RETURNED INSIDE THE `try`, which the `finally` below still covers: the build's own refusal
         # arm leaves `mol` unassigned, and a return after the `finally` would read a name that path
         # never wrote.

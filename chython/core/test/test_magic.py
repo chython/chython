@@ -53,7 +53,7 @@ from sys import executable
 
 from pytest import mark, raises
 
-from chython.core import MoleculeContainer, QueryContainer
+from chython.core import MoleculeContainer, QueryContainer, smiles
 
 
 def build(atoms, bonds, order=None, **kwargs):
@@ -790,3 +790,102 @@ def test_enhanced_stereo_is_NOT_in_the_identity_yet():
     racemate.set_stereo_group(list(racemate.atom_numbers)[0], 1, 1)
     assert racemate.has_stereo_groups and not single.has_stereo_groups
     assert racemate == single, 'a known gap, not a passing grade'
+
+
+def test_bond_stereo_group_survives_an_unrelated_invalidating_edit():
+    """A group is STATED INPUT, so unlike a CIP descriptor it is not dropped when the graph changes.
+
+    `set_element` is the invalidating op: it sets `cip_stale`, which clears seeded CIP descriptors in
+    `_apply` and touches nothing a caller stated.
+    """
+    mol = smiles('OC(=O)/C=C/C=C/C(=O)O')
+    with mol.edit() as e:
+        e.set_bond_stereo_group(4, 5, 3, 1)
+        e.set_bond_stereo_group(6, 7, 3, 1)
+    assert mol.bond_stereo_groups() == {(3, 1): [(4, 5), (6, 7)]}
+    with mol.edit() as e:
+        e.set_element(1, 'N')         # invalidating: sets cip_stale, drops stored CIP descriptors
+    assert mol.bond_stereo_groups() == {(3, 1): [(4, 5), (6, 7)]}
+
+
+def test_bond_stereo_group_dies_with_its_bond():
+    mol = smiles('OC(=O)/C=C/C=C/C(=O)O')
+    with mol.edit() as e:
+        e.set_bond_stereo_group(4, 5, 3, 1)
+        e.set_bond_stereo_group(6, 7, 3, 1)
+    with mol.edit() as e:
+        e.delete_bond(4, 5)
+    assert mol.bond_stereo_groups() == {(3, 1): [(6, 7)]}
+
+
+def test_bond_stereo_group_dies_with_its_bond_in_the_SAME_session():
+    """The group goes with the bond whether or not the two ops share a scope.
+
+    Same journal, so `set_bond_stereo_group` has deferred its bond check to the seal and the entry
+    has no seeded twin to fall back on; the deletion drops it on replay.
+    """
+    mol = smiles('C/C=C/C')
+    with mol.edit() as e:
+        e.set_bond_stereo_group(2, 3, 3, 1)
+        e.delete_bond(2, 3)
+    assert mol.bond_stereo_groups() == {}
+    assert not mol.has_bond_stereo_groups
+
+    two = smiles('C/C=C/C')
+    with two.edit() as e:
+        e.set_bond_stereo_group(2, 3, 3, 1)
+    with two.edit() as e:
+        e.delete_bond(2, 3)
+    assert two.bond_stereo_groups() == {}
+
+
+def test_a_bond_stereo_group_on_a_pair_that_is_not_a_bond_is_still_refused():
+    """Two unrelated atoms name no element, so the direct call refuses; a session degrades instead.
+
+    A seal that raised would abort every unrelated edit in the scope, and a group is a label rather
+    than a claim -- so inside a session the collection is kept on the lower-numbered atom and the
+    lost axis spelling is logged.
+    """
+    mol = smiles('CCCC')
+    with raises(KeyError, match=r'\(1, 4\)'):
+        mol.set_bond_stereo_group(1, 4, 3, 1)
+    assert mol.stereo_groups() == {}
+
+    two = smiles('CCCC')
+    with two.edit() as e:
+        e.set_bond_stereo_group(1, 4, 3, 1)
+    assert two.stereo_groups() == {(3, 1): [1]}
+    assert two.bond_stereo_groups() == {}
+    assert [r.rule for r in two.log] == ['edit:stereo-group-not-an-axis']
+
+
+def test_union_carries_and_renumbers_bond_stereo_groups():
+    """union() renumbers within ONE namespace, and an OR and an AND never collided anyway.
+
+    A collection is keyed by kind and id together, so both sides' OR 1 and AND 1 are four collections
+    in the union: two OR from the atom members and two AND from the axis members.
+    """
+    left = smiles('OC(=O)/C=C/C(=O)O')
+    right = smiles('OC(=O)/C=C/C(=O)O')
+    left_ids = list(left.atom_numbers)
+    right_ids = list(right.atom_numbers)
+    # Give both sides an OR 1 on an atom and an AND 1 on an axis, so both ids collide across the union.
+    # For OC(=O)/C=C/C(=O)O the C=C double bond atoms are at list positions 3 and 4.
+    left.set_stereo_group(left_ids[0], 2, 1)     # OR 1 on an atom
+    with left.edit() as e:
+        e.set_bond_stereo_group(left_ids[3], left_ids[4], 3, 1)   # AND 1 on the axis
+    right.set_stereo_group(right_ids[0], 2, 1)   # OR 1 on an atom
+    with right.edit() as e:
+        e.set_bond_stereo_group(right_ids[3], right_ids[4], 3, 1)  # AND 1 on the axis
+    u = left.union(right)
+    # Four collections: each kind's two ids, renumbered apart
+    sg = u.stereo_groups()
+    assert len(sg) == 4
+    assert {g for k, g in sg if k == 2} == {1, 2}, 'the two OR ids are distinct'
+    assert {g for k, g in sg if k == 3} == {1, 2}, 'the two AND ids are distinct'
+    # The axis members alone, sharing those AND ids
+    bg = u.bond_stereo_groups()
+    assert len(bg) == 2
+    assert all(k == 3 for k, _ in bg), 'both are AND'
+    assert {g for _, g in bg} == {1, 2}, 'distinct ids'
+    assert all(len(v) == 1 and isinstance(v[0], tuple) for v in bg.values()), 'one axis each'

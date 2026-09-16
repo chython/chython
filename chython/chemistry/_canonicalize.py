@@ -18,16 +18,18 @@
 #
 """`canonicalize()` -- the pre-pass that makes `canonical_bytes` a compound identity rather than a
 drawing identity, so equal compounds hash equal and a corpus deduplicates by hash.  The stage order
-is a correctness constraint, not taste: `kekule()`, `standardize()`, `implicify_hydrogens()`,
-`neutralize()`, `thiele()`, `standardize_isomers()`, and `kekule()` again only under
-`keep_kekule=True`.  Each ordering pair is justified at its numbered step below.
+is a correctness constraint, not taste: `kekule()`, `validate_stereo()`, `standardize()`,
+`implicify_hydrogens()`, `neutralize()`, `standardize_kekule()`, `thiele()`, `standardize_isomers()`, and
+`kekule()` again only under `keep_kekule=True`.  Each ordering pair is justified at its numbered step
+below.
 
-The order alone is not enough, because the last stage can unblock the second one: a `tautomer` row
+The order alone is not enough, because the last stage can unblock the third one: a `tautomer` row
 wanting a free ring nitrogen cannot fire while the mobile hydrogen sits on it, and the placement is
-what moves that hydrogen off.  So steps 2 to 6 run to a fixed point rather than once -- step 7.
+what moves that hydrogen off.  So steps 3 to 8 run to a fixed point rather than once -- step 9.
 """
 from ._hydrogens import implicify_hydrogens
 from ._isomers import standardize_isomers
+from ._kekule_form import standardize_kekule
 from ._protomers import neutralize
 from ._standardize import standardize
 from ..core import LOST, LogRecord, MoleculeContainer, recording
@@ -38,7 +40,7 @@ __all__ = ['canonicalize']
 
 _RULE_ROUNDS = 'canonicalize:rounds'
 
-#: How many times steps 2 to 6 may be re-run before the pipeline gives up and says so.  Every shape
+#: How many times steps 3 to 8 may be re-run before the pipeline gives up and says so.  Every shape
 #: measured converges in two, and the loop cannot cycle in principle: the `tautomer` rows move a
 #: hydrogen from oxygen or sulfur to nitrogen and never back, and the placement stage never makes an
 #: oxygen or a sulfur a site.  The cap is here so a rule table that breaks either half is reported as
@@ -62,7 +64,7 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     needing the aromatic form.
 
     CHARGES ARE PAIRED OFF, not preserved atom by atom: glycine's zwitterion and its neutral drawing
-    share a key, because step 4 runs `neutralize()`.  `neutralize()` leaves the NET charge untouched, so
+    share a key, because step 5 runs `neutralize()`.  `neutralize()` leaves the NET charge untouched, so
     sodium acetate stays sodium acetate -- there is no proton in it to move -- while ammonium acetate
     becomes acetic acid and ammonia, both drawings of one salt.
 
@@ -79,7 +81,7 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
                         f'{type(molecule).__name__}; a ReactionContainer has its own canonicalize(), '
                         f'which runs this pass on each of its molecules')
 
-    # the bool is measured, not accumulated: steps 1 and 5 are a round trip, so summing the stages'
+    # the bool is measured, not accumulated: steps 1 and 6 are a round trip, so summing the stages'
     # own flags would report a change through both ends of a no-op on an already-canonical molecule.
     before = molecule.canonical_bytes
 
@@ -92,43 +94,64 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     #    event already reported.  `check_valence()` is still how those atoms are found.
     molecule.kekule()
 
-    # 2. Repair the drawing.
+    # 2. Drop the parities the constitution does not justify, on the localised form and before step 6
+    #    hides a bond order behind an aromatic one.  A cis/trans sign on a double bond an alternating
+    #    cycle can move states which Kekule form was drawn, not the compound's geometry, and it enters
+    #    `canonical_bytes` whether or not the unit is stereogenic -- so the two bond-shift drawings of
+    #    1,2-dimethylcyclooctatetraene keep two keys until it is gone.  The report is not recorded: the
+    #    parities it names are the reader's own input and `validate_stereo()` returns them to a caller
+    #    that wants them.
+    molecule.validate_stereo()
+
+    # 3. Repair the drawing.
     standardize(molecule, fix_tautomers=fix_tautomers)
 
-    # 3. Explicit hydrogens are a `canonical_bytes` difference, so they have to go.
+    # 4. Explicit hydrogens are a `canonical_bytes` difference, so they have to go.
     implicify_hydrogens(molecule)
 
-    # 4. Pair off the charges an acid/base row can pair off, so a zwitterion and its neutral drawing
-    #    hash equal.  AFTER step 3, because `acids.tsv` reads implicit hydrogens: a cation drawn with
+    # 5. Pair off the charges an acid/base row can pair off, so a zwitterion and its neutral drawing
+    #    hash equal.  AFTER step 4, because `acids.tsv` reads implicit hydrogens: a cation drawn with
     #    hydrogen ATOMS is invisible to it until they have been folded in.  `keep_charge` stays at its
     #    default -- the net charge is part of the compound, so a canonical form may move a proton but
     #    never create or destroy one.  A quaternary ammonium keeps its counterion: it has no proton to
     #    give, so the pass finds no donor and declines.
     neutralize(molecule)
 
-    # 5. Back to the aromatic form, which is the representation callers compare.  Ahead of step 6,
+    # 6. Which Kekule form, decided before step 7 reads one.  `thiele()` refuses a candidate ring whose
+    #    atom holds its double bond outside the ring, so a compound with several Kekule forms has one
+    #    aromatic form per form until this stage picks between them; a ring too big for `thiele()` to
+    #    consider gets a canonical alternation here instead, nothing later collapsing its two.  AFTER
+    #    step 3, whose group rules are written against the orders the drawing carried, and after step 2,
+    #    whose parities would otherwise pin the very bond this stage moves.
+    standardize_kekule(molecule)
+
+    # 7. Back to the aromatic form, which is the representation callers compare.  Ahead of step 8,
     #    because a mobile hydrogen is a property of the aromatic form: step 1's definite orders already
     #    say where the hydrogen is, leaving the placement stage nothing to choose.
     #    `result.refused` is not recorded on top of the pass's own records either, and for the same
     #    reason -- with the severity the aromatiser itself states, which is `REFUSED` and not a loss.
     molecule.thiele()
 
-    # 6. Canonical placement of mobile hydrogens and charges -- what makes the two N-H forms of
+    # 8. Canonical placement of mobile hydrogens and charges -- what makes the two N-H forms of
     #    4-methylimidazole hash equal.  Not gated by `fix_tautomers`: that flag withholds local repair
     #    rules, and this picks which of two valid drawings to keep rather than repairing one.
     moved = standardize_isomers(molecule)
 
-    # 7. Steps 2 to 6 again, while the placement keeps unblocking a repair.  `Oc1[nH]cnc2nncc1-2` is
+    # 9. Steps 3 to 8 again, while the placement keeps unblocking a repair.  `Oc1[nH]cnc2nncc1-2` is
     #    the shape: its mobile hydrogen sits on the one ring nitrogen the hydroxy-azine rows need free,
-    #    so step 2 declines, and by the time step 6 has moved it the repair is behind us -- the drawing
+    #    so step 3 declines, and by the time step 8 has moved it the repair is behind us -- the drawing
     #    kept its hydroxy form and the same compound drawn the other way got the oxo form and a
     #    different key.  Only the placement is re-entered from, since it is the one stage that can put
     #    the molecule back into a shape an earlier stage would have acted on.
     #
     #    `kekule()` leads, and not for the reason step 1 does: the `tautomer` rows are written against
-    #    definite bond orders, so on the aromatic form step 5 left behind they match nothing at all and
-    #    re-running step 2 would be a guaranteed no-op.  Step 4 is re-entered only behind a repair,
-    #    which is the only thing that can hand it a charged site it has not already seen.
+    #    definite bond orders, so on the aromatic form step 7 left behind they match nothing at all and
+    #    re-running step 3 would be a guaranteed no-op.  Step 5 is re-entered only behind a repair,
+    #    which is the only thing that can hand it a charged site it has not already seen.  Step 6 rides
+    #    with the aromatisation and not with the repair: the kekulisation above is free to come back with
+    #    a different Kekule form than the one it was handed, which is the form step 7 would then read.
+    #    Step 2 is not re-entered: the parities it can justify are a property of the constitution, which
+    #    no stage from here on changes.
     for _ in range(_ROUNDS_MAX):
         if not moved:
             break
@@ -137,7 +160,8 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
         if changed:
             implicify_hydrogens(molecule)
             neutralize(molecule)
-        molecule.thiele()               # unconditional: step 5's form is what a caller compares, and
+        standardize_kekule(molecule)
+        molecule.thiele()               # unconditional: step 6's form is what a caller compares, and
         if not changed:                 # the kekulisation above has to be undone either way
             break
         moved = standardize_isomers(molecule)
@@ -148,8 +172,10 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
                                  f'this molecule is not a fixed point and two drawings of it may not '
                                  f'share a key', LOST))
 
-    # 8. `keep_kekule` undoes step 5 rather than skipping it: skipping 5 would skip 6 with it, and the
-    #    flag would then decide which tautomer the caller gets.
+    # 10. `keep_kekule` undoes step 7 rather than skipping it: skipping 7 would skip 8 with it, and the
+    #     flag would then decide which tautomer the caller gets.  Step 6 is not re-run behind it and
+    #     would have nothing to do: an aromatic ring is unwound into a ring holding every double bond it
+    #     has room for, and which of its alternations comes back is the kekuliser's answer to give.
     if keep_kekule:
         molecule.kekule()
 

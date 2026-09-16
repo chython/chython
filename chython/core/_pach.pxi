@@ -1224,6 +1224,8 @@ cdef int _pach_refuse_losses(MoleculeContainer mol, uint32_t drop_mask) except -
             if edges[k].wedge:
                 raise ValueError('a bond carries a wedge and the pach format has no field for one; '
                                  'pass drop=[\'wedges\'] to write the record without it')
+    # ONE SEGMENT HOLDS EVERY GROUP, an axis's at its anchor slot beside a centre's, so its presence is
+    # the whole question -- there is no second place a version 0 or 2 record could be losing one from.
     if not (drop_mask & PACH_DROP_STEREO_GROUPS) and structure_has(structure, SEG_STEREO_GROUPS):
         raise ValueError('this molecule carries enhanced stereo_groups and the pach format has no '
                          'field for them; pass drop=[\'stereo_groups\'] to write the record without '

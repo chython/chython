@@ -1,0 +1,11 @@
+smiles	atom	descriptor	rule	compound
+[C@H](F)(Cl)Br	1	S	1a	(S)-bromochlorofluoromethane
+[C@@H](F)(Cl)Br	1	R	1a	(R)-bromochlorofluoromethane
+C[C@H](O)CC	2	S	1a	(S)-butan-2-ol
+C[C@@H](O)CC	2	R	1a	(R)-butan-2-ol
+OC[C@@H](O)C=O	3	R	1a: duplicate O	(R)-glyceraldehyde
+OC[C@H](O)C=O	3	S	1a: duplicate O	(S)-glyceraldehyde
+C[C@H](N)C(=O)O	2	S	1a	(S)-alanine
+C[C@@H](N)C(=O)O	2	R	1a	(R)-alanine
+C[C@H]([2H])O	2	S	2	(S)-1-deuterioethanol
+C[C@@H]([2H])O	2	R	2	(R)-1-deuterioethanol

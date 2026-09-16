@@ -485,6 +485,46 @@ def test_an_impossible_hydrogen_count_is_a_verdict_and_not_an_error():
     assert valence_check('C', 0, False, 0, 16) == 'violation'      # outside the nibble entirely
 
 
+def test_a_hydrogen_is_the_same_hydrogen_drawn_or_counted():
+    """A verdict is about the compound, so it may not depend on which side of the atom a hydrogen
+    is stored on.
+
+    Every described (element, charge, radical), every total hydrogen count the rows reach, in every
+    split between drawn atoms and the count.  What makes this load-bearing rather than tidy:
+    `implicify_hydrogens()` is on the deduplication path, so the counted spelling is the one
+    `canonicalize()` writes, and a split that answered differently is a violation the pipeline
+    created out of a molecule that passed.
+
+    Only the drawn reading reaches the metal hydrides.  `Ti 0 0 2 0 -H -H` and
+    `Ga -1 0 4 0 -H -H -H -H` name the hydrogen neighbour outright, and the alkali and alkaline
+    earth ladders are a bare bond count -- `Ca 0 0 2 0 *` covers calcium hydride along with
+    everything else two-coordinate.
+    """
+    described = sorted({(z, charge, radical) for z, charge, radical, *_ in valence_rules()})
+    for z, charge, radical in described:
+        for total in range(9):             # 0..8 is the widest bond-order sum any row states
+            answers = {k: valence_check(z, charge, radical, total - k, k, [(1, 'H')] * (total - k))
+                       for k in range(total + 1)}
+            assert len(set(answers.values())) == 1, (z, charge, radical, total, answers)
+
+    assert valence_check('Ca', 0, False, 0, 2) == 'valid', 'calcium hydride'
+    assert valence_check('Na', 0, False, 0, 1) == 'valid', 'sodium hydride'
+    assert valence_check('Ti', 0, False, 0, 2) == 'valid', 'the -H -H row, reached from a count'
+    assert valence_check('Ga', -1, False, 0, 4) == 'valid'
+
+    # the second reading reads the same rows and grants nothing: a count the collection has no bond
+    # count for is still a violation
+    assert valence_check('C', 0, False, 0, 5) == 'violation'
+    assert valence_check('N', 0, False, 1, 4, [(1, 'C')]) == 'violation'
+
+    # AND IT INHERITS THE `env=*` BLINDNESS, visibly.  Phosphorus at five bonds has an `env=*` row,
+    # so five hydrogens on it are accepted the way five fluorines are; the drawn spelling was
+    # accepted before this reading existed.  Narrowing it means keying that row to an environment in
+    # the TSV, argued on chemistry.
+    assert valence_check('P', 0, False, 5, 0, [(1, 'H')] * 5) == 'valid'
+    assert valence_check('P', 0, False, 0, 5) == 'valid'
+
+
 # --- the answers that must survive the oracle's removal
 
 def test_the_answers_everyone_knows():

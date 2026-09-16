@@ -25,16 +25,16 @@ that whatever the molecule says about configuration is not to be trusted or not 
 only correct outcome is a flat molecule.  `clean_stereo` is chython 2's name for it, kept so that no
 consumer has to write a partial version of its own.
 
-FOUR KINDS OF STATE, AND WIPING ONLY THE FIRST IS THE TRAP.  Configuration lives in four places:
-parities on the atom, wedges on the edge, ABS/AND/OR group membership per atom, and CIP descriptors on
-atoms and bonds.  Leave the wedges and the CTfile writer draws them again and the CTfile reader
-derives the parities back from them, so the wipe does not survive one round trip -- pinned in
-`chython/formats/ctfile/test/test_fidelity.py`, which is where the reader and the writer both are.
-Leave a group and an AND membership names a configuration that no longer exists.  Leave a stored
-`(R)` and an external consumer -- which is who stored CIP is FOR -- reads a descriptor off an atom
-with no parity.
+FIVE KINDS OF STATE, AND WIPING ONLY THE FIRST IS THE TRAP.  Configuration lives in five places:
+parities on the atom, wedges on the edge, ABS/AND/OR group membership -- one byte at the anchor slot,
+whichever kind of unit is anchored there -- and CIP descriptors on atoms and on bonds.  Leave the
+wedges and the CTfile writer draws them again and the CTfile reader derives the parities back from
+them, so the wipe does not survive one round trip -- pinned in `chython/formats/ctfile/test/test_fidelity.py`, which is
+where the reader and the writer both are.  Leave a group and an AND membership names a configuration
+that no longer exists.  Leave a stored `(R)` and an external consumer -- which is who stored CIP is
+FOR -- reads a descriptor off an atom with no parity.
 """
-from chython.core import MoleculeContainer
+from chython.core import MoleculeContainer, read_smiles as smiles
 
 
 def _flat_butane():
@@ -51,8 +51,12 @@ def _flat_butane():
     return m, sids
 
 
-def _all_four_kinds():
-    """`_flat_butane` carrying all four kinds of stereo state at once.
+def _all_five_kinds():
+    """`_flat_butane` carrying all five kinds of stereo state at once.
+
+    An axis group is not a sixth kind: one byte per anchor slot holds every collection, so the AND1 on
+    these two centres IS the group state -- `test_an_axis_group_is_wiped_by_the_same_clear` states the
+    same byte through an axis, on a molecule that has one.
 
     Both centres get an ODD parity (2), and that is not decoration: word IV bit 6 is set for parity 2
     and only for parity 2, so the round-trip test can detect a clear that missed the byte.
@@ -74,8 +78,8 @@ def _all_four_kinds():
 # ----------------------------------------------------------------------------------------------
 
 def test_every_kind_of_stereo_state_is_cleared():
-    m, sids = _all_four_kinds()
-    # the fixture really does carry all four before the call; without this the test below would pass
+    m, sids = _all_five_kinds()
+    # the fixture really does carry all five before the call; without this the test below would pass
     # on a molecule that never had a wedge or a group to lose
     assert [m.parity_of(s) for s in (sids[1], sids[3])] == [2, 2]
     assert m.wedges() and m.stereo_groups() and m.atom_cips() and m.bond_cips()
@@ -95,25 +99,42 @@ def test_every_kind_of_stereo_state_is_cleared():
                       'bond_cips': {(sids[1], sids[3]): 'E'}}
 
 
-def test_the_report_is_what_the_five_readers_said_before_the_wipe():
+def test_an_axis_group_is_wiped_by_the_same_clear():
+    """One namespace, one wipe: an axis's byte lives at its unit's anchor and goes with the rest.
+
+    `_all_five_kinds` has no double bond to carry an axis, so the axis case is stated here, on the one
+    molecule that does.  The report names the collection twice -- once per reader -- because
+    `bond_stereo_groups()` is the axis-only view of `stereo_groups()` and both are read first.
+    """
+    m = smiles('C/C=C/C')
+    with m.edit() as e:
+        e.set_bond_stereo_group(2, 3, 2, 1)
+    assert m.clean_stereo() == {'parities': [2],
+                                'stereo_groups': {(2, 1): [(2, 3)]},
+                                'bond_stereo_groups': {(2, 1): [(2, 3)]}}
+    assert m.stereo_groups() == {} and m.bond_stereo_groups() == {}
+    assert [m.parity_of(s) for s in m.atom_numbers] == [0, 0, 0, 0]
+
+
+def test_the_report_is_what_the_readers_said_before_the_wipe():
     """The report's shape is not invented here: each value is one reader's own answer, verbatim.
 
     That is the whole design of the return value -- `validate_stereo` reports one kind of state and a
-    flat list of stable ids says all there is to say about it, while this touches five readers, and a
+    flat list of stable ids says all there is to say about it, while this touches six readers, and a
     union list would tell a caller that atom 2 "had something" without saying what.  So the report is
     keyed by reader, and a key is absent when its reader was empty.
     """
-    m, sids = _all_four_kinds()
+    m, sids = _all_five_kinds()
     before = {'parities': sorted(s for s in m.atom_numbers if m.parity_of(s)),
               'wedges': m.wedges(),
               'stereo_groups': m.stereo_groups(),
               'atom_cips': m.atom_cips(),
               'bond_cips': m.bond_cips()}
-    assert m.clean_stereo() == before
+    assert m.clean_stereo() == before, 'an empty reader contributes no key: this fixture has no axis'
 
 
 def test_a_second_call_reports_nothing_and_is_a_pure_read():
-    m, sids = _all_four_kinds()
+    m, sids = _all_five_kinds()
     assert m.clean_stereo()
     other = m.copy()
     assert m.clean_stereo() == {}, 'idempotent: there is nothing left to clear'
@@ -139,7 +160,7 @@ def test_an_empty_molecule_survives_it():
 # ----------------------------------------------------------------------------------------------
 
 def test_a_shared_arena_keeps_its_stereo_when_the_copy_is_cleaned():
-    m, sids = _all_four_kinds()
+    m, sids = _all_five_kinds()
     other = m.copy()
     assert m.shares_arena_with(other)
 
@@ -155,7 +176,7 @@ def test_a_shared_arena_keeps_its_stereo_when_the_copy_is_cleaned():
 
 
 def test_a_shared_arena_keeps_its_stereo_when_the_original_is_cleaned():
-    m, sids = _all_four_kinds()
+    m, sids = _all_five_kinds()
     other = m.copy()
 
     m.clean_stereo()
@@ -176,7 +197,7 @@ def test_the_stale_unit_table_does_not_travel_in_the_clone():
     must put it back to the byte.  Delete the invalidate and the shrink assertion fails with the two
     numbers equal.
     """
-    m, sids = _all_four_kinds()
+    m, sids = _all_five_kinds()
     m.stereo_units()                       # the table exists, marked, before the wipe
     grown = m.total_len
 
@@ -198,7 +219,7 @@ def test_coordinates_are_not_dropped():
     only thing a depiction has to work with, on a molecule the caller asked to flatten and not to
     forget, and `clean2d()` is the call that replaces a layout.
     """
-    m, sids = _all_four_kinds()
+    m, sids = _all_five_kinds()
     before = [m.xy_of(s) for s in m.atom_numbers]
     m.clean_stereo()
     assert m.has_coordinates
@@ -206,7 +227,7 @@ def test_coordinates_are_not_dropped():
 
 
 def test_the_constitution_is_untouched():
-    m, sids = _all_four_kinds()
+    m, sids = _all_five_kinds()
 
     def snapshot():
         return (m.atom_count, m.bond_count, sorted(m.atom_numbers),
@@ -227,7 +248,7 @@ def test_a_cleared_parity_does_not_come_back_through_a_round_trip():
     """`clean_stereo` zeroes the byte through `structure_clear_parities`, and `to_bytes` carries the
     segment, so the wipe persists across a round trip.
     """
-    m, sids = _all_four_kinds()
+    m, sids = _all_five_kinds()
     assert m.clean_stereo()
     again = MoleculeContainer.from_bytes(m.to_bytes())
     assert [again.parity_of(s) for s in (sids[1], sids[3])] == [0, 0], \
@@ -246,7 +267,7 @@ def test_the_feature_words_match_a_round_trip_after_the_wipe():
     The fixture's parities are odd for the reason stated on it -- an even one never sets bit 6 and
     would pass with the maintenance removed.
     """
-    m, sids = _all_four_kinds()
+    m, sids = _all_five_kinds()
     assert m.clean_stereo()
     fresh = MoleculeContainer.from_bytes(m.to_bytes())
     assert [m.features_of(s) for s in m.atom_numbers] == [fresh.features_of(s) for s in m.atom_numbers]

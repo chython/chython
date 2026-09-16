@@ -716,9 +716,11 @@ def emit_v2000(mol, sgroups=None, *, title=None, program='', comment='', log=Non
     relative = any(kind != 1 for kind, _ in groups)
     configured = any(mol.parity_of(sid) for sid in sids)
     chiral = 1 if configured and not relative else 0
-    if groups and relative:
+    if relative:
         # V2000's chiral flag is one bit for the whole record, so an AND or OR collection cannot be
-        # written -- and writing the atoms without it would state a single known enantiomer.
+        # written -- and writing the atoms without it would state a single known enantiomer.  The loss
+        # is the partition, not the member: an axis member does have an atom spelling here, its anchor,
+        # which is what MRV writes; what V2000 has nowhere to put is which collection an atom is in.
         out.append(LogRecord('v2000:enhanced-stereo-not-written', (),
                              'V2000 has no enhanced stereo groups; the AND/OR collections in this structure '
                              'are not written. Write V3000 to keep them',

@@ -92,7 +92,7 @@ coordinate the input stated — and the field's range is the writer's to enforce
 
 ### 1.5 The CIP descriptor fields, and what an EDIT can invalidate
 
-Storage only.  Nothing in the core assigns a descriptor.  An atom's descriptor is the low nibble of
+`_cip.pxi` assigns; this section binds it.  An atom's descriptor is the low nibble of
 `atom_t.reserved` (9 values: none, `R`, `S`, `r`, `s`, `M`, `P`, `m`, `p`), a bond's is three bits of
 `halfedge_t.flags` (5 values: none, `E`, `Z`, `M`, `P`).  Both words were already serialised, which
 is why they were chosen: `to_bytes()` is a molecule identity in v4, so widening `atom_t` would
@@ -111,8 +111,10 @@ arena holds.**  Everything below follows from that.
 4. **The drop rule keys on the OPERATION, not on the field.**  An edit changing which atoms exist,
    which are bonded, or a bond's order drops every descriptor the molecule held and logs a count.
    Charge, isotope, radical, map number, hydrogen count, coordinates, wedges, stereo flags and stereo
-   groups keep them — isotope included, even though CIP Rule 2 ranks by mass, because this layer did
-   not compute the stored descriptor.
+   groups keep them — isotope included, even though CIP Rule 2 ranks by mass, because the drop answers
+   for the claim the input made and not for a computation.  A COMPUTED descriptor an isotope edit
+   outdates is `assign_cip()`'s to correct, by being run again: it reads no nibble, so a second run
+   costs the same as the first and cannot be confused by the first's answer.
 5. **`kekule` and `thiele` are exempt, and the exemption list is closed.**  They are the only
    operations allowed to change a representation, and the aromatic and Kekulé spellings are one
    molecule.  They reach the journal as ordinary order changes, so they announce themselves with a flag

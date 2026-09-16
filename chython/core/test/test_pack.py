@@ -20,7 +20,7 @@ import struct
 
 import pytest
 
-from chython.core import STEREO_AND, WEDGE_UP, MoleculeContainer
+from chython.core import STEREO_AND, WEDGE_UP, MoleculeContainer, smiles
 from chython.core import _core
 
 # Segment table starts at byte 24; each entry is 8 bytes (offset uint32 + length uint32).
@@ -819,3 +819,43 @@ def test_a_version_5_buffer_may_not_set_the_reserved_flag_bits():
         d[atoms_at + 24 * 0 + 3] |= bits
         with pytest.raises(ValueError, match='reserved flag bits'):
             MoleculeContainer.from_bytes(bytes(d))
+
+
+# ---------------------------------------------------------------------------
+# bond stereo groups
+# ---------------------------------------------------------------------------
+
+def test_bond_stereo_group_survives_to_bytes():
+    """The sg_pack byte at the axis's anchor is arena state, so it round-trips through the buffer."""
+    mol = smiles('COC(=O)/C=C\\C(=O)OC')
+    n, m = 5, 6
+    with mol.edit() as e:
+        e.set_bond_stereo_group(n, m, 2, 1)
+    assert mol.stereo_group_of((n, m)) == (2, 1)
+    back = MoleculeContainer.from_bytes(mol.to_bytes())
+    assert back.stereo_group_of((n, m)) == (2, 1)
+    assert back.bond_stereo_groups() == {(2, 1): [(n, m)]}
+
+
+def test_a_group_set_and_cleared_leaves_one_empty_group_segment():
+    """Clearing a group frees no segment, for an axis exactly as for a centre: one namespace, one
+    behaviour.  The buffer keeps an all-zero SEG_STEREO_GROUPS, which is not what a molecule that
+    never carried a group writes, so what holds is idempotence and equality rather than byte identity
+    with `before`.  Byte identity across builds is the frozen pach corpora's business.
+    """
+    mol = smiles('COC(=O)/C=C\\C(=O)OC')
+    before = mol.to_bytes()
+    with mol.edit() as e:
+        e.set_bond_stereo_group(5, 6, 2, 1)
+        e.set_bond_stereo_group(5, 6, 0)
+    after = mol.to_bytes()
+    assert mol.stereo_groups() == {} and mol.bond_stereo_groups() == {}
+    assert after != before, 'the segment is allocated once and stays'
+    assert MoleculeContainer.from_bytes(after).to_bytes() == after, 'a re-read writes the same bytes'
+    assert mol == smiles('COC(=O)/C=C\\C(=O)OC')
+
+    centre = smiles('C[C@H](N)O')
+    centre_before = centre.to_bytes()
+    centre.set_stereo_group(2, 2, 1)
+    centre.set_stereo_group(2, 0)
+    assert centre.to_bytes() != centre_before, 'a centre leaves the same empty segment behind'

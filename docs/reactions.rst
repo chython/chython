@@ -891,12 +891,13 @@ of the bond names it:
 
 .. testoutput::
 
-    C/C=C/O |&1:1|
-    C/C=C/O |&1:1|
+    C/C=C/O |&1:2|
+    C/C=C/O |&1:2|
 
-The group is written on the unit's **anchor** whichever terminal the template named, since a parity and a
-group are one statement about one unit.  Both terminals grouped is therefore that statement made twice:
-the lower id wins and the collision is logged.
+The group is stored at the unit's **anchor** whichever terminal the template named, since a parity and a
+group are one statement about one unit; the tail then names the axis by an owner of its own choosing.
+Both terminals grouped is therefore that statement made twice: the lower id wins and the collision is
+logged.
 
 **Signs in one group state a relative configuration.**  Two signed product atoms sharing a group are a
 *drawn* pair: the relationship between them is stated and the absolute configuration is not.  That is

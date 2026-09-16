@@ -4,7 +4,7 @@ build-backend = 'setuptools.build_meta'
 
 [project]
 name = 'chython'
-version = '3.1'
+version = '3.2'
 description = 'Library for processing molecules and reactions in python way'
 authors = [{name = 'Ramil Nugmanov', email = 'nougmanoff@protonmail.com'}]
 license = 'LGPL-3.0-or-later'
@@ -146,6 +146,8 @@ include = ['chython*']
 # `pach_v3_corpus.bin.gz` and `pach_v4_corpus.bin.gz` ship for the opposite reason: this tree CAN write
 # them, which is why they are frozen.  A fixture the test run regenerates pins no layout, so the
 # committed bytes are the artefact and `gen_pach3_corpus.py` is run by hand.
+# `pach_bond_group_corpus.bin.gz` is the same artefact for the bond enhanced-stereo block, written by the
+# same generator and pinning the header field the earlier fifty records all leave zero.
 #
 # `arena_v4_corpus.bin.gz` has the strongest reason of the three: it is arena `STRUCT_VERSION` 4, which
 # this tree no longer writes and no later build ever will, so `gen_v4_fixtures.py` cannot rerun.  It is
@@ -169,7 +171,7 @@ include = ['chython*']
 'chython.core' = ['valence_rules.tsv', 'elements.tsv', 'isotopes.tsv', 'RULES.md']
 'chython.chemistry' = ['tables/abbreviations.tsv', 'tables/standardize_groups.tsv', 'tables/standardize_metals.tsv', 'tables/resonance.tsv', 'tables/salts.tsv', 'tables/acids.tsv', 'tables/sybyl_types.tsv', 'tables/residues.tsv', 'tables/rotatable.tsv', 'tables/hbond.tsv', 'tables/pharmacophore.tsv', 'tables/tpsa.tsv', 'tables/crippen.tsv', 'tables/covalent_radii.tsv', 'tables/maccs.tsv', 'tables/maccs_corpus.tsv', 'tables/qed_alerts.tsv']
 'chython.reactions' = ['tables/functional.tsv', 'tables/protective.tsv', 'tables/reactions.tsv', 'tables/roles.tsv']
-'chython.core.test' = ['pach_v2_corpus.bin.gz', 'pach_v0_corpus.bin.gz', 'pach_v0_native_corpus.bin.gz', 'reaction_pach_v2_corpus.bin.gz', 'arena_v4_corpus.bin.gz', 'pach_v3_corpus.bin.gz', 'pach_v4_corpus.bin.gz', 'modeling_view_corpus.json.gz']
+'chython.core.test' = ['pach_v2_corpus.bin.gz', 'pach_v0_corpus.bin.gz', 'pach_v0_native_corpus.bin.gz', 'reaction_pach_v2_corpus.bin.gz', 'arena_v4_corpus.bin.gz', 'pach_v3_corpus.bin.gz', 'pach_v4_corpus.bin.gz', 'pach_bond_group_corpus.bin.gz', 'modeling_view_corpus.json.gz']
 'chython.reactions.test' = ['golden_subset.smi']
 'chython.formats.ctfile' = ['CTFILE.md']
 

@@ -237,6 +237,36 @@ def test_cyclopentadienyl_anion():
     assert alternating(mol, bonds) == {i: 1 for i in ids[1:]}
 
 
+def test_cyclopentadienide_with_its_hydrogen_stated():
+    # a stated hydrogen is the third bond an ion of carbon has room for, so the class is decided and
+    # not the ring's to choose.  The odd ring above reaches the same answer by parity alone
+    mol, ids, bonds, h = build('C' * 5, cycle(5), charges={0: -1}, stated_h={0: 1})
+    assert kekule_classify(mol, bonds, h)[ids[0]] == 'must_not'
+    assert clean(kekule(mol, bonds, h))
+    assert alternating(mol, bonds) == {i: 1 for i in ids[1:]}
+
+
+def test_two_carbanions_in_one_ring_keep_the_lone_pair_each_states():
+    # cyclooctatetraenide (2-), written aromatic.  An even ring lets a matcher pair the ions off with
+    # each other, and the fourth bond that gives each of them is a valence violation the kekuliser
+    # would have to report; both classes being must-not, the six carbons between them alternate
+    mol, ids, bonds, h = build('C' * 8, cycle(8), charges={0: -1, 1: -1}, stated_h={0: 1, 1: 1})
+    cls = kekule_classify(mol, bonds, h)
+    assert [cls[ids[0]], cls[ids[1]]] == ['must_not', 'must_not']
+    assert clean(kekule(mol, bonds, h))
+    assert alternating(mol, bonds) == {i: 1 for i in ids[2:]}
+
+
+def test_the_pentalene_dianion_spends_its_leftover_double_on_the_fusion_bond():
+    # the two ions in different rings of one system: atoms 3 and 7 are the fusion pair, and with both
+    # ions must-not the only matching left puts a double on the bond they share
+    mol, ids, bonds, h = build('C' * 8, [(0, 1), (1, 2), (2, 3), (3, 7), (7, 0),
+                                         (3, 4), (4, 5), (5, 6), (6, 7)],
+                               charges={0: -1, 4: -1}, stated_h={0: 1, 4: 1})
+    assert clean(kekule(mol, bonds, h))
+    assert alternating(mol, bonds) == {i: 1 for i in ids if i not in (ids[0], ids[4])}
+
+
 # --- an exocyclic double bond saturates its ring atom (MDL fixture 3)
 
 def test_para_quinone_written_aromatic():

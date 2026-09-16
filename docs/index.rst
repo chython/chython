@@ -56,6 +56,7 @@ Cookbook
    pach
    molecule
    standardize
+   stereo
    substructure
    reactions
    ml

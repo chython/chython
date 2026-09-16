@@ -1127,11 +1127,16 @@ def record_from_molecule(mol, *, title=None, log=None):
     unknown, first_unknown = 0, None
     # The canonical form of the groups, which the V3000 emitter asks for too: a group's *number* is
     # arbitrary, so two writes of one molecule must not disagree about which arbitrary number it got.
+    # `mrvStereoGroup` is an atomArray column, so a member spelled as an owner pair is named by its
+    # anchor -- the one atom its group byte lives at, and the same spelling CXSMILES uses.
     groups = {}
     if mol.has_stereo_groups:
         for (kind, group), members in mol.canonical_stereo_groups().items():
-            for sid in members:
-                groups[sid] = (kind, group)
+            for member in members:
+                # AN INT MEMBER IS ALREADY THE SLOT the byte lives at -- including a bare label on an atom
+                # that anchors no unit, which has no anchor to resolve to and is still written.
+                anchor = member if isinstance(member, int) else mol.stereo_group_anchor_of(member)
+                groups[anchor] = (kind, group)
     for sid in sids:
         atom = CtabAtom()
         atom.element = mol.element_of(sid)

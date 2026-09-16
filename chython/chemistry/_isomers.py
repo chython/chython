@@ -23,6 +23,12 @@ compound, and both kekulise, so there is nothing to repair and only a choice to 
 whichever form arrived.  Placements are ranked in a placement-stripped frame (`_ranks`), proved by the
 kekuliser rather than scored (`_admissible`), and decided per system (`_choose`).
 
+A charge is mobile on all three shapes and in both signs: which nitrogen of an imidazolium holds the `+`,
+or which one of a guanidide holds the `-`, is a fact about the spelling.  Hydrogen and charge are dealt
+SEPARATELY, since the two do not always travel together -- 1-methylimidazolium is `Cn1cc[nH+]c1` and
+`C[n+]1cc[nH]c1` for the one ion, its substituted nitrogen taking the charge and never the hydrogen.  Net
+charge is `neutralize()`'s and no placement here creates or destroys one.
+
 Three shapes carry a mobile hydrogen, and only the first is aromatic:
 
 * an **aromatic** ring system -- pyrazole, imidazole, the purines.  `_sites`.
@@ -34,7 +40,9 @@ Three shapes carry a mobile hydrogen, and only the first is aromatic:
   both, which two algorithms could not promise.
 * an **amidine** or **guanidine**, where the hydrogen moves between the nitrogens of one sp2 carbon
   and the C=N moves with it.  No ring, so no kekuliser: which nitrogen may take the double bond is a
-  closed-form question about its valence (`_amidines`).
+  closed-form question about its valence (`_amidines`).  Units sharing a nitrogen -- a biguanide's
+  bridge -- are one placement problem, since that nitrogen may accept one C=N and not two
+  (`_amidine_systems`).
 
 What is deliberately *not* here: moving a hydrogen from oxygen or sulfur onto nitrogen.  An enol and
 its ketone are not two valid spellings of one drawing, they are a drawing to repair, and the repair is
@@ -42,7 +50,8 @@ a `tautomer` row in `standardize_groups.tsv` with a `why` -- which is why this m
 never `REPAIRED`.
 """
 from collections.abc import Iterable, Sequence
-from itertools import combinations
+from itertools import combinations, product
+from math import comb
 from ..core import INFO, LOST, LogRecord, MoleculeContainer, recording
 
 
@@ -75,10 +84,16 @@ _TRIALS_MAX = 512
 def _sites(molecule: MoleculeContainer) -> list[int]:
     """Every atom whose hydrogen or charge the ring decides.
 
-    A neutral or anionic, non-radical N, P or As with exactly two heavy neighbours, both bonds
-    aromatic, and at most one hydrogen -- nothing in the graph says whether it donates its lone pair.
-    Three neighbours leaves no room for a double bond either way, so it is not a site; nor is an atom
-    holding its hydrogen explicitly, which `implicify_hydrogens()` converts to this spelling first.
+    A non-radical N, P or As carrying at most one unit of charge, with exactly two aromatic bonds and at
+    most one hydrogen -- nothing in the graph says whether it donates its lone pair.  A non-aromatic bond
+    has already decided the question, and an atom holding its hydrogen explicitly is not a site either,
+    which `implicify_hydrogens()` converts to this spelling first.
+
+    Cationic as well as anionic: which nitrogen of an imidazolium carries the `+` is a fact about the
+    spelling and not about the ion, so it is as mobile as the hydrogen beside it.  A SUBSTITUTED nitrogen
+    is a site on the charge alone: 1-methylimidazolium is drawn `Cn1cc[nH+]c1` and `C[n+]1cc[nH]c1` for
+    the one ion, its `+` mobile where its hydrogen is not, which is why the two are dealt separately in
+    `_choose` and why a third bond does not disqualify.
 
     Pure reads, and it must stay that way: the container refuses a read once an edit session is open.
     """
@@ -86,15 +101,15 @@ def _sites(molecule: MoleculeContainer) -> list[int]:
     for n in molecule.atom_numbers:
         if molecule.element_of(n) not in _MOBILE or molecule.radical_of(n):
             continue
-        if molecule.charge_of(n) not in (0, -1):
+        if molecule.charge_of(n) not in (-1, 0, 1):
             continue
         h = molecule.implicit_h_of(n)
         if h is None or h > 1:
             continue                      # an unknown count is not a placement anybody may choose
-        neighbors = tuple(molecule.neighbors_of(n))
-        if len(neighbors) != 2 or any(molecule.order_of(n, m) != 4 for m in neighbors):
-            continue                      # three neighbours has no room either way; a non-aromatic
-        out.append(n)                     # bond has already decided the question
+        orders = [molecule.order_of(n, m) for m in molecule.neighbors_of(n)]
+        if orders.count(4) != 2 or any(o not in (1, 4) for o in orders):
+            continue
+        out.append(n)
     return out
 
 
@@ -160,8 +175,49 @@ def _ranks(molecule: MoleculeContainer, sites: Iterable[int],
     return out
 
 
+def _budget(molecule: MoleculeContainer, sites: Iterable[int]) -> tuple[int, dict[int, int]]:
+    """What the sites arrived holding: how many hydrogens in total, and the multiset of their charges.
+
+    A placement deals both back out over the same sites, which is what conserves the formula and every
+    component's charge: a hydrogen and a `+` may move from one site to another and neither may be created.
+    Net charge is `neutralize()`'s question and none of this pass's.
+
+    Two budgets and not one multiset of `(hydrogens, charge)` pairs, because the two do not travel
+    together: a substituted nitrogen takes a `+` and no hydrogen, so 1-methylimidazolium holds the pairs
+    `(0, +1), (1, 0)` drawn one way and `(0, 0), (1, +1)` the other.  Dealing pairs could never bring
+    those two drawings together; dealing one hydrogen and one `+` over the same two sites does.  The
+    charge multiset rather than the net: a `+` and a `-` on one system is a charge separation, which is
+    `fix_resonance()`'s to remove and never this pass's to invent.
+    """
+    charges: dict[int, int] = {}
+    hydrogens = 0
+    for n in sites:
+        hydrogens += molecule.implicit_h_of(n) or 0
+        q = molecule.charge_of(n)
+        charges[q] = charges.get(q, 0) + 1
+    return hydrogens, charges
+
+
+def _deal(sites: tuple[int, ...], states: tuple[tuple, ...]):
+    """Every distinct way to deal the states over the sites, as `{site: state}`.
+
+    One state per site and every state dealt, so an assignment is a permutation of the multiset.  Both
+    paths deal their charges with this, zeros included so that every site is covered; hydrogens are a
+    count rather than a multiset and are chosen with `combinations` beside it on the ring path, and follow
+    from the double bond on the amidine one.
+    """
+    if not states:
+        yield {}
+        return
+    (state, count), rest = states[0], states[1:]
+    for chosen in combinations(sites, count):
+        remaining = tuple(n for n in sites if n not in chosen)
+        for tail in _deal(remaining, rest):
+            yield {**{n: state for n in chosen}, **tail}
+
+
 def _admissible(molecule: MoleculeContainer, group: list[int],
-                protons: frozenset[int], anions: frozenset[int]) -> bool:
+                placement: dict[int, tuple[int, int]]) -> bool:
     """Does this placement give a Kekule form for this group?  The kekuliser is the oracle.
 
     This group's systems and not the whole molecule's: one ring nobody can kekulise (`c1cccc1`) would
@@ -171,52 +227,61 @@ def _admissible(molecule: MoleculeContainer, group: list[int],
     cannot carry the hydrogens it was given, it drops one and logs it, and handed a neutral nitrogen that
     has to be a cation it charges it.  A placement that kekulises only because the kekuliser rewrote it
     is a placement of a different molecule, so the counts are read back and compared with what was asked
-    for.  1,2,4-triazol-3-one taught this: protonating both nitrogens flanking its lone ring carbon
-    leaves that carbon no partner for a double bond, and the relaxation hid it by taking the hydrogens
-    away.
+    for -- which is also what tells a `+` this pass placed from one the kekuliser added.  1,2,4-triazol-3-
+    one taught this: protonating both nitrogens flanking its lone ring carbon leaves that carbon no
+    partner for a double bond, and the relaxation hid it by taking the hydrogens away.
     """
     work = molecule.copy()
     with work.edit():
-        for n in group:
-            work.set_charge(n, -1 if n in anions else 0)
-            work.set_hydrogens(n, 1 if n in protons else 0)
+        for n, (hydrogens, charge) in placement.items():
+            work.set_charge(n, charge)
+            work.set_hydrogens(n, hydrogens)
     members = frozenset(group)
     if any(members.intersection(system) for system in work.kekule().unresolved):
         return False
-    return all(work.implicit_h_of(n) == (1 if n in protons else 0)
-               and work.charge_of(n) == (-1 if n in anions else 0) for n in group)
+    return all((work.implicit_h_of(n), work.charge_of(n)) == state for n, state in placement.items())
 
 
 def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]):
     """The canonical placement for one group, `None` when nothing must move, `'budget'` when too big.
 
-    Protons and charges are two candidate sets over the same sites, both counts read off the group
-    rather than assumed.  The key is `(sorted proton ranks, sorted charge ranks)`, a strict total order
-    because `atoms_order` is a permutation -- so no two placements share a key and no tie is left for an
-    arbitrary rule to break.
+    The hydrogens and the charges are read off the group rather than assumed, and dealt back over it.  The
+    key is the sorted ranks of the sites holding the hydrogens, then of those holding each charge in turn
+    -- a strict total order, because `atoms_order` is a permutation and those two sets fix the placement,
+    so no two placements share a key and no tie is left for an arbitrary rule to break.
+
+    A hydrogen deals over the sites with two heavy neighbours and a charge over all of them, which is the
+    whole difference a substituted nitrogen makes.  That much is not left to the oracle: `kekule()` decides
+    bond orders and not valences, and it will happily find a Kekule form for a 1-methylpyrazolium whose
+    hydrogen was put on its methylated nitrogen -- four bonds on a neutral nitrogen, kekulised and
+    over-valent.
     """
-    held = frozenset(n for n in group if molecule.implicit_h_of(n))
-    charged = frozenset(n for n in group if molecule.charge_of(n) == -1)
-    k, q = len(held), len(charged)
-    if k + q == 0 or k + q == len(group):
-        return None                       # every site alike: there is no distribution to choose
-    trials = 0
-    for protons in combinations(group, k):
-        trials += len(tuple(combinations([n for n in group if n not in protons], q)))
+    hydrogens, charges = _budget(molecule, group)
+    carriers = [n for n in group if len(tuple(molecule.neighbors_of(n))) == 2]
+    order = tuple((q, charges[q]) for q in sorted(charges))
+    trials, rest = comb(len(carriers), hydrogens), len(group)
+    for _, count in order:
+        trials *= comb(rest, count)
+        rest -= count
         if trials > _TRIALS_MAX:
             return 'budget'
+    if trials == 1:
+        return None                       # one way to deal them: there is no distribution to choose
+    signs = [q for q in sorted(charges) if q]
+    current = {n: (molecule.implicit_h_of(n) or 0, molecule.charge_of(n)) for n in group}
     best = None
-    for protons in combinations(group, k):
-        rest = [n for n in group if n not in protons]
-        for anions in combinations(rest, q):
-            key = (sorted(ranks[n] for n in protons), sorted(ranks[n] for n in anions))
+    for protonated in combinations(carriers, hydrogens):
+        for dealt in _deal(tuple(group), order):
+            placement = {n: (1 if n in protonated else 0, dealt[n]) for n in group}
+            key = [sorted(ranks[n] for n in protonated)]
+            key.extend(sorted(ranks[n] for n in group if dealt[n] == q) for q in signs)
             if best is not None and key >= best[0]:
                 continue                  # cheaper than the oracle, so it goes first
-            if _admissible(molecule, group, frozenset(protons), frozenset(anions)):
-                best = (key, frozenset(protons), frozenset(anions))
-    if best is None or (best[1], best[2]) == (held, charged):
+            if _admissible(molecule, group, placement):
+                best = (key, placement)
+    if best is None or best[1] == current:
         return None
-    return best[1], best[2]
+    return best[1]
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -340,86 +405,183 @@ def _aromatized(molecule: MoleculeContainer):
 
 # ---------------------------------------------------------------------------------------------------
 # The amidines and guanidines.  No ring, so no kekuliser: which nitrogen may hold the double bond is a
-# closed-form question about its valence.
+# closed-form question about its valence.  Units sharing a nitrogen are decided together.
 # ---------------------------------------------------------------------------------------------------
 
-def _amidine_site(molecule: MoleculeContainer, n: int, carbon: int) -> bool:
+def _amidine_carbon(molecule: MoleculeContainer, n: int) -> bool:
+    """An acyclic, neutral, non-radical sp2 carbon holding exactly one double bond.
+
+    Carbon-local, so it can be answered before any nitrogen is classified: `_amidine_site` needs the
+    carbon set and `_amidines` closes the loop between the two.
+    """
+    if molecule.element_of(n) != 6 or molecule.in_ring_of(n):
+        return False
+    if molecule.charge_of(n) or molecule.radical_of(n):
+        return False
+    h = molecule.implicit_h_of(n)
+    if h is None:
+        return False
+    neighbors = tuple(molecule.neighbors_of(n))
+    orders = [molecule.order_of(n, m) for m in neighbors]
+    if any(o not in (1, 2) for o in orders) or orders.count(2) != 1:
+        return False
+    return len(neighbors) + h == 3
+
+
+def _amidine_site(molecule: MoleculeContainer, n: int, carbon: int, carbons: set[int]) -> bool:
     """A nitrogen whose hydrogen count is decided by whether it takes this carbon's double bond.
 
-    Neutral, non-radical, at most two heavy neighbours -- three leaves no room for the double bond -- and
-    no multiple bond of its own anywhere else, which is what keeps a nitro or an azo group out.
+    Non-radical, carrying at most one unit of charge, at most three heavy neighbours, and no multiple bond
+    of its own anywhere else, which is what keeps a nitro or an azo group out.  A double bond to another
+    amidine carbon is the one exception: that bond is mobile too, so the site set of a biguanide's bridge is
+    the same whichever of the two carbons the drawing happened to put it on, which is what makes both
+    drawings rank in one frame.
+
+    A charged nitrogen is a site like any other, and its charge is placed with the double bond: which
+    nitrogen of a guanidinium holds the `+` follows from which one holds the hydrogen.  Room is a question
+    for the valence identity in `_choose_amidines` and not for a neighbour count, and it has to be: a
+    tertiary nitrogen has no room for a hydrogen at all neutral, one as a cation, so gating on the count
+    would make metformin's site set depend on where its `+` was drawn.  Four heavy neighbours is the count
+    that decides, holding neither hydrogen nor double bond under any charge in range.
     """
     if molecule.element_of(n) != 7 or molecule.in_ring_of(n):
         return False
-    if molecule.charge_of(n) or molecule.radical_of(n) or molecule.implicit_h_of(n) is None:
+    if molecule.charge_of(n) not in (-1, 0, 1) or molecule.radical_of(n):
+        return False
+    if molecule.implicit_h_of(n) is None:
         return False
     neighbors = tuple(molecule.neighbors_of(n))
-    if len(neighbors) > 2 or molecule.order_of(n, carbon) not in (1, 2):
+    if len(neighbors) > 3 or molecule.order_of(n, carbon) not in (1, 2):
         return False
-    return all(molecule.order_of(n, m) == 1 for m in neighbors if m != carbon)
+    return all(molecule.order_of(n, m) == 1 or (molecule.order_of(n, m) == 2 and m in carbons)
+               for m in neighbors if m != carbon)
 
 
 def _amidines(molecule: MoleculeContainer) -> list[tuple[int, list[int]]]:
-    """`(carbon, its mobile nitrogens)` per acyclic amidine or guanidine.
+    """`(carbon, its mobile nitrogens)` per acyclic amidine or guanidine unit.
 
-    Acyclic on both counts, the carbon and every nitrogen, so an amidine group can never overlap a ring
+    Acyclic on both counts, the carbon and every nitrogen, so an amidine unit can never overlap a ring
     system `_aromatized` handed upward and the two answers cannot contradict each other.  A cyclic
     amidine is left for the ring path to reach through its ring.
+
+    A unit is kept only when its one double bond lands on a site -- which is what an amide's C=O fails --
+    and dropping a carbon can take a site away from its neighbour, so the two halves are iterated to a
+    fixed point rather than computed once.  One site is a unit: the acceptor is forced, but a forced
+    acceptor still denies a shared nitrogen to the unit next to it.
     """
+    carbons = {n for n in molecule.atom_numbers if _amidine_carbon(molecule, n)}
+    while True:
+        sites = {c: sorted(m for m in molecule.neighbors_of(c) if _amidine_site(molecule, m, c, carbons))
+                 for c in carbons}
+        dropped = {c for c in carbons if not any(molecule.order_of(c, m) == 2 for m in sites[c])}
+        if not dropped:
+            return [(c, sites[c]) for c in sorted(carbons)]
+        carbons -= dropped
+
+
+def _amidine_systems(groups: list[tuple[int, list[int]]]) -> list[list[tuple[int, list[int]]]]:
+    """The units merged where they share a nitrogen -- one system per connected component.
+
+    A bridging nitrogen accepts one C=N and not two, so two units sharing one are not independent and a
+    biguanide decided as two amidines puts a double bond on its bridge twice.
+    """
+    owners: dict[int, list[int]] = {}
+    for carbon, sites in groups:
+        for n in sites:
+            owners.setdefault(n, []).append(carbon)
+    lookup = dict(groups)
+    seen: set[int] = set()
     out = []
-    for n in molecule.atom_numbers:
-        if molecule.element_of(n) != 6 or molecule.in_ring_of(n):
+    for start, _ in groups:
+        if start in seen:
             continue
-        if molecule.charge_of(n) or molecule.radical_of(n):
-            continue
-        h = molecule.implicit_h_of(n)
-        if h is None:
-            continue
-        neighbors = tuple(molecule.neighbors_of(n))
-        orders = [molecule.order_of(n, m) for m in neighbors]
-        if any(o not in (1, 2) for o in orders) or orders.count(2) != 1:
-            continue
-        if len(neighbors) + h != 3:
-            continue                       # sp2, and that one double bond is the only one it has
-        sites = sorted(m for m in neighbors if _amidine_site(molecule, m, n))
-        if len(sites) < 2 or not any(molecule.order_of(n, m) == 2 for m in sites):
-            continue                       # the C=N has to be one this group is allowed to move
-        out.append((n, sites))
+        stack, members = [start], []
+        seen.add(start)
+        while stack:
+            c = stack.pop()
+            members.append(c)
+            for n in lookup[c]:
+                for other in owners[n]:
+                    if other not in seen:
+                        seen.add(other)
+                        stack.append(other)
+        members.sort()
+        out.append([(c, lookup[c]) for c in members])
     return out
 
 
-def _choose_amidine(molecule: MoleculeContainer, carbon: int, sites: list[int],
-                    ranks: dict[int, int]) -> int | None:
-    """Which nitrogen takes the C=N, or `None` when it already has it.
+def _choose_amidines(molecule: MoleculeContainer, unit: list[tuple[int, list[int]]],
+                     ranks: dict[int, int]):
+    """`({carbon: acceptor}, {site: charge})` for one system, `None` when it already has it, `'budget'`
+    when too big.
 
-    A neutral nitrogen with `d` heavy neighbours carries `3 - d` hydrogens single-bonded and `2 - d`
-    double-bonded, so the total over the group is fixed whichever one accepts and there is nothing to
-    prove admissible.  The key mirrors the ring one -- the sorted ranks of the nitrogens that KEEP their
-    hydrogen, minimised -- so one canonical order answers both paths.
+    A nitrogen with charge `q` and `d` heavy neighbours carries `3 + q - d` hydrogens single-bonded and
+    `2 + q - d` double-bonded, so with the charges dealt the total over the system is fixed whichever
+    nitrogens accept and there is nothing to prove admissible -- only a count no nitrogen can carry to
+    reject.  What has to be enforced is that each nitrogen accepts at most once, which makes an assignment
+    a perfect matching of the carbons onto their sites.
+
+    The candidate graph is a forest -- a cycle through it is a ring, and every atom here is acyclic -- so
+    no two assignments share an acceptor set.  That is what leaves the key a strict total order: the
+    sorted ranks of the nitrogens that KEEP their hydrogen, then the sorted ranks holding each charge,
+    the same shape of key the ring path uses.
     """
-    current = next(n for n in sites if molecule.order_of(carbon, n) == 2)
-    acceptor = min(sites, key=lambda a: sorted(ranks[n] for n in sites if n != a))
-    return None if acceptor == current else acceptor
+    carbons = [c for c, _ in unit]
+    all_sites = sorted({n for _, sites in unit for n in sites})
+    degrees = {n: len(tuple(molecule.neighbors_of(n))) for n in all_sites}
+    current = {c: next((n for n in sites if molecule.order_of(c, n) == 2), None) for c, sites in unit}
+    # a nitrogen already holding two C=N is over-valent, and repairing one is `standardize()`'s job
+    if len(set(current.values())) != len(current):
+        return None
+    charged = {n: molecule.charge_of(n) for n in all_sites}
+    counts: dict[int, int] = {}
+    for n in all_sites:
+        counts[charged[n]] = counts.get(charged[n], 0) + 1
+    order = tuple((charge, counts[charge]) for charge in sorted(counts))
+
+    trials, rest = 1, len(all_sites)
+    for _, count in order:
+        trials *= comb(rest, count)
+        rest -= count
+    for _, sites in unit:
+        trials *= len(sites)
+    if trials > _TRIALS_MAX:
+        return 'budget'
+
+    best = None
+    for charges in _deal(tuple(all_sites), order):
+        free = {n: 3 + charges[n] - degrees[n] for n in all_sites}
+        for choice in product(*(sites for _, sites in unit)):
+            taken = frozenset(choice)
+            if len(taken) != len(choice):
+                continue                  # two carbons cannot share one acceptor
+            if any(free[n] < (1 if n in taken else 0) for n in all_sites):
+                continue                  # a nitrogen asked for a hydrogen it cannot carry
+            key = [sorted(ranks[n] for n in all_sites if n not in taken)]
+            key.extend(sorted(ranks[n] for n in all_sites if charges[n] == charge)
+                       for charge, _ in order)
+            if best is None or key < best[0]:
+                best = (key, dict(zip(carbons, choice)), charges)
+    if best is None or (best[1], best[2]) == (current, charged):
+        return None
+    return best[1], best[2]
 
 
 # ---------------------------------------------------------------------------------------------------
 # The pass.
 # ---------------------------------------------------------------------------------------------------
 
-def _place_rings(molecule: MoleculeContainer, lines: list[tuple[str, tuple[int, ...], str]]) -> bool:
+def _place_rings(molecule: MoleculeContainer, work, systems, sites: list[int],
+                 ranks: dict[int, int], lines: list[tuple[str, tuple[int, ...], str]]) -> bool:
     """Decide every ring system, aromatic as drawn or spelled aromatic for the purpose.  Did it move?"""
-    work, systems = _aromatized(molecule)
     target = work if work is not None else molecule
-
-    sites = _sites(target)
     if len(sites) < 2:
         return False                      # one site is one placement; zero is none
 
     # every read happens before the session opens: the container refuses a read while a journal is
     # pending, so the whole plan is computed first and the session is pure writes.
-    ranks = _ranks(target, sites)
     rule = _RULE if work is None else _RULE_KEKULE
-    plan: list[tuple[list[int], frozenset[int], frozenset[int]]] = []
+    plan: list[tuple[list[int], dict[int, tuple[int, int]]]] = []
     for group in _groups(target, sites):
         if len(group) < 2:
             continue
@@ -432,22 +594,22 @@ def _place_rings(molecule: MoleculeContainer, lines: list[tuple[str, tuple[int, 
                           f'placements than the {_TRIALS_MAX}-trial budget allows; it was left as '
                           f'drawn rather than half-searched'))
             continue
-        protons, anions = answer
-        plan.append((group, protons, anions))
+        plan.append((group, answer))
         lines.append((rule, tuple(group),
                       f'ring system {tuple(group)!r}: mobile hydrogen(s) placed on '
-                      f'{tuple(sorted(protons))!r} and charge(s) on {tuple(sorted(anions))!r}, the '
-                      f'canonical placement for this skeleton'))
+                      f'{tuple(n for n in group if answer[n][0])!r} and charge(s) on '
+                      f'{tuple(n for n in group if answer[n][1])!r}, the canonical placement for this '
+                      f'skeleton'))
 
     if not plan:
         return False
 
     if work is None:
         with molecule.edit():
-            for group, protons, anions in plan:
-                for n in group:
-                    molecule.set_charge(n, -1 if n in anions else 0)
-                    molecule.set_hydrogens(n, 1 if n in protons else 0)
+            for _, placement in plan:
+                for n, (hydrogens, charge) in placement.items():
+                    molecule.set_charge(n, charge)
+                    molecule.set_hydrogens(n, hydrogens)
                 # no parity restore, deliberately: `set_hydrogens` and `set_charge` do not clear one,
                 # only `delete_atom` does.  Pinned by
                 # `test_a_stereocentre_is_not_touched_and_needs_no_parity_restore`.
@@ -458,19 +620,18 @@ def _place_rings(molecule: MoleculeContainer, lines: list[tuple[str, tuple[int, 
     # group did not move keeps the orders it was drawn with: the pass answers where a hydrogen goes, and
     # rewriting a Kekule form nobody asked about is not that answer.
     with work.edit():
-        for group, protons, anions in plan:
-            for n in group:
-                work.set_charge(n, -1 if n in anions else 0)
-                work.set_hydrogens(n, 1 if n in protons else 0)
+        for _, placement in plan:
+            for n, (hydrogens, charge) in placement.items():
+                work.set_charge(n, charge)
+                work.set_hydrogens(n, hydrogens)
     if work.kekule().unresolved:
-        lines.append((_RULE_REFUSED, tuple(sorted(n for group, _, _ in plan for n in group)),
+        lines.append((_RULE_REFUSED, tuple(sorted(n for group, _ in plan for n in group)),
                       'the canonical placement has no Kekule form for the molecule as a whole, though '
                       'it had one for each system alone; nothing was written'))
         return False
 
-    moved = frozenset(n for group, _, _ in plan for n in group)
-    placed = {n: (1 if n in protons else 0, -1 if n in anions else 0)
-              for group, protons, anions in plan for n in group}
+    moved = frozenset(n for group, _ in plan for n in group)
+    placed = {n: state for _, placement in plan for n, state in placement.items()}
     orders: list[tuple[int, int, int]] = []
     for atoms, rewrite in systems:
         if atoms.isdisjoint(moved):
@@ -497,39 +658,46 @@ def _place_rings(molecule: MoleculeContainer, lines: list[tuple[str, tuple[int, 
     return True
 
 
-def _place_amidines(molecule: MoleculeContainer,
+def _place_amidines(molecule: MoleculeContainer, groups: list[tuple[int, list[int]]],
+                    ranks: dict[int, int],
                     lines: list[tuple[str, tuple[int, ...], str]]) -> bool:
     """Decide every acyclic amidine and guanidine.  Did anything move?"""
-    groups = _amidines(molecule)
     if not groups:
         return False
-
-    # the double bond is stripped along with the hydrogens: it is half of what the two spellings differ
-    # by, so a frame that kept it would rank the two drawings differently.
-    ranks = _ranks(molecule, [n for _, sites in groups for n in sites],
-                   [(carbon, n) for carbon, sites in groups for n in sites])
-    plan: list[tuple[int, list[int], int, dict[int, int]]] = []
-    for carbon, sites in groups:
-        acceptor = _choose_amidine(molecule, carbon, sites, ranks)
-        if acceptor is None:
+    plan: list[tuple[list[tuple[int, list[int]]], dict[int, int], dict[int, int], dict[int, int]]] = []
+    for unit in _amidine_systems(groups):
+        answer = _choose_amidines(molecule, unit, ranks)
+        if answer is None:
             continue
-        hydrogens = {n: (2 if n == acceptor else 3) - len(tuple(molecule.neighbors_of(n)))
+        sites = sorted({n for _, s in unit for n in s})
+        if answer == 'budget':
+            lines.append((_RULE_BUDGET, tuple(sites),
+                          f'amidine system {tuple(sites)!r} has more placements than the '
+                          f'{_TRIALS_MAX}-trial budget allows; it was left as drawn rather than '
+                          f'half-searched'))
+            continue
+        accepted, charges = answer
+        acceptors = frozenset(accepted.values())
+        hydrogens = {n: (2 if n in acceptors else 3) + charges[n] - len(tuple(molecule.neighbors_of(n)))
                      for n in sites}
         if min(hydrogens.values()) < 0:
             continue                      # no nitrogen may be asked for a hydrogen it does not have
-        plan.append((carbon, sites, acceptor, hydrogens))
+        plan.append((unit, accepted, charges, hydrogens))
         lines.append((_RULE_AMIDINE, tuple(sites),
-                      f'amidine at atom {carbon}: the double bond to {tuple(sites)!r} placed on '
-                      f'{acceptor}, the canonical acceptor for this skeleton, and the hydrogens '
-                      f'follow it'))
+                      f'amidine at atom(s) {tuple(c for c, _ in unit)!r}: the double bond(s) to '
+                      f'{tuple(sites)!r} placed on {tuple(accepted[c] for c, _ in unit)!r} and '
+                      f'charge(s) on {tuple(n for n in sites if charges[n])!r}, the canonical assignment '
+                      f'for this skeleton, and the hydrogens follow it'))
 
     if not plan:
         return False
     with molecule.edit():
-        for carbon, sites, acceptor, hydrogens in plan:
-            for n in sites:
-                molecule.set_order(carbon, n, 2 if n == acceptor else 1)
+        for unit, accepted, charges, hydrogens in plan:
+            for carbon, sites in unit:
+                for n in sites:
+                    molecule.set_order(carbon, n, 2 if n == accepted[carbon] else 1)
             for n, h in hydrogens.items():
+                molecule.set_charge(n, charges[n])
                 molecule.set_hydrogens(n, h)
     return True
 
@@ -552,10 +720,22 @@ def standardize_isomers(molecule: MoleculeContainer) -> bool:
     Never raises.
     """
     lines: list[tuple[str, tuple[int, ...], str]] = []
-    # rings first: an amidine's gates exclude every ring atom, so the two passes are independent and the
-    # order is a convenience rather than a dependency.
-    changed = _place_rings(molecule, lines)
-    changed = _place_amidines(molecule, lines) or changed
+    groups = _amidines(molecule)
+    work, systems = _aromatized(molecule)
+    target = work if work is not None else molecule
+    sites = _sites(target)
+
+    # ONE frame for both paths, and that is what makes them independent -- their gates do not overlap,
+    # an amidine's excluding every ring atom, but their answers would: a ring hydrogen and an amidine's
+    # C=N are both mobile, so a frame holding either ranks the other's placements by where the drawing
+    # happened to put it.  A guanidinyl pyrazole decided in two frames was not idempotent.  The double
+    # bonds are stripped along with the hydrogens, being half of what two amidine spellings differ by,
+    # and the ring systems are read on the aromatic copy where no Kekule order says anything either.
+    ranks = _ranks(target, sites + [n for _, s in groups for n in s],
+                   [(carbon, n) for carbon, s in groups for n in s])
+
+    changed = _place_rings(molecule, work, systems, sites, ranks, lines)
+    changed = _place_amidines(molecule, groups, ranks, lines) or changed
 
     with recording(molecule, stage='isomers') as log:
         for rule, atoms, message in lines:

@@ -606,3 +606,38 @@ def test_build_puts_the_log_on_the_molecule_as_well_as_returning_it():
     lines[4] = lines[4].replace('C   0  0', 'C   0  9')
     mol, _, log = _read(lines)
     assert log and [str(x) for x in mol.log] == [str(x) for x in log]
+
+
+def _diene_with_a_bond_group(kind, group):
+    """(2E,4E)-hexa-2,4-dienedioic acid with its first skeletal C=C in the stated group.
+
+    The bond is selected by its ends' element, not by index: an index test also keeps a carboxyl C=O.
+    """
+    from ....core import read_smiles
+    mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
+    pairs = [(b.n, b.m) for b in mol.bonds()
+             if b.order == 2 and mol.atom(b.n).atomic_symbol == 'C' and mol.atom(b.m).atomic_symbol == 'C']
+    assert len(pairs) == 2, pairs
+    with mol.edit() as e:
+        e.set_bond_stereo_group(pairs[0][0], pairs[0][1], kind, group)
+    return mol
+
+
+def test_v2000_reports_a_bond_group_as_lost():
+    """V2000's chiral flag is one bit for the whole record and `SAL` names atoms, so neither plane's
+    AND/OR collections can be written."""
+    log = []
+    emit_v2000(_diene_with_a_bond_group(3, 1), log=log)
+    assert 'v2000:enhanced-stereo-not-written' in [r.rule for r in log]
+
+
+def test_an_abs_bond_group_is_not_a_loss_for_v2000():
+    """ABS is what the chiral flag itself states, so a bond collection of kind 1 loses nothing.
+
+    The test the positive one above cannot be: a gate reading `bond_groups` as a plain truth value
+    passes that one and reports a loss here, where there is none.
+    """
+    log = []
+    emit_v2000(_diene_with_a_bond_group(1, 0), log=log)
+    # `wedge:double-bond-no-coords` is expected here: the fixture has no layout.
+    assert 'v2000:enhanced-stereo-not-written' not in [r.rule for r in log], [r.rule for r in log]

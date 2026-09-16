@@ -98,3 +98,10 @@ def test_an_sgroup_bearing_v4_buffer_keeps_its_sgroups_through_adoption():
     assert any(mol.parity_of(n) for n in mol.atom_numbers), 'and neither did the stereocentre'
     assert _parity_bytes(mol), 'adopted, but into no segment'
     assert MoleculeContainer.from_bytes(mol.to_bytes()).sgroups == mol.sgroups
+
+
+def test_v4_buffer_loads_with_the_widened_flag_mask():
+    """Widening HE_FLAG_DEFINED cannot reject a buffer that never set one of the new bits."""
+    for raw in _records():
+        mol = MoleculeContainer.from_bytes(raw)
+        assert not mol.has_bond_stereo_groups, str(mol)
