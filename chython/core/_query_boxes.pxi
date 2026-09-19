@@ -86,6 +86,24 @@ DEF METAL_W0_FORBIDDEN = 0x019f8f8003e00078  # W0_ELEMENT_SPAN & ~METAL_W0_ALLOW
 DEF METAL_W1_FORBIDDEN = 0x2000000030000000  # W1_ELEMENT_SPAN & ~METAL_W1_ALLOWED
 
 
+cdef inline bint el_is_metal(uint32_t element) noexcept nogil:
+    """Whether `element` is one of the 93 metals, reading the `[M]` masks above.
+
+    `Atom.is_metal` is this function, so the property and the SMARTS primitive cannot disagree -- a
+    second list would be a second metal set, and the one thing a caller must be able to rely on is that
+    `atom.is_metal` is true exactly where `[M]` matches.  The bit layout is `_features.pxi`'s: a light
+    element takes word 0 bit `57 - element`, a heavy one word 1 bit `element - 57`.  Word 0 bit 0 is the
+    heavy MARKER and no light element reaches it, `57 - element` being 1..56 over the light span.
+
+    The R marker, element 0, is not a metal: a marker has no element to test.
+    """
+    if not element or element > 118:
+        return False
+    if element <= 56:
+        return (<uint64_t> METAL_W0_ALLOWED >> (57 - element)) & 1
+    return (<uint64_t> METAL_W1_ALLOWED >> (element - 57)) & 1
+
+
 # ---------------------------------------------------------------------------
 # Span table — single source for every one-hot feature span
 # ---------------------------------------------------------------------------

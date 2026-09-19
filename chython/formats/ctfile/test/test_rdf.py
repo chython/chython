@@ -1181,11 +1181,12 @@ def test_a_repeated_dtype_merges_on_the_container_and_is_reported(tmp_path):
     assert any('appears twice' in x for x in reaction.log), reaction.log
 
 
-def test_pach_refuses_a_reaction_carrying_metadata_and_takes_the_waiver(root):
-    """``pach`` has no metadata field and refuses rather than dropping silently, so read-then-pach raises
-    until the caller waives it.  The entry point for a reaction is ``reaction_pach_dump``; the bare
-    ``pach_dump`` beside it takes a *molecule*.  ``title`` is waived alongside ``meta`` because an
-    RDfile's reaction carries a name line too, and that refusal is a different one.
+def test_pach_reports_a_reaction_carrying_metadata_and_takes_the_waiver(root):
+    """``pach`` has no metadata field, so read-then-pach WRITES THE RECORD and says what it left out, on
+    ``reaction.log`` at stage ``pach``.  ``strict=True`` asks for the refusal instead, and ``drop=`` waives
+    the field, which logs nothing.  The entry point for a reaction is ``reaction_pach_dump``; the bare
+    ``pach_dump`` beside it takes a *molecule*.  ``title`` appears alongside ``meta`` because an RDfile's
+    reaction carries a name line too, and that is a second loss.
     """
     from pytest import raises
 
@@ -1195,9 +1196,13 @@ def test_pach_refuses_a_reaction_carrying_metadata_and_takes_the_waiver(root):
     with RDFRead(root / 'test' / 'MR.rdf') as f:
         reaction = next(x for x in f if isinstance(x, ReactionContainer))
     assert reaction.meta
+    assert reaction_pach_dump(reaction)
+    assert sorted(r.rule for r in reaction.log) == ['pach:meta-lost', 'pach:title-lost']
+    assert {r.stage for r in reaction.log} == {'pach'}
     with raises(ValueError, match='metadata key'):
-        reaction_pach_dump(reaction, drop=['title'])
+        reaction_pach_dump(reaction, drop=['title'], strict=True)
     assert reaction_pach_dump(reaction, drop=['meta', 'title'])
+    assert len(reaction.log) == 2
 
 
 def test_the_file_timestamp_is_on_the_reader_and_not_in_any_record(root):

@@ -27,7 +27,7 @@ from ...core import (LogRecord, LOST, MoleculeContainer, REPAIRED, STEREO_ABS, S
                      STEREO_OR, WEDGE_DOWN, WEDGE_EITHER, WEDGE_NONE, WEDGE_UP)
 from ._errors import MalformedCtfile, UnsupportedCtfile
 from ._hydrogens import MOLFILE_CHANNELS, calc_implicit
-from ._sgroup import SGroupStore
+from ._sgroup import SGroupStore, promote_stereo_labels
 from ...core.wedge import assign_parities
 
 
@@ -526,6 +526,12 @@ class Ctab:
         if self.meta:
             mol.meta.update(self.meta)
         store.to_molecule(mol, log)
+
+        # Stereo labels, once the S-groups are on the molecule and the collections and parities are
+        # settled -- both of which the promotion reads.  Under `ignore_stereo` there is no parity for a
+        # label to belong to, so there is nothing to promote and the label stays the data record it is.
+        if not ignore_stereo:
+            promote_stereo_labels(mol, log)
 
         # The log goes onto the molecule for the same reason, and is still RETURNED, because a caller
         # collecting into its own `log=` list may still do so.  `absorb` and not `extend`: it stamps

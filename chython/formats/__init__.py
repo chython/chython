@@ -24,7 +24,8 @@ Unmodelled constructs round-trip, stored on the container so a molecule-only con
 """
 
 from .ctfile import (ERDFWrite, ESDFWrite, FIELDDISP_TAIL, FailedRecord, RDFRead, RDFWrite, SDFRead,
-                     SDFWrite, SGroup, SGroupStore, add_data_sgroup, data_sgroups, mol, rxn)
+                     SDFWrite, SGroup, SGroupStore, STEREOLABEL, add_data_sgroup, data_sgroups, mol,
+                     promote_stereo_labels, rxn, stereo_labels)
 from .mol2 import Mol2ParseError, mol2, mol2_mol, read_mol2
 from .xml import (ForbiddenXml, MalformedXml, UnsupportedXml, XmlError, cml, mrv, read_cml, read_mrv,
                   read_xml, write_cml, write_mrv)
@@ -35,7 +36,8 @@ from ..core._core import _set_sgroup_fns
 # The one registration this package makes, and it goes the same way `chemistry`'s do: the core owns
 # S-group storage and the method names, this package owns what a CTfile `DAT` record means.  See
 # `_set_sgroup_fns`.
-_set_sgroup_fns(add_data_sgroup=add_data_sgroup, data_sgroups=data_sgroups)
+_set_sgroup_fns(add_data_sgroup=add_data_sgroup, data_sgroups=data_sgroups,
+                stereo_labels=stereo_labels)
 
 # `xyz` and the PDB-family entry points return their own intermediates, and that is the interface: XYZ
 # states no bonds, both state a z coordinate the container cannot yet hold, and a PDB record carries a
@@ -60,6 +62,7 @@ _set_sgroup_fns(add_data_sgroup=add_data_sgroup, data_sgroups=data_sgroups)
 __all__ = ['SDFRead', 'SDFWrite', 'ESDFWrite', 'RDFRead', 'RDFWrite', 'ERDFWrite',
            'FailedRecord', 'mol', 'rxn',
            'SGroup', 'SGroupStore', 'add_data_sgroup', 'data_sgroups', 'FIELDDISP_TAIL',
+           'STEREOLABEL', 'stereo_labels', 'promote_stereo_labels',
            # `mol2` shadows its own module inside this package, as `xyz` already does: the facade is the
            # name a caller wants, and `from .mol2 import ...` here is by full path anyway.
            'mol2', 'read_mol2', 'mol2_mol', 'Mol2ParseError',

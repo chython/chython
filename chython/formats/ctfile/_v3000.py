@@ -30,7 +30,7 @@ from ._ctab import (Ctab, CtabAtom, CtabBond, axis_spelling, order_from_bond_typ
 from ._errors import MalformedCtfile, UnsupportedCtfile
 from ._hydrogens import (MRV_IMPLICIT_H, ZERO_VALENCE, apply_mrv_implicit_h, implicit_h_records,
                          valence_for_write)
-from ._sgroup import (NO_INDEX, UNSUPPORTED, SGroup, checked_index, format_fielddisp,
+from ._sgroup import (MAX_STEREO_GROUP, NO_INDEX, UNSUPPORTED, SGroup, checked_index, format_fielddisp,
                       merge_log, normalize_indices, parse_fielddisp, resolve_output)
 from ._tokens import emit_v30, join_continuations, parse_list, quote_value, tokenize
 from ...core import LogRecord, LOST, R_INDEX_MAX, REPAIRED
@@ -96,10 +96,10 @@ _COLLECTION_PREFIXES = (('STEBABS', 'ABS', 'bond'), ('STEBRAC', 'RAC', 'bond'),
                         ('STEBREL', 'REL', 'bond'), ('STEABS', 'ABS', 'atom'),
                         ('STERAC', 'RAC', 'atom'), ('STEREL', 'REL', 'atom'))
 
-#: The highest group id the arena stores beside a kind in one byte, mirrored from the core's
-#: `STEREO_GROUP_MAX` (`core/_molecule_arena.pxi`), which a Python layer cannot read from a `DEF`.
-#: A file's id above it is renumbered by `_parse_collections`, the id being a label and not data.
-_MAX_STEREO_GROUP = 63
+#: A file's id above the arena's maximum is renumbered by `_parse_collections`, the id being a label and
+#: not data.  Declared in `_sgroup`, the lowest module that needs it; re-bound here under the name the
+#: renumbering reads.
+_MAX_STEREO_GROUP = MAX_STEREO_GROUP
 
 
 def _bonds_keyword(sgroup_type):

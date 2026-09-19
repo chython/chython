@@ -683,9 +683,8 @@ def emit_v2000(mol, sgroups=None, *, title=None, program='', comment='', log=Non
       the properties block wins and many readers look at only one of the two.  A charge past the reach
       of ``ccc`` writes 0 in the column and the truth in ``M  CHG``;
     * bond orders are written as stored: 1, 2 and 3 for a Kekule bond and 4 for an aromatic one, which
-      is how a CTfile spells one.  Caveat to weigh when choosing a representation: the spec lists type
-      4 among the *query* bond types, so some consumers read it as an aromatic query rather than as a
-      delocalised bond.  Call ``kekule()`` first for an alternating file;
+      is how a CTfile spells one.  Order 4 is de facto standard and is written without comment: the spec
+      lists it among the *query* bond types and every implementation reads it as a delocalised bond;
     * a hydrogen count the valence rules would not reproduce is written as the ``MRV_IMPLICIT_H`` data
       S-group, and **also** in ``vvv`` where every bond on the atom has an integral order.  An atom
       holding an aromatic bond gets the S-group alone: ``vvv`` is a *total* valence, and reaching it

@@ -148,12 +148,15 @@ def test_compressed_is_the_export_default_and_false_writes_the_raw_record():
     assert pach(molecule) == pach(molecule, compressed=None)
 
 
-def test_drop_reaches_the_encoder_rather_than_being_swallowed():
+def test_drop_and_strict_reach_the_encoder_rather_than_being_swallowed():
     molecule = _molecule()
     molecule.set_title(b'x')
+    assert unpach(pach(molecule)).title == '', 'the record is written; the title is on the log'
+    assert [r.rule for r in molecule.log] == ['pach:title-lost']
     with pytest.raises(ValueError, match='title'):
-        pach(molecule)
+        pach(molecule, strict=True)
     assert unpach(pach(molecule, drop=['title'])).title == ''
+    assert len(molecule.log) == 1
 
 
 def test_the_import_direction_ignores_the_export_keywords():

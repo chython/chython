@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 import pytest
-from chython.core import MoleculeContainer, QueryContainer
+from chython.core import MoleculeContainer, QueryContainer, read_smarts, read_smiles
 
 
 def mol(elements, bonds):
@@ -1071,3 +1071,53 @@ def test_query_search_methods_reject_none_rather_than_crashing():
         list(q.get_mapping(None))
     with pytest.raises(TypeError):
         list(q.get_raw_mapping(None))
+
+
+# ── match_any: the union over several queries ───────────────────────────────
+
+
+def test_one_query_needs_no_wrapping_and_answers_the_comprehension():
+    """The singular call is the common one, so a caller holding one query does not build a list for
+    it -- and the answer is the union over `get_mapping`, spelled out here."""
+    m = read_smiles('CC(=O)OCC')
+    q = read_smarts('[O]')
+    assert m.match_any(q) == {n for mp in q.get_mapping(m) for n in mp.values()}
+    assert m.match_any([q]) == m.match_any(q)
+
+
+def test_every_atom_of_every_mapping_lands_not_just_the_first():
+    m = read_smiles('CCOCC')
+    ether = read_smarts('[C][O][C]')
+    assert m.match_any(ether) == set(m.atom_numbers) - {n for n in m if m.degree_of(n) == 1}
+
+
+def test_an_atom_two_queries_both_cover_appears_once():
+    """A SCREEN AND NOT A COUNT: a set, so overlap is invisible by construction and a caller wanting
+    per-query hits calls `get_mapping` per query."""
+    m = read_smiles('CC(=O)O')
+    carbonyl, hydroxyl = read_smarts('[C]=[O]'), read_smarts('[O]')
+    both = m.match_any([carbonyl, hydroxyl])
+    assert both == m.match_any(carbonyl) | m.match_any(hydroxyl)
+    assert len(both) == 3
+
+
+def test_an_empty_union_is_empty_and_so_is_a_union_that_matched_nothing():
+    m = read_smiles('CCO')
+    assert m.match_any([]) == set()
+    assert m.match_any(()) == set()
+    assert m.match_any(read_smarts('[N]')) == set()
+    assert m.match_any([read_smarts('[N]'), read_smarts('[P]')]) == set()
+
+
+def test_a_generator_of_queries_is_accepted_because_the_argument_is_an_iterable():
+    m = read_smiles('CCN')
+    queries = ['[N]', '[C][C]']
+    assert m.match_any(read_smarts(x) for x in queries) == set(m.atom_numbers)
+
+
+def test_something_that_is_not_a_query_is_refused_rather_than_skipped():
+    m = read_smiles('CCO')
+    with pytest.raises(TypeError):
+        m.match_any(['[O]'])
+    with pytest.raises(TypeError):
+        m.match_any(m)

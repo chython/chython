@@ -26,12 +26,17 @@ keyword, so keyword order across the line is *not* preserved -- the writer emits
 
 from itertools import chain
 
-from ...core import LogRecord, LOST, REPAIRED
+from ...core import INFO, LogRecord, LOST, REPAIRED, STEREO_ABS, STEREO_AND, STEREO_UNSPECIFIED
 
 
 __all__ = ['SGroup', 'SGroupStore', 'SGROUP_TYPES', 'NO_INDEX', 'DISP_MAX', 'DISP_MIN',
            'resolve_output', 'UNSUPPORTED', 'merge_log',
-           'add_data_sgroup', 'data_sgroups', 'FIELDDISP_TAIL']
+           'add_data_sgroup', 'data_sgroups', 'FIELDDISP_TAIL', 'MAX_STEREO_GROUP',
+           'STEREOLABEL', 'stereo_labels', 'promote_stereo_labels']
+
+#: The highest group id the arena stores beside a kind in one byte, mirrored from the core's
+#: `STEREO_GROUP_MAX` (`core/_molecule_arena.pxi`), which a Python layer cannot read from a `DEF`.
+MAX_STEREO_GROUP = 63
 
 #: The stable prefix for log lines that report an unmodelled construct.  A caller filters on
 #: ``startswith(UNSUPPORTED)``, so writers and the ratchet import this one definition.
@@ -222,8 +227,15 @@ class SGroupStore:
         return [r for r in self.records if r.is_data()]
 
     def by_name(self, name):
-        """DAT records whose ``FIELDNAME`` is `name`."""
-        return [r for r in self.records if r.is_data() and r.name == name]
+        """DAT records whose ``FIELDNAME`` is `name`, MATCHED WITHOUT CASE.
+
+        ``FIELDNAME`` is a key a producer chose, not a spelling the spec fixes, and one body of records
+        writes both ``STEREOLABEL`` and ``StereoLabel``: a case-sensitive match reads neither reliably.
+        The record keeps the spelling it arrived with -- this is the lookup, not a normalisation.
+        """
+        folded = name.casefold()
+        return [r for r in self.records if r.is_data() and r.name is not None
+                and r.name.casefold() == folded]
 
     def translate(self, atom_map):
         """A new store with every reference mapped, per :meth:`SGroup.translate`."""
@@ -515,12 +527,156 @@ def _resolve_disp(molecule, atoms, disp, log):
 
 
 def data_sgroups(molecule, name=None):
-    """`molecule`'s ``DAT`` records, or just those whose ``FIELDNAME`` is `name`.
+    """`molecule`'s ``DAT`` records, or just those whose ``FIELDNAME`` is `name`, matched without case.
 
     Snapshots, for the reason :func:`add_data_sgroup` gives: the arena is the storage.
     """
     store = SGroupStore.from_molecule(molecule)
     return store.data_records() if name is None else store.by_name(name)
+
+
+#: The ``FIELDNAME`` a stereo label carries.  Matched without case -- see :meth:`SGroupStore.by_name`.
+STEREOLABEL = 'STEREOLABEL'
+
+#: The payload words :func:`promote_stereo_labels` turns into a collection, and which kind.  ``RS`` is
+#: AND with or without the marker; a bare letter is AND only when the marker says so.
+_LABEL_TO_KIND = {('RS', False): STEREO_AND, ('RS', True): STEREO_AND,
+                  ('R', True): STEREO_AND, ('S', True): STEREO_AND,
+                  ('R', False): STEREO_ABS, ('S', False): STEREO_ABS}
+
+# The log says AND and ABS rather than STERAC and STEABS: the record this promotion produces is an
+# arena collection, which every format spells its own way, and `STEREO_TO_COLLECTION` lives in
+# `_ctab`, which imports this module.
+_KIND_WORD = {STEREO_AND: 'AND', STEREO_ABS: 'ABS'}
+
+
+def stereo_labels(molecule):
+    """``[(atoms, bonds, label, relative), ...]`` for every ``STEREOLABEL`` data S-group on `molecule`.
+
+    A stereo label is a configuration word in a field the CTfile spec reserves for arbitrary data, so it
+    is outside the spec and it is what a large body of real records carries.  This is the accessor, and
+    it NORMALISES the payload, three ways a raw ``FIELDDATA`` read gets wrong:
+
+    * the surrounding parentheses of ``"(R)"`` are punctuation and are stripped;
+    * the letters are upper-cased, so ``r`` and ``R`` are one word;
+    * a ``*`` on EITHER SIDE of the letters is lifted out into `relative` rather than left inside the
+      string -- ``*R`` and CAS's ``R*`` are one word, so they get one reading.
+
+    `atoms` is a TUPLE and not one number: one group covers two atoms wherever the label describes an
+    axis, and in one record a racemate.  `bonds` are ``(n, m)`` pairs, empty for an atom label.
+
+    `label` is whatever is left after normalising -- ``'R'``, ``'S'``, ``'RS'``, ``'E'``, ``'Z'``, ``'&'``
+    -- and is not validated here: this reads the record, and :func:`promote_stereo_labels` is what decides
+    which words name a collection.
+    """
+    out = []
+    for record in data_sgroups(molecule, STEREOLABEL):
+        text = b''.join(record.data).decode('utf8', 'replace').strip()
+        relative = False
+        while True:
+            if text[:1] == '*':
+                relative = True
+                text = text[1:].strip()
+            elif text[-1:] == '*':
+                relative = True
+                text = text[:-1].strip()
+            elif len(text) > 1 and text[0] == '(' and text[-1] == ')':
+                text = text[1:-1].strip()
+            else:
+                break
+        out.append((tuple(record.atoms), tuple(record.bonds), text.upper(), relative))
+    return out
+
+
+def promote_stereo_labels(molecule, log=None):
+    """Turn `molecule`'s stereo labels into enhanced-stereo collections.  Returns True if any landed.
+
+    Reading the record, not repairing it: the label is a statement about the partition, and a reader that
+    stores it where no query can reach it has not read it.  Runs at read time, with the rest of the
+    stereo the CTfile reader derives.
+
+    TWO RULES DECIDE EVERY CASE.
+
+    **A collection wins.**  Where the file states a collection covering the labelled atom the label is
+    not promoted -- the file already said what the partition is, and where the two disagree the
+    collection is the spec-defined statement.  So promotion reaches the records that have no other way to
+    say it: every V2000 record, where the syntax does not exist, and the V3000 records that state none.
+
+    **A promotion never invents a parity.**  A label on an atom no configuration reaches gets no group
+    and is logged: a collection member with no parity inside it names a configuration that does not
+    exist, which is the state :meth:`MoleculeContainer.clean_stereo` exists to remove.
+
+    What each word promotes to, where no collection covers the atom:
+
+    ===================== ==========================================================================
+    ``RS`` ``*RS``        AND -- one group per S-group, so two atoms in one group are one racemate
+    ``*R`` ``*S``         AND.  ``*`` marks the configuration as relative -- this centre against the
+                          others, either enantiomer -- which is what AND spells.  OR would say one of
+                          two named alternatives holds, which is a stronger statement than the marker
+                          makes.  Producers that write both a marked label and a collection put the
+                          marked atom in ``STERAC``
+    ``R`` ``S``           ABS.  An unmarked letter is the local descriptor and says nothing about a
+                          partition, so this reaches only a record that states no collection -- where a
+                          parity with no group already writes as absolute, making the group explicit
+                          rather than new
+    ``E`` ``Z`` ``*E``    Logged, not promoted.  A bond label, and no record states one beside a
+    ``*Z``                collection to settle the reading against
+    anything else          Logged, not promoted.  ``&`` occurs and is not a configuration
+    ===================== ==========================================================================
+
+    :param log: a list to append reports to.  One line per label, promoted or not.
+    """
+    log = [] if log is None else log
+    labels = stereo_labels(molecule)
+    if not labels:
+        return False
+
+    used = {group for _, group in molecule.stereo_groups() if group}
+    plan = []
+    for atoms, bonds, label, relative in labels:
+        word = ('*' if relative else '') + label
+        if not atoms:
+            log.append(LogRecord('sgroup:stereo-label-not-promoted', (),
+                                 f'STEREOLABEL {word!r} references no atom, so there is nothing to '
+                                 f'promote it onto', LOST))
+            continue
+        kind = _LABEL_TO_KIND.get((label, relative))
+        if kind is None:
+            log.append(LogRecord('sgroup:stereo-label-not-promoted', tuple(atoms),
+                                 f'STEREOLABEL {word!r} is not a word that names a collection, so it is '
+                                 f'kept as the data label it is and nothing was promoted', LOST))
+            continue
+        stated = [n for n in atoms if molecule.stereo_group_of(n) != (STEREO_UNSPECIFIED, 0)]
+        if stated:
+            log.append(LogRecord('sgroup:stereo-label-not-promoted', tuple(atoms),
+                                 f'STEREOLABEL {word!r} not promoted: the record states a collection on '
+                                 f'atom(s) {stated}, which is the partition', INFO))
+            continue
+        configured = [n for n in atoms if molecule.parity_of(n)]
+        if not configured:
+            log.append(LogRecord('sgroup:stereo-label-not-promoted', tuple(atoms),
+                                 f'STEREOLABEL {word!r} not promoted: no atom it references carries a '
+                                 f'configuration, and a collection member without one names a '
+                                 f'configuration that does not exist', LOST))
+            continue
+        if kind == STEREO_AND:
+            group = next(i for i in range(1, MAX_STEREO_GROUP + 1) if i not in used)
+            used.add(group)
+        else:
+            group = 0
+        plan.append((tuple(configured), kind, group, word))
+
+    if not plan:
+        return False
+    with molecule.edit():
+        for atoms, kind, group, _ in plan:
+            for n in atoms:
+                molecule.set_stereo_group(n, kind, group)
+    for atoms, kind, group, word in plan:
+        log.append(LogRecord('sgroup:stereo-label-promoted', atoms,
+                             f'STEREOLABEL {word!r} read as {_KIND_WORD[kind]}{group or ""} on '
+                             f'atom(s) {list(atoms)}', REPAIRED))
+    return True
 
 
 def resolve_output(mol, title, sgroups, log=None):

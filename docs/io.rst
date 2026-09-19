@@ -770,6 +770,50 @@ caller holding the molecule at arm's length. ``mol.sgroups`` beside them is the 
 every S-group kind there is; these two are the parsed ``DAT`` records.
 
 
+``STEREOLABEL``: a configuration in the field reserved for data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The field name above is not arbitrary. V2000 has no syntax for an enhanced-stereo collection -- its chiral
+flag is one bit for the whole record -- and a large body of records states the partition as a ``DAT`` group
+named ``STEREOLABEL`` instead, holding a configuration word: ``R``, ``S``, ``RS``, ``*R``, ``(S)``. That is
+outside the spec and it is what the records carry, so the reader reads it.
+
+``mol.stereo_labels()`` answers ``[(atoms, bonds, label, relative), ...]`` for every such record, with the
+payload **normalised** -- parentheses stripped, letters upper-cased, a ``*`` on either side lifted out into
+``relative``, so ``*R`` and CAS's ``R*`` are one word. ``atoms`` is a tuple because one label covers one
+centre or a pair. The name matches without regard to case, both spellings occurring:
+
+.. testcode::
+
+    from chython import smiles
+
+    alanine = smiles('C[C@H](N)C(=O)O')
+    alanine.clean2d()
+    centre = [a.n for a in alanine.atoms() if a.parity][0]
+    alanine.add_data_sgroup('StereoLabel', '*RS', atoms=[centre])
+
+    back = mol_facade(mol_facade(alanine, version=2000))
+    print(back.stereo_labels())
+    print(back.stereo_groups())                  # kind 3 is AND -- the label was promoted
+    print([x.rule for x in back.log])
+
+.. testoutput::
+
+    [((2,), (), 'RS', True)]
+    {(3, 1): [2]}
+    ['sgroup:stereo-label-promoted']
+
+Reading the label is not the same as believing it. The reader **promotes** one to a collection under two
+rules: a collection the record itself states wins, the spec-defined statement being the one to believe; and
+a promotion never invents a parity, so a label on an atom no configuration reaches is logged
+``sgroup:stereo-label-not-promoted`` and left as the data record it is. ``E`` and ``Z`` name an axis and no
+record states one beside a collection to settle the reading against, so they are read and not promoted.
+Promotion consumes nothing -- the ``DAT`` record is still there afterwards, which is what lets V2000 carry
+the collection back out at all. ``promote_stereo_labels(molecule)`` is the pass by itself, for a caller who
+read the record with ``ignore_stereo`` or built the labels by hand, and ``clean_stereo_groups()``
+(:doc:`molecule`) is how a caller who would rather not have the partition drops it.
+
+
 Atom Labels and Markers
 -----------------------
 

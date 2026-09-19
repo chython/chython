@@ -44,7 +44,7 @@ import zlib
 
 import pytest
 
-from chython.core import MoleculeContainer, pach_dump, pach_load, pach_record_length, read_smiles
+from chython.core import LOST, MoleculeContainer, pach_dump, pach_load, pach_record_length, read_smiles
 from .pach_corpus import V0_NATIVE_PATH, V0_PATH, V2_PATH, load_corpus
 
 
@@ -897,7 +897,13 @@ def test_a_zero_length_pack_of_a_molecule_with_no_bonds_round_trips():
 
 # ------------------------------------------------------------------------------------------------
 # What the format cannot carry.  Every one of these is data the arena holds and pach has no slot
-# for, and the writer's contract is that it says so instead of dropping it.
+# for, and the writer's contract is that IT WRITES THE RECORD AND SAYS SO: one line per field on
+# `mol.log` at stage `pach`, named by rule, severity `lost`.  `strict=True` asks for the refusal
+# instead, and `drop=` waives the field, which logs nothing because nothing was unexpected.
+#
+# The second block below is the other class: a record pach cannot encode AT ALL -- an atom number
+# past the field width, a degree past the nibble.  There the writer raises whatever `strict` says,
+# because there would be no legal record to inform anybody about.
 # ------------------------------------------------------------------------------------------------
 
 def small():
@@ -908,21 +914,31 @@ def small():
     return mol, a, b
 
 
-def test_a_map_number_has_no_slot_and_is_not_dropped_silently():
+def test_a_map_number_has_no_slot_and_is_logged_not_dropped_silently():
     mol, a, _ = small()
     mol.set_map_number(a, 7)
+    assert pach_dump(mol, compressed=False, version=2)
+    assert [(r.rule, r.stage, r.severity) for r in mol.log] == [('pach:map-number-lost', 'pach', LOST)]
+    assert '1 atom mapping(s)' in mol.log[0].message
     with pytest.raises(ValueError, match='map_number'):
-        pach_dump(mol, compressed=False, version=2)
+        pach_dump(mol, compressed=False, version=2, strict=True)
+    assert len(mol.log) == 1, 'the refusal left a log line behind as well'
+
+    # A waived field is not a loss the caller needs telling about: they named it.
     assert pach_dump(mol, compressed=False, drop=['map_number'], version=2)
     assert pach_dump(mol, compressed=False, drop='*', version=2)
+    assert len(mol.log) == 1
 
 
-def test_a_title_has_no_slot_and_is_not_dropped_silently():
+def test_a_title_has_no_slot_and_is_logged_not_dropped_silently():
     mol, _, _ = small()
     mol.set_title('a public compound')
+    assert pach_dump(mol, compressed=False, version=2)
+    assert [r.rule for r in mol.log] == ['pach:title-lost']
     with pytest.raises(ValueError, match='title'):
-        pach_dump(mol, compressed=False, version=2)
+        pach_dump(mol, compressed=False, version=2, strict=True)
     assert pach_dump(mol, compressed=False, drop=['title'], version=2)
+    assert len(mol.log) == 1
 
 
 def test_an_unknown_drop_name_is_refused_rather_than_ignored():
@@ -951,13 +967,16 @@ def test_a_degree_above_fifteen_is_refused():
         pach_dump(mol, compressed=False, version=2)
 
 
-def test_pack_refuses_a_non_empty_meta():
-    """Record metadata is the eighth thing pach has no field for, so it is refused by name."""
+def test_pack_reports_a_non_empty_meta():
+    """Record metadata is the eighth thing pach has no field for, so it is logged by name."""
     mol = read_smiles('CCO')
     mol.meta['boiling_point'] = '78.37'
+    assert MoleculeContainer.unpack(mol.pack(version=2)) == mol
+    assert [r.rule for r in mol.log] == ['pach:meta-lost']
     with pytest.raises(ValueError, match='metadata key'):
-        mol.pack(version=2)
+        mol.pack(version=2, strict=True)
     assert MoleculeContainer.unpack(mol.pack(drop=['meta'], version=2)) == mol
+    assert len(mol.log) == 1
 
 
 def test_pack_is_silent_about_an_untouched_meta():
@@ -968,14 +987,20 @@ def test_pack_is_silent_about_an_untouched_meta():
 
 
 def test_a_reaction_waiver_reaches_its_components():
+    """And so does `strict`, and so does the report -- which lands on the COMPONENT's log, that being
+    the container the field was read off."""
     from chython.core import ReactionContainer
 
     mol = read_smiles('CCO')
     mol.meta['k'] = 'v'
     rxn = ReactionContainer([mol], [read_smiles('CC=O')])
+    assert rxn.pack()
+    assert [r.rule for r in mol.log] == ['pach:meta-lost']
+    assert not rxn.log
     with pytest.raises(ValueError, match='metadata key'):
-        rxn.pack()
+        rxn.pack(strict=True)
     rxn.pack(drop=['meta'])
+    assert len(mol.log) == 1
 
 
 def test_a_v2_record_lands_its_parities_in_the_segment():

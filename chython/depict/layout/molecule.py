@@ -81,7 +81,9 @@ def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False):
 
     This is the form a renderer wants -- drawing must not change what it draws.  `clean2d()` is this
     plus the decision to keep the result.  `force=False` on a molecule that already `has_layout`
-    returns the stored plane and computes nothing.  By default the JS implementation of
+    returns the stored plane and computes nothing -- uncentred, because that plane is the caller's and
+    this is a read; `MoleculeContainer.recenter2d()` centres one of those.  A COMPUTED plane is centred
+    on the origin, every component of it placed.  By default the JS implementation of
     https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 is used; it can be changed globally with the
     `chython.clean2d_engine` parameter.
 
@@ -93,10 +95,15 @@ def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False):
 
     plane = _engine_layout(mol, get_clean2d_engine(engine))
     _rescale_plane(mol, plane)
-    if mol.connected_components_count > 1:
-        shift_x = 0.
-        for c in mol.connected_components:
-            shift_x = _shift_plane_mean(mol, plane, shift_x, component=c) + .9
+    # EVERY COMPONENT IS PLACED, including the only one.  A backend returns a plane wherever its own
+    # arithmetic landed, so a single-component molecule that skipped this kept the engine's offset --
+    # which is what put a laid-out drawing thousands of units from the origin and outside a format's
+    # coordinate field.  One component takes the same shift as the first component of a mixture, so
+    # there is one placement rule rather than two.
+    shift_x = 0.
+    for c in mol.connected_components:
+        shift_x = _shift_plane_mean(mol, plane, shift_x, component=c) + .9
+    _center_plane(plane)
     return plane
 
 
@@ -231,6 +238,27 @@ def _rescale_plane(mol, plane) -> bool:
                 plane[n] = (x / bond_reduce, y / bond_reduce)
             return True
     return False
+
+
+def _center_plane(plane) -> None:
+    """Shift `plane` in place so the midpoint of its bounding box is the origin.
+
+    The last step of a computed layout, so what `layout2d` returns and what `clean2d` stores are centred
+    -- the whole molecule, not per component, since a mixture is one drawing.  A reaction is unaffected:
+    `_position` re-normalises every member with `_shift_plane_mean`, which places `min_x` at the member's
+    own `shift_x`.
+
+    The molecule's stored coordinates are `MoleculeContainer.recenter2d`'s job, not this function's: a
+    plane is not yet a molecule, and the arithmetic is stated twice because the two inputs are.
+    """
+    if not plane:
+        return
+    xs = [x for x, _ in plane.values()]
+    ys = [y for _, y in plane.values()]
+    dx = (min(xs) + max(xs)) / 2
+    dy = (min(ys) + max(ys)) / 2
+    for n, (x, y) in plane.items():
+        plane[n] = (x - dx, y - dy)
 
 
 def _shift_plane_mean(mol, plane, shift_x: float, shift_y=0., component=None) -> float:

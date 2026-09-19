@@ -33,6 +33,10 @@ them, so the wipe does not survive one round trip -- pinned in `chython/formats/
 where the reader and the writer both are.  Leave a group and an AND membership names a configuration
 that no longer exists.  Leave a stored `(R)` and an external consumer -- which is who stored CIP is
 FOR -- reads a descriptor off an atom with no parity.
+
+`clean_stereo_groups()` IS THE NARROW HALF, at the end of this file: the collections gone and the
+configuration kept.  That direction is safe where the reverse is not -- a membership is not a
+configuration -- so it drops two readers and touches neither the parities nor the wedges.
 """
 from chython.core import MoleculeContainer, read_smiles as smiles
 
@@ -272,3 +276,82 @@ def test_the_feature_words_match_a_round_trip_after_the_wipe():
     fresh = MoleculeContainer.from_bytes(m.to_bytes())
     assert [m.features_of(s) for s in m.atom_numbers] == [fresh.features_of(s) for s in m.atom_numbers]
     assert m._union_feature_words == fresh._union_feature_words
+
+
+# ----------------------------------------------------------------------------------------------
+# `clean_stereo_groups()` -- the collections gone, the configuration kept
+# ----------------------------------------------------------------------------------------------
+
+def test_the_collections_go_and_nothing_else_does():
+    m, sids = _all_five_kinds()
+    report = m.clean_stereo_groups()
+    assert m.stereo_groups() == {} and m.bond_stereo_groups() == {}
+    assert not m.has_stereo_groups
+    assert report == {'stereo_groups': {(3, 1): [sids[1], sids[3]]}}
+    # the four kinds a membership is not
+    assert [m.parity_of(s) for s in (sids[1], sids[3])] == [2, 2]
+    assert m.wedges() == [(sids[1], sids[2], 1)]
+    assert m.atom_cips() == {sids[1]: 'R'}
+    assert m.bond_cips() == {(sids[1], sids[3]): 'E'}
+    assert m.has_coordinates
+
+
+def test_a_stated_parity_with_no_partition_is_what_a_file_stating_no_collection_gives():
+    """The reason the narrow direction is safe: this is an ordinary molecule afterwards, where
+    `clean_stereo()`'s reverse -- a membership with no parity inside it -- would not be."""
+    m, sids = _all_five_kinds()
+    assert m.clean_stereo_groups()
+    again = MoleculeContainer.from_bytes(m.to_bytes())
+    assert [again.parity_of(s) for s in (sids[1], sids[3])] == [2, 2]
+    assert again.stereo_groups() == {}
+    assert [m.features_of(s) for s in m.atom_numbers] == [again.features_of(s) for s in m.atom_numbers]
+
+
+def test_an_axis_membership_goes_by_the_same_call():
+    m = smiles('C/C=C/C')
+    with m.edit() as e:
+        e.set_bond_stereo_group(2, 3, 2, 1)
+    assert m.clean_stereo_groups() == {'stereo_groups': {(2, 1): [(2, 3)]},
+                                       'bond_stereo_groups': {(2, 1): [(2, 3)]}}
+    assert m.parity_of(2) == 1, 'the axis keeps its configuration'
+
+
+def test_a_molecule_with_no_collection_reports_nothing_and_is_a_pure_read():
+    m, sids = _all_five_kinds()
+    assert m.clean_stereo_groups()
+    other = m.copy()
+    assert m.clean_stereo_groups() == {}
+    assert m.shares_arena_with(other), 'an empty report is a pure read: no clone, no _gen bump'
+    assert m.generation == other.generation
+    flat, _ = _flat_butane()
+    assert flat.clean_stereo_groups() == {}
+    assert MoleculeContainer().clean_stereo_groups() == {}
+
+
+def test_a_shared_arena_keeps_its_collections():
+    m, sids = _all_five_kinds()
+    other = m.copy()
+    other.clean_stereo_groups()
+    assert not m.shares_arena_with(other)
+    assert m.stereo_groups() == {(3, 1): [sids[1], sids[3]]}
+    assert other.stereo_groups() == {}
+
+
+def test_the_predicate_reads_the_memberships_and_not_the_segment():
+    """The segment outlives the memberships -- both wipes zero the payload rather than pay
+    `structure_respan` -- so a predicate answering on the segment would say True with no group left,
+    and the caller clearing groups to build a stereo level could not ask whether it worked.
+    """
+    m, sids = _all_five_kinds()
+    assert m.has_stereo_groups
+    assert m.clean_stereo_groups()
+    assert m.has_stereo_groups is False
+    # the same on the wide wipe, and on the public single-member clear
+    m, sids = _all_five_kinds()
+    assert m.clean_stereo()
+    assert m.has_stereo_groups is False
+    m, sids = _all_five_kinds()
+    with m.edit():
+        m.set_stereo_group(sids[1], 0)
+        m.set_stereo_group(sids[3], 0)
+    assert m.has_stereo_groups is False

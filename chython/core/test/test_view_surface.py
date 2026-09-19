@@ -79,6 +79,36 @@ def test_the_r_marker_has_no_radius():
     assert [a.atomic_radius for a in mol.atoms()] == [0.0, 0.67]
 
 
+def test_is_metal_agrees_with_the_M_primitive_for_every_element():
+    """ONE METAL SET IN THE LIBRARY.  The property and `[M]` read the same two masks, so the loop below
+    is the assertion that a caller writing `atom.is_metal` and a template writing `[M]` select the same
+    93 elements -- the one thing a second hand-kept list could not promise."""
+    from chython.core import read_smarts
+
+    metal = read_smarts('[M]')
+    mol = smiles('C')
+    sid = next(iter(mol))
+    found = 0
+    for z in range(1, 119):
+        with mol.edit():
+            mol.set_element(sid, z)
+        answer = mol.atom(sid).is_metal
+        assert answer is metal.is_substructure(mol), z
+        found += answer
+    assert found == 93
+
+
+def test_a_metalloid_is_not_a_metal_and_the_marker_is_not_either():
+    """The boundary is `[M]`'s, drawn once: B Si Ge As Sb Te and Se sit outside it.  The R marker has
+    no element to test, so it answers False rather than reading as the carbon it borrows features from.
+    """
+    mol = smiles('[B][Si][Ge][As][Sb][Te][Se]')
+    assert [a.is_metal for a in mol.atoms()] == [False] * 7
+    mol = smiles('[Na][Fe][U][Al][Sn]')
+    assert [a.is_metal for a in mol.atoms()] == [True] * 5
+    assert [a.is_metal for a in smiles('[R]C').atoms()] == [False, False]
+
+
 def test_repr_reads_as_chemistry():
     mol = smiles('c1ccccc1')
     sid = next(iter(mol))
@@ -318,3 +348,30 @@ def test_aromatic_rings_checks_the_bond_that_CLOSES_the_ring():
         mol.set_order(ring[-1], ring[0], 1)
     assert mol.rings == [ring], 'the ring must survive the edit, or this tests nothing'
     assert mol.aromatic_rings == [], 'one non-aromatic bond is enough, wherever in the ring it sits'
+
+
+def test_numbered_atoms_pairs_each_atom_with_the_id_the_container_issued():
+    """Sugar over `atoms()`, for the loop that wants the id as a variable rather than as `atom.n`.
+
+    `atoms()` keeps yielding bare atoms because that is the right default, so the two must agree atom
+    for atom and in one order -- a caller zipping them is entitled to that.
+    """
+    mol = smiles('CC(=O)[O-]')
+    pairs = list(mol.numbered_atoms())
+    assert [n for n, _ in pairs] == list(mol) == mol.atom_numbers
+    assert [a.n for _, a in pairs] == [a.n for a in mol.atoms()]
+    for n, atom in pairs:
+        assert atom.n == n
+
+
+def test_the_map_a_caller_would_otherwise_write_as_a_comprehension():
+    mol = smiles('CCO')
+    by_id = dict(mol.numbered_atoms())
+    assert set(by_id) == set(mol.atom_numbers)
+    assert [by_id[n].atomic_symbol for n in mol] == ['C', 'C', 'O']
+
+
+def test_an_empty_molecule_yields_nothing_rather_than_raising():
+    from chython.core import MoleculeContainer
+
+    assert list(MoleculeContainer().numbered_atoms()) == []

@@ -100,13 +100,30 @@ is that plus the decision to keep the result:
 
     mol.clean2d()                     # now it does
     print(mol.has_layout)
-    print(mol.coordinates()[1])
+    print(mol.xy_box())
 
 .. testoutput::
 
     False
     True
-    (0.0, 0.0)
+    ((-1.8562, -1.0717), (1.8562, 1.0717))
+
+A computed layout is **centred on the origin** -- the box above is symmetric in both axes -- and every
+component of a mixture is placed, the only one included.  A backend returns a plane wherever its own
+arithmetic landed, and that offset is not a caller's business.
+
+``xy_box()`` is the extent: ``((min_x, min_y), (max_x, max_y))``, or ``None`` for a molecule carrying no
+coordinates at all.  ``recenter2d()`` moves stored coordinates onto that centre and answers whether it
+moved anything, which is how a plane that came from a file is centred -- ``clean2d()`` will not do it,
+because it leaves a molecule that already has a layout alone:
+
+.. testcode::
+
+    print(mol.recenter2d())           # False: clean2d already centred this one
+
+.. testoutput::
+
+    False
 
 ``has_layout`` is the question a renderer asks, and it is not ``has_coordinates``: a writer gives a
 molecule an XY segment with every atom at the origin, which is coordinates and not a layout.

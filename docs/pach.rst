@@ -150,11 +150,17 @@ has coordinates, which is the default.  ``2`` writes the legacy layout for a rea
 release.  ``3`` asks for the coordinates the molecule *has*, so an undrawn molecule writes version 4
 rather than a coordinate block of zeros stating a position nothing recorded; ``4`` on a drawn molecule
 drops the drawing, which ``drop=['coordinates']`` says more plainly, and that waiver selects version 4
-whatever ``version=`` asked for.  ``drop=`` waives the writer's refusals by name — ``map_number``,
-``title``, ``meta``, ``sgroups``, ``cip``, ``wedges``, ``stereo_groups``, ``stereo``, ``coordinates``,
-and ``conformers`` — or ``'*'`` for all of them, and an unrecognised name is refused rather than
-ignored.  ``stereo_groups`` (or equivalently ``stereo``) suppresses both the atom enhanced-stereo block
-and the bond-group block.
+whatever ``version=`` asked for.  ``drop=`` names a field the writer may leave out without saying so —
+``map_number``, ``title``, ``meta``, ``sgroups``, ``cip``, ``wedges``, ``stereo_groups``, ``stereo``,
+``coordinates``, and ``conformers`` — or ``'*'`` for all of them, and an unrecognised name is refused
+rather than ignored.  ``stereo_groups`` (or equivalently ``stereo``) suppresses both the atom
+enhanced-stereo block and the bond-group block.
+
+**The record is written and the loss is logged.**  A field the container holds and the chosen version has
+no room for costs the record that field, one line per field on ``mol.log`` at stage ``pach``, named by
+rule and counted: ``pach:title-lost``, ``pach:coordinates-lost``, ``pach:stereo-lost``.  A writer informs;
+it does not refuse.  ``strict=True`` asks for the refusal instead, for a caller who would rather not write
+a lossy record at all, and ``drop=`` says "I know" and logs nothing.
 
 .. testcode::
 
@@ -346,17 +352,15 @@ directions for the two bond kinds — slot 0 and slot 2 are then an adjacency cr
     alanine.set_stereo_group(centre, STEREO_AND, 1)
     print(MoleculeContainer.unpack(alanine.pack()).stereo_group_of(centre))
 
-    try:                                          # version 2 has no field for a stereo group
-        alanine.pack(version=2)
-    except ValueError as err:
-        print('stereo_groups' in str(err))
+    alanine.pack(version=2)                       # version 2 has no field for a stereo group
+    print([r.rule for r in alanine.log])          # so the record is written and the loss is logged
 
 .. testoutput::
 
     True
     True
     (3, 1)
-    True
+    ['pach:stereo-groups-lost']
 
 Enhanced stereo block, 3 bytes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -431,10 +435,8 @@ relocated to its higher pivot can precede an axis with numerically smaller owner
     print(MoleculeContainer.unpack(raw, compressed=False).bond_stereo_groups())
 
     print(MoleculeContainer.unpack(diene.pack(drop=['stereo_groups'])).bond_stereo_groups())
-    try:                                          # neither version 0 nor version 2 has the field
-        diene.pack(version=2)
-    except ValueError as err:
-        print('stereo_groups' in str(err))
+    diene.pack(version=2)                         # neither version 0 nor version 2 has the field
+    print([r.rule for r in diene.log])
 
 .. testoutput::
 
@@ -443,7 +445,7 @@ relocated to its higher pivot can precede an axis with numerically smaller owner
     3 4 3 1
     {(3, 1): [(2, 3), (4, 5)]}
     {}
-    True
+    ['pach:stereo-groups-lost']
 
 The two entries name atom indices 1-2 and 3-4, which are atom numbers 2-3 and 4-5 counted from 0.  A
 molecule carrying only bond groups still sets flag bit 1 and leaves ``sgroups`` at 0: the two blocks
@@ -482,30 +484,32 @@ nothing for the field; a **partially** mapped molecule is writable, and "mapped 
     back = MoleculeContainer.unpack(partial.pack())
     print([a.map_number for a in back.atoms()])
 
-    try:                                          # version 2 has no field for a map number
-        partial.pack(version=2)
-    except ValueError as err:
-        print('map_number' in str(err))
+    partial.pack(version=2)                       # version 2 has no field for a map number
+    print([r.rule for r in partial.log])
 
 .. testoutput::
 
     1 27
     True
     [1, 0]
-    True
+    ['pach:map-number-lost']
 
 What the writer refuses
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-A writer that drops a field quietly is discovered years later by whoever reads the record back, so
-each of these raises ``ValueError`` naming what it refused, and the atom too where one atom is at
-fault — the two count limits are a property of the whole molecule and name neither:
+There would be **no legal record** to inform anybody about, so each of these raises ``ValueError``
+whatever ``strict=`` says, naming what it refused and the atom too where one atom is at fault — the two
+count limits are a property of the whole molecule and name neither:
 
 * more than 65535 atoms, or more than 65535 bonds
-* a coordinate outside ±838.8607 Å, waivable with ``drop=['coordinates']``
 * an isotope more than 31 mass units from its element's MDL reference
 * an isotope on an ``R`` marker, which has no reference mass to shift from
-* a formal charge outside -4..+11
+* a formal charge outside -4..+11, which the arena's own -4..+8 cannot reach
+
+A coordinate outside ±838.8607 Å is the other class: the range is asked before the version byte is
+chosen, so such a drawing makes the record a version 4 one — every atom, bond and configuration, and
+``pach:coordinates-lost`` on the log.  ``recenter2d()`` moves a far-away plane onto the origin and
+``clean2d(force=True)`` replaces it.
 
 **The format's other fields are at least as wide as the container's, so there is nothing to refuse.**
 The hydrogen nibble is the arena's own 0..15 including ``H_UNKNOWN``; the R index field holds 0..127
@@ -517,12 +521,12 @@ domain, because a record it did not write can state one.
 What a version 3 or 4 record does not carry
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Each of these makes the writer refuse by name unless the matching ``drop=`` waiver is passed.  pach
-has no text of any kind and no third coordinate; metadata ships in a form that does.
+Each of these is written without and named on the log, unless the matching ``drop=`` waiver is passed.
+pach has no text of any kind and no third coordinate; metadata ships in a form that does.
 
 * ``title`` and ``meta``
 * S-groups: superatoms, data labels, polymer brackets
-* 3D conformers — a version 3 or 4 record carries 2D display coordinates only, and the refusal is on
+* 3D conformers — a version 3 or 4 record carries 2D display coordinates only, and the report is on
   the models as a whole rather than on a first one: a molecule holding ten states them nowhere in this
   format.  ``drop=['conformers']`` waives it and keeps the drawing, so a drawn molecule still writes
   version 3; ``to_bytes()`` is the form that carries every model.
@@ -613,9 +617,9 @@ reading when every coordinate in the record is zero.  Version 3's int24 is what 
 exact at the container's own scale, and version 4 says "no drawing" by being version 4.
 
 A float16 spans a wider range than version 3's int24 field.  A coordinate whose absolute value exceeds
-838.8607 Å is accepted into a version 0 or 2 record and refused when that record is re-encoded as
-version 3.  ``drop=['coordinates']`` writes version 4 instead, storing the molecule without a drawing,
-and it does so whether or not ``version=3`` was asked for beside it.
+838.8607 Å is accepted into a version 0 or 2 record and costs the drawing when that record is re-encoded
+as version 3: the chemistry travels, as a version 4 record.  ``drop=['coordinates']`` asks for the same
+version 4 without the log line, and it does so whether or not ``version=3`` was asked for beside it.
 
 
 Reaction records

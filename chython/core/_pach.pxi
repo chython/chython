@@ -93,9 +93,12 @@
 # holding a column of stored keys of unknown vintage can feed all of them to one door.
 #
 # ==================================================================================================
-# WHAT THE ARENA HOLDS AND PACH CANNOT.  Every one of these makes the WRITER REFUSE, by name, unless
-# the caller passes `drop=`.  A serialiser that quietly throws data away is worse than one that
-# cannot serialise, because the loss is discovered by whoever reads the record back years later.
+# WHAT THE ARENA HOLDS AND PACH CANNOT.  THE RECORD IS WRITTEN AND EVERY ONE OF THESE IS LOGGED, by
+# name and with a count, onto `mol.log` at stage `pach`.  A writer informs; it does not refuse.  A
+# refusal belongs at an answer boundary and a serialiser is not one: a loop writing forty thousand
+# records must not be stopped by a field one of them carries, which is the same argument that makes
+# `pach_load` a loop-safe door in the other direction.  `strict=True` is the all-or-nothing caller's,
+# and `drop=` names a waiver at the door, which produces no log line because the caller already said it.
 # ==================================================================================================
 #
 #   map_number      no field.  Atom-to-atom mapping is the point of a reaction record.
@@ -108,18 +111,20 @@
 #   stereo          only three unit kinds have a slot -- tetrahedral, allene, cis/trans.  An
 #                   atropisomer's or a helical unit's parity has nowhere to go.
 #
-# THE ONE FIELD THAT IS DEGRADED RATHER THAN REFUSED IS THE COORDINATE, and it is the exception because
-# refusing it would refuse every drawn molecule there is.  pach carries x and y as float16 -- about
+# THE COORDINATE IS DEGRADED RATHER THAN DROPPED, so it is not on the list above.  pach carries x and y
+# as float16 -- about
 # three significant decimal digits, |x| < 65504 -- and NOT AS A PRESENCE FLAG: it writes 0 for an atom
 # with no coordinate, so "this record has no drawing" and "every atom sits at the origin" are the same
 # four bytes.  The decoder resolves that in favour of the first reading whenever every coordinate is
 # zero BYTE, because a molecule read from a string and packed is the common case and it has no drawing
 # all.  Both halves of this are losses; neither is `drop`-able, and both are stated here instead.
 #
-# And these the writer refuses outright, with no `drop` spelling, because the record would be a lie
-# rather than a subset: an atom number above 4095, an atom with more than 15 neighbours, an implicit
-# hydrogen count above 6 (the field is 3 bits with 7 taken by the sentinel), an isotope more than 15
-# mass units from its element's MDL reference, a formal charge outside -4..+8.
+# AND THESE THE WRITER REFUSES OUTRIGHT, with no `drop` spelling and whatever `strict` says, because
+# there is no legal record to inform anybody about: the value does not fit the FORMAT's own field, so
+# writing it would state a different molecule rather than a subset of this one.  An R marker, an atom
+# number above 4095, an atom with more than 15 neighbours, an implicit hydrogen count above 6 (the field
+# is 3 bits with 7 taken by the sentinel), an isotope more than 15 mass units from its element's MDL
+# reference, a formal charge outside -4..+8.
 #
 # TWO THINGS THE FORMAT CARRIES THAT THE ARENA CANNOT HOLD EXACTLY, reported rather than hidden:
 #
@@ -1190,62 +1195,123 @@ cdef bint _pach_chain_middle(uint32_t *ptr, halfedge_t *edges, uint32_t a, uint3
     return True
 
 
-cdef int _pach_refuse_losses(MoleculeContainer mol, uint32_t drop_mask) except -1:
-    """Everything the arena holds that pach has no field for, refused by name.
+cdef int _pach_loss(MoleculeContainer mol, bint strict, str rule, str refusal, str note) except -1:
+    """One field the arena holds and the chosen pach version has no room for.
+
+    THE RECORD IS WRITTEN AND THE MOLECULE IS TOLD.  A serialiser is not an answer boundary: a loop
+    writing forty thousand records must not be stopped by a field one of them carries, which is the
+    same argument that makes `pach_load` a loop-safe door in the other direction.  `mol.log` is the
+    destination and it is never conditional -- a writer HAS a container to write to, which is the whole
+    reason a reader takes a `log=` and a writer does not.
+
+    `strict=True` is for a caller who wants a record to be all-or-nothing, and gets `refusal`: the
+    sentence names the `drop=` waiver, which only the strict arm needs to be told about because the
+    lenient arm has already done it.
+
+    This is class 1 only -- a legal record exists and is a correct subset of the molecule.  A value
+    outside the FORMAT's own range is class 2: there is no lenient answer to give, so those raise
+    whatever `strict` says.
+    """
+    if strict:
+        raise ValueError(refusal)
+    mol._log_event(rule, 'pach', note, mc_lost())
+    return 0
+
+
+cdef int _pach_report_losses(MoleculeContainer mol, uint32_t drop_mask, bint strict) except -1:
+    """Everything the arena holds that pach has no field for, named one field at a time.
 
     Not a validation pass: a validator answers "is this molecule legal", and every molecule here is.
     This answers "would writing it lose something", which is a question about the FORMAT, and the only
     honest answers are "no", "yes and here is what" and "yes and you said you did not mind".
+
+    Counted first and reported once per field: a sentence per atom would put forty thousand lines on the
+    log of one record, and the count is the fact a caller acts on.
     """
     cdef Structure structure = mol._structure
     cdef atom_t *atoms = structure.atoms()
     cdef halfedge_t *edges = csr_edges(structure)
     cdef uint32_t n = structure.header.atom_count
-    cdef uint32_t i, k
+    cdef uint32_t i, k, hits
+    cdef uint32_t first = 0
     if not (drop_mask & PACH_DROP_MAP_NUMBER):
+        hits = 0
         for i in range(n):
             if atoms[i].map_number:
-                raise ValueError('atom %d carries map_number %d and the pach format has no field for '
-                                 'one; pass drop=[\'map_number\'] to write the record without it, or '
-                                 'to_bytes() to keep it'
-                                 % (atoms[i].n, atoms[i].map_number))
+                if not hits:
+                    first = i
+                hits += 1
+        if hits:
+            _pach_loss(mol, strict, 'pach:map-number-lost',
+                       'atom %d carries map_number %d and the pach format has no field for one; pass '
+                       'drop=[\'map_number\'] to write the record without it, or to_bytes() to keep it'
+                       % (atoms[first].n, atoms[first].map_number),
+                       'the pach format has no map_number field, so %d atom mapping(s) were not '
+                       'written; to_bytes() keeps them' % hits)
     if not (drop_mask & PACH_DROP_CIP):
+        hits = 0
         for i in range(n):
             if atoms[i].reserved & ATOM_CIP_MASK:
-                raise ValueError('atom %d carries a cip descriptor and the pach format has no field '
-                                 'for one; pass drop=[\'cip\'] to write the record without it'
-                                 % atoms[i].n)
+                if not hits:
+                    first = i
+                hits += 1
+        if hits:
+            _pach_loss(mol, strict, 'pach:cip-lost',
+                       'atom %d carries a cip descriptor and the pach format has no field for one; '
+                       'pass drop=[\'cip\'] to write the record without it' % atoms[first].n,
+                       'the pach format has no cip field, so %d atom descriptor(s) were not written; '
+                       'assign_cip() recomputes them' % hits)
+        hits = 0
         for k in range(2 * structure.header.bond_count):
             if edges[k].flags & HE_CIP_MASK:
-                raise ValueError('a bond carries a cip descriptor and the pach format has no field '
-                                 'for one; pass drop=[\'cip\'] to write the record without it')
+                hits += 1
+        if hits:
+            _pach_loss(mol, strict, 'pach:cip-lost',
+                       'a bond carries a cip descriptor and the pach format has no field for one; '
+                       'pass drop=[\'cip\'] to write the record without it',
+                       'the pach format has no cip field, so %d bond descriptor(s) were not written'
+                       % (hits // 2))
     if not (drop_mask & PACH_DROP_WEDGES):
+        hits = 0
         for k in range(2 * structure.header.bond_count):
             if edges[k].wedge:
-                raise ValueError('a bond carries a wedge and the pach format has no field for one; '
-                                 'pass drop=[\'wedges\'] to write the record without it')
+                hits += 1
+        if hits:
+            _pach_loss(mol, strict, 'pach:wedge-lost',
+                       'a bond carries a wedge and the pach format has no field for one; pass '
+                       'drop=[\'wedges\'] to write the record without it',
+                       'the pach format has no wedge field, so %d wedge(s) were not written' % hits)
     # ONE SEGMENT HOLDS EVERY GROUP, an axis's at its anchor slot beside a centre's, so its presence is
     # the whole question -- there is no second place a version 0 or 2 record could be losing one from.
     if not (drop_mask & PACH_DROP_STEREO_GROUPS) and structure_has(structure, SEG_STEREO_GROUPS):
-        raise ValueError('this molecule carries enhanced stereo_groups and the pach format has no '
-                         'field for them; pass drop=[\'stereo_groups\'] to write the record without '
-                         'them')
+        _pach_loss(mol, strict, 'pach:stereo-groups-lost',
+                   'this molecule carries enhanced stereo_groups and the pach format has no field for '
+                   'them; pass drop=[\'stereo_groups\'] to write the record without them',
+                   'the pach format has no enhanced stereo field, so the AND/OR/ABS collections were '
+                   'not written')
     if not (drop_mask & PACH_DROP_SGROUPS) and structure_sgroup_count(structure):
-        raise ValueError('this molecule carries %d sgroups and the pach format has no field for them; '
-                         'pass drop=[\'sgroups\'] to write the record without them'
-                         % structure_sgroup_count(structure))
+        _pach_loss(mol, strict, 'pach:sgroups-lost',
+                   'this molecule carries %d sgroups and the pach format has no field for them; pass '
+                   'drop=[\'sgroups\'] to write the record without them'
+                   % structure_sgroup_count(structure),
+                   'the pach format has no S-group field, so %d sgroup(s) were not written'
+                   % structure_sgroup_count(structure))
     if not (drop_mask & PACH_DROP_TITLE) and len(blob_bytes(structure, SEG_OPAQUE_BLOB, 0)):
-        raise ValueError('this molecule carries a title and the pach format has no text of any kind; '
-                         'pass drop=[\'title\'] to write the record without it')
+        _pach_loss(mol, strict, 'pach:title-lost',
+                   'this molecule carries a title and the pach format has no text of any kind; pass '
+                   'drop=[\'title\'] to write the record without it',
+                   'the pach format has no text of any kind, so the title was not written')
     # `_meta` and not `meta`, so asking the question does not create the dict it is asking about
     if not (drop_mask & PACH_DROP_META) and mol._meta:
-        raise ValueError('this molecule carries %d metadata key(s) and the pach format has no field '
-                         'for any of them; pass drop=[\'meta\'] to write the record without them'
-                         % len(mol._meta))
+        _pach_loss(mol, strict, 'pach:meta-lost',
+                   'this molecule carries %d metadata key(s) and the pach format has no field for any '
+                   'of them; pass drop=[\'meta\'] to write the record without them' % len(mol._meta),
+                   'the pach format has no metadata field, so %d key(s) were not written'
+                   % len(mol._meta))
     return 0
 
 
-cdef bytes _pach_encode(MoleculeContainer mol, uint32_t drop_mask):
+cdef bytes _pach_encode(MoleculeContainer mol, uint32_t drop_mask, bint strict):
     """One version 2 pach record, uncompressed.
 
     ONLY VERSION 2 IS EVER WRITTEN.  Version 0 differs in the bond order block alone and every reader
@@ -1287,7 +1353,7 @@ cdef bytes _pach_encode(MoleculeContainer mol, uint32_t drop_mask):
     cdef bytes out
 
     mol._require_clean()
-    _pach_refuse_losses(mol, drop_mask)
+    _pach_report_losses(mol, drop_mask, strict)
     # The unit table is DERIVED and unmarked, which is what the decoder built its frames against; the
     # two directions have to ask the same question or the sign they exchange means two things.  It can
     # reallocate, so every pointer below is taken after it.
@@ -1374,22 +1440,26 @@ cdef bytes _pach_encode(MoleculeContainer mol, uint32_t drop_mask):
                 continue
             u = stereo_unit_of(structure, i)
             if u is NULL or u.n_refs != 4:
-                if drop_mask & PACH_DROP_STEREO:
-                    continue
-                raise ValueError('atom %d carries a configuration that no stereo unit of this '
-                                 'molecule can express, so the pach format has nowhere to put it; '
-                                 'pass drop=[\'stereo\'] to write the record without it'
-                                 % atoms[i].n)
+                if not (drop_mask & PACH_DROP_STEREO):
+                    _pach_loss(mol, strict, 'pach:stereo-lost',
+                               'atom %d carries a configuration that no stereo unit of this molecule '
+                               'can express, so the pach format has nowhere to put it; pass '
+                               'drop=[\'stereo\'] to write the record without it' % atoms[i].n,
+                               'atom %d carries a configuration no stereo unit of this molecule can '
+                               'express, so it was not written' % atoms[i].n)
+                continue
             if u.kind == SU_TETRA or u.kind == SU_ALLENE:
                 if u.kind == SU_TETRA:
                     kind_true = PACH_TETRA_TRUE
                     if not _pach_tetra_frame(atoms, nbr, ptr, i, want):
-                        if drop_mask & PACH_DROP_STEREO:
-                            continue
-                        raise ValueError('atom %d carries a configuration and its neighbours do not '
-                                         'form a frame the pach format can state it against; pass '
-                                         'drop=[\'stereo\'] to write the record without it'
-                                         % atoms[i].n)
+                        if not (drop_mask & PACH_DROP_STEREO):
+                            _pach_loss(mol, strict, 'pach:stereo-lost',
+                                       'atom %d carries a configuration and its neighbours do not '
+                                       'form a frame the pach format can state it against; pass '
+                                       'drop=[\'stereo\'] to write the record without it' % atoms[i].n,
+                                       'atom %d has no neighbour frame the pach format can state its '
+                                       'configuration against, so it was not written' % atoms[i].n)
+                        continue
                 else:
                     kind_true = PACH_ALLENE_TRUE
                     if not _pach_allene_ends(ptr, edges, i, terms, inwards) \
@@ -1398,12 +1468,14 @@ cdef bytes _pach_encode(MoleculeContainer mol, uint32_t drop_mask):
                             or not _pach_end_pair(atoms, ptr, edges, nbr, ptr,
                                                   terms[1], inwards[1], pair_b) \
                             or not _pach_cumulene_want(u, pair_a, pair_b, want):
-                        if drop_mask & PACH_DROP_STEREO:
-                            continue
-                        raise ValueError('atom %d anchors an allene whose terminals do not form a '
-                                         'frame the pach format can state a sign against; pass '
-                                         'drop=[\'stereo\'] to write the record without it'
-                                         % atoms[i].n)
+                        if not (drop_mask & PACH_DROP_STEREO):
+                            _pach_loss(mol, strict, 'pach:stereo-lost',
+                                       'atom %d anchors an allene whose terminals do not form a frame '
+                                       'the pach format can state a sign against; pass '
+                                       'drop=[\'stereo\'] to write the record without it' % atoms[i].n,
+                                       'atom %d anchors an allene with no terminal frame the pach '
+                                       'format can sign, so it was not written' % atoms[i].n)
+                        continue
                 smi_perm_of(u, want, perm)
                 v2 = translate_parity(parity, perm)
                 # THE FIELD IS CHOSEN BY THE NEIGHBOUR COUNT, not by the unit kind, because that is
@@ -1429,24 +1501,28 @@ cdef bytes _pach_encode(MoleculeContainer mol, uint32_t drop_mask):
                         or not _pach_end_pair(atoms, ptr, edges, nbr, ptr, partner, far_prev,
                                               pair_b) \
                         or not _pach_cumulene_want(u, pair_a, pair_b, want):
-                    if drop_mask & PACH_DROP_STEREO:
-                        continue
-                    raise ValueError('the cis/trans configuration anchored at atom %d has no frame '
-                                     'the pach format can state it against; pass drop=[\'stereo\'] '
-                                     'to write the record without it' % atoms[i].n)
+                    if not (drop_mask & PACH_DROP_STEREO):
+                        _pach_loss(mol, strict, 'pach:stereo-lost',
+                                   'the cis/trans configuration anchored at atom %d has no frame the '
+                                   'pach format can state it against; pass drop=[\'stereo\'] to '
+                                   'write the record without it' % atoms[i].n,
+                                   'the cis/trans configuration anchored at atom %d has no frame the '
+                                   'pach format can state it against, so it was not written'
+                                   % atoms[i].n)
+                    continue
                 smi_perm_of(u, want, perm)
                 v2 = translate_parity(parity, perm)
                 ct_n[ct_count] = atoms[i].n
                 ct_m[ct_count] = atoms[partner].n
                 ct_s[ct_count] = 1 if v2 == kind_true else 0
                 ct_count += 1
-            elif drop_mask & PACH_DROP_STEREO:
-                continue
-            else:
-                raise ValueError('atom %d carries a configuration of a kind the pach format has no '
-                                 'field for -- it has three, tetrahedral, allene and cis/trans; pass '
-                                 'drop=[\'stereo\'] to write the record without it'
-                                 % atoms[i].n)
+            elif not (drop_mask & PACH_DROP_STEREO):
+                _pach_loss(mol, strict, 'pach:stereo-lost',
+                           'atom %d carries a configuration of a kind the pach format has no field '
+                           'for -- it has three, tetrahedral, allene and cis/trans; pass '
+                           'drop=[\'stereo\'] to write the record without it' % atoms[i].n,
+                           'atom %d carries a configuration of a kind the pach format has no field '
+                           'for, so it was not written' % atoms[i].n)
 
         table_at = 4 + 9 * <Py_ssize_t> n
         order_at = table_at + 3 * <Py_ssize_t> nb

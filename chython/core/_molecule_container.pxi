@@ -888,8 +888,11 @@ def _set_sgroup_fns(**fns):
     function, which tells the caller about the layer boundary instead of about S-groups.
 
     Keyword-only and dict-backed for `_set_salts_fns`' reason.  `add_data_sgroup` appends and answers the
-    record; `data_sgroups` reads and answers a list -- so unlike the pairs above these two are not
-    interchangeable in type, and the keyword is here for uniformity rather than to catch a swap.
+    record; `data_sgroups` reads and answers a list; `stereo_labels` reads the `STEREOLABEL` records alone
+    -- so unlike the pairs above these are not interchangeable in type, and the keyword is here for
+    uniformity rather than to catch a swap.
+
+    THE CALL REPLACES THE WHOLE SET, so a caller unregistering to test the ImportError restores all three.
     """
     global _sgroup_impl
     _sgroup_impl = dict(fns)
@@ -1220,6 +1223,28 @@ cdef class MoleculeContainer:
         if self._journal_len:
             raise RuntimeError('the container has pending edits; the arena still holds the '
                                'pre-scope state, so this read would answer from stale data')
+        return 0
+
+    cdef int _require_stereo_frame(self) except -1:
+        """`_require_clean` for a read of the PERCEIVED STEREO FRAME -- the units and their refs.
+
+        Weaker on purpose, and weaker by exactly the ops that cannot move a ref: the frame is a function
+        of the CSR and of the atom fields perception reads, so a journal holding only parities, wedges,
+        collections, CIP letters, map numbers or coordinates leaves it as the arena has it.  That is the
+        whole of `set_parity(order=...)` in a loop, which is what `enrich_from` is, and refusing it would
+        force one arena clone per stereocentre.  Anything that adds, deletes or retypes still raises.
+        """
+        cdef uint32_t i
+        cdef uint8_t op
+        for i in range(self._journal_len):
+            op = self._journal[i].op
+            if op != OP_SET_STEREO and op != OP_WANT_PARITY and op != OP_SET_WEDGE \
+                    and op != OP_SET_STEREO_GROUP and op != OP_SET_BOND_STEREO_GROUP \
+                    and op != OP_SET_ATOM_CIP and op != OP_SET_BOND_CIP \
+                    and op != OP_SET_MAP_NUMBER and op != OP_SET_XY and op != OP_SET_XYZ:
+                raise RuntimeError('this edit session has already changed the graph, so the stereo '
+                                   'frame an `order=` is read against is the pre-scope one; seal the '
+                                   'structural edit first and state the parity in a second session')
         return 0
 
     # THERE IS NO `_require_kekule` HERE, AND THE ABSENCE IS DELIBERATE.  No core reader of a bond
@@ -2550,6 +2575,38 @@ cdef class MoleculeContainer:
         cdef uint32_t n
         for n in self._numbers:
             yield self.atom(n)
+
+    def numbered_atoms(self):
+        """`(n, atom)` per atom, for the loop that needs the id as a variable rather than as `atom.n`.
+
+        Sugar over `atoms()`, which keeps yielding bare atoms because that is the right default.  Named
+        for what it yields and spelled to match `atom_numbers`; `dict(mol.numbered_atoms())` is the map
+        a caller building one otherwise writes as a comprehension at each of four sites.
+        """
+        self._require_clean()
+        cdef uint32_t n
+        for n in self._numbers:
+            yield n, self.atom(n)
+
+    def match_any(self, queries):
+        """Every atom covered by ANY of `queries`: the union of their matches, as stable ids.
+
+        One `QueryContainer` or an iterable of them, because the singular call is the common one and a
+        caller holding one query should not have to wrap it.  `set()` when nothing matches -- which is
+        also what an empty `queries` gives, an empty union being empty.
+
+        A SCREEN AND NOT A COUNT.  Every mapping of every query is walked, so an atom two queries both
+        cover appears once; a caller wanting which query matched calls `get_mapping` per query, this
+        method having thrown that away by construction.
+        """
+        cdef set out = set()
+        cdef object q, mp
+        if isinstance(queries, QueryContainer):
+            queries = (queries,)
+        for q in queries:
+            for mp in (<QueryContainer?> q).get_mapping(self):
+                out.update((<dict> mp).values())
+        return out
 
     def bonds(self):
         # Yields each bond once, as a Bond view; its endpoints are bond.n and bond.m, and `n` is the
@@ -4119,16 +4176,33 @@ cdef class MoleculeContainer:
         self._append(OP_SET_STEREO, n, 0, 2 if stereo else 1)
         self._maybe_apply()
 
-    def set_parity(self, uint32_t n, int parity):
+    def set_parity(self, uint32_t n, int parity, *, tuple order=None):
         """Set the three-state parity of atom `n`.
 
         `parity` must be 0 (unset -- no wedge drawn), 1 (even), or 2 (odd).
         The same `OP_SET_STEREO` journal op is used; the three values map directly to the
         apply handler's 0/1/2 dispatch.  Raises `ValueError` for any value outside 0..2.
+
+        `order` STATES WHICH DIRECTION ORDER THE PARITY IS EXPRESSED IN -- `translate_stereo`'s tuple,
+        same spelling and same rulings -- and the value is re-based onto the unit's own refs before it
+        is stored.  `None` is the default and means the molecule's own refs, which is the only meaning
+        this method had.  WITHOUT IT, ASSIGNING ONE MOLECULE'S PARITY INTEGER TO ANOTHER'S ATOM INVERTS
+        THE CENTRE, because each molecule's refs follow its own neighbour ordering; with it the pair is
+        a fixed point, `translate_stereo(a, o)` out of one and `set_parity(b, that, order=o)` into the
+        other reproducing the configuration.
+
+        Reading the frame needs the arena's perceived units, so `order=` raises `RuntimeError` inside an
+        edit session that has already changed the graph.  A session of nothing but parities, wedges,
+        collections and coordinates is fine -- see `_require_stereo_frame`.
         """
         self._require(n)
         if parity < 0 or parity > 2:
             raise ValueError('parity must be 0 (unset), 1 (even), or 2 (odd)')
+        if order is not None:
+            # 0 is 0 in every order, and the unit lookup would refuse an atom that anchors none --
+            # so clearing a parity does not depend on there being a frame to clear it against.
+            if parity:
+                parity = self._parity_in_order(n, order, parity)
         self._append(OP_SET_STEREO, n, 0, parity)
         self._maybe_apply()
 
@@ -4403,6 +4477,73 @@ cdef class MoleculeContainer:
         span_y = <int64_t> max_y - <int64_t> min_y
         return span_x >= 100 or span_y >= 100
 
+    def xy_box(self):
+        """The plane's bounding box as `((min_x, min_y), (max_x, max_y))`, or None when none is stated.
+
+        ONE METHOD AND NOT FOUR PROPERTIES.  Every caller of a `min_x` wants the other three in the same
+        breath -- a writer checking a format's coordinate field, `recenter2d` computing its shift, a
+        renderer sizing a canvas -- and four properties would walk the plane four times for one answer.
+
+        None on `not has_coordinates`, which is the SEGMENT test and not `has_layout`: a degenerate plane
+        still has a box, and a caller asking for the extent has not asked whether it is drawable.  A
+        one-atom plane answers that atom twice.
+        """
+        self._require_clean()
+        if not structure_has(self._structure, SEG_XY):
+            return None
+        cdef uint32_t count = self._structure.header.atom_count
+        if not count:
+            return None
+        cdef xy_t *xy = structure_xy(self._structure)
+        cdef xy_t *p = xy
+        cdef int32_t min_x = p.x, max_x = p.x, min_y = p.y, max_y = p.y
+        cdef uint32_t i
+        for i in range(1, count):
+            p = xy + i
+            if p.x < min_x:
+                min_x = p.x
+            elif p.x > max_x:
+                max_x = p.x
+            if p.y < min_y:
+                min_y = p.y
+            elif p.y > max_y:
+                max_y = p.y
+        return ((min_x / <double> XY_SCALE, min_y / <double> XY_SCALE),
+                (max_x / <double> XY_SCALE, max_y / <double> XY_SCALE))
+
+    def recenter2d(self):
+        """Centre the stored plane's bounding box on the origin.  Did it move anything?
+
+        PURE TRANSLATION, so every atom keeps its position relative to every other and the chemist's
+        drawing survives -- the separation from `rescale2d`, which changes the scale and not the centre.
+        A plane a drawing editor parked several thousand units out has ordinary bond lengths, so scaling
+        cannot bring it back into a format's coordinate field and translating can.
+
+        False, and nothing stored, on a molecule with no coordinates, and False when the box is already
+        centred to within the arena's fixed point -- there is nothing to store and a `_gen` bump would
+        invalidate every view for no change.
+
+        NO WRITER CALLS THIS.  A serialiser does not move the drawing it was handed; a format whose field
+        the plane does not fit drops the plane and logs, naming this method and `clean2d()`.
+        """
+        cdef object box = self.xy_box()
+        if box is None:
+            return False
+        cdef double dx = -(box[0][0] + box[1][0]) / 2.
+        cdef double dy = -(box[0][1] + box[1][1]) / 2.
+        # Half the fixed-point step: below this the shift rounds to zero at every atom, so the write
+        # would be a `_gen` bump with no new bytes in it.
+        if -.00005 < dx < .00005 and -.00005 < dy < .00005:
+            return False
+        # THE WHOLE PLANE IS READ BEFORE THE SESSION OPENS.  `xy_of` requires a clean arena, so reading
+        # inside the scope would raise; and one dict beats a per-atom accessor paying a segment check.
+        cdef dict plane = self.coordinates()
+        cdef object n, xy
+        with self.edit():
+            for n, xy in plane.items():
+                self.set_xy(<uint32_t> n, xy[0] + dx, xy[1] + dy)
+        return True
+
     def coordinates(self):
         """`{n: (x, y)}` for the whole plane, or `{}` when none is stated.
 
@@ -4661,8 +4802,26 @@ cdef class MoleculeContainer:
 
     @property
     def has_stereo_groups(self):
+        """Does any atom or axis carry a group?  `bool(stereo_groups())`, without building the dict.
+
+        THE MEMBERSHIPS, NOT THE SEGMENT.  The segment outlives the memberships -- `clean_stereo()` and
+        `set_stereo_group(n, 0)` both zero the payload rather than pay `structure_respan` for a new
+        buffer -- so the segment's presence is not the question this name asks.  A predicate that
+        answered True on a molecule with no groups left would be worse than absent, since the caller
+        clearing groups to build a stereo level could not then ask whether it worked.
+
+        One byte per anchor slot is the whole of that state, so this is a scan for a non-zero byte and
+        needs neither the unit table nor the owner resolution `stereo_groups()` does.
+        """
         self._require_clean()
-        return structure_has(self._structure, SEG_STEREO_GROUPS)
+        if not structure_has(self._structure, SEG_STEREO_GROUPS):
+            return False
+        cdef uint8_t *sg = structure_stereo_groups(self._structure)
+        cdef uint32_t i
+        for i in range(self._structure.header.atom_count):
+            if sg[i]:
+                return True
+        return False
 
     def stereo_group_of(self, element):
         """`(kind, group)` for any spelling `set_stereo_group` accepts; `(0, 0)` where none is stated.
@@ -5438,6 +5597,351 @@ cdef class MoleculeContainer:
         self._gen += 1
         return report
 
+    def clean_stereo_groups(self):
+        """Drop every ABS/AND/OR membership, atom and axis, and keep everything else.  Returns what went.
+
+        THE NARROW HALF OF `clean_stereo()`, for the caller who wants the collections gone and the
+        configuration kept -- building a stereo level, or dropping a partition a reader promoted from a
+        label.  The parities, the wedges and the stored CIP descriptors all survive untouched.
+
+        A MEMBERSHIP IS NOT A CONFIGURATION, which is why this direction is safe where the other is not.
+        `clean_stereo()` drops the parities WITH the memberships because an AND group holding no parity
+        names a configuration that no longer exists; the reverse leaves stated parities with no
+        partition, which is exactly what a file stating no collection gives.
+
+        THE WIPE GOES INTO A CLONE (ruling F65), for `clean_stereo()`'s reason: `copy()` shares the arena
+        on the grounds that it is immutable, so a clear written straight into SEG_STEREO_GROUPS would
+        strip the groups out of every container sharing it.  An empty report is a PURE READ -- no clone,
+        no `_gen` bump.  The stereo unit table is NOT invalidated and the parity features are NOT re-based:
+        both are computed against the parities, and this call does not touch one.
+
+        THE REPORT IS `clean_stereo()`'s TWO GROUP KEYS, absent when their reader was empty, so `{}`
+        means "no collection here" and the return value is falsy exactly then:
+
+            {'stereo_groups':      {(kind, group): [member, ...]},   # `stereo_groups()`
+             'bond_stereo_groups': {(kind, group): [(n, m), ...]}}   # `bond_stereo_groups()`
+
+        `has_stereo_groups` answers False afterwards: it reads the memberships, not the segment.
+        """
+        cdef Structure fresh
+        cdef dict report
+        cdef object key, value
+        self._require_clean()
+        report = {}
+        for key, value in (('stereo_groups', self.stereo_groups()),
+                           ('bond_stereo_groups', self.bond_stereo_groups())):
+            if value:
+                report[key] = value
+        if not report:
+            return report
+        fresh = structure_clone(self._structure)
+        memset(structure_stereo_groups(fresh), 0, structure_seg_len(fresh, SEG_STEREO_GROUPS))
+        self._structure = fresh
+        self._gen += 1
+        return report
+
+    def enrich_from(self, *others, str stereo='keep', str layout='keep'):
+        """Take from `others` what they state about this compound and this record does not.  Took anything?
+
+        TWO READINGS OF ONE SUBSTANCE, EACH IMPOVERISHED IN A DIFFERENT WAY.  A V2000 molfile has a plane
+        and wedges and no way to spell an AND collection; a SMILES has the configuration and no plane; a
+        CXSMILES has both and no plane.  This writes into THIS molecule's own atoms -- the atom count does
+        not move and no component is added, which is what separates it from `union()`.
+
+        THE ATOM CORRESPONDENCE IS `isomorphism()`, so the two sides must be the same CONSTITUTION down to
+        the hydrogen counts, the kekule form and the protonation.  A source that is not answers nothing
+        taken and one `enrich:not-the-same-constitution` line; normalising it (`implicify_hydrogens`,
+        `kekule`/`thiele`, `neutralize`) is the caller's, before the call.
+
+        `stereo` and `layout` say WHO WINS where the two disagree.  This molecule is the chemistry base,
+        so it wins by default; neither axis is a fixed rule:
+
+        | `stereo`   | at a site both sides state                                                    |
+        | ---------- | ----------------------------------------------------------------------------- |
+        | `'keep'`   | this molecule's configuration stands; the disagreement is logged              |
+        | `'override'` | the source's configuration is written                                       |
+        | `'clear'`  | the site is left UNSET, parity and collection both -- two files that disagree |
+        |            | about a centre do not establish one, and asserting either invents a fact      |
+
+        | `layout`   | the source's plane                                                            |
+        | ---------- | ----------------------------------------------------------------------------- |
+        | `'keep'`   | taken only when this molecule has none                                        |
+        | `'override'` | always taken                                                                |
+
+        A WEDGE IS A STATEMENT ABOUT A DRAWING, so whenever the plane changes this molecule's wedges are
+        DROPPED rather than kept -- one drawn against the old plane asserts nothing about the new one --
+        and the source's are taken only when its configuration won as well.  Nothing is lost by dropping
+        them: a writer derives a wedge from a parity when none is stored.
+
+        A COLLECTION IS TAKEN ALL-OR-NOTHING AND RENUMBERED.  A group is taken only when no member of it
+        already carries one here, and it is given a FRESH id -- two files that number their `&1`
+        differently must not have their racemates merged into one.
+
+        SYMMETRY IS RESOLVED OR REFUSED, NEVER GUESSED.  On a symmetric constitution several isomorphisms
+        exist and they carry stereo differently; where one of them disagrees with a configuration this
+        molecule already states, and the orbits leave the choice open, the site is refused and logged
+        rather than written.  Everything lands on `self.log` at stage `enrich`, with the verbs `borrowed
+        parity`, `borrowed group` and `borrowed layout`, so rates are log analysis and not a return shape.
+        """
+        if stereo != 'keep' and stereo != 'override' and stereo != 'clear':
+            raise ValueError("stereo is 'keep', 'override' or 'clear', not %r" % (stereo,))
+        if layout != 'keep' and layout != 'override':
+            raise ValueError("layout is 'keep' or 'override', not %r" % (layout,))
+        cdef bint took = False
+        cdef object other
+        for other in others:
+            if not isinstance(other, MoleculeContainer):
+                raise TypeError('a source is a MoleculeContainer, not %s'
+                                % type(other).__name__)
+            if self._enrich_one(<MoleculeContainer> other, stereo, layout):
+                took = True
+        return took
+
+    cdef int _enrich_one(self, MoleculeContainer other, str stereo, str layout) except -1:
+        """One source, consumed whole.  `enrich_from` is the loop and every ruling is stated there."""
+        cdef dict mapping, inverse, base_refs, base_parity, proposed, orbits, sizes, unit, plane
+        cdef dict second, second_proposal
+        cdef list clashes, second_clashes, borrowed, overridden, cleared, kept, groups
+        cdef list members, drop_wedges, take_wedges
+        cdef set refused, used
+        cdef bint take_layout, free
+        cdef object n, m, x, key, value, member, element, kind, group, gid
+
+        mapping = self.isomorphism(other)
+        if mapping is None:
+            self._log_event(
+                'enrich:not-the-same-constitution', 'enrich',
+                'the source is not the same constitution (%d atoms/%d bonds here against %d/%d '
+                'there), so nothing was taken'
+                % (self.atom_count, self.bond_count, other.atom_count, other.bond_count),
+                mc_refused())
+            return 0
+        base_refs = {}
+        base_parity = {}
+        for unit in self.stereo_units():
+            base_refs[unit['anchor']] = unit['refs']
+            if unit['parity']:
+                base_parity[unit['anchor']] = unit['parity']
+
+        # THE SECOND CANDIDATE IS THE STEREO-AWARE COMPOSITION, and it is tried only when the first one
+        # disagrees with a configuration already stated here.  Where both records state the same
+        # configuration -- the commonest real pair -- the two stereo-aware labellings break their ties
+        # the same way, so that composition is the consistent isomorphism and the blind one need not be.
+        proposed = self._enrich_proposal(other, mapping, base_refs)
+        clashes = self._enrich_clashes(proposed, base_parity)
+        if clashes:
+            second = self._enrich_compose(self.canonical_order(), other.canonical_order())
+            if second and self._verify_isomorphism(other, second):
+                second_proposal = self._enrich_proposal(other, second, base_refs)
+                second_clashes = self._enrich_clashes(second_proposal, base_parity)
+                if len(second_clashes) < len(clashes):
+                    mapping = second
+                    proposed = second_proposal
+                    clashes = second_clashes
+
+        # Which of the remaining disagreements the orbits leave open.  An unproven site is refused; a
+        # site whose anchor and named directions are each alone in their orbit has no other image, so
+        # the disagreement there is the source's statement and the `stereo` policy answers it.
+        refused = set()
+        if clashes:
+            orbits = None
+            try:
+                orbits = self.automorphism_orbits()
+            except AutomorphismBudgetExceeded:
+                pass
+            if orbits is None:
+                refused.update(clashes)
+            else:
+                sizes = {}
+                for value in orbits.values():
+                    sizes[value] = sizes.get(value, 0) + 1
+                for n in clashes:
+                    for m in (n,) + tuple(x for x in base_refs[n] if x is not None):
+                        if sizes[orbits[m]] > 1:
+                            refused.add(n)
+                            break
+            for n in sorted(refused):
+                self._log_event(
+                    'enrich:symmetry-unresolved', 'enrich',
+                    'the source disagrees at the site anchored on atom %d and the symmetry leaves '
+                    'which of its images the source meant open, so nothing was taken there' % n,
+                    mc_refused())
+
+        inverse = {}
+        for key, value in mapping.items():
+            inverse[value] = key
+
+        borrowed = []       # sites this molecule stated nothing at
+        overridden = []     # sites the source won
+        cleared = []        # sites neither side gets
+        kept = []           # sites this molecule won
+        for n in sorted(proposed):
+            if n in refused:
+                continue
+            if n not in base_parity:
+                borrowed.append(n)
+            elif base_parity[n] == proposed[n]:
+                continue
+            elif stereo == 'override':
+                overridden.append(n)
+            elif stereo == 'clear':
+                cleared.append(n)
+            else:
+                kept.append(n)
+
+        # The collections, mapped and renumbered.  Read before the session opens: `stereo_groups()`
+        # needs a clean arena on both sides, and a fresh id is counted against what is here now.
+        used = set()
+        for key in self.stereo_groups():
+            if key[1]:
+                used.add(key[1])
+        groups = []
+        for key, value in sorted(other.stereo_groups().items()):
+            kind = key[0]
+            members = []
+            for member in value:
+                if isinstance(member, tuple):
+                    members.append(tuple(sorted((inverse[member[0]], inverse[member[1]]))))
+                else:
+                    members.append(inverse[member])
+            free = True
+            for element in members:
+                if self.stereo_group_of(element)[0] != STEREO_UNSPECIFIED:
+                    free = False
+                    break
+            if not free:
+                self._log_event(
+                    'enrich:group-not-taken', 'enrich',
+                    'the source states a collection on %r, one of which already carries one here, '
+                    'so the collection was not taken' % (members,), mc_info())
+                continue
+            if kind == STEREO_ABS:
+                groups.append((members, kind, 0))
+                continue
+            gid = None
+            for group in range(1, STEREO_GROUP_MAX + 1):
+                if group not in used:
+                    gid = group
+                    break
+            if gid is None:
+                self._log_event(
+                    'enrich:group-not-taken', 'enrich',
+                    'this molecule already holds %d collections, the most one record can, so the '
+                    'source collection on %r was not taken' % (STEREO_GROUP_MAX, members), mc_lost())
+                continue
+            used.add(gid)
+            groups.append((members, kind, gid))
+
+        # The plane, and the wedges that mean nothing except against it.
+        take_layout = other.has_coordinates and (layout == 'override' or not self.has_coordinates)
+        plane = other.coordinates() if take_layout else {}
+        drop_wedges = self.wedges() if take_layout else []
+        take_wedges = other.wedges() if take_layout and stereo == 'override' else []
+
+        # BEFORE THE EARLY RETURN: a disagreement this molecule won is the whole of what happened on a
+        # `stereo='keep'` pair, and a pass that took nothing still has to say why.
+        if kept:
+            self._log_event('enrich:parity-conflict', 'enrich',
+                            'this molecule won %d disagreed site(s): %r' % (len(kept), kept),
+                            mc_info())
+        if not (borrowed or overridden or cleared or groups or take_layout):
+            return 0
+        with self.edit():
+            for n in borrowed:
+                self.set_parity(n, proposed[n])
+            for n in overridden:
+                self.set_parity(n, proposed[n])
+            for n in cleared:
+                self.set_parity(n, 0)
+                self.set_stereo_group(n, STEREO_UNSPECIFIED)
+            for members, kind, group in groups:
+                for element in members:
+                    self.set_stereo_group(element, kind, group)
+            for n, m, value in drop_wedges:
+                self.set_wedge(n, m, 0)
+            for key, value in plane.items():
+                self.set_xy(inverse[key], value[0], value[1])
+            for n, m, value in take_wedges:
+                self.set_wedge(inverse[n], inverse[m], value)
+
+        if borrowed:
+            self._log_event('enrich:parity-borrowed', 'enrich',
+                            'borrowed parity at %d site(s): %r' % (len(borrowed), borrowed),
+                            mc_repaired())
+        if overridden:
+            self._log_event('enrich:parity-overridden', 'enrich',
+                            'the source won %d disagreed site(s): %r'
+                            % (len(overridden), overridden), mc_repaired())
+        if cleared:
+            self._log_event('enrich:parity-cleared', 'enrich',
+                            'the two records disagree at %d site(s), so neither configuration is '
+                            'stated there any more: %r' % (len(cleared), cleared), mc_lost())
+        for members, kind, group in groups:
+            self._log_event('enrich:group-borrowed', 'enrich',
+                            'borrowed group %d %d on %r' % (kind, group, members), mc_repaired())
+        if take_layout:
+            self._log_event('enrich:layout-borrowed', 'enrich',
+                            'borrowed layout for %d atom(s)%s'
+                            % (len(plane), '; %d wedge(s) dropped with the old plane'
+                               % len(drop_wedges) if drop_wedges else ''), mc_repaired())
+        return 1
+
+    cdef dict _enrich_compose(self, dict mine, dict theirs):
+        """`{my id: their id}` from two labellings of the same shape, or `{}` when the shapes differ."""
+        cdef dict at_position = {}
+        cdef dict out = {}
+        cdef object n, position
+        for n, position in theirs.items():
+            at_position[position] = n
+        for n, position in mine.items():
+            if position not in at_position:
+                return {}
+            out[n] = at_position[position]
+        return out
+
+    cdef dict _enrich_proposal(self, MoleculeContainer other, dict mapping, dict base_refs):
+        """`{anchor here: parity}` -- every configuration the source states, re-based onto our own refs.
+
+        `set_parity(order=...)`'s arithmetic, run per unit: the source's refs are mapped to our ids and
+        the parity comes across in THAT order, never as an integer copied between two ref orders.
+        """
+        cdef dict inverse = {}
+        cdef dict out = {}
+        cdef dict unit
+        cdef object key, value, anchor, x
+        for key, value in mapping.items():
+            inverse[value] = key
+        for unit in other.stereo_units():
+            if not unit['parity']:
+                continue
+            anchor = inverse[unit['anchor']]
+            if anchor not in base_refs:
+                self._log_event(
+                    'enrich:no-unit-here', 'enrich',
+                    'the source states a configuration at the site anchored on its atom %d, which '
+                    'anchors no unit here, so it was not taken' % unit['anchor'], mc_lost())
+                continue
+            try:
+                out[anchor] = self._parity_in_order(
+                    anchor, tuple([None if x is None else inverse[x] for x in unit['refs']]),
+                    unit['parity'])
+            except ValueError:
+                self._log_event(
+                    'enrich:frame-mismatch', 'enrich',
+                    'the source states a configuration at the site anchored on atom %d in a '
+                    'direction order this molecule cannot hold, so it was not taken' % anchor,
+                    mc_lost())
+        return out
+
+    cdef list _enrich_clashes(self, dict proposed, dict base_parity):
+        """The sites both sides state and state differently, ascending."""
+        cdef list out = []
+        cdef object n
+        for n in sorted(proposed):
+            if n in base_parity and base_parity[n] != proposed[n]:
+                out.append(n)
+        return out
+
     def translate_stereo(self, uint32_t n, tuple order):
         """Translate the stored parity of the unit anchored at `n` to the caller's direction order.
 
@@ -5445,6 +5949,11 @@ cdef class MoleculeContainer:
         own, or for a pinned slot that is no direction at all) representing the caller's desired
         ordering of the unit's directions.  Returns the parity in that order: 0 when the unit's
         parity is unset, 1 when even, 2 when odd.
+
+        THE WRITE HALF IS `set_parity(n, parity, order=...)`, and it is this arithmetic run again --
+        the translation is an XOR by the presented permutation's parity, hence its own inverse.  So
+        reading a configuration out of one molecule in some order and writing it into another in the
+        same order reproduces that configuration, which is what `enrich_from` rests on.
 
         For bond kinds (cis/trans, allene, atropisomer) the two pairs in `refs` must be
         preserved.  The ``unnamed_mask`` (``u.spare >> SU_UNNAMED_SHIFT``) distinguishes real
@@ -5462,6 +5971,16 @@ cdef class MoleculeContainer:
 
         Raises `KeyError` when `n` is not in the molecule or does not anchor any unit.
         Raises `ValueError` when `order` is not a valid permutation of the unit's refs.
+        """
+        return self._parity_in_order(n, order, -1)
+
+    cdef int _parity_in_order(self, uint32_t n, tuple order, int parity_in) except -1:
+        """`translate_stereo`'s arithmetic, over a parity the caller supplies rather than the stored one.
+
+        `parity_in` < 0 reads SEG_PARITY at the anchor, which is the read direction; a value in 0..2 is
+        a parity STATED IN `order`, and the answer is then that parity re-expressed against the unit's
+        own refs -- what `set_parity(order=...)` stores.  One body for both because the translation is
+        an XOR by the presented permutation's parity: the same operation inverts itself.
         """
         # All cdef declarations at the top of the function scope (Cython rule: no cdef inside
         # conditional blocks).
@@ -5497,7 +6016,7 @@ cdef class MoleculeContainer:
         swap[0] = 0u; swap[1] = 0u
         pp = 0u
 
-        self._require_clean()
+        self._require_stereo_frame()
         if n not in self._index_of:
             raise KeyError(n)
         # Builds the table for the refs and the unnamed mask, and NEVER READS SU_STEREOGENIC: this is
@@ -5695,8 +6214,12 @@ cdef class MoleculeContainer:
         # Phase 3 — computation.
         # ================================================================
 
-        # Parity is read from SEG_PARITY at the anchor's slot.
-        parity = structure_parity_at(self._structure, anchor_slot)
+        # Parity is read from SEG_PARITY at the anchor's slot, or taken from the caller on the write
+        # direction -- where it is already stated in `order` and the arithmetic below re-bases it.
+        if parity_in < 0:
+            parity = structure_parity_at(self._structure, anchor_slot)
+        else:
+            parity = <uint8_t> parity_in
 
         if u.kind != SU_TETRA:
             # Bond kind: XOR the two within-pair swaps; no perm table needed.
@@ -5945,8 +6468,25 @@ cdef class MoleculeContainer:
 
         The read beside `add_data_sgroup` above, and the same layer split: `sgroups` hands back raw
         dicts from storage, this hands back the parsed records.  Registered by `chython.formats`.
+
+        `name` MATCHES WITHOUT CASE: `FIELDNAME` is a key a producer chose, not a spelling any spec
+        fixes, and one body of records writes both `STEREOLABEL` and `StereoLabel`.
         """
         return _sgroup_fn('data_sgroups')(self, name)
+
+    def stereo_labels(self):
+        """`[(atoms, bonds, label, relative), ...]` for every `STEREOLABEL` data S-group here.
+
+        A stereo label is a configuration word -- `R`, `S`, `RS`, `*R`, `E` -- in the field the CTfile
+        spec reserves for arbitrary data, so it is outside the spec and it is what a large body of real
+        records carries.  The payload is NORMALISED: parentheses stripped, letters upper-cased, a leading
+        `*` lifted out into `relative`.  `atoms` is a tuple because one label covers one atom or two.
+
+        Reading the label is not the same as believing it: the CTfile reader promotes one to an enhanced
+        stereo collection where the record states none, and a collection the record DOES state wins.
+        Registered by `chython.formats`.
+        """
+        return _sgroup_fn('stereo_labels')(self)
 
     cdef dict _sgroup_dict(self, sgroup_t *rec):
         """One record as a dict, with every atom index turned back into a stable id."""
@@ -6407,6 +6947,17 @@ cdef class MoleculeContainer:
         1,000,000, and exists ONLY so that the paragraph above has a test -- no record small enough
         to run in a test suite can exhaust the real budget. Callers must not set it.
         """
+        # `stereo` True: the same search `canonical_bytes` runs, so the order this reports and the
+        # order the canonical form is built on cannot be two different orders.
+        return self._canonical_order(seed, True, _node_budget)
+
+    cdef dict _canonical_order(self, dict seed, bint stereo, uint32_t node_budget):
+        """`canonical_order`'s body, with the stereo term of the invariant as an argument.
+
+        THE ONLY CALLER THAT PASSES False IS `isomorphism`, and there is no public spelling of it:
+        a stereo-blind labelling is canonical for the CONSTITUTION and not for the molecule, so a
+        caller hashing it would call two diastereomers one compound.
+        """
         self._require_clean()
         cdef uint32_t n_atoms = self._structure.header.atom_count
         cdef list numbers = self._numbers
@@ -6426,18 +6977,105 @@ cdef class MoleculeContainer:
         try:
             # Raises on a truncated search, and leaves `order` untouched when it does -- the flag
             # is read by no one here because the exception is the answer.
-            # `stereo` True: the same search `canonical_bytes` runs, so the order this reports and
-            # the order the canonical form is built on cannot be two different orders.
-            if _node_budget:
-                _canon_order(self._structure, labels, order, &flags, _node_budget, True)
+            if node_budget:
+                _canon_order(self._structure, labels, order, &flags, node_budget, stereo)
             else:
-                mol_canonical_order(self._structure, labels, order, &flags, True)
+                mol_canonical_order(self._structure, labels, order, &flags, stereo)
             for i in range(n_atoms):
                 out[numbers[i]] = order[i]
         finally:
             PyMem_Free(order)
             PyMem_Free(labels)
         return out
+
+    def isomorphism(self, MoleculeContainer other, *, uint32_t _node_budget=0):
+        """`{self id: other id}` when `other` is the SAME CONSTITUTION as this molecule, else None.
+
+        THE MAPPING TWO READINGS OF ONE COMPOUND ARE MERGED THROUGH -- `enrich_from` is its one caller
+        in the tree.  Not spelled `mapping`: in chython that word is atom-atom mapping (`map_number`,
+        `reconstruct_mapping`, `QueryContainer.get_mapping`), which this is not.
+
+        STEREO-BLIND BY CONSTRUCTION.  `canonical_order()` breaks its ties on the stored parities,
+        which is right for an identity and wrong here: the premise of a merge is that the two sides
+        carry DIFFERENT stereo, so two stereo-aware labellings compose into a map that is *an*
+        isomorphism rather than a chosen one.  This runs the same search with the stereo term of the
+        invariant off, so both sides are tied the same way, and then VERIFIES the composition --
+        every mapped atom record and the whole mapped bond set including orders.  Element agreement
+        alone is not evidence of an isomorphism; edge agreement is, and it is O(bonds).
+
+        SAME CONSTITUTION MEANS IDENTICAL: element, charge, isotope, radical state, R index, implicit
+        hydrogen count (an unknown count matching an unknown one) and every bond order.  Two readings
+        of one substance routinely differ in explicit-versus-implicit hydrogen, in kekule form and in
+        zwitterion-versus-neutral, and any of those makes a composition meaningless, so each answers
+        None here.  Normalising them -- `implicify_hydrogens`, `kekule`/`thiele`, `neutralize` -- is
+        the caller's business, before the call.
+
+        None means "not the same constitution" and is not `{}`; the empty dict is what two empty
+        molecules map to.  Raises `AutomorphismBudgetExceeded` on a truncated search, matching
+        `canonical_order`: there is no degraded answer to give.  `_node_budget` is that paragraph's
+        test hook and callers must not set it.
+        """
+        self._require_clean()
+        other._require_clean()
+        cdef uint32_t n_atoms = self._structure.header.atom_count
+        if n_atoms != other._structure.header.atom_count:
+            return None
+        if self._structure.header.bond_count != other._structure.header.bond_count:
+            return None
+        if not n_atoms:
+            return {}
+        cdef dict mine = self._canonical_order(None, False, _node_budget)
+        cdef dict theirs = other._canonical_order(None, False, _node_budget)
+        cdef dict at_position = {}
+        cdef object n, position
+        for n, position in theirs.items():
+            at_position[position] = n
+        cdef dict mapping = {}
+        for n, position in mine.items():
+            mapping[n] = at_position[position]
+        if self._verify_isomorphism(other, mapping):
+            return mapping
+        return None
+
+    cdef int _verify_isomorphism(self, MoleculeContainer other, dict mapping) except -1:
+        """Does `mapping` carry every atom record and every bond of this molecule onto `other`'s?
+
+        Both directions are covered by one pass: the map is a bijection between two atom sets of equal
+        size, and a bond count equality gate plus "every bond of mine is a bond of theirs" leaves no
+        room for a bond of theirs that is not one of mine.
+        """
+        cdef atom_t *mine = self._structure.atoms()
+        cdef atom_t *theirs = other._structure.atoms()
+        cdef atom_t *a
+        cdef atom_t *b
+        cdef uint32_t *ptr = csr_ptr(self._structure)
+        cdef halfedge_t *edges = csr_edges(self._structure)
+        cdef halfedge_t *e
+        cdef halfedge_t *f
+        cdef list numbers = self._numbers
+        cdef uint32_t i, k, j
+        cdef dict their_index = other._index_of
+        for i in range(self._structure.header.atom_count):
+            a = mine + i
+            j = <uint32_t> their_index[mapping[numbers[i]]]
+            b = theirs + j
+            if a.element != b.element or a.charge != b.charge or a.isotope != b.isotope:
+                return False
+            if at_radical(a) != at_radical(b) or at_r_index(a) != at_r_index(b):
+                return False
+            if at_implicit_h_unknown(a) != at_implicit_h_unknown(b):
+                return False
+            if not at_implicit_h_unknown(a) and at_implicit_h(a) != at_implicit_h(b):
+                return False
+            if at_explicit_h(a) != at_explicit_h(b):
+                return False
+            for k in range(ptr[i], ptr[i + 1]):
+                e = &edges[k]
+                f = csr_find(other._structure, j,
+                             <uint32_t> their_index[mapping[numbers[e.to]]])
+                if f is NULL or f.order != e.order:
+                    return False
+        return True
 
     @property
     def atoms_order_classes(self):
@@ -7275,7 +7913,7 @@ cdef class MoleculeContainer:
         cdef uint32_t n_persistent = self._structure.header.persistent_len
         return memoryview(<bytes> self._structure.buffer[:n_persistent])
 
-    def pack(self, *, bint compressed=True, drop=None, version=None):
+    def pack(self, *, bint compressed=True, drop=None, version=None, bint strict=False):
         """One pach record.  See `chython.core.pach_dump`, which this forwards to.
 
         `version` is None for the current layout -- 3 with coordinates, 4 without -- 3 or 4 to state
@@ -7283,8 +7921,11 @@ cdef class MoleculeContainer:
         so an undrawn molecule and a `drop=['coordinates']` caller both get version 4; `4` writes no
         coordinate block even for a drawn molecule.  pach is small and lossy; `to_bytes` is the arena
         verbatim and lossless.
+
+        THE RECORD IS WRITTEN AND EVERY LOSS IS ON `self.log` at stage `pach`.  `strict=True` refuses
+        instead, for a caller who wants a record to be all-or-nothing.
         """
-        return pach_dump(self, compressed=compressed, drop=drop, version=version)
+        return pach_dump(self, compressed=compressed, drop=drop, version=version, strict=strict)
 
     @staticmethod
     def unpack(data, *, compressed=None):
@@ -7344,16 +7985,16 @@ cdef class MoleculeContainer:
             return mol
         return MoleculeContainer.from_bytes(raw)
 
-    def pach(self, *, bint compressed=True, drop=None, version=None):
+    def pach(self, *, bint compressed=True, drop=None, version=None, bint strict=False):
         """chython 2's name for `pack`, and the same record byte for byte.
 
         The three keywords chython 2 also took are gone rather than accepted and ignored: `check=` is
-        not a choice here (this release refuses by field name, which `drop=` waives), `order=` states
-        an atom order pach has never carried, and `skip_labels_calculation=` names a step this arena
-        does not have.  Each is a `TypeError`, because a silently ignored `check=False` would promise
-        a refusal was waived and let `pack` raise anyway.
+        not a choice here (a loss is logged and `drop=` waives it in advance), `order=` states an atom
+        order pach has never carried, and `skip_labels_calculation=` names a step this arena does not
+        have.  Each is a `TypeError`, because a silently ignored `check=False` would promise something
+        about a refusal this writer does not make.
         """
-        return pach_dump(self, compressed=compressed, drop=drop, version=version)
+        return pach_dump(self, compressed=compressed, drop=drop, version=version, strict=strict)
 
     @staticmethod
     def unpach(data, *, compressed=None):

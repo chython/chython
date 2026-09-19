@@ -313,6 +313,9 @@ Iterating Atoms and Bonds
     for atom in mol.atoms():
         print(atom.n, atom.atomic_symbol, atom.element)
 
+    # `(n, atom)` pairs, for the loop that wants the id as a variable rather than as `atom.n`
+    dict(mol.numbered_atoms())
+
     # Iterate Bond views, each bond once, with bond.n the lower of the two ids
     for bond in mol.bonds():
         print(bond.n, bond.m, bond.order)  # order: 1, 2, 3, 4 (aromatic), 8 (dative)
@@ -334,6 +337,10 @@ Iterating Atoms and Bonds
 
 ``atom.element`` is the atomic **number**; ``atom.atomic_symbol`` is the string. There is no
 ``atomic_number`` field -- one field, one name, and the number is the one the arena stores.
+
+``atoms()`` yields the bare view because that is the right default; ``numbered_atoms()`` is sugar over it
+for the loop that needs the id beside it, and ``dict(mol.numbered_atoms())`` is the map otherwise written
+as a comprehension.
 
 .. testcode::
 
@@ -376,6 +383,7 @@ Atom Properties
     atom.atomic_symbol       # 'C', 'N', 'O', ...
     atom.element             # 6, 7, 8, ... -- the atomic number
     atom.atomic_radius       # the calculated radius in angstroms; 0.0 for the R marker
+    atom.is_metal            # bool: one of the 93 elements the `[M]` primitive is drawn from
     atom.isotope             # the mass number, 0 when the record states none
     atom.charge              # formal charge (int)
     atom.radical             # bool; `is_radical` is the same flag
@@ -407,6 +415,25 @@ Waals -- and it is element data, the same for every atom of an element. It is on
 readers hold an atom already: it sizes a sphere in a 3D depiction and thresholds distance-based bond
 perception. The header of ``chython/core/elements.tsv`` states the column, including the 32 rows the
 published set does not reach, which carry the group analogue one period up.
+
+``is_metal`` reads the element list the ``[M]`` primitive is drawn from, one boundary for both, so the
+property and the query cannot disagree about an element. It is a question about the **element alone**:
+``[Na+]`` answers ``True`` while ``[M]``, which is neutral by definition, does not match it -- ``[M;*]``
+is the query that does. Every metalloid answers ``False``, B Si Ge As Se Sb Te among them, and so does
+the R marker, which has no element at all.
+
+.. testcode::
+
+    from chython import smarts
+
+    salt = smiles('[Na+].CC(=O)[O-]')
+    print([a.atomic_symbol for a in salt.atoms() if a.is_metal])
+    print(bool(smarts('[M]') <= salt), bool(smarts('[M;*]') <= salt))
+
+.. testoutput::
+
+    ['Na']
+    False True
 
 ``degree``, ``neighbors`` and ``heteroatoms`` here are **structural** counts, so a dative bond counts
 like any other. The SMARTS primitives ``D``, ``x`` and ``z`` count *substituents* and ignore a dative
@@ -814,6 +841,79 @@ matters:
 :doc:`standardize` documents both.
 
 
+Enriching from Another Record
+-----------------------------
+
+``union`` puts two substances in one container. ``enrich_from`` does the other thing: two readings of the
+**same** substance, each impoverished in a different way, and one of them gets what the other knows. A
+molfile has a plane and no way to spell an AND collection; a SMILES has the configuration and no plane.
+The atom count does not move and no component is added -- the fields are written into this molecule's own
+atoms:
+
+.. testcode::
+
+    from chython import mol as mol_facade
+
+    flat = mol_facade("""
+      chython
+
+      6  5  0  0  0  0            999 V2000
+        0.3572    1.0312    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+        0.3572    0.2062    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+        1.0717   -0.2062    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+       -0.3572   -0.2062    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+       -0.3572   -1.0312    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+       -1.0717    0.2063    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+      1  2  1  0  0  0  0
+      2  3  1  0  0  0  0
+      2  4  1  0  0  0  0
+      4  5  2  0  0  0  0
+      4  6  1  0  0  0  0
+    M  END
+    """)                                          # the drawing, drawn flat
+
+    print(flat.has_coordinates, len(flat.stereogenic_units()), flat.parity_of(2))
+    print(flat.enrich_from(smiles('C[C@H](N)C(=O)O')))   # the configuration, from a string with no plane
+    print(flat.has_coordinates, flat.parity_of(2))
+    print([x.rule for x in flat.log])
+
+.. testoutput::
+
+    True 1 0
+    True
+    True 2
+    ['enrich:parity-borrowed']
+
+The correspondence is ``isomorphism()``, so the two sides must be the same **constitution** down to the
+hydrogen counts, the kekule form and the protonation. A source that is not answers ``False`` and one
+``enrich:not-the-same-constitution`` line; normalising it -- ``implicify_hydrogens``, ``kekule``/``thiele``,
+``neutralize`` -- is the caller's job before the call.
+
+``stereo=`` and ``layout=`` say who wins where the two disagree. This molecule is the chemistry base, so
+it wins by default:
+
+=================== ==============================================================================
+``stereo=``         at a site both sides state
+=================== ==============================================================================
+``'keep'``          this molecule's configuration stands; the disagreement is logged
+``'override'``      the source's configuration is written
+``'clear'``         the site is left **unset**, parity and collection both -- two files that
+                    disagree about a centre do not establish one, and asserting either invents
+                    a fact
+=================== ==============================================================================
+
+``layout='keep'`` takes the source's plane only where this molecule has none; ``'override'`` always takes
+it. A wedge is a statement about a drawing, so whenever the plane changes this molecule's wedges are
+**dropped** rather than carried onto a layout they were not drawn against -- nothing is lost, a writer
+deriving a wedge from a parity where none is stored.
+
+A collection is taken all-or-nothing and **renumbered**: two files numbering their ``&1`` differently must
+not have their racemates merged. On a symmetric constitution several isomorphisms exist and they carry
+stereo differently; where the orbits leave the choice open the site is refused and logged rather than
+guessed. Everything lands on ``molecule.log`` at stage ``enrich``, so rates are log analysis rather than a
+return shape -- the return value answers only *did anything come across*.
+
+
 Stereochemistry
 ---------------
 
@@ -1011,6 +1111,37 @@ exist yet while a molecule is being built. The question is asked once, on a fini
 .. testoutput::
 
     []
+
+``clean_stereo()`` judges nothing: it drops the parities, the wedges, the ABS/AND/OR memberships and the
+stored CIP descriptors, and reports what went as a dict keyed by kind -- one key per kind and a key absent
+where that kind was empty, so ``{}`` means the molecule had no stereo at all. Coordinates are not stereo
+and survive; ``clean2d()`` is the call that drops a layout.
+
+``clean_stereo_groups()`` is the **narrow half**: every membership goes, atom and axis, and the parities,
+the wedges and the descriptors stay. That direction is the safe one -- a membership is not a configuration,
+while an AND group left holding no parity would name a configuration that no longer exists, which is why
+``clean_stereo()`` drops both together. It is the call for a caller building a stereo level, or dropping a
+partition a reader promoted from a label (:doc:`stereo`):
+
+.. testcode::
+
+    from chython import STEREO_AND
+
+    diol = smiles('C[C@H](O)[C@@H](O)C')
+    centres = [a.n for a in diol.atoms() if a.parity]
+    with diol.edit() as e:
+        for n in centres:
+            e.set_stereo_group(n, STEREO_AND, 1)
+
+    print(diol.clean_stereo_groups())
+    print(diol.stereo_groups(), [diol.parity_of(n) for n in centres])
+    print(diol.clean_stereo_groups())          # an empty report is a pure read
+
+.. testoutput::
+
+    {'stereo_groups': {(3, 1): [2, 4]}}
+    {} [2, 1]
+    {}
 
 Wedges are a drawing, so they are written as one -- narrow end first, and the code says which way the
 bond leaves the plane:

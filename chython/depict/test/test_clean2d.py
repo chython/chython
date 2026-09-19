@@ -596,16 +596,25 @@ def test_a_molecule_with_no_explicit_hydrogen_lays_out_exactly_as_it_did():
     four points were measured before explicit hydrogens were deferred out of the parse tree, and the
     deferral must not move a molecule that has none.  When a smilesdrawer upgrade makes this fail,
     re-measure the four points and update the literals here, never widen the tolerance.
+
+    Centred on the box midpoint, which is `layout2d`'s last step -- so a change of PLACEMENT moves all
+    four by one vector and leaves every distance between them alone.  The shape is what this pins; the
+    assertion below states the shape separately for that reason.
     """
     if ctx is None:
         skip('quickjs is not installed')
 
     plane = smiles('CC(=O)O').layout2d(engine='smilesdrawer')
 
-    assert plane[1] == approx((0., 0.), abs=1e-12)
-    assert plane[2] == approx((.824999999998, 2.020263e-06), abs=1e-12)
-    assert plane[3] == approx((1.237499999998, -.714468937859), abs=1e-12)
-    assert plane[4] == approx((1.237496500795, .714474998639), abs=1e-12)
+    assert plane[1] == approx((-.618749999999, -3.03039e-06), abs=1e-12)
+    assert plane[2] == approx((.206249999999, -1.010127e-06), abs=1e-12)
+    assert plane[3] == approx((.618749999999, -.714471968249), abs=1e-12)
+    assert plane[4] == approx((.618746500796, .714471968249), abs=1e-12)
+
+    xs = [x for x, _ in plane.values()]
+    ys = [y for _, y in plane.values()]
+    assert min(xs) + max(xs) == approx(0., abs=1e-12)
+    assert min(ys) + max(ys) == approx(0., abs=1e-12)
 
 
 def test_a_layout_short_of_a_point_is_refused_rather_than_mis_assigned():

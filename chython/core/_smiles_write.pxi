@@ -2208,11 +2208,16 @@ cdef tuple smw_tail_parts(Structure structure, smw_scratch_t *s, dict groups, di
     whose output is its own input is how the two sides drift apart.
 
     Indices are positions in the emitted order, which is what CXSMILES means by an atom index.
-    `groups` is {n: (kind, number)} -- `write_smiles` INVERTS `canonical_stereo_groups()`,
-    whose own shape is {(kind, canonical_id): [n, ...]}, so that this loop can ask about one
-    atom at a time -- or None to read the stored bytes.  The canonical view is used for canonical
-    output so the group NUMBERS are canonical too, and the stored bytes for stored-order output,
-    whose point is to show what is stored.  An atom absent from `groups` carries no group.
+    `groups` has THREE states, and the empty dict is not the same as None:
+
+    | `groups`          | the collections come from            | and that is what |
+    | ----------------- | ------------------------------------ | ---------------- |
+    | `{n: (kind, no)}` | `canonical_stereo_groups()` inverted | canonical output wants, group NUMBERS canonical too |
+    | `None`            | the stored `SEG_STEREO_GROUPS` bytes | stored-order output shows, being what is stored |
+    | `{}`              | nothing -- no atom carries one       | `!s` asserts: no configuration, so no collection |
+
+    An atom absent from a non-None `groups` carries no group, which is why `{}` suppresses the whole
+    field and None does not.
 
     `labels` is UNLIKE the other four: a list POSITIONAL in the emitted order, one entry per atom,
     holding the alias bytes or None -- because that is what `$...$` is, and because a join then
@@ -2829,7 +2834,18 @@ cdef dict smw_prepare(MoleculeContainer molecule, smw_scratch_t *s, smw_opts_t *
     else:
         for i in range(n):
             s.pos[i] = i
-    if o.canonical and structure.header.segments[SEG_STEREO_GROUPS].length:
+    if not o.stereo:
+        # `!s` WRITES NO COLLECTION -- and the empty dict, not None, is how that is said: None means
+        # "read the stored bytes" to `smw_tail_parts`, so leaving it here would emit the arena's
+        # groups verbatim, which is the opposite of suppressing them.
+        #
+        # A collection is an assertion about configuration, so a spelling that writes no parity sign
+        # must write no `|&1:|`, `|o1:|` or `|a:|` either: a string saying "these two centres are one
+        # racemate" while naming neither centre's configuration states something the caller asked to
+        # leave out.  It also keeps `!s` output a function of the constitution alone, which is the
+        # promise at `smw_canonical_positions`.
+        groups = {}
+    elif o.canonical and structure.header.segments[SEG_STEREO_GROUPS].length:
         # {(kind, canonical_id): [member, ...]} inverted to {n: (kind, id)}: the writer asks per atom,
         # the view answers per group, and a member spelled as an owner pair is an axis that one of its
         # two atoms has to speak for -- which owner, and why not the anchor, is `smw_group_atoms`'.

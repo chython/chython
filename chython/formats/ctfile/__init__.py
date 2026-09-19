@@ -33,7 +33,8 @@ from ._rxn import (RXN_HEADER_LINES, emit_rxn, parse_rxn, parse_rxn_record, snif
                    split_rxn_v2000)
 from ._sdf import (UNPARSED_KEY, V2000_STAMP, V3000_STAMP, emit_record, parse_record,
                    split_records)
-from ._sgroup import FIELDDISP_TAIL, SGroup, SGroupStore, add_data_sgroup, data_sgroups
+from ._sgroup import (FIELDDISP_TAIL, STEREOLABEL, SGroup, SGroupStore, add_data_sgroup,
+                      data_sgroups, promote_stereo_labels, stereo_labels)
 from ._stream import ESDFWrite, FailedRecord, SDFRead, SDFWrite
 from ._v2000 import emit_v2000, parse_v2000
 from ._v3000 import emit_v3000, parse_v3000
@@ -44,6 +45,7 @@ __all__ = ['SDFRead', 'SDFWrite', 'ESDFWrite', 'FailedRecord',
            'Ctab', 'CtabAtom', 'CtabBond',
            'CtfileError', 'MalformedCtfile', 'UnsupportedCtfile',
            'SGroup', 'SGroupStore', 'add_data_sgroup', 'data_sgroups', 'FIELDDISP_TAIL',
+           'STEREOLABEL', 'stereo_labels', 'promote_stereo_labels',
            'V2000_STAMP', 'V3000_STAMP', 'UNPARSED_KEY',
            'parse_record', 'emit_record', 'split_records',
            'parse_v2000', 'emit_v2000', 'parse_v3000', 'emit_v3000',

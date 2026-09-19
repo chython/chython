@@ -27,7 +27,7 @@ import tracemalloc
 
 from pytest import mark, raises
 
-from chython.core import H_UNKNOWN, MoleculeContainer, pach_load, pach_record_length, read_smiles
+from chython.core import H_UNKNOWN, LOST, MoleculeContainer, pach_load, pach_record_length, read_smiles
 from .pach3_corpus import (BGROUP_BUILDERS, BGROUP_NAMES, BGROUP_PATH, BUILDERS, V3_PATH, V4_PATH,
                            answers, answers_bgroup, drawn, load_corpus)
 from .pach3_corpus import _BIPHENYL_BONDS, _BIPHENYL_H, _BUTANE_XY, _chlorofluorobiphenyl, _drawn_butane
@@ -116,12 +116,15 @@ def test_an_r_marker_sets_bit_seven_of_the_element_byte():
     assert raw[12] == 0x80
 
 
-def test_a_title_is_refused_by_name():
+def test_a_title_is_logged_by_name_and_refused_by_name_under_strict():
     mol = read_smiles('[Na+]')
     mol.set_title('sodium')
+    assert mol.pack(compressed=False, version=4)[12] == 11
+    assert [(r.rule, r.stage, r.severity) for r in mol.log] == [('pach:title-lost', 'pach', LOST)]
     with raises(ValueError, match="drop=\\['title'\\]"):
-        mol.pack(version=4)
+        mol.pack(version=4, strict=True)
     assert mol.pack(compressed=False, version=4, drop=['title'])[12] == 11
+    assert len(mol.log) == 1, 'a waived field is not a loss the caller needs telling about'
 
 
 def test_version_3_on_a_coordinate_free_molecule_writes_version_4():
@@ -224,15 +227,28 @@ def test_dropping_coordinates_selects_version_4():
     assert len(raw) == 12 + 4 * 3 + 3 * 5
 
 
-def test_a_coordinate_beyond_the_int24_range_is_refused_by_name():
+def test_a_coordinate_beyond_the_int24_range_costs_the_record_its_drawing():
+    """The range is asked BEFORE the version byte is chosen, so a plane version 3 cannot hold makes the
+    record a version 4 one -- with every atom, bond and configuration, and the drawing logged as lost."""
     mol = read_smiles('CCO')
     n = mol.atom_numbers
     with mol.edit() as e:
         e.set_xy(n[0], 0.0, 0.0)
         e.set_xy(n[1], 900.0, 0.0)
         e.set_xy(n[2], 0.0, 0.0)
+    raw = mol.pack(compressed=False, version=3)
+    assert raw[0] == 4
+    assert len(raw) == 12 + 3 * 3 + 2 * 5
+    assert [r.rule for r in mol.log] == ['pach:coordinates-lost']
+    assert 'recenter2d()' in mol.log[0].message
     with raises(ValueError, match='838.8607'):
-        mol.pack(version=3)
+        mol.pack(version=3, strict=True)
+
+    # And the advice works: the plane is 900 wide, which fits once it is centred on the origin.
+    mol.log.clear()
+    assert mol.recenter2d()
+    assert mol.pack(compressed=False, version=3)[0] == 3
+    assert not mol.log
 
 
 # ----- decoder tests: the atom block read back -----
@@ -474,15 +490,20 @@ def test_a_version_3_record_puts_the_stereo_block_after_nine_bytes_an_atom():
     assert pach_record_length(raw, compressed=False) == len(raw) == 100
 
 
-def test_a_tetrahedral_centre_with_two_named_directions_is_refused_by_name():
+def test_a_tetrahedral_centre_with_two_named_directions_is_logged_and_skipped():
     # A sulfonium: its lone pair is one direction and its hydrogen another, so only two directions have
     # an atom of their own and a record with three slots for them has nothing to put in the third.
     mol = read_smiles('C[S@@H+]CC')
+    raw = mol.pack(compressed=False)
+    assert raw[6:8] == b'\x00\x00', 'the configuration is skipped, so the block is empty'
+    assert len(raw) == 12 + 4 * 3 + 3 * 5
+    assert [(r.rule, r.severity) for r in mol.log] == [('pach:stereo-lost', LOST)]
     with raises(ValueError, match='names 2 direction'):
-        mol.pack()
+        mol.pack(strict=True)
     raw = mol.pack(compressed=False, drop=['stereo'])
     assert raw[6:8] == b'\x00\x00'
     assert len(raw) == 12 + 4 * 3 + 3 * 5
+    assert len(mol.log) == 1
 
 
 def test_dropping_stereo_writes_no_stereo_block():
@@ -1276,13 +1297,18 @@ def test_dropping_coordinates_beats_an_explicit_version_three():
     assert back == mol
 
 
-def test_the_refusals_advice_is_a_call_that_works():
+def test_the_strict_refusals_advice_is_a_call_that_works():
     mol, n = _drawn_amino_propanol()
     with mol.edit() as e:
         e.set_xy(n[0], 1000.0, 0.0)
     with raises(ValueError, match="drop=\\['coordinates'\\]"):
-        mol.pack(compressed=False, version=3)
+        mol.pack(compressed=False, version=3, strict=True)
     assert mol.pack(compressed=False, version=3, drop=['coordinates'])[0] == 4
+    assert not mol.log, 'the field was waived by name, so nothing was unexpected'
+
+    # And without either: the record is written, as a version 4 one, and the drawing is logged.
+    assert mol.pack(compressed=False, version=3)[0] == 4
+    assert [r.rule for r in mol.log] == ['pach:coordinates-lost']
 
 
 # ----- frozen corpus tests: the pinned version 3 and version 4 records -----
@@ -1343,26 +1369,27 @@ def test_every_legacy_record_re_encodes_as_version_3_and_4_and_agrees(path):
     Not `problems == []`: a legacy corpus holds records whose own writer left a field underivable, and
     a report about one of those is the reader working.  `mol is not None` is the bar.
     """
-    _expected_refused = {V0_PATH: ['xy:14', 'xy:15', 'xy:16', 'xy:17', 'xy:18'],
+    _expected_undrawn = {V0_PATH: ['xy:14', 'xy:15', 'xy:16', 'xy:17', 'xy:18'],
                          V2_PATH: ['xy:14', 'xy:15', 'xy:16', 'xy:17', 'xy:18'],
                          V0_NATIVE_PATH: []}
-    refused = []
+    undrawn = []
     for name, data, _ in load_corpus(path):
         mol, _ = pach_load(data, compressed=False)
         assert mol is not None, name
-        try:
-            three, problems = pach_load(mol.pack(compressed=False, version=3), compressed=False)
-        except ValueError as err:
-            # a version 0/2 coordinate can sit outside version 3's field; the chemistry still travels
-            assert 'pach coordinate field' in str(err), name
-            refused.append(name)
+        three, problems = pach_load(mol.pack(compressed=False, version=3), compressed=False)
+        assert problems == [], name
+        if [r for r in mol.log if r.rule == 'pach:coordinates-lost']:
+            # a version 0/2 coordinate can sit outside version 3's field; the chemistry still travels,
+            # as a version 4 record, and the drawing is on the log rather than in the exception
+            undrawn.append(name)
+            assert not three.has_coordinates, name
+            assert _fields(three, False) == _fields(mol, False), name
         else:
-            assert problems == [], name
             assert _fields(three, True) == _fields(mol, True), name
         four, problems = pach_load(mol.pack(compressed=False, version=4), compressed=False)
         assert problems == [], name
         assert _fields(four, False) == _fields(mol, False), name
-    assert refused == _expected_refused[path]
+    assert undrawn == _expected_undrawn[path]
 
 
 def test_no_configured_direction_list_has_two_unnamed_directions():
@@ -1397,7 +1424,7 @@ def test_a_two_unnamed_direction_list_is_not_stereogenic():
     assert not unit['stereogenic'] and not unit['parity']
 
 
-def test_a_bond_stereo_group_is_refused_by_the_legacy_encoder_unless_dropped():
+def test_a_bond_stereo_group_is_reported_by_the_legacy_encoder_unless_dropped():
     """`stereo_groups` is the one drop key, so it covers an axis's collection too."""
     mol = read_smiles('OC(=O)/C=C/C=C/C(=O)O')
     pairs = [(b.n, b.m) for b in mol.bonds()
@@ -1405,9 +1432,12 @@ def test_a_bond_stereo_group_is_refused_by_the_legacy_encoder_unless_dropped():
     assert len(pairs) == 2, pairs
     with mol.edit() as e:
         e.set_bond_stereo_group(pairs[0][0], pairs[0][1], 3, 1)
+    assert mol.pack(compressed=False, version=2)
+    assert [r.rule for r in mol.log] == ['pach:stereo-groups-lost']
     with raises(ValueError, match='stereo_groups'):
-        mol.pack(compressed=False, version=2)
+        mol.pack(compressed=False, version=2, strict=True)
     mol.pack(compressed=False, version=2, drop=['stereo_groups'])  # must not raise
+    assert len(mol.log) == 1
 
 
 # ----- compatibility statement: what every stored record declares -----

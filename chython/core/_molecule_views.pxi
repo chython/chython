@@ -68,6 +68,15 @@ cdef class Atom:
         return self._ptr().element == 0
 
     @property
+    def is_metal(self):
+        """True for the 93 elements `[M]` matches -- `el_is_metal`, so the two cannot disagree.
+
+        Every metalloid answers False, B Si Ge As Se Sb Te among them: the boundary is `[M]`'s, drawn
+        once, and this property does not get a second one.  So does the R marker, which has no element.
+        """
+        return el_is_metal(self._ptr().element)
+
+    @property
     def r_index(self):
         """The R index, or 0 for a plain R and for every element."""
         return at_r_index(self._ptr())

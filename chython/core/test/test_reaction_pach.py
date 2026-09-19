@@ -406,30 +406,40 @@ def test_more_than_255_molecules_on_a_side_is_refused_by_name():
 
 
 # --------------------------------------------------------------------------------------------------
-# the writer refuses to lose things quietly, exactly as the molecule writer does
+# the writer never loses anything quietly, exactly as the molecule writer does: the record is written
+# and every field with no slot is named on the log, at stage `pach`.  `strict=True` asks for a refusal.
 # --------------------------------------------------------------------------------------------------
 
-def test_the_writer_refuses_reaction_meta_and_title_and_takes_a_waiver():
+def test_the_writer_reports_reaction_meta_and_title_and_takes_a_waiver():
     rxn = _reaction(AMIDATION)
     rxn.meta['SOURCE'] = 'a textbook'
+    assert ReactionContainer.unpack(rxn.pack()).meta == {}
+    assert [r.rule for r in rxn.log] == ['pach:meta-lost']
     with pytest.raises(ValueError) as err:
-        rxn.pack()
+        rxn.pack(strict=True)
     assert 'meta' in str(err.value)
     assert ReactionContainer.unpack(rxn.pack(drop=['meta'])).meta == {}
+    assert len(rxn.log) == 1
 
     rxn = _reaction(AMIDATION)
     rxn.set_title(b'acetamide from acetic acid')
+    assert ReactionContainer.unpack(rxn.pack()).title == ''
+    assert [r.rule for r in rxn.log] == ['pach:title-lost']
     with pytest.raises(ValueError) as err:
-        rxn.pack()
+        rxn.pack(strict=True)
     assert 'title' in str(err.value)
     assert ReactionContainer.unpack(rxn.pack(drop=['title'])).title == ''
 
 
-def test_a_molecule_level_refusal_reaches_the_caller_and_names_the_field():
+def test_a_molecule_level_report_lands_on_that_molecule_and_names_the_field():
     rxn = _reaction(AMIDATION)
-    rxn.reactants[0].set_title(b'acetic acid')
+    mol = rxn.reactants[0]
+    mol.set_title(b'acetic acid')
+    assert len(ReactionContainer.unpack(rxn.pack())) == 5
+    assert [r.rule for r in mol.log] == ['pach:title-lost']
+    assert not rxn.log, 'the field was read off the component, so that is whose log says so'
     with pytest.raises(ValueError) as err:
-        rxn.pack()
+        rxn.pack(strict=True)
     assert 'title' in str(err.value)
     assert len(ReactionContainer.unpack(rxn.pack(drop=['title']))) == 5
 
@@ -664,8 +674,12 @@ def test_version_5_carries_a_stereo_group_that_version_1_cannot():
     alanine = read_smiles('C[C@H](N)C(=O)O')
     alanine.set_stereo_group(alanine.atom_numbers[1], STEREO_AND, 1)
     rxn = ReactionContainer(reactants=(read_smiles('CCO'),), products=(alanine,))
+    # The version 2 molecule record a version 1 reaction holds has no field for one, so that record is
+    # written without it and the collection is on the molecule's log.
+    assert rxn.pack(version=1)
+    assert [r.rule for r in alanine.log] == ['pach:stereo-groups-lost']
     with pytest.raises(ValueError, match='stereo_groups'):
-        rxn.pack(version=1)                            # the version 2 record has no field for one
+        rxn.pack(version=1, strict=True)
     back = ReactionContainer.unpack(rxn.pack())
     product = back.products[0]
     assert product.stereo_group_of(product.atom_numbers[1]) == (STEREO_AND, 1)

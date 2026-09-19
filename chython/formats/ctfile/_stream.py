@@ -262,8 +262,7 @@ class SDFRead(_FileBacked):
 class SDFWrite(_FileBacked):
     """MDL V2000 SDF writer.  ``write(mol)`` per record; ``with`` works; a path or a buffer works.
 
-    A molecule holding an aromatic bond is refused rather than kekulised on the caller's behalf; the
-    message names ``kekule()``.  Use :class:`ESDFWrite` for V3000.
+    Use :class:`ESDFWrite` for V3000.
     """
     __slots__ = ()
     _stamp = V2000_STAMP
@@ -300,8 +299,7 @@ class ESDFWrite(SDFWrite):
     V2000 cannot spell at all.  A large charge is not one of them: V2000 writes 0 in the ccc column
     and the truth in `M  CHG`.  `needs_v3000()` is that list as a predicate.
 
-    It does not buy an aromatic bond: order ``4`` in a structure record states a query, so
-    ``emit_v3000`` refuses it exactly as V2000 does and points at ``kekule()``.
+    An aromatic bond is not one either: both versions write order ``4``.
     """
     __slots__ = ()
     _stamp = V3000_STAMP

@@ -130,43 +130,69 @@ cdef Py_ssize_t _pach3_length(const unsigned char *data, Py_ssize_t length) noex
                        (data[1] & PACH3_FLAG_MAP) != 0)
 
 
-cdef int _pach3_refuse_losses(MoleculeContainer mol, uint32_t drop_mask) except -1:
-    """Everything the arena holds that versions 3 and 4 have no field for, refused by name.
+cdef int _pach3_report_losses(MoleculeContainer mol, uint32_t drop_mask, bint strict) except -1:
+    """Everything the arena holds that versions 3 and 4 have no field for, named one field at a time.
 
     A conformer set is one of them: the coordinate block is 2D display geometry, so a 3D conformer is
     a loss this asks about rather than a coordinate it could write. Map numbers, wedges, atom and bond
     stereo groups and stereo each have a block of their own and are not asked about here.
+
+    `_pach_loss` is the destination and the strict switch; see it for why a writer logs.
     """
     cdef Structure structure = mol._structure
     cdef atom_t *atoms = structure.atoms()
     cdef halfedge_t *edges = csr_edges(structure)
-    cdef uint32_t i, k
+    cdef uint32_t i, k, hits
+    cdef uint32_t first = 0
     if not (drop_mask & PACH_DROP_CIP):
+        hits = 0
         for i in range(structure.header.atom_count):
             if atoms[i].reserved & ATOM_CIP_MASK:
-                raise ValueError('atom %d carries a cip descriptor and the pach format has no field '
-                                 'for one; pass drop=[\'cip\'] to write the record without it'
-                                 % atoms[i].n)
+                if not hits:
+                    first = i
+                hits += 1
+        if hits:
+            _pach_loss(mol, strict, 'pach:cip-lost',
+                       'atom %d carries a cip descriptor and the pach format has no field for one; '
+                       'pass drop=[\'cip\'] to write the record without it' % atoms[first].n,
+                       'the pach format has no cip field, so %d atom descriptor(s) were not written; '
+                       'assign_cip() recomputes them' % hits)
+        hits = 0
         for k in range(2 * structure.header.bond_count):
             if edges[k].flags & HE_CIP_MASK:
-                raise ValueError('a bond carries a cip descriptor and the pach format has no field '
-                                 'for one; pass drop=[\'cip\'] to write the record without it')
+                hits += 1
+        if hits:
+            _pach_loss(mol, strict, 'pach:cip-lost',
+                       'a bond carries a cip descriptor and the pach format has no field for one; '
+                       'pass drop=[\'cip\'] to write the record without it',
+                       'the pach format has no cip field, so %d bond descriptor(s) were not written'
+                       % (hits // 2))
     if not (drop_mask & PACH_DROP_SGROUPS) and structure_sgroup_count(structure):
-        raise ValueError('this molecule carries %d sgroups and the pach format has no field for them; '
-                         'pass drop=[\'sgroups\'] to write the record without them'
-                         % structure_sgroup_count(structure))
+        _pach_loss(mol, strict, 'pach:sgroups-lost',
+                   'this molecule carries %d sgroups and the pach format has no field for them; pass '
+                   'drop=[\'sgroups\'] to write the record without them'
+                   % structure_sgroup_count(structure),
+                   'the pach format has no S-group field, so %d sgroup(s) were not written'
+                   % structure_sgroup_count(structure))
     if not (drop_mask & PACH_DROP_CONFORMERS) and structure_has(structure, SEG_CONFORMERS):
-        raise ValueError('this molecule carries 3D conformers and the pach format holds 2D display '
-                         'coordinates only; pass drop=[\'conformers\'] to write the record without '
-                         'them, or to_bytes() to keep them')
+        _pach_loss(mol, strict, 'pach:conformers-lost',
+                   'this molecule carries 3D conformers and the pach format holds 2D display '
+                   'coordinates only; pass drop=[\'conformers\'] to write the record without them, or '
+                   'to_bytes() to keep them',
+                   'the pach format holds 2D display coordinates only, so %d conformer(s) were not '
+                   'written; to_bytes() keeps them' % structure_conformer_count(structure))
     if not (drop_mask & PACH_DROP_TITLE) and len(blob_bytes(structure, SEG_OPAQUE_BLOB, 0)):
-        raise ValueError('this molecule carries a title and the pach format has no text of any kind; '
-                         'pass drop=[\'title\'] to write the record without it')
+        _pach_loss(mol, strict, 'pach:title-lost',
+                   'this molecule carries a title and the pach format has no text of any kind; pass '
+                   'drop=[\'title\'] to write the record without it',
+                   'the pach format has no text of any kind, so the title was not written')
     # `_meta` and not `meta`, so asking the question does not create the dict it is asking about
     if not (drop_mask & PACH_DROP_META) and mol._meta:
-        raise ValueError('this molecule carries %d metadata key(s) and the pach format has no field '
-                         'for any of them; pass drop=[\'meta\'] to write the record without them'
-                         % len(mol._meta))
+        _pach_loss(mol, strict, 'pach:meta-lost',
+                   'this molecule carries %d metadata key(s) and the pach format has no field for any '
+                   'of them; pass drop=[\'meta\'] to write the record without them' % len(mol._meta),
+                   'the pach format has no metadata field, so %d key(s) were not written'
+                   % len(mol._meta))
     return 0
 
 
@@ -246,8 +272,8 @@ cdef inline void _pach3_unit_frame(stereo_unit_t *u, uint32_t *want) noexcept no
                 want[base + 1] = u.refs[base + 1]
 
 
-cdef int _pach3_stereo_record(Structure structure, stereo_unit_t *u, uint8_t parity,
-                              unsigned char *out) except -1:
+cdef int _pach3_stereo_record(MoleculeContainer mol, Structure structure, stereo_unit_t *u,
+                              uint8_t parity, unsigned char *out, bint strict) except -1:
     """One nine-byte stereo record, or nothing written and 0 returned when the unit is unconfigured.
 
         bytes 0-1  slot0    bytes 2-3  slot1    bytes 4-5  slot2    bytes 6-7  slot3
@@ -286,16 +312,24 @@ cdef int _pach3_stereo_record(Structure structure, stereo_unit_t *u, uint8_t par
         # states that all four `_stereo_emit` sites pass `n_refs=4` and that the one site which does
         # not, `_stereo_anchor_collision_probe`, has its unit refused before translation.  That is an
         # invariant of another file over a table this one only reads, so the guard states it here.
-        raise ValueError('the stereo unit anchored at atom %d orders %d reference direction(s) and a '
-                         'parity is a fact about four; pass drop=[\'stereo\'] to write the record '
-                         'without it' % (atoms[anchor].n, u.n_refs))
+        _pach_loss(mol, strict, 'pach:stereo-lost',
+                   'the stereo unit anchored at atom %d orders %d reference direction(s) and a parity '
+                   'is a fact about four; pass drop=[\'stereo\'] to write the record without it'
+                   % (atoms[anchor].n, u.n_refs),
+                   'the stereo unit anchored at atom %d orders %d reference direction(s) and a parity '
+                   'is a fact about four, so it was not written' % (atoms[anchor].n, u.n_refs))
+        return 0
     _pach3_unit_frame(u, want)
     if kind == SU_TETRA:
         if want[2] == SU_NO_REF:
-            raise ValueError('the tetrahedral centre at atom %d names %d direction(s) with an atom of '
-                             'their own and the pach record states three; pass drop=[\'stereo\'] to '
-                             'write the record without it'
-                             % (atoms[anchor].n, 1 if want[1] == SU_NO_REF else 2))
+            _pach_loss(mol, strict, 'pach:stereo-lost',
+                       'the tetrahedral centre at atom %d names %d direction(s) with an atom of their '
+                       'own and the pach record states three; pass drop=[\'stereo\'] to write the '
+                       'record without it' % (atoms[anchor].n, 1 if want[1] == SU_NO_REF else 2),
+                       'the tetrahedral centre at atom %d names %d direction(s) with an atom of their '
+                       'own and the pach record states three, so it was not written'
+                       % (atoms[anchor].n, 1 if want[1] == SU_NO_REF else 2))
+            return 0
         _p3_put_u16(out, anchor)
         _p3_put_u16(out + 2, want[0])
         _p3_put_u16(out + 4, want[1])
@@ -304,16 +338,23 @@ cdef int _pach3_stereo_record(Structure structure, stereo_unit_t *u, uint8_t par
         # A list with TWO unnamed directions has no second slot to name and, per ruling F41
         # (`_list_has_two_unnamed`), is not stereogenic -- so a configured unit cannot present one.
         if want[0] == SU_NO_REF or want[2] == SU_NO_REF:
-            raise ValueError('the stereo unit anchored at atom %d has a direction list with no named '
-                             'direction, so the pach record has nothing to state it against; pass '
-                             'drop=[\'stereo\'] to write the record without it' % atoms[anchor].n)
+            _pach_loss(mol, strict, 'pach:stereo-lost',
+                       'the stereo unit anchored at atom %d has a direction list with no named '
+                       'direction, so the pach record has nothing to state it against; pass '
+                       'drop=[\'stereo\'] to write the record without it' % atoms[anchor].n,
+                       'the stereo unit anchored at atom %d has a direction list with no named '
+                       'direction, so it was not written' % atoms[anchor].n)
+            return 0
         if kind == SU_ALLENE:
             # The anchor is the chain's CENTRE and the record names the two ENDS, so the ends come
             # from the chain and which end leads comes from which one owns the first named direction.
             if not _pach_allene_ends(ptr, edges, anchor, terms, inwards):
-                raise ValueError('atom %d anchors an allene whose chain this molecule does not hold; '
-                                 'pass drop=[\'stereo\'] to write the record without it'
-                                 % atoms[anchor].n)
+                _pach_loss(mol, strict, 'pach:stereo-lost',
+                           'atom %d anchors an allene whose chain this molecule does not hold; pass '
+                           'drop=[\'stereo\'] to write the record without it' % atoms[anchor].n,
+                           'atom %d anchors an allene whose chain this molecule does not hold, so it '
+                           'was not written' % atoms[anchor].n)
+                return 0
             if csr_find_at(ptr, edges, terms[0], want[0]) is not NULL:
                 owner_a = terms[0]
                 owner_b = terms[1]
@@ -324,9 +365,13 @@ cdef int _pach3_stereo_record(Structure structure, stereo_unit_t *u, uint8_t par
             owner_a = anchor
             owner_b = stereo_unit_partner(structure, u)
             if owner_b == SU_NO_REF:
-                raise ValueError('the stereo unit anchored at atom %d names two atoms and the second '
-                                 'is not in this molecule; pass drop=[\'stereo\'] to write the record '
-                                 'without it' % atoms[anchor].n)
+                _pach_loss(mol, strict, 'pach:stereo-lost',
+                           'the stereo unit anchored at atom %d names two atoms and the second is not '
+                           'in this molecule; pass drop=[\'stereo\'] to write the record without it'
+                           % atoms[anchor].n,
+                           'the stereo unit anchored at atom %d names a second atom this molecule does '
+                           'not hold, so it was not written' % atoms[anchor].n)
+                return 0
         _p3_put_u16(out, owner_a)
         _p3_put_u16(out + 2, want[0])
         _p3_put_u16(out + 4, owner_b)
@@ -336,13 +381,15 @@ cdef int _pach3_stereo_record(Structure structure, stereo_unit_t *u, uint8_t par
     return 1
 
 
-cdef int _pach3_stereo_block(Structure structure, unsigned char *out, uint32_t *count) except -1:
+cdef int _pach3_stereo_block(MoleculeContainer mol, Structure structure, unsigned char *out,
+                             uint32_t *count, bint strict) except -1:
     """Every configured unit as a nine-byte record, into room for `unit_count` of them.
 
-    Called only when `stereo` was not dropped, so a unit this format cannot state is a refusal here
-    rather than a skip -- `drop=['stereo']` is what a caller who wants the record anyway passes.  The
-    table holds unconfigured units too, which is why the header's count is what was WRITTEN.  One unit
-    per anchor, so that count cannot exceed the atom count and the header's u16 field cannot fill.
+    Called only when `stereo` was not dropped, so a unit this format cannot state is logged here and
+    skipped -- `drop=['stereo']` is the caller saying so in advance, and `strict=True` the caller who
+    wants the refusal.  The table holds unconfigured units too, which is why the header's count is what
+    was WRITTEN.  One unit per anchor, so that count cannot exceed the atom count and the header's u16
+    field cannot fill.
     """
     cdef stereo_unit_t *units = structure_stereo_units(structure)
     cdef stereo_unit_t *u
@@ -351,14 +398,14 @@ cdef int _pach3_stereo_block(Structure structure, unsigned char *out, uint32_t *
     cdef uint32_t written = 0
     for i in range(total):
         u = units + i
-        written += <uint32_t> _pach3_stereo_record(structure, u,
+        written += <uint32_t> _pach3_stereo_record(mol, structure, u,
                                                   structure_parity_at(structure, u.anchor),
-                                                  out + written * PACH3_STEREO_LEN)
+                                                  out + written * PACH3_STEREO_LEN, strict)
     count[0] = written
     return 0
 
 
-cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask):
+cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask, bint strict):
     """One version 3 or version 4 pach record, uncompressed.
 
     Version 3 when the molecule has coordinates and `coordinates` was not dropped, else version 4.
@@ -388,7 +435,7 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask):
     cdef bytes out
 
     mol._require_clean()
-    _pach3_refuse_losses(mol, drop_mask)
+    _pach3_report_losses(mol, drop_mask, strict)
     # DERIVED and unmarked, and it can reallocate, so every pointer below is taken after it.  The
     # decoder asks the same question, and the two directions have to ask the same one or a stored
     # configuration means two things.
@@ -409,6 +456,24 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask):
     xy = NULL
     if want_xy:
         xy = structure_xy(structure)
+        # THE RANGE IS ASKED BEFORE THE VERSION BYTE IS CHOSEN, not inside the atom loop: a drawing
+        # outside +/-838.8607 costs the record its coordinates, which makes it a version 4 record, and
+        # that is a decision the header has to be able to state.  One sentence names the first atom past
+        # the field and the repair, because the whole plane moves together.
+        for i in range(n):
+            if xy[i].x < -PACH3_XY_LIMIT or xy[i].x > PACH3_XY_LIMIT \
+                    or xy[i].y < -PACH3_XY_LIMIT or xy[i].y > PACH3_XY_LIMIT:
+                _pach_loss(mol, strict, 'pach:coordinates-lost',
+                           'atom %d sits at (%r, %r) and the pach coordinate field reaches '
+                           '+/-838.8607; pass drop=[\'coordinates\'] to write the record without a '
+                           'drawing' % (atoms[i].n, xy_read_x(&xy[i]), xy_read_y(&xy[i])),
+                           'atom %d sits at (%r, %r) and the pach coordinate field reaches '
+                           '+/-838.8607, so the record was written without a drawing; recenter2d() '
+                           'moves a far-away plane onto the origin and clean2d(force=True) replaces it'
+                           % (atoms[i].n, xy_read_x(&xy[i]), xy_read_y(&xy[i])))
+                want_xy = False
+                xy = NULL
+                break
     unit_count = 0
     if not (drop_mask & PACH_DROP_STEREO):
         unit_count = structure_stereo_unit_count(structure)
@@ -463,12 +528,8 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask):
         for i in range(n):
             _pach3_put_atom(&atoms[i], buf + at)
             if want_xy:
-                if xy[i].x < -PACH3_XY_LIMIT or xy[i].x > PACH3_XY_LIMIT \
-                        or xy[i].y < -PACH3_XY_LIMIT or xy[i].y > PACH3_XY_LIMIT:
-                    raise ValueError('atom %d sits at (%r, %r) and the pach coordinate field reaches '
-                                     '+/-838.8607; pass drop=[\'coordinates\'] to write the record '
-                                     'without a drawing'
-                                     % (atoms[i].n, xy_read_x(&xy[i]), xy_read_y(&xy[i])))
+                # In range by construction: `want_xy` is only still set because the pre-pass above
+                # checked every atom against `PACH3_XY_LIMIT`.
                 _p3_put_i24(buf + at + 3, xy[i].x)
                 _p3_put_i24(buf + at + 6, xy[i].y)
             at += PACH3_ATOM_XY_LEN if want_xy else PACH3_ATOM_FLAT_LEN
@@ -508,7 +569,7 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask):
                 at += PACH3_BOND_LEN
         stereo_count = 0
         if unit_count:
-            _pach3_stereo_block(structure, buf + at, &stereo_count)
+            _pach3_stereo_block(mol, structure, buf + at, &stereo_count, strict)
             _p3_put_u16(buf + 6, stereo_count)
             at += <Py_ssize_t> stereo_count * PACH3_STEREO_LEN
         # ATOM ENHANCED STEREO, three bytes an entry and only for an atom that carries one: `atom u16`
@@ -1306,7 +1367,8 @@ def pach_load(data, *, compressed=None):
     return _pach_decode(&view[0], view.shape[0])
 
 
-def pach_dump(MoleculeContainer mol not None, *, bint compressed=True, drop=None, version=None):
+def pach_dump(MoleculeContainer mol not None, *, bint compressed=True, drop=None, version=None,
+              bint strict=False):
     """Write one pach record.  `version` selects the layout.
 
     `None` is version 3 when the molecule has coordinates and version 4 when it does not, which is the
@@ -1320,11 +1382,23 @@ def pach_dump(MoleculeContainer mol not None, *, bint compressed=True, drop=None
     recorded, and a caller who passed `drop=['coordinates']`, because a waiver named at the door wins
     over the version asked for beside it.
 
-    Raises `ValueError` naming any field the arena holds and the chosen version cannot carry.  `drop`
-    waives those refusals: an iterable of field names, or `'*'` for all of them.  The names are
+    THE RECORD IS WRITTEN AND THE MOLECULE IS TOLD what it does not carry: one sentence per field on
+    `mol.log` at stage `pach`, with a count.  A serialiser is not an answer boundary, so a loop over
+    forty thousand records is not stopped by a field one of them holds -- and `pack()` is no different,
+    forwarding here.  `strict=True` restores the refusal for a caller who wants a record to be
+    all-or-nothing, and its message names the `drop=` waiver.
+
+    `drop` says in advance that a field is not wanted, and a waived field produces no log line because
+    the caller already said it: an iterable of field names, or `'*'` for all of them.  The names are
     `map_number`, `title`, `sgroups`, `cip`, `wedges`, `stereo_groups`, `stereo`, `meta`,
     `coordinates` and `conformers`; `conformers` is asked only by versions 3 and 4.  An unrecognised
     name is refused rather than ignored.
+
+    `ValueError` WHATEVER `strict` SAYS for a value outside the FORMAT's own field, because no legal
+    record exists to inform anybody about: a charge outside -4..+11, an isotope more than 31 mass
+    numbers from its element's reference, more than 65535 atoms or bonds, and version 2's narrower set.
+    A coordinate past +/-838.8607 is NOT one of those -- the record is written without a drawing and
+    says so, naming `recenter2d()`.
     """
     cdef uint32_t mask = 0
     cdef object name
@@ -1344,11 +1418,11 @@ def pach_dump(MoleculeContainer mol not None, *, bint compressed=True, drop=None
     # would validate the name and then discard it, and the record would come back version 3 with the
     # drawing the caller waived.
     if version is None or version == PACH3_VERSION_XY:
-        raw = _pach3_encode(mol, mask)
+        raw = _pach3_encode(mol, mask, strict)
     elif version == 2:
-        raw = _pach_encode(mol, mask & 0xff)
+        raw = _pach_encode(mol, mask & 0xff, strict)
     elif version == PACH3_VERSION_FLAT:
-        raw = _pach3_encode(mol, mask | PACH_DROP_COORDINATES)
+        raw = _pach3_encode(mol, mask | PACH_DROP_COORDINATES, strict)
     else:
         raise ValueError('%r is not a writable pach version; they are 2, 3, 4 and None for 3-or-4 '
                          'by whether the molecule has coordinates' % (version,))

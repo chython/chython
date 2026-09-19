@@ -87,6 +87,27 @@ It is a method of ``QueryContainer``, which ``smarts()`` returns:
 
     assert filtered and len(every) >= len(filtered)
 
+``mol.match_any(queries)`` is the other shape of the same walk: every atom covered by **any** of the
+queries, as a set of stable ids. One query or an iterable of them, the singular call being the common one:
+
+.. testcode::
+
+    paracetamol = smiles('CC(=O)Nc1ccc(O)cc1')
+
+    print(sorted(paracetamol.match_any(smarts('[N;D2]'))))
+    print(sorted(paracetamol.match_any([smarts('[O;D1]'), smarts('[N]')])))
+    print(paracetamol.match_any(smarts('[Br]')))
+
+.. testoutput::
+
+    [4]
+    [3, 4, 9]
+    set()
+
+A SCREEN, NOT A COUNT: every mapping of every query is walked, so an atom two queries both cover appears
+once and which query matched it is not in the answer -- ``get_mapping`` per query is that question. An
+empty ``queries`` gives an empty set, a union of nothing being empty.
+
 
 SMARTS Queries
 --------------

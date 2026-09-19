@@ -604,6 +604,32 @@ def test_a_suppressed_tail_writes_no_group_and_still_logs_nothing():
     assert log == []
 
 
+def test_a_stereo_free_spelling_writes_no_collection_either():
+    """`!s` WRITES NO `|&1:|`.  A collection is an assertion about configuration, so a string that
+    names no centre's configuration must not say "these two axes are one racemate" beside it.
+
+    It is also what makes `format(mol, '!s')` a key for the CONSTITUTION: a molecule and its
+    collection-free twin are one string, which they would not be if the tail leaked the memberships.
+    """
+    log = []
+    grouped = _diene_with_bond_groups()
+    text = write_smiles(grouped, '!s', log=log)
+    assert text == 'O=C(C=CC=CC(=O)O)O', text
+    assert log == []
+    assert text == write_smiles(read_smiles('OC(=O)/C=C/C=C/C(=O)O'), '!s')
+    assert text == write_smiles(read_smiles('OC(=O)C=CC=CC(=O)O'), '!s')
+
+
+def test_the_collection_is_suppressed_at_an_atom_centre_too_and_whatever_its_kind():
+    """One switch, one rule: the suppression is in `smw_prepare` and not per unit kind, so an ABS, an
+    OR and an AND all come out of `!s` as the same constitution string."""
+    flat = write_smiles(read_smiles('CC(N)C(=O)O'), '!s')
+    for kind, group in ((1, 0), (2, 1), (3, 1)):
+        mol = read_smiles('C[C@H](N)C(=O)O')
+        mol.set_stereo_group(2, kind, group)
+        assert write_smiles(mol, '!s') == flat, (kind, group)
+
+
 def test_a_reaction_carries_a_bond_group_in_its_components_tail():
     """One tail per reaction, and a component's axis group reaches it through the component's atoms."""
     rxn = ReactionContainer([_diene_with_bond_groups()], [], [read_smiles('CCO')])

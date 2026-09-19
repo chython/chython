@@ -33,7 +33,7 @@ from chython import mol, saturate, smiles
 from chython.chemistry import calc_implicit, fix_resonance
 from chython.core._core import (_set_resonance_fn, _set_sgroup_fns, detached_smiles,
                                 molecule_to_inchi, molecule_to_inchikey)
-from chython.formats import add_data_sgroup, data_sgroups
+from chython.formats import add_data_sgroup, data_sgroups, stereo_labels
 
 
 #: A four-carbon chain WITH 2D COORDINATES, which the S-group tests need: a `FIELDDISP` anchor is the
@@ -188,13 +188,18 @@ def test_the_data_label_method_appends_and_survives_both_ctab_versions():
 
 
 def test_the_data_label_methods_name_the_package_that_registers_them():
+    """The setter replaces the whole set, so the restore names every function the hook carries -- one
+    left out is unregistered for the rest of the process and only fails in some orderings."""
     molecule = mol(BLOCK_2D)
     try:
         _set_sgroup_fns()
-        for call in (lambda: molecule.add_data_sgroup('X', 'y'), lambda: molecule.data_sgroups()):
+        for call in (lambda: molecule.add_data_sgroup('X', 'y'), lambda: molecule.data_sgroups(),
+                     lambda: molecule.stereo_labels()):
             with raises(ImportError) as e:
                 call()
             assert 'chython.formats' in str(e.value)
     finally:
-        _set_sgroup_fns(add_data_sgroup=add_data_sgroup, data_sgroups=data_sgroups)
+        _set_sgroup_fns(add_data_sgroup=add_data_sgroup, data_sgroups=data_sgroups,
+                        stereo_labels=stereo_labels)
     assert molecule.data_sgroups() == []
+    assert molecule.stereo_labels() == []

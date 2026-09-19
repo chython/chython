@@ -119,8 +119,14 @@ V3000           both       both       ``MDLV30/STE*`` with ``ATOMS=``, ``MDLV30/
                                       ``BONDS=``; an axis is named by its chain midpoint, an atom
                                       for an allene and a bond otherwise, and an AND or OR
                                       collection clears the record's chiral flag
-V2000           neither    neither    the chiral flag is one bit for the whole record, with no way
-                                      to state which collection an atom is in
+V2000           label      neither    the chiral flag is one bit for the whole record, with no way
+                                      to state which collection an atom is in.  A ``STEREOLABEL``
+                                      data S-group states the partition outside the spec and the
+                                      reader promotes one; the writer states no collection of its
+                                      own and logs ``v2000:enhanced-stereo-not-written``, while a
+                                      label already on the molecule is written as the data record it
+                                      is -- so a file that came in this way goes back out and reads
+                                      the same (:doc:`io`)
 pach v3/v4      both       both       an atom-group block and a bond-group block, split by owner
                                       count, one namespace
 pach v0/v2      neither    neither    the format is frozen; ``pack(version=2)`` raises
@@ -234,6 +240,23 @@ Rule                                           When
 ``smiles:stereo-group-renumbered``             the id is outside 1..63, renumbered to the lowest free id
 ``smiles:stereo-group-refused``                the setter refused the group
 =============================================  ==========================================================
+
+A ``STEREOLABEL`` promotion is a seal-time repair rather than a parse, so its two records land in
+``molecule.log``:
+
+=============================================  ==========================================================
+Rule                                           When
+=============================================  ==========================================================
+``sgroup:stereo-label-promoted``               a label named a collection and the record stated none, so
+                                               the collection was created from it
+``sgroup:stereo-label-not-promoted``           the label was read and left as data: the record already
+                                               states a collection, or the word names none (``E``, ``&``),
+                                               or the labelled atom carries no configuration for a
+                                               membership to be about
+=============================================  ==========================================================
+
+``clean_stereo_groups()`` drops every membership and keeps every parity, which is the call for a caller who
+wants the configurations a promotion found and not the partition it inferred.
 
 The MRV sample carries an axis through a format whose member list is atom-only:
 

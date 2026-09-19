@@ -69,7 +69,7 @@ def smiles(data, log=None, *, spec=''):
     return read_smiles(data, log)
 
 
-def pach(data, *, log=None, compressed=None, drop=None, version=None):
+def pach(data, *, log=None, compressed=None, drop=None, version=None, strict=False):
     """A container from a pach record, or a pach record from a container.
 
     Import is :func:`unpach`, which reads a molecule record, a reaction record and `to_bytes` output
@@ -80,7 +80,8 @@ def pach(data, *, log=None, compressed=None, drop=None, version=None):
         a `ValueError` when the buffer disagrees.  On export `None` and `True` both compress, which is
         what `pack()` does, and `False` writes the raw record.
     :param drop: export only; the fields whose loss is waived, or `'*'`.  Without it a field the
-        format cannot carry is a `ValueError` naming it.
+        format cannot carry is written off to the container's log, naming it.
+    :param strict: export only; refuse the record instead of logging what it cannot carry.
     :param version: export only; `None` for the current layout -- 3 with coordinates and 4 without for
         a molecule, 5 for a reaction -- or a version outright.
     :param log: import only; see :func:`unpach`.
@@ -89,10 +90,11 @@ def pach(data, *, log=None, compressed=None, drop=None, version=None):
     back, so a store may hold both.
     """
     if isinstance(data, MoleculeContainer):
-        return pach_dump(data, compressed=compressed is not False, drop=drop, version=version)
+        return pach_dump(data, compressed=compressed is not False, drop=drop, version=version,
+                         strict=strict)
     if isinstance(data, ReactionContainer):
         return reaction_pach_dump(data, compressed=compressed is not False, drop=drop,
-                                  version=version)
+                                  version=version, strict=strict)
     if isinstance(data, QueryContainer):
         raise TypeError('pach has no record for a query; a pattern is not a stored structure')
     return unpach(data, compressed=compressed, log=log)

@@ -80,7 +80,7 @@ from ._core import (H_UNKNOWN, MoleculeContainer, TensorEncoding, pach_dump, pac
                     _reaction_depict_fns, _reaction_draw_fns,
                     _reaction_attention_fn, _reaction_interop_fn, _reaction_reconstruct_fn,
                     _set_reaction_factory)
-from ._log import Log
+from ._log import LOST, Log, LogRecord
 from ._reaction_passes import (reaction_canonicalize, reaction_clean_isotopes, reaction_clean_stereo,
                                reaction_contract_ions, reaction_explicify_hydrogens,
                                reaction_implicify_hydrogens, reaction_kekule, reaction_neutralize,
@@ -788,7 +788,7 @@ class ReactionContainer:
 
     # --- the wire format -------------------------------------------------------------------------
 
-    def pack(self, *, compressed=True, drop=None, version=None) -> bytes:
+    def pack(self, *, compressed=True, drop=None, version=None, strict=False) -> bytes:
         """One reaction pach record.  See :func:`reaction_pach_dump`, which this forwards to.
 
         `version` is None for the current record, 5, or 1 for the legacy one.  Version 1 moves each
@@ -796,9 +796,12 @@ class ReactionContainer:
         version 5's molecule records carry the field themselves.
 
         `pack`/`unpack`/`drop` and no `check=`: the naming owes its consistency to the molecule side
-        of this release, where `MoleculeContainer.pack` takes `drop=` and refuses by field name.
+        of this release, where `MoleculeContainer.pack` takes the same `drop=` and `strict=`.
+
+        THE RECORD IS WRITTEN AND EVERY LOSS IS LOGGED -- the reaction's own on `self.log`, each
+        molecule's on that molecule's log, at stage `pach`.  `strict=True` raises on the first instead.
         """
-        return reaction_pach_dump(self, compressed=compressed, drop=drop, version=version)
+        return reaction_pach_dump(self, compressed=compressed, drop=drop, version=version, strict=strict)
 
     @staticmethod
     def unpack(data, *, compressed=None) -> 'ReactionContainer':
@@ -1008,7 +1011,7 @@ def _resolve_drop(drop):
     return names
 
 
-def _pach_molecule_record(mol, index, drop):
+def _pach_molecule_record(mol, index, drop, strict):
     """One molecule's pach bytes with its map numbers moved into the atom-number field."""
     numbers = [(a.n, a.map_number) for a in mol.atoms()]
     mapped = [n for _, n in numbers if n]
@@ -1032,30 +1035,44 @@ def _pach_molecule_record(mol, index, drop):
         mol.remap(dict(numbers))
     # 'map_number' unconditionally: the relabelled copy still carries the field, and an unmapped
     # molecule has nothing there for the waiver to waive.
-    return pach_dump(mol, compressed=False, drop=sorted(drop | {'map_number'}), version=2)
+    return pach_dump(mol, compressed=False, drop=sorted(drop | {'map_number'}), version=2,
+                     strict=strict)
 
 
-def reaction_pach_dump(rxn: 'ReactionContainer', *, compressed=True, drop=None, version=None) -> bytes:
+def reaction_pach_dump(rxn: 'ReactionContainer', *, compressed=True, drop=None, version=None,
+                       strict=False) -> bytes:
     """Write one reaction pach record.  `ReactionContainer.pack` forwards here.
 
     `version` is `None` for the current record, 5, and `1` for the legacy one.  Version 5's molecules
     carry their own map numbers; version 1 moves them into the atom-number field, which has no
     spelling for a partially mapped molecule and refuses one by name.
 
-    Raises `ValueError` naming any field the container holds and the format cannot -- the reaction's
-    `meta` and `title`, and everything `pach_dump` refuses on each molecule.  `drop` waives those:
-    an iterable of names, or `'*'` for all of them.  The names are `pach_dump`'s nine plus `meta`.
+    THE RECORD IS WRITTEN AND EVERY LOSS IS LOGGED -- the reaction's own `meta` and `title` on
+    `rxn.log` at stage `pach`, each molecule's on that molecule's log, by `pach_dump`.  `strict=True`
+    refuses instead, at both levels.  `drop` says in advance that a field is not wanted and produces no
+    log line: an iterable of names, or `'*'` for all of them.  The names are `pach_dump`'s ten plus
+    `meta`.
 
-    Also raises when a side holds more than 255 molecules, because the count field is a uint8.
+    Raises whatever `strict` says when a side holds more than 255 molecules, because the count field is
+    a uint8 and there is no legal record to write, and for the version 1 mapping refusals below.
     """
     names = _resolve_drop(drop)
     if 'meta' not in names and rxn._meta:
-        raise ValueError('the reaction carries %d metadata key(s) and the pach format has no field '
-                         'for any of them; pass drop=[\'meta\'] to write the record without them'
-                         % len(rxn._meta))
+        if strict:
+            raise ValueError('the reaction carries %d metadata key(s) and the pach format has no '
+                             'field for any of them; pass drop=[\'meta\'] to write the record '
+                             'without them' % len(rxn._meta))
+        rxn.log.append(LogRecord('pach:meta-lost', (),
+                                 'the pach format has no metadata field, so %d reaction key(s) were '
+                                 'not written' % len(rxn._meta), LOST, 'pach', ''))
     if 'title' not in names and rxn._title:
-        raise ValueError('the reaction carries the title %r and the pach format has no text of any '
-                         'kind; pass drop=[\'title\'] to write the record without it' % rxn._title)
+        if strict:
+            raise ValueError('the reaction carries the title %r and the pach format has no text of '
+                             'any kind; pass drop=[\'title\'] to write the record without it'
+                             % rxn._title)
+        rxn.log.append(LogRecord('pach:title-lost', (),
+                                 'the pach format has no text of any kind, so the reaction title was '
+                                 'not written', LOST, 'pach', ''))
     molecule_drop = names & _PACH_MOLECULE_DROP_NAMES
 
     counts = []
@@ -1076,9 +1093,9 @@ def reaction_pach_dump(rxn: 'ReactionContainer', *, compressed=True, drop=None, 
     out = bytearray((version, counts[0], counts[1], counts[2]))
     for index, mol in enumerate(rxn.molecules()):
         if version == _PACH_REACTION_VERSION_1:
-            out += _pach_molecule_record(mol, index, molecule_drop)
+            out += _pach_molecule_record(mol, index, molecule_drop, strict)
         elif version == _PACH_REACTION_VERSION_5:
-            out += pach_dump(mol, compressed=False, drop=sorted(molecule_drop))
+            out += pach_dump(mol, compressed=False, drop=sorted(molecule_drop), strict=strict)
         else:
             raise ValueError('%r is in the writable version set but has no writer; the set and the '
                              'dispatch must move together' % (version,))
