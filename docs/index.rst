@@ -22,7 +22,9 @@ and those raise an :class:`ImportError` naming the extra when called rather than
   a stored geometry
 - Read IUPAC names through OPSIN
 - Substructure search with chython SMARTS, including component grouping for intramolecular patterns
-- Canonical form, standardization, kekulization and aromatization, resonance repair, salt stripping
+- Canonical form, standardization, kekulization and aromatization, resonance repair
+- Salts read as their components: one featurized row each, the role each plays, and the selection put
+  back together — the key that links a compound to its hydrate and its hydrochloride
 - Morgan and linear fingerprints, as hash sets, folded bit vectors or count vectors
   -- *needs* ``chython[ml]``, the hash-set and bit-set spellings included: every one of them builds
   the same numpy invariant vector first, whatever it finally returns
@@ -56,6 +58,7 @@ Cookbook
    pach
    molecule
    standardize
+   salts
    stereo
    substructure
    reactions

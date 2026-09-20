@@ -45,15 +45,15 @@ from ._qed import alert_count, qed, qed_properties
 from ._residues import (RESIDUE_KINDS, ResidueTemplate, normalize_atom_name, residue_template,
                         residue_templates)
 from ._resonance import fix_resonance
-from ._salts import SaltComposition, decompose_salts, split_salts
+from ._salts import ComponentRow, DEFAULT_STABILIZER_CLASSES, SaltComposition, decompose_salts, split_salts
 from ._saturate import saturate
 from ._smarts import SmartsSyntaxError, compile_smarts
 from ._standardize import LogRecord, standardize
-from ._tables import (ACID_ROLES, AbbreviationRow, AcidRow, Endpoint, RESONANCE_ROLES, Rule, SALT_ROLES,
-                      SaltRow, abbreviation_row, abbreviations_rows, acids_rules, acids_rules_by_role,
-                      acids_table_text, groups_rules,
+from ._tables import (ACID_ROLES, AbbreviationRow, AcidRow, Endpoint, RESONANCE_ROLES, Rule,
+                      SALT_CLASSES, SALT_MATCHES, SaltRow, abbreviation_row, abbreviations_rows,
+                      acids_rules, acids_rules_by_role, acids_table_text, groups_rules,
                       metals_rules, read_table, resonance_rules, resonance_rules_by_role,
-                      resonance_table_text, salts_rows, salts_rows_by_role, salts_species_keys,
+                      resonance_table_text, salts_rows, salts_rows_by_klass, salts_species_keys,
                       salts_table_text, standardize_rules)
 from ._tpsa import tpsa
 from ..core._core import (_set_canonicalize_fn, _set_featurizer_fns, _set_hydrogens_fns,
@@ -62,7 +62,8 @@ from ..core._core import (_set_canonicalize_fn, _set_featurizer_fns, _set_hydrog
                           _set_valence_fn)
 
 
-__all__ = ['ACID_ROLES', 'AbbreviationRow', 'LogRecord', 'SALT_ROLES', 'SaltComposition',
+__all__ = ['ACID_ROLES', 'AbbreviationRow', 'ComponentRow', 'DEFAULT_STABILIZER_CLASSES',
+           'LogRecord', 'SALT_CLASSES', 'SALT_MATCHES', 'SaltComposition',
            'abbreviation_row', 'abbreviations_rows', 'alert_count',
            'calc_implicit', 'canonicalize', 'check_valence', 'crippen_logp', 'crippen_mr',
            'decompose_salts', 'expand_abbreviations', 'explicify_hydrogens', 'fix_resonance',

@@ -38,10 +38,10 @@ Ties are left tied.  Two candidates of equal rank are automorphic, so which one 
 observable in the result, and the sort being stable makes the arbitrary half of the choice cheap.
 Charging needs no order at all, being one atom's charge and nothing else's.
 
-NET CHARGE MOVES HERE, which no other `standardize()` stage does, and every spelling that moves it is
-accepted: a lone `[Zn+]` beside a neutral halogen sits at `+1`, a neutral metal beside `[Cl-]` at `-1`,
-and a charged metal with no halide leaves `0` for `+1`.  A dropped sign is the premise of the stage, so
-the record states which way the total went rather than the pass declining to move it.
+NET CHARGE MOVES HERE, and every spelling that moves it is accepted: a lone `[Zn+]` beside a neutral
+halogen sits at `+1`, a neutral metal beside `[Cl-]` at `-1`, and a charged metal with no halide
+leaves `0` for `+1`.  A dropped sign is the premise of the stage, so the record states which way the
+total went rather than the pass declining to move it.
 """
 from collections.abc import MutableSequence
 from ..core import LogRecord, MoleculeContainer

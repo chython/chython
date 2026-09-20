@@ -1,21 +1,23 @@
-# Salt knowledge: which atoms are cations, which may take the charge, and which whole components are
-# counterions, bases or solvates.  Read by chython/chemistry/_tables.py, applied by chython/chemistry/_salts.py.
+# Salt knowledge: which atoms are cations, which may take the charge, which are acidic, and which whole
+# components are known species.  Read by chython/chemistry/_tables.py, applied by chython/chemistry/_salts.py.
 #
-# TWO MATCHING MECHANISMS, AND THE `role` COLUMN SELECTS.  A role an ATOM plays is a question about a
-# neighbourhood, so it is a SMARTS matched by embedding.  A component that IS a compound is that compound,
-# so it is a SMILES matched by key equality of the WHOLE component.  Neither can express the other's
-# question honestly: `[M;*:1]` would need 186 SMILES rows, and tartaric acid every hydrogen count spelled
-# out as SMARTS.
+# TWO COLUMNS, TWO QUESTIONS.  `match` is HOW a row is recognized; `klass` is WHAT the row is.  A pass
+# selects rows by `klass`, never by `match` -- which is what makes a new class invisible to a pass that
+# did not name it.
 #
-#   role         pattern is   matched by                                    used by
-#   cation       SMARTS       embedding; the `:1` atom is the cation        split_salts, decompose_salts*
-#   acceptor     SMARTS       embedding; the `:1` atom takes the -1        split_salts
-#   counterion   SMILES       key equality, whole component                 decompose_salts
-#   base         SMILES       key equality, whole component                 decompose_salts
-#   solvate      SMILES       key equality, whole component                 decompose_salts
+#   match    pattern is   recognized by
+#   embed    SMARTS       embedding; the `:1` atom is the one the row is about
+#   whole    SMILES       key equality against the WHOLE component
 #
-#   * decompose_salts uses a cation row only when the whole component is that ONE atom -- a lone [Na+].
-#     All 93 metals the core's `[M]` accepts qualify, not the s-block alone.
+# Neither mechanism can express the other's question honestly: `[M;*:1]` would need 186 SMILES rows, and
+# tartaric acid every hydrogen count spelled out as SMARTS.
+#
+#   klass             match   read by
+#   metal_cation      embed   split_salts (the cation); decompose_salts, but only when the component IS
+#                             that one atom -- a lone [Na+].  All 93 metals `[M]` accepts qualify.
+#   charge_acceptor   embed   split_salts (the atom that keeps the electron pair)
+#   protic_acid       embed   decompose_salts (the acid_salt tag), fix_salt_charges (the proton source)
+#   the fourteen species classes  whole   decompose_salts
 #
 # A SPECIES ROW IS COMPARED BY `format(component, '!s')` -- the canonical SMILES with stereo disabled,
 # after `thiele()` on both sides.  Stereo is out because a row names a CONSTITUTION: whether the tartrate
@@ -26,138 +28,158 @@
 #
 # A CONJUGATE IS NOT A ROW.  `decompose_salts` neutralizes before it matches, so `[Cl-]` is `Cl` and
 # `CC([O-])=O` is acetic acid by the time the key is taken.  Only a species that cannot be neutral gets
-# its own row: `salts:choline` is a quaternary ammonium and has nowhere to put the charge.
+# its own row: `salts:choline` is `quaternary_ammonium` and has nowhere to put the charge.
 #
-# A SPECIES THAT IS BOTH SOLVENT AND BASE IS TABULATED AS THE `base`.  When every component is tabulated,
-# `decompose_salts` takes the species rows as the parents and counts the solvates, so pyridine under
-# `solvate` would read pyridine hydrochloride as hydrochloric acid; under `base` that record answers with
-# both components as candidate parents, which a caller can see and reject.
+# A SPECIES THAT IS BOTH SOLVENT AND BASE IS TABULATED AS THE BASE.  `salts:pyridine` is `amine_base` and
+# not a solvent class: as a solvent class it would read pyridine hydrochloride as hydrochloric acid, while
+# as a base that record answers with both components as candidate parents, which a caller can reject.
 #
-# `charges` IS THE OVERCHARGE GUARD AND ONLY A `cation` ROW HAS ONE.  A cation cutting k bonds ends at
-# charge+k; the row lists every value that is allowed to be, and the whole atom is refused before anything
-# is cut -- all-or-nothing, never a partially split molecule.
+# `charges` IS THE OVERCHARGE GUARD AND ONLY THE `metal_cation` ROW HAS ONE.  A cation cutting k bonds ends
+# at charge+k; the row lists every value that is allowed to be, and the whole atom is refused before
+# anything is cut -- all-or-nothing, never a partially split molecule.
+#
+# `order` IS THE ACIDITY RUNG AND ONLY A `protic_acid` ROW HAS ONE.  Low is more acidic; rows sharing a
+# value are tied, and a tie is resolved by canonical order and logged rather than by file position.
+#
+# ALCOHOLS ARE DELIBERATELY ABSENT.  `CCO.[Na]` is more often sodium metal in ethanol than sodium ethoxide,
+# and a row here would resolve that against the commoner reading.  So is every azole but tetrazole: below
+# sulfonamide's rung an N-H needs a hydride or an organolithium, and a metal drawn beside one is reagent
+# chemistry.  An acid with no row refuses, logs, and surfaces as a `charges_undrawn` tag -- the count of
+# those refusals is what would justify a row.
 #
 # There is no `elements` column: `pattern` already names the elements a row applies to, and `keep=['Na']` is
 # resolved against the MOLECULE's atoms.
-id	role	pattern	charges	comment
+id	match	klass	pattern	charges	order	comment
 # --- cations -------------------------------------------------------------------------------------- #
-salts:metal	cation	[M;*:1]	1;2;3;4	any of the 93 metals `[M]` accepts, at any charge.  Generality is safe because every bond is cut or none is: see _salts.py
-# --- acceptors: the atom that keeps the electron pair when a cation lets go ----------------------- #
-salts:oxo-acid	acceptor	[O,S,Se;D2;z1:1]-[C,N,P,S,Cl,Se,Br,I,Si]=O	-	carboxylate, sulfonate, phosphate, perchlorate and their S/Se analogues
-salts:thiophosphate	acceptor	[O,S,Se;D2;z1:1]-[P]=[S,Se]	-	thio- and selenophosphate, which the oxo-acid row misses for want of a `=O`
-salts:phenolate	acceptor	[O,S,Se;D2;z1:1]-[C,N;a]	-	phenolate, thiophenolate, N-hydroxy azole
-salts:nitrate	acceptor	[O;D2;z1:1]-[N+](-[O-])=O	-	nitrate, drawn charge-separated as standardize() leaves it
-salts:halide-hydroxide	acceptor	[O,F,Cl,Br,I;D1;z1:1]	-	a terminal halogen or oxygen: halide, hydroxide, alkoxide
-# --- counterions, acidic: the mineral and organic acids ------------------------------------------- #
-salts:hf	counterion	F	-	hydrofluoric
-salts:hcl	counterion	Cl	-	hydrochloric
-salts:hbr	counterion	Br	-	hydrobromic
-salts:hi	counterion	I	-	hydroiodic
-salts:hno3	counterion	O[N+](=O)[O-]	-	nitric
-salts:hno2	counterion	ON=O	-	nitrous
-salts:h3po4	counterion	OP(O)(O)=O	-	phosphoric
-salts:dimethyl-phosphate	counterion	COP(O)(=O)OC	-	dimethyl phosphate
-salts:h2so4	counterion	OS(O)(=O)=O	-	sulfuric
-salts:mesylic	counterion	CS(O)(=O)=O	-	methanesulfonic
-salts:triflic	counterion	OS(=O)(=O)C(F)(F)F	-	trifluoromethanesulfonic
-salts:tosylic	counterion	CC1=CC=C(C=C1)S(O)(=O)=O	-	p-toluenesulfonic
-salts:h2co3	counterion	OC(O)=O	-	carbonic
-salts:formic	counterion	OC=O	-	formic
-salts:acetic	counterion	CC(O)=O	-	acetic
-salts:tfa	counterion	OC(=O)C(F)(F)F	-	trifluoroacetic
-salts:glycolic	counterion	OCC(O)=O	-	glycolic
-salts:lactic	counterion	CC(O)C(O)=O	-	lactic
-salts:oxalic	counterion	OC(=O)C(O)=O	-	oxalic
-salts:dichloroacetic	counterion	OC(=O)C(Cl)Cl	-	dichloroacetic
-salts:maleic	counterion	OC(=O)C=CC(O)=O	-	maleic and fumaric -- one row, the key being taken with stereo disabled
-salts:tartaric	counterion	OC(C(O)C(O)=O)C(O)=O	-	tartaric, any stereoisomer, for the same reason
-salts:hclo4	counterion	O[Cl](=O)(=O)=O	-	perchloric
-salts:citric	counterion	OC(=O)CC(O)(CC(O)=O)C(O)=O	-	citric
-salts:succinic	counterion	OC(=O)CCC(O)=O	-	succinic
-salts:malic	counterion	OC(CC(O)=O)C(O)=O	-	malic, any stereoisomer
-salts:malonic	counterion	OC(=O)CC(O)=O	-	malonic
-salts:glutaric	counterion	OC(=O)CCCC(O)=O	-	glutaric
-salts:adipic	counterion	OC(=O)CCCCC(O)=O	-	adipic
-salts:sebacic	counterion	OC(=O)CCCCCCCCC(O)=O	-	sebacic
-salts:mucic	counterion	OC(=O)C(O)C(O)C(O)C(O)C(O)=O	-	galactaric (mucic)
-salts:gluconic	counterion	OCC(O)C(O)C(O)C(O)C(O)=O	-	gluconic
-salts:ascorbic	counterion	OCC(O)C1OC(=O)C(O)=C1O	-	ascorbic
-salts:mandelic	counterion	OC(c1ccccc1)C(O)=O	-	mandelic
-salts:benzoic	counterion	OC(=O)c1ccccc1	-	benzoic
-salts:salicylic	counterion	OC(=O)c1ccccc1O	-	salicylic
-salts:gentisic	counterion	OC(=O)c1cc(O)ccc1O	-	gentisic
-salts:xinafoic	counterion	OC(=O)c1c(O)ccc2ccccc12	-	1-hydroxy-2-naphthoic (xinafoic)
-salts:oxynaphthoic	counterion	OC(=O)c1cc2ccccc2cc1O	-	3-hydroxy-2-naphthoic (beta-oxynaphthoic, BON).  Same formula as `salts:xinafoic` and a different constitution, so the key mechanism keeps them apart and both are needed
-salts:pamoic	counterion	OC(=O)c1c(O)c(Cc2c(O)c(C(O)=O)c3ccccc3c2)cc4ccccc14	-	pamoic (embonic)
-salts:hippuric	counterion	OC(=O)CNC(=O)c1ccccc1	-	hippuric
-salts:nicotinic	counterion	OC(=O)c1cccnc1	-	nicotinic
-salts:orotic	counterion	OC(=O)C1=CC(=O)NC(=O)N1	-	orotic
-salts:pyroglutamic	counterion	OC(=O)C1CCC(=O)N1	-	pyroglutamic
-salts:aspartic	counterion	OC(=O)CC(N)C(O)=O	-	aspartic
-salts:glutamic	counterion	OC(=O)CCC(N)C(O)=O	-	glutamic
-salts:lauric	counterion	CCCCCCCCCCCC(O)=O	-	lauric (dodecanoic)
-salts:palmitic	counterion	CCCCCCCCCCCCCCCC(O)=O	-	palmitic (hexadecanoic)
-salts:stearic	counterion	CCCCCCCCCCCCCCCCCC(O)=O	-	stearic (octadecanoic)
-salts:oleic	counterion	CCCCCCCCC=CCCCCCCCC(O)=O	-	oleic
-salts:besylic	counterion	OS(=O)(=O)c1ccccc1	-	benzenesulfonic (besylic)
-salts:esylic	counterion	CCS(O)(=O)=O	-	ethanesulfonic (esylic)
-salts:napsylic	counterion	OS(=O)(=O)c1ccc2ccccc2c1	-	naphthalene-2-sulfonic (napsylic)
-salts:camsylic	counterion	CC1(C)C2CCC1(CS(O)(=O)=O)C(=O)C2	-	camphor-10-sulfonic (camsylic)
-salts:isethionic	counterion	OCCS(O)(=O)=O	-	2-hydroxyethanesulfonic (isethionic)
-salts:edisylic	counterion	OS(=O)(=O)CCS(O)(=O)=O	-	1,2-ethanedisulfonic (edisylic)
-salts:cyclamic	counterion	OS(=O)(=O)NC1CCCCC1	-	cyclohexylsulfamic (cyclamic)
-salts:thiocyanic	counterion	SC#N	-	thiocyanic
-# --- counterions, basic --------------------------------------------------------------------------- #
-salts:ammonia	base	N	-	ammonia, which the cation rows do not reach: `[M]` is 93 metals and nitrogen is not one
-salts:diethylamine	base	CCNCC	-	diethylamine
-salts:triethylamine	base	CCN(CC)CC	-	triethylamine
-salts:tert-butylamine	base	CC(C)(C)N	-	tert-butylamine
-salts:cyclohexylamine	base	NC1CCCCC1	-	cyclohexylamine
-salts:ethylenediamine	base	NCCN	-	ethylenediamine
-salts:piperazine	base	C1CNCCN1	-	piperazine
-salts:morpholine	base	C1COCCN1	-	morpholine
-salts:imidazole	base	c1cnc[nH]1	-	imidazole
-salts:pyridine	base	c1ccncc1	-	pyridine, a base rather than a solvate: see the header note on the two roles
-salts:guanidine	base	NC(N)=N	-	guanidine
-salts:hydrazine	base	NN	-	hydrazine
-salts:ethanolamine	base	OCCN	-	ethanolamine (olamine)
-salts:diethanolamine	base	OCCNCCO	-	diethanolamine
-salts:triethanolamine	base	OCCN(CCO)CCO	-	triethanolamine
-salts:deanol	base	CN(C)CCO	-	2-(dimethylamino)ethanol (deanol)
-salts:tromethamine	base	OCC(N)(CO)CO	-	tromethamine (TRIS)
-salts:meglumine	base	CNCC(O)C(O)C(O)C(O)CO	-	meglumine, any stereoisomer
-salts:choline	base	C[N+](C)(C)CCO	-	choline, tabulated charged: a quaternary ammonium cannot be neutralized
-salts:benzathine	base	C(c1ccccc1)NCCNCc1ccccc1	-	benzathine
-salts:procaine	base	CCN(CC)CCOC(=O)c1ccc(N)cc1	-	procaine
-salts:arginine	base	NC(CCCNC(N)=N)C(O)=O	-	arginine, any stereoisomer
-salts:lysine	base	NCCCCC(N)C(O)=O	-	lysine, any stereoisomer
-# --- solvates: present in the record, not part of the compound ------------------------------------ #
-salts:water	solvate	O	-	water of crystallization
-salts:methanol	solvate	CO	-	methanol
-salts:ethanol	solvate	CCO	-	ethanol
-salts:isopropanol	solvate	CC(C)O	-	2-propanol
-salts:acetone	solvate	CC(C)=O	-	acetone
-salts:acetonitrile	solvate	CC#N	-	acetonitrile
-salts:dmso	solvate	CS(C)=O	-	dimethyl sulfoxide
-salts:dmf	solvate	CN(C)C=O	-	N,N-dimethylformamide
-salts:thf	solvate	C1CCOC1	-	tetrahydrofuran
-salts:dioxane	solvate	C1COCCO1	-	1,4-dioxane
-salts:ethyl-acetate	solvate	CCOC(C)=O	-	ethyl acetate
-salts:diethyl-ether	solvate	CCOCC	-	diethyl ether
-salts:mtbe	solvate	COC(C)(C)C	-	methyl tert-butyl ether
-salts:dichloromethane	solvate	ClCCl	-	dichloromethane
-salts:chloroform	solvate	ClC(Cl)Cl	-	chloroform
-salts:toluene	solvate	Cc1ccccc1	-	toluene
-salts:benzene	solvate	c1ccccc1	-	benzene
-salts:hexane	solvate	CCCCCC	-	n-hexane
-salts:heptane	solvate	CCCCCCC	-	n-heptane
-salts:pentane	solvate	CCCCC	-	n-pentane
-salts:cyclohexane	solvate	C1CCCCC1	-	cyclohexane
-salts:butanol	solvate	CCCCO	-	1-butanol
-salts:tert-butanol	solvate	CC(C)(C)O	-	tert-butanol
-salts:mek	solvate	CCC(C)=O	-	2-butanone
-salts:nmp	solvate	CN1CCCC1=O	-	N-methyl-2-pyrrolidone
-salts:dma	solvate	CC(=O)N(C)C	-	N,N-dimethylacetamide
-salts:dme	solvate	COCCOC	-	1,2-dimethoxyethane
-salts:dichloroethane	solvate	ClCCCl	-	1,2-dichloroethane
-salts:anisole	solvate	COc1ccccc1	-	anisole
+salts:metal	embed	metal_cation	[M;*:1]	1;2;3;4	-	any of the 93 metals `[M]` accepts, at any charge.  Generality is safe because every bond is cut or none is: see _salts.py
+# --- charge acceptors: the atom that keeps the electron pair when a cation lets go ---------------- #
+salts:oxo-acid	embed	charge_acceptor	[O,S,Se;D2;z1:1]-[C,N,P,S,Cl,Se,Br,I,Si]=O	-	-	carboxylate, sulfonate, phosphate, perchlorate and their S/Se analogues
+salts:thiophosphate	embed	charge_acceptor	[O,S,Se;D2;z1:1]-[P]=[S,Se]	-	-	thio- and selenophosphate, which the oxo-acid row misses for want of a `=O`
+salts:phenolate	embed	charge_acceptor	[O,S,Se;D2;z1:1]-[C,N;a]	-	-	phenolate, thiophenolate, N-hydroxy azole
+salts:nitrate	embed	charge_acceptor	[O;D2;z1:1]-[N+](-[O-])=O	-	-	nitrate, drawn charge-separated as standardize() leaves it
+salts:halide-hydroxide	embed	charge_acceptor	[O,F,Cl,Br,I;D1;z1:1]	-	-	a terminal halogen or oxygen: halide, hydroxide, alkoxide
+# --- acidic sites: which hydrogen a metal may take, most acidic first ----------------------------- #
+salts:sulfonic-oh	embed	protic_acid	[O;D1;z1;h1:1]-[S;z5](=O)=O	-	1	sulfonic and sulfuric acid
+salts:oxo-acid-oh	embed	protic_acid	[O;D1;z1;h1:1]-[N,P,Cl,Br,I]=O	-	2	phosphoric, phosphonic, nitrous, perchloric
+salts:nitric-oh	embed	protic_acid	[O;D1;z1;h1:1]-[N+,P+,Cl+,Br+,I+]-[O-]	-	2	nitric, drawn charge-separated as standardize() leaves it
+salts:acyl-sulfonamide	embed	protic_acid	[N;D2;z1;h1:1](-[C;z2]=O)-[S;z5](=O)=O	-	2	acyl sulfonamide: saccharin
+salts:hydrogen-halide	embed	protic_acid	[F,Cl,Br,I;D0;h1:1]	-	3	HF HCl HBr HI: the unbonded halogen holding its hydrogen
+salts:carboxylic-oh	embed	protic_acid	[O;D1;z1;h1:1]-[C;z2]=O	-	4	carboxylic acid
+salts:tetrazole-1h	embed	protic_acid	[nH;r5:1]:1:n:n:n:c:1	-	4	tetrazole 1H, the carboxylic-acid bioisostere
+salts:tetrazole-2h	embed	protic_acid	n:1:[nH;r5:1]:n:n:c:1	-	4	tetrazole 2H: standardize() converges no mobile hydrogen, so both tautomers get a row
+salts:phenol-oh	embed	protic_acid	[O;D1;z1;h1:1]-[C,N;a]	-	5	phenol, N-hydroxy azole
+salts:imide	embed	protic_acid	[N;D2;z1;h1:1](-[C;z2]=O)-[C;z2]=O	-	5	imide: phenytoin, succinimide
+salts:sulfonamide	embed	protic_acid	[N;z1;h1,h2:1]-[S;z5](=O)=O	-	5	sulfonamide, tosylamide
+# --- species: the acids --------------------------------------------------------------------------- #
+salts:hf	whole	mineral_acid	F	-	-	hydrofluoric
+salts:hcl	whole	mineral_acid	Cl	-	-	hydrochloric
+salts:hbr	whole	mineral_acid	Br	-	-	hydrobromic
+salts:hi	whole	mineral_acid	I	-	-	hydroiodic
+salts:hno3	whole	mineral_acid	O[N+](=O)[O-]	-	-	nitric
+salts:hno2	whole	mineral_acid	ON=O	-	-	nitrous
+salts:h3po4	whole	mineral_acid	OP(O)(O)=O	-	-	phosphoric
+salts:dimethyl-phosphate	whole	mineral_acid	COP(O)(=O)OC	-	-	dimethyl phosphate
+salts:h2so4	whole	mineral_acid	OS(O)(=O)=O	-	-	sulfuric
+salts:mesylic	whole	sulfonic_acid	CS(O)(=O)=O	-	-	methanesulfonic
+salts:triflic	whole	sulfonic_acid	OS(=O)(=O)C(F)(F)F	-	-	trifluoromethanesulfonic
+salts:tosylic	whole	sulfonic_acid	CC1=CC=C(C=C1)S(O)(=O)=O	-	-	p-toluenesulfonic
+salts:h2co3	whole	mineral_acid	OC(O)=O	-	-	carbonic
+salts:formic	whole	short_carboxylic_acid	OC=O	-	-	formic
+salts:acetic	whole	short_carboxylic_acid	CC(O)=O	-	-	acetic
+salts:tfa	whole	short_carboxylic_acid	OC(=O)C(F)(F)F	-	-	trifluoroacetic
+salts:glycolic	whole	short_carboxylic_acid	OCC(O)=O	-	-	glycolic
+salts:lactic	whole	carboxylic_acid	CC(O)C(O)=O	-	-	lactic
+salts:oxalic	whole	short_carboxylic_acid	OC(=O)C(O)=O	-	-	oxalic
+salts:dichloroacetic	whole	short_carboxylic_acid	OC(=O)C(Cl)Cl	-	-	dichloroacetic
+salts:maleic	whole	carboxylic_acid	OC(=O)C=CC(O)=O	-	-	maleic and fumaric -- one row, the key being taken with stereo disabled
+salts:tartaric	whole	carboxylic_acid	OC(C(O)C(O)=O)C(O)=O	-	-	tartaric, any stereoisomer, for the same reason
+salts:hclo4	whole	mineral_acid	O[Cl](=O)(=O)=O	-	-	perchloric
+salts:citric	whole	carboxylic_acid	OC(=O)CC(O)(CC(O)=O)C(O)=O	-	-	citric
+salts:succinic	whole	carboxylic_acid	OC(=O)CCC(O)=O	-	-	succinic
+salts:malic	whole	carboxylic_acid	OC(CC(O)=O)C(O)=O	-	-	malic, any stereoisomer
+salts:malonic	whole	carboxylic_acid	OC(=O)CC(O)=O	-	-	malonic
+salts:glutaric	whole	carboxylic_acid	OC(=O)CCCC(O)=O	-	-	glutaric
+salts:adipic	whole	carboxylic_acid	OC(=O)CCCCC(O)=O	-	-	adipic
+salts:sebacic	whole	carboxylic_acid	OC(=O)CCCCCCCCC(O)=O	-	-	sebacic
+salts:mucic	whole	carboxylic_acid	OC(=O)C(O)C(O)C(O)C(O)C(O)=O	-	-	galactaric (mucic)
+salts:gluconic	whole	carboxylic_acid	OCC(O)C(O)C(O)C(O)C(O)=O	-	-	gluconic
+salts:ascorbic	whole	carboxylic_acid	OCC(O)C1OC(=O)C(O)=C1O	-	-	ascorbic
+salts:mandelic	whole	carboxylic_acid	OC(c1ccccc1)C(O)=O	-	-	mandelic
+salts:benzoic	whole	aromatic_acid	OC(=O)c1ccccc1	-	-	benzoic
+salts:salicylic	whole	aromatic_acid	OC(=O)c1ccccc1O	-	-	salicylic
+salts:gentisic	whole	aromatic_acid	OC(=O)c1cc(O)ccc1O	-	-	gentisic
+salts:xinafoic	whole	aromatic_acid	OC(=O)c1c(O)ccc2ccccc12	-	-	1-hydroxy-2-naphthoic (xinafoic)
+salts:oxynaphthoic	whole	aromatic_acid	OC(=O)c1cc2ccccc2cc1O	-	-	3-hydroxy-2-naphthoic (beta-oxynaphthoic, BON).  Same formula as `salts:xinafoic` and a different constitution, so the key mechanism keeps them apart and both are needed
+salts:pamoic	whole	aromatic_acid	OC(=O)c1c(O)c(Cc2c(O)c(C(O)=O)c3ccccc3c2)cc4ccccc14	-	-	pamoic (embonic)
+salts:hippuric	whole	carboxylic_acid	OC(=O)CNC(=O)c1ccccc1	-	-	hippuric
+salts:nicotinic	whole	carboxylic_acid	OC(=O)c1cccnc1	-	-	nicotinic
+salts:orotic	whole	carboxylic_acid	OC(=O)C1=CC(=O)NC(=O)N1	-	-	orotic
+salts:pyroglutamic	whole	carboxylic_acid	OC(=O)C1CCC(=O)N1	-	-	pyroglutamic
+salts:aspartic	whole	amino_acid	OC(=O)CC(N)C(O)=O	-	-	aspartic
+salts:glutamic	whole	amino_acid	OC(=O)CCC(N)C(O)=O	-	-	glutamic
+salts:lauric	whole	fatty_acid	CCCCCCCCCCCC(O)=O	-	-	lauric (dodecanoic)
+salts:palmitic	whole	fatty_acid	CCCCCCCCCCCCCCCC(O)=O	-	-	palmitic (hexadecanoic)
+salts:stearic	whole	fatty_acid	CCCCCCCCCCCCCCCCCC(O)=O	-	-	stearic (octadecanoic)
+salts:oleic	whole	fatty_acid	CCCCCCCCC=CCCCCCCCC(O)=O	-	-	oleic
+salts:besylic	whole	sulfonic_acid	OS(=O)(=O)c1ccccc1	-	-	benzenesulfonic (besylic)
+salts:esylic	whole	sulfonic_acid	CCS(O)(=O)=O	-	-	ethanesulfonic (esylic)
+salts:napsylic	whole	sulfonic_acid	OS(=O)(=O)c1ccc2ccccc2c1	-	-	naphthalene-2-sulfonic (napsylic)
+salts:camsylic	whole	sulfonic_acid	CC1(C)C2CCC1(CS(O)(=O)=O)C(=O)C2	-	-	camphor-10-sulfonic (camsylic)
+salts:isethionic	whole	sulfonic_acid	OCCS(O)(=O)=O	-	-	2-hydroxyethanesulfonic (isethionic)
+salts:edisylic	whole	sulfonic_acid	OS(=O)(=O)CCS(O)(=O)=O	-	-	1,2-ethanedisulfonic (edisylic)
+salts:cyclamic	whole	sulfonic_acid	OS(=O)(=O)NC1CCCCC1	-	-	cyclohexylsulfamic (cyclamic)
+salts:thiocyanic	whole	mineral_acid	SC#N	-	-	thiocyanic
+# --- species: the bases --------------------------------------------------------------------------- #
+salts:ammonia	whole	amine_base	N	-	-	ammonia, which the cation rows do not reach: `[M]` is 93 metals and nitrogen is not one
+salts:diethylamine	whole	amine_base	CCNCC	-	-	diethylamine
+salts:triethylamine	whole	amine_base	CCN(CC)CC	-	-	triethylamine
+salts:tert-butylamine	whole	amine_base	CC(C)(C)N	-	-	tert-butylamine
+salts:cyclohexylamine	whole	amine_base	NC1CCCCC1	-	-	cyclohexylamine
+salts:ethylenediamine	whole	amine_base	NCCN	-	-	ethylenediamine
+salts:piperazine	whole	amine_base	C1CNCCN1	-	-	piperazine
+salts:morpholine	whole	amine_base	C1COCCN1	-	-	morpholine
+salts:imidazole	whole	amine_base	c1cnc[nH]1	-	-	imidazole
+salts:pyridine	whole	amine_base	c1ccncc1	-	-	pyridine, an amine base: as a solvent class it would read pyridine hydrochloride as hydrochloric acid
+salts:guanidine	whole	amine_base	NC(N)=N	-	-	guanidine
+salts:hydrazine	whole	amine_base	NN	-	-	hydrazine
+salts:ethanolamine	whole	amine_base	OCCN	-	-	ethanolamine (olamine)
+salts:diethanolamine	whole	amine_base	OCCNCCO	-	-	diethanolamine
+salts:triethanolamine	whole	amine_base	OCCN(CCO)CCO	-	-	triethanolamine
+salts:deanol	whole	amine_base	CN(C)CCO	-	-	2-(dimethylamino)ethanol (deanol)
+salts:tromethamine	whole	amine_base	OCC(N)(CO)CO	-	-	tromethamine (TRIS)
+salts:meglumine	whole	amine_base	CNCC(O)C(O)C(O)C(O)CO	-	-	meglumine, any stereoisomer
+salts:choline	whole	quaternary_ammonium	C[N+](C)(C)CCO	-	-	choline, tabulated charged: a quaternary ammonium cannot be neutralized
+salts:benzathine	whole	amine_base	C(c1ccccc1)NCCNCc1ccccc1	-	-	benzathine
+salts:procaine	whole	amine_base	CCN(CC)CCOC(=O)c1ccc(N)cc1	-	-	procaine
+salts:arginine	whole	amino_acid	NC(CCCNC(N)=N)C(O)=O	-	-	arginine, any stereoisomer
+salts:lysine	whole	amino_acid	NCCCCC(N)C(O)=O	-	-	lysine, any stereoisomer
+# --- species: the solvents ------------------------------------------------------------------------ #
+salts:water	whole	water	O	-	-	water of crystallization
+salts:methanol	whole	alcohol	CO	-	-	methanol
+salts:ethanol	whole	alcohol	CCO	-	-	ethanol
+salts:isopropanol	whole	alcohol	CC(C)O	-	-	2-propanol
+salts:acetone	whole	aprotic_solvent	CC(C)=O	-	-	acetone
+salts:acetonitrile	whole	aprotic_solvent	CC#N	-	-	acetonitrile
+salts:dmso	whole	aprotic_solvent	CS(C)=O	-	-	dimethyl sulfoxide
+salts:dmf	whole	aprotic_solvent	CN(C)C=O	-	-	N,N-dimethylformamide
+salts:thf	whole	aprotic_solvent	C1CCOC1	-	-	tetrahydrofuran
+salts:dioxane	whole	aprotic_solvent	C1COCCO1	-	-	1,4-dioxane
+salts:ethyl-acetate	whole	aprotic_solvent	CCOC(C)=O	-	-	ethyl acetate
+salts:diethyl-ether	whole	aprotic_solvent	CCOCC	-	-	diethyl ether
+salts:mtbe	whole	aprotic_solvent	COC(C)(C)C	-	-	methyl tert-butyl ether
+salts:dichloromethane	whole	halo_solvent	ClCCl	-	-	dichloromethane
+salts:chloroform	whole	halo_solvent	ClC(Cl)Cl	-	-	chloroform
+salts:toluene	whole	hydrocarbon	Cc1ccccc1	-	-	toluene
+salts:benzene	whole	hydrocarbon	c1ccccc1	-	-	benzene
+salts:hexane	whole	hydrocarbon	CCCCCC	-	-	n-hexane
+salts:heptane	whole	hydrocarbon	CCCCCCC	-	-	n-heptane
+salts:pentane	whole	hydrocarbon	CCCCC	-	-	n-pentane
+salts:cyclohexane	whole	hydrocarbon	C1CCCCC1	-	-	cyclohexane
+salts:butanol	whole	alcohol	CCCCO	-	-	1-butanol
+salts:tert-butanol	whole	alcohol	CC(C)(C)O	-	-	tert-butanol
+salts:mek	whole	aprotic_solvent	CCC(C)=O	-	-	2-butanone
+salts:nmp	whole	aprotic_solvent	CN1CCCC1=O	-	-	N-methyl-2-pyrrolidone
+salts:dma	whole	aprotic_solvent	CC(=O)N(C)C	-	-	N,N-dimethylacetamide
+salts:dme	whole	aprotic_solvent	COCCOC	-	-	1,2-dimethoxyethane
+salts:dichloroethane	whole	halo_solvent	ClCCCl	-	-	1,2-dichloroethane
+salts:anisole	whole	aprotic_solvent	COc1ccccc1	-	-	anisole

@@ -88,8 +88,8 @@ def sticky_fragments(molecule, role=None, *, masked=None,
     exactly when it is absent from the product.
 
     A molecule with more than one connected component yields nothing -- a counter-ion has no cut.  A
-    salt is therefore the caller's to reduce to one component: `decompose_salts().parents` names it, and
-    the anion of a trifluoroborate or a carboxylate enumerates normally.
+    salt is therefore the caller's to reduce to one component: `decompose_salts().parents` names them, one
+    row per component, and the anion of a trifluoroborate or a carboxylate enumerates normally.
 
     A fragment's marker has no valence rules, so `check_valence` reports it as unknown; a caller
     filtering on a clean valence report excludes the marker.
@@ -126,8 +126,8 @@ def sticky_linkers(molecule, role_left=None, role_right=None, *, masked=None,
     between its ends.
 
     A molecule with more than one connected component yields nothing -- a counter-ion has no cut.  A
-    salt is therefore the caller's to reduce to one component: `decompose_salts().parents` names it, and
-    the anion of a trifluoroborate or a carboxylate enumerates normally.
+    salt is therefore the caller's to reduce to one component: `decompose_salts().parents` names them, one
+    row per component, and the anion of a trifluoroborate or a carboxylate enumerates normally.
     """
     if molecule.connected_components_count != 1:
         return

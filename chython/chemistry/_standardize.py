@@ -23,14 +23,19 @@ charge delta and an optional absolute radical flag per matched atom, plus a new 
 per matched bond; no rule touches the atom or bond set, an isotope, an aromatic order or a hydrogen
 count.  A patch is validated in full before any of it is written.
 
-`standardize()` closes with one stage that is not a table row, `_organometallics`: completing a
-one-coordinate zinc or magnesium adds a bond, and which halide joins which metal is a question about
-every candidate at once, neither of which a rule table can state.  It is also the one stage that moves
-net charge, a metal nobody drew a halide for being charged instead.
+`standardize()` closes with two stages that are not table rows.  `_organometallics` completes a
+one-coordinate zinc or magnesium: that adds a bond, and which halide joins which metal is a question
+about every candidate at once, neither of which a rule table can state.  `_salts.fix_salt_charges`
+moves the charges a salt was drawn without, and proton choice across several acidic sites is the same
+kind of question -- an ordering over `salts.tsv`'s rows rather than a set of them.  Each moves net
+charge: a metal nobody drew a halide for is charged, and a metal drawn beside a neutral acid takes its
+proton.  Fourth is not a preference -- the organometallic completion bonds a free halide to a metal, so
+counting anion equivalents before it would count a halide about to stop being free.
 """
 from collections.abc import MutableSequence
 from ._implicit import calc_implicit
 from ._organometallics import unite_organometallics
+from ._salts import fix_salt_charges
 from ._tables import Rule, groups_rules, metals_rules
 from ..core import LogRecord, MoleculeContainer, recording
 
@@ -136,7 +141,7 @@ def standardize(molecule: MoleculeContainer, *, fix_hydrogens: bool = True,
 
     Runs the functional-group rules, then the metal-organic ones, then completes any organozinc or
     Grignard that arrived one-coordinate -- bonding a free halide to it, or charging it when the drawing
-    offers none -- then recomputes the implicit
+    offers none -- then moves the charges a salt was drawn without, and then recomputes the implicit
     hydrogen count of every atom a patch wrote -- charge, radical state and bond order all change what
     the valence collection gives an atom.  `fix_hydrogens=False` skips that recompute, for a caller about
     to kekulise anyway.  `molecule.log` takes a record per patch applied and per patch refused.
@@ -149,9 +154,12 @@ def standardize(molecule: MoleculeContainer, *, fix_hydrogens: bool = True,
     with recording(molecule, stage='standardize') as lg:
         written = _pass(molecule, groups_rules(), lg, fix_tautomers)
         written |= _pass(molecule, metals_rules(), lg, fix_tautomers)
-        # last, and the order is not observable: no `metals:` row matches a sigma metal-carbon bond, so
-        # none of them can see either the ion pair this reads or the covalent form it writes.
+        # third: bonds a free halide to a one-coordinate metal.  No `metals:` row matches a sigma
+        # metal-carbon bond, so stages 1 and 2 cannot see the ion pair this reads or the covalent form
+        # it writes.  Stage 4 must follow: counting anion equivalents before this would count a halide
+        # about to stop being free.  `CC[Zn].[Cl-].CC(=O)O.[Na]` is the record that forces the order.
         written |= unite_organometallics(molecule, lg)
+        written |= fix_salt_charges(molecule, lg)
     if not written:
         return False
     if fix_hydrogens:

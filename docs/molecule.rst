@@ -384,6 +384,7 @@ Atom Properties
     atom.element             # 6, 7, 8, ... -- the atomic number
     atom.atomic_radius       # the calculated radius in angstroms; 0.0 for the R marker
     atom.is_metal            # bool: one of the 93 elements the `[M]` primitive is drawn from
+    atom.valence_electrons   # the group's valence electron count; 0 for the R marker and the f block
     atom.isotope             # the mass number, 0 when the record states none
     atom.charge              # formal charge (int)
     atom.radical             # bool; `is_radical` is the same flag
@@ -837,7 +838,7 @@ matters:
     2
 
 ``split_salts()`` is one of the two passes reading ``chython/chemistry/tables/salts.tsv``, beside
-``decompose_salts()``, which reports the record as compound plus counterions and changes nothing.
+``decompose_salts()``, which reports the record as one featurized row per component and changes nothing.
 :doc:`standardize` documents both.
 
 

@@ -68,9 +68,12 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     sodium acetate stays sodium acetate -- there is no proton in it to move -- while ammonium acetate
     becomes acetic acid and ammonia, both drawings of one salt.
 
-    One stage does move the net charge, `standardize()`'s organometallic completion: a zinc or magnesium
-    holding one carbon and no halide is charged rather than left as a neutral one-coordinate metal.  It
-    is the only place in the pipeline where the total changes, and it says so in the log.
+    `standardize()` moves the net charge wherever a drawing omitted one: the organometallic completion
+    charges a metal nobody drew a halide for; `fix_salt_charges()` pairs each free metal with the acid
+    that belongs to it, deprotonating the acid and charging the metal only when it arrives neutral -- a
+    metal already drawn charged takes the proton and the total falls.  Both say so in the log, and
+    `neutralize()` two steps later leaves the repair alone: `acids.tsv`'s rows are charged sites only,
+    so a sodium cation is no donor to any of them.
     """
     # A refusal at the answer boundary, which is the only place one belongs.  `smiles()` returns
     # whichever container its string describes, so a `>>` in a structure column arrives here as a

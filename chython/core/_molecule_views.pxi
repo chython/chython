@@ -63,6 +63,16 @@ cdef class Atom:
         return el_atomic_radius(self._ptr().element)
 
     @property
+    def valence_electrons(self):
+        """The group's valence electron count, and 0 where the element has none numbered.
+
+        0 for the R marker, for the f block and for anything outside 1..118 -- `el_valence_electrons`
+        draws that boundary once and this property does not get a second one.  A caller testing for an
+        s- or p-block metal wants `is_metal and 0 < valence_electrons <= 3`; 0 is unknown, not zero.
+        """
+        return el_valence_electrons(self._ptr().element)
+
+    @property
     def is_r(self):
         """True for the fragment marker, element 0.  A marker matches nothing and carries no mass."""
         return self._ptr().element == 0

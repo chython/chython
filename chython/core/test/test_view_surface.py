@@ -62,6 +62,35 @@ def test_atomic_radius_agrees_with_the_table_for_every_element():
         assert mol.atom(sid).atomic_radius == table[z], z
 
 
+def test_valence_electrons_agrees_with_the_table_for_every_element():
+    from chython.core._core import valence_electrons_table
+
+    table = valence_electrons_table()
+    mol = smiles('C')
+    sid = next(iter(mol))
+    for z in range(1, 119):
+        with mol.edit():
+            mol.set_element(sid, z)
+        assert mol.atom(sid).valence_electrons == table[z], z
+
+
+def test_valence_electrons_is_zero_for_the_r_marker_and_the_f_block():
+    mol = smiles('[*]')
+    sid = next(iter(mol))
+    assert mol.atom(sid).valence_electrons == 0
+    for z in (58, 64, 92):  # Ce, Gd, U -- the f block carries no group number here
+        with mol.edit():
+            mol.set_element(sid, z)
+        assert mol.atom(sid).valence_electrons == 0, z
+
+
+def test_valence_electrons_separates_the_s_and_p_block_metals():
+    # the `<= 3` test fix_salt_charges() rests on: Na 1, Ca 2, Al 3, and Fe 8 above the line
+    for spelling, expected in (('[Na]', 1), ('[Ca]', 2), ('[Al]', 3), ('[Fe]', 8)):
+        mol = smiles(spelling)
+        assert mol.atom(next(iter(mol))).valence_electrons == expected, spelling
+
+
 def test_atomic_radius_matches_the_container():
     mol = smiles('CCl')
     for a in mol.atoms():

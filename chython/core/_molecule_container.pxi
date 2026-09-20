@@ -7314,26 +7314,33 @@ cdef class MoleculeContainer:
         """
         return _salts_fn('split_salts')(self, keep=keep)
 
-    def decompose_salts(self):
-        """What this record is, and what was drawn beside it.  A `SaltComposition` named tuple.
-
-        `parents` is the compound, `counterions` and `solvates` are `{row id: equivalents}`, and
-        `cations` counts lone cation atoms per element symbol -- separate because all 93 metals share
-        one row id::
-
-            smiles('NCC(=O)O.OC(=O)C(F)(F)F.O').decompose_salts()
-            # parents=(smiles('C(CN)(=O)O'),) counterions={'salts:tfa': 1}
-            # solvates={'salts:water': 1} cations={}
+    def decompose_salts(self, *, classes=None, max_atoms=None, discardable=()):
+        """What this record is, featurized as one `ComponentRow` per component.  A `SaltComposition`.
 
         NOTHING IS CHANGED AND NOTHING IS LOGGED: the work runs on a copy that is hydrogen-implicified,
-        salt-split, neutralized and aromatized, so `CC(=O)O[Na]`, `CC(=O)[O-].[Na+]` and `CC(=O)O.[Na+]`
-        all report one `Na`.  `parents` holds that form rather than the caller's drawing.
+        salt-split, neutralized and aromatized, so the charge-balanced spellings of sodium acetate
+        (`CC(=O)[O-].[Na+]`, `CC(=O)O[Na]`) report the same rows.
+        `parents` and `stabilizers` are the partition; `components` is the full sequence.
 
-        A TABULATED SPECIES IS ONLY A COUNTERION WHEN SOMETHING ELSE IS THERE TO BE THE COMPOUND, so
-        `smiles('CC(=O)O')` answers acetic acid as its own parent and `[Na+].[Cl-]` answers hydrochloric
-        acid beside one `Na`.  `parents` is empty only for an empty molecule.
+            smiles('NCC(=O)O.OC(=O)C(F)(F)F.O').decompose_salts().equivalents_by_species()
+            # {'salts:tfa': 1, 'salts:water': 1}
+
+        `classes` narrows which `klass` values are eligible stabilizers (default is water, the mineral
+        acids, the sulfonic acids and the C1-C2 carboxylic acids).  `max_atoms` caps the heavy-atom
+        count of a stabilizer.  `discardable` names species keys, row ids or class names that are also
+        eligible, regardless of `classes`.
+
+        A STABILIZER IS ELIGIBLE, NEVER LEFTOVER -- when no parent is a non-lone-metal outside the
+        recognized solvents, every component becomes a parent rather than nothing, so water alone answers
+        water.
         """
-        return _salts_fn('decompose_salts')(self)
+        fn = _salts_fn('decompose_salts')
+        kw = {'max_atoms': max_atoms, 'discardable': discardable}
+        # `None` is forwarded as an absent argument, not as a value: the default is chemistry's knowledge
+        # and naming DEFAULT_STABILIZER_CLASSES in core would put a second copy of it there.
+        if classes is not None:
+            kw['classes'] = classes
+        return fn(self, **kw)
 
     def neutralize(self, *, keep_charge=True):
         """Move every proton the acid/base table can from a cation onto an anion.  Anything moved?

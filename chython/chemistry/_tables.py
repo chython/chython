@@ -34,7 +34,8 @@ __all__ = ['ACID_ROLES', 'AbbreviationRow', 'AcidRow', 'CRIPPEN_CATCH_ALLS', 'CR
            'MACCS_EXPECTATIONS', 'MACCS_KINDS', 'MACCS_PREDICATES', 'MACCS_UNSET_KEYS',
            'MaccsCorpusRow', 'MaccsRow', 'PHARMACOPHORE_ROLES', 'PharmacophoreRow', 'QedAlertRow',
            'RESONANCE_ROLES', 'ROTATABLE_ROLES', 'Rule',
-           'RotatableRow', 'SALT_ROLES', 'SaltRow', 'SybylType', 'TPSA_CLASSES', 'TpsaRow',
+           'RotatableRow', 'SALT_CLASSES', 'SALT_MATCHES', 'SaltRow', 'SybylType', 'TPSA_CLASSES',
+           'TpsaRow',
            'abbreviation_row', 'abbreviations_by_label', 'abbreviations_rows',
            'acids_rules', 'acids_rules_by_role', 'acids_table_text',
            'covalent_radii', 'crippen_rules', 'crippen_rules_by_role', 'first_match',
@@ -42,7 +43,7 @@ __all__ = ['ACID_ROLES', 'AbbreviationRow', 'AcidRow', 'CRIPPEN_CATCH_ALLS', 'CR
            'maccs_corpus_by_key', 'maccs_rules', 'maccs_rules_by_key', 'metals_rules',
            'pharmacophore_rules', 'pharmacophore_rules_by_role', 'qed_alerts', 'read_table',
            'resonance_rules', 'resonance_rules_by_role', 'resonance_table_text', 'rotatable_rules',
-           'rotatable_rules_by_role', 'salts_rows', 'salts_rows_by_role',
+           'rotatable_rules_by_role', 'salts_rows', 'salts_rows_by_klass',
            'salts_species_keys', 'salts_table_text', 'standardize_rules', 'sybyl_types',
            'tpsa_rules']
 
@@ -293,34 +294,45 @@ def resonance_table_text() -> str:
 
 # --- salts.tsv ---------------------------------------------------------------------------------- #
 #
-# This table has two matching mechanisms: a `cation`/`acceptor` row is a SMARTS matched by embedding,
-# a `counterion`/`base`/`solvate` row names a compound matched by string equality of its key.  `role`
-# says which.
+# `match` says HOW a row is recognized -- `embed` is a SMARTS matched by embedding, `whole` a SMILES
+# matched by key equality of the whole component.  `klass` says WHAT the row is, and a pass selects by
+# class: a new `embed` class cannot reach a pass that did not name it.
 
-#: The closed vocabulary.  A row naming anything else is a load-time error, because a role the pass
-#: never asks for is a row that silently does nothing.
-SALT_ROLES = ('cation', 'acceptor', 'counterion', 'base', 'solvate')
+#: The closed match vocabulary.  Two mechanisms and no third.
+SALT_MATCHES = ('embed', 'whole')
 
-#: Which roles are SMARTS matched by embedding.  The rest are SMILES matched by canonical equality.
-_SMARTS_ROLES = frozenset({'cation', 'acceptor'})
+#: The closed class vocabulary.  A row naming anything else is a load-time error, because a class the
+#: passes never ask for is a row that silently does nothing.
+SALT_CLASSES = ('metal_cation', 'charge_acceptor', 'protic_acid',
+                'mineral_acid', 'sulfonic_acid', 'short_carboxylic_acid', 'carboxylic_acid',
+                'aromatic_acid', 'fatty_acid', 'amino_acid', 'amine_base', 'quaternary_ammonium',
+                'water', 'alcohol', 'hydrocarbon', 'halo_solvent', 'aprotic_solvent')
+
+#: Which classes are matched by embedding.  Pinned here rather than trusted from the row so a typo in
+#: `match` is a load-time error instead of a row that never fires.
+_EMBED_CLASSES = frozenset({'metal_cation', 'charge_acceptor', 'protic_acid'})
 
 
 class SaltRow(NamedTuple):
     """One row of `tables/salts.tsv`, compiled.
 
-    Exactly one of `query` (a `cation` or `acceptor` row) and `key` (the other three roles) is set.
-    `anchor` is the stable id of the query atom mapped `:1` -- the subject, since a row may name a
-    whole neighbourhood.  `key` is `format(species, '!s')`, the stereo-free canonical SMILES a species
-    row is matched by, `None` for a SMARTS row.  `charges` is the set of charges a cation may end up
-    with, `cation` rows only.
+    Exactly one of `query` (an `embed` row) and `key` (a `whole` row) is set.  `anchor` is the stable id
+    of the query atom mapped `:1` -- the subject, since a row may name a whole neighbourhood.  `key` is
+    `format(species, '!s')`, the stereo-free canonical SMILES a species row is matched by.  `charges` is
+    the set of charges a cation may end up with, `metal_cation` only.  `order` is the acidity rung,
+    `protic_acid` only, low being more acidic; equal values are tied.  `heavy_atoms` is the species' atom
+    count, `0` for an `embed` row -- a size judgement the caller would otherwise re-measure per component.
     """
     id: str
-    role: str
+    match: str
+    klass: str
     pattern: str
     query: QueryContainer | None
     key: str | None
     anchor: int
     charges: frozenset[int]
+    order: int
+    heavy_atoms: int
     comment: str
 
 
@@ -339,14 +351,21 @@ def _compile_salts() -> tuple[SaltRow, ...]:
             raise ValueError(f'salts.tsv: {row_id} appears twice; an id is a log record\'s only '
                              'handle on a row and must name one')
         seen.add(row_id)
-        role = row['role']
-        if role not in SALT_ROLES:
-            raise ValueError(f'{row_id}: role {role!r} is not one of {", ".join(SALT_ROLES)}')
+        match = row['match']
+        klass = row['klass']
+        if match not in SALT_MATCHES:
+            raise ValueError(f'{row_id}: match {match!r} is not one of {", ".join(SALT_MATCHES)}')
+        if klass not in SALT_CLASSES:
+            raise ValueError(f'{row_id}: klass {klass!r} is not one of {", ".join(SALT_CLASSES)}')
+        if (klass in _EMBED_CLASSES) != (match == 'embed'):
+            raise ValueError(f'{row_id}: klass {klass!r} and match {match!r} disagree; a class is '
+                             'recognized one way and a row cannot choose the other')
 
         query = None
         anchor = 0
         key = None
-        if role in _SMARTS_ROLES:
+        heavy_atoms = 0
+        if match == 'embed':
             query = read_smarts(row['pattern'])
             anchors = [n for n, number in query.map_numbers().items() if number == 1]
             if len(anchors) != 1:
@@ -358,20 +377,36 @@ def _compile_salts() -> tuple[SaltRow, ...]:
             species = read_smiles(row['pattern'])
             species.thiele()
             key = format(species, '!s')
+            heavy_atoms = len(species)
 
         if row['charges'] == '-':
             charges = frozenset()
-            if role == 'cation':
-                raise ValueError(f'{row_id}: a cation row must list the charges it may end up with; '
-                                 '`-` would make the overcharge guard vacuous and split a metal '
+            if klass == 'metal_cation':
+                raise ValueError(f'{row_id}: a metal_cation row must list the charges it may end up '
+                                 'with; `-` would make the overcharge guard vacuous and split a metal '
                                  'carbonyl')
         else:
-            if role != 'cation':
+            if klass != 'metal_cation':
                 raise ValueError(f'{row_id}: charges are the cation overcharge guard and mean nothing '
-                                 f'for a {role} row; write `-`')
+                                 f'for a {klass} row; write `-`')
             charges = frozenset(int(c) for c in row['charges'].split(';'))
 
-        out.append(SaltRow(row_id, role, row['pattern'], query, key, anchor, charges, row['comment']))
+        if row['order'] == '-':
+            order = 0
+            if klass == 'protic_acid':
+                raise ValueError(f'{row_id}: a protic_acid row must state its acidity rung; without one '
+                                 'the proton fix_salt_charges() moves would be chosen by file position')
+        else:
+            if klass != 'protic_acid':
+                raise ValueError(f'{row_id}: order is the acidity rung and means nothing for a {klass} '
+                                 'row; write `-`')
+            order = int(row['order'])
+            if order < 1:
+                raise ValueError(f'{row_id}: order {order} is not a rung; rungs start at 1, low being '
+                                 'more acidic, and 0 is the value a row without one compiles to')
+
+        out.append(SaltRow(row_id, match, klass, row['pattern'], query, key, anchor, charges, order,
+                           heavy_atoms, row['comment']))
     return tuple(out)
 
 
@@ -382,22 +417,22 @@ def salts_rows() -> tuple[SaltRow, ...]:
     return _SALTS_CACHE['rows']                                               # type: ignore[return-value]
 
 
-def salts_rows_by_role() -> dict[str, tuple[SaltRow, ...]]:
-    """The same rows grouped by role, every role present even when it has no rows.
+def salts_rows_by_klass() -> dict[str, tuple[SaltRow, ...]]:
+    """The same rows grouped by class, every class present even when it has no rows.
 
-    Grouped here rather than in the pass so a role with no rows is a `()` the pass iterates over
-    rather than a `KeyError` on the first molecule.
+    Grouped here rather than in the pass so a class with no rows is a `()` the pass iterates over rather
+    than a `KeyError` on the first molecule.
     """
-    if 'by_role' not in _SALTS_CACHE:
-        grouped: dict[str, list] = {role: [] for role in SALT_ROLES}
+    if 'by_klass' not in _SALTS_CACHE:
+        grouped: dict[str, list] = {klass: [] for klass in SALT_CLASSES}
         for row in salts_rows():
-            grouped[row.role].append(row)
-        _SALTS_CACHE['by_role'] = {role: tuple(rows) for role, rows in grouped.items()}
-    return _SALTS_CACHE['by_role']                                            # type: ignore[return-value]
+            grouped[row.klass].append(row)
+        _SALTS_CACHE['by_klass'] = {klass: tuple(rows) for klass, rows in grouped.items()}
+    return _SALTS_CACHE['by_klass']                                           # type: ignore[return-value]
 
 
 def salts_species_keys() -> dict[str, SaltRow]:
-    """The `counterion`, `base` and `solvate` rows keyed by `format(species, '!s')`.
+    """The `whole` rows keyed by `format(species, '!s')`.
 
     One dict lookup per component is the whole match: the key is a stereo-free canonical SMILES, so a
     component either IS a tabulated species or is not, and there is no candidate list to walk.

@@ -19,16 +19,18 @@
 """`split_salts`, `decompose_salts` and the table behind them.
 
 `split_salts` acts on all 93 `[M]` metals, kept safe by an all-or-nothing test per cation atom, so the
-refusals matter as much as the splits.  `decompose_salts` reads the same table the other way round: a
-tabulated species is a counterion only when something else is there to be the compound, so the record
-that is nothing but a salt former answers with that former as its own parent.
+refusals matter as much as the splits.  `decompose_salts` returns one `ComponentRow` per component: a
+stabilizer is eligible, never leftover -- the guard fires when no parent is a non-lone-metal outside the
+recognized solvents, so water alone answers water and a THF monohydrate reports both as parents.
 """
-from pytest import raises
+from pytest import mark, raises
 # `__all__` and not the package object: `from ... import chemistry` would execute the facade, which
 # `test_dependency_direction.py` ratchets against.
-from .. import SALT_ROLES, __all__ as CHEMISTRY_ALL, decompose_salts, split_salts
+from .. import (ComponentRow, DEFAULT_STABILIZER_CLASSES, __all__ as CHEMISTRY_ALL, decompose_salts,
+                implicify_hydrogens, neutralize, split_salts)
 from .. import _salts
-from .._tables import salts_rows, salts_rows_by_role, salts_species_keys, salts_table_text
+from .._tables import (SALT_CLASSES, SALT_MATCHES, salts_rows, salts_rows_by_klass,
+                       salts_species_keys, salts_table_text)
 from ...core import REFUSED, REPAIRED, MoleculeContainer, read_smiles as smiles
 
 
@@ -154,7 +156,7 @@ def test_the_stage_is_the_pass_name():
     assert m.log[0].stage == 'split-salts'
 
 
-# the keep surface: row id, role or element symbol
+# the keep surface: row id, class or element symbol
 
 
 def test_keep_protects_a_cation_from_splitting_too():
@@ -176,15 +178,15 @@ def test_keeping_an_acceptor_row_refuses_the_cation_that_needed_it():
     assert 'matches no acceptor row' in log.refused()[0]
 
 
-def test_a_role_name_reaches_every_row_of_that_role():
-    """A role name saves a caller from naming rows one by one and going stale each time the table
-    grows.  Only the two SMARTS roles mean anything here: nothing else names an atom."""
-    for keep in [['cation'], ['acceptor']]:
+def test_a_class_name_reaches_every_row_of_that_class():
+    """A class name saves a caller from naming rows one by one and going stale each time the table
+    grows.  Only the two embed classes name an atom; a class with no atom leaves the split alone."""
+    for keep in [['metal_cation'], ['charge_acceptor']]:
         m = smiles('CC(=O)O[Na]')
         assert split_salts(m, keep=keep) is False, keep
-    # a role that names no atom leaves the split alone
+    # a class that names no atom leaves the split alone
     m = smiles('CC(=O)O[Na]')
-    assert split_salts(m, keep=['solvate']) is True
+    assert split_salts(m, keep=['water']) is True
 
 
 def test_there_is_no_strip_keyword():
@@ -200,17 +202,17 @@ def test_a_molecule_in_keep_is_refused_with_the_reason():
         split_salts(smiles('CC(=O)O[Na]'), keep=[smiles('Cl')])
     assert 'names a whole COMPONENT' in str(e.value)
     assert "keep=['Na']" in str(e.value), 'the refusal does not say what to write instead'
-    assert "keep=['cation']" in str(e.value)
+    assert "keep=['metal_cation']" in str(e.value)
 
 
 def test_a_keep_item_of_the_wrong_kind_is_refused_at_the_boundary():
     with raises(TypeError) as e:
         split_salts(smiles('CC(=O)O[Na]'), keep=[11])
-    assert 'row ids, roles or element symbols' in str(e.value)
+    assert 'row ids, classes or element symbols' in str(e.value)
 
     with raises(ValueError) as e:
         split_salts(smiles('CC(=O)O[Na]'), keep=['Unobtainium'])
-    assert 'a row id' in str(e.value) and 'a role' in str(e.value)
+    assert 'a row id' in str(e.value) and 'a class' in str(e.value)
 
 
 def test_a_typo_in_a_row_id_is_refused():
@@ -261,57 +263,7 @@ def test_an_inner_salt_is_one_piece_either_way():
     assert len(m.split()) == 1
 
 
-# decompose_salts: the relational order
-
-
-def test_a_record_that_is_its_own_salt_former_is_its_own_parent():
-    """Acetic acid is acetic acid.  Nothing is beside it, so nothing is counted beside it."""
-    r = smiles('CC(=O)O').decompose_salts()
-    assert [str(p) for p in r.parents] == ['C(C)(=O)O']
-    assert (r.counterions, r.solvates, r.cations) == ({}, {}, {})
-
-    r = smiles('Cl').decompose_salts()
-    assert [str(p) for p in r.parents] == ['Cl']
-    assert (r.counterions, r.solvates, r.cations) == ({}, {}, {})
-
-
-def test_a_salt_reports_the_acid_as_the_parent_and_the_metal_as_a_cation():
-    for s in ['CC(=O)O[Na]', 'CC(=O)[O-].[Na+]', 'CC(=O)O.[Na+]']:
-        r = smiles(s).decompose_salts()
-        assert [str(p) for p in r.parents] == ['C(C)(=O)O'], s
-        assert r.cations == {'Na': 1} and r.counterions == {}, s
-    # and sodium chloride is hydrochloric acid beside one sodium, rather than no compound at all
-    r = smiles('[Na+].[Cl-]').decompose_salts()
-    assert [str(p) for p in r.parents] == ['Cl'] and r.cations == {'Na': 1}
-
-
-def test_a_compound_beside_a_former_reports_the_compound():
-    r = smiles('NCC(=O)O.OC(=O)C(F)(F)F.O').decompose_salts()
-    assert [str(p) for p in r.parents] == ['C(CN)(=O)O']
-    assert r.counterions == {'salts:tfa': 1} and r.solvates == {'salts:water': 1}
-
-
-def test_a_solvate_is_counted_even_when_every_component_is_tabulated():
-    """The middle rung: acetic acid monohydrate is acetic acid, with the water counted."""
-    r = smiles('CC(=O)O.O').decompose_salts()
-    assert [str(p) for p in r.parents] == ['C(C)(=O)O'] and r.solvates == {'salts:water': 1}
-
-
-def test_a_record_of_nothing_but_solvates_is_the_solvate():
-    assert [str(p) for p in smiles('O.O').decompose_salts().parents] == ['O']
-    assert [str(p) for p in smiles('CCO.O').decompose_salts().parents] == ['C(C)O', 'O']
-
-
-def test_two_drawn_equivalents_of_one_compound_are_one_parent():
-    r = smiles('OC(=O)c1ccccc1O.OC(=O)c1ccccc1O').decompose_salts()
-    assert len(r.parents) == 1
-
-
-def test_two_enantiomers_drawn_together_are_two_parents():
-    """Parents dedup by canonical bytes, not by the constitution key: a racemate drawn as two
-    components is two compounds, and collapsing them would report a stoichiometry that was not drawn."""
-    r = smiles('N[C@@H](C)C(=O)O.N[C@H](C)C(=O)O').decompose_salts()
-    assert len(r.parents) == 2
+# decompose_salts: the default split
 
 
 def test_decompose_salts_changes_nothing_and_logs_nothing():
@@ -325,90 +277,198 @@ def test_decompose_salts_changes_nothing_and_logs_nothing():
 
 def test_the_salt_surface_is_two_methods():
     """One that edits and one that reports.  The third, which deleted components, asked the same
-    question as the reporter and answered it destructively; a consumer takes `parents[0]` instead."""
+    question as the reporter and answered it destructively; a consumer reads `parents` instead."""
     mol = smiles('CC(=O)O[Na].O')
     assert callable(mol.split_salts) and callable(mol.decompose_salts)
     for gone in ('split_ionic', 'strip_salts', 'salt_composition'):
         assert not hasattr(mol, gone), f'{gone} still resolves'
         assert gone not in CHEMISTRY_ALL, f'{gone} is still on the package'
-    assert set(_salts.__all__) == {'SaltComposition', 'decompose_salts', 'split_salts'}
+    assert set(_salts.__all__) == {'ComponentRow', 'DEFAULT_STABILIZER_CLASSES',
+                                   'SaltComposition', 'decompose_salts', 'split_salts'}
 
 
-#  smiles                                          parent smiles, counterions, solvates, cations
-COMPOSITIONS = [
-    ('NCC(=O)O',                                    'NCC(=O)O', {}, {}, {}),
-    ('NCC(=O)O.OC(=O)C(F)(F)F',                     'NCC(=O)O', {'salts:tfa': 1}, {}, {}),
-    ('[NH3+]CC(=O)O.[O-]C(=O)C(F)(F)F',             'NCC(=O)O', {'salts:tfa': 1}, {}, {}),
-    ('NCC(=O)O.OC(=O)C(F)(F)F.OC(=O)C(F)(F)F',      'NCC(=O)O', {'salts:tfa': 2}, {}, {}),
-    ('NCCCCN.Cl.Cl.O',                              'NCCCCN', {'salts:hcl': 2},
-     {'salts:water': 1}, {}),
-    # a record whose charges do not balance is still read: the counterion is named and the parent comes
-    # back neutral, since `keep_charge=False` takes each component as close to neutral as it goes.
-    ('CN(C)CCOC(c1ccccc1)c1ccccc1.[O-]S(=O)(=O)c1ccc(C)cc1',
-     'CN(C)CCOC(c1ccccc1)c1ccccc1', {'salts:tosylic': 1}, {}, {}),
-    ('[NH2]CC(=O)[O-].[K+]',                        'NCC(=O)O', {}, {}, {'K': 1}),
-    # a quaternary ammonium has no proton to give, so it keeps its charge and the chloride still counts
-    ('C[N+](C)(C)C.[Cl-]',                          'C[N+](C)(C)C', {'salts:hcl': 1}, {}, {}),
-    ('C[N+](C)(C)CC(=O)[O-]',                       'C[N+](C)(C)CC(=O)[O-]', {}, {}, {}),
-]
-
-
-def test_the_composition_of_a_record():
-    for s, parent, counterions, solvates, cations in COMPOSITIONS:
-        r = smiles(s).decompose_salts()
-        assert len(r.parents) == 1, s
-        assert r.parents[0].canonical_bytes == smiles(parent).canonical_bytes, s
-        assert r.counterions == counterions, s
-        assert r.solvates == solvates, s
-        assert r.cations == cations, s
-
-
-def test_an_explicit_hydrogen_does_not_hide_a_counterion():
-    """The key is taken from a molecule with implicit hydrogens, where an explicit one is a difference;
-    the implicification inside the pass is what keeps a hydrogen-atom drawing readable."""
-    a = smiles('NCC(=O)O.[H]OC(=O)C(F)(F)F').decompose_salts()
-    b = smiles('NCC(=O)O.OC(=O)C(F)(F)F').decompose_salts()
-    assert a.counterions == b.counterions == {'salts:tfa': 1}
-
-
-def test_a_kekule_drawing_of_a_solvate_still_matches():
-    """`thiele()` runs on the copy, so a Kekule toluene keys to the tabulated aromatic one."""
-    for s in ['NCC(=O)O.Cc1ccccc1', 'NCC(=O)O.C1=CC=CC=C1C']:
-        assert smiles(s).decompose_salts().solvates == {'salts:toluene': 1}, s
-
-
-def test_a_counterion_row_names_a_constitution_and_not_a_stereoisomer():
-    """One tartrate row covers L, D, meso and undefined, the key being taken with stereo disabled."""
-    for s in ['CN.O[C@H]([C@@H](O)C(O)=O)C(O)=O',
-              'CN.O[C@@H]([C@H](O)C(O)=O)C(O)=O',
-              'CN.OC(C(O)C(O)=O)C(O)=O']:
-        r = smiles(s).decompose_salts()
-        assert [str(p) for p in r.parents] == ['CN'], s
-        assert r.counterions == {'salts:tartaric': 1}, s
-
-
-def test_the_compound_of_interest_keeps_its_own_stereo():
-    """Stereo is dropped from the KEY and not from the molecule, so a parent comes back configured."""
-    r = smiles('C[C@H](N)C(=O)O.Cl').decompose_salts()
-    assert r.counterions == {'salts:hcl': 1}
-    assert r.parents[0].canonical_bytes == smiles('C[C@H](N)C(=O)O').canonical_bytes
-    assert r.parents[0].canonical_bytes != smiles('C[C@@H](N)C(=O)O').canonical_bytes
-
-
-def test_a_labelled_solvate_is_a_different_species():
-    """No `clean_isotopes()`, matching how the table itself was loaded: D2O is not water, so it is
-    reported as an unrecognized component rather than silently counted as a hydrate."""
-    r = smiles('NCC(=O)O.[2H]O[2H]').decompose_salts()
-    assert r.solvates == {}
+def test_two_enantiomers_drawn_together_are_two_parents():
+    """Parents are per component, not per canonical constitution: a racemate drawn as two components is
+    two compounds, and collapsing them would report a stoichiometry that was not drawn."""
+    r = smiles('N[C@@H](C)C(=O)O.N[C@H](C)C(=O)O').decompose_salts()
     assert len(r.parents) == 2
 
 
-def test_a_coordination_complex_is_a_parent_and_not_a_composition():
-    """The all-or-nothing test inside `split_salts` reaches here: a dative bond exempts the whole atom,
-    so cisplatin is one compound rather than a platinum and two chlorides."""
-    r = smiles('N[Pt](N)(Cl)Cl').decompose_salts()
-    assert len(r.parents) == 1
-    assert r.counterions == {} and r.cations == {}
+#: (record, parents, stabilizer row ids).  A parent is named by the spelling the NORMALIZED probe holds --
+#: neutralized, so a drawn acetate is acetic acid here and an intrinsic `[Na+]` is still `[Na+]`.  Public
+#: compounds throughout.
+COMPOSITIONS = (
+    ('CC(=O)Oc1ccccc1C(=O)O.O', ('CC(=O)Oc1ccccc1C(=O)O',), ('salts:water',)),
+    ('CCN.Cl', ('CCN',), ('salts:hcl',)),
+    ('c1ccncc1.OC(=O)C(F)(F)F', ('c1ccncc1',), ('salts:tfa',)),
+    ('CC(=O)[O-].[Na+]', ('CC(=O)O', '[Na+]'), ()),
+    ('CC(=O)O[Na]', ('CC(=O)O', '[Na+]'), ()),
+    ('CC(=O)O.[Na+]', ('CC(=O)O', '[Na+]'), ()),
+    ('CC(=O)O.[Na]', ('CC(=O)O', '[Na]'), ()),
+    ('C[N+](C)(C)C.[Cl-]', ('C[N+](C)(C)C', 'Cl'), ()),
+    ('CC[B-](F)(F)F.[K+]', ('CC[B-](F)(F)F', '[K+]'), ()),
+    ('CCCS([O-])(=O)=O.[Na+].O', ('CCCS(O)(=O)=O', '[Na+]'), ('salts:water',)),
+    ('[Na]', ('[Na]',), ()),
+    ('CCBr.[Zn]', ('CCBr', '[Zn]'), ()),
+    ('c1ccccc1.CC(=O)Oc1ccccc1C(=O)O', ('c1ccccc1', 'CC(=O)Oc1ccccc1C(=O)O'), ()),
+    ('CCO.CCCO', ('CCO', 'CCCO'), ()),
+    ('O.C1CCOC1', ('O', 'C1CCOC1'), ()),
+    ('CC(=O)O', ('CC(=O)O',), ()),
+    ('O', ('O',), ()),
+)
+
+
+def _canonical(spelling):
+    mol = smiles(spelling)
+    mol.thiele()
+    return format(mol, '!s')
+
+
+@mark.parametrize('spelling, parents, stabilizers', COMPOSITIONS)
+def test_the_default_split_is_the_table(spelling, parents, stabilizers):
+    answer = smiles(spelling).decompose_salts()
+    assert sorted(format(row.molecule, '!s') for row in answer.parents) == \
+        sorted(_canonical(p) for p in parents)
+    assert sorted(row.species for row in answer.stabilizers) == sorted(stabilizers)
+
+
+def test_every_component_gets_exactly_one_row_and_one_role():
+    answer = smiles('CCCS([O-])(=O)=O.[Na+].O').decompose_salts()
+    assert len(answer.components) == 3
+    assert {row.role for row in answer.components} == {'parent', 'stabilizer'}
+    assert len(answer.parents) + len(answer.stabilizers) == len(answer.components)
+    # `atoms` partitions the caller's heavy atoms: 7 in the sulfonate, the sodium, the water
+    assert sorted(n for row in answer.components for n in row.atoms) == list(range(1, 10))
+
+
+def test_the_row_carries_the_shape_and_both_charges():
+    answer = smiles('CC(=O)[O-].[Na+]').decompose_salts()
+    acetate, sodium = sorted(answer.components, key=lambda row: row.heavy_atoms, reverse=True)
+    assert (acetate.heavy_atoms, acetate.carbon_count, acetate.ring_count) == (4, 2, 0)
+    assert (acetate.charge, acetate.residual_charge) == (-1, 0)
+    assert (sodium.charge, sodium.residual_charge) == (1, 1)
+    assert sodium.is_lone_metal and not acetate.is_lone_metal
+    assert sodium.species == 'salts:metal' and sodium.klass == 'metal_cation'
+
+
+def test_is_lone_metal_is_charge_blind_across_all_four_spellings():
+    for spelling in ('CC(=O)[O-].[Na+]', 'CC(=O)O[Na]', 'CC(=O)O.[Na+]', 'CC(=O)O.[Na]'):
+        answer = smiles(spelling).decompose_salts()
+        assert [row.is_lone_metal for row in answer.components].count(True) == 1, spelling
+        assert not answer.stabilizers, spelling
+
+
+def test_a_counter_ion_of_an_intrinsic_charge_stays():
+    # the chloride is drawn -1 and the record's intrinsic charge is +1, so it is on duty
+    answer = smiles('C[N+](C)(C)C.[Cl-]').decompose_salts()
+    assert len(answer.parents) == 2 and not answer.stabilizers
+    # the same chloride beside an ammonium that HAS a neutral form is a stabilizer
+    answer = smiles('CC[NH3+].[Cl-]').decompose_salts()
+    assert [row.species for row in answer.stabilizers] == ['salts:hcl']
+
+
+#: A lone metal states no charge when it is drawn neutral, and one the drawing does not account for when the
+#: record's drawn charges do not balance either way; the anion it belongs to is then on counter-ion duty and
+#: never leftover -- with a third component present, the guard is not what saves it.  Water is on no duty: it
+#: is neither an anion nor a `protic_acid` site.  `[Mg+]` with two acetates is the record that pins the
+#: negative direction: `fix_salt_charges` calls that magnesium under-charged, so the reader must not answer it
+#: one way before `standardize()` and another way after.  The last four rows are the controls: a balanced
+#: sodium chloride beside a free acid, a record with no metal at all, a hydrate of a charged metal, and an
+#: amine hydrochloride, whose HCl leaves because the record balances.
+UNDRAWN_METAL_DUTY = (
+    ('Cl.[Na].CCBr', 'Cl', ()),
+    ('CC(=O)[O-].[Na].CCBr', 'C(C)(=O)O', ()),
+    ('[O-]S(=O)(=O)C.[Na].CCBr', 'CS(=O)(O)=O', ()),
+    ('CC(=O)O.[Na].O.CCBr', 'C(C)(=O)O', ('salts:water',)),
+    ('CC(=O)O.[Na+].CCBr', 'C(C)(=O)O', ()),
+    ('Cl.[Na+].CCBr', 'Cl', ()),
+    ('CC(=O)O.[Mg+2].CCBr', 'C(C)(=O)O', ()),
+    ('CC(=O)[O-].CC(=O)[O-].[Mg+].CCBr', 'C(C)(=O)O', ()),
+    ('[Na+].[Cl-].[Cl-].CCBr', 'Cl', ()),
+    ('[Na+].[Cl-].CC(=O)O.CCBr', 'Cl', ('salts:acetic',)),
+    ('CCN.Cl.CCBr', 'C(C)N', ('salts:hcl',)),
+    ('O.[Na+].CCBr', 'C(C)Br', ('salts:water',)),
+    ('CC[NH3+].[Cl-]', 'C(C)N', ('salts:hcl',)),
+)
+
+
+@mark.parametrize('spelling, parent, stabilizers', UNDRAWN_METAL_DUTY)
+def test_an_anion_whose_metal_lacks_its_charge_is_never_leftover(spelling, parent, stabilizers):
+    answer = smiles(spelling).decompose_salts()
+    assert parent in [str(row.molecule) for row in answer.parents], spelling
+    assert tuple(row.species for row in answer.stabilizers) == stabilizers, spelling
+
+
+def test_an_under_charged_metal_answers_the_same_before_and_after_standardize():
+    """The records `fix_salt_charges` repairs must not partition one way before it and another way after.
+
+    The metal's own drawn charge is what the repair moves, so the comparison is over the partition: which
+    components are parents, which leave, and every parent that is not the metal.
+    """
+    for spelling in ('CC(=O)[O-].CC(=O)[O-].[Mg+].CCBr', 'CC(=O)O.[Na].CCBr', 'CC(=O)O.[Na+].CCBr'):
+        mol = smiles(spelling)
+        drawn = smiles(spelling).decompose_salts()
+        mol.standardize()
+        repaired = mol.decompose_salts()
+        assert ([str(row.molecule) for row in drawn.parents if not row.is_lone_metal]
+                == [str(row.molecule) for row in repaired.parents if not row.is_lone_metal]), spelling
+        assert len(drawn.parents) == len(repaired.parents), spelling
+        assert ([row.species for row in drawn.stabilizers]
+                == [row.species for row in repaired.stabilizers]), spelling
+
+
+def test_a_sodium_sulfonate_monohydrate_keeps_its_pair_and_loses_its_water():
+    answer = smiles('CCCS([O-])(=O)=O.[Na+].O').decompose_salts()
+    assert [row.species for row in answer.stabilizers] == ['salts:water']
+    assert len(answer.parents) == 2
+
+
+def test_an_organometallic_is_never_a_stabilizer():
+    answer = smiles('CC[B-](F)(F)F.[K+]').decompose_salts()
+    borate = next(row for row in answer.components if row.is_organometallic)
+    assert borate.role == 'parent' and borate.residual_charge == -1
+
+
+def test_the_guard_makes_every_component_a_parent_when_all_are_formers():
+    for spelling in ('O', 'O.O', 'O.Cl'):
+        answer = smiles(spelling).decompose_salts()
+        assert answer.parents and not answer.stabilizers, spelling
+
+
+def test_classes_and_max_atoms_and_discardable_widen_the_split():
+    record = 'CC(=O)Oc1ccccc1C(=O)O.c1ccccc1'
+    assert not smiles(record).decompose_salts().stabilizers
+    widened = smiles(record).decompose_salts(classes=DEFAULT_STABILIZER_CLASSES + ('hydrocarbon',))
+    assert [row.species for row in widened.stabilizers] == ['salts:benzene']
+    capped = smiles(record).decompose_salts(classes=DEFAULT_STABILIZER_CLASSES + ('hydrocarbon',),
+                                            max_atoms=5)
+    assert not capped.stabilizers
+    named = smiles(record).decompose_salts(discardable=('salts:benzene',))
+    assert [row.species for row in named.stabilizers] == ['salts:benzene']
+
+
+def test_equivalents_counts_repeated_components():
+    answer = smiles('CCN.Cl.Cl').decompose_salts()
+    assert {row.equivalents for row in answer.stabilizers} == {2}
+    assert answer.equivalents_by_species() == {'salts:hcl': 2}
+
+
+def test_equivalents_counts_by_role_not_just_by_structure():
+    """A component on counter-ion duty and a free copy share the canonical key but not the role.
+
+    `C[N+](C)(C)C.[Cl-].Cl`: `[Cl-]` is on duty for TMA's intrinsic +1 charge, the second `Cl` is a
+    free stabilizer.  Both normalize to `Cl`, but their roles differ, so each has equivalents=1.
+    """
+    answer = smiles('C[N+](C)(C)C.[Cl-].Cl').decompose_salts()
+    assert answer.equivalents_by_species() == {'salts:hcl': 1}
+    assert any(row.species == 'salts:hcl' and row.role == 'parent' for row in answer.components)
+
+
+def test_the_record_charges_are_both_reported():
+    answer = smiles('CC(=O)[O-].[Na+]').decompose_salts()
+    assert (answer.charge, answer.residual_charge) == (0, 1)
+    answer = smiles('CC(=O)O.[Na+]').decompose_salts()
+    assert (answer.charge, answer.residual_charge) == (1, 1)
 
 
 # the container methods, and the table
@@ -423,6 +483,23 @@ def test_the_two_are_container_methods_and_agree_with_the_functions():
     for s in ['CC(=O)O[Na]', 'NCC(=O)O.OC(=O)C(F)(F)F', 'Cl']:
         a, b = smiles(s), smiles(s)
         assert a.decompose_salts() == decompose_salts(b)
+
+
+def test_the_container_method_forwards_every_keyword():
+    record = 'CC(=O)Oc1ccccc1C(=O)O.c1ccccc1'
+    assert not smiles(record).decompose_salts().stabilizers
+    assert [row.species for row in
+            smiles(record).decompose_salts(
+                classes=DEFAULT_STABILIZER_CLASSES + ('hydrocarbon',)).stabilizers] == ['salts:benzene']
+    assert not smiles(record).decompose_salts(classes=DEFAULT_STABILIZER_CLASSES + ('hydrocarbon',),
+                                              max_atoms=5).stabilizers
+    assert [row.species for row in
+            smiles(record).decompose_salts(discardable=('salts:benzene',)).stabilizers] == ['salts:benzene']
+
+
+def test_the_container_method_and_the_function_agree():
+    mol = smiles('CCN.Cl.O')
+    assert mol.decompose_salts().tags == decompose_salts(mol).tags
 
 
 def test_a_species_row_compiles_to_a_stereo_free_canonical_key():
@@ -462,31 +539,48 @@ def test_every_row_of_the_table_round_trips_through_its_own_key():
         assert salts_species_keys()[format(probe, '!s')].id == row.id, row.id
 
 
-def test_a_named_base_is_a_base_and_not_a_counterion():
-    by_role = salts_rows_by_role()
-    assert {r.id for r in by_role['base']} >= {'salts:ammonia', 'salts:tromethamine', 'salts:choline'}
-    assert 'salts:ammonia' not in {r.id for r in by_role['counterion']}
+def test_pyridine_is_tabulated_as_an_amine_base_not_a_solvent():
+    """Pyridine under a solvate class would read pyridine hydrochloride as hydrochloric acid."""
+    assert salts_species_keys()[format(smiles('c1ccncc1'), '!s')].klass == 'amine_base'
 
 
-def test_a_base_counts_where_a_counterion_does():
-    """The two roles differ in which side of the salt a species came from, not in being beside the
-    compound, so `counterions` holds both and a consumer reads one field."""
-    r = smiles('OC(=O)c1ccc(cc1)C(=O)Nc1ccccc1.OCC(N)(CO)CO').decompose_salts()
-    assert r.counterions == {'salts:tromethamine': 1}
+def test_a_kekule_drawing_still_keys_to_its_row():
+    """`thiele()` runs on the copy before keying, so a Kekule toluene keys to the tabulated aromatic row."""
+    for s in ['NCC(=O)O.Cc1ccccc1', 'NCC(=O)O.C1=CC=CC=C1C']:
+        answer = smiles(s).decompose_salts()
+        assert any(row.species == 'salts:toluene' for row in answer.components), s
 
 
-def test_a_species_that_is_both_solvent_and_base_is_tabulated_as_the_base():
-    """Pyridine under `solvate` would read pyridine hydrochloride as hydrochloric acid, the species rung
-    beating the solvate one.  Under `base` the record answers with both candidates, which is visible."""
-    assert salts_species_keys()[format(smiles('c1ccncc1'), '!s')].role == 'base'
-    r = smiles('c1ccncc1.Cl').decompose_salts()
-    assert {str(p) for p in r.parents} == {'c1ccccn1', 'Cl'}
-    assert r.counterions == {} and r.solvates == {}
+def test_an_explicit_hydrogen_does_not_hide_a_stabilizer():
+    """`implicify_hydrogens()` runs on the copy before keying, so an H-atom drawing still keys."""
+    a = smiles('NCC(=O)O.[H]OC(=O)C(F)(F)F').decompose_salts()
+    b = smiles('NCC(=O)O.OC(=O)C(F)(F)F').decompose_salts()
+    assert (sorted(row.species for row in a.stabilizers) ==
+            sorted(row.species for row in b.stabilizers) == ['salts:tfa'])
+
+
+def test_an_isotope_labelled_solvate_does_not_match_the_unlabelled_row():
+    """No `clean_isotopes()`: D2O is not water, so it is an unrecognized parent, not a hydrate."""
+    answer = smiles('NCC(=O)O.[2H]O[2H]').decompose_salts()
+    assert not any(row.species == 'salts:water' for row in answer.components)
+    assert len(answer.parents) == 2
+
+
+def test_a_coordination_complex_is_one_parent():
+    """The `split_salts` all-or-nothing test reaches here: cisplatin comes back intact as one component."""
+    answer = smiles('N[Pt](N)(Cl)Cl').decompose_salts()
+    assert len(answer.parents) == 1 and not answer.stabilizers
+
+
+def test_two_drawn_equivalents_report_one_row_per_drawn_copy():
+    """Each drawn copy gets its own row; `equivalents` says how many copies play the same role."""
+    answer = smiles('OC(=O)c1ccccc1O.OC(=O)c1ccccc1O').decompose_salts()
+    assert len(answer.parents) == 2
+    assert all(row.equivalents == 2 for row in answer.parents)
 
 
 def test_no_two_rows_share_a_key():
-    assert len(salts_species_keys()) == sum(len(salts_rows_by_role()[r])
-                                            for r in ('counterion', 'base', 'solvate'))
+    assert len(salts_species_keys()) == sum(1 for row in salts_rows() if row.key is not None)
 
 
 def test_the_ionic_conjugates_are_gone_because_neutralize_reaches_them():
@@ -499,34 +593,68 @@ def test_a_row_no_longer_carries_a_keep_flag():
     assert not hasattr(salts_rows()[0], 'keep')
     for line in salts_table_text().splitlines():
         if line.startswith('id\t'):
-            assert line.split('\t') == ['id', 'role', 'pattern', 'charges', 'comment']
+            assert line.split('\t') == ['id', 'match', 'klass', 'pattern', 'charges', 'order', 'comment']
             break
     else:
         raise AssertionError('salts.tsv has no column header')
 
 
-def test_every_row_is_internally_consistent():
-    """The loaded row shape the passes index into.  Exactly one of `query`/`key` per row is what makes
-    `role` load-bearing; load-time checks themselves live in `_tables.py`."""
-    ids = set()
+def test_every_row_declares_a_known_match_and_class():
     for row in salts_rows():
-        assert row.id not in ids, f'{row.id} appears twice'
-        ids.add(row.id)
-        assert row.id.startswith('salts:'), f'{row.id} is not table-qualified'
-        assert row.role in SALT_ROLES
-        assert (row.query is None) != (row.key is None), \
-            f'{row.id} has both a query and a key, or neither'
-        if row.query is not None:
-            assert row.anchor in row.query.map_numbers()
-        assert bool(row.charges) == (row.role == 'cation'), \
-            f'{row.id}: charges are the cation overcharge guard and mean nothing elsewhere'
-        assert row.comment, f'{row.id} has no comment'
+        assert row.match in SALT_MATCHES, row.id
+        assert row.klass in SALT_CLASSES, row.id
+
+
+def test_embed_rows_carry_a_query_and_whole_rows_carry_a_key():
+    for row in salts_rows():
+        if row.match == 'embed':
+            assert row.query is not None and row.key is None, row.id
+            assert row.heavy_atoms == 0, row.id
+        else:
+            assert row.key is not None and row.query is None, row.id
+            assert row.heavy_atoms > 0, row.id
+
+
+def test_heavy_atoms_counts_the_species():
+    rows = {row.id: row for row in salts_rows()}
+    assert rows['salts:water'].heavy_atoms == 1
+    assert rows['salts:acetic'].heavy_atoms == 4
+    assert rows['salts:tartaric'].heavy_atoms == 10
+
+
+def test_classes_are_grouped_and_none_is_missing():
+    grouped = salts_rows_by_klass()
+    assert set(grouped) == set(SALT_CLASSES)
+    assert sum(len(rows) for rows in grouped.values()) == len(salts_rows())
+    assert len(grouped['metal_cation']) == 1
+    assert len(grouped['charge_acceptor']) == 5
+    assert len(grouped['water']) == 1
+
+
+def test_the_class_census_matches_the_table():
+    expected = {'mineral_acid': 12, 'sulfonic_acid': 10, 'short_carboxylic_acid': 6,
+                'carboxylic_acid': 18, 'aromatic_acid': 6, 'fatty_acid': 4, 'amino_acid': 4,
+                'amine_base': 20, 'quaternary_ammonium': 1, 'water': 1, 'alcohol': 5,
+                'hydrocarbon': 6, 'halo_solvent': 3, 'aprotic_solvent': 14}
+    grouped = salts_rows_by_klass()
+    assert {k: len(grouped[k]) for k in expected} == expected
+    assert sum(expected.values()) == 110
+
+
+def test_only_the_metal_cation_row_carries_charges():
+    for row in salts_rows():
+        assert bool(row.charges) == (row.klass == 'metal_cation'), row.id
+
+
+def test_only_a_protic_acid_row_carries_an_order():
+    for row in salts_rows():
+        assert bool(row.order) == (row.klass == 'protic_acid'), row.id
 
 
 def test_the_metal_row_covers_every_metal_the_core_calls_one():
     """93 metals: `[M]`'s membership is the core's business and this row inherits it, so a change
     there shows up here as a diff."""
-    row, = salts_rows_by_role()['cation']
+    row, = salts_rows_by_klass()['metal_cation']
     assert row.pattern == '[M;*:1]'
     hits = 0
     for z in range(1, 119):
@@ -563,3 +691,405 @@ def test_a_record_is_substring_matchable():
     split_salts(m)
     assert len(log) == 1
     assert 'was ionic' in log[0]
+
+
+#: Every `protic_acid` row, with one public compound each row must fire on.  The rung is the pass's
+#: proton-choice order, so it is pinned here beside the pattern rather than left to file position.
+ACID_LADDER = (
+    ('salts:sulfonic-oh', 1, 'CS(=O)(=O)O'),
+    ('salts:oxo-acid-oh', 2, 'OP(=O)(O)O'),
+    ('salts:nitric-oh', 2, 'O[N+](=O)[O-]'),
+    ('salts:acyl-sulfonamide', 2, 'O=C1NS(=O)(=O)c2ccccc21'),
+    ('salts:hydrogen-halide', 3, 'Cl'),
+    ('salts:carboxylic-oh', 4, 'CC(=O)O'),
+    ('salts:tetrazole-1h', 4, 'c1nnn[nH]1'),
+    ('salts:tetrazole-2h', 4, 'c1nn[nH]n1'),
+    ('salts:phenol-oh', 5, 'Oc1ccccc1'),
+    ('salts:imide', 5, 'O=C1CCC(=O)N1'),
+    ('salts:sulfonamide', 5, 'Cc1ccc(cc1)S(N)(=O)=O'),
+)
+
+#: Nothing here is a salt-forming acid, and no row may fire on any of it.  Every azole people draw is in
+#: the list: only tetrazole sits in the salt-forming range, so every other one is a refusal by design.
+NOT_ACIDS = (
+    'c1cc[nH]c1', 'c1cnc[nH]1', 'c1cn[nH]c1', 'c1cn[nH]n1', 'c1c[nH]nn1', 'c1nc[nH]n1',
+    'c1ccc2[nH]nnc2c1', 'c1ccc2[nH]ccc2c1', 'Cn1c(=O)c2[nH]cnc2n(C)c1=O',
+    'CC(N)=O', 'c1ccccc1C(N)=O', 'CNC(C)=O', 'NC(N)=O', 'Nc1ccccc1', 'NO', 'CC=NO', 'CC(=O)NO',
+    'CCO', 'O', 'CO', 'CC(C)(C)O', 'OC1CCCCC1', 'OCC1OC(O)C(O)C(O)C1O',
+    'CC(C)=O', 'CS(C)=O', 'CC(=O)OC', 'COS(C)(=O)=O', 'C1CCOC1', 'c1ccncc1',
+    'c1ccccc1[N+](=O)[O-]', 'C[N+](C)(C)[O-]', 'Clc1ccccc1', 'CCCl',
+)
+
+
+def test_the_acid_ladder_is_the_table():
+    rows = salts_rows_by_klass()['protic_acid']
+    assert [(row.id, row.order) for row in rows] == [(i, o) for i, o, _ in ACID_LADDER]
+    assert [row.order for row in rows] == sorted(row.order for row in rows)
+
+
+def test_every_acid_row_fires_on_its_compound():
+    rows = {row.id: row for row in salts_rows_by_klass()['protic_acid']}
+    for row_id, _, spelling in ACID_LADDER:
+        mol = smiles(spelling)
+        mol.standardize()
+        mol.thiele()
+        assert next(rows[row_id].query.get_mapping(mol), None) is not None, row_id
+
+
+def test_no_acid_row_fires_on_a_non_acid():
+    rows = salts_rows_by_klass()['protic_acid']
+    for spelling in NOT_ACIDS:
+        mol = smiles(spelling)
+        mol.standardize()
+        mol.thiele()
+        fired = [row.id for row in rows if next(row.query.get_mapping(mol), None) is not None]
+        assert not fired, (spelling, fired)
+
+
+def test_a_nitrophenol_is_a_phenol_and_not_a_nitric_acid():
+    rows = {row.id: row for row in salts_rows_by_klass()['protic_acid']}
+    mol = smiles('c1cc(O)ccc1[N+](=O)[O-]')
+    mol.standardize()
+    mol.thiele()
+    assert next(rows['salts:phenol-oh'].query.get_mapping(mol), None) is not None
+    assert next(rows['salts:nitric-oh'].query.get_mapping(mol), None) is None
+
+
+# tags
+
+
+#: (record, tags that must be present).  Containment and not equality: §14's table names the tags each
+#: record is interesting for, and a derived tag set is free to carry more -- `CC(=O)O.[Na+]` is both
+#: `charge_unbalanced` and an `ion_pair`.  Exclusivity is asserted separately, where it is a claim.
+TAGGINGS = (
+    ('CC(=O)Oc1ccccc1C(=O)O.O', {'hydrate'}),
+    ('CCN.Cl', {'acid_salt'}),
+    ('c1ccncc1.OC(=O)C(F)(F)F', {'acid_salt'}),
+    ('CC(=O)[O-].[Na+]', {'metal_salt', 'ion_pair'}),
+    ('CC(=O)O[Na]', {'metal_salt', 'ion_pair'}),
+    ('CC(=O)O.[Na+]', {'metal_salt', 'charge_unbalanced'}),
+    ('CC(=O)O.[Na]', {'metal_salt', 'charges_undrawn'}),
+    ('C[N+](C)(C)C.[Cl-]', {'acid_salt', 'ion_pair'}),
+    ('CC[B-](F)(F)F.[K+]', {'ion_pair'}),
+    ('CCCS([O-])(=O)=O.[Na+].O', {'metal_salt', 'hydrate'}),
+    ('[Na]', {'single', 'elemental_metal'}),
+    ('CCBr.[Zn]', {'elemental_metal'}),
+    ('c1ccccc1.CC(=O)Oc1ccccc1C(=O)O', {'solvate'}),
+    ('CCO.CCCO', {'solvate'}),
+    ('O.C1CCOC1', {'hydrate', 'solvate', 'competing_formers', 'stabilizer_only'}),
+    ('CC(=O)O', {'single'}),
+    ('O', {'single', 'stabilizer_only'}),
+)
+
+
+@mark.parametrize('spelling, tags', TAGGINGS)
+def test_the_tags_are_the_table(spelling, tags):
+    assert tags <= smiles(spelling).decompose_salts().tags, spelling
+
+
+def test_a_borate_potassium_pair_is_not_a_metal_salt():
+    tags = smiles('CC[B-](F)(F)F.[K+]').decompose_salts().tags
+    assert 'metal_salt' not in tags and 'elemental_metal' not in tags
+
+
+def test_mixture_is_what_is_left_when_the_table_recognizes_nothing():
+    tags = smiles('CCBr.c1ccc2c(c1)cccc2C#N').decompose_salts().tags
+    assert 'mixture' in tags
+    for spelling in ('CC(=O)[O-].[Na+]', 'CCN.Cl', 'CC(=O)Oc1ccccc1C(=O)O.O',
+                     'c1ccccc1.CC(=O)Oc1ccccc1C(=O)O'):
+        assert 'mixture' not in smiles(spelling).decompose_salts().tags, spelling
+
+
+def test_a_tag_does_not_flip_when_classes_widen():
+    record = 'CC(=O)Oc1ccccc1C(=O)O.c1ccccc1'
+    narrow = smiles(record).decompose_salts().tags
+    wide = smiles(record).decompose_salts(classes=DEFAULT_STABILIZER_CLASSES + ('hydrocarbon',)).tags
+    assert 'solvate' in narrow and narrow == wide
+
+
+def test_the_three_records_the_default_keeps_whole():
+    api = 'CC(=O)Oc1ccccc1C(=O)O'                                  # aspirin: a carboxylic acid site
+    for record, tag in ((f'{api}.Cc1ccccc1', 'solvate'),
+                        (f'{api}.NCCCCC(N)C(=O)O', 'base_salt'),
+                        (f'{api}.CCN(CC)CC', 'base_salt')):
+        answer = smiles(record).decompose_salts()
+        assert tag in answer.tags, record
+        assert len(answer.parents) == 2 and not answer.stabilizers, record
+
+
+# compose: putting a selection back together
+
+
+def _normalized(spelling):
+    """The form `decompose_salts()` compares against: five steps in the same order as the function body."""
+    mol = smiles(spelling)
+    implicify_hydrogens(mol)
+    split_salts(mol)
+    mol.thiele()
+    neutralize(mol, keep_charge=False)
+    mol.thiele()
+    return mol
+
+
+#: Each record is a stereo-carrying parent drawn beside a water.  `compose(parents)` must equal the parent
+#: drawn dry -- so the four kinds of stereo chython stores each get a row.
+COMPOSABLE = (
+    ('C[C@H](N)C(=O)O.O', 'C[C@H](N)C(=O)O'),                       # a plain tetrahedral centre
+    ('C[C@@H](O)c1ccccc1.O', 'C[C@@H](O)c1ccccc1'),                 # a second, on an aromatic
+    ('[13CH3]C(=O)O.O', '[13CH3]C(=O)O'),                           # an isotope
+    ('C/C=C/C(=O)O.O', 'C/C=C/C(=O)O'),                             # an E/Z bond
+)
+
+
+@mark.parametrize('record, dry', COMPOSABLE)
+def test_compose_of_the_parents_is_the_parent_drawn_dry(record, dry):
+    answer = smiles(record).decompose_salts()
+    assert answer.compose(answer.parents).canonical_bytes == _normalized(dry).canonical_bytes
+
+
+def test_compose_takes_any_selection_including_a_stabilizer_back():
+    answer = smiles('CCN.Cl.O').decompose_salts()
+    assert answer.compose(answer.components).canonical_bytes == _normalized('CCN.Cl.O').canonical_bytes
+    water = next(row for row in answer.stabilizers if row.species == 'salts:water')
+    rebuilt = answer.compose(answer.parents + (water,))
+    assert rebuilt.canonical_bytes == _normalized('CCN.O').canonical_bytes
+
+
+def test_compose_of_one_row_is_that_row():
+    answer = smiles('CCN.Cl').decompose_salts()
+    only = answer.parents[0]
+    assert answer.compose((only,)).canonical_bytes == only.molecule.canonical_bytes
+
+
+def test_compose_refuses_an_empty_selection_and_a_foreign_row():
+    answer = smiles('CCN.Cl').decompose_salts()
+    other = smiles('CCO').decompose_salts()
+    with raises(ValueError):
+        answer.compose(())
+    with raises(ValueError):
+        answer.compose(other.components)
+
+
+def test_compose_unions_two_stereo_parents():
+    # both parents carry a tetrahedral centre, so the union loop runs with parities in play
+    answer = smiles('C[C@H](N)C(=O)O.C[C@@H](O)c1ccccc1.O').decompose_salts()
+    assert len(answer.parents) == 2                          # or the copy path would carry the test
+    assert answer.compose(answer.parents).canonical_bytes == \
+        _normalized('C[C@H](N)C(=O)O.C[C@@H](O)c1ccccc1').canonical_bytes
+
+
+# standardize integration
+
+
+def test_standardize_runs_the_stage_and_recomputes_the_hydrogen_counts():
+    mol = smiles('CC(=O)O.[Na]')
+    assert mol.standardize()
+    assert mol.canonical_bytes == smiles('CC(=O)[O-].[Na+]').canonical_bytes
+    # the deprotonated oxygen's count comes from calc_implicit, not from the stage
+    oxygen = next(atom for atom in mol.atoms() if atom.element == 8 and atom.charge == -1)
+    assert oxygen.implicit_h == 0
+
+
+def test_a_deprotonated_azole_keeps_the_ring_hydrogens():
+    """The recomputation never lands on the one atom class the ring decides.
+
+    `calc_implicit` on an uncharged aromatic pnictogen answers `H_UNKNOWN`, so a stage recomputing one
+    would erase a stated N-H.  The ids this stage returns are free metals and sites it has just charged,
+    and a charged `[n-]` has its class fixed by the charge.
+    """
+    mol = smiles('c1nnn[nH]1.[Na]')
+    assert mol.standardize()
+    assert mol.canonical_bytes == smiles('c1nnn[n-]1.[Na+]').canonical_bytes
+    assert sum(atom.total_h for atom in mol.atoms()) == 1         # the ring CH, and nothing lost
+    assert not mol.check_valence()
+
+
+def test_the_stage_order_is_forced_by_the_zinc_record():
+    mol = smiles('CC[Zn].[Cl-].CC(=O)O.[Na]')
+    assert mol.standardize()
+    assert mol.canonical_bytes == smiles('CC[Zn]Cl.CC(=O)[O-].[Na+]').canonical_bytes
+
+
+def test_standardize_reproduces_the_four_spellings():
+    expected = {'CC(=O)O.[Na]': 'CC(=O)[O-].[Na+]',
+                'CC(=O)O.[Na+]': 'CC(=O)[O-].[Na+]',
+                'CC(=O)[O-].[Na+]': 'CC(=O)[O-].[Na+]',
+                'CC(=O)O[Na]': 'CC(=O)O[Na]'}          # covalent stays covalent: split_salts() owns that
+    for drawn, after in expected.items():
+        mol = smiles(drawn)
+        mol.standardize()
+        assert mol.canonical_bytes == smiles(after).canonical_bytes, drawn
+        assert not mol.check_valence(), drawn
+
+
+def test_canonicalize_does_not_undo_the_repair():
+    mol = smiles('CC(=O)O.[Na]')
+    mol.canonicalize()
+    assert mol.canonical_bytes == smiles('CC(=O)[O-].[Na+]').canonical_bytes
+
+
+def test_the_log_carries_one_stage_name_for_one_call():
+    mol = smiles('CC(=O)O.[Na]')
+    mol.standardize()
+    assert {record.stage for record in mol.log} == {'standardize'}
+
+
+# fix_salt_charges
+
+
+#: §12.2's worked table, one row per case.  `None` as the answer means the record comes back as drawn and
+#: the refusal is logged -- the invariant being that a refusal writes nothing at all, not that it writes
+#: something harmless.
+CHARGE_FIXES = (
+    ('CC(=O)O.[Na]', 'CC(=O)[O-].[Na+]'),                   # step 1, then case 3
+    ('CC(=O)O.[Na+]', 'CC(=O)[O-].[Na+]'),                  # case 3
+    ('CC(=O)[O-].[Na+]', 'CC(=O)[O-].[Na+]'),               # case 1, nothing written
+    ('CC(=O)O.CC(=O)O.[Mg]', 'CC(=O)[O-].CC(=O)[O-].[Mg+2]'),
+    ('O=S(=O)([O-])[O-].[Mg+2]', 'O=S(=O)([O-])[O-].[Mg+2]'),   # case 1
+    ('CS(=O)(=O)O.[Na]', 'CS(=O)(=O)[O-].[Na+]'),           # rung 1
+    ('Cl.[Na]', '[Cl-].[Na+]'),                              # rung 3
+    ('Oc1ccccc1.[Na]', '[O-]c1ccccc1.[Na+]'),                # rung 5
+    ('CC(=O)O.[Mg]', None),                                  # case 4: one equivalent, two wanted
+    ('CC(=O)O.[Zn]', None),                                  # step 1 refused
+    ('CCCCCC.[Na+]', None),                                  # case 4: nothing to sit on
+    ('[Na]', None),                                          # case 4: a lone metal is the metal
+    ('[Ce]', None),                                          # the f block: valence_electrons is 0
+    ('[Al+].[O-]S(=O)(=O)[O-]', None),                       # case 2: +3 against two anion equivalents
+    ('CCN.Cl', 'CCN.Cl'),                                    # no free metal: the stage never looks
+)
+
+
+def _fixed(spelling):
+    """Run the stage alone, against a list, and answer (molecule, written ids, log).
+
+    Mirrors what `standardize()` does: run the stage, then recompute implicit H counts for every
+    written atom via `calc_implicit` -- the same step `standardize()` takes after each stage.
+    """
+    from .. import calc_implicit
+    mol = smiles(spelling)
+    log = []
+    written = _salts.fix_salt_charges(mol, log)
+    for n in sorted(written):
+        calc_implicit(mol, n)
+    return mol, written, log
+
+
+@mark.parametrize('spelling, expected', CHARGE_FIXES)
+def test_fix_salt_charges_is_the_worked_table(spelling, expected):
+    mol, written, log = _fixed(spelling)
+    if expected is None:
+        assert mol.canonical_bytes == smiles(spelling).canonical_bytes, spelling
+        assert not written, spelling
+        assert log and all(record.severity == REFUSED for record in log), spelling
+    else:
+        assert mol.canonical_bytes == smiles(expected).canonical_bytes, spelling
+
+
+def test_a_refusal_writes_nothing_at_all():
+    for spelling in ('[Na]', 'CC(=O)O.[Zn]', 'CC(=O)O.[Mg]'):
+        mol, written, _ = _fixed(spelling)
+        assert format(mol) == format(smiles(spelling)), spelling
+        assert written == set(), spelling
+
+
+def test_the_written_ids_are_the_atoms_whose_charge_moved():
+    mol, written, _ = _fixed('CC(=O)O.[Na]')
+    assert len(written) == 2
+    assert {mol.atom(n).charge for n in written} == {-1, 1}
+
+
+def test_the_chosen_site_and_the_moved_charge_are_named_in_the_log():
+    _, _, log = _fixed('CC(=O)O.[Na]')
+    assert {record.rule for record in log} == {'salts:metal-charge', 'salts:charge-transfer'}
+    assert all(record.severity == REPAIRED for record in log)
+    transfer = next(record for record in log if record.rule == 'salts:charge-transfer')
+    assert 'salts:carboxylic-oh' in transfer.message
+
+
+def test_the_ladder_picks_the_more_acidic_of_two_sites():
+    # a phenol and a carboxylic acid on one molecule: rung 4 beats rung 5
+    mol, written, log = _fixed('OC(=O)c1ccccc1O.[Na]')
+    assert mol.canonical_bytes == smiles('[O-]C(=O)c1ccccc1O.[Na+]').canonical_bytes
+    transfer = next(record for record in log if record.rule == 'salts:charge-transfer')
+    assert 'salts:carboxylic-oh' in transfer.message and 'rung 4' in transfer.message
+
+
+def test_the_n_h_rows_fire_and_the_azoles_refuse():
+    for spelling, expected in (('O=S1(=O)NC(=O)c2ccccc21.[Na]',
+                                'O=S1(=O)[N-]C(=O)c2ccccc21.[Na+]'),
+                               ('O=C1NC(=O)NC1(c1ccccc1)c1ccccc1.[Na]',
+                                'O=C1[N-]C(=O)NC1(c1ccccc1)c1ccccc1.[Na+]'),
+                               ('[nH]1nnnc1c1ccccc1.[Na]', '[n-]1nnnc1c1ccccc1.[Na+]')):
+        mol, _, _ = _fixed(spelling)
+        assert mol.canonical_bytes == smiles(expected).canonical_bytes, spelling
+    for spelling in ('c1cc[nH]c1.[Na]', 'c1cnc[nH]1.[Na]', 'c1cn[nH]c1.[Na]'):
+        mol, written, log = _fixed(spelling)
+        assert mol.canonical_bytes == smiles(spelling).canonical_bytes, spelling
+        assert not written and log, spelling
+
+
+def test_case_2_raises_every_metal_to_its_group_number():
+    # one ionic charge per metal: two magnesiums take +2 each, and four anion equivalents want exactly that
+    mol, written, _ = _fixed('O=S(=O)([O-])[O-].O=S(=O)([O-])[O-].[Mg+].[Mg+]')
+    assert sorted(mol.atom(n).charge for n in written if mol.atom(n).is_metal) == [2, 2]
+
+
+def test_case_2_refuses_when_the_group_numbers_fall_short():
+    # sodium at +1 against two chlorides: no second charge is available to it
+    mol, written, log = _fixed('[Cl-].[Cl-].[Na]')
+    assert format(mol) == format(smiles('[Cl-].[Cl-].[Na]'))
+    assert written == set()
+    assert len(log) == 1 and log[0].severity == REFUSED
+    assert '+1' in log[0].message and '2 drawn anion' in log[0].message
+
+
+def test_case_2_refuses_when_the_group_numbers_overshoot():
+    # aluminium's group number is +3 and sulfate draws two anion equivalents; over and under are one refusal
+    mol, written, log = _fixed('[Al+].[O-]S(=O)(=O)[O-]')
+    assert format(mol) == format(smiles('[Al+].[O-]S(=O)(=O)[O-]'))
+    assert written == set()
+    assert len(log) == 1 and log[0].severity == REFUSED
+    assert '+3' in log[0].message and '2 drawn anion' in log[0].message
+
+
+def test_case_2_refuses_a_count_that_is_not_a_charge():
+    """The raise target is the group number, so a metal whose valence electron count states no single
+    ionic charge refuses the record: zinc's count is 12, and the f block states none at all."""
+    for spelling, phrase in (('[Zn+].[O-]C(=O)C(=O)[O-]', 'a count and not a charge'),
+                             ('[Ce+].[O-]C(=O)C(=O)[O-]', 'not known')):
+        mol, written, log = _fixed(spelling)
+        assert format(mol) == format(smiles(spelling)), spelling
+        assert written == set(), spelling
+        assert len(log) == 1 and log[0].severity == REFUSED, spelling
+        assert phrase in log[0].message, spelling
+
+
+def test_a_refused_case_2_leaves_no_hydrogen_behind():
+    """A refusal writes no charge, and `standardize()` derives a hydrogen count only where one moved, so
+    the brutto formula and the metal's implicit count come back exactly as drawn."""
+    mol = smiles('[Al+].[O-]S(=O)(=O)[O-]')
+    metal = next(atom.n for atom in mol.atoms() if atom.is_metal)
+    brutto, hydrogens = mol.brutto, mol.implicit_h_of(metal)
+    mol.standardize()
+    assert mol.brutto == brutto
+    assert mol.implicit_h_of(metal) == hydrogens
+    assert mol.canonical_bytes == smiles('[Al+].[O-]S(=O)(=O)[O-]').canonical_bytes
+
+
+def test_case_2_requires_drawn_anions():
+    mol, written, log = _fixed('[Na-]')
+    assert mol.canonical_bytes == smiles('[Na-]').canonical_bytes
+    assert written == set()
+    assert len(log) == 1 and log[0].severity == REFUSED
+
+
+def test_step_1_refusal_message_names_the_cut():
+    # `[Ce]`: electrons == 0, count not known for the f block
+    _, _, ce_log = _fixed('[Ce]')
+    assert len(ce_log) == 1 and ce_log[0].severity == REFUSED
+    # `CC(=O)O.[Zn]`: electrons == 12, a valence electron count and not a charge
+    _, _, zn_log = _fixed('CC(=O)O.[Zn]')
+    assert len(zn_log) == 1 and zn_log[0].severity == REFUSED
+    # each message names its own cut and not the other
+    assert 'not known' in ce_log[0].message and 'not known' not in zn_log[0].message
+    assert 'a count' in zn_log[0].message and 'a count' not in ce_log[0].message

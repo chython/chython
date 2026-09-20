@@ -475,12 +475,12 @@ rest run either way.
 Reagents Drawn Apart
 --------------------
 
-``standardize()`` closes with one stage that is **not** a rule table. A one-coordinate zinc or magnesium
-holding a carbon is an incomplete drawing, and the stage completes it: a free halide in the record is
-bonded to the metal, and a metal left without one is charged. All four charge spellings are accepted,
-including the two that do not conserve net charge — a lone ``[Zn+]`` beside a neutral halogen sits at
-``+1`` — because the drawing dropped a sign rather than meaning a cation and a radical. The record says
-which way the total moved.
+``standardize()`` closes with two stages that are **not** rule tables, third and fourth after the ``groups``
+and ``metals`` tables above. A one-coordinate zinc or magnesium holding a carbon is an incomplete drawing,
+and the third completes it: a free halide in the record is bonded to the metal, and a metal left without
+one is charged. All four charge spellings are accepted, including the two that do not conserve net charge —
+a lone ``[Zn+]`` beside a neutral halogen sits at ``+1`` — because the drawing dropped a sign rather than
+meaning a cation and a radical. The record says which way the total moved.
 
 .. testcode::
 
@@ -520,9 +520,9 @@ metal                    canonical rank, so two different reagents sharing one h
 
 A metal that goes without is **charged** instead, zinc and magnesium alike: a neutral one-coordinate
 metal is not a species, so the halide is taken to be missing from the drawing rather than from the
-compound. This is the one place ``standardize()`` moves net charge, and it is a separate record —
-``organometallics:charge`` rather than ``organometallics:unite`` — so a consumer can filter out the
-halide nobody drew while keeping the ones that were drawn.
+compound. ``standardize()`` moves the net charge here, as does the salt-charge stage below. It is a
+separate record — ``organometallics:charge`` rather than ``organometallics:unite`` — so a consumer can
+filter out the halide nobody drew while keeping the ones that were drawn.
 
 .. testcode::
 
@@ -535,6 +535,32 @@ halide nobody drew while keeping the ones that were drawn.
 
     C(C)[Zn+] ['organometallics:charge']
     C(C)[Zn]Cl.C[Zn+] ['organometallics:unite', 'organometallics:charge']
+
+A metal drawn beside a **neutral acid** is the same drawing error one step further on, and the fourth
+stage repairs it. ``CC(=O)O.[Na]`` and ``CC(=O)O.[Na+]`` are both sodium acetate; a free metal carrying no
+charge takes its group number, and the charge is then balanced against the anions already drawn by taking
+a proton from the most acidic site ``chython/chemistry/tables/salts.tsv`` recognizes. The stage runs after
+the organometallic completion above, which bonds a free halide to a one-coordinate metal: counting anion
+equivalents first would count a halide that is about to stop being free.
+
+.. testcode::
+
+    for s in ('CC(=O)O.[Na]', 'CC(=O)O.[Na+]', 'CC(=O)O.[Zn]', '[Na]'):
+        mol = smiles(s)
+        mol.standardize()
+        print(mol, [r.rule for r in mol.log.refused()])
+
+.. testoutput::
+
+    C(C)([O-])=O.[Na+] []
+    C(C)([O-])=O.[Na+] []
+    C(C)(=O)O.[Zn] ['salts:metal-charge']
+    [Na] ['salts:charge-transfer']
+
+The two refusals are the point: **no ionic charge follows from zinc's electron count**, and a lone metal is
+the metal. The zinc record is stored as drawn and ``decompose_salts()`` tags it ``charges_undrawn``, so the
+population stays countable. A covalent ``CC(=O)O[Na]`` stays covalent — a missing charge is a drawing error
+and this stage repairs errors, while a metal–oxygen bond is a representation choice ``split_salts()`` owns.
 
 
 Hydrogens
@@ -837,8 +863,12 @@ Salts
 Two passes read ``chython/chemistry/tables/salts.tsv``, and both act on all 93 metals the core's ``[M]``
 accepts. One edits and one reports; **neither deletes a component**.
 
-``split_salts()`` cuts the ionic bond and moves the charge onto the two ends. The atom count does not
-change:
+===================== ============================================================= ====================
+pass                  does                                                          returns
+===================== ============================================================= ====================
+``split_salts()``     cuts the ionic bond, moving the charge onto the two ends       ``bool``
+``decompose_salts()`` reads the record as one featurized row per component           ``SaltComposition``
+===================== ============================================================= ====================
 
 .. testcode::
 
@@ -849,72 +879,9 @@ change:
 
     True C(C)([O-])=O.[Na+]
 
-The test is **all-or-nothing per cation atom**, which is what makes generality over 93 metals safe: a
-dative bond, a neighbour that matches no acceptor row, an untabulated resulting charge or an implicit
-hydrogen on the cation refuses the whole atom and logs why. Cisplatin, ferrocene and the metal
-carbonyls therefore come back intact rather than half-split. A dative bond is the *exemption* signal and
-never the trigger — ``standardize()`` installs it to record coordination that must be preserved:
-
-.. testcode::
-
-    mol = smiles('N[Pt](N)(Cl)Cl')
-    print(mol.split_salts(), mol)
-    print(mol.log.refused()[0].rule)
-
-.. testoutput::
-
-    False N[Pt](Cl)(N)Cl
-    salts:metal
-
-``decompose_salts()`` reads the record as a compound plus what was drawn beside it, and **changes
-nothing and logs nothing** — the return value is the whole report. Four fields: the compound, then the
-counterions and solvates keyed by their row, and lone cations keyed by element symbol:
-
-.. testcode::
-
-    r = smiles('NCC(=O)O.OC(=O)C(F)(F)F.O').decompose_salts()   # glycine TFA salt, monohydrate
-    print([str(p) for p in r.parents], r.counterions, r.solvates, r.cations)
-
-.. testoutput::
-
-    ['C(CN)(=O)O'] {'salts:tfa': 1} {'salts:water': 1} {}
-
-The work runs on a copy that is hydrogen-implicified, salt-split, neutralized and aromatized, so the
-counts compare across a corpus rather than across a drawing — the three ways of writing sodium acetate
-agree, and neutralizing first is why no conjugate base needs a row of its own:
-
-.. testcode::
-
-    for s in ['CC(=O)O[Na]', 'CC(=O)[O-].[Na+]', 'CC(=O)O.[Na+]']:
-        r = smiles(s).decompose_salts()
-        print([str(p) for p in r.parents], r.counterions, r.cations)
-
-.. testoutput::
-
-    ['C(C)(=O)O'] {} {'Na': 1}
-    ['C(C)(=O)O'] {} {'Na': 1}
-    ['C(C)(=O)O'] {} {'Na': 1}
-
-A tabulated species is a counterion only when **something else is there to be the compound**, which is
-why sodium acetate answers acetic acid rather than an empty ``parents`` and one equivalent of
-``salts:acetic``. Every component is a solvate row, a species row or unmatched, and the three decide
-together: the unmatched components are the parents when there are any, failing that the species rows are
-with the solvates counted, and failing that the solvates are.
-
-.. testcode::
-
-    r = smiles('CC(=O)O.O').decompose_salts()      # acetic acid monohydrate
-    print([str(p) for p in r.parents], r.solvates)
-    print([str(p) for p in smiles('O.O').decompose_salts().parents])
-
-.. testoutput::
-
-    ['C(C)(=O)O'] {'salts:water': 1}
-    ['O']
-
-``cations`` is keyed by element symbol and not by row id because all 93 metals share one row: keyed by
-row, a sodium and a potassium salt would be indistinguishable. Parents dedup by canonical bytes, so two
-drawn equivalents of one compound are one parent and two enantiomers are two.
+Neither is a ``canonicalize()`` stage: which half of a salt is the compound is a claim about a collection
+rather than a fact about a molecule. :doc:`salts` is the chapter — the table, the roles a component plays,
+the tags a record carries, and how the rows key one compound across sources.
 
 
 Stereo and Isotopes
@@ -1285,5 +1252,5 @@ a record may have, a size above which a component stops being small enough to be
 threshold about one collection rather than a fact about a molecule. Residual charge is the same past a
 point — it separates the salt drawn apart from the species that cannot be neutral, but a lone
 ``[C-]#C.[Na+]`` and a lone ``[CH3-].[Na+]`` both keep their charges, and which of the two is a
-plausible record is a claim about the collection. ``decompose_salts()`` above answers the salt half of a
-screen by name.
+plausible record is a claim about the collection. ``decompose_salts()`` answers the salt half of a screen
+by name, and :doc:`salts` is where it is documented.
