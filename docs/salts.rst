@@ -24,7 +24,7 @@ moved by a ``standardize()`` stage, and :doc:`standardize` documents it beside t
 The Table
 ---------
 
-``chython/chemistry/tables/salts.tsv`` holds all of it: 127 rows, of which 110 name a whole species. Two
+``chython/chemistry/tables/salts.tsv`` holds all of it: 134 rows, of which 110 name a whole species. Two
 columns carry two different questions — ``match`` is *how* a row is recognized, ``klass`` is *what* the
 row is — and a pass selects rows by ``klass`` and never by ``match``, which is what makes a new class
 invisible to a pass that did not name it.
@@ -36,12 +36,12 @@ invisible to a pass that did not name it.
 ``whole`` SMILES   canonical-key equality against the whole component
 ========= ======== ====================================================================================
 
-Three classes are about an atom and the other fourteen name a species:
+Four classes are about an atom and the other fourteen name a species:
 
 =================== ======================================================================================
 group               classes
 =================== ======================================================================================
-atom rows           ``metal_cation``, ``charge_acceptor``, ``protic_acid``
+atom rows           ``metal_cation``, ``charge_acceptor``, ``protic_acid``, ``metal_protic``
 acids               ``mineral_acid``, ``sulfonic_acid``, ``short_carboxylic_acid``, ``carboxylic_acid``,
                     ``aromatic_acid``, ``fatty_acid``
 bases               ``amine_base``, ``amino_acid``
@@ -51,6 +51,12 @@ cations             ``quaternary_ammonium``
 
 ``SALT_CLASSES`` and ``SALT_MATCHES`` are that vocabulary at runtime, so a caller comparing a row's
 ``klass`` against a name it typed can check the name exists.
+
+``metal_protic`` is the one class neither pass on this page reads. Water and an alcohol are sites only for
+a free s-block metal — the :doc:`standardize` stage's question and nobody else's — so ``decompose_salts()``
+still reads ``CCN.CCO`` as a solvate, a hydrate stays droppable, and neither is an ``acid_salt``. Sulfur is
+an acid site: a thiol, a thiophenol, a thioacid and a xanthic acid each have a ``protic_acid`` row, so an
+amine beside one is the ``acid_salt`` it is on the shelf.
 
 The acid, base and solvent classes are the **formers** — the species a salt is *made with*, which is the
 word the tags below use. ``quaternary_ammonium`` and ``metal_cation`` are not: they are the cation half of
@@ -101,6 +107,28 @@ trigger — ``standardize()`` installs it to record coordination that must be pr
 
     False N[Pt](Cl)(N)Cl
     salts:metal
+
+**A drawn metal–oxygen bond states the alkoxide**, so ``salts:alkoxide`` reads the saturated case the
+carboxylate and phenolate rows do not cover. Silicon and boron are outside ``[M]``, which is why a silyl
+ether and a borate ester are not salts:
+
+.. testcode::
+
+    for s in ('CCO[Na]', 'CC(C)(C)O[K]', 'CCS[K]', 'C[Si](C)(C)O[Na]', 'CCO[Si](C)(C)C', 'CCOCC'):
+        mol = smiles(s)
+        print(mol.split_salts(), mol)
+
+.. testoutput::
+
+    True C(C)[O-].[Na+]
+    True C(C)([O-])(C)C.[K+]
+    True C(C)[S-].[K+]
+    True C[Si]([O-])(C)C.[Na+]
+    False C(C)O[Si](C)(C)C
+    False C(C)OCC
+
+That is a different question from ``CCO.[Na]``, where nothing is drawn between the two components: there
+the :doc:`standardize` stage decides, and it decides on the metal.
 
 
 Reading the Record
@@ -256,6 +284,29 @@ A benzoate is tabulated, classified and a parent by default: which of an amine a
 the compound is a question about a collection, so widening it is the caller's decision and never the
 pass's.
 
+**A widening needs no caller-side pre-check.** A registry that treats solvent of crystallization as
+packaging rather than substance widens by the four solvent classes, and needs no "is this record nothing
+but solvent?" test in front of it:
+
+.. testcode::
+
+    wide = DEFAULT_STABILIZER_CLASSES + ('alcohol', 'hydrocarbon', 'halo_solvent', 'aprotic_solvent')
+    for s in ['CC(=O)Oc1ccccc1C(=O)O.Cc1ccccc1', 'CC(=O)Oc1ccccc1C(=O)O.CS(C)=O.CCO',
+              'Cc1ccccc1', 'CCO.O']:
+        r = smiles(s).decompose_salts(classes=wide)
+        print([str(row.molecule) for row in r.parents], sorted(r.tags))
+
+.. testoutput::
+
+    ['O=C(Oc1c(C(O)=O)cccc1)C'] ['acid_salt', 'solvate']
+    ['O=C(Oc1c(C(O)=O)cccc1)C'] ['acid_salt', 'competing_formers', 'solvate']
+    ['c1c(C)cccc1'] ['single', 'stabilizer_only']
+    ['C(C)O', 'O'] ['competing_formers', 'hydrate', 'solvate', 'stabilizer_only']
+
+The last two lines are the one guard again: a solvent name in a reagent field is a compound to whoever
+wrote it, so a record left with no parent promotes every component back and says so with
+``stabilizer_only``. The widening cannot empty a record, however wide it is.
+
 
 Counter-ion duty
 ~~~~~~~~~~~~~~~~
@@ -307,8 +358,8 @@ tag                   the record
 ===================== =========================================================================
 ``single``            has one component
 ``mixture``           has several parents, none a former, a lone metal or on duty
-``hydrate``           has more than one component, one of them water
-``solvate``           has more than one component, one of them a non-water solvent class
+``hydrate``           has more than one component, one of them water drawn uncharged
+``solvate``           has more than one component, one of them an uncharged non-water solvent
 ``acid_salt``         holds an acid or an acidic site beside a component that is not a lone metal
 ``base_salt``         holds a tabulated base beside an acidic site
 ``metal_salt``        pairs a lone-metal parent with an anion or a neutral acid
@@ -323,7 +374,8 @@ tag                   the record
 .. testcode::
 
     for s in ['O', '[Na]', 'CCN.Cl', 'CCN(CC)CC.Cl', 'CC(=O)O[Na]', 'CC(=O)O.[Na]', 'CCBr.CCO',
-              'CCBr.CCI', 'C[N+](C)(C)C.[Cl-]', '[Na+].[Cl-].[Cl-].CCBr']:
+              'CCBr.CCI', 'C[N+](C)(C)C.[Cl-]', '[Na+].[Cl-].[Cl-].CCBr', '[OH-].[Na+]',
+              'CC(C)(C)[O-].[K+]']:
         print(s, sorted(smiles(s).decompose_salts().tags))
 
 .. testoutput::
@@ -338,8 +390,15 @@ tag                   the record
     CCBr.CCI ['mixture']
     C[N+](C)(C)C.[Cl-] ['acid_salt', 'ion_pair']
     [Na+].[Cl-].[Cl-].CCBr ['acid_salt', 'charge_unbalanced', 'ion_pair', 'metal_salt']
+    [OH-].[Na+] ['ion_pair', 'metal_salt', 'stabilizer_only']
+    CC(C)(C)[O-].[K+] ['ion_pair', 'metal_salt', 'stabilizer_only']
 
-Two of those lines are worth reading twice. ``CCBr.CCO`` is the tag and the role saying different things,
+**The two solvent tags read the drawn charge, where ``klass`` reads the neutralized form.** The two last
+lines are why: a conjugate is not a row, so hydroxide keys as ``water`` and an alkoxide as ``alcohol`` —
+right for identity, and the wrong question for a tag that claims solvent of crystallization. Sodium
+hydroxide and potassium *tert*-butoxide are ``metal_salt`` and nothing more.
+
+Two more lines are worth reading twice. ``CCBr.CCO`` is the tag and the role saying different things,
 which is the design: the record *is* a solvate, and ethanol is an ``alcohol``, a class the default does
 not let leave — so both components are parents, and the tag is what tells a caller a solvate is what it is
 looking at. And ``CCN.Cl`` is an

@@ -397,9 +397,12 @@ def _tags(build: list[dict], roles: list[str], guarded: bool) -> frozenset[str]:
     if len(formers) > 1:
         tags.add('competing_formers')
     if len(build) > 1:
-        if any(row['klass'] == 'water' for row in build):
+        # A SOLVENT TAG NEEDS THE COMPONENT DRAWN NEUTRAL.  `klass` is read off the neutralized probe,
+        # which is right for identity -- a conjugate is not a row -- and wrong for this question: the
+        # hydroxide of `[OH-].[Na+]` keys as water and is the counterion, not solvent of crystallization.
+        if any(row['klass'] == 'water' and not row['charge'] for row in build):
             tags.add('hydrate')
-        if any(row['klass'] in _SOLVENT_CLASSES - {'water'} for row in build):
+        if any(row['klass'] in _SOLVENT_CLASSES - {'water'} and not row['charge'] for row in build):
             tags.add('solvate')
 
     if any(row['residual_charge'] for row, role in zip(build, roles) if role == 'parent'):
@@ -545,6 +548,34 @@ _RULE_PROTON = 'salts:charge-transfer'
 #: charges -- and 0 is the f block's unknown, which refuses for the same reason.
 _DETERMINATE_VALENCE = 3
 
+#: The s block, as `valence_electrons`: group 1 answers 1 and group 2 answers 2, while the d block answers
+#: its full count (Fe 8, Ag 11, Zn 12) and aluminium 3, so these two values name no other metal.
+_REDUCING_ELECTRONS = frozenset({1, 2})
+
+#: Beryllium, the one s-block metal that does not reduce water or an alcohol, excluded by element.
+_BERYLLIUM = 4
+
+
+def _hydride(molecule: MoleculeContainer, n: int, log: MutableSequence) -> bool:
+    """Does charging free metal `n` mean losing a hydrogen it was drawn with?  Logs the refusal if so.
+
+    `standardize()` recomputes the implicit hydrogen count of every atom this stage writes, and the count
+    an ionic metal derives is 0, so writing a charge here is what would delete the hydride.  `[NaH].CCO` is
+    sodium hydride in ethanol AS DRAWN; sodium ethoxide and H2 is a reaction, which this pass does not run.
+    The same guard `split_salts` applies before cutting a bond, for the same reason.
+    """
+    hydrogens = molecule.implicit_h_of(n)
+    if hydrogens is None:
+        count = 'an unknown number of'
+    elif hydrogens:
+        count = str(hydrogens)
+    else:
+        return False
+    log.append(LogRecord(_RULE_METAL, (n,),
+                         f'atom {n} is a free metal carrying {count} implicit hydrogen(s); charging it '
+                         f'would drop them, so the whole record is left as drawn', REFUSED))
+    return True
+
 
 def fix_salt_charges(molecule: MoleculeContainer, log: MutableSequence) -> set[int]:
     """Move the charges a salt was drawn without: `CC(=O)O.[Na]` is `CC(=O)[O-].[Na+]`.  Written ids.
@@ -563,6 +594,11 @@ def fix_salt_charges(molecule: MoleculeContainer, log: MutableSequence) -> set[i
     ALL-OR-NOTHING PER RECORD, not per site, and both steps are planned entirely in reads: step 1 charges a
     metal on the strength of a balance step 2 may refuse.  `[Na]` alone is that case, and it comes back as
     `[Na]`.
+
+    WATER AND AN ALCOHOL ARE SITES ONLY FOR AN S-BLOCK METAL.  `CCO.[Na]` is sodium ethoxide and
+    `CCO.[Zn]` is left as drawn: the table's `metal_protic` rows join the rung ladder only when every free
+    metal in the record is group 1 or group 2 and none is beryllium.  They sit on rung 6, below every acid,
+    so a record holding both an acid and an alcohol spends its metal on the acid.
     """
     metals = [atom.n for atom in molecule.atoms() if atom.is_metal and not atom.degree]
     if not metals:
@@ -574,6 +610,8 @@ def fix_salt_charges(molecule: MoleculeContainer, log: MutableSequence) -> set[i
     if not any(charges.values()):
         # step 1: no metal carries a charge, so the drawing states nothing to override
         for n in metals:
+            if _hydride(molecule, n, log):
+                return set()
             electrons = molecule.atom(n).valence_electrons
             if not 0 < electrons <= _DETERMINATE_VALENCE:
                 if electrons == 0:
@@ -600,9 +638,14 @@ def fix_salt_charges(molecule: MoleculeContainer, log: MutableSequence) -> set[i
 
     sites: list[tuple[int, int, int, str]] = []
     if total > anions:
+        by_klass = salts_rows_by_klass()
+        rows = by_klass['protic_acid']
+        if all(molecule.atom(n).valence_electrons in _REDUCING_ELECTRONS and
+               molecule.element_of(n) != _BERYLLIUM for n in metals):
+            rows += by_klass['metal_protic']
         ranks = molecule.atoms_order
         best: dict[int, tuple[int, str]] = {}
-        for row in salts_rows_by_klass()['protic_acid']:
+        for row in rows:
             for mapping in row.query.get_mapping(molecule):
                 n = mapping[row.anchor]
                 if molecule.charge_of(n) or (n in best and best[n][0] <= row.order):
@@ -646,6 +689,9 @@ def fix_salt_charges(molecule: MoleculeContainer, log: MutableSequence) -> set[i
             group_numbers[n] = electrons
         held = {n: planned.get(n, charges[n]) for n in metals}
         raises = {n: group_numbers[n] for n in metals if held[n] < group_numbers[n]}
+        for n in raises:
+            if _hydride(molecule, n, log):
+                return set()
         reached = sum(raises.get(n, held[n]) for n in metals)
         if reached != anions:
             log.append(LogRecord(_RULE_METAL, tuple(metals),

@@ -17,6 +17,8 @@
 #                             that one atom -- a lone [Na+].  All 93 metals `[M]` accepts qualify.
 #   charge_acceptor   embed   split_salts (the atom that keeps the electron pair)
 #   protic_acid       embed   decompose_salts (the acid_salt tag), fix_salt_charges (the proton source)
+#   metal_protic      embed   fix_salt_charges ONLY, and only when every free metal is s-block -- a site a
+#                             reducing metal opens and no acid table calls an acid
 #   the fourteen species classes  whole   decompose_salts
 #
 # A SPECIES ROW IS COMPARED BY `format(component, '!s')` -- the canonical SMILES with stereo disabled,
@@ -38,14 +40,19 @@
 # at charge+k; the row lists every value that is allowed to be, and the whole atom is refused before
 # anything is cut -- all-or-nothing, never a partially split molecule.
 #
-# `order` IS THE ACIDITY RUNG AND ONLY A `protic_acid` ROW HAS ONE.  Low is more acidic; rows sharing a
-# value are tied, and a tie is resolved by canonical order and logged rather than by file position.
+# `order` IS THE ACIDITY RUNG AND ONLY A `protic_acid` OR `metal_protic` ROW HAS ONE.  Low is more acidic;
+# rows sharing a value are tied, and a tie is resolved by canonical order and logged rather than by file
+# position.  ONE SCALE FOR BOTH CLASSES, because `fix_salt_charges` ranks them in one pool: a carboxylic
+# acid beside an alcohol and one sodium gives the carboxylate, rung 4 against rung 6.
 #
-# ALCOHOLS ARE DELIBERATELY ABSENT.  `CCO.[Na]` is more often sodium metal in ethanol than sodium ethoxide,
-# and a row here would resolve that against the commoner reading.  So is every azole but tetrazole: below
-# sulfonamide's rung an N-H needs a hydride or an organolithium, and a metal drawn beside one is reagent
-# chemistry.  An acid with no row refuses, logs, and surfaces as a `charges_undrawn` tag -- the count of
-# those refusals is what would justify a row.
+# WATER AND ALCOHOL ARE NOT ACIDS, THEY ARE WHAT A FREE S-BLOCK METAL REDUCES.  `CCN.CCO` is a mixture and
+# `CCO` is no acid site, so `decompose_salts` reads neither as a salt and a hydrate stays droppable;
+# `CCO.[Na]` is sodium ethoxide, because sodium does not stand beside a hydroxyl.  That distinction is the
+# whole of `metal_protic`.  Beryllium is the one s-block metal outside it, not reducing water.
+#
+# EVERY AZOLE BUT TETRAZOLE IS ABSENT.  Below sulfonamide's rung an N-H needs a hydride or an
+# organolithium, and a metal drawn beside one is reagent chemistry.  An acid with no row refuses, logs, and
+# surfaces as a `charges_undrawn` tag -- the count of those refusals is what would justify a row.
 #
 # There is no `elements` column: `pattern` already names the elements a row applies to, and `keep=['Na']` is
 # resolved against the MOLECULE's atoms.
@@ -58,18 +65,26 @@ salts:thiophosphate	embed	charge_acceptor	[O,S,Se;D2;z1:1]-[P]=[S,Se]	-	-	thio- 
 salts:phenolate	embed	charge_acceptor	[O,S,Se;D2;z1:1]-[C,N;a]	-	-	phenolate, thiophenolate, N-hydroxy azole
 salts:nitrate	embed	charge_acceptor	[O;D2;z1:1]-[N+](-[O-])=O	-	-	nitrate, drawn charge-separated as standardize() leaves it
 salts:halide-hydroxide	embed	charge_acceptor	[O,F,Cl,Br,I;D1;z1:1]	-	-	a terminal halogen or oxygen: halide, hydroxide, alkoxide
+salts:alkoxide	embed	charge_acceptor	[O,S,Se;D2;z1:1](-[C,Si;z1])-[M]	-	-	alkoxide, thiolate, silanolate drawn with the metal bonded.  The `[M]` is the row: without it the pattern is true of diethyl ether
 # --- acidic sites: which hydrogen a metal may take, most acidic first ----------------------------- #
 salts:sulfonic-oh	embed	protic_acid	[O;D1;z1;h1:1]-[S;z5](=O)=O	-	1	sulfonic and sulfuric acid
 salts:oxo-acid-oh	embed	protic_acid	[O;D1;z1;h1:1]-[N,P,Cl,Br,I]=O	-	2	phosphoric, phosphonic, nitrous, perchloric
 salts:nitric-oh	embed	protic_acid	[O;D1;z1;h1:1]-[N+,P+,Cl+,Br+,I+]-[O-]	-	2	nitric, drawn charge-separated as standardize() leaves it
 salts:acyl-sulfonamide	embed	protic_acid	[N;D2;z1;h1:1](-[C;z2]=O)-[S;z5](=O)=O	-	2	acyl sulfonamide: saccharin
+salts:sulfinic-oh	embed	protic_acid	[O;D1;z1;h1:1]-[S;z2]=O	-	2	sulfinic acid.  The sulfonic row above is `z5`, which this S is not
+salts:thio-acid-sh	embed	protic_acid	[S;D1;z1;h1:1]-[C;z2]=[O,S]	-	2	thioacid, dithioacid, xanthic acid, dithiocarbamic acid.  Thioacetic acid is a rung optimistic here, which costs a tie broken the wrong way when one component holds two sites
 salts:hydrogen-halide	embed	protic_acid	[F,Cl,Br,I;D0;h1:1]	-	3	HF HCl HBr HI: the unbonded halogen holding its hydrogen
 salts:carboxylic-oh	embed	protic_acid	[O;D1;z1;h1:1]-[C;z2]=O	-	4	carboxylic acid
 salts:tetrazole-1h	embed	protic_acid	[nH;r5:1]:1:n:n:n:c:1	-	4	tetrazole 1H, the carboxylic-acid bioisostere
 salts:tetrazole-2h	embed	protic_acid	n:1:[nH;r5:1]:n:n:c:1	-	4	tetrazole 2H: standardize() converges no mobile hydrogen, so both tautomers get a row
+salts:thiophenol-sh	embed	protic_acid	[S;D1;z1;h1:1]-[C,N;a]	-	4	thiophenol
 salts:phenol-oh	embed	protic_acid	[O;D1;z1;h1:1]-[C,N;a]	-	5	phenol, N-hydroxy azole
 salts:imide	embed	protic_acid	[N;D2;z1;h1:1](-[C;z2]=O)-[C;z2]=O	-	5	imide: phenytoin, succinimide
 salts:sulfonamide	embed	protic_acid	[N;z1;h1,h2:1]-[S;z5](=O)=O	-	5	sulfonamide, tosylamide
+salts:thiol-sh	embed	protic_acid	[S;D1;z1;h1:1]-[C;z1]	-	5	thiol
+# --- sites only an s-block metal opens, on the same rung scale ------------------------------------ #
+salts:water-oh	embed	metal_protic	[O;D0;z1;h2:1]	-	6	water
+salts:alcohol-oh	embed	metal_protic	[O;D1;z1;h1:1]-[C,Si;z1]	-	6	alcohol, silanol.  `D1` and `z1`, so a phenol, a carboxylic acid and an ether are each somebody else's row or nobody's
 # --- species: the acids --------------------------------------------------------------------------- #
 salts:hf	whole	mineral_acid	F	-	-	hydrofluoric
 salts:hcl	whole	mineral_acid	Cl	-	-	hydrochloric

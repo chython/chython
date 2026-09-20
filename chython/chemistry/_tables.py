@@ -303,14 +303,18 @@ SALT_MATCHES = ('embed', 'whole')
 
 #: The closed class vocabulary.  A row naming anything else is a load-time error, because a class the
 #: passes never ask for is a row that silently does nothing.
-SALT_CLASSES = ('metal_cation', 'charge_acceptor', 'protic_acid',
+SALT_CLASSES = ('metal_cation', 'charge_acceptor', 'protic_acid', 'metal_protic',
                 'mineral_acid', 'sulfonic_acid', 'short_carboxylic_acid', 'carboxylic_acid',
                 'aromatic_acid', 'fatty_acid', 'amino_acid', 'amine_base', 'quaternary_ammonium',
                 'water', 'alcohol', 'hydrocarbon', 'halo_solvent', 'aprotic_solvent')
 
 #: Which classes are matched by embedding.  Pinned here rather than trusted from the row so a typo in
 #: `match` is a load-time error instead of a row that never fires.
-_EMBED_CLASSES = frozenset({'metal_cation', 'charge_acceptor', 'protic_acid'})
+_EMBED_CLASSES = frozenset({'metal_cation', 'charge_acceptor', 'protic_acid', 'metal_protic'})
+
+#: Which classes carry an acidity rung.  Both, and on one scale: `fix_salt_charges` ranks the two pools
+#: together, so a rung that meant something different per class would decide nothing.
+_RUNGED_CLASSES = frozenset({'protic_acid', 'metal_protic'})
 
 
 class SaltRow(NamedTuple):
@@ -319,9 +323,10 @@ class SaltRow(NamedTuple):
     Exactly one of `query` (an `embed` row) and `key` (a `whole` row) is set.  `anchor` is the stable id
     of the query atom mapped `:1` -- the subject, since a row may name a whole neighbourhood.  `key` is
     `format(species, '!s')`, the stereo-free canonical SMILES a species row is matched by.  `charges` is
-    the set of charges a cation may end up with, `metal_cation` only.  `order` is the acidity rung,
-    `protic_acid` only, low being more acidic; equal values are tied.  `heavy_atoms` is the species' atom
-    count, `0` for an `embed` row -- a size judgement the caller would otherwise re-measure per component.
+    the set of charges a cation may end up with, `metal_cation` only.  `order` is the acidity rung on one
+    scale over `protic_acid` and `metal_protic`, low being more acidic; equal values are tied.
+    `heavy_atoms` is the species' atom count, `0` for an `embed` row -- a size judgement the caller would
+    otherwise re-measure per component.
     """
     id: str
     match: str
@@ -393,11 +398,11 @@ def _compile_salts() -> tuple[SaltRow, ...]:
 
         if row['order'] == '-':
             order = 0
-            if klass == 'protic_acid':
-                raise ValueError(f'{row_id}: a protic_acid row must state its acidity rung; without one '
-                                 'the proton fix_salt_charges() moves would be chosen by file position')
+            if klass in _RUNGED_CLASSES:
+                raise ValueError(f'{row_id}: a {klass} row must state its acidity rung; without one the '
+                                 'proton fix_salt_charges() moves would be chosen by file position')
         else:
-            if klass != 'protic_acid':
+            if klass not in _RUNGED_CLASSES:
                 raise ValueError(f'{row_id}: order is the acidity rung and means nothing for a {klass} '
                                  'row; write `-`')
             order = int(row['order'])

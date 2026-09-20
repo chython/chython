@@ -562,6 +562,29 @@ the metal. The zinc record is stored as drawn and ``decompose_salts()`` tags it 
 population stays countable. A covalent ``CC(=O)O[Na]`` stays covalent — a missing charge is a drawing error
 and this stage repairs errors, while a metal–oxygen bond is a representation choice ``split_salts()`` owns.
 
+**Water and an alcohol are sites only for an s-block metal.** Neither is an acid and the table calls
+neither one: they are its ``metal_protic`` class, which joins the acidity ladder only when every free metal
+in the record is group 1 or group 2 and none is beryllium. So ``CCO.[Na]`` is sodium ethoxide, ``O.[Na]``
+is sodium hydroxide, and ``CCO.[Zn]`` is left as drawn. Their rung is 6, below every acid, which is what
+spends a single metal on the acid when one record holds both:
+
+.. testcode::
+
+    for s in ('CCO.[Na]', 'O.[Na]', 'CC(=O)O.CCO.[Na]', 'CCO.[Zn]'):
+        mol = smiles(s)
+        mol.standardize()
+        print(mol)
+
+.. testoutput::
+
+    C(C)[O-].[Na+]
+    [OH-].[Na+]
+    C(=O)([O-])C.CCO.[Na+]
+    C(C)O.[Zn]
+
+A thiol needs none of that gate. It is an acid row like the carboxylic acid, so ``CCS.[Na]`` is sodium
+ethanethiolate for the same reason and for any metal whose electron count states a charge.
+
 
 Hydrogens
 ---------

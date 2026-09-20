@@ -57,6 +57,24 @@ def test_the_metals_chython_two_left_alone_now_split():
         assert format(m) == expect, s
 
 
+def test_an_alkoxide_drawn_with_the_metal_bonded_splits():
+    """The drawn O-metal bond states the alkoxide, so there is nothing left to disambiguate and
+    `salts:alkoxide` reads it.  Silicon and boron are outside `[M]`, so a silyl ether is untouched."""
+    for s, expect in [('CCO[Na]', 'C(C)[O-].[Na+]'),                          # sodium ethoxide
+                      ('CC(C)(C)O[K]', 'C(C)([O-])(C)C.[K+]'),                # potassium tert-butoxide
+                      ('CCS[K]', 'C(C)[S-].[K+]'),                            # potassium ethanethiolate
+                      ('C[Si](C)(C)O[Na]', 'C[Si]([O-])(C)C.[Na+]'),          # sodium trimethylsilanolate
+                      ('CCO[Mg]OCC', 'C(C)[O-].C(C)[O-].[Mg+2]')]:
+        m = smiles(s)
+        assert split_salts(m) is True, s
+        assert format(m) == expect, s
+    for s in ['CCOCC', 'CSC', 'CCO[Si](C)(C)C', 'CCOB(OCC)OCC']:              # no metal, no acceptor
+        m = smiles(s)
+        before = m.canonical_bytes
+        assert split_salts(m) is False, s
+        assert m.canonical_bytes == before, s
+
+
 def test_the_atom_count_never_changes():
     """The atom count is a contract of this pass; nothing in this module deletes a component."""
     for s in ['CC(=O)O[Na]', 'CC(=O)O[Zn]OC(C)=O', '[Al](OC(C)=O)(OC(C)=O)OC(C)=O', '[Na][Cl]']:
@@ -627,7 +645,8 @@ def test_classes_are_grouped_and_none_is_missing():
     assert set(grouped) == set(SALT_CLASSES)
     assert sum(len(rows) for rows in grouped.values()) == len(salts_rows())
     assert len(grouped['metal_cation']) == 1
-    assert len(grouped['charge_acceptor']) == 5
+    assert len(grouped['charge_acceptor']) == 6
+    assert len(grouped['metal_protic']) == 2
     assert len(grouped['water']) == 1
 
 
@@ -646,9 +665,10 @@ def test_only_the_metal_cation_row_carries_charges():
         assert bool(row.charges) == (row.klass == 'metal_cation'), row.id
 
 
-def test_only_a_protic_acid_row_carries_an_order():
+def test_only_a_runged_row_carries_an_order():
+    """One rung scale over the two classes `fix_salt_charges` ranks together, and no rung anywhere else."""
     for row in salts_rows():
-        assert bool(row.order) == (row.klass == 'protic_acid'), row.id
+        assert bool(row.order) == (row.klass in ('protic_acid', 'metal_protic')), row.id
 
 
 def test_the_metal_row_covers_every_metal_the_core_calls_one():
@@ -700,17 +720,30 @@ ACID_LADDER = (
     ('salts:oxo-acid-oh', 2, 'OP(=O)(O)O'),
     ('salts:nitric-oh', 2, 'O[N+](=O)[O-]'),
     ('salts:acyl-sulfonamide', 2, 'O=C1NS(=O)(=O)c2ccccc21'),
+    ('salts:sulfinic-oh', 2, 'CS(=O)O'),
+    ('salts:thio-acid-sh', 2, 'CCOC(=S)S'),
     ('salts:hydrogen-halide', 3, 'Cl'),
     ('salts:carboxylic-oh', 4, 'CC(=O)O'),
     ('salts:tetrazole-1h', 4, 'c1nnn[nH]1'),
     ('salts:tetrazole-2h', 4, 'c1nn[nH]n1'),
+    ('salts:thiophenol-sh', 4, 'Sc1ccccc1'),
     ('salts:phenol-oh', 5, 'Oc1ccccc1'),
     ('salts:imide', 5, 'O=C1CCC(=O)N1'),
     ('salts:sulfonamide', 5, 'Cc1ccc(cc1)S(N)(=O)=O'),
+    ('salts:thiol-sh', 5, 'CCS'),
 )
 
-#: Nothing here is a salt-forming acid, and no row may fire on any of it.  Every azole people draw is in
-#: the list: only tetrazole sits in the salt-forming range, so every other one is a refusal by design.
+#: Every `metal_protic` row, on the same rung scale and below every acid.  A separate ladder because a
+#: separate class: these fire for a free s-block metal and for nothing else in the library.
+METAL_PROTIC_LADDER = (
+    ('salts:water-oh', 6, 'O'),
+    ('salts:alcohol-oh', 6, 'CCO'),
+)
+
+#: Nothing here is a salt-forming acid, and no `protic_acid` row may fire on any of it.  Every azole people
+#: draw is in the list: only tetrazole sits in the salt-forming range, so every other one is a refusal by
+#: design.  Water and the alcohols are here too -- they are `metal_protic`, which is a different question
+#: and a different class, so a row of this table must not call either an acid.
 NOT_ACIDS = (
     'c1cc[nH]c1', 'c1cnc[nH]1', 'c1cn[nH]c1', 'c1cn[nH]n1', 'c1c[nH]nn1', 'c1nc[nH]n1',
     'c1ccc2[nH]nnc2c1', 'c1ccc2[nH]ccc2c1', 'Cn1c(=O)c2[nH]cnc2n(C)c1=O',
@@ -718,6 +751,14 @@ NOT_ACIDS = (
     'CCO', 'O', 'CO', 'CC(C)(C)O', 'OC1CCCCC1', 'OCC1OC(O)C(O)C(O)C1O',
     'CC(C)=O', 'CS(C)=O', 'CC(=O)OC', 'COS(C)(=O)=O', 'C1CCOC1', 'c1ccncc1',
     'c1ccccc1[N+](=O)[O-]', 'C[N+](C)(C)[O-]', 'Clc1ccccc1', 'CCCl',
+    'CSC', 'CCSSCC', 'CSc1ccccc1', 'CC(=O)SC',
+)
+
+#: What a `metal_protic` row must not fire on.  Every other O-H the table already places -- a phenol and a
+#: carboxylic acid are acids and rank above these -- plus the ethers, which hold no hydrogen at all.
+NOT_METAL_PROTIC = (
+    'Oc1ccccc1', 'CC(=O)O', 'CS(=O)(=O)O', 'ON=O', 'CCOCC', 'C1CCOC1', 'COC', 'C[Si](C)(C)OC',
+    'CCS', 'CC(=O)OC', 'CC(C)=O', 'NO', 'OO',
 )
 
 
@@ -746,6 +787,33 @@ def test_no_acid_row_fires_on_a_non_acid():
         assert not fired, (spelling, fired)
 
 
+def test_the_metal_protic_ladder_is_the_table():
+    rows = salts_rows_by_klass()['metal_protic']
+    assert [(row.id, row.order) for row in rows] == [(i, o) for i, o, _ in METAL_PROTIC_LADDER]
+    acids = salts_rows_by_klass()['protic_acid']
+    assert min(row.order for row in rows) > max(row.order for row in acids), \
+        'a metal_protic rung must sit below every acid: the metal spends itself on the acid first'
+
+
+def test_every_metal_protic_row_fires_on_its_compound():
+    rows = {row.id: row for row in salts_rows_by_klass()['metal_protic']}
+    for row_id, _, spelling in METAL_PROTIC_LADDER:
+        mol = smiles(spelling)
+        mol.standardize()
+        mol.thiele()
+        assert next(rows[row_id].query.get_mapping(mol), None) is not None, row_id
+
+
+def test_no_metal_protic_row_fires_on_an_acid_or_an_ether():
+    rows = salts_rows_by_klass()['metal_protic']
+    for spelling in NOT_METAL_PROTIC:
+        mol = smiles(spelling)
+        mol.standardize()
+        mol.thiele()
+        fired = [row.id for row in rows if next(row.query.get_mapping(mol), None) is not None]
+        assert not fired, (spelling, fired)
+
+
 def test_a_nitrophenol_is_a_phenol_and_not_a_nitric_acid():
     rows = {row.id: row for row in salts_rows_by_klass()['protic_acid']}
     mol = smiles('c1cc(O)ccc1[N+](=O)[O-]')
@@ -765,6 +833,12 @@ TAGGINGS = (
     ('CC(=O)Oc1ccccc1C(=O)O.O', {'hydrate'}),
     ('CCN.Cl', {'acid_salt'}),
     ('c1ccncc1.OC(=O)C(F)(F)F', {'acid_salt'}),
+    ('CCN.CCS', {'acid_salt'}),                           # a thiol is an acid site, so this is a salt
+    ('CCN.Sc1ccccc1', {'acid_salt'}),
+    ('CCN.CCOC(=S)S', {'acid_salt'}),                     # xanthic acid
+    ('CCN.CS(=O)O', {'acid_salt'}),                       # sulfinic: the sulfonic row is z5, this S is z2
+    ('CCN.CCO', {'solvate'}),                             # and an alcohol is still no acid site
+    ('CCS.[Na].CCBr', {'metal_salt', 'acid_salt'}),       # the thiol is what the lone sodium owes to
     ('CC(=O)[O-].[Na+]', {'metal_salt', 'ion_pair'}),
     ('CC(=O)O[Na]', {'metal_salt', 'ion_pair'}),
     ('CC(=O)O.[Na+]', {'metal_salt', 'charge_unbalanced'}),
@@ -805,6 +879,37 @@ def test_a_tag_does_not_flip_when_classes_widen():
     narrow = smiles(record).decompose_salts().tags
     wide = smiles(record).decompose_salts(classes=DEFAULT_STABILIZER_CLASSES + ('hydrocarbon',)).tags
     assert 'solvate' in narrow and narrow == wide
+
+
+def test_a_solvent_tag_needs_the_component_drawn_neutral():
+    """`klass` is read off the neutralized probe and the solvent tags are not.
+
+    Sodium hydroxide keys as water, because a conjugate is not a row and that is what makes the inventory
+    small; it is the counterion all the same, and `hydrate` is a claim about solvent of crystallization.
+    The roles are untouched -- both components stay parents and nothing is stripped.
+    """
+    for spelling in ('[OH-].[Na+]', 'CC[O-].[Na+]', 'CC(C)(C)[O-].[K+]', 'C[O-].[Na+]'):
+        answer = smiles(spelling).decompose_salts()
+        assert 'hydrate' not in answer.tags and 'solvate' not in answer.tags, spelling
+        assert {'metal_salt', 'ion_pair'} <= answer.tags, spelling
+        assert len(answer.parents) == 2 and not answer.stabilizers, spelling
+    # and the drawn-neutral water is still the hydrate it was
+    for spelling in ('CC(=O)Oc1ccccc1C(=O)O.O', 'CCCS([O-])(=O)=O.[Na+].O', 'O.[Na]'):
+        assert 'hydrate' in smiles(spelling).decompose_salts().tags, spelling
+
+
+def test_an_attachment_point_is_a_parent_like_any_other():
+    """A supported-synthesis drawing keys and desalts like anything else: the `[R]` is skeleton.
+
+    `[R]` alone is `single` and no more -- it is neither a lone metal nor a recognized solvent, so the
+    parent guard has nothing to promote back.
+    """
+    answer = smiles('[R]CCN.Cl').decompose_salts()
+    assert [format(row.molecule, '!s') for row in answer.parents] == ['C(N)C[R]']
+    assert [row.klass for row in answer.stabilizers] == ['mineral_acid']
+    assert answer.tags == frozenset({'acid_salt'})
+    assert 'hydrate' in smiles('[R]CCN.O').decompose_salts().tags
+    assert smiles('[R]').decompose_salts().tags == frozenset({'single'})
 
 
 def test_the_three_records_the_default_keeps_whole():
@@ -928,6 +1033,25 @@ def test_canonicalize_does_not_undo_the_repair():
     assert mol.canonical_bytes == smiles('CC(=O)[O-].[Na+]').canonical_bytes
 
 
+def test_a_free_s_block_metal_beside_water_or_an_alcohol_is_the_alcoholate():
+    """Through `standardize()` and through `canonicalize()`, which reaches this stage by running it: a
+    hydroxide's own hydrogen comes back from `calc_implicit` like any other."""
+    for drawn, after in (('CCO.[Na]', 'CC[O-].[Na+]'),
+                         ('O.[Na]', '[OH-].[Na+]'),
+                         ('CC(C)(C)O.[K]', 'CC(C)(C)[O-].[K+]'),
+                         ('CCS.[Na]', 'CC[S-].[Na+]'),
+                         ('C[Si](C)(C)O.[Na]', 'C[Si](C)(C)[O-].[Na+]'),
+                         ('CCO.[Zn]', 'CCO.[Zn]')):        # not the s block: left as drawn
+        for pipeline in ('standardize', 'canonicalize'):
+            mol = smiles(drawn)
+            getattr(mol, pipeline)()
+            assert mol.canonical_bytes == smiles(after).canonical_bytes, (drawn, pipeline)
+            assert not mol.check_valence(), (drawn, pipeline)
+    mol = smiles('O.[Na]')
+    mol.standardize()
+    assert next(atom for atom in mol.atoms() if atom.element == 8).total_h == 1
+
+
 def test_the_log_carries_one_stage_name_for_one_call():
     mol = smiles('CC(=O)O.[Na]')
     mol.standardize()
@@ -949,6 +1073,14 @@ CHARGE_FIXES = (
     ('CS(=O)(=O)O.[Na]', 'CS(=O)(=O)[O-].[Na+]'),           # rung 1
     ('Cl.[Na]', '[Cl-].[Na+]'),                              # rung 3
     ('Oc1ccccc1.[Na]', '[O-]c1ccccc1.[Na+]'),                # rung 5
+    ('CCS.[Na]', 'CC[S-].[Na+]'),                            # rung 5: a thiol, for any metal at all
+    ('CCO.[Na]', 'CC[O-].[Na+]'),                            # rung 6: only an s-block metal opens this
+    ('O.[Na]', '[OH-].[Na+]'),
+    ('O.O.[Mg]', '[OH-].[OH-].[Mg+2]'),                      # two equivalents, two sites
+    ('CC(=O)O.CCO.[Na]', 'CC(=O)[O-].CCO.[Na+]'),            # rung 4 beats rung 6: the acid spends it
+    ('CCO.[Sc]', None),                                      # d block: an alcohol is no site for it
+    ('CCO.[Al]', None),                                      # p block: the same
+    ('CCO.[Be]', None),                                      # the s-block metal that reduces neither
     ('CC(=O)O.[Mg]', None),                                  # case 4: one equivalent, two wanted
     ('CC(=O)O.[Zn]', None),                                  # step 1 refused
     ('CCCCCC.[Na+]', None),                                  # case 4: nothing to sit on
@@ -1004,6 +1136,39 @@ def test_the_chosen_site_and_the_moved_charge_are_named_in_the_log():
     assert all(record.severity == REPAIRED for record in log)
     transfer = next(record for record in log if record.rule == 'salts:charge-transfer')
     assert 'salts:carboxylic-oh' in transfer.message
+
+
+def test_a_metal_protic_site_is_named_in_the_log_like_any_other():
+    _, _, log = _fixed('CCO.[Na]')
+    transfer = next(record for record in log if record.rule == 'salts:charge-transfer')
+    assert 'salts:alcohol-oh' in transfer.message and 'rung 6' in transfer.message
+
+
+def test_the_alcohol_is_a_site_for_the_s_block_and_for_no_other_metal():
+    """The ruling: a free group 1 or 2 metal does not stand beside a hydroxyl.  Beryllium is the one
+    s-block metal outside it, and the d and p blocks are outside it as blocks."""
+    for symbol in ('Li', 'Na', 'K', 'Cs', 'Mg', 'Ca', 'Ba'):
+        # one alcohol per equivalent: the stage is all-or-nothing, so a group 2 metal needs two
+        charge = smiles('[%s]' % symbol).atom(1).valence_electrons
+        mol, written, log = _fixed('.'.join(['CCO'] * charge + ['[%s]' % symbol]))
+        assert written, symbol
+        assert all(record.severity == REPAIRED for record in log), symbol
+        assert sum(atom.charge for atom in mol.atoms() if atom.charge > 0) == charge, symbol
+    for symbol in ('Be', 'Sc', 'Al', 'Zn', 'Fe', 'Ce'):
+        mol, written, log = _fixed('.'.join(['CCO'] * 4 + ['[%s]' % symbol]))
+        assert not written, symbol
+        assert all(record.severity == REFUSED for record in log), symbol
+
+
+def test_a_thiol_is_an_acid_for_every_metal_and_not_a_metal_protic_site():
+    """The sulfur rows are `protic_acid`, so they need no s-block gate -- what gates them is the same
+    determinate-valence step every acid goes through."""
+    mol, written, log = _fixed('CCS.CCS.CCS.[Al]')
+    assert mol.canonical_bytes == smiles('CC[S-].CC[S-].CC[S-].[Al+3]').canonical_bytes
+    assert all(record.severity == REPAIRED for record in log)
+    # and the alcohol is not, for the same metal and the same count
+    mol, written, log = _fixed('CCO.CCO.CCO.[Al]')
+    assert not written and all(record.severity == REFUSED for record in log)
 
 
 def test_the_ladder_picks_the_more_acidic_of_two_sites():
@@ -1074,6 +1239,42 @@ def test_a_refused_case_2_leaves_no_hydrogen_behind():
     assert mol.brutto == brutto
     assert mol.implicit_h_of(metal) == hydrogens
     assert mol.canonical_bytes == smiles('[Al+].[O-]S(=O)(=O)[O-]').canonical_bytes
+
+
+#: A free metal drawn with a hydrogen, one record per path that would have written its charge: the four
+#: acidity rungs an alcohol, water, a carboxylic acid and a benzylic alcohol reach, and the case-2 raise.
+#: `[H-].[Na+].CCO` is the control -- drawn ionically, the hydride is a component and nothing is at risk.
+HYDRIDE_RECORDS = ('[NaH]', '[NaH].CCO', '[NaH].O', '[NaH].CC(=O)O', '[NaH].c1ccccc1CO', '[KH].CCO',
+                   '[AlH2].CCO', '[MgH+].[O-]S(=O)(=O)[O-]')
+
+
+@mark.parametrize('spelling', HYDRIDE_RECORDS)
+def test_an_implicit_hydrogen_on_the_free_metal_refuses_the_transfer(spelling):
+    """Charging a free metal drops nothing it was drawn with.
+
+    `[NaH].CCO` is sodium hydride in ethanol AS DRAWN.  Sodium ethoxide and H2 is a reaction, not a
+    repair, and the hydride has nowhere to go, so the record is left alone -- the guard `split_salts()`
+    already applies before cutting a bond, on the path that writes a charge without cutting one.
+    """
+    mol = smiles(spelling)
+    metal = next(atom.n for atom in mol.atoms() if atom.is_metal)
+    brutto, hydrogens = mol.brutto, mol.implicit_h_of(metal)
+    log = mol.log
+    mol.standardize()
+    assert mol.brutto == brutto, spelling
+    assert mol.implicit_h_of(metal) == hydrogens, spelling
+    assert mol.canonical_bytes == smiles(spelling).canonical_bytes, spelling
+    assert 'implicit hydrogen' in log.refused()[0], spelling
+
+
+def test_the_ionically_drawn_hydride_is_not_the_guard_s_business():
+    """`[H-]` is a component and not a count on the metal, so the record standardizes as any other."""
+    mol = smiles('[H-].[Na+].CCO')
+    brutto = mol.brutto
+    mol.standardize()
+    assert mol.brutto == brutto
+    assert mol.canonical_bytes == smiles('[H-].[Na+].CCO').canonical_bytes
+    assert not mol.log.refused()
 
 
 def test_case_2_requires_drawn_anions():
