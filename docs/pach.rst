@@ -153,8 +153,33 @@ drops the drawing, which ``drop=['coordinates']`` says more plainly, and that wa
 whatever ``version=`` asked for.  ``drop=`` names a field the writer may leave out without saying so —
 ``map_number``, ``title``, ``meta``, ``sgroups``, ``cip``, ``wedges``, ``stereo_groups``, ``stereo``,
 ``coordinates``, and ``conformers`` — or ``'*'`` for all of them, and an unrecognised name is refused
-rather than ignored.  ``stereo_groups`` (or equivalently ``stereo``) suppresses both the atom
-enhanced-stereo block and the bond-group block.
+rather than ignored.
+
+**``drop=['stereo']`` is everything about stereo** — the configurations, the enhanced-stereo
+collections, the wedges and the CIP descriptors — because that is one subject to a caller, so the wide
+name implies ``stereo_groups``, ``wedges`` and ``cip``.  ``drop=['stereo_groups']`` is the narrow one
+and takes only the two collection blocks, the atom enhanced-stereo block and the bond-group block,
+leaving every sign in place.  The pair is the SMILES spec's ``!s`` and ``!e`` under another name, and a
+record written under either reads back as the molecule that spec writes:
+
+.. testcode::
+
+    from chython import STEREO_AND
+
+    alanine = smiles('N[C@@H](C)C(=O)O')
+    alanine.set_stereo_group(alanine.atom_numbers[1], STEREO_AND, 3)
+    print(format(alanine))
+
+    wide = MoleculeContainer.unpack(alanine.pack(drop=['stereo']))
+    narrow = MoleculeContainer.unpack(alanine.pack(drop=['stereo_groups']))
+    print(format(wide) == format(alanine, '!s'), format(wide))
+    print(format(narrow) == format(alanine, '!e'), format(narrow))
+
+.. testoutput::
+
+    C([C@H](C)N)(=O)O |&1:1|
+    True C(C(C)N)(=O)O
+    True C([C@H](C)N)(=O)O
 
 **The record is written and the loss is logged.**  A field the container holds and the chosen version has
 no room for costs the record that field, one line per field on ``mol.log`` at stage ``pach``, named by

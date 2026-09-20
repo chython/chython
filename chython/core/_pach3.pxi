@@ -1392,7 +1392,8 @@ def pach_dump(MoleculeContainer mol not None, *, bint compressed=True, drop=None
     the caller already said it: an iterable of field names, or `'*'` for all of them.  The names are
     `map_number`, `title`, `sgroups`, `cip`, `wedges`, `stereo_groups`, `stereo`, `meta`,
     `coordinates` and `conformers`; `conformers` is asked only by versions 3 and 4.  An unrecognised
-    name is refused rather than ignored.
+    name is refused rather than ignored.  `stereo` IS EVERYTHING ABOUT STEREO and implies `cip`,
+    `wedges` and `stereo_groups` -- the SMILES spec's `!s`, where `drop=['stereo_groups']` is its `!e`.
 
     `ValueError` WHATEVER `strict` SAYS for a value outside the FORMAT's own field, because no legal
     record exists to inform anybody about: a charge outside -4..+11, an isotope more than 31 mass
@@ -1412,6 +1413,12 @@ def pach_dump(MoleculeContainer mol not None, *, bint compressed=True, drop=None
                 raise ValueError('%r is not a droppable field; the drop names are %s'
                                  % (name, ', '.join(sorted(_PACH_DROP_NAMES))))
             mask |= <uint32_t> <int> _PACH_DROP_NAMES[name]
+    # `stereo` IS EVERYTHING ABOUT STEREO.  A caller asking for a record without stereo means without
+    # the configurations, the enhanced-stereo collections, the wedges and the CIP descriptors -- one
+    # subject, one waiver -- so the wide name implies the three narrow ones.  `stereo_groups`, `wedges`
+    # and `cip` stay spellable alone, which is what makes them narrower and not redundant.
+    if mask & PACH_DROP_STEREO:
+        mask |= PACH_DROP_STEREO_GROUPS | PACH_DROP_WEDGES | PACH_DROP_CIP
     cdef bytes raw
     # `None` AND `3` ARE ONE ARM.  Both ask for the coordinates the molecule has, and `drop=` is the
     # waiver that wins tree-wide: stripping `PACH_DROP_COORDINATES` back out of the caller's mask here

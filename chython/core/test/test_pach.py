@@ -941,6 +941,29 @@ def test_a_title_has_no_slot_and_is_logged_not_dropped_silently():
     assert len(mol.log) == 1
 
 
+def test_the_stereo_waiver_covers_every_stereo_field_version_2_cannot_hold():
+    """`drop=['stereo']` is everything about stereo, so the three fields the version 2 writer reports
+    separately -- the wedge, the enhanced-stereo collection, the CIP descriptor -- are all waived by
+    it, and there is nothing left for the writer to report."""
+    from chython.core import STEREO_AND
+    mol = read_smiles('N[C@@H](C)C(=O)O')
+    n = mol.atom_numbers
+    mol.clean2d()
+    mol.set_wedge(n[1], n[2], 1)
+    mol.set_stereo_group(n[1], STEREO_AND, 3)
+    mol.assign_cip()
+    assert mol.atom_cips() and mol.wedges() and mol.has_stereo_groups
+    del mol.log[:]
+
+    assert pach_dump(mol, compressed=False, version=2)
+    assert sorted(r.rule for r in mol.log) == ['pach:cip-lost', 'pach:stereo-groups-lost',
+                                               'pach:wedge-lost']
+    del mol.log[:]
+    assert pach_dump(mol, compressed=False, version=2, drop=['stereo'])
+    assert [r.rule for r in mol.log] == []
+    assert pach_dump(mol, compressed=False, version=2, drop=['stereo'], strict=True)
+
+
 def test_an_unknown_drop_name_is_refused_rather_than_ignored():
     mol, a, _ = small()
     mol.set_map_number(a, 7)

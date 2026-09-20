@@ -1047,6 +1047,56 @@ def test_dropping_stereo_groups_alone_keeps_the_configurations():
     assert back.parity_of(back.atom_numbers[1]) == mol.parity_of(mol.atom_numbers[1]) != 0
 
 
+# ----- encoder tests: the two widths of the stereo waiver -----
+#
+# `drop=['stereo']` IS EVERYTHING ABOUT STEREO: the configurations, the enhanced-stereo collections,
+# the wedges and the CIP descriptors.  `drop=['stereo_groups']` is the narrow one and takes only the
+# collections.  The pair is the SMILES spec's `!s` and `!e` under another name, and the round trips
+# below hold them to it -- a record whose stereo was waived reads back as the molecule that spec
+# writes, so the two doors cannot drift apart.
+
+def test_dropping_stereo_drops_the_wedges_too():
+    mol, n = _drawn_amino_propanol()
+    with mol.edit() as e:
+        e.set_wedge(n[1], n[2], 1)
+    raw = mol.pack(compressed=False, version=3, drop=['stereo'])
+    block = raw[12 + 4 * 9:]
+    assert all(block[5 * k + 4] >> 4 == 0 for k in range(3)), 'a wedge nibble survived the waiver'
+    back, problems = pach_load(raw, compressed=False)
+    assert problems == [] and back.wedges() == []
+
+
+def test_dropping_stereo_waives_the_cip_loss():
+    mol = read_smiles('N[C@@H](C)C(=O)O')
+    mol.assign_cip()
+    assert mol.atom_cips()
+    del mol.log[:]
+    assert mol.pack(compressed=False, drop=['stereo'])
+    assert [r.rule for r in mol.log] == []
+    assert mol.pack(compressed=False, drop=['stereo'], strict=True)
+
+
+def test_the_stereo_waiver_writes_the_no_stereo_smiles():
+    for smi in ('N[C@@H](C)C(=O)O', 'C/C=C/C', 'C/C=C/[C@H](O)CC', 'CC=[C@]=CC'):
+        mol = read_smiles(smi)
+        back, problems = pach_load(mol.pack(compressed=False, drop=['stereo']), compressed=False)
+        assert problems == []
+        assert format(back) == format(mol, '!s') != format(mol)
+
+
+def test_the_stereo_group_waiver_writes_the_no_enhanced_stereo_smiles():
+    from chython.core import STEREO_AND
+    mol = read_smiles('N[C@@H](C)C(=O)O')
+    mol.set_stereo_group(mol.atom_numbers[1], STEREO_AND, 3)
+    back, problems = pach_load(mol.pack(compressed=False, drop=['stereo_groups']), compressed=False)
+    assert problems == []
+    assert format(back) == format(mol, '!e') != format(mol)
+
+    back, problems = pach_load(mol.pack(compressed=False, drop=['stereo']), compressed=False)
+    assert problems == []
+    assert format(back) == format(mol, '!s') != format(mol, '!e')
+
+
 # ----- encoder and decoder tests: the map block -----
 
 def test_a_mapped_molecule_round_trips():
