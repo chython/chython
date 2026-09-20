@@ -84,6 +84,7 @@ assembled in any order gives one string. This is a reaction SMILES and not a SMI
     format(rxn, '!c')    # keep the container's order of molecules within each side
     format(rxn, 'a')     # asymmetric ring closures
     format(rxn, '!s')    # no stereo marks
+    format(rxn, '!e')    # no enhanced stereo groups, every stereo mark kept
     format(rxn, 'A')     # aromatic bonds instead of aromatic atoms
     format(rxn, 'h')     # show implicit hydrogens
     format(rxn, '!b')    # no bond tokens
@@ -97,7 +98,9 @@ both name where the atom order comes from, so a spec holding both is refused.
 The tail carries radicals (``^1:``), the enhanced stereo groups (``a:``, ``&n:``, ``on:``) and ``f:``,
 whose groups name the components of every molecule that has more than one -- so a salt reactant
 survives a round trip as one molecule. AND/OR group ids are renumbered across the whole reaction,
-because two molecules' ``&1`` are two different groups.
+because two molecules' ``&1`` are two different groups. ``!e`` drops the three group fields and keeps
+``^1:`` and ``f:``, which is what makes it usable where ``!x`` is not: without ``f:`` that salt reactant
+reads back as two reactants.
 
 .. testcode::
 

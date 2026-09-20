@@ -129,6 +129,7 @@ cdef struct smw_opts_t:
     bint canonical          # canonical atom order; False = stored slot order
     bint random_order       # a fresh random atom order, refused together with `canonical = False`
     bint stereo             # emit @/@@ and /\
+    bint enhanced_stereo    # emit the `a:` / `&n:` / `on:` collections; read only under `stereo`
     bint aromatic_bond      # ':' bonds and UPPERCASE atoms; default is lowercase and no token
     bint mapping            # emit :N from the atom's map number
     bint hydrogens          # force brackets and an explicit H count on every atom
@@ -2214,10 +2215,11 @@ cdef tuple smw_tail_parts(Structure structure, smw_scratch_t *s, dict groups, di
     | ----------------- | ------------------------------------ | ---------------- |
     | `{n: (kind, no)}` | `canonical_stereo_groups()` inverted | canonical output wants, group NUMBERS canonical too |
     | `None`            | the stored `SEG_STEREO_GROUPS` bytes | stored-order output shows, being what is stored |
-    | `{}`              | nothing -- no atom carries one       | `!s` asserts: no configuration, so no collection |
+    | `{}`              | nothing -- no atom carries one       | `!s` and `!e` both assert, see below |
 
     An atom absent from a non-None `groups` carries no group, which is why `{}` suppresses the whole
-    field and None does not.
+    field and None does not.  `!s` reaches `{}` having no configuration left to collect and `!e`
+    suppresses the labels alone, so the two arrive at one dict from opposite directions.
 
     `labels` is UNLIKE the other four: a list POSITIONAL in the emitted order, one entry per atom,
     holding the alias bytes or None -- because that is what `$...$` is, and because a join then
@@ -2565,10 +2567,15 @@ def smw_stereo_seed_labels(MoleculeContainer molecule not None):
 cdef int smw_parse_spec(str spec, smw_opts_t *o) except -1:
     """The format spec, one key per writer option.
 
-    `''` canonical with everything on; `!s` no stereo; `A` aromatic bonds rather than lowercase
-    atoms; `m` atom mapping; `h` every hydrogen count explicit; `!b` no bond tokens; `!x` no
-    CXSMILES; `!z` no charges; `a` asymmetric ring-closure bonds; `i` stored slot order;
-    `r` a random atom order.
+    `''` canonical with everything on; `!s` no stereo; `!e` no enhanced stereo; `A` aromatic bonds
+    rather than lowercase atoms; `m` atom mapping; `h` every hydrogen count explicit; `!b` no bond
+    tokens; `!x` no CXSMILES; `!z` no charges; `a` asymmetric ring-closure bonds; `i` stored slot
+    order; `r` a random atom order.
+
+    `!s` AND `!e` ARE TWO WIDTHS OF ONE CUT, and `!s` is the wider: it drops the signs and the
+    collections both, so `!e` under it selects nothing further.  `!e` alone keeps every sign and drops
+    only the three collection fields, which is the one spelling identical to the same molecule with no
+    collection stored -- `!x` drops the whole tail and takes `^n:`, `$...$` and `f:` with it.
 
     `i` AND `r` TOGETHER RAISE, rather than one winning: they are two answers to the one question of
     where the atom order comes from, and letting the later key win would make `ir` and `ri` different
@@ -2577,6 +2584,7 @@ cdef int smw_parse_spec(str spec, smw_opts_t *o) except -1:
     o.canonical = True
     o.random_order = False
     o.stereo = True
+    o.enhanced_stereo = True
     o.aromatic_bond = False
     o.mapping = False
     o.hydrogens = False
@@ -2599,6 +2607,8 @@ cdef int smw_parse_spec(str spec, smw_opts_t *o) except -1:
         i += 1
         if c == 's':
             o.stereo = not negate
+        elif c == 'e':
+            o.enhanced_stereo = not negate
         elif c == 'A':
             o.aromatic_bond = not negate
         elif c == 'm':
@@ -2664,6 +2674,10 @@ def normalize_smiles_spec(str spec=''):
         out.append('r')
     if not o.stereo:
         out.append('!s')
+    elif not o.enhanced_stereo:
+        # UNDER `!s` THE KEY SELECTS NOTHING, so `!s` and `!s!e` are one behaviour and must be one
+        # normal form -- which is the biconditional this function exists for, not a shortcut.
+        out.append('!e')
     if o.aromatic_bond:
         out.append('A')
     if o.mapping:
@@ -2834,16 +2848,24 @@ cdef dict smw_prepare(MoleculeContainer molecule, smw_scratch_t *s, smw_opts_t *
     else:
         for i in range(n):
             s.pos[i] = i
-    if not o.stereo:
-        # `!s` WRITES NO COLLECTION -- and the empty dict, not None, is how that is said: None means
-        # "read the stored bytes" to `smw_tail_parts`, so leaving it here would emit the arena's
-        # groups verbatim, which is the opposite of suppressing them.
+    if not o.stereo or not o.enhanced_stereo:
+        # NEITHER `!s` NOR `!e` WRITES A COLLECTION -- and the empty dict, not None, is how that is
+        # said: None means "read the stored bytes" to `smw_tail_parts`, so leaving it here would emit
+        # the arena's groups verbatim, which is the opposite of suppressing them.
         #
-        # A collection is an assertion about configuration, so a spelling that writes no parity sign
-        # must write no `|&1:|`, `|o1:|` or `|a:|` either: a string saying "these two centres are one
-        # racemate" while naming neither centre's configuration states something the caller asked to
-        # leave out.  It also keeps `!s` output a function of the constitution alone, which is the
-        # promise at `smw_canonical_positions`.
+        # For `!s`: a collection is an assertion about configuration, so a spelling that writes no
+        # parity sign must write no `|&1:|`, `|o1:|` or `|a:|` either: a string saying "these two
+        # centres are one racemate" while naming neither centre's configuration states something the
+        # caller asked to leave out.  It also keeps `!s` output a function of the constitution alone,
+        # which is the promise at `smw_canonical_positions`.
+        #
+        # For `!e`: the signs stay and the labels go, so an `&1` centre comes out as a plain `@` and
+        # the string asserts one enantiomer where the record stated a racemate.  THE CALLER IS ASKING
+        # FOR EXACTLY THAT -- the string the same molecule with no collection stored writes, which is
+        # the only spelling two records of one compound can be compared on when one of them carries
+        # collections and the other does not.  A collection is not an input to the canonical order
+        # (the seed is parities, `smw_stereo_seed`), so suppressing one moves no atom and the two
+        # strings are equal character for character.
         groups = {}
     elif o.canonical and structure.header.segments[SEG_STEREO_GROUPS].length:
         # {(kind, canonical_id): [member, ...]} inverted to {n: (kind, id)}: the writer asks per atom,
@@ -3262,7 +3284,9 @@ def write_reaction_smiles(rxn not None, str spec='', list log=None):
     The tail aggregates `^1:` radicals, the three enhanced-stereo group fields and `f:`, whose groups
     name the components of every molecule that has more than one -- so `[Na+].[Cl-]` on one side comes
     back as one reactant and not two.  A tail carrying `^1:` and `f:` alone drops enhanced stereo
-    groups from every reaction it writes.  `!x` suppresses the whole block.
+    groups from every reaction it writes.  `!e` is that spelling asked for by name, `!x` suppresses
+    the whole block, and `f:` is why the two are not interchangeable here: without it a two-component
+    reactant reads back as two reactants.
 
     `log` is the writer's loss list, the one every other writer takes: a fact the string cannot carry
     is appended to it and never spelled into the text.  `str(rxn)`, `format(rxn, spec)` and

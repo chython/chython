@@ -29,8 +29,8 @@ from random import Random, seed
 from pytest import mark, raises
 
 from chython.core import MoleculeContainer
-from chython.core._core import (normalize_smiles_spec, read_smiles, smw_symbol_table,
-                                smw_traversal, smv_valence_model, write_smiles)
+from chython.core._core import (normalize_smiles_spec, read_reaction_smiles, read_smiles,
+                                smw_symbol_table, smw_traversal, smv_valence_model, write_smiles)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -486,6 +486,57 @@ def test_the_abs_collection_is_written_alone_and_beside_another_one():
     # and `!x` suppresses this field with the rest of the block
     assert write_smiles(read_smiles('F[C@H](Cl)Br |a:1|'), '!x') == '[C@@H](F)(Cl)Br'
     assert write_smiles(read_smiles('F[C@H](Cl)Br')) == '[C@@H](F)(Cl)Br'
+
+
+def test_the_two_stereo_widths_write_the_string_the_stripped_record_writes():
+    """THE THREE IDENTITIES `!e` and `!s` exist for, stated as the equalities a caller compares on.
+
+    Three records of one compound: `es` carries collections, `sm` carries the same parities and no
+    collection, `ns` carries no configuration at all. Then, for every one of them,
+
+    | `format(es, '!e') == str(sm)` | drop the collections, keep every sign |
+    | `format(es, '!s') == str(ns)` | drop the configuration entirely |
+    | `format(sm, '!s') == str(ns)` | and the wider cut does not care which record it started from |
+
+    Character for character and not up to re-reading, because the point is a key that links two
+    sources spelling one compound differently -- a collection is not an input to the canonical order,
+    so suppressing one moves no atom. The second row of the table is the case `!x` cannot serve: a
+    radical and an alias are the rest of the tail, and `!x` takes them too.
+    """
+    records = [('C[C@H](O)C[C@@H](N)C |&1:1,o1:4|', 'C[C@H](O)C[C@@H](N)C', 'CC(O)CC(N)C'),
+               ('C[C@H](O)C[C@@H](N)[CH2] |&1:1,o1:4,^1:6,$;;;;;;lbl$|',
+                'C[C@H](O)C[C@@H](N)[CH2] |^1:6,$;;;;;;lbl$|',
+                'CC(O)CC(N)[CH2] |^1:6,$;;;;;;lbl$|'),
+               ('C/C=C/C[C@H](O)C |&1:4,&2:1|', 'C/C=C/C[C@H](O)C', 'CC=CCC(O)C'),
+               ('C[C@H](O)CC |a:1|', 'C[C@H](O)CC', 'CC(O)CC'),
+               ('O[C@H](F)[C@@H](F)C[C@H](Cl)C |&1:1,3,o1:6|', 'O[C@H](F)[C@@H](F)C[C@H](Cl)C',
+                'OC(F)C(F)CC(Cl)C')]
+    for es_text, sm_text, ns_text in records:
+        es, sm, ns = read_smiles(es_text), read_smiles(sm_text), read_smiles(ns_text)
+        assert write_smiles(es, '!e') == str(sm), es_text
+        assert write_smiles(es, '!s') == str(ns), es_text
+        assert write_smiles(sm, '!s') == str(ns), es_text
+        assert es.has_stereo_groups and not sm.has_stereo_groups, es_text
+    # `!e` writes no collection and touches nothing else, so on a record carrying none it is the
+    # default spec's own string -- the no-op that makes it safe to apply to a whole corpus
+    plain = read_smiles('C[C@H](O)CC')
+    assert write_smiles(plain, '!e') == str(plain) == 'C(C)[C@@H](O)C'
+    # one behaviour, one normal form: `!s` already drops the collections, so `!e` under it selects
+    # nothing and must not reach the key
+    assert normalize_smiles_spec('!s!e') == normalize_smiles_spec('!e!s') == '!s'
+    assert normalize_smiles_spec('!e') == normalize_smiles_spec('!e!e') == '!e'
+    assert normalize_smiles_spec('e') == ''
+    assert normalize_smiles_spec('m!e') == normalize_smiles_spec('!em') == '!em'
+
+
+def test_a_reaction_drops_its_collections_under_not_e_and_keeps_its_fragment_groups():
+    # the reaction tail aggregates across every molecule, so `!e` has to reach the writer that
+    # assembles it and not only the per-molecule one; `f:` is what `!x` would cost here, a
+    # two-component reactant reading back as two reactants
+    rxn = read_reaction_smiles('C[C@H](O)CC.[Na+].[Cl-]>>C[C@@H](N)CC |&1:1,o1:8,f:1.2|')
+    assert format(rxn, '') == 'C(C)[C@@H](O)C.[Na+].[Cl-]>>C(C)[C@H](N)C |&1:2,o1:9,f:1.2|'
+    assert format(rxn, '!e') == 'C(C)[C@@H](O)C.[Na+].[Cl-]>>C(C)[C@H](N)C |f:1.2|'
+    assert format(rxn, '!x') == 'C(C)[C@@H](O)C.[Na+].[Cl-]>>C(C)[C@H](N)C'
 
 
 def test_an_alias_survives_a_round_trip_through_the_string():

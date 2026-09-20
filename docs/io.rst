@@ -642,6 +642,7 @@ specifier  effect
 ``A``      aromaticity on the bonds (``:``) instead of lowercase atoms
 ``r``      a fresh random atom order instead of the canonical one
 ``!s``     without stereo
+``!e``     without enhanced stereo: the ``a:``/``&n:``/``on:`` collections, nothing else
 ``!x``     without CXSMILES extensions
 ``!z``     without charges
 ``!b``     without bond tokens
@@ -686,6 +687,55 @@ Two consequences. The draws come from the ``random`` module, so ``random.seed()`
 repeatable even though its strings are not predictable. And an ``r`` string is **not** canonical, so it
 must never reach a hash or an equality test — ``==`` compares ``canonical_bytes`` and never a string.
 ``r`` and the stored-order key ``i`` both name where the atom order comes from and raise together.
+
+``!s`` and ``!e`` are two widths of one cut, and they exist for comparing records of one compound that
+different sources spelled with different amounts of stereo. Take three of them — ``racemic`` carries
+enhanced-stereo collections, ``single`` carries the same parities and no collection, ``flat`` carries no
+configuration at all:
+
+.. testcode::
+
+    racemic = smiles('C[C@H](O)C[C@@H](N)C |&1:1,o1:4|')
+    single = smiles('C[C@H](O)C[C@@H](N)C')
+    flat = smiles('CC(O)CC(N)C')
+
+    print(racemic)
+    print(format(racemic, '!e'))
+    print(format(racemic, '!e') == str(single))
+    print(format(racemic, '!s') == format(single, '!s') == str(flat))
+
+.. testoutput::
+
+    [C@@H](O)(C[C@H](C)N)C |&1:0,o1:3|
+    [C@@H](O)(C[C@H](C)N)C
+    True
+    True
+
+Both equalities are character for character. A collection is not an input to the canonical order — the
+order is seeded with the parities — so dropping one moves no atom, and the wider cut lands on the same
+string from either record. That makes ``format(mol, '!e')`` a key that links a record stating a racemate
+to a record drawing one enantiomer, and ``format(mol, '!s')`` a key that links either to a record with
+no stereo drawn at all.
+
+What ``!e`` asserts, it asserts on purpose: an ``&1`` centre comes out as a bare ``@``, so the string
+claims one enantiomer where the record stated a racemate. That is the request — the string the stripped
+record writes — and it is why the key is not the default.
+
+``!e`` is also narrower than ``!x``, which drops the whole extension block:
+
+.. testcode::
+
+    labelled = smiles('C[C@H](O)C[C@@H](N)[CH2] |&1:1,o1:4,^1:6,$;;;;;;lbl$|')
+    print(format(labelled, '!e'))
+    print(format(labelled, '!x'))
+
+.. testoutput::
+
+    N[C@@H]([CH2])C[C@H](C)O |$;;lbl;;;;$,^1:2|
+    N[C@@H]([CH2])C[C@H](C)O
+
+The radical and the atom label are in the tail too, and ``!x`` takes them with it — as it takes ``f:``
+from a reaction, where a two-component reactant then reads back as two reactants.
 
 Any spelling that reaches ``__format__`` works — f-strings, ``%``, ``str.format``:
 
