@@ -1527,6 +1527,128 @@ none.
 A record with no inputs or no products is refused the same way, as ``reconstruct:empty``.
 
 
+A Configuration Is Not a Reason to Lose a Mapping
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``stereo`` says whether the configuration is part of the question the ladder asks, and **loose is the
+default**: a record whose constitution the corpus explains gets its mapping even where the two sides
+disagree about a centre, and the disagreement is a log line rather than a lost answer.
+
+The ladder is walked **twice**: strict first, always, then loose only if nothing explained the record.
+The corpus discriminates rows by configuration -- one row carries a centre through and another turns it
+over -- so a record that states its product configuration is entitled to the row that actually explains
+it, and the loose walk reaches only records that would otherwise have come back unexplained.
+
+.. testcode::
+
+    retention = smiles('C[C@H](O)CC.CC(=O)O>>C[C@@H](CC)OC(C)=O')
+    inversion = smiles('C[C@H](O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O')
+
+    assert retention.reconstruct_mapping() == ('react:esterification',)
+    assert inversion.reconstruct_mapping() == ('react:mitsunobu',)
+
+    # neither is a loose hit: both records state a configuration the corpus can account for
+    assert not [r for r in retention.log if r.rule == 'reconstruct:stereo-mismatch']
+
+A product drawn flat is the ordinary sad record, and it is the loose walk's own case.  ``strict`` is
+there for the caller who would rather have nothing than a mapping over a configuration nobody checked:
+
+.. testcode::
+
+    flat = smiles('C[C@H](O)CC.CC(=O)O>>CC(CC)OC(C)=O')
+    assert flat.reconstruct_mapping() == ('react:esterification',)
+    assert [r.rule for r in flat.log if r.rule.startswith('reconstruct:stereo')] \
+        == ['reconstruct:stereo-mismatch']
+
+    assert smiles('C[C@H](O)CC.CC(=O)O>>CC(CC)OC(C)=O').reconstruct_mapping(stereo='strict') == ()
+
+Loose relaxes the configuration and **nothing else**.  The hydrogen counts, the charges, the isotopes and
+every bond order are still what a component has to reproduce, so a constitutional mismatch comes back
+unexplained under either setting.
+
+``reconstruct:stereo-mismatch`` is one ``INFO`` line naming every site where the two sides disagree, in
+the stable ids of the recorded product.  Three ways to disagree are all reported: the sides state
+different configurations, the record states none where the explanation predicts one, or the record states
+one the explanation does not.  A collection can differ on a strict hit too, a collection not being part
+of the canonical form.
+
+
+Healing the Configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``heal_stereo`` names the side whose configuration is the truth and writes it onto the other.  It is
+**off by default**, and the two settings are ``'product'`` -- the usual one, the record's own product
+decides and the inputs are repaired -- and ``'reactant'``.  Every line it writes is at stage ``'heal'``.
+
+.. testcode::
+
+    rxn = smiles('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O')     # the product knows, the alcohol does not
+    assert rxn.reconstruct_mapping(heal_stereo='product') == ('react:esterification',)
+
+    alcohol = rxn.reactants[0]
+    alcohol.assign_cip()
+    assert list(alcohol.atom_cips().values()) == ['R']
+    assert [r.rule for r in rxn.log if r.stage == 'heal'] == ['heal:parity']
+
+**The explanation mediates, which is what makes the reaction type count.** The rung's rebuilt component
+was built from the inputs *through* the row, so it already states whatever course the row states, and the
+repair is read against it rather than against the other side directly.  Two mechanisms, and which one
+applies is the whole of "the reaction type on the reaction centre":
+
+* the side being repaired states a configuration and the prediction contradicts the record -- it is
+  **turned over**.  Every unit chython models is two-state, so the row is a bijection on those two
+  states and the other state is the one the record implies.  One line repairs a retentive row and an
+  inverting one.
+* nothing went in configured -- the record's own configuration is **stated**, in the record's direction
+  order carried onto the other side's atoms.  Sound exactly when that carrying succeeds: a stereocentre
+  only turns over when a bond to it is broken, so an order still readable against the unit's own
+  neighbours is a centre the row left alone.
+
+A row that *did* replace a bond at the centre and does not state its course is refused, and the log says
+what is missing.  A displacement turns the centre over; the product's configuration therefore says
+nothing about the halide's:
+
+.. testcode::
+
+    rxn = smiles('CC(Cl)CC.CNC>>C[C@H](CC)N(C)C')
+    assert rxn.reconstruct_mapping(heal_stereo='product') == ('react:n_alkylation',)
+
+    assert [r.rule for r in rxn.log if r.stage == 'heal'] == ['heal:course-unstated']
+    halide = next(m for m in rxn.reactants if any(m.atom(n).element == 17 for n in m.atom_numbers))
+    assert all(halide.parity_of(n) == 0 for n in halide.atom_numbers)
+
+===========================  =====================================================================
+rule                         what it says
+===========================  =====================================================================
+``heal:parity``              a configuration was turned over or stated
+``heal:group``               a collection crossed with a configuration, or was dropped
+``heal:course-unstated``     no route from the record back to a unit on the other side
+``heal:not-stereogenic``     the unit holds no second configuration, so nothing there is the claim
+``heal:group-not-anchored``  a collection where no configuration is established, and a promotion
+                             never invents a parity
+``heal:frame-mismatch``      the two sides read the site against different neighbours
+===========================  =====================================================================
+
+**The side named wins, and a line says where it did.** An enhanced-stereo collection travels with the
+configuration it describes, under a **fresh id** -- two records numbering their ``&1`` differently must
+not have their racemates merged -- and is dropped where the named side states none, a configured unit in
+no collection already being an absolute one.
+
+A healed record is one the strict walk accepts, which is the way to check a repair over a corpus:
+
+.. testcode::
+
+    rxn = smiles(r'C/C=C/CO.CC(=O)O>>C/C=C\COC(C)=O')       # the geometry disagrees
+    assert rxn.reconstruct_mapping(heal_stereo='product') == ('react:esterification',)
+
+    healed = smiles(format(rxn, 'm'))
+    assert healed.reconstruct_mapping(stereo='strict') == ('react:esterification',)
+
+What it will not do is invent the course.  Where the record states a configuration at a centre the row
+rebuilt and no row states what it does there, the repair stops and says so; the mapping is unaffected
+either way.
+
+
 Attention Mapping
 -----------------
 

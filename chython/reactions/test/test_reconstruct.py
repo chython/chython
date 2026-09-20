@@ -454,3 +454,230 @@ def test_a_spectator_input_comes_back_unmapped():
     assert rxn.reconstruct_mapping() == ('react:amidation',)
     toluene = rxn.reactants[2]
     assert all(toluene.map_number_of(n) == 0 for n in toluene.atom_numbers)
+
+
+# --- stereo strictness ----------------------------------------------------------------------------
+
+def test_a_flat_product_is_explained_loosely():
+    # THE SAD RECORD: a configured reactant and a product drawn flat.  Constitutionally the ester is
+    # there, so the mapping is there, and the configuration the record failed to state is a log line.
+    from ...core import INFO
+    rxn = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CC(=O)O')], [smiles('CC(CC)OC(C)=O')])
+    assert rxn.reconstruct_mapping() == ('react:esterification',)
+    mismatch = [r for r in rxn.log if r.rule == 'reconstruct:stereo-mismatch']
+    assert len(mismatch) == 1 and mismatch[0].severity == INFO
+    product = rxn.products[0]
+    assert all(product.map_number_of(n) != 0 for n in product.atom_numbers
+               if product.atom(n).element != 1)
+
+
+def test_strict_refuses_what_loose_explains():
+    from ...core import LOST
+    rxn = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CC(=O)O')], [smiles('CC(CC)OC(C)=O')])
+    assert rxn.reconstruct_mapping(stereo='strict') == ()
+    assert [r.rule for r in rxn.log if r.severity == LOST] == ['reconstruct:unexplained']
+
+
+def test_the_strict_pass_runs_first_so_stereo_still_picks_the_row():
+    # THE WHOLE REASON THE LOOSE PASS IS SECOND.  The corpus discriminates by configuration: one row
+    # carries the centre through and another turns it over, and a record that states its product
+    # configuration is entitled to the row that actually explains it.  Run blind, both rows fit.
+    retention = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CC(=O)O')],
+                                  [smiles('C[C@@H](CC)OC(C)=O')])
+    assert retention.reconstruct_mapping() == ('react:esterification',)
+    inversion = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CC(=O)O')],
+                                  [smiles('C[C@H](CC)OC(C)=O')])
+    assert inversion.reconstruct_mapping() == ('react:mitsunobu',)
+    # and neither is a loose hit
+    for rxn in (retention, inversion):
+        assert not [r for r in rxn.log if r.rule == 'reconstruct:stereo-mismatch']
+
+
+def test_an_inverted_purification_is_explained_loosely():
+    # The lowest rung is stereo-strict too, so the enantiomer of the input is not the input; loosely it
+    # is the same constitution and the record is a purification with a configuration disagreement.
+    rxn = ReactionContainer([smiles('C[C@H](N)C(=O)O'), smiles('O')], [smiles('C[C@@H](N)C(=O)O')])
+    assert rxn.reconstruct_mapping() == ('purification',)
+    assert [r.rule for r in rxn.log if r.rule.startswith('reconstruct:stereo')] \
+        == ['reconstruct:stereo-mismatch']
+
+
+def test_the_mismatch_line_names_the_sites():
+    rxn = ReactionContainer([smiles('C[C@H](N)C(=O)O'), smiles('O')], [smiles('C[C@@H](N)C(=O)O')])
+    rxn.reconstruct_mapping()
+    mismatch = next(r for r in rxn.log if r.rule == 'reconstruct:stereo-mismatch')
+    product = rxn.products[0]
+    centre = next(n for n in product.atom_numbers if product.parity_of(n))
+    assert mismatch.atoms == (centre,)
+
+
+def test_a_constitutional_mismatch_is_still_unexplained():
+    # Loose relaxes the configuration and nothing else: the hydrogen counts, the kekule form and the
+    # protonation are still what `isomorphism()` requires.
+    rxn = ReactionContainer([smiles('[CH3:1][CH2:2][OH:3]')], [smiles('[CH3:4][CH2:5][CH3:6]')])
+    assert rxn.reconstruct_mapping() == ()
+
+
+def test_the_stereo_argument_is_validated():
+    rxn = ReactionContainer([smiles('CCO')], [smiles('CCO')])
+    with raises(ValueError, match="'loose' or 'strict'"):
+        rxn.reconstruct_mapping(stereo='blind')
+
+
+# --- healing the configuration --------------------------------------------------------------------
+
+def _cip(molecule, number: int):
+    """The CIP descriptor at the atom carrying map number `number`, or None where there is none.
+
+    THE PARITY INTEGER IS NOT THE ASSERTION.  It is read against the atom's own refs, and a row that
+    changes a substituent changes those, so a centre carried through retentively legitimately shows two
+    different integers on the two sides of one record.
+    """
+    molecule.assign_cip()
+    return next((d for n, d in molecule.atom_cips().items() if molecule.map_number_of(n) == number),
+                None)
+
+
+def _healed(record: str, **kwargs):
+    """`reconstruct_mapping(**kwargs)` on `record`, then the label the STRICT walk gives the result.
+
+    The ratchet for every repair: a healed record is one the strict walk accepts, which is a statement
+    about the whole record rather than about one integer in one frame.
+    """
+    rxn = smiles(record)
+    label = rxn.reconstruct_mapping(**kwargs)
+    return rxn, label, smiles(format(rxn, 'm')).reconstruct_mapping(stereo='strict')
+
+
+def test_heal_is_off_by_default():
+    rxn, label, strict = _healed('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O')
+    assert label == ('react:esterification',)
+    assert not [r for r in rxn.log if r.stage == 'heal']
+    assert strict == ()                                   # the record is as inconsistent as it arrived
+
+
+def test_the_product_configuration_fills_a_flat_input():
+    # THE ORDINARY SAD RECORD, and the reason `'product'` is the direction a caller reaches for: the
+    # product was copied from a catalogue with its configuration and the starting material drawn by hand
+    # without one.  Fischer esterification never touches the carbinol bond, so the record's own centre is
+    # the input's.
+    rxn, label, strict = _healed('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O', heal_stereo='product')
+    assert label == ('react:esterification',) and strict == ('react:esterification',)
+    alcohol = next(m for m in rxn.reactants if len(m) == 5)
+    assert _cip(alcohol, 2) == _cip(rxn.products[0], 2) == 'R'
+    assert [r.rule for r in rxn.log if r.stage == 'heal'] == ['heal:parity']
+
+
+def test_the_other_enantiomer_fills_it_the_other_way():
+    # The same record drawn S, to pin that the repair reads the record rather than a default.
+    rxn, label, strict = _healed('CC(O)CC.CC(=O)O>>C[C@@H](CC)OC(C)=O', heal_stereo='product')
+    assert strict == label == ('react:esterification',)
+    alcohol = next(m for m in rxn.reactants if len(m) == 5)
+    assert _cip(alcohol, 2) == _cip(rxn.products[0], 2) == 'S'
+
+
+def test_the_product_configuration_turns_an_input_over():
+    # The input states a configuration and the record contradicts it.  Every unit is two-state, so the
+    # repair is the other state -- no inversion arithmetic and no second code path.
+    rxn, label, strict = _healed('C[C@H](N)C(=O)O.O>>C[C@@H](N)C(=O)O', heal_stereo='product')
+    assert label == ('purification',) and strict == ('purification',)
+    alanine = next(m for m in rxn.reactants if len(m) > 1)
+    assert _cip(alanine, 2) == _cip(rxn.products[0], 2)
+    assert [r.rule for r in rxn.log if r.stage == 'heal'] == ['heal:parity']
+
+
+def test_the_input_configuration_fills_a_flat_product():
+    # `'reactant'`: the other direction, and the one that STATES a configuration where the record holds
+    # none rather than turning one over.
+    rxn, label, strict = _healed('C[C@H](O)CC.CC(=O)O>>CC(CC)OC(C)=O', heal_stereo='reactant')
+    assert label == ('react:esterification',) and strict == ('react:esterification',)
+    alcohol = next(m for m in rxn.reactants if len(m) == 5)
+    assert _cip(rxn.products[0], 2) == _cip(alcohol, 2) == 'S'
+
+
+def test_the_two_directions_repair_opposite_sides():
+    # One record, both directions, and the answers differ: the geometry the record states in its product
+    # against the geometry it states in its reactant.  Either way the record ends up consistent.
+    record = r'C/C=C/CO.CC(=O)O>>C/C=C\COC(C)=O'
+    from_product, label, strict = _healed(record, heal_stereo='product')
+    assert label == ('react:esterification',) and strict == ('react:esterification',)
+    from_reactant, label, strict = _healed(record, heal_stereo='reactant')
+    assert label == ('react:esterification',) and strict == ('react:esterification',)
+    assert format(from_product, 'm') != format(from_reactant, 'm')
+
+
+def test_nothing_is_healed_where_the_record_states_nothing():
+    # `'product'` onto a flat product asks for a configuration the record does not hold.  Silence and no
+    # log line: there is no disagreement here, only an absence on the side that was named the truth.
+    rxn, label, strict = _healed('C[C@H](O)CC.CC(=O)O>>CC(CC)OC(C)=O', heal_stereo='product')
+    assert label == ('react:esterification',)
+    assert not [r for r in rxn.log if r.stage == 'heal']
+    assert strict == ()
+
+
+def test_a_row_that_rebuilt_the_centre_refuses():
+    # THE REFUSAL THAT MAKES THE REST SOUND.  An N-alkylation replaces the bond at the centre, so the
+    # product's configuration says nothing about the halide's: a displacement turns the centre over and
+    # the row does not state that it does.  Nothing is written and the line says what is missing.
+    rxn, label, strict = _healed('CC(Cl)CC.CNC>>C[C@H](CC)N(C)C', heal_stereo='product')
+    assert label == ('react:n_alkylation',)
+    assert [r.rule for r in rxn.log if r.stage == 'heal'] == ['heal:course-unstated']
+    halide = next(m for m in rxn.reactants if len(m) == 5)
+    assert all(halide.parity_of(n) == 0 for n in halide.atom_numbers)
+    assert strict == ()
+
+
+def test_healing_is_frame_order_independent():
+    # ONE RECORD, TWO ATOM ORDERS, one answer.  The parity integer differs between the two spellings and
+    # the map numbers land on different atoms, so neither is the assertion: the healed alcohol is the
+    # same molecule, `__eq__` being the canonical form and carrying the parity.
+    one = _healed('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O', heal_stereo='product')[0]
+    two = _healed('CCC(O)C.OC(=O)C>>CC[C@@H](C)OC(C)=O', heal_stereo='product')[0]
+    alcohols = [next(m for m in rxn.reactants if len(m) == 5) for rxn in (one, two)]
+    assert alcohols[0] == alcohols[1]
+    for alcohol in alcohols:
+        alcohol.assign_cip()
+        assert list(alcohol.atom_cips().values()) == ['R']
+
+
+def test_every_heal_line_is_stage_heal():
+    rxn = _healed('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O', heal_stereo='product')[0]
+    healed = [r for r in rxn.log if r.rule.startswith('heal:')]
+    assert healed and all(r.stage == 'heal' for r in healed)
+    assert all(r.stage == 'reconstruct' for r in rxn.log if not r.rule.startswith('heal:'))
+
+
+def test_the_heal_line_names_the_atoms_of_the_molecule_it_wrote():
+    rxn = _healed('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O', heal_stereo='product')[0]
+    line = next(r for r in rxn.log if r.rule == 'heal:parity')
+    alcohol = next(m for m in rxn.reactants if len(m) == 5)
+    assert line.atoms == tuple(n for n in alcohol.atom_numbers if alcohol.parity_of(n))
+
+
+def test_heal_stereo_is_validated():
+    rxn = ReactionContainer([smiles('CCO')], [smiles('CCO')])
+    with raises(ValueError, match="False, 'product' or 'reactant'"):
+        rxn.reconstruct_mapping(heal_stereo='both')
+
+
+def test_a_collection_crosses_under_a_fresh_id():
+    # A racemate is a statement about a configured unit, so it travels with the configuration.  The KIND
+    # crosses and the NUMBER does not: two records numbering their `&1` differently must not have their
+    # racemates merged by a heal.
+    rxn, label, _ = _healed('C[C@H](O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O |&1:1|', heal_stereo='reactant')
+    assert label == ('react:mitsunobu',)
+    product = rxn.products[0]
+    assert [kind for kind, _ in product.stereo_groups()] \
+        == [kind for kind, _ in rxn.reactants[0].stereo_groups()]
+    assert [r.rule for r in rxn.log if r.stage == 'heal'] == ['heal:group']
+
+
+def test_an_absolute_source_drops_a_collection():
+    # The other way round, and the policy the argument states: the side the caller named wins outright.
+    # A racemic input against a single-enantiomer product, read from the product, is absolute -- and the
+    # line is there to be read, because this is the direction that discards a statement.
+    rxn, label, _ = _healed('C[C@H](O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O |&1:1|', heal_stereo='product')
+    assert label == ('react:mitsunobu',)
+    assert rxn.reactants[0].stereo_groups() == {}
+    line = next(r for r in rxn.log if r.rule == 'heal:group')
+    assert 'dropped' in line.message

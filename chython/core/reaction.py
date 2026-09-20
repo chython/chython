@@ -645,8 +645,8 @@ class ReactionContainer:
         """
         return reaction_canonicalize(self, fix_tautomers=fix_tautomers, keep_kekule=keep_kekule)
 
-    def reconstruct_mapping(self, *, max_size_ratio: float = 5.,
-                            min_filter_size: int = 42) -> tuple[str, ...]:
+    def reconstruct_mapping(self, *, max_size_ratio: float = 5., min_filter_size: int = 42,
+                            stereo: str = 'loose', heal_stereo=False) -> tuple[str, ...]:
         """Assign an atom-atom mapping by reconstructing the recorded product from the recorded inputs.
 
         Canonicalizes both sides IN PLACE and then numbers them, so the reaction comes back normalized
@@ -663,10 +663,33 @@ class ReactionContainer:
         record, a record with no inputs or no products, and a record whose product is grossly larger
         than everything that went in all come back empty with a `REFUSED` record on `self.log`.
 
+        A CONFIGURATION IS NOT A REASON TO LOSE A MAPPING.  ``stereo='loose'``, the default, walks the
+        ladder stereo-strict first and then again with the configuration out of the question, so a
+        record that states its product configuration still gets the row that explains it -- the corpus
+        discriminates a centre carried through from one turned over -- while a record whose
+        configuration is absent or wrong is mapped anyway and gets one INFO
+        ``'reconstruct:stereo-mismatch'`` line naming the sites.  ``stereo='strict'`` runs the first
+        walk alone, for a caller whose record is only worth having if its configuration agrees.
+
+        ``heal_stereo`` repairs the disagreement instead of only reporting it, and is off by default.
+        ``'product'`` reads the recorded product as the truth and rewrites the inputs; ``'reactant'``
+        reads the inputs plus the row and rewrites the product.  Either way the explanation mediates,
+        so the reaction type decides the reaction centre: the rung's rebuilt product was made from the
+        inputs through the row and already states whatever course the row states.  Where the side being
+        repaired states a configuration, the repair is a TURN-OVER and not an arithmetic -- every unit
+        is two-state, so the other state is the one the record implies, and one line serves a retentive
+        row and an inverting one.  Where nothing went in configured, the record's own configuration is
+        stated in its own direction order, which is sound exactly where that order still reads against
+        the unit's neighbours: a centre only turns over when a bond to it is broken.  A row that
+        rebuilt the centre and states no course is refused with ``'heal:course-unstated'``.  Every line
+        lands on ``self.log`` at stage ``heal``; a collection crosses under a FRESH id and only onto an
+        established parity, and is dropped where the named side states none.
+
         Registered by `chython.reactions`, not implemented here -- see `_reaction_reconstruct_fn`.
         """
         return _reaction_reconstruct_fn()(self, max_size_ratio=max_size_ratio,
-                                          min_filter_size=min_filter_size)
+                                          min_filter_size=min_filter_size, stereo=stereo,
+                                          heal_stereo=heal_stereo)
 
     def attention_mapping(self, *, multiplier: float = 1.75, keep_reactant_mapping: bool = False,
                           threads: int | None = None) -> MappingResult:
