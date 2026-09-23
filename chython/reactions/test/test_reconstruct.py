@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+from collections import Counter
 from pytest import raises
 
 from ...core import ReactionContainer, read_smiles as smiles
@@ -454,6 +455,123 @@ def test_a_spectator_input_comes_back_unmapped():
     assert rxn.reconstruct_mapping() == ('react:amidation',)
     toluene = rxn.reactants[2]
     assert all(toluene.map_number_of(n) == 0 for n in toluene.atom_numbers)
+
+
+# --- what the walk is allowed to cost -------------------------------------------------------------
+
+#: Solvents, a drying agent and a base that carry NO group the corpus names a slot for, so no row can
+#: reach them: dichloromethane, THF, water, DMF, dioxane, hexane.  A record files its solvent among its
+#: reagents, and the corpus median is 4 reagents, so this is the ordinary case and not a stress test.
+_UNREACHABLE = ('ClCCl', 'C1CCOC1', 'O', 'CN(C)C=O', 'C1COCCO1', 'CCCCCC')
+
+
+def _amidation(extra=()):
+    return ReactionContainer([smiles('CC(=O)O'), smiles('CCN'), *(smiles(s) for s in extra)],
+                             [smiles('CC(=O)NCC')])
+
+
+def _pools(reaction):
+    """The label, and how many pools of inputs the walk offered the corpus to earn it."""
+    from .. import _reconstruct
+
+    offered = []
+    kept = _reconstruct._fitting
+
+    def counting(molecules, *args, **kwargs):
+        offered.append(len(molecules))
+        return kept(molecules, *args, **kwargs)
+
+    _reconstruct._fitting = counting
+    try:
+        return reaction.reconstruct_mapping(), len(offered)
+    finally:
+        _reconstruct._fitting = kept
+
+
+def _mapping(reaction):
+    """The written mapping, per molecule, as the thing the padding may not perturb."""
+    return [sorted((n, m.map_number_of(n)) for n in m.atom_numbers) for m in reaction.molecules()]
+
+
+def test_inert_inputs_do_not_change_the_answer():
+    plain, padded = _amidation(), _amidation(_UNREACHABLE)
+    assert plain.reconstruct_mapping() == padded.reconstruct_mapping() == ('react:amidation',)
+    # PER ATOM, on the two molecules both records share: the acid, the amine and the amide
+    written = _mapping(padded)
+    assert _mapping(plain) == [*written[:2], written[-1]]
+
+
+def test_inert_inputs_do_not_multiply_the_work():
+    # `_applications` walks the subsets of the inputs A ROW COULD REACH, so the six inert reagents cost
+    # nothing: 3 pools either way.  Walking every subset instead costs `C(n, 1..4)`, measured at 162 on
+    # this record -- and a record may file more reagents than six.
+    plain_label, plain = _pools(_amidation())
+    padded_label, padded = _pools(_amidation(_UNREACHABLE))
+    assert plain_label == padded_label == ('react:amidation',)
+    assert plain == 3
+    assert padded == plain, 'an input no row can reach must not be enumerated'
+
+
+def test_the_composed_rung_only_walks_what_the_stripping_reached():
+    # `_deprotect_then_react` runs after `_react` on the same walk, so a pool of its stripped list that
+    # holds nothing stripped is a pool `_react` already offered: here the acid alone, and the acid with
+    # the isobutylene the Boc left behind.  Both rungs walk, so the count is per rung.
+    from .._reconstruct import _applications
+
+    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CC(C)(C)OC(=O)NCC')], [smiles('CC(=O)NCC')])
+    stripped, unstripped = [], []
+    for store, required in ((stripped, {1}), (unstripped, None)):
+        pool = [smiles('CC(=O)O'), smiles('CCN'), smiles('CC(C)=C')]
+        store.extend(subset for subset, _ in _applications(rxn.products[0], pool, required=required))
+    assert rxn.reconstruct_mapping() == ('deprotect+react:amidation',)
+    assert len(stripped) < len(unstripped), 'a pool the stripping never reached must not be re-walked'
+
+
+def test_the_corpus_is_walked_once_for_both_strictnesses():
+    # THE FLAT-PRODUCT RECORD, which only the loose walk explains: the strict walk enumerates every rung
+    # and accepts none of it, so the loose walk is the one that earns the label.  What a rung enumerates
+    # is a question about the inputs and the corpus, not about strictness, so it is asked once.
+    from .. import _reconstruct
+
+    rxn = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CC(=O)O')], [smiles('CC(CC)OC(C)=O')])
+    walks = []
+    kept = _reconstruct._applications
+
+    def counting(recorded, inputs, rules=None, required=None):
+        walks.append(required)
+        return kept(recorded, inputs, rules, required)
+
+    _reconstruct._applications = counting
+    try:
+        assert rxn.reconstruct_mapping() == ('react:esterification',)
+    finally:
+        _reconstruct._applications = kept
+    assert walks == [None], 'the corpus walk is paid once per call, not once per strictness'
+
+
+def test_the_recorded_product_bounds_what_a_row_may_build():
+    from .._reconstruct import _supplies
+    from .._tables import reaction_rules
+
+    rule = reaction_rules()['amidation'][0]
+    created = max(len(template.created_atoms) for template in rule.templates)
+    # the bound is over ELEMENTS, and one recorded component sufficing is enough
+    assert _supplies(Counter({'C': 4, 'N': 1, 'O': 1}), [{'C': 4, 'N': 1, 'O': 1}], rule)
+    assert _supplies(Counter({'C': 9}), [{'C': 40}, {'C': 4}], rule)
+    # a record wanting an element no input carries is out of reach, up to what the row creates
+    assert not _supplies(Counter({'C': 40}), [{'C': 4, 'Br': created + 1}], rule)
+    # NECESSARY AND NOT SUFFICIENT: enough atoms of the right elements says nothing about the bonds
+    assert _supplies(Counter({'C': 99}), [{'C': 4}], rule)
+
+
+def test_an_unreachable_input_still_reports_as_a_spectator():
+    # the pruning is of the SEARCH, so an input it skipped is still an input: it comes back at 0 like
+    # any other spectator rather than disappearing from the record
+    rxn = _amidation(_UNREACHABLE)
+    assert rxn.reconstruct_mapping() == ('react:amidation',)
+    assert len(rxn.reactants) + len(rxn.agents) == 2 + len(_UNREACHABLE)
+    for molecule in (*rxn.reactants, *rxn.agents)[2:]:
+        assert all(molecule.map_number_of(n) == 0 for n in molecule.atom_numbers)
 
 
 # --- stereo strictness ----------------------------------------------------------------------------

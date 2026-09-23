@@ -28,11 +28,12 @@ not; a configuration that disagrees is a fact about the record, reported and opt
 never a reason to hand back no mapping.  `_Options.loose` is that separation, and `_Link` is what carries
 each rung's paired components out to it.
 """
-from collections.abc import Callable, Iterator, Sequence
+from collections import Counter
+from collections.abc import Callable, Container, Iterator, Mapping, Sequence
 from itertools import combinations
 from typing import NamedTuple
 
-from ._enumerate import _run, deprotect, EnumeratedReaction
+from ._enumerate import _fitting, _outcomes, deprotect, EnumeratedReaction, functional_groups
 from ._numbering import fast_mapping
 from ._tables import reaction_rules
 from ..core import (INFO, LOST, LogRecord, MoleculeContainer, REFUSED, ReactionContainer, STEREO_ABS,
@@ -106,12 +107,17 @@ def reconstruct_mapping(reaction: ReactionContainer, *, max_size_ratio: float = 
     # entitled to the row that actually explains it.  The loose walk is what a record whose
     # configuration explains nothing falls through to, and it reaches only records that would otherwise
     # have come back unexplained.
+    #
+    # ONE MEMO FOR THE CALL AND BOTH WALKS SHARE IT: a rung enumerates what the inputs and the corpus
+    # allow, which is not a question about strictness, so the loose walk reads the strict walk's outcomes
+    # back rather than putting the same question again.
+    memo = {}
     for loose in ((False, True) if stereo == 'loose' else (False,)):
         options = _Options(max_size_ratio, min_filter_size, loose)
         for phase in _PHASES:
             if unbalanced and phase not in _FILTER_EXEMPT:
                 continue
-            found = list(phase(recorded, inputs, options))
+            found = list(phase(recorded, inputs, options, memo))
             if not found:
                 continue
             complete, links = found[0].write(recorded)
@@ -144,11 +150,29 @@ def reconstruct_mapping(reaction: ReactionContainer, *, max_size_ratio: float = 
 
 # --- the rungs ------------------------------------------------------------------------------------
 
-def _purification(recorded, inputs, options) -> Iterator[_Explanation]:
+def _once(memo: dict, key: str, compute: Callable[[], object]):
+    """`compute()`'s value, computed on the first walk of a call and read back on the second.
+
+    WHAT A RUNG ENUMERATES IS NOT A QUESTION ABOUT STRICTNESS.  `_applications` and `deprotect` take no
+    `_Options`: both walks put the same question to the corpus and get the same outcomes back, and what
+    strictness decides is which of those outcomes `_reproduces` accepts.  So the walk is paid once.
+
+    `compute` materializes -- the driver exhausts every rung with `list()`, so nothing is lost -- and the
+    outcomes are held, not the generator, because a generator replays nothing.  Sound only because every
+    consumer of an outcome reads it: `_reproduces` compares, `_translate` copies before it edits.
+    """
+    try:
+        return memo[key]
+    except KeyError:
+        got = memo[key] = compute()
+        return got
+
+
+def _purification(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """The product went in and came out.  The mapping it implies is the identity.
 
     The one explanation whose mapping is certain, and the only label with no namespace -- no rule and no
-    table produced it.
+    table produced it.  Nothing to memo: the identity test IS the strictness question.
     """
     if _number_product(recorded.copy(), inputs, options.loose)[0]:
         yield _Explanation('purification',
@@ -180,9 +204,9 @@ def _translate(reaction, sources: Sequence[MoleculeContainer]) -> list[MoleculeC
     return out
 
 
-def _react(recorded, inputs, options) -> Iterator[_Explanation]:
+def _react(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """A corpus row, applied to the inputs as they arrived.  The strongest evidence there is."""
-    for pool, outcome in _applications(inputs):
+    for pool, outcome in _once(memo, 'react', lambda: list(_applications(recorded, inputs))):
         if not _reproduces(recorded, outcome.reaction.products, options.loose):
             continue
         sources = [*_translate(outcome.reaction, pool), *inputs]
@@ -191,42 +215,54 @@ def _react(recorded, inputs, options) -> Iterator[_Explanation]:
                            outcome.rule_id)
 
 
-def _deprotect(recorded, inputs, options) -> Iterator[_Explanation]:
+def _deprotect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """An input, unmasked.  The recorded product IS the recorded input minus a protecting group.
 
     `partial=True` because incomplete cleavage is ordinary and `R-N(Boc)2 -> R-NHBoc` is a record this
-    rung must read.  The generator is largest-first, so nothing beyond what is taken is computed.
+    rung must read.  Largest-first, which is the order the explanations come out in.
     """
-    for molecule in inputs:
-        for outcome in deprotect(molecule, partial=True):
-            if not _reproduces(recorded, outcome.reaction.products, options.loose):
-                continue
-            sources = [*_translate(outcome.reaction, [molecule]), *inputs]
-            yield _Explanation('deprotect:%s' % '+'.join(outcome.names),
-                               lambda target, s=sources, o=options:
-                               _number_product(target, s, o.loose),
-                               '+'.join(outcome.rule_ids))
+    for molecule, outcome in _once(memo, 'deprotect',
+                                   lambda: [(m, o) for m in inputs
+                                            for o in deprotect(m, partial=True)]):
+        if not _reproduces(recorded, outcome.reaction.products, options.loose):
+            continue
+        sources = [*_translate(outcome.reaction, [molecule]), *inputs]
+        yield _Explanation('deprotect:%s' % '+'.join(outcome.names),
+                           lambda target, s=sources, o=options: _number_product(target, s, o.loose),
+                           '+'.join(outcome.rule_ids))
 
 
-def _deprotect_then_react(recorded, inputs, options) -> Iterator[_Explanation]:
-    """Strip what can be stripped, then let the corpus fire on what is left.
+def _strip(inputs) -> tuple[list[MoleculeContainer], set[int]]:
+    """`inputs` with every protecting group taken off, and which members of the result a strip produced.
 
     ONE all-stripped pass and not every raw/stripped combination, which would be exponential in the
     number of protected inputs: a deliberate lower bound on what composition buys.  A stripped form
     keeps the stable ids it came in with, so numbering survives the composition unaided.
     """
     pool = []
-    changed = False
+    stripped = set()
     for molecule in inputs:
         outcome = next(deprotect(molecule), None)
         if outcome is None:
             pool.append(molecule)
         else:
-            pool.extend(_translate(outcome.reaction, [molecule]))
-            changed = True
-    if not changed:
+            for product in _translate(outcome.reaction, [molecule]):
+                stripped.add(len(pool))
+                pool.append(product)
+    return pool, stripped
+
+
+def _deprotect_then_react(recorded, inputs, options, memo) -> Iterator[_Explanation]:
+    """Strip what can be stripped, then let the corpus fire on what is left.
+
+    Only the pools a stripping reached are walked -- `stripped`, handed on as `_applications`' `required`.
+    A pool of unstripped members is one `_react` already put to the corpus, and this rung runs after it.
+    """
+    pool, stripped = _once(memo, 'strip', lambda: _strip(inputs))
+    if not stripped:
         return
-    for subset, outcome in _applications(pool):
+    for subset, outcome in _once(memo, 'deprotect+react',
+                                 lambda: list(_applications(recorded, pool, required=stripped))):
         if not _reproduces(recorded, outcome.reaction.products, options.loose):
             continue
         sources = [*_translate(outcome.reaction, subset), *pool, *inputs]
@@ -235,13 +271,13 @@ def _deprotect_then_react(recorded, inputs, options) -> Iterator[_Explanation]:
                            outcome.rule_id)
 
 
-def _protect(recorded, inputs, options) -> Iterator[_Explanation]:
+def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """The recorded product is a recorded input, masked.
 
     THE WEAKEST RUNG AND SO THE LAST: an amide, an ester and a carbamate are all protecting groups as
     well as products, so offered first this reads every acylation as a protection.
     """
-    for outcome in deprotect(recorded, partial=True):
+    for outcome in _once(memo, 'protect', lambda: list(deprotect(recorded, partial=True))):
         pairs = _pair_with_inputs(outcome.reaction.products, inputs, options.loose)
         if not pairs:
             continue
@@ -751,31 +787,92 @@ def _anchors(owners) -> tuple:
 
 # --- enumeration ----------------------------------------------------------------------------------
 
-def _applications(inputs: Sequence[MoleculeContainer],
-                  rules=None) -> Iterator[tuple[list[MoleculeContainer], 'EnumeratedReaction']]:
+def _supplies(supply: Counter, targets: Sequence[Mapping[str, int]], rule) -> bool:
+    """Could this pool, plus whatever the row creates, hold the atoms of SOME recorded component?
+
+    A NECESSARY CONDITION AND NOT A MATCH.  `_reproduces` asks whether a component of the record IS a
+    component of what the row built, and a built component's atoms are the pool's, less what the row
+    deleted, plus what it created -- so a record component wanting more of an element than the pool
+    carries is reachable only through a created atom, and a row creates a fixed number of those.  One
+    component sufficing is enough, the record being matched per component; deletions are not subtracted,
+    which only makes the bound weaker and never wrong.
+
+    THE SCREEN THE RECORDED PRODUCT AFFORDS AND THE GROUP PREFILTER CANNOT.  That prefilter reads the
+    inputs alone, so it passes every row whose groups are in the pot however little the pot could build
+    -- and the rows it passes are the ones whose cost is the isomorphism search.
+    """
+    created = max(len(template.created_atoms) for template in rule.templates)
+    for counts in targets:
+        deficit = 0
+        for element, n in counts.items():
+            short = n - supply.get(element, 0)
+            if short > 0:
+                deficit += short
+                if deficit > created:
+                    break
+        else:
+            return True
+    return False
+
+
+def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContainer],
+                  rules=None, required: Container[int] | None = None
+                  ) -> Iterator[tuple[list[MoleculeContainer], 'EnumeratedReaction']]:
     """Every way a corpus row applies to a SUBSET of `inputs`, with the subset it applied to.
 
     Subsets and not the whole list, because `_run` requires every molecule it is handed to be touched
     while a recorded record files its base, solvent and catalyst among the inputs.  Bounded by the widest
-    row's slot count, so this is a small fixed number of combinations and not a power set.
+    row's slot count, so the count is a polynomial in the number of inputs and not a power set -- but
+    `C(n, 1..4)` is still `n**4/24`, which is why the walk is over `reachable` and not over every input.
+
+    THE INPUTS A ROW COULD REACH, AND NOT ALL OF THEM.  An input carrying none of the groups any row
+    names a slot for cannot be one of an outcome's reactants, and `_run` keeps an outcome only when every
+    molecule it was handed was touched -- so every pool containing such an input is empty by
+    construction.  Enumerating them anyway lets a record's own solvents dominate its cost: a record files
+    its base and solvent among its reagents, and they are typically 2 of the 4 a median record carries.
+
+    Each input is scanned for its groups ONCE and the result handed to `_fitting`, rather than rescanned
+    per pool: a molecule's groups do not depend on what it is enumerated beside.  `recorded` is here for
+    `_supplies`, which is the one filter in the walk that reads the answer rather than the inputs.
+
+    `required` is a set of indices a pool must draw at least one member from, and the caller's way of
+    saying that the pools it omits were already walked: `_deprotect_then_react` runs after `_react` in the
+    same walk, so a pool of its stripped list holding no stripped molecule IS a pool `_react` offered the
+    corpus and `_react` not having returned is that pool's verdict.
 
     The subset comes back because the reactor's products carry the reactor's own numbering: `_translate`
     needs the inputs, positionally, to cross back to theirs.
 
-    TODO: the bare `except` is defensive, not load-bearing -- `_run` has not been observed to raise on
-    the current corpus, but a row that consistently fails is invisible here.  Narrow it to the observed
-    type once there is one.
+    TODO: the bare `except` is defensive, not load-bearing -- applying a row has not been observed to
+    raise on the current corpus, but a row that consistently fails is invisible here.  Narrow it to the
+    observed type once there is one.
     """
     if rules is None:
         rules = reaction_rules()
-    widest = max((len(rule.groups) for family in rules.values() for rule in family), default=0)
-    order = range(len(inputs))
-    for size in range(1, min(widest, len(inputs)) + 1):
-        for subset in combinations(order, size):
+    widest = 0
+    slots = set()
+    for family in rules.values():
+        for rule in family:
+            if len(rule.groups) > widest:
+                widest = len(rule.groups)
+            slots.update(rule.groups)
+    carried = [functional_groups(molecule) for molecule in inputs]
+    reachable = [i for i, groups in enumerate(carried) if not slots.isdisjoint(groups)]
+    targets = [part.element_counts for part in recorded.split()]
+    for size in range(1, min(widest, len(reachable)) + 1):
+        for subset in combinations(reachable, size):
+            if required is not None and not any(i in required for i in subset):
+                continue
             pool = [inputs[i] for i in subset]
+            supply = Counter()
+            for molecule in pool:
+                supply.update(molecule.element_counts)
             try:
-                for outcome in _run(pool, rules):
-                    yield pool, outcome
+                for rule in _fitting(pool, rules, carried=[carried[i] for i in subset]):
+                    if not _supplies(supply, targets, rule):
+                        continue
+                    for outcome in _outcomes(rule, pool):
+                        yield pool, outcome
             except Exception:
                 continue
 

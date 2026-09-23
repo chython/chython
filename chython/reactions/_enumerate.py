@@ -110,8 +110,66 @@ def _selected(rules: Mapping[str, tuple[ReactionRule, ...]],
     return chain.from_iterable(rules.values())
 
 
+#: `{rule id: (its groups as a set, its groups as a multiset)}`.  The prefilter's left-hand side is a
+#: constant of the row while the right-hand side is the pool's, so an enumerator walking many pools over
+#: one corpus would otherwise rebuild every row's `Counter` once per pool.
+_NEEDS_CACHE: dict[str, tuple[frozenset, Counter]] = {}
+
+
+def _needs(rule: ReactionRule) -> tuple[frozenset, Counter]:
+    """`rule.groups` as a set and as a multiset, built once per row.
+
+    Two spellings of one requirement because the set settles most pools on its own: only a row whose
+    groups are all present at all goes on to the subtraction that also counts them.
+    """
+    needs = _NEEDS_CACHE.get(rule.id)
+    if needs is None:
+        needs = _NEEDS_CACHE[rule.id] = (frozenset(rule.groups), Counter(rule.groups))
+    return needs
+
+
+def _fitting(molecules: Sequence[MoleculeContainer], rules: Mapping[str, tuple[ReactionRule, ...]],
+             reaction: str | None = None, carried: Sequence[Mapping[str, int]] | None = None
+             ) -> Iterator[ReactionRule]:
+    """The rows whose groups this pool could satisfy.  `_run`'s prefilter, and nothing after it.
+
+    Separate from `_run` because a caller may hold a test this file cannot: reconstruction knows the
+    recorded product, so it can bound what a row could BUILD from a pool before paying to build it.
+    Both filters and why each one is sound are documented on `_run`.
+
+    `carried` is the caller's own `[functional_groups(m) for m in molecules]`, positional, where it has
+    one already: a molecule's groups do not depend on what it is enumerated beside, so an enumerator
+    walking many pools over the same inputs scans each input once instead of once per pool.
+    """
+    if carried is None:
+        carried = [functional_groups(molecule) for molecule in molecules]
+    available = Counter()
+    for groups in carried:
+        available.update(groups)
+    have = available.keys()
+
+    for rule in _selected(rules, reaction):
+        wanted, counts = _needs(rule)
+        if not wanted <= have or counts - available:
+            continue
+        if any(wanted.isdisjoint(groups) for groups in carried):
+            continue
+        yield rule
+
+
+def _outcomes(rule: ReactionRule, molecules: Sequence[MoleculeContainer]
+              ) -> Iterator[EnumeratedReaction]:
+    """Every reaction `rule` produces on `molecules` that touched all of them."""
+    inputs = len(molecules)
+    for template in rule.templates:
+        for rxn in template(*molecules):
+            if len(rxn.reactants) == inputs:
+                yield EnumeratedReaction(rule.name, rxn, rule.id)
+
+
 def _run(molecules: Sequence[MoleculeContainer], rules: Mapping[str, tuple[ReactionRule, ...]],
-         reaction: str | None = None) -> Iterator[EnumeratedReaction]:
+         reaction: str | None = None, carried: Sequence[Mapping[str, int]] | None = None
+         ) -> Iterator[EnumeratedReaction]:
     """The enumeration itself.  One presence scan per input, then every row that fits.
 
     Separate from `react()` only so a test can hand it a rule fixture the corpus has no row for.
@@ -122,19 +180,16 @@ def _run(molecules: Sequence[MoleculeContainer], rules: Mapping[str, tuple[React
     (`len(rxn.reactants) == inputs`), so a three-molecule question is never answered by a row that
     ignores one; an untouched COMPONENT of a touched input is different and survives, which is the salt
     rule.  Nothing between them knows how many molecules a row "expects".
-    """
-    available = Counter()
-    for molecule in molecules:
-        available.update(functional_groups(molecule))
-    inputs = len(molecules)
 
-    for rule in _selected(rules, reaction):
-        if Counter(rule.groups) - available:
-            continue
-        for template in rule.templates:
-            for rxn in template(*molecules):
-                if len(rxn.reactants) == inputs:
-                    yield EnumeratedReaction(rule.name, rxn, rule.id)
+    THAT OUTGOING RULE IS ALSO A PREFILTER READ PER INPUT: an input carrying none of a row's groups can
+    never be one of its reactants, so a row is skipped where any single input is disjoint from it.  The
+    union test cannot see this -- it asks only whether the groups are there, not whether they are spread
+    across every molecule that has to be touched.
+
+    `carried` is `_fitting`'s, and means the same thing here.
+    """
+    for rule in _fitting(molecules, rules, reaction, carried):
+        yield from _outcomes(rule, molecules)
 
 
 def react(molecule: MoleculeContainer, others=(), reaction: str | None = None
