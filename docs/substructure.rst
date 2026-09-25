@@ -188,11 +188,12 @@ Atom Primitives
 ===========  ==========================================================  ========
 token        meaning                                                     range
 ===========  ==========================================================  ========
-``D``        degree -- heavy-atom neighbours, excluding implicit H        0-14
-             **and dative bonds**
+``D``        degree -- heavy-atom neighbours: no hydrogen atom of any    0-14
+             isotope, **and no dative bond**
 ``z``        hybridization                                               1-6
 ``x``        heteroatom neighbours (not C, not H), **excluding dative**   0-14
-``h``        implicit hydrogen count                                     0-14
+``h``        hydrogen count, implicit and drawn, of any isotope --       0-14
+             ``[2H]`` answers as protium
 ``r``        ring size membership -- ``r5`` is "in a 5-membered ring"     3-14
 ``a``        aromatic flag; the same thing as ``z4``                      --
 ``M``        metal wildcard, and in a template the deletion mask         --

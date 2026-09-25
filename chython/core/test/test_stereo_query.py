@@ -521,13 +521,10 @@ def test_a_centre_with_two_drawn_hydrogens_is_not_a_frame_the_query_can_read():
         assert not q.is_substructure(m), f'an ambiguous hydrogen pairing must refuse (sign {sign})'
 
 
-def test_the_implicit_hydrogen_primitive_decides_the_drawn_case_on_its_own():
-    """The `h` primitive is an ordinary box screen and is independent of ruling F88.
-
-    `h1` counts IMPLICIT hydrogens, so it separates the two representations -- that is its job, and
-    F88 does not touch it.  `H1` counts total hydrogens and so accepts both.  Stated as a test
-    because "a drawn hydrogen must not change the answer" could otherwise be over-read into the
-    primitives that exist precisely to ask about it.
+def test_a_drawn_hydrogen_answers_the_hydrogen_primitives_as_an_implicit_one():
+    """`h1` and `H1` both count every attached hydrogen, drawn or implicit, so neither separates the
+    two representations and the stereo sign still matches through each -- a drawn hydrogen does not
+    change the answer to any primitive.
     """
     drawn, _ = _explicit_hydrogen_target(1)
     implicit, _ = _chiral_target(1)
@@ -538,7 +535,7 @@ def test_the_implicit_hydrogen_primitive_decides_the_drawn_case_on_its_own():
                                     [('op', 'and_low'), ('total_h', 1),
                                      ('op', 'and_low'), ('stereo', 1)])
     assert q_implicit.is_substructure(implicit)
-    assert not q_implicit.is_substructure(drawn), 'h counts implicit hydrogens only'
+    assert q_implicit.is_substructure(drawn), 'h counts a drawn hydrogen too'
     assert q_total.is_substructure(implicit)
     assert q_total.is_substructure(drawn), 'H counts both, and the sign still matches'
 

@@ -175,8 +175,8 @@ def test_a_site_taken_past_zero_alone_is_refused():
 
 
 def test_explicit_hydrogens_hide_the_site():
-    """`acids.tsv` reads IMPLICIT hydrogens, so a cation drawn with hydrogen atoms is invisible until
-    they are folded in.  The docstring says `implicify_hydrogens()` first, and this is why."""
+    """A proton is moved only off an implicit count, so a cation drawn with hydrogen atoms is refused
+    until they are folded in.  The docstring says `implicify_hydrogens()` first, and this is why."""
     m = smiles('[H][N+]([H])([H])C.[Cl-]')
     assert neutralize(m) is False
     implicify_hydrogens(m)

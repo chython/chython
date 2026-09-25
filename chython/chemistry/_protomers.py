@@ -66,6 +66,11 @@ def _admitted(molecule: MoleculeContainer, candidates: dict[int, AcidRow], delta
                                    f'atom {n} has no derivable implicit hydrogen count, so a proton '
                                    f'cannot be counted off or onto it', REFUSED))
             continue
+        if hydrogens + delta < 0:
+            lines.append(LogRecord(row.id, (n,),
+                                   f'atom {n} holds its proton as a drawn hydrogen atom, and this pass '
+                                   f'writes implicit counts only', REFUSED))
+            continue
         order_sum, environment, aromatic = environment_of(molecule, n)
         # an aromatic bond has no valence row, so the question cannot be put -- `check_valence` calls
         # that `unknown` rather than a violation, and a pyridinium must stay deprotonatable.
@@ -101,8 +106,9 @@ def neutralize(molecule: MoleculeContainer, *, keep_charge: bool = True) -> bool
     nitrate past zero.  `keep_charge=False` lets a site act alone, as far as its own component's charge
     allows: `C[NH3+]` alone becomes `CN`.
 
-    Sites are found by `tables/acids.tsv`, whose `h` primitive reads IMPLICIT hydrogens, so a molecule
-    carrying explicit hydrogen atoms wants `implicify_hydrogens()` first.  A site whose hydrogen count
+    Sites are found by `tables/acids.tsv`, whose `h` primitive counts drawn hydrogen atoms too, but a
+    proton is moved only off an implicit count, so a molecule carrying explicit hydrogen atoms wants
+    `implicify_hydrogens()` first.  A site whose hydrogen count
     is not derivable, and one whose neutral form no valence row accepts, is refused and logged.
     """
     lines: list[LogRecord] = []

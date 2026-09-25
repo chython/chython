@@ -14,8 +14,8 @@
 #            pattern matching nothing is invisible: the pass just stops recognizing that site.
 #   comment  what the row claims.  Documentation only.
 #
-# `h` COUNTS IMPLICIT HYDROGENS ONLY, so an `acid` row does not see `[N+]([H])([H])[H]` drawn with three
-# hydrogen ATOMS.  `implicify_hydrogens()` first; the pass says so in its docstring.
+# `h` COUNTS DRAWN HYDROGENS TOO, but a proton moves only off an implicit count, so `[N+]([H])([H])[H]`
+# drawn with three hydrogen ATOMS is refused.  `implicify_hydrogens()` first; the pass says so in its docstring.
 #
 # AN UNSTATED CHARGE IS NEUTRAL, not "any charge", which is why nitrate has a row of its own: the anchor
 # oxygen's neighbour is `[N+]`, and `acids:alkoxide`'s `[C,N]` admits the neutral nitrogen alone.

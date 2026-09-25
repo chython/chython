@@ -192,6 +192,26 @@ def test_two_kekule_tautomers_of_one_lactam_store_the_same_molecule():
             f'{label}: {a} and {b} still differ, {ma} vs {mb}'
 
 
+AROMATIC_PAIRS = [
+    ('O=C1NC(=O)c2cnccc2N1', 'O=C1NC(=O)C2=CNC=CC2=N1', 'pyrido[4,3-d]pyrimidine-2,4-dione'),
+    ('O=C1Nc2cc3ncccc3cc2N1', 'O=C1N=C2C=C3C(=CC=CN3)C=C2N1', 'imidazo[4,5-g]quinolin-2-one'),
+]
+
+
+def test_a_fused_lactam_keeps_its_pyridine_aromatic():
+    """A hydrogen on a lactam nitrogen does not move onto a fused pyridine nitrogen, whichever form arrives.
+
+    Both placements kekulise, so the canonical order alone would take whichever ranks lower; the imine
+    leaves the pyridine without a sextet and is the form that loses.
+    """
+    for aromatic, quinoid, label in AROMATIC_PAIRS:
+        ma, mb = read_smiles(aromatic), read_smiles(quinoid)
+        canonicalize(ma)
+        canonicalize(mb)
+        assert ma.aromatic_rings_count == read_smiles(aromatic).aromatic_rings_count, f'{label}: {ma}'
+        assert ma.canonical_bytes == mb.canonical_bytes, f'{label}: {ma} vs {mb}'
+
+
 def test_a_kekule_placement_never_changes_the_formula():
     """The working copy is spelled aromatic and kekulised back, and `kekule()` repairs when it must.
 

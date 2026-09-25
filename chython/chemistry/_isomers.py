@@ -217,8 +217,9 @@ def _deal(sites: tuple[int, ...], states: tuple[tuple, ...]):
 
 
 def _admissible(molecule: MoleculeContainer, group: list[int],
-                placement: dict[int, tuple[int, int]]) -> bool:
-    """Does this placement give a Kekule form for this group?  The kekuliser is the oracle.
+                placement: dict[int, tuple[int, int]]) -> int | None:
+    """How many bonds `thiele()` writes aromatic under this placement, or `None` when it gives no Kekule
+    form for this group.  The kekuliser is the oracle.
 
     This group's systems and not the whole molecule's: one ring nobody can kekulise (`c1cccc1`) would
     otherwise make every placement of every other ring inadmissible.
@@ -238,17 +239,26 @@ def _admissible(molecule: MoleculeContainer, group: list[int],
             work.set_hydrogens(n, hydrogens)
     members = frozenset(group)
     if any(members.intersection(system) for system in work.kekule().unresolved):
-        return False
-    return all((work.implicit_h_of(n), work.charge_of(n)) == state for n, state in placement.items())
+        return None
+    if any((work.implicit_h_of(n), work.charge_of(n)) != state for n, state in placement.items()):
+        return None
+    work.thiele()
+    return work.aromatic_bond_count
 
 
 def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]):
     """The canonical placement for one group, `None` when nothing must move, `'budget'` when too big.
 
     The hydrogens and the charges are read off the group rather than assumed, and dealt back over it.  The
-    key is the sorted ranks of the sites holding the hydrogens, then of those holding each charge in turn
-    -- a strict total order, because `atoms_order` is a permutation and those two sets fix the placement,
-    so no two placements share a key and no tie is left for an arbitrary rule to break.
+    key is the aromatic bond count `thiele()` gives the placement, most first, then the sorted ranks of the
+    sites holding the hydrogens, then of those holding each charge in turn -- a strict total order, because
+    `atoms_order` is a permutation and those two sets fix the placement, so no two placements share a key
+    and no tie is left for an arbitrary rule to break.
+
+    Aromaticity leads because a fused system spelled aromatic joins rings a hydrogen cannot cross for
+    free: pyrido[4,3-d]pyrimidine-2,4-dione `O=C1NC(=O)c2cnccc2N1` with its N1-H moved onto the pyridine
+    N kekulises, as a quinoid imine with no pyridine sextet.  Only nitrogen sites deal here and `thiele()`
+    leaves a lactam non-aromatic, so the term never weighs an enol against its ketone.
 
     A hydrogen deals over the sites with two heavy neighbours and a charge over all of them, which is the
     whole difference a substituted nitrogen makes.  That much is not left to the oracle: `kekule()` decides
@@ -273,11 +283,12 @@ def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]
     for protonated in combinations(carriers, hydrogens):
         for dealt in _deal(tuple(group), order):
             placement = {n: (1 if n in protonated else 0, dealt[n]) for n in group}
-            key = [sorted(ranks[n] for n in protonated)]
+            aromatic = _admissible(molecule, group, placement)
+            if aromatic is None:
+                continue
+            key = [[-aromatic], sorted(ranks[n] for n in protonated)]
             key.extend(sorted(ranks[n] for n in group if dealt[n] == q) for q in signs)
-            if best is not None and key >= best[0]:
-                continue                  # cheaper than the oracle, so it goes first
-            if _admissible(molecule, group, placement):
+            if best is None or key < best[0]:
                 best = (key, placement)
     if best is None or best[1] == current:
         return None

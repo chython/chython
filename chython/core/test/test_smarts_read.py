@@ -247,12 +247,15 @@ def test_degree_counts_heavy_neighbours():
     assert hits('[S;D4]') == ['dimethyl_sulfone']
 
 
-def test_implicit_h_and_total_h_are_different_questions():
-    """`h` counts the implicit hydrogens, `H` all of them.  The methyl of `[2H]C` is the case that
-    separates them -- three implicit hydrogens, four in total."""
-    assert read_smarts('[C;h3]').is_substructure(MOLECULES['deuteriomethane'])
-    assert not read_smarts('[C;H3]').is_substructure(MOLECULES['deuteriomethane'])
-    assert read_smarts('[C;H4]').is_substructure(MOLECULES['deuteriomethane'])
+def test_a_drawn_deuterium_is_a_hydrogen_not_a_neighbour():
+    """`h` and `H` both count every attached hydrogen, drawn or implicit, of any isotope, and `D` counts
+    heavy atoms only.  The methyl of `[2H]C` has four hydrogens and no neighbour, as methane does."""
+    for q in ('[C;h4]', '[C;H4]', '[C;D0]'):
+        assert read_smarts(q).is_substructure(MOLECULES['deuteriomethane']), q
+    for q in ('[C;h3]', '[C;H3]', '[C;D1]'):
+        assert not read_smarts(q).is_substructure(MOLECULES['deuteriomethane']), q
+    for s in ('C(C)O', '[H]C([H])(C)O', '[2H]C([2H])(C)O', '[3H]C(C)O'):
+        assert read_smarts('[O;D1;h1]-[C;D2;h2]').is_substructure(read_smiles(s)), s
     assert hits('[C;H0]') == sorted(set(hits('[C;H0]')) - {'methane'}) != []
 
 
@@ -888,6 +891,10 @@ V2_DIVERGES = ['C~C', 'c1ccccc1', 'cc', 'cC', '[C;z3]', '[S;z3]', '[N;z3]',
                'CCC', 'CCCC', 'CCCCC', 'C1CC1',       # V2's induced matching
                'CC', 'C-C', 'C-;@C', 'C-;!@C', 'C-,=C', 'C-,:C', 'C=C', 'C#C', 'Br', 'Cl']
 
+# V2 counts a drawn deuterium as a `D` neighbour and not as an `h`; here it is a hydrogen like any other.
+# Excluded per pair, since every other panel molecule agrees on the same patterns.
+V2_DIVERGES_ON_DEUTERIUM = compile_regex(r'[;&,!]\s*[Dh]\d')
+
 _CHILD = r'''
 from chython import smarts, smiles
 
@@ -994,6 +1001,8 @@ def test_oracle_agrees_on_everything_it_can_read():
             if mine == v2:
                 continue
             if mine and not v2 and not _has_induced_embedding(q, MOLECULES[name]):
+                continue
+            if name == 'deuteriomethane' and V2_DIVERGES_ON_DEUTERIUM.search(pattern):
                 continue
             mismatches.append('%s vs %s: V3=%s V2=%s' % (pattern, name, mine, v2))
     assert not unexpected_refusals, ('V2 refused a pattern this sweep believed it could read; move '

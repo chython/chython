@@ -245,6 +245,9 @@ cdef int fill_features(Structure structure) except -1:
             # `rebuild_derived` derives degree as the CSR row length, `_pach.pxi` writes it as that
             # row length, and `_stereo.pxi` reads it as connectivity.  Two different facts, so two
             # counts -- neither is a stale copy of the other, and each is derived in one place only.
+            #
+            # A hydrogen ATOM of any isotope is not a `D` neighbour: `[2H]C([2H])(C)O` is a primary
+            # alcohol, `[C;D2]`, exactly as `C(C)O` is.  It counts towards `h` below instead.
             w1 = w0_element_bits(element)
             degree = 0
             heteroatoms = 0
@@ -252,8 +255,10 @@ cdef int fill_features(Structure structure) except -1:
                 w1 |= w0_bond_bits(&edges[k])
                 if edges[k].order == 8:
                     continue
-                degree += 1
                 nb_element = atoms[edges[k].to].element
+                if nb_element == 1:
+                    continue
+                degree += 1
                 if element_is_heteroatom(nb_element):
                     heteroatoms += 1
 
@@ -299,8 +304,10 @@ cdef int fill_features(Structure structure) except -1:
                 # the one function-body forward reference in the core.
                 w3 |= SPAN_MASK[SPAN_IMPLICIT_H] | SPAN_MASK[SPAN_TOTAL_H]
             else:
+                # `h` is every attached hydrogen, implicit or drawn, so a deuterium answers `h` as the
+                # protium `canonicalize()` would have folded into the count.  `H` is the same sum.
                 th = ih + eh
-                w3 |= <uint64_t> 1 << (17 + _bit_of(<int32_t> ih, 0, 4))
+                w3 |= <uint64_t> 1 << (17 + _bit_of(<int32_t> th, 0, 4))
                 w3 |= <uint64_t> 1 << (27 + _bit_of(<int32_t> th, 0, 5))
             w3 |= <uint64_t> 1 << (33 + _bit_of(a.charge, -4, 8))
             if a.isotope:
