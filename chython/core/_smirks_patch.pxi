@@ -1214,7 +1214,8 @@ cdef tuple smk_one(ReactionTemplate t, MoleculeContainer work, set work_bonds, d
             (tuple(sorted(touched)), tuple(identities)), where)
 
 
-def smk_apply(ReactionTemplate t, tuple molecules, bint automorphism_filter, object log, bint report):
+def smk_apply(ReactionTemplate t, tuple molecules, bint automorphism_filter, object log, bint report,
+              bint dedupe):
     """Validate eagerly, then hand back the generator.
 
     The split is the point: a bad argument raises from the CALL, not from the first `next()`, so a
@@ -1230,10 +1231,11 @@ def smk_apply(ReactionTemplate t, tuple molecules, bint automorphism_filter, obj
             raise TypeError('a template applies to molecules; this one was handed a %s' % type(m).__name__)
     if not molecules:
         raise ValueError('a template needs at least one molecule to apply to')
-    return smk_enumerate(t, list(molecules), automorphism_filter, log, report)
+    return smk_enumerate(t, list(molecules), automorphism_filter, log, report, dedupe)
 
 
-def smk_enumerate(ReactionTemplate t, list inputs, bint automorphism_filter, object log, bint report):
+def smk_enumerate(ReactionTemplate t, list inputs, bint automorphism_filter, object log, bint report,
+                  bint dedupe):
     """Every distinct outcome of one template over one set of inputs.
 
     The inputs are unioned into one working container, which is why an intramolecular template needs
@@ -1300,10 +1302,11 @@ def smk_enumerate(ReactionTemplate t, list inputs, bint automorphism_filter, obj
             continue
         if made is None:
             continue
-        key = (<tuple> made)[1]
-        if key in seen_keys:
-            continue
-        seen_keys.add(key)
+        if dedupe:
+            key = (<tuple> made)[1]
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
         if len(log) > start:      # `_smiles_read.pxi:smi_one` states why the touch is guarded
             (<object> (<tuple> made)[0]).log.absorb('react', log[start:])
         if report:

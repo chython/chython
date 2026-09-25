@@ -81,6 +81,31 @@ def _selected(role: Optional[str], present: dict) -> list[Role]:
     return [row for _, rows in items for row in rows if row.group in present]
 
 
+def _unmasked(template, molecule, masked: frozenset):
+    """`template(molecule, report=True)`, with the mask applied BEFORE the distinct-outcome collapse.
+
+    The collapse keeps the first of two outcomes that build one structure, and cutting either nitrogen
+    of `C1CNCCN1` builds one structure; masking the survivor's site would leave nothing.  So a mask
+    turns the collapse off and redoes it here, on the same key -- the products' `canonical_bytes` --
+    over the outcomes the mask allows.  Unmasked, the template's own collapse is the whole answer.
+    """
+    if not masked:
+        yield from template(molecule, report=True)
+        return
+    seen = set()
+    for reaction, where in template(molecule, report=True, dedupe=False):
+        marker = where[ROLE_CAP]
+        # The product HOLDING the marker, not the first one: a row whose patch releases its leaving
+        # group as a molecule rather than deleting it yields two products in an unspecified order.
+        product = next(p for p in reaction.products if marker in p.atom_numbers)
+        if next(iter(product.neighbors_of(marker))) in masked or not masked <= set(product):
+            continue
+        key = tuple(sorted(p.canonical_bytes for p in reaction.products))
+        if key not in seen:
+            seen.add(key)
+            yield reaction, where
+
+
 def _index(product, marker, index: int) -> None:
     """Number one end of a linker.  A fragment's single marker keeps index 0 and needs no write."""
     with product.edit() as e:
@@ -93,7 +118,8 @@ def sticky_fragments(molecule, role=None, *, masked=None,
 
     `masked` bars an atom from the coupling in both the ways it can take part: as the attachment site,
     and as a leaving group the patch consumes.  Atom ids survive a patch, so a masked atom is consumed
-    exactly when it is absent from the product.
+    exactly when it is absent from the product.  An equivalent unmasked atom still yields:
+    `C1CNCCN1` masked at one nitrogen is cut at the other.
 
     A molecule with more than one connected component yields nothing -- a counter-ion has no cut.  A
     salt is therefore the caller's to reduce to one component: `decompose_salts().parents` names them, one
@@ -106,14 +132,10 @@ def sticky_fragments(molecule, role=None, *, masked=None,
         return
     masked = frozenset(masked or ())
     for row in _selected(role, molecule.functional_groups()):
-        for reaction, where in row.template(molecule, report=True):
+        for reaction, where in _unmasked(row.template, molecule, masked):
             marker = where[ROLE_CAP]
-            # The product HOLDING the marker, not the first one: a row whose patch releases its leaving
-            # group as a molecule rather than deleting it yields two products in an unspecified order.
             product = next(p for p in reaction.products if marker in p.atom_numbers)
             site = next(iter(product.neighbors_of(marker)))
-            if site in masked or not masked <= set(product):
-                continue
             product.canonicalize()
             yield StickyFragment(
                 row.name,
@@ -148,13 +170,11 @@ def sticky_linkers(molecule, role_left=None, role_right=None, *, masked=None,
         return
 
     for left_row in left_rows:
-        for left_reaction, left_where in left_row.template(molecule, report=True):
+        for left_reaction, left_where in _unmasked(left_row.template, molecule, masked):
             one = left_where[ROLE_CAP]
             inter = next(p for p in left_reaction.products if one in p.atom_numbers)
             # read on `inter`: the second cut cannot rebond this site, since `one` must survive it
             site_one = next(iter(inter.neighbors_of(one)))
-            if site_one in masked or not masked <= set(inter):
-                continue
             _index(inter, one, 1)
             for right_row in right_rows:
                 for reaction, where in right_row.template(inter, report=True):

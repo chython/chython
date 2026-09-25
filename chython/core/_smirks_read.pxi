@@ -1121,7 +1121,8 @@ cdef class ReactionTemplate:
     def __repr__(self):
         return 'read_smirks(%r)' % self.smirks
 
-    def __call__(self, *molecules, bint automorphism_filter=True, log=None, bint report=False):
+    def __call__(self, *molecules, bint automorphism_filter=True, log=None, bint report=False,
+                 bint dedupe=True):
         """Apply this template to one molecule or to several, yielding one `ReactionContainer` per
         distinct outcome.
 
@@ -1158,9 +1159,15 @@ cdef class ReactionTemplate:
         reaction alone.  The ids are the yielded products' own, and they survive `copy()` and `split()`,
         so a caller that must edit "the atom the product side called :1" can reach it -- by map number,
         the template's `:N` space, which is still not the reaction's imposed mapping.
+
+        `dedupe=False` yields one outcome per embedding, including outcomes that build the same
+        structure from different atoms: `C1CNCCN1` cut at either nitrogen.  A caller that filters
+        outcomes by atom id needs every one, since the default keeps only the first of each structure.
+        `automorphism_filter` is a different collapse -- over the template's own symmetry, not the
+        outcome's.
         """
         return smk_apply(self, molecules, automorphism_filter,
-                         log if log is not None else [], report)
+                         log if log is not None else [], report, dedupe)
 
 
 def read_smirks(text, log=None, *, rule_id=None):

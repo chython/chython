@@ -174,6 +174,28 @@ def test_masked_applies_to_the_left_end_only():
     assert list(mol.sticky_linkers('aryl_halide', 'aryl_amine', masked=[nitrogen]))
 
 
+@mark.parametrize('core, role', [
+    ('C1CNCCN1', 'alkyl_amine'), ('C1CNCCCN1', 'alkyl_amine'), ('NCCN', 'alkyl_amine'),
+    ('OCCCCO', 'alkyl_hydroxyl'), ('C1NCC12CNC2', 'alkyl_amine'),
+])
+def test_masking_one_of_two_equivalent_ends_cuts_the_other(core, role):
+    """The mask is applied before the equivalent cuts collapse, so the survivor is never the masked end."""
+    mol = smiles(core)
+    mol.canonicalize()
+    fragments = list(mol.sticky_fragments(role))
+    linkers = list(mol.sticky_linkers(role, role))
+    assert len(fragments) == 1 and len(linkers) == 1, 'unmasked, the two ends are one cut'
+    ends = linkers[0].atom_left, linkers[0].atom_right
+    for end, other in (ends, ends[::-1]):
+        assert [f.atom for f in mol.sticky_fragments(role, masked={end})] == [other]
+        assert [(x.atom_left, x.atom_right) for x in mol.sticky_linkers(role, role, masked={end})] == \
+            [(other, end)]
+        assert [f.canonical_smiles for f in mol.sticky_fragments(role, masked={end})] == \
+            [fragments[0].canonical_smiles]
+        assert [x.canonical_smiles for x in mol.sticky_linkers(role, role, masked={end})] == \
+            [linkers[0].canonical_smiles]
+
+
 def test_a_mixture_yields_no_linker():
     mol = smiles('Brc1ccc(C(=O)O)cc1.O')
     mol.canonicalize()

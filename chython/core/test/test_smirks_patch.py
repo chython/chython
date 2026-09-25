@@ -498,6 +498,13 @@ def test_equivalent_sites_give_one_answer():
     assert len(list(t(smiles('BrCCCCBr'), automorphism_filter=False))) == 1
 
 
+def test_dedupe_off_yields_every_site_of_one_structure():
+    """`dedupe=False` keeps the outcome of each bromine, for a caller that filters by atom id."""
+    t = read_smirks('[C:1][Br;D1]>>[C:1][O;D1:2]')
+    sites = {where[1] for _, where in t(smiles('BrCCCCBr'), report=True, dedupe=False)}
+    assert sites == {2, 5}
+
+
 def test_a_pathological_template_cannot_kill_the_enumeration():
     """N11.  Every candidate is guarded end to end -- the patch AND the dedupe key.
 
