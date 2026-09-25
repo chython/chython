@@ -39,21 +39,29 @@ class StickyFragment(NamedTuple):
     """One cut, in the three forms a consumer needs.
 
     `canonical_smiles` is the dedup key: two cuts of two molecules that yield the same fragment yield
-    the same string, which is what the R index being part of the canonical record buys.
+    the same string, which is what the R index being part of the canonical record buys.  `atom` is the
+    source molecule's atom the cap hangs off, not necessarily the group's `:1`.
     """
     role: str
     sticky_left: str            # `-c1ccccc1`  -- carries the bond token, glues onto a piece before it
     sticky_right: str           # `c(cccc1)c1` -- carries NO bond token; the next piece supplies it
     canonical_smiles: str
+    atom: int                   # source atom the cap hangs off; ids survive a patch
 
 
 class StickyLinker(NamedTuple):
-    """One bi-attachment cut.  `canonical_smiles` is always R1 = left, R2 = right."""
+    """One bi-attachment cut.  `canonical_smiles` is always R1 = left, R2 = right.
+
+    `atom_left` and `atom_right` are the source molecule's atoms the two caps hang off, not necessarily
+    the groups' `:1`.
+    """
     role_left: str
     role_right: str
     sticky_left: str            # `-A...B`, role_left's end first; leading bond token, none trailing
     sticky_right: str           # `-B...A`, the same linker flipped
     canonical_smiles: str
+    atom_left: int
+    atom_right: int
 
 
 def _selected(role: Optional[str], present: dict) -> list[Role]:
@@ -103,7 +111,8 @@ def sticky_fragments(molecule, role=None, *, masked=None,
             # The product HOLDING the marker, not the first one: a row whose patch releases its leaving
             # group as a molecule rather than deleting it yields two products in an unspecified order.
             product = next(p for p in reaction.products if marker in p.atom_numbers)
-            if next(iter(product.neighbors_of(marker))) in masked or not masked <= set(product):
+            site = next(iter(product.neighbors_of(marker)))
+            if site in masked or not masked <= set(product):
                 continue
             product.canonicalize()
             yield StickyFragment(
@@ -111,7 +120,7 @@ def sticky_fragments(molecule, role=None, *, masked=None,
                 product.sticky_smiles(left=marker, remove_left=True, keep_bond_left=True,
                                       hydrogens=hydrogens),
                 product.sticky_smiles(right=marker, remove_right=True, hydrogens=hydrogens),
-                str(product))
+                str(product), site)
 
 
 def sticky_linkers(molecule, role_left=None, role_right=None, *, masked=None,
@@ -142,7 +151,9 @@ def sticky_linkers(molecule, role_left=None, role_right=None, *, masked=None,
         for left_reaction, left_where in left_row.template(molecule, report=True):
             one = left_where[ROLE_CAP]
             inter = next(p for p in left_reaction.products if one in p.atom_numbers)
-            if next(iter(inter.neighbors_of(one))) in masked or not masked <= set(inter):
+            # read on `inter`: the second cut cannot rebond this site, since `one` must survive it
+            site_one = next(iter(inter.neighbors_of(one)))
+            if site_one in masked or not masked <= set(inter):
                 continue
             _index(inter, one, 1)
             for right_row in right_rows:
@@ -154,7 +165,8 @@ def sticky_linkers(molecule, role_left=None, role_right=None, *, masked=None,
                     if one not in product.atom_numbers:
                         continue
                     # Both caps on one atom: a linker needs at least one atom between its ends.
-                    if next(iter(product.neighbors_of(two))) == next(iter(product.neighbors_of(one))):
+                    site_two = next(iter(product.neighbors_of(two)))
+                    if site_two == site_one:
                         continue
                     _index(product, two, 2)
                     product.canonicalize()
@@ -166,4 +178,4 @@ def sticky_linkers(molecule, role_left=None, role_right=None, *, masked=None,
                         product.sticky_smiles(left=two, right=one, remove_left=True,
                                               keep_bond_left=True, remove_right=True,
                                               hydrogens=hydrogens),
-                        str(product))
+                        str(product), site_one, site_two)

@@ -348,8 +348,8 @@ def reaction_rules() -> dict[str, tuple[ReactionRule, ...]]:
     """The whole corpus -- every row of `reactions.tsv` -- composed and cached, GROUPED BY NAME.
 
     The one accessor; a caller wanting a subset asks for it by `reaction=` name, and the name is
-    therefore the key.  Grouped and not one row deep because A REACTION NAME NAMES A ROW FAMILY: 294
-    rows under 72 names, `amidation` being three of them, one per way the acid is activated.  Same shape
+    therefore the key.  Grouped and not one row deep because A REACTION NAME NAMES A ROW FAMILY: 321
+    rows under 73 names, `amidation` being three of them, one per way the acid is activated.  Same shape
     as `roles()` for the same reason, while `functional_rules()` is one row deep because a group name
     there names exactly one row.
 

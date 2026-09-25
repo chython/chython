@@ -481,3 +481,21 @@ def test_a_carried_racemic_centre_stays_one_group():
     mol = smiles('C[C@H](CCN)CC(O)=O |&1:1,r|')
     rxn = next(o.reaction for o in mol.react(reaction='amidation'))
     assert str(rxn) == 'O=C(O)C[C@@H](CCN)C>>O=C1NCC[C@@H](C)C1 |&1:4,14|'
+
+
+@pytest.mark.parametrize('azole, expected', [
+    ('Cc1cc[nH]n1', ('Cc1ccn(-c2ccccc2)n1', 'Cc1ccnn1-c1ccccc1')),
+    ('Cc1c[nH]cn1', ('Cc1cn(-c2ccccc2)cn1', 'Cc1cncn1-c1ccccc1')),
+    ('Cc1nn[nH]n1', ('Cc1nnn(-c2ccccc2)n1', 'Cc1nnnn1-c1ccccc1')),
+    ('c1nc[nH]n1', ('c1ncn(-c2ccccc2)n1', 'c1nncn1-c1ccccc1')),
+    ('c1cn[nH]n1', ('c1cn(-c2ccccc2)nn1', 'c1cnn(-c2ccccc2)n1')),
+])
+def test_an_n_arylated_azole_is_aromatic_at_either_nitrogen(azole, expected):
+    """Both regioisomers come out aromatic after `kekule()` + `thiele()`, tetrazole and triazoles too."""
+    found = set()
+    for row in smiles(azole).react(smiles('Brc1ccccc1'), reaction='ullmann_pyrrole'):
+        product = row.reaction.products[0].copy()
+        product.kekule()
+        product.thiele()
+        found.add(product)
+    assert found == {smiles(x) for x in expected}

@@ -1052,7 +1052,7 @@ Functional groups
 Protecting groups
 -----------------
 
-103 protecting groups, alphabetically.  *Protects* names the functional
+106 protecting groups, alphabetically.  *Protects* names the functional
 group the row reveals, which is a row of the table above.
 :meth:`chython.MoleculeContainer.protective_groups` reports a match and
 :meth:`chython.MoleculeContainer.deprotect` applies the patch.
@@ -1270,6 +1270,21 @@ every group that could.
      - ``carbonyl``
      - ``[C;D3,D4;z1;x2;r5:1]1[S;D2;x0;z1][C;D2;x1;z1][C;D2;x1;z1][S;D2;x0;z1]1``
      - 1,3-dithiolane, revealing a ketone or aldehyde
+   * - ``carboxyl_allyl``
+     - ``protective:106``
+     - ``carboxyl``
+     - ``[C;x2:1](=[O:2])-[O;D2:3]-;!@[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]``
+     - allyl ester, revealing a carboxylic acid
+   * - ``carboxyl_benzyl``
+     - ``protective:105``
+     - ``carboxyl``
+     - ``[C;x2:1](=[O:2])-[O;D2:3]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1``
+     - benzyl ester, revealing a carboxylic acid
+   * - ``carboxyl_tbu``
+     - ``protective:104``
+     - ``carboxyl``
+     - ``[C;x2:1](=[O:2])-[O;D2:3]-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]``
+     - tert-butyl ester, revealing a carboxylic acid
    * - ``carboxyl_trioxabicyclooctane``
      - ``protective:53``
      - ``carboxyl``

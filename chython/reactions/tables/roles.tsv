@@ -91,3 +91,5 @@ id	name	group	product	example	decoys	description
 85	alkynyl_decarboxy	alkynyl_carboxylic_acid	[A@=:3]([#0:20])#[A:4]			decarboxylative coupling; the alkyne is kept
 86	alkyl_deamino	primary_amine	[A@=:2][#0:20]			deaminative coupling via a Katritzky salt
 87	aryl_deamino	primary_aniline	[A@=:2][#0:20]			deaminative coupling via a diazonium
+88	azole_nitrogen	pyrazole	[A:1]:[A@=:2][#0:20]	Cc1cc[nH]n1		NH-pyrazole capped at the h0 nitrogen, the other tautomer's N-substitution
+89	azole_nitrogen	imidazole	[A:1]:[A:2]:[A@=:3][#0:20]	Cc1c[nH]cn1		NH-imidazole capped at the h0 nitrogen, the other tautomer's N-substitution

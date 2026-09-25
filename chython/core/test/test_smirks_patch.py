@@ -52,7 +52,7 @@ parity the input did not carry (N10).
 formatted SMILES string, whose canonical form can oscillate on a symmetric stereocentre -- and a
 candidate that fails takes itself out of the enumeration rather than the enumeration with it.
 """
-from pytest import raises
+from pytest import mark, raises
 from .._core import read_smiles as smiles, read_smirks
 
 
@@ -302,6 +302,43 @@ def test_the_ambiguous_aromatic_atom_is_STILL_unknown_after_a_patch():
     unknown = [n for n in p.atom_numbers if p.implicit_h_of(n) is None]
     assert [p.element_of(n) for n in unknown] == [7], 'only the pnictogen, and only because of the ring'
     assert p.unknown_h_count == 1
+
+
+AZOLE_AT_H0 = '[N;h1;D2;a;r5:1]:[N;h0;D2;r5:2].[Br][C;a:101]>>[A:101]-[A:2]:[A:1]'
+
+
+def _repaired(molecule):
+    molecule = molecule.copy()
+    molecule.kekule()
+    molecule.thiele()
+    return molecule
+
+
+@mark.parametrize('azole, expected', [
+    ('Cc1nn[nH]n1', ('Cc1nnn(-c2ccccc2)n1', 'Cc1nnnn1-c1ccccc1')),
+    ('c1cn[nH]n1', ('c1cn(-c2ccccc2)nn1',)),
+    ('Cc1cc[nH]n1', ('Cc1ccnn1-c1ccccc1',)),
+])
+def test_n_substituting_the_h0_nitrogen_moves_the_azole_hydrogen(azole, expected):
+    """A pnictogen sharing an aromatic ring with a pnictogen the patch bonded is recomputed.
+
+    The matched NH nitrogen is not written, yet its hydrogen belongs to the tautomer the patch just
+    replaced.  It comes back `H_UNKNOWN`, and `kekule()` settles it.
+    """
+    t = read_smirks(AZOLE_AT_H0)
+    products = set()
+    for r in t(smiles(azole), smiles('Brc1ccccc1')):
+        p = r.products[0]
+        assert not [n for n in p.atom_numbers if p.element_of(n) == 7 and p.implicit_h_of(n)]
+        products.add(_repaired(p))
+    assert products == {smiles(x) for x in expected}
+
+
+def test_c_substitution_leaves_the_azole_hydrogen_alone():
+    """No pnictogen gained a bond, so the NH keeps its stored count."""
+    t = read_smirks('[Br][C;a:1].[B;D3:2]-[C;a:3]>>[A:1]-[A:3]')
+    p = next(iter(t(smiles('Brc1cc[nH]c1'), smiles('OB(O)c1ccccc1')))).products[0]
+    assert [p.implicit_h_of(n) for n in p.atom_numbers if p.element_of(n) == 7] == [1]
 
 
 def test_created_atom_hydrogens_are_derived():

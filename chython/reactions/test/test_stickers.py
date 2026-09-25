@@ -19,6 +19,7 @@
 """Sticky fragments: the R-capped cut, its two open-bond spellings, and the glue rule."""
 from pytest import mark, raises
 from ...core import read_smiles as smiles
+from .._tables import functional_rules, roles
 
 
 def test_an_aryl_bromide_yields_one_fragment():
@@ -219,3 +220,67 @@ def test_a_molander_salt_enumerates_once_its_counter_ion_is_gone(salt, role, lef
     assert out[0].sticky_left == left
     assert out[0].sticky_right == right
     assert out[0].canonical_smiles == fragment
+
+
+@mark.parametrize('azole, expected', [
+    ('Cc1cc[nH]n1', ('Cc1ccn([R])n1', 'Cc1ccnn1[R]')),
+    ('Cc1c[nH]cn1', ('Cc1cn([R])cn1', 'Cc1cncn1[R]')),
+    ('Cc1nn[nH]n1', ('Cc1nnn([R])n1', 'Cc1nnnn1[R]')),
+    ('c1nc[nH]n1', ('c1ncn([R])n1', 'c1nncn1[R]')),
+    ('c1cn[nH]n1', ('c1cn([R])nn1', 'c1cnn([R])n1')),
+])
+def test_an_azole_is_capped_at_every_ring_nitrogen(azole, expected):
+    """Capping the h0 nitrogen gives the other tautomer's N-substitution, aromatic and fully counted."""
+    mol = smiles(azole)
+    mol.canonicalize()
+    found = {f.canonical_smiles for f in mol.sticky_fragments('azole_nitrogen')}
+    capped = {smiles(s) for s in found}
+    assert capped == {smiles(x) for x in expected}
+    for c in capped:
+        assert c.unknown_h_count == 0
+        assert not [n for n in c if c.element_of(n) == 7 and c.implicit_h_of(n)]
+
+
+def test_pyrrole_is_capped_once():
+    mol = smiles('c1cc[nH]c1')
+    mol.canonicalize()
+    assert {f.canonical_smiles for f in mol.sticky_fragments('azole_nitrogen')} == {'n1([R])cccc1'}
+
+
+def test_a_linker_names_its_two_source_atoms():
+    mol = smiles('Brc1ccc(CN)cc1')
+    mol.canonicalize()
+    ipso = next(n for n in mol if mol.element_of(n) == 6
+                and any(mol.element_of(m) == 35 for m in mol.neighbors_of(n)))
+    amine = next(n for n in mol if mol.element_of(n) == 7)
+    linkers = {(x.atom_left, x.atom_right) for x in mol.sticky_linkers('aryl_halide', 'alkyl_amine')}
+    assert linkers == {(ipso, amine)}
+
+
+def test_an_equivalent_site_is_cut_once_and_named():
+    """Automorphic sites give one fragment, and its atom is one of them."""
+    mol = smiles('Brc1ccc(Br)cc1')
+    mol.canonicalize()
+    out = list(mol.sticky_fragments('aryl_halide'))
+    ipso = {n for n in mol if mol.element_of(n) == 6
+            and any(mol.element_of(m) == 35 for m in mol.neighbors_of(n))}
+    assert len(out) == 1 and out[0].atom in ipso
+
+
+def test_the_h0_cap_names_the_h0_nitrogen():
+    """The pyrrole row caps the NH, the pyrazole row the other nitrogen, so the two name both."""
+    mol = smiles('Cc1cc[nH]n1')
+    mol.canonicalize()
+    out = list(mol.sticky_fragments('azole_nitrogen'))
+    assert len(out) == 2
+    assert {f.atom for f in out} == {n for n in mol if mol.element_of(n) == 7}
+
+
+def test_the_attachment_atom_is_a_source_atom():
+    """Every role, on its own example: the site is the molecule's own atom, never one the patch made."""
+    for name, rows in roles().items():
+        for row in rows:
+            mol = smiles(row.example or functional_rules()[row.group].example)
+            mol.canonicalize()
+            for f in mol.sticky_fragments(name):
+                assert f.atom in mol.atom_numbers, (row.id, f)

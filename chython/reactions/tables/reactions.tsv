@@ -425,3 +425,33 @@ id	name	groups	product	ring_sizes	probe	description
 292	ugi_4cr	aldehyde,primary_amine,carboxylic_acid,isocyano	[A:201](=[A:202])-[A:101](-[A:102])-[A;&1:2]-[A:302](=[O])-[A:301]		C(CC)=O.C(C)N.C(C)(=O)O.[C-]#[N+]CC>>N(CC)C(=O)[C@H](N(C(C)=O)CC)CC |&1:5|	Aldehyde, amine, acid and isocyanide in one pot, giving the alpha-acylamino amide (Ugi)
 293	oxadiazole	hydrazide,carboxylic_acid	[A:3]:1:[A:2]:[A:1]:[A:101]:[A:4]:1		C(C)(NN)=O.C(C)(=O)O>>Cc1oc(C)nn1	Hydrazide and a carboxylic acid, giving the 1,3,4-oxadiazole
 294	oxadiazole	hydrazide,acyl_chloride	[A:3]:1:[A:2]:[A:1]:[A:101]:[A:4]:1		C(C)(NN)=O.C(C)(=O)Cl>>Cc1oc(C)nn1	Hydrazide and an acyl chloride, giving the 1,3,4-oxadiazole
+#
+# --- ureas and thioureas from two amines, every pair of the five N-nucleophiles -----------------
+# The thiocarbonyl is unmapped as the carbonyl is: thiophosgene or TCDI supplies it.
+295	urea_from_amines	primary_amine,secondary_amine	[A:1](-[A:2])-[C](=[O])-[A:101](-[A:102])-[A:103]		CN.CNC>>CNC(=O)N(C)C	A primary amine and a secondary amine with a carbonyl source, giving the urea
+296	urea_from_amines	primary_amine,secondary_aniline	[A:1](-[A:2])-[C](=[O])-[A:101](-[A:102])-[A:103]		CN.CNc1ccccc1>>CNC(=O)N(C)c1ccccc1	A primary amine and a secondary aniline with a carbonyl source, giving the urea
+297	urea_from_amines	primary_amine,aziridine_nh	[A:1](-[A:2])-[C](=[O])-[A:101]		CN.C1CN1>>CNC(=O)N1CC1	A primary amine and an aziridine NH with a carbonyl source, giving the urea
+298	urea_from_amines	secondary_amine,secondary_amine	[A:1](-[A:2])(-[A:3])-[C](=[O])-[A:101](-[A:102])-[A:103]		CNC.CNC>>CN(C)C(=O)N(C)C	Two secondary amines and a carbonyl source, giving the urea
+299	urea_from_amines	secondary_amine,primary_aniline	[A:1](-[A:2])(-[A:3])-[C](=[O])-[A:101]-[A:102]		CNC.Nc1ccccc1>>CN(C)C(=O)Nc1ccccc1	A secondary amine and a primary aniline with a carbonyl source, giving the urea
+300	urea_from_amines	secondary_amine,secondary_aniline	[A:1](-[A:2])(-[A:3])-[C](=[O])-[A:101](-[A:102])-[A:103]		CNC.CNc1ccccc1>>CN(C)C(=O)N(C)c1ccccc1	A secondary amine and a secondary aniline with a carbonyl source, giving the urea
+301	urea_from_amines	secondary_amine,aziridine_nh	[A:1](-[A:2])(-[A:3])-[C](=[O])-[A:101]		CNC.C1CN1>>CN(C)C(=O)N1CC1	A secondary amine and an aziridine NH with a carbonyl source, giving the urea
+302	urea_from_amines	primary_aniline,secondary_aniline	[A:1](-[A:2])-[C](=[O])-[A:101](-[A:102])-[A:103]		Nc1ccccc1.CNc1ccccc1>>c1ccccc1NC(=O)N(C)c1ccccc1	A primary aniline and a secondary aniline with a carbonyl source, giving the urea
+303	urea_from_amines	primary_aniline,aziridine_nh	[A:1](-[A:2])-[C](=[O])-[A:101]		Nc1ccccc1.C1CN1>>c1ccccc1NC(=O)N1CC1	A primary aniline and an aziridine NH with a carbonyl source, giving the urea
+304	urea_from_amines	secondary_aniline,secondary_aniline	[A:1](-[A:2])(-[A:3])-[C](=[O])-[A:101](-[A:102])-[A:103]		CNc1ccccc1.CNc1ccccc1>>c1ccccc1N(C)C(=O)N(C)c1ccccc1	Two secondary anilines and a carbonyl source, giving the urea
+305	urea_from_amines	secondary_aniline,aziridine_nh	[A:1](-[A:2])(-[A:3])-[C](=[O])-[A:101]		CNc1ccccc1.C1CN1>>c1ccccc1N(C)C(=O)N1CC1	A secondary aniline and an aziridine NH with a carbonyl source, giving the urea
+306	urea_from_amines	aziridine_nh,aziridine_nh	[A:1]-[C](=[O])-[A:101]		C1CN1.C1CN1>>C1CN1C(=O)N1CC1	Two aziridine NHs and a carbonyl source, giving the urea
+307	thiourea_from_amines	primary_amine,primary_amine	[A:1](-[A:2])-[C](=[S])-[A:101]-[A:102]		CN.CN>>CNC(=S)NC	Two primary amines and a thiocarbonyl source, giving the thiourea
+308	thiourea_from_amines	primary_amine,secondary_amine	[A:1](-[A:2])-[C](=[S])-[A:101](-[A:102])-[A:103]		CN.CNC>>CNC(=S)N(C)C	A primary amine and a secondary amine with a thiocarbonyl source, giving the thiourea
+309	thiourea_from_amines	primary_amine,primary_aniline	[A:1](-[A:2])-[C](=[S])-[A:101]-[A:102]		CN.Nc1ccccc1>>CNC(=S)Nc1ccccc1	A primary amine and a primary aniline with a thiocarbonyl source, giving the thiourea
+310	thiourea_from_amines	primary_amine,secondary_aniline	[A:1](-[A:2])-[C](=[S])-[A:101](-[A:102])-[A:103]		CN.CNc1ccccc1>>CNC(=S)N(C)c1ccccc1	A primary amine and a secondary aniline with a thiocarbonyl source, giving the thiourea
+311	thiourea_from_amines	primary_amine,aziridine_nh	[A:1](-[A:2])-[C](=[S])-[A:101]		CN.C1CN1>>CNC(=S)N1CC1	A primary amine and an aziridine NH with a thiocarbonyl source, giving the thiourea
+312	thiourea_from_amines	secondary_amine,secondary_amine	[A:1](-[A:2])(-[A:3])-[C](=[S])-[A:101](-[A:102])-[A:103]		CNC.CNC>>CN(C)C(=S)N(C)C	Two secondary amines and a thiocarbonyl source, giving the thiourea
+313	thiourea_from_amines	secondary_amine,primary_aniline	[A:1](-[A:2])(-[A:3])-[C](=[S])-[A:101]-[A:102]		CNC.Nc1ccccc1>>CN(C)C(=S)Nc1ccccc1	A secondary amine and a primary aniline with a thiocarbonyl source, giving the thiourea
+314	thiourea_from_amines	secondary_amine,secondary_aniline	[A:1](-[A:2])(-[A:3])-[C](=[S])-[A:101](-[A:102])-[A:103]		CNC.CNc1ccccc1>>CN(C)C(=S)N(C)c1ccccc1	A secondary amine and a secondary aniline with a thiocarbonyl source, giving the thiourea
+315	thiourea_from_amines	secondary_amine,aziridine_nh	[A:1](-[A:2])(-[A:3])-[C](=[S])-[A:101]		CNC.C1CN1>>CN(C)C(=S)N1CC1	A secondary amine and an aziridine NH with a thiocarbonyl source, giving the thiourea
+316	thiourea_from_amines	primary_aniline,primary_aniline	[A:1](-[A:2])-[C](=[S])-[A:101]-[A:102]		Nc1ccccc1.Nc1ccccc1>>c1ccccc1NC(=S)Nc1ccccc1	Two primary anilines and a thiocarbonyl source, giving the thiourea
+317	thiourea_from_amines	primary_aniline,secondary_aniline	[A:1](-[A:2])-[C](=[S])-[A:101](-[A:102])-[A:103]		Nc1ccccc1.CNc1ccccc1>>c1ccccc1NC(=S)N(C)c1ccccc1	A primary aniline and a secondary aniline with a thiocarbonyl source, giving the thiourea
+318	thiourea_from_amines	primary_aniline,aziridine_nh	[A:1](-[A:2])-[C](=[S])-[A:101]		Nc1ccccc1.C1CN1>>c1ccccc1NC(=S)N1CC1	A primary aniline and an aziridine NH with a thiocarbonyl source, giving the thiourea
+319	thiourea_from_amines	secondary_aniline,secondary_aniline	[A:1](-[A:2])(-[A:3])-[C](=[S])-[A:101](-[A:102])-[A:103]		CNc1ccccc1.CNc1ccccc1>>c1ccccc1N(C)C(=S)N(C)c1ccccc1	Two secondary anilines and a thiocarbonyl source, giving the thiourea
+320	thiourea_from_amines	secondary_aniline,aziridine_nh	[A:1](-[A:2])(-[A:3])-[C](=[S])-[A:101]		CNc1ccccc1.C1CN1>>c1ccccc1N(C)C(=S)N1CC1	A secondary aniline and an aziridine NH with a thiocarbonyl source, giving the thiourea
+321	thiourea_from_amines	aziridine_nh,aziridine_nh	[A:1]-[C](=[S])-[A:101]		C1CN1.C1CN1>>C1CN1C(=S)N1CC1	Two aziridine NHs and a thiocarbonyl source, giving the thiourea

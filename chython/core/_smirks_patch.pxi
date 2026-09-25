@@ -53,7 +53,9 @@
 #
 #   * an atom the patch WROTE (its element, charge, radical, or one of its bonds) and every surviving
 #     neighbour of a deleted atom gets its count recomputed from the valence collection;
-#   * an atom that merely sat inside the match keeps the count its input stated, exactly;
+#   * a pnictogen sharing an aromatic ring with a pnictogen the patch bonded is recomputed -- the
+#     azole NH of the tautomer the patch replaced;
+#   * any other atom that merely sat inside the match keeps the count its input stated, exactly;
 #   * where the collection has no answer -- no row for the element in that charge and radical state,
 #     or an aromatic bond reaching the atom -- the count is stored as `H_UNKNOWN`.
 #
@@ -187,6 +189,39 @@ cdef int smk_hydrogens(MoleculeContainer m, uint32_t n) except -2:
                        exo, False, env, env_len, &hn, &charged, &reason):
         return <int> hn
     return H_UNKNOWN
+
+
+cdef bint smk_aromatic_pnictogen(MoleculeContainer m, object n) except -1:
+    cdef object other
+    if m.element_of(<uint32_t> n) not in (7, 15, 33):
+        return False
+    for other in m.neighbors_of(<uint32_t> n):
+        if m.order_of(<uint32_t> n, <uint32_t> other) == 4:
+            return True
+    return False
+
+
+cdef int smk_ring_pnictogens(MoleculeContainer new, set gained, set alive, set changed) except -1:
+    """Add to `changed` every pnictogen with hydrogens sharing a ring with a bonded aromatic pnictogen.
+
+    The pyrrole-type hydrogen of an azole belongs to one tautomer.  N-substituting any other ring
+    nitrogen makes it the other tautomer's, so the NH is recomputed although the patch never wrote
+    it, and comes back `H_UNKNOWN` for `kekule()`.  Example: 5-methyltetrazole arylated at N2.
+    """
+    cdef set sites = set()
+    cdef object ring, n
+    for n in gained:
+        if n in alive and smk_aromatic_pnictogen(new, n):
+            sites.add(n)
+    if not sites:
+        return 0
+    for ring in new.rings:
+        if sites.isdisjoint(ring):
+            continue
+        for n in ring:
+            if n not in changed and new.implicit_h_of(<uint32_t> n) and smk_aromatic_pnictogen(new, n):
+                changed.add(n)
+    return 0
 
 
 # "the element is the R marker", in `smk_atom_fields`'s element slot, where 0 already means INHERIT.
@@ -928,6 +963,8 @@ cdef tuple smk_one(ReactionTemplate t, MoleculeContainer work, set work_bonds, d
             if key not in doomed:
                 changed.add(key)
 
+    # atoms given a NEW bond: the ring-pnictogen rule below starts from them
+    cdef set gained = set()
     cdef set prod_bond_set = set(t.product_bonds)
     cdef tuple fields
     cdef uint32_t nid
@@ -997,8 +1034,11 @@ cdef tuple smk_one(ReactionTemplate t, MoleculeContainer work, set work_bonds, d
                 new.add_bond(<uint32_t> u, <uint32_t> v, order)
                 changed.add(u)
                 changed.add(v)
+                gained.add(u)
+                gained.add(v)
 
     cdef set alive = set(new.atom_numbers)
+    smk_ring_pnictogens(new, gained, alive, changed)
 
     # Hydrogens BEFORE the stereo directives, and the order is load-bearing: whether an anchor's
     # fourth direction is an atom or its implicit hydrogen is a fact about the count, so a directive

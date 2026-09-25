@@ -1059,7 +1059,7 @@ How a Corpus Row Composes
 
 ``reaction_rules()`` is the accessor for the corpus that ``react()`` and ``@`` enumerate over -- one
 table, ``reactions.tsv``, and one id space.  It is keyed by the name ``reaction=`` selects on, and each
-value is that name's whole **family** of rows: 294 rows under 72 names, ``amidation`` being three of
+value is that name's whole **family** of rows: 321 rows under 73 names, ``amidation`` being three of
 them, one per way the acid is activated.  A row does not carry a SMIRKS string of its own: it names
 **slots** by the functional-group name they take, out of ``functional.tsv``, and its ``product`` column
 patches the atoms those groups number.  The template is composed from the two lazily, and cached for the
@@ -1310,6 +1310,11 @@ that is:
 
 An unknown name raises ``ValueError`` listing every name ``protective.tsv`` has.
 
+An ester reports its alcohol half as a ``carboxyl_*`` group -- ``CC(=O)OC(C)(C)C`` is ``carboxyl_tbu``,
+revealing acetic acid -- and the ether of the same group stays ``hydroxyl_*``.  Where the acyl half is
+itself a protecting group the larger row claims the ester, a tie falling to file order: tert-butyl
+benzoate is ``hydroxyl_benzoate``, benzyl benzoate is ``carboxyl_benzyl``.
+
 **The enumeration unit is the site, not the rule**, because chemistry is not deterministic: a reagent
 that *can* cleave every Boc does not thereby cleave every Boc, and controlled mono-cleavage of a
 bis-protected substrate is a normal thing to attempt, and an *N,N*-di-Boc amine's second Boc is genuinely
@@ -1382,7 +1387,7 @@ there is to carry:
 
 .. testoutput::
 
-    253 103
+    253 106
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']
@@ -1833,7 +1838,9 @@ bond token and neither carries a trailing one, so every join in a chain of piece
     c1(ccncc1)-c1ccc(-c2ccccc2)cc1
 
 ``canonical_smiles`` numbers the ends R1 = left and R2 = right, always, so the string says which end a
-role belongs to without consulting the tuple.
+role belongs to without consulting the tuple.  ``atom_left`` and ``atom_right`` (``atom`` on a
+fragment) are the source molecule's atoms the caps hang off -- a site of the match, not necessarily the
+group's ``:1``.  Automorphic sites are cut once, so a symmetric molecule names one of them.
 
 ``masked`` bars an atom from the coupling both as the attachment site and as a leaving group the patch
 consumes.  On a linker it applies to the **left** end only: a masked handle is one whose only role is

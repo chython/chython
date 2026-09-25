@@ -283,7 +283,7 @@ FUNCTIONAL = {
     'functional:253': 'triarylmethyl_radical',
 }
 
-#: `protective.tsv`: 103 rows, id -> the row it names.
+#: `protective.tsv`: 106 rows, id -> the row it names.
 PROTECTIVE = {
     'protective:1': 'hydroxyl_thiocarbamate',
     'protective:2': 'hydroxyl_fmoc',
@@ -388,9 +388,12 @@ PROTECTIVE = {
     'protective:101': 'hydroxyl_acyl',
     'protective:102': 'hydroxyl_methyl',
     'protective:103': 'hydroxyl_ethyl',
+    'protective:104': 'carboxyl_tbu',
+    'protective:105': 'carboxyl_benzyl',
+    'protective:106': 'carboxyl_allyl',
 }
 
-#: `roles.tsv`: 87 rows, id -> the row it names.
+#: `roles.tsv`: 89 rows, id -> the row it names.
 ROLES = {
     'roles:1': 'aryl_halide/aryl_chloride',
     'roles:2': 'aryl_halide/aryl_bromide',
@@ -479,9 +482,11 @@ ROLES = {
     'roles:85': 'alkynyl_decarboxy/alkynyl_carboxylic_acid',
     'roles:86': 'alkyl_deamino/primary_amine',
     'roles:87': 'aryl_deamino/primary_aniline',
+    'roles:88': 'azole_nitrogen/pyrazole',
+    'roles:89': 'azole_nitrogen/imidazole',
 }
 
-#: `reactions.tsv`: 294 rows, id -> the row it names.
+#: `reactions.tsv`: 321 rows, id -> the row it names.
 REACTIONS = {
     'reactions:1': 'amidation/carboxylic_acid+primary_amine',
     'reactions:2': 'amidation/carboxylic_acid+primary_aniline',
@@ -777,4 +782,31 @@ REACTIONS = {
     'reactions:292': 'ugi_4cr/aldehyde+primary_amine+carboxylic_acid+isocyano',
     'reactions:293': 'oxadiazole/hydrazide+carboxylic_acid',
     'reactions:294': 'oxadiazole/hydrazide+acyl_chloride',
+    'reactions:295': 'urea_from_amines/primary_amine+secondary_amine',
+    'reactions:296': 'urea_from_amines/primary_amine+secondary_aniline',
+    'reactions:297': 'urea_from_amines/primary_amine+aziridine_nh',
+    'reactions:298': 'urea_from_amines/secondary_amine+secondary_amine',
+    'reactions:299': 'urea_from_amines/secondary_amine+primary_aniline',
+    'reactions:300': 'urea_from_amines/secondary_amine+secondary_aniline',
+    'reactions:301': 'urea_from_amines/secondary_amine+aziridine_nh',
+    'reactions:302': 'urea_from_amines/primary_aniline+secondary_aniline',
+    'reactions:303': 'urea_from_amines/primary_aniline+aziridine_nh',
+    'reactions:304': 'urea_from_amines/secondary_aniline+secondary_aniline',
+    'reactions:305': 'urea_from_amines/secondary_aniline+aziridine_nh',
+    'reactions:306': 'urea_from_amines/aziridine_nh+aziridine_nh',
+    'reactions:307': 'thiourea_from_amines/primary_amine+primary_amine',
+    'reactions:308': 'thiourea_from_amines/primary_amine+secondary_amine',
+    'reactions:309': 'thiourea_from_amines/primary_amine+primary_aniline',
+    'reactions:310': 'thiourea_from_amines/primary_amine+secondary_aniline',
+    'reactions:311': 'thiourea_from_amines/primary_amine+aziridine_nh',
+    'reactions:312': 'thiourea_from_amines/secondary_amine+secondary_amine',
+    'reactions:313': 'thiourea_from_amines/secondary_amine+primary_aniline',
+    'reactions:314': 'thiourea_from_amines/secondary_amine+secondary_aniline',
+    'reactions:315': 'thiourea_from_amines/secondary_amine+aziridine_nh',
+    'reactions:316': 'thiourea_from_amines/primary_aniline+primary_aniline',
+    'reactions:317': 'thiourea_from_amines/primary_aniline+secondary_aniline',
+    'reactions:318': 'thiourea_from_amines/primary_aniline+aziridine_nh',
+    'reactions:319': 'thiourea_from_amines/secondary_aniline+secondary_aniline',
+    'reactions:320': 'thiourea_from_amines/secondary_aniline+aziridine_nh',
+    'reactions:321': 'thiourea_from_amines/aziridine_nh+aziridine_nh',
 }

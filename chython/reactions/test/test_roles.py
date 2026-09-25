@@ -95,7 +95,7 @@ def test_a_product_stating_no_cap_is_refused_at_load():
 
 def test_the_glossary_is_complete():
     assert len(roles()) == 53
-    assert sum(len(rows) for rows in roles().values()) == 87
+    assert sum(len(rows) for rows in roles().values()) == 89
 
 
 def test_every_role_family_is_present():

@@ -112,10 +112,10 @@ def test_a_row_reveals_the_element_it_says_it_does(rule):
 # --- the table as a file --------------------------------------------------------------------------
 
 def test_the_table_reads_and_ids_are_one_space():
-    """103 rows numbered 1..103, which is what a positional id in a ported table has to be."""
+    """106 rows numbered 1..106, which is what a positional id in a ported table has to be."""
     rows = read_table('protective.tsv')
     assert [int(row['id']) for row in rows] == list(range(1, len(rows) + 1))
-    assert len(RULES) == len(rows) == 103
+    assert len(RULES) == len(rows) == 106
 
 
 def test_a_protecting_group_is_named_once():
@@ -183,6 +183,50 @@ def test_without_the_sort_a_boc_becomes_a_carbonate():
     assert skeleton(read_smiles('C(O)(OC(C)C)=O')) in wrong
     # and the sorted walk never offers it that site
     assert protective_groups(molecule) == {'hydroxyl_boc': 1}
+
+
+# --- esters ---------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize('ester, name', [
+    ('CC(=O)OC(C)(C)C', 'tbu'),
+    ('CC(=O)OCc1ccccc1', 'benzyl'),
+    ('CC(=O)OCC=C', 'allyl'),
+])
+def test_an_ester_is_a_protected_acid(ester, name):
+    """A tBu, benzyl or allyl ester reveals the acid, so the hydroxyl row of the same group has no site."""
+    molecule = read_smiles(ester)
+    assert protective_groups(molecule) == {f'carboxyl_{name}': 1}
+    assert next(deprotect(molecule, (f'hydroxyl_{name}',)), None) is None
+    assert next(deprotect(molecule)).reaction.products[0] == read_smiles('CC(=O)O')
+
+
+@pytest.mark.parametrize('ether, name', [
+    ('CCOC(C)(C)C', 'tbu'),
+    ('CCOCc1ccccc1', 'benzyl'),
+    ('CCOCC=C', 'allyl'),
+])
+def test_an_ether_is_not_a_protected_acid(ether, name):
+    assert next(deprotect(read_smiles(ether), (f'carboxyl_{name}',)), None) is None
+
+
+@pytest.mark.parametrize('ester, name', [
+    ('CC(=O)OC(C)(C)C', 'carboxyl_tbu'),                  # 7 > hydroxyl_acyl 4
+    ('CC(=O)OCC=C', 'carboxyl_allyl'),                    # 6 > 4
+    ('O=C(OCc1ccccc1)c1ccccc1', 'carboxyl_benzyl'),       # 10 > hydroxyl_benzoate 9
+    ('CC(C)(C)OC(=O)c1ccccc1', 'hydroxyl_benzoate'),      # 7 < 9
+    ('C=CCOC(=O)c1ccccc1', 'hydroxyl_benzoate'),          # 6 < 9
+    ('CC(C)(C)OC(=O)C(C)(C)C', 'hydroxyl_piv'),           # 7 = 7, table order
+    ('CC(C)(C)OC(=O)C(F)(F)F', 'hydroxyl_tfa'),           # 7 = 7, table order
+])
+def test_an_ester_goes_to_the_larger_claim(ester, name):
+    """Both halves of an ester can be a protecting group; the larger row claims it, a tie falls to file
+    order."""
+    assert protective_groups(read_smiles(ester)) == {name: 1}
+
+
+def test_a_tbu_ester_and_a_methyl_ester_are_two_claims():
+    assert protective_groups(read_smiles('CC(C)(C)OC(=O)CCC(N)C(=O)OC')) == {
+        'carboxyl_tbu': 1, 'hydroxyl_methyl': 1}
 
 
 # --- the report -----------------------------------------------------------------------------------

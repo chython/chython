@@ -136,3 +136,6 @@ id	name	protects	smarts	product	protected	cleaved	decoys	description
 101	hydroxyl_acyl	hydroxyl	[O;D2:1]-;!@[C;z2;x2](=O)-[C;D1]	[A:1]	CC(OC(C)=O)C	C(C)(O)C	O(C(=O)CC)C(C)C	acetyl, revealing an alcohol
 102	hydroxyl_methyl	hydroxyl	[O;D2:1]-;!@[C;D1]	[A:1]	CC(OC)C	C(C)(O)C	C(C)OC(C)C	methyl, revealing an alcohol
 103	hydroxyl_ethyl	hydroxyl	[O;D2:1]-;!@[C;D2;z1;x1]-[C;D1]	[A:1]	C(C)OC(C)C	C(C)(O)C		ethyl, revealing an alcohol
+104	carboxyl_tbu	carboxyl	[C;x2:1](=[O:2])-[O;D2:3]-;!@[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]	[A:1](=[A:2])[A:3]	CC(=O)OC(C)(C)C	CC(=O)O	CCOC(C)(C)C,CC(C)(C)OC(=O)Nc1ccccc1,CCOC(=O)OC(C)(C)C	tert-butyl ester, revealing a carboxylic acid
+105	carboxyl_benzyl	carboxyl	[C;x2:1](=[O:2])-[O;D2:3]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1](=[A:2])[A:3]	CC(=O)OCc1ccccc1	CC(=O)O	CCOCc1ccccc1,O=C(Nc1ccccc1)OCc1ccccc1,CCOC(=O)OCc1ccccc1	benzyl ester, revealing a carboxylic acid
+106	carboxyl_allyl	carboxyl	[C;x2:1](=[O:2])-[O;D2:3]-;!@[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]	[A:1](=[A:2])[A:3]	CC(=O)OCC=C	CC(=O)O	CCOCC=C,C=CCOC(=O)Nc1ccccc1,CCOC(=O)OCC=C	allyl ester, revealing a carboxylic acid
