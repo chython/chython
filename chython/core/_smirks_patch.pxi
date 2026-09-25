@@ -994,7 +994,8 @@ cdef tuple smk_one(ReactionTemplate t, MoleculeContainer work, set work_bonds, d
             if <int> fields[1] != work.charge_of(nid):
                 new.set_charge(nid, <int> fields[1])
                 changed.add(<object> nid)
-            if <int> fields[2] != work.isotope_of(nid):
+            # an unstated product isotope (0) keeps the reactant's: `[C:1]` does not strip a 14C label
+            if <int> fields[2] and <int> fields[2] != work.isotope_of(nid):
                 new.set_isotope(nid, <int> fields[2])
             if <bint> fields[3] != work.radical_of(nid):
                 new.set_radical(nid, <bint> fields[3])

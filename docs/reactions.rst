@@ -1029,6 +1029,7 @@ is no ``oxidize()``, ``reduce()`` or ``transform()``, and ``~mol`` raises ``Type
     appel reactions:20 C(C)O>>C(C)Br
     appel_chloride reactions:22 C(C)O>>C(C)Cl
     alcohol_to_aldehyde reactions:35 C(C)O>>C(C)=O
+    appel_iodide reactions:400 C(C)O>>C(C)I
 
 The oxidation/reduction taxonomy is not a column and never was computed: that ``aldehyde_to_acid``
 oxidizes something was a filing decision, and the corpus's multi-component rows never had a class at
@@ -1059,10 +1060,9 @@ How a Corpus Row Composes
 
 ``reaction_rules()`` is the accessor for the corpus that ``react()`` and ``@`` enumerate over -- one
 table, ``reactions.tsv``, and one id space.  It is keyed by the name ``reaction=`` selects on, and each
-value is that name's whole **family** of rows: 321 rows under 73 names, ``amidation`` being three of
-them, one per way the acid is activated.  A row does not carry a SMIRKS string of its own: it names
-**slots** by the functional-group name they take, out of ``functional.tsv``, and its ``product`` column
-patches the atoms those groups number.  The template is composed from the two lazily, and cached for the
+value is that name's whole **family** of rows: ``amidation`` holds one per acyl source and N-H partner.
+A row does not carry a SMIRKS string of its own: it names **slots** by the functional-group name they
+take, out of ``functional.tsv``, and its ``product`` column patches the atoms those groups number.  The template is composed from the two lazily, and cached for the
 table as a whole.
 
 A group leaves its **leaving group unnumbered**, so the atoms it numbers are the ones it means to keep --
@@ -1142,8 +1142,7 @@ demand there belongs in the ``product`` column as an ordinary ``r``.
 
 Prefer one row with a ``,`` list to several rows differing by one element -- ``aryl_halide`` is
 ``[Cl,Br,I;D1]-[C;a:1]``, not three rows.  But the bound on such a merge is **chemical**, not
-notational: fluorine is left out because it does S\ :sub:`N`\ Ar instead, and ``aryl_bromide_iodide``
-exists as its own group because Sonogashira on an aryl chloride is not a claim this table makes.
+notational: fluorine is left out because it does S\ :sub:`N`\ Ar instead.
 
 ``probe`` is the row's acceptance test
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1387,7 +1386,7 @@ there is to carry:
 
 .. testoutput::
 
-    253 106
+    265 106
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']

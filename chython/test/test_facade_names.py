@@ -177,14 +177,14 @@ def test_the_whole_corpus_is_reachable_without_a_molecule():
     import chython
 
     functional, protective = chython.functional_rules(), chython.protective_rules()
-    assert len(functional) == 253 and len(protective) == 106
+    assert len(functional) == 265 and len(protective) == 106
     assert all(isinstance(k, str) and v.name == k for k, v in functional.items())
     assert all(isinstance(k, str) and v.name == k for k, v in protective.items())
     assert functional['carboxylic_acid'].smarts and protective['amine_boc'].protects == ('amine',)
 
     # the other two are name-to-rows, because a reaction name names a row family.
     reactions, handles = chython.reaction_rules(), chython.roles()
-    assert len(reactions) == 73 and sum(len(v) for v in reactions.values()) == 321
+    assert len(reactions) == 82 and sum(len(v) for v in reactions.values()) == 676
     assert len(handles) == 53 and sum(len(v) for v in handles.values()) == 89
     assert all(r.name == name for name, rows in reactions.items() for r in rows)
 

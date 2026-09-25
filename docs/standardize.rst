@@ -491,7 +491,7 @@ meaning a cation and a radical. The record says which way the total moved.
 
 .. testoutput::
 
-    {'metalate_carbanion': 1}
+    {'alkyl_zinc': 1, 'metalate_carbanion': 1}
     C(C)[Zn]Cl {'alkyl_zinc': 1}
 
 It cannot be a row, for two reasons. ``bonds_fix`` changes the order of a bond that already exists, and

@@ -257,12 +257,18 @@ def test_every_product_number_comes_from_a_slot():
 _DELIBERATE_DELETIONS = {
     'appel': {1},                        # the alcohol oxygen, replaced by the halide
     'appel_chloride': {1},
+    'appel_iodide': {1},
+    'alcohol_amination': {1},            # the alcohol oxygen, leaving as water or a sulfonate
+    'sandmeyer': {1},                    # the aniline nitrogen, leaving as N2 from the diazonium
+    'nitrile_hydrolysis': {1},           # the nitrile nitrogen, leaving as ammonia past the amide
     'amide_to_amine': {3},               # the carbonyl oxygen, reduced away
     'nitro_to_amine': {2, 3},            # both nitro oxygens
     'sulfoxide_to_thioether': {2},       # the sulfoxide oxygen
-    'amidation': {3},                    # the carboxylic acid hydroxyl O, the leaving group
+    'amidation': {1, 3},                 # the acid hydroxyl O (3) or the carboxylate O- (1), the leaving group
     'esterification': {3},
     'weinreb_amidation': {3},
+    'n_acylation': {3},
+    'sulfonamide_formation': {4},        # the sulfonic acid hydroxyl O, activated and displaced
     'hydrazide_formation': {3},
     'acid_chlorination': {3},            # the carboxylic acid hydroxyl O, replaced by Cl
     'acid_to_alcohol': {3},              # the carboxylic acid hydroxyl O, released as water
@@ -343,7 +349,7 @@ def _map_numbers(smarts):
 def test_reaction_rules_groups_a_family_under_its_name():
     """`reaction=` selects by name, so the name is the key and its value is every spelling.
 
-    294 rows under 72 names -- `amidation` is three, one per way the acid is activated -- so a
+    A name holds a family -- `amidation` is one row per acyl source and N-H partner -- so a
     name-to-row map would drop rows and a flat tuple makes every `reaction=` call a linear scan that
     rebuilds the known-name set to say what it did not find.
     """

@@ -24,7 +24,7 @@ name a molecule carries, and :doc:`reactions` documents it where it is applied.
 Functional groups
 -----------------
 
-253 functional groups, alphabetically.  The name is the key
+265 functional groups, alphabetically.  The name is the key
 :meth:`chython.MoleculeContainer.functional_groups` returns and the key
 :func:`chython.functional_rules` is keyed on; the id is what a consumer stores.
 
@@ -68,6 +68,10 @@ Functional groups
      - ``functional:196``
      - ``[C;z2;D1:1]=[C;z2:2]-[C;D3;z2;x2:3](=[O;D1;x0:4])-[O;D2:5]``
      - H2C=CH-CO-O-R, the polymerizable monomer.  ``D1`` as in ``acrylamide``
+   * - ``activated_ester``
+     - ``functional:264``
+     - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x1]-[N]``
+     - an N-O ester -- NHS, HOBt, HOAt, oxime -- the acylating agent ``ester`` (``x0`` oxygen) leaves out
    * - ``activated_isocyanide``
      - ``functional:166``
      - ``[C;-;D1:1]#[N;+;D2:2]-[C;z1;h1,h2:3]``
@@ -76,6 +80,10 @@ Functional groups
      - ``functional:167``
      - ``[C;z1;D2,D3;x0:1](-[C;z2,z3;x1,x2:2])-[C;z2,z3;x1,x2:3]``
      - CH flanked by two EWGs, the Knoevenagel nucleophile
+   * - ``acyclic_ester``
+     - ``functional:259``
+     - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-;!@[O;D2;x0]``
+     - ``ester`` outside a ring, so hydrolysis leaves one product; a lactone opens to a hydroxy acid instead
    * - ``acyl_azide``
      - ``functional:240``
      - ``[N;D1;z2;-:1]=[N;D2;+:2]=[N;D2;z2:3]-[C;D3;z2:4]=[O;D1;x0:5]``
@@ -102,15 +110,15 @@ Functional groups
      - internal C=C, no heteroatom on either carbon
    * - ``alkenyl_boronic_acid``
      - ``functional:62``
-     - ``[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z2;x1:1]=[C:2]``
+     - ``[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z2;x1,x2:1]=[C:2]``
      - vinylboronic acid
    * - ``alkenyl_boronic_ester``
      - ``functional:63``
-     - ``[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z2;x1:1]=[C:2]``
+     - ``[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z2;x1,x2:1]=[C:2]``
      - vinylboronate ester
    * - ``alkenyl_bromide``
      - ``functional:49``
-     - ``[Br;D1][C;z2;x1:1]=[C:2]``
+     - ``[Br;D1][C;z2;x1,x2:1]=[C:2]``
      - vinylic C-Br
    * - ``alkenyl_carboxylic_acid``
      - ``functional:81``
@@ -118,7 +126,7 @@ Functional groups
      - alpha,beta-unsaturated acid
    * - ``alkenyl_chloride``
      - ``functional:48``
-     - ``[Cl;D1][C;z2;x1:1]=[C:2]``
+     - ``[Cl;D1][C;z2;x1,x2:1]=[C:2]``
      - vinylic C-Cl, the Heck/Negishi electrophile
    * - ``alkenyl_fluoride``
      - ``functional:47``
@@ -128,9 +136,13 @@ Functional groups
      - ``functional:112``
      - ``[Mg;D2](-[F,Cl,Br,I])-[C;z2:1]=[C:2]``
      - vinyl Grignard
+   * - ``alkenyl_halide``
+     - ``functional:255``
+     - ``[Cl,Br,I;D1]-[C;z2;x1,x2:1]=[C:2]``
+     - vinylic C-X, the three ``alkenyl_*`` halides as one class; F excluded as in ``aryl_halide``
    * - ``alkenyl_iodide``
      - ``functional:50``
-     - ``[I;D1][C;z2;x1:1]=[C:2]``
+     - ``[I;D1][C;z2;x1,x2:1]=[C:2]``
      - vinylic C-I
    * - ``alkenyl_molander_salt``
      - ``functional:68``
@@ -144,9 +156,13 @@ Functional groups
      - ``functional:120``
      - ``[Sn;D4;z1]-;!@[C;z2:1]=[C:2]``
      - vinylstannane
+   * - ``alkenyl_sulfonate``
+     - ``functional:256``
+     - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z2;x1,x2:1]=[C:2])-[C]``
+     - enol triflate, nonaflate or tosylate, the vinylic pseudohalide
    * - ``alkenyl_zinc``
      - ``functional:115``
-     - ``[Zn;D2](-[F,Cl,Br,I])-[C;z2:1]=[C:2]``
+     - ``[Zn;*]-[C;z2:1]=[C:2]``
      - vinylzinc
    * - ``alkoxide``
      - ``functional:232``
@@ -154,12 +170,16 @@ Functional groups
      - RO-
    * - ``alkyl_boronic_acid``
      - ``functional:14``
-     - ``[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z1;x1:1]``
+     - ``[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z1;x1,x2,x3:1]``
      - RB(OH)2 on sp3 carbon
    * - ``alkyl_boronic_ester``
      - ``functional:61``
-     - ``[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z1;x1:1]``
+     - ``[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z1;x1,x2,x3:1]``
      - RB(OR')2 on sp3 carbon
+   * - ``alkyl_boroxine``
+     - ``functional:260``
+     - ``[B;D3;z1;x2;r6](-[O;D2;r6]-[B;r6])(-[O;D2;r6]-[B;r6])-;!@[C;z1:1]``
+     - (RBO)3, trimethylboroxine the common one: a methyl donor for the Suzuki
    * - ``alkyl_bromide``
      - ``functional:10``
      - ``[Br;D1][C;z1;x1:1]``
@@ -218,8 +238,8 @@ Functional groups
      - ROTf on sp3 carbon, a strong SN2 leaving group
    * - ``alkyl_zinc``
      - ``functional:113``
-     - ``[Zn;D2](-[F,Cl,Br,I])-[C;z1:1]``
-     - RZnX, the Negishi nucleophile
+     - ``[Zn;*]-[C;z1:1]``
+     - RZnX, R2Zn or RZn+, the Negishi nucleophile; ``*`` takes the zinc at any charge
    * - ``alkyne``
      - ``functional:4``
      - ``[C;z3;x0;D2:1]#[C;x0;D2:2]``
@@ -406,8 +426,8 @@ Functional groups
      - ArOTf, the pseudohalide that couples like an aryl bromide
    * - ``aryl_zinc``
      - ``functional:114``
-     - ``[Zn;D2](-[F,Cl,Br,I])-[C;a:1]``
-     - ArZnX
+     - ``[Zn;*]-[C;a:1]``
+     - ArZnX, Ar2Zn or ArZn+
    * - ``azetidine``
      - ``functional:238``
      - ``[N;D2;z1;x0;r4;h1:1]([C;z1;r4:2])[C;z1;r4:3]``
@@ -540,6 +560,10 @@ Functional groups
      - ``functional:104``
      - ``[C;a:1]-[N;+;D2:2]#[N;D1:3]``
      - ArN2+
+   * - ``diboron_ester``
+     - ``functional:258``
+     - ``[B;D3:1](-[O;D2:2])(-[O;D2:3])-[B;D3](-[O;D2])-[O;D2]``
+     - B2pin2 and its kin, the Miyaura boron source; one boron and its two oxygens are kept
    * - ``difluoromethoxy``
      - ``functional:208``
      - ``[F:1][C;D3;z1;x3:2]([F:3])-[O;D2:4]``
@@ -695,7 +719,11 @@ Functional groups
    * - ``metalate_carbanion``
      - ``functional:241``
      - ``[Mg,Zn,Cu,Li;D1;+:1]-[C:2]``
-     - The ionic spelling of an organometallic, which the neutral ``alkyl_grignard`` and ``alkyl_zinc`` rows cannot match
+     - The ionic spelling of an organometallic, which the neutral ``alkyl_grignard`` row cannot match; the ``*_zinc`` rows take it too
+   * - ``methanol``
+     - ``functional:254``
+     - ``[O;D1;z1;x0:1]-[C;D1:2]``
+     - CH3-OH, which ``primary_alcohol`` (``D2``) leaves out
    * - ``methyl_ester``
      - ``functional:170``
      - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]-[C;D1]``
@@ -712,6 +740,14 @@ Functional groups
      - ``functional:205``
      - ``[N;a;D3:1]-[C;z1,a:2]``
      - The substituted pyrrole-type nitrogen -- an N-alkylated or N-arylated azole, as distinct from the ``nh_azole`` that could still be alkylated
+   * - ``nh_carbamate``
+     - ``functional:261``
+     - ``[N;D1,D2;z1;x0:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2:4]``
+     - a carbamate N-H, BocNH2 and the oxazolidinone included; ``carbamate`` does not bound the N
+   * - ``nh_sulfonamide``
+     - ``functional:263``
+     - ``[N;D1,D2;z1;x1:1]-[S;D4:2](=[O:3])=[O:4]``
+     - a sulfonamide N-H; ``sulfonamide`` matches the tertiary one too
    * - ``nh_thiourea``
      - ``functional:156``
      - ``[N;z1;h1,h2;!R:1]-[C;D3;z2;x3:2](=[S;D1:3])-[N;z1;h1,h2;!R:4]``
@@ -720,6 +756,10 @@ Functional groups
      - ``functional:155``
      - ``[N;z1;h1,h2;!R:1]-[C;D3;z2;x3:2](=[O:3])-[N;z1;h1,h2;!R:4]``
      - acyclic urea with an N-H on both nitrogens, the Biginelli subset
+   * - ``nh_urea_any``
+     - ``functional:262``
+     - ``[N;D1,D2;z1;x0:1]-[C;D3;z2;x3:2](=[O;D1:3])-[N;z1:4]``
+     - a urea N-H, ring or chain; ``nh_urea`` is the acyclic both-NH subset
    * - ``nitrile``
      - ``functional:32``
      - ``[N;D1;z3;x0:1]#[C;D2;x1:2]``
@@ -852,6 +892,10 @@ Functional groups
      - ``functional:128``
      - ``[C;z1:1]-[C;z2;x2;D3:2](=[O:3])-[O;D2;x1]-[N;D3;x1;r5](-[C;z2;r5]=[O])-[C;z2;r5]=[O]``
      - NHPI/NHS ester; decarboxylative coupling transfers the alkyl
+   * - ``ring_enamine_nh2``
+     - ``functional:265``
+     - ``[N;D1;z1;x0:1]-[C;z2;x1;r5,r6:2]=[C;z2:3]``
+     - an NH2 on a ring C=C that ``primary_aniline`` (``[C;a]``) does not see: aminopyridone, 3-aminocoumarin
    * - ``secondary_alcohol``
      - ``functional:16``
      - ``[O;D1;z1;x0:1][C;D3;x1;z1:2]``
@@ -946,7 +990,7 @@ Functional groups
      - monosubstituted C=C
    * - ``terminal_alkyne``
      - ``functional:3``
-     - ``[C;z3;x0;D1:1]#[C;x0;D2:2]``
+     - ``[C;z3;x0;D1:1]#[C;D2:2]``
      - monosubstituted C#C, the Sonogashira nucleophile
    * - ``terminal_epoxide``
      - ``functional:171``
@@ -968,6 +1012,10 @@ Functional groups
      - ``functional:29``
      - ``[N;D3;z1;x0:1]([C;z1,a:2])([C;z1,a:3])[C;z1,a:4]``
      - R3N, the N-oxidation substrate.  The three substituents are stated because the bare ``[N;D3;z1;x0]`` also matched every TERTIARY AMIDE and every carbamate -- an N-Boc amine reported as an amine, and ``nitrogen_oxidation`` offered to oxidize DMF.  ``primary_amine`` and ``secondary_amine`` always stated theirs
+   * - ``tetramethylstannane``
+     - ``functional:257``
+     - ``[Sn;D4](-[C;D1])(-[C;D1])(-[C;D1])-[C;D1:1]``
+     - Me4Sn, the Stille methylating agent; ``alkyl_stannane`` excludes the methyls of a Me3Sn dummy
    * - ``thioamide``
      - ``functional:145``
      - ``[S;z2;x0;D1:1]=[C;D2,D3;x2:2]-[N;D1:3]``

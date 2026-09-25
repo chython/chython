@@ -250,6 +250,13 @@ def test_remove_reagents_refuses_an_unmapped_reaction_and_names_the_other_door()
     assert 'mapping=False' in str(e.value)
 
 
+def test_a_bond_swapped_between_unmapped_atoms_is_a_reaction_centre():
+    r = read_reaction_smiles('[CH3:1][CH2:2]O.O=S(Cl)Cl.CCN(CC)CC>>[CH3:1][CH2:2]Cl')
+    assert r.remove_reagents(keep_reagents=True) is True
+    assert [m.smiles for m in r.reactants] == ['C(C)O']
+    assert sorted(m.smiles for m in r.agents) == ['C(C)N(CC)CC', 'O=S(Cl)Cl']
+
+
 def test_the_rule_based_door_moves_a_molecule_that_appears_on_both_sides():
     r = read_reaction_smiles('CCO.CC(=O)O>>CC(=O)OCC.CCO')
     assert r.remove_reagents(mapping=False, keep_reagents=True) is True

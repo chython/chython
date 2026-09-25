@@ -25,7 +25,7 @@ half, and the primitive it adds is the CLAIM -- see `_claims`.
 """
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from itertools import chain, combinations
+from itertools import chain, combinations, product as cartesian
 from typing import NamedTuple
 from ._tables import (PROTECTS_ELEMENTS, ProtectiveGroup, ReactionRule,
                       functional_rules as _group_table, protective_rules, reaction_rules)
@@ -456,6 +456,91 @@ def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
         return None
     return EnumeratedDeprotection(tuple(names), _numbered(molecule, tuple(working.split())),
                                   tuple(ids))
+
+
+def _heavy_formula(molecule: MoleculeContainer) -> Counter:
+    return Counter({element: n for element, n in molecule.element_counts.items() if element != 1})
+
+
+def _fitting_counts(classes: list[tuple[Counter, list[int]]], need: Counter) -> Iterator[list[int]]:
+    """Every `[how many sites of each class]` whose deltas sum to `need` exactly.
+
+    Pruned on overshoot when no delta is negative, which is every row that builds nothing heavier than it
+    deletes; otherwise the walk is the full product of the class sizes.
+    """
+    prune = all(n >= 0 for delta, _ in classes for n in delta.values())
+
+    def walk(i, left, chosen):
+        if i == len(classes):
+            if not +left and not -left:
+                yield chosen
+            return
+        delta, sites = classes[i]
+        for x in range(len(sites) + 1):
+            here = left.copy()
+            for element, n in delta.items():
+                here[element] -= x * n
+            if prune and -here:
+                break
+            yield from walk(i + 1, here, chosen + [x])
+    yield from walk(0, need, [])
+
+
+def _deprotect_toward(molecule: MoleculeContainer, targets: Sequence[MoleculeContainer],
+                     bound: int = 4096) -> Iterator[EnumeratedDeprotection]:
+    """`deprotect(molecule, partial=True)` restricted to the site subsets that can give a `targets` component.
+
+    The full strip first, as there; then only the subsets whose heavy-atom formula equals a target's.  A
+    site's formula delta is measured once, by stripping it alone, and summed: claims are disjoint, so
+    the deltas add.  A group a strip EXPOSES is not a site of `molecule` and is reached by the full strip
+    alone.  So a record naming one Boc among twelve acetates costs thirteen single strips and the one
+    subset that fits, not `2^13`.  At most `bound` subsets are stripped, largest first.
+    """
+    rules = tuple(protective_rules().values())
+    claims = _claims(molecule, rules)
+    if not claims:
+        return
+    full = _strip(molecule, frozenset(rule.name for rule in rules), rules)
+    if full is None:
+        return
+    yield full
+    before = _heavy_formula(molecule)
+    components = [(frozenset(part.atom_numbers), _heavy_formula(part)) for part in molecule.split()]
+    classes: dict[int, dict[tuple, list[int]]] = {}
+    for index, claim in enumerate(claims):
+        single = _strip_sites(molecule, (index,), rules)
+        if single is None:
+            continue
+        delta = before.copy()
+        for part in single.reaction.products:
+            delta.subtract(_heavy_formula(part))
+        home = next(i for i, (atoms, _) in enumerate(components) if not atoms.isdisjoint(claim.atoms))
+        key = tuple(sorted((element, n) for element, n in delta.items() if n))
+        classes.setdefault(home, {}).setdefault(key, []).append(index)
+    subsets = set()
+    for home, grouped in classes.items():
+        formula = components[home][1]
+        spelled = [(Counter(dict(key)), sites) for key, sites in grouped.items()]
+        for target in {tuple(sorted(_heavy_formula(t).items())) for t in targets}:
+            need = formula.copy()
+            need.subtract(dict(target))
+            for counts in _fitting_counts(spelled, need):
+                if not any(counts):
+                    continue
+                for picked in cartesian(*(combinations(sites, x) for x, (_, sites) in zip(counts, spelled))):
+                    subsets.add(tuple(sorted(chain.from_iterable(picked))))
+                    if len(subsets) >= bound:
+                        break
+    seen = {_products_key(full)}
+    for subset in sorted(subsets, key=lambda s: (-len(s), s))[:bound]:
+        outcome = _strip_sites(molecule, subset, rules)
+        if outcome is None:
+            continue
+        key = _products_key(outcome)
+        if key in seen:
+            continue
+        seen.add(key)
+        yield outcome
 
 
 def deprotect(molecule: MoleculeContainer, names: Sequence[str] = (), *,

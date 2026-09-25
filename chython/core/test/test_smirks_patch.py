@@ -236,6 +236,13 @@ def test_hydrogens_are_recomputed_where_the_patch_wrote():
     assert str(p) == 'C(C)N'
 
 
+def test_an_unstated_product_isotope_keeps_the_label():
+    """`[C:1]` on the product side states no isotope, so the matched 14C stays 14C."""
+    t = read_smirks('[C;z2:1](=[O:2])-[O;D1]>>[C:1](=[O:2])-[Cl]')
+    p = next(iter(t(smiles('CC[14C](=O)O')))).products[0]
+    assert str(p) == 'C(C)[14C](=O)Cl'
+
+
 def test_matched_but_unwritten_atom_keeps_its_stored_count():
     """An atom that merely sat inside the match is not recomputed, even when its count is wrong.
 

@@ -53,7 +53,7 @@
 id	name	smarts	example	decoys	description
 1	terminal_alkene	[C;z2;x0;D1:1]=[C;z2;x0;D2,D3:2]	C=CCC	CC=CC,C=CN	monosubstituted C=C
 2	alkene	[C;z2;x0;D2,D3:1]=[C;z2;x0;D2,D3:2]	CC=CC	C=CCC,CC=CO	internal C=C, no heteroatom on either carbon
-3	terminal_alkyne	[C;z3;x0;D1:1]#[C;x0;D2:2]	C#CCC	CC#CC	monosubstituted C#C, the Sonogashira nucleophile
+3	terminal_alkyne	[C;z3;x0;D1:1]#[C;D2:2]	C#CCC	CC#CC	monosubstituted C#C, the Sonogashira nucleophile
 4	alkyne	[C;z3;x0;D2:1]#[C;x0;D2:2]	CC#CC	C#CCC	internal C#C
 5	aryl_fluoride	[F;D1]-[C;a:1]	Fc1ccccc1	FCc1ccccc1	Ar-F, an SNAr electrophile rather than a cross-coupling one
 6	aryl_chloride	[Cl;D1]-[C;a:1]	Clc1ccccc1	ClCc1ccccc1	Ar-Cl
@@ -64,7 +64,7 @@ id	name	smarts	example	decoys	description
 11	alkyl_iodide	[I;D1][C;z1;x1:1]	CCCI	Ic1ccccc1	R-I on sp3 carbon
 12	aryl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;a:1]	OB(O)c1ccccc1	CC1(C)OB(OC1(C)C)c1ccccc1	ArB(OH)2
 13	aryl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;a:1]	CC1(C)OB(OC1(C)C)c1ccccc1	OB(O)c1ccccc1	ArB(OR)2, pinacol boronate and its kin
-14	alkyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z1;x1:1]	OB(O)CCCC	OB(O)c1ccccc1	RB(OH)2 on sp3 carbon
+14	alkyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z1;x1,x2,x3:1]	OB(O)CCCC	OB(O)c1ccccc1	RB(OH)2 on sp3 carbon
 15	primary_alcohol	[O;D1;z1;x0:1][C;D2;x1;z1:2]	CCO	CC(C)O,Oc1ccccc1	R-CH2-OH
 16	secondary_alcohol	[O;D1;z1;x0:1][C;D3;x1;z1:2]	CC(C)O	CCO,CC(C)(C)O	R2CH-OH
 17	tertiary_alcohol	[O;D1;z1;x0:1][C;D4;x1;z1:2]	CC(C)(C)O	CC(C)O	R3C-OH
@@ -98,9 +98,9 @@ id	name	smarts	example	decoys	description
 45	alkyl_halide	[Cl,Br,I;D1][C;z1;x1:1]	CCCBr	CCCF	R-X on sp3 carbon, the SN2 electrophile
 46	alkyl_fluoride	[F;D1][C;z1;x1:1]	CCCF	Fc1ccccc1,FC(F)F	R-F on sp3 carbon; not a leaving group, a metabolic-stability flag
 47	alkenyl_fluoride	[F;D1][C;z2;x1:1]=[C:2]	FC=C	Fc1ccccc1,CCCF	vinylic C-F
-48	alkenyl_chloride	[Cl;D1][C;z2;x1:1]=[C:2]	ClC=C	Clc1ccccc1,CCCCl	vinylic C-Cl, the Heck/Negishi electrophile
-49	alkenyl_bromide	[Br;D1][C;z2;x1:1]=[C:2]	BrC=C	Brc1ccccc1,CCCBr	vinylic C-Br
-50	alkenyl_iodide	[I;D1][C;z2;x1:1]=[C:2]	IC=C	Ic1ccccc1,CCCI	vinylic C-I
+48	alkenyl_chloride	[Cl;D1][C;z2;x1,x2:1]=[C:2]	ClC=C	Clc1ccccc1,CCCCl	vinylic C-Cl, the Heck/Negishi electrophile
+49	alkenyl_bromide	[Br;D1][C;z2;x1,x2:1]=[C:2]	BrC=C	Brc1ccccc1,CCCBr	vinylic C-Br
+50	alkenyl_iodide	[I;D1][C;z2;x1,x2:1]=[C:2]	IC=C	Ic1ccccc1,CCCI	vinylic C-I
 51	alkynyl_fluoride	[F;D1][C;z3;x1:1]#[C:2]	FC#CC	FC=C	C(sp)-F; `z3` is genuine sp here
 52	alkynyl_chloride	[Cl;D1][C;z3;x1:1]#[C:2]	ClC#CC	ClC=C	C(sp)-Cl
 53	alkynyl_bromide	[Br;D1][C;z3;x1:1]#[C:2]	BrC#CC	BrC=C	C(sp)-Br
@@ -111,9 +111,9 @@ id	name	smarts	example	decoys	description
 58	alkyl_triflate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C;D4](-[F])(-[F])-[F]	O=S(=O)(OCC)C(F)(F)F	CS(=O)(=O)OCC	ROTf on sp3 carbon, a strong SN2 leaving group
 59	alkyl_mesylate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C;D1]	CS(=O)(=O)OCC	O=S(=O)(OCC)C(F)(F)F	ROMs
 60	alkyl_tosylate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C;a]:1:[C;a;D2]:[C;a;D2]:[C;a](-[C;D1]):[C;a;D2]:[C;a;D2]:1	Cc1ccc(cc1)S(=O)(=O)OCC	CS(=O)(=O)OCC	ROTs
-61	alkyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z1;x1:1]	CC1(C)OB(OC1(C)C)CCCC	OB(O)CCCC	RB(OR')2 on sp3 carbon
-62	alkenyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z2;x1:1]=[C:2]	OB(O)C=C	OB(O)c1ccccc1	vinylboronic acid
-63	alkenyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z2;x1:1]=[C:2]	CC1(C)OB(OC1(C)C)C=C	OB(O)C=C	vinylboronate ester
+61	alkyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z1;x1,x2,x3:1]	CC1(C)OB(OC1(C)C)CCCC	OB(O)CCCC	RB(OR')2 on sp3 carbon
+62	alkenyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z2;x1,x2:1]=[C:2]	OB(O)C=C	OB(O)c1ccccc1	vinylboronic acid
+63	alkenyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z2;x1,x2:1]=[C:2]	CC1(C)OB(OC1(C)C)C=C	OB(O)C=C	vinylboronate ester
 64	alkynyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z3;x1:1]#[C:2]	OB(O)C#CC	OB(O)C=C	alkynylboronic acid
 65	alkynyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z3;x1:1]#[C:2]	CC1(C)OB(OC1(C)C)C#CC	OB(O)C#CC	alkynylboronate ester
 66	aryl_molander_salt	[B;D4;z1;x3;-](-[F])(-[F])(-[F])-;!@[C;a:1]	[K+].[B-](F)(F)(F)c1ccccc1	OB(O)c1ccccc1	ArBF3-, the air-stable trifluoroborate
@@ -163,9 +163,9 @@ id	name	smarts	example	decoys	description
 110	alkyl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;z1:1]	CC[Mg]Br	Br[Mg]c1ccccc1	RMgX on sp3 carbon
 111	aryl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;a:1]	Br[Mg]c1ccccc1	CC[Mg]Br	ArMgX
 112	alkenyl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;z2:1]=[C:2]	Br[Mg]C=C	CC[Mg]Br	vinyl Grignard
-113	alkyl_zinc	[Zn;D2](-[F,Cl,Br,I])-[C;z1:1]	CC[Zn]Br	Br[Zn]c1ccccc1	RZnX, the Negishi nucleophile
-114	aryl_zinc	[Zn;D2](-[F,Cl,Br,I])-[C;a:1]	Br[Zn]c1ccccc1	CC[Zn]Br	ArZnX
-115	alkenyl_zinc	[Zn;D2](-[F,Cl,Br,I])-[C;z2:1]=[C:2]	Br[Zn]C=C	CC[Zn]Br	vinylzinc
+113	alkyl_zinc	[Zn;*]-[C;z1:1]	CC[Zn]Br	Br[Zn]c1ccccc1,N#C[Zn]C#N	RZnX, R2Zn or RZn+, the Negishi nucleophile; `*` takes the zinc at any charge
+114	aryl_zinc	[Zn;*]-[C;a:1]	Br[Zn]c1ccccc1	CC[Zn]Br,N#C[Zn]C#N	ArZnX, Ar2Zn or ArZn+
+115	alkenyl_zinc	[Zn;*]-[C;z2:1]=[C:2]	Br[Zn]C=C	CC[Zn]Br,N#C[Zn]C#N	vinylzinc
 116	boronate_alkyl_chloride	[Cl;D1]-[C;z1;D2;x2:1]-[B:2]	ClCB(O)O	CCCCl	B-CH2-Cl, the one-carbon SN2 electrophile
 117	boronate_alkyl_bromide	[Br;D1]-[C;z1;D2;x2:1]-[B:2]	BrCB(O)O	CCCBr	B-CH2-Br
 118	boronate_alkyl_iodide	[I;D1]-[C;z1;D2;x2:1]-[B:2]	ICB(O)O	CCCI	B-CH2-I
@@ -303,7 +303,7 @@ id	name	smarts	example	decoys	description
 239	beta_lactam	[N;D2,D3;z1;r4:1]-[C;D3;z2;r4:2]=[O;D1;x0:3]	O=C1CC2N1CCS2	O=C1CCCN1,CC(=O)N,C1CNC1	The four-membered lactam.  `D2,D3` because a fused penicillin or cephalosporin nitrogen is D3 and `D2` alone reaches only the monocyclic model compound
 # --- and two spellings that only a charge or a metal distinguishes ------------------------
 240	acyl_azide	[N;D1;z2;-:1]=[N;D2;+:2]=[N;D2;z2:3]-[C;D3;z2:4]=[O;D1;x0:5]	O=C(c1ccccc1)N=[N+]=[N-]	CCN=[N+]=[N-]	R-CO-N3, the Curtius substrate, as distinct from the alkyl azide
-241	metalate_carbanion	[Mg,Zn,Cu,Li;D1;+:1]-[C:2]	CC[Zn+].[Br-]	CC[Mg]Br,CCC,CC[O-].[Na+]	The ionic spelling of an organometallic, which the neutral `alkyl_grignard` and `alkyl_zinc` rows cannot match
+241	metalate_carbanion	[Mg,Zn,Cu,Li;D1;+:1]-[C:2]	CC[Zn+].[Br-]	CC[Mg]Br,CCC,CC[O-].[Na+]	The ionic spelling of an organometallic, which the neutral `alkyl_grignard` row cannot match; the `*_zinc` rows take it too
 # --- the merged leaving-group classes, for a row that couples any sulfonate ---------------
 242	aryl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C]	O=S(=O)(Oc1ccccc1)C(F)(F)F	CS(=O)(=O)Nc1ccccc1,CS(=O)(=O)c1ccccc1,CS(=O)(=O)OCC	ArOSO2R for any R -- triflate, mesylate, tosylate, besylate.  The three named rows answer "which pseudohalide"; this one answers "does this couple", which is the question a coupling row asks
 243	alkyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C]	CS(=O)(=O)OCC	CS(=O)(=O)NCC,CS(=O)(=O)CC,CS(=O)(=O)Oc1ccccc1	ROSO2R' on sp3 carbon, any R'.  The SN2 leaving group as one class
@@ -319,3 +319,17 @@ id	name	smarts	example	decoys	description
 251	hindered_aryloxyl	[O;D1;h0;z1:1]-[C;a:2](:[C;a:3]-[C;D4;z1:4]):[C;a:5]-[C;D4;z1:6] |^1:0|	[O]c1c(C(C)(C)C)cc(C(C)(C)C)cc1C(C)(C)C |^1:0|	[O]c1ccccc1 |^1:0|,Oc1c(C(C)(C)C)cc(C)cc1C(C)(C)C	Ar-O• with a quaternary carbon at BOTH ortho positions, which is what makes it isolable; the unhindered phenoxyl radical is a decoy
 252	hydrazyl	[N;D2;h0;z1:1](-[C;a:2])-[N;D3;z1:3](-[C;a:4])-[C;a:5] |^1:0|	[N](N(c1ccccc1)c1ccccc1)c1c([N+](=O)[O-])cc([N+](=O)[O-])cc1[N+](=O)[O-] |^1:0|	c1ccccc1N(c1ccccc1)Nc1ccccc1,C[N]N(C)C |^1:1|	Ar2N-N•-Ar, the DPPH class: three aryl rings to delocalise over, and the trialkyl hydrazyl with none of them is a decoy
 253	triarylmethyl_radical	[C;D3;h0;z1:1](-[C;a:2])(-[C;a:3])-[C;a:4] |^1:0|	[C](c1ccccc1)(c1ccccc1)c1ccccc1 |^1:0|	C(c1ccccc1)(c1ccccc1)c1ccccc1,[C+](c1ccccc1)(c1ccccc1)c1ccccc1,C[C](C)c1ccccc1 |^1:1|	Ar3C•, Gomberg's radical and the trityl spin labels.  `_radical` is in the name because `protective.tsv`'s trityl rows are this skeleton without one
+# --- the cross-coupling partners the classes above leave out ----------------------------------
+254	methanol	[O;D1;z1;x0:1]-[C;D1:2]	CO	CCO,C[O-].[Na+],COC	CH3-OH, which `primary_alcohol` (`D2`) leaves out
+255	alkenyl_halide	[Cl,Br,I;D1]-[C;z2;x1,x2:1]=[C:2]	BrC=C	Brc1ccccc1,CCCBr,FC=C	vinylic C-X, the three `alkenyl_*` halides as one class; F excluded as in `aryl_halide`
+256	alkenyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z2;x1,x2:1]=[C:2])-[C]	O=S(=O)(OC1=CCCCC1)C(F)(F)F	O=S(=O)(Oc1ccccc1)C(F)(F)F,CS(=O)(=O)OCC,CS(=O)(=O)C=C	enol triflate, nonaflate or tosylate, the vinylic pseudohalide
+257	tetramethylstannane	[Sn;D4](-[C;D1])(-[C;D1])(-[C;D1])-[C;D1:1]	C[Sn](C)(C)C	C[Sn](C)(C)c1ccccc1,CCCC[Sn](CCCC)(CCCC)C	Me4Sn, the Stille methylating agent; `alkyl_stannane` excludes the methyls of a Me3Sn dummy
+258	diboron_ester	[B;D3:1](-[O;D2:2])(-[O;D2:3])-[B;D3](-[O;D2])-[O;D2]	CC1(C)OB(B2OC(C)(C)C(C)(C)O2)OC1(C)C	CC1(C)OB(c2ccccc2)OC1(C)C,OB(O)B(O)O	B2pin2 and its kin, the Miyaura boron source; one boron and its two oxygens are kept
+259	acyclic_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-;!@[O;D2;x0]	CC(=O)OC	O=C1CCCO1,CC(=O)O,CC(=O)N	`ester` outside a ring, so hydrolysis leaves one product; a lactone opens to a hydroxy acid instead
+260	alkyl_boroxine	[B;D3;z1;x2;r6](-[O;D2;r6]-[B;r6])(-[O;D2;r6]-[B;r6])-;!@[C;z1:1]	CB1OB(C)OB(C)O1	CC1(C)OB(C)OC1(C)C,OB(O)C	(RBO)3, trimethylboroxine the common one: a methyl donor for the Suzuki
+# --- the N-H nucleophiles the amide rows leave out, and the activated ester -------------------
+261	nh_carbamate	[N;D1,D2;z1;x0:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2:4]	CC(C)(C)OC(=O)NC	CC(C)(C)OC(=O)N(C)C,CNC(=O)NC,CC(=O)NC	a carbamate N-H, BocNH2 and the oxazolidinone included; `carbamate` does not bound the N
+262	nh_urea_any	[N;D1,D2;z1;x0:1]-[C;D3;z2;x3:2](=[O;D1:3])-[N;z1:4]	O=C1NCCN1C	CN(C)C(=O)N(C)C,CNC(=O)OC,CC(=O)NC	a urea N-H, ring or chain; `nh_urea` is the acyclic both-NH subset
+263	nh_sulfonamide	[N;D1,D2;z1;x1:1]-[S;D4:2](=[O:3])=[O:4]	CNS(=O)(=O)c1ccccc1	CN(C)S(=O)(=O)c1ccccc1,CS(=O)(=O)O	a sulfonamide N-H; `sulfonamide` matches the tertiary one too
+264	activated_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x1]-[N]	CC(=O)ON1C(=O)CCC1=O	CC(=O)OC,CC(=O)O	an N-O ester -- NHS, HOBt, HOAt, oxime -- the acylating agent `ester` (`x0` oxygen) leaves out
+265	ring_enamine_nh2	[N;D1;z1;x0:1]-[C;z2;x1;r5,r6:2]=[C;z2:3]	NC1=CN(C)C(=O)C=C1	NC=CC,NC1=NCCC1,Nc1ccccc1	an NH2 on a ring C=C that `primary_aniline` (`[C;a]`) does not see: aminopyridone, 3-aminocoumarin

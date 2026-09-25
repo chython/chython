@@ -19,6 +19,7 @@
 from collections import Counter
 from pytest import raises
 
+from .._enumerate import _deprotect_toward
 from ...core import ReactionContainer, read_smiles as smiles
 
 
@@ -258,12 +259,40 @@ def test_a_partial_deprotection_is_explained():
     assert labels and all(label.startswith('deprotect:') for label in labels)
 
 
+def test_partial_deprotection_strips_only_the_subsets_that_fit_the_product():
+    # one Boc among twelve acetates: 2^13 site subsets, and one of them has the recorded formula
+    protected = smiles('CC(C)(C)OC(=O)NC' + 'C(OC(C)=O)' * 12 + 'C')
+    product = smiles('NC' + 'C(OC(C)=O)' * 12 + 'C')
+    assert [o.names for o in _deprotect_toward(protected, [product])][1:] == [('amine_boc',)]
+    rxn = ReactionContainer([protected], [product])
+    assert rxn.reconstruct_mapping() == ('deprotect:amine_boc',)
+
+
 def test_deprotect_then_react_composes():
     # the amine arrives Boc-protected; strip it, then amidate.  Neither rung alone explains this.
     rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CC(C)(C)OC(=O)NCC')],
                             [smiles('CC(=O)NCC')])
     labels = rxn.reconstruct_mapping()
     assert labels and all(label.startswith('deprotect+react:') for label in labels)
+
+
+def test_a_reactor_outcome_is_compared_in_its_canonical_form():
+    # the patch leaves the benzotriazole NH where the input had it; the recorded side is canonical
+    rxn = ReactionContainer([smiles('Clc1ccc2[nH]nnc2c1'), smiles('OB(O)c1ccccc1')],
+                            [smiles('c1ccc(-c2ccc3[nH]nnc3c2)cc1')])
+    assert rxn.reconstruct_mapping() == ('react:suzuki',)
+
+
+def test_an_unmasked_azole_nitrogen_is_settled_before_comparison():
+    # `deprotect()` leaves the revealed pyrrole-type N at H_UNKNOWN; `kekule()` is what closes it
+    rxn = ReactionContainer([smiles('CC(C)(C)OC(=O)n1ccc2ccccc21')], [smiles('c1ccc2[nH]ccc2c1')])
+    assert rxn.reconstruct_mapping() == ('deprotect:amine_boc',)
+
+
+def test_a_stripped_azole_is_settled_before_the_corpus_fires():
+    rxn = ReactionContainer([smiles('CC(C)(C)OC(=O)n1ccc2cc(Br)ccc21'), smiles('OB(O)c1ccccc1')],
+                            [smiles('c1ccc(-c2ccc3[nH]ccc3c2)cc1')])
+    assert rxn.reconstruct_mapping() == ('deprotect+react:suzuki',)
 
 
 def test_a_direct_reaction_outranks_the_composed_rung():

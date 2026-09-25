@@ -33,7 +33,8 @@ from collections.abc import Callable, Container, Iterator, Mapping, Sequence
 from itertools import combinations
 from typing import NamedTuple
 
-from ._enumerate import _fitting, _outcomes, deprotect, EnumeratedReaction, functional_groups
+from ._enumerate import (_deprotect_toward, _fitting, _outcomes, deprotect, EnumeratedReaction,
+                         functional_groups)
 from ._numbering import fast_mapping
 from ._tables import reaction_rules
 from ..core import (INFO, LOST, LogRecord, MoleculeContainer, REFUSED, ReactionContainer, STEREO_ABS,
@@ -179,13 +180,45 @@ def _purification(recorded, inputs, options, memo) -> Iterator[_Explanation]:
                            lambda target, o=options: _number_product(target, inputs, o.loose))
 
 
-def _translate(reaction, sources: Sequence[MoleculeContainer]) -> list[MoleculeContainer]:
+def _heavy(molecule: MoleculeContainer) -> dict[int, int]:
+    """Element counts without hydrogen: what canonicalization cannot change."""
+    return {element: n for element, n in molecule.element_counts.items() if element != 1}
+
+
+def _settle(products: Sequence[MoleculeContainer], targets: list[dict[int, int]]
+            ) -> list[MoleculeContainer]:
+    """`products`, each one with a component the heavy-atom formula of a `targets` entry canonicalized.
+
+    The recorded side is canonicalized; a reactor or a strip returns its patch raw -- mobile hydrogens
+    where the patch left them, an unmasked azole nitrogen at `H_UNKNOWN`.  So the comparison is
+    canonical against canonical.  The formula screen is there because `canonicalize()` is the cost: an
+    outcome that cannot be a recorded component is never compared, so it is never settled either.
+    Copies; an outcome is read by both walks.
+    """
+    out = []
+    for product in products:
+        if any(_heavy(part) in targets for part in product.split()):
+            product = product.copy()
+            product.canonicalize()
+        out.append(product)
+    return out
+
+
+def _settled(recorded: MoleculeContainer, found: Iterator) -> list:
+    """`(source, outcome, settled products)` for every `(source, outcome)` a rung enumerated."""
+    targets = [_heavy(part) for part in recorded.split()]
+    return [(source, outcome, _settle(outcome.reaction.products, targets)) for source, outcome in found]
+
+
+def _translate(reaction, sources: Sequence[MoleculeContainer],
+               products: Sequence[MoleculeContainer] | None = None) -> list[MoleculeContainer]:
     """The reaction's products carrying `sources`' map numbers in place of the reactor's own.
 
     The two schemes compose through ATOM numbers: a reactor reactant is a copy of its source at the
     same atom numbers, so reactant map -> atom number -> source map.  `sources` is positional, which
     `_run` guarantees -- an outcome names the inputs its match touched, in input order.  An atom the
-    reactor left at 0, and one no source claims, stays 0.
+    reactor left at 0, and one no source claims, stays 0.  `products` replaces the reaction's own, for a
+    settled copy still wearing the reactor's numbers.
     """
     table = {}
     for reactant, source in zip(reaction.reactants, sources):
@@ -194,7 +227,7 @@ def _translate(reaction, sources: Sequence[MoleculeContainer]) -> list[MoleculeC
             if number:
                 table[number] = source.map_number_of(n)
     out = []
-    for product in reaction.products:
+    for product in (reaction.products if products is None else products):
         product = product.copy()
         writes = [(n, table.get(product.map_number_of(n), 0)) for n in product.atom_numbers]
         with product.edit():
@@ -206,10 +239,11 @@ def _translate(reaction, sources: Sequence[MoleculeContainer]) -> list[MoleculeC
 
 def _react(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """A corpus row, applied to the inputs as they arrived.  The strongest evidence there is."""
-    for pool, outcome in _once(memo, 'react', lambda: list(_applications(recorded, inputs))):
-        if not _reproduces(recorded, outcome.reaction.products, options.loose):
+    for pool, outcome, products in _once(memo, 'react',
+                                         lambda: _settled(recorded, _applications(recorded, inputs))):
+        if not _reproduces(recorded, products, options.loose):
             continue
-        sources = [*_translate(outcome.reaction, pool), *inputs]
+        sources = [*_translate(outcome.reaction, pool, products), *inputs]
         yield _Explanation('react:%s' % outcome.name,
                            lambda target, s=sources, o=options: _number_product(target, s, o.loose),
                            outcome.rule_id)
@@ -219,14 +253,16 @@ def _deprotect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """An input, unmasked.  The recorded product IS the recorded input minus a protecting group.
 
     `partial=True` because incomplete cleavage is ordinary and `R-N(Boc)2 -> R-NHBoc` is a record this
-    rung must read.  Largest-first, which is the order the explanations come out in.
+    rung must read.  Largest-first, which is the order the explanations come out in.  Only the subsets
+    that can give a recorded component are stripped: `_deprotect_toward`.
     """
-    for molecule, outcome in _once(memo, 'deprotect',
-                                   lambda: [(m, o) for m in inputs
-                                            for o in deprotect(m, partial=True)]):
-        if not _reproduces(recorded, outcome.reaction.products, options.loose):
+    parts = list(recorded.split())
+    for molecule, outcome, products in _once(memo, 'deprotect',
+                                             lambda: _settled(recorded, ((m, o) for m in inputs
+                                                                         for o in _deprotect_toward(m, parts)))):
+        if not _reproduces(recorded, products, options.loose):
             continue
-        sources = [*_translate(outcome.reaction, [molecule]), *inputs]
+        sources = [*_translate(outcome.reaction, [molecule], products), *inputs]
         yield _Explanation('deprotect:%s' % '+'.join(outcome.names),
                            lambda target, s=sources, o=options: _number_product(target, s, o.loose),
                            '+'.join(outcome.rule_ids))
@@ -237,7 +273,9 @@ def _strip(inputs) -> tuple[list[MoleculeContainer], set[int]]:
 
     ONE all-stripped pass and not every raw/stripped combination, which would be exponential in the
     number of protected inputs: a deliberate lower bound on what composition buys.  A stripped form
-    keeps the stable ids it came in with, so numbering survives the composition unaided.
+    keeps the stable ids it came in with, so numbering survives the composition unaided.  A stripped
+    form is canonicalized, as the inputs were: the corpus is written against that form, and a strip
+    leaves an unmasked azole nitrogen at `H_UNKNOWN`.
     """
     pool = []
     stripped = set()
@@ -247,6 +285,7 @@ def _strip(inputs) -> tuple[list[MoleculeContainer], set[int]]:
             pool.append(molecule)
         else:
             for product in _translate(outcome.reaction, [molecule]):
+                product.canonicalize()
                 stripped.add(len(pool))
                 pool.append(product)
     return pool, stripped
@@ -261,11 +300,12 @@ def _deprotect_then_react(recorded, inputs, options, memo) -> Iterator[_Explanat
     pool, stripped = _once(memo, 'strip', lambda: _strip(inputs))
     if not stripped:
         return
-    for subset, outcome in _once(memo, 'deprotect+react',
-                                 lambda: list(_applications(recorded, pool, required=stripped))):
-        if not _reproduces(recorded, outcome.reaction.products, options.loose):
+    for subset, outcome, products in _once(memo, 'deprotect+react',
+                                           lambda: _settled(recorded,
+                                                            _applications(recorded, pool, required=stripped))):
+        if not _reproduces(recorded, products, options.loose):
             continue
-        sources = [*_translate(outcome.reaction, subset), *pool, *inputs]
+        sources = [*_translate(outcome.reaction, subset, products), *pool, *inputs]
         yield _Explanation('deprotect+react:%s' % outcome.name,
                            lambda target, s=sources, o=options: _number_product(target, s, o.loose),
                            outcome.rule_id)
@@ -275,9 +315,11 @@ def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """The recorded product is a recorded input, masked.
 
     THE WEAKEST RUNG AND SO THE LAST: an amide, an ester and a carbamate are all protecting groups as
-    well as products, so offered first this reads every acylation as a protection.
+    well as products, so offered first this reads every acylation as a protection.  Only the subsets
+    that can give an input component are stripped.
     """
-    for outcome in _once(memo, 'protect', lambda: list(deprotect(recorded, partial=True))):
+    parts = [part for molecule in inputs for part in molecule.split()]
+    for outcome in _once(memo, 'protect', lambda: list(_deprotect_toward(recorded, parts))):
         pairs = _pair_with_inputs(outcome.reaction.products, inputs, options.loose)
         if not pairs:
             continue
