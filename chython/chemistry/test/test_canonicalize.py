@@ -228,6 +228,21 @@ def test_the_pipeline_is_a_fixed_point_and_not_merely_ordered():
             assert m.canonical_bytes == first, f'{label}: {string} is not a fixed point'
 
 
+def test_a_placement_that_makes_a_zwitterion_is_neutralized():
+    """Step 8 can hand step 5 a charged site: it moves an N-oxide's charge onto the azole NH.
+
+    Imidazo[4,5-b]pyridine 4-oxide and its N-hydroxy tautomer are one compound, and each drawing is a
+    fixed point -- the zwitterion step 8 leaves behind is not.
+    """
+    for oxide, hydroxy in (('c1ccc2[nH]cnc2[n+]1[O-]', 'c1ccc2ncnc2n1O'),
+                           ('c1[n+]([O-])c2[nH]cnc2c([N+](=O)[O-])c1', 'c1n(O)c2ncnc2c([N+](=O)[O-])c1')):
+        a, b = smiles(oxide), smiles(hydroxy)
+        a.canonicalize()
+        b.canonicalize()
+        assert a == b, f'{oxide} and {hydroxy} keep two keys: {a} vs {b}'
+        assert a.canonicalize() is False, f'{oxide} still moved on a second pass'
+
+
 def test_the_extra_round_costs_no_duplicate_repair_record():
     """A repair is reported once however many rounds saw the molecule.
 

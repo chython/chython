@@ -241,7 +241,7 @@ def _react(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """A corpus row, applied to the inputs as they arrived.  The strongest evidence there is."""
     for pool, outcome, products in _once(memo, 'react',
                                          lambda: _settled(recorded, _applications(recorded, inputs))):
-        if not _reproduces(recorded, products, options.loose):
+        if not _reproduces(recorded, products, pool, options.loose):
             continue
         sources = [*_translate(outcome.reaction, pool, products), *inputs]
         yield _Explanation('react:%s' % outcome.name,
@@ -260,7 +260,7 @@ def _deprotect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     for molecule, outcome, products in _once(memo, 'deprotect',
                                              lambda: _settled(recorded, ((m, o) for m in inputs
                                                                          for o in _deprotect_toward(m, parts)))):
-        if not _reproduces(recorded, products, options.loose):
+        if not _reproduces(recorded, products, [molecule], options.loose):
             continue
         sources = [*_translate(outcome.reaction, [molecule], products), *inputs]
         yield _Explanation('deprotect:%s' % '+'.join(outcome.names),
@@ -303,7 +303,7 @@ def _deprotect_then_react(recorded, inputs, options, memo) -> Iterator[_Explanat
     for subset, outcome, products in _once(memo, 'deprotect+react',
                                            lambda: _settled(recorded,
                                                             _applications(recorded, pool, required=stripped))):
-        if not _reproduces(recorded, products, options.loose):
+        if not _reproduces(recorded, products, subset, options.loose):
             continue
         sources = [*_translate(outcome.reaction, subset, products), *pool, *inputs]
         yield _Explanation('deprotect+react:%s' % outcome.name,
@@ -316,12 +316,18 @@ def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
 
     THE WEAKEST RUNG AND SO THE LAST: an amide, an ester and a carbamate are all protecting groups as
     well as products, so offered first this reads every acylation as a protection.  Only the subsets
-    that can give an input component are stripped.
+    that can give an input component are stripped, and the strip is settled against the inputs as the
+    other rungs' outcomes are against the record: it leaves an unmasked azole nitrogen at `H_UNKNOWN`.
     """
     parts = [part for molecule in inputs for part in molecule.split()]
-    for outcome in _once(memo, 'protect', lambda: list(_deprotect_toward(recorded, parts))):
-        pairs = _pair_with_inputs(outcome.reaction.products, inputs, options.loose)
-        if not pairs:
+    targets = [_heavy(part) for part in parts]
+    passengers = set(recorded.split())
+    for outcome, stripped in _once(memo, 'protect',
+                                   lambda: [(outcome, _settle(outcome.reaction.products, targets))
+                                            for outcome in _deprotect_toward(recorded, parts)]):
+        pairs = _pair_with_inputs(stripped, inputs, options.loose)
+        if all(part in passengers for part, _ in pairs):
+            # a recorded component the strip left untouched pairs by being an input, not by the strip
             continue
         yield _Explanation('protect:%s' % '+'.join(outcome.names),
                            lambda target, p=pairs, o=options: _number_from_pairs(target, p, o.loose),
@@ -920,20 +926,27 @@ def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContaine
 
 
 def _reproduces(recorded: MoleculeContainer, products: Sequence[MoleculeContainer],
-                loose: bool) -> bool:
-    """True when a connected component of `recorded` is a component of one of `products`.
+                consumed: Sequence[MoleculeContainer], loose: bool) -> bool:
+    """True when a connected component of `recorded` is a component the row built into `products`.
 
     Per component, because a template answers the reaction centre while the record carries the salt too;
     and by container equality, never by SMILES -- `__eq__` is the canonical form.  The loose pass asks
     `_same` instead, which costs the set: components per record are two or three, so the pairwise scan
     is the same work.
+
+    A PASSENGER IS NOT EVIDENCE.  A product component equal to a component of the `consumed` molecules
+    is one the reactor carried through untouched -- the `[K+]` of `tBuO-.K+` -- and matching it would
+    let any row that fires on the salt claim a carboxylate potassium record whose organic ion it never
+    built.
     """
     parts = list(recorded.split())
+    passengers = {part for molecule in consumed for part in molecule.split()}
+    built = [candidate for product in products for candidate in product.split()
+             if candidate not in passengers]
     if not loose:
         want = set(parts)
-        return any(part in want for product in products for part in product.split())
-    return any(_same(candidate, part, True)
-               for product in products for candidate in product.split() for part in parts)
+        return any(candidate in want for candidate in built)
+    return any(_same(candidate, part, True) for candidate in built for part in parts)
 
 
 # --- housekeeping ---------------------------------------------------------------------------------

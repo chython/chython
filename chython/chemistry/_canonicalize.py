@@ -149,8 +149,11 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     #
     #    `kekule()` leads, and not for the reason step 1 does: the `tautomer` rows are written against
     #    definite bond orders, so on the aromatic form step 7 left behind they match nothing at all and
-    #    re-running step 3 would be a guaranteed no-op.  Step 5 is re-entered only behind a repair,
-    #    which is the only thing that can hand it a charged site it has not already seen.  Step 6 rides
+    #    re-running step 3 would be a guaranteed no-op.  Step 5 is re-entered every round: a repair and
+    #    the placement both hand it charged sites it has not seen -- the placement moves an N-oxide's
+    #    charge onto an azole NH, `c1ccc2[nH]cnc2[n+]1[O-]` to `c1ccc2nc[nH+]c2n1[O-]`, a zwitterion
+    #    step 5 pairs off -- and what it pairs off can unblock the placement again.  It cannot cycle:
+    #    step 5 only ever reduces the number of charged atoms and step 8 never adds one.  Step 6 rides
     #    with the aromatisation and not with the repair: the kekulisation above is free to come back with
     #    a different Kekule form than the one it was handed, which is the form step 7 would then read.
     #    Step 2 is not re-entered: the parities it can justify are a property of the constitution, which
@@ -162,7 +165,7 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
         changed = standardize(molecule, fix_tautomers=fix_tautomers)
         if changed:
             implicify_hydrogens(molecule)
-            neutralize(molecule)
+        changed |= neutralize(molecule)
         standardize_kekule(molecule)
         molecule.thiele()               # unconditional: step 6's form is what a caller compares, and
         if not changed:                 # the kekulisation above has to be undone either way

@@ -354,20 +354,19 @@ def reaction_reset_mapping(rxn) -> bool:
 def _side_states(molecules):
     """`({map number: state}, {colliding map numbers})` for one side.
 
-    A state is `(element, charge, radical, implicit h, {neighbour map number: order}, unmapped bonds)` --
-    everything a CGR's dynamic atom and dynamic bond carried between them, which is what the reaction
-    centre is defined against.  A bond to an unmapped atom enters as a sorted `(element, order)` pair:
-    its partner has no identity across the arrow, but its presence does.  `[CH2:1]O >> [CH2:1]Cl` keeps
-    atom 1's mapped state and changes its unmapped pair from `(8, 1)` to `(17, 1)`.
+    A state is `(element, charge, radical, implicit h, {neighbour map number: order}, unmapped branches)`
+    -- everything a CGR's dynamic atom and dynamic bond carried between them, which is what the reaction
+    centre is defined against.  An unmapped neighbour has no identity across the arrow, so it enters as a
+    description: the canonical SMILES of the unmapped region it belongs to, rooted at the mapped atom by
+    its map number.  `[C:1](=[O:2])OC >> [C:1](=[O:2])O` changes atom 1's branch from `[C:1]OC` to
+    `[C:1]O`; an unmapped `OH` drawn on both sides is the same branch twice and changes nothing.
     """
     states = {}
     collisions = set()
     for molecule in molecules:
         local = {}
-        elements = {}
         for atom in molecule.atoms():
             # `mn`/`mm` are MAP numbers here; `n`/`m` are atom numbers, and this function holds both.
-            elements[atom.n] = atom.element
             mn = atom.map_number
             if not mn:
                 continue
@@ -377,16 +376,30 @@ def _side_states(molecules):
             states[mn] = (atom.element, atom.charge, atom.is_radical, atom.implicit_h, {}, [])
         for bond in molecule.bonds():
             mn, mm = local.get(bond.n), local.get(bond.m)
-            if mn is None and mm is None:
-                continue
-            if mm is None:
-                states[mn][5].append((elements[bond.m], int(bond.order)))
-            elif mn is None:
-                states[mm][5].append((elements[bond.n], int(bond.order)))
-            else:
+            if mn is not None and mm is not None:
                 states[mn][4][mm] = bond.order
                 states[mm][4][mn] = bond.order
+        for n, mn in local.items():
+            states[mn][5].extend(_unmapped_branches(molecule, n, local))
     return {mn: (*state[:5], tuple(sorted(state[5]))) for mn, state in states.items()}, collisions
+
+
+def _unmapped_branches(molecule, n, mapped):
+    """The canonical SMILES of each unmapped region bonded to atom `n`, with `n` itself as the root."""
+    seen = set()
+    for start in molecule.neighbors_of(n):
+        if start in mapped or start in seen:
+            continue
+        region = {start}
+        stack = [start]
+        while stack:
+            for m in molecule.neighbors_of(stack.pop()):
+                if m not in mapped and m not in region:
+                    region.add(m)
+                    stack.append(m)
+        seen |= region
+        region.add(n)
+        yield format(molecule.substructure(region), 'm')
 
 
 def reaction_center(rxn) -> set[int]:
@@ -394,7 +407,7 @@ def reaction_center(rxn) -> set[int]:
 
     An atom is in the centre when it appears on BOTH sides and something about it differs: its element,
     charge, radical state, implicit hydrogen count, the map numbers and orders of its bonds, or the
-    elements and orders of its bonds to unmapped atoms.  It is computed without building a CGR: there is
+    unmapped branches bonded to it (`_side_states`).  It is computed without building a CGR: there is
     no CGR container on this release, and the question does not need one.
 
     AN ATOM PRESENT ON ONLY ONE SIDE IS NOT IN THE CENTRE, and that is a decision.  Calling it dynamic

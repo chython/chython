@@ -228,7 +228,10 @@ about the relation between the sides:
     mapped.reset_mapping()
 
 ``remove_reagents(mapping=True)`` is the default and reads the reaction centre off the mapping: a
-molecule none of whose atoms change is not part of the transformation.  It raises ``ValueError`` on a
+molecule none of whose atoms change is not part of the transformation.  An unmapped neighbour counts as
+the whole unmapped branch it belongs to, so ``[C:1](=[O:2])OC>>[C:1](=[O:2])O`` puts atom 1 in the
+centre although neither oxygen is numbered -- the shape ``reconstruct_mapping()`` writes for an ester
+hydrolysis, whose leaving alkoxy and incoming hydroxy it cannot follow.  It raises ``ValueError`` on a
 record with no mapping to read, naming ``mapping=False`` -- the rule-based door, which moves a molecule
 appearing on **both** sides, plus anything in ``common``.  ``common`` is a list you pass rather than a
 built-in table of solvents, because a solvent table is chemistry knowledge and does not belong in the

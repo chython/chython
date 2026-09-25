@@ -52,7 +52,7 @@ EMPTY -- `_mirror` copies what a molecule wrote, and these two molecule methods 
 from pytest import raises
 
 from chython.core import LOST, Log, read_reaction_smiles, read_smiles
-from chython.core._reaction_passes import reaction_number_new_hydrogens
+from chython.core._reaction_passes import reaction_center, reaction_number_new_hydrogens
 
 
 def _add_explicit_h(molecule, heavy):
@@ -255,6 +255,25 @@ def test_a_bond_swapped_between_unmapped_atoms_is_a_reaction_centre():
     assert r.remove_reagents(keep_reagents=True) is True
     assert [m.smiles for m in r.reactants] == ['C(C)O']
     assert sorted(m.smiles for m in r.agents) == ['C(C)N(CC)CC', 'O=S(Cl)Cl']
+
+
+def test_an_unmapped_neighbour_of_the_same_element_swapped_is_a_reaction_centre():
+    # ester hydrolysis: the alkoxy O leaves unmapped and the acid's OH arrives unmapped
+    r = read_reaction_smiles('O.[Li+].[OH-].[c:3]1([cH:8][cH:7][cH:6][cH:5][cH:4]1)[C:1](OC)=[O:2]>>'
+                             '[c:3]1([cH:4][cH:5][cH:6][cH:7][cH:8]1)[C:1](=[O:2])O')
+    assert reaction_center(r) == {1}
+    assert r.remove_reagents(keep_reagents=True) is True
+    assert len(r.reactants) == 1 and len(r.agents) == 3
+
+
+def test_an_unmapped_branch_differing_past_its_first_atom_is_a_reaction_centre():
+    r = read_reaction_smiles('C[C:1](=[O:2])OC.CCO>>C[C:1](=[O:2])OCC')
+    assert reaction_center(r) == {1}
+
+
+def test_the_same_unmapped_branch_on_both_sides_is_not_a_reaction_centre():
+    r = read_reaction_smiles('[CH3:1][CH2:2]OC.[Na+].[Cl-]>>[CH3:1][CH2:2]OC')
+    assert reaction_center(r) == set()
 
 
 def test_the_rule_based_door_moves_a_molecule_that_appears_on_both_sides():

@@ -828,3 +828,38 @@ def test_an_absolute_source_drops_a_collection():
     assert rxn.reactants[0].stereo_groups() == {}
     line = next(r for r in rxn.log if r.rule == 'heal:group')
     assert 'dropped' in line.message
+
+
+def test_an_ester_hydrolysis_mapping_has_a_reaction_centre():
+    # Both oxygens the row swaps are unmapped -- the alkoxy leaves, the OH arrives from an agent -- so the
+    # centre is the acyl carbon's unmapped branch changing, and the reagents separate on it.
+    rxn = ReactionContainer([smiles(x) for x in ('COC(=O)c1ccccc1', '[Li+]', '[OH-]', 'O')],
+                            [smiles('OC(=O)c1ccccc1')])
+    assert rxn.reconstruct_mapping(stereo='loose', heal_stereo='product') == ('react:ester_hydrolysis',)
+    assert rxn.remove_reagents(keep_reagents=True) is True
+    assert [m.smiles for m in rxn.reactants] == [smiles('COC(=O)c1ccccc1').smiles]
+    assert sorted(m.smiles for m in rxn.agents) == sorted(smiles(x).smiles for x in ('[Li+]', '[OH-]', 'O'))
+
+
+def test_a_counterion_carried_through_a_row_is_not_an_explanation():
+    # Each row fires on a salt input and carries its metal through untouched; the recorded organic ion is
+    # never built, so the metal matching itself explains nothing.
+    for inputs, product in ((('COC(=O)c1ccc(F)cc1[N+](=O)[O-]', 'CC(C)(C)[O-].[K+]', 'O'),       # SNAr
+                             '[O-]C(=O)c1ccc(F)cc1[N+](=O)[O-].[K+]'),
+                            (('CCNCC', 'CCOS(=O)(=O)c1ccc(C)cc1.[K+].[Cl-]'),                  # nitration
+                             'OS(=O)(=O)c1ccc(C)cc1.[K+]'),
+                            (('CC(C)(C)OC(=O)CCC(=O)O', '[Ag+].[O-][N+](=O)[O-]', '[Na+].[OH-]'),  # protect
+                             'CC(C)(C)OC(=O)CCC(=O)[O-].[Ag+]')):
+        rxn = ReactionContainer([smiles(x) for x in inputs], [smiles(product)])
+        assert rxn.reconstruct_mapping() == (), product
+
+
+def test_a_protected_azole_pairs_with_its_input_tautomer():
+    # The strip leaves the unmasked pyrazole nitrogen where the patch put it; settled, it is the input.
+    for inputs, product, label in ((('Cc1cc[nH]n1', 'C1CCOC=C1', 'Cc1ccc(cc1)S(=O)(=O)O'),
+                                    'Cc1ccn(n1)C1CCCCO1', 'protect:amine_thp'),
+                                   (('Cc1cc[nH]n1', 'ClCOCC[Si](C)(C)C', '[Na+].[H-]'),
+                                    'Cc1ccn(COCC[Si](C)(C)C)n1', 'protect:amine_sem')):
+        rxn = ReactionContainer([smiles(x) for x in inputs], [smiles(product)])
+        assert rxn.reconstruct_mapping() == (label,)
+        assert rxn.remove_reagents(keep_reagents=True) is True
