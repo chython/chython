@@ -1065,8 +1065,8 @@ How a Corpus Row Composes
 table, ``reactions.tsv``, and one id space.  It is keyed by the name ``reaction=`` selects on, and each
 value is that name's whole **family** of rows: ``amidation`` holds one per acyl source and N-H partner.
 A row does not carry a SMIRKS string of its own: it names **slots** by the functional-group name they
-take, out of ``functional.tsv``, and its ``product`` column patches the atoms those groups number.  The template is composed from the two lazily, and cached for the
-table as a whole.
+take, out of ``functional.tsv``, and its ``product`` column patches the atoms those groups number.  The
+template is composed from the two lazily, and cached for the table as a whole.
 
 A group leaves its **leaving group unnumbered**, so the atoms it numbers are the ones it means to keep --
 and keeping them is the product side's job, deletion being by absence.  Adding an atom to a group
@@ -1314,8 +1314,9 @@ An unknown name raises ``ValueError`` listing every name ``protective.tsv`` has.
 
 An ester reports its alcohol half as a ``carboxyl_*`` group -- ``CC(=O)OC(C)(C)C`` is ``carboxyl_tbu``,
 revealing acetic acid -- and the ether of the same group stays ``hydroxyl_*``.  Where the acyl half is
-itself a protecting group the larger row claims the ester, a tie falling to file order: tert-butyl
-benzoate is ``hydroxyl_benzoate``, benzyl benzoate is ``carboxyl_benzyl``.
+itself a protecting group the alkyl half still claims the ester, which reads as a protected acid:
+tert-butyl benzoate is ``carboxyl_tbu``, methyl pivalate ``hydroxyl_methyl``, benzyl acetate
+``carboxyl_benzyl``.
 
 **The enumeration unit is the site, not the rule**, because chemistry is not deterministic: a reagent
 that *can* cleave every Boc does not thereby cleave every Boc, and controlled mono-cleavage of a
