@@ -48,6 +48,43 @@ _RULE_ROUNDS = 'canonicalize:rounds'
 _ROUNDS_MAX = 5
 
 
+def _pin_lactim(molecule: MoleculeContainer) -> bool:
+    """Kekulise `molecule` with the C=N of one aromatic lactim pinned, when that lets a row repair it.
+
+    A site is `[O,S;D1]-c:n` with a bare two-connected ring nitrogen.  Sites are tried in `atoms_order`,
+    which the placement stage has already made spelling-independent, and a site is taken only when a
+    trial `standardize()` on the pinned form turns its C-OH into C=O -- the rows stay the only authority
+    on which lactims are lactams.  Returns True with the molecule kekulised and the repair still to run.
+    """
+    ranks = molecule.atoms_order
+    sites = []
+    for o in molecule.atom_numbers:
+        if molecule.element_of(o) not in (8, 16) or molecule.charge_of(o) or molecule.implicit_h_of(o) != 1:
+            continue
+        neighbors = tuple(molecule.neighbors_of(o))
+        if len(neighbors) != 1 or molecule.order_of(o, neighbors[0]) != 1:
+            continue
+        c = neighbors[0]
+        for n in molecule.neighbors_of(c):
+            if (molecule.element_of(n) == 7 and molecule.order_of(c, n) == 4 and not molecule.charge_of(n)
+                    and not molecule.implicit_h_of(n) and len(tuple(molecule.neighbors_of(n))) == 2):
+                sites.append((ranks[o], ranks[n], o, c, n))
+    for *_, o, c, n in sorted(sites):
+        trial = molecule.copy()
+        with trial.edit():
+            trial.set_order(c, n, 2)
+        if trial.kekule().unresolved or trial.order_of(c, n) != 2:
+            continue
+        standardize(trial)
+        if trial.order_of(o, c) != 2:
+            continue
+        with molecule.edit():
+            molecule.set_order(c, n, 2)
+        molecule.kekule()
+        return True
+    return False
+
+
 def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
                  keep_kekule: bool = False) -> bool:
     """Bring `molecule` to the representation two drawings of one compound share.  Did it change?
@@ -158,19 +195,23 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     #    a different Kekule form than the one it was handed, which is the form step 7 would then read.
     #    Step 2 is not re-entered: the parities it can justify are a property of the constitution, which
     #    no stage from here on changes.
+    #
+    #    A round the placement did not ask for is opened by a lactim `kekule()` left unrepairable: the
+    #    hydroxy-azine rows need the C=N beside the C-OH, and which Kekule form comes back depends on the
+    #    atom order.  `_pin_lactim` pins that C=N and kekulises around it, so 3-hydroxyisoquinoline
+    #    reaches isoquinolin-3(2H)-one from every order.
     for _ in range(_ROUNDS_MAX):
-        if not moved:
+        if moved:
+            molecule.kekule()
+        elif not (fix_tautomers and _pin_lactim(molecule)):
             break
-        molecule.kekule()
         changed = standardize(molecule, fix_tautomers=fix_tautomers)
         if changed:
             implicify_hydrogens(molecule)
         changed |= neutralize(molecule)
         standardize_kekule(molecule)
         molecule.thiele()               # unconditional: step 6's form is what a caller compares, and
-        if not changed:                 # the kekulisation above has to be undone either way
-            break
-        moved = standardize_isomers(molecule)
+        moved = changed and standardize_isomers(molecule)   # the kekulisation has to be undone either way
     else:
         with recording(molecule, stage='canonicalize') as log:
             log.append(LogRecord(_RULE_ROUNDS, (), f'repair and placement were still changing the '

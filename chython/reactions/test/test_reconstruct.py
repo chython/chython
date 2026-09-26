@@ -17,6 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import Counter
+import pytest
 from pytest import raises
 
 from .._enumerate import _deprotect_toward
@@ -272,8 +273,7 @@ def test_deprotect_then_react_composes():
     # the amine arrives Boc-protected; strip it, then amidate.  Neither rung alone explains this.
     rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CC(C)(C)OC(=O)NCC')],
                             [smiles('CC(=O)NCC')])
-    labels = rxn.reconstruct_mapping()
-    assert labels and all(label.startswith('deprotect+react:') for label in labels)
+    assert rxn.reconstruct_mapping() == ('deprotect:amine_boc+react:amidation',)
 
 
 def test_a_reactor_outcome_is_compared_in_its_canonical_form():
@@ -292,7 +292,7 @@ def test_an_unmasked_azole_nitrogen_is_settled_before_comparison():
 def test_a_stripped_azole_is_settled_before_the_corpus_fires():
     rxn = ReactionContainer([smiles('CC(C)(C)OC(=O)n1ccc2cc(Br)ccc21'), smiles('OB(O)c1ccccc1')],
                             [smiles('c1ccc(-c2ccc3[nH]ccc3c2)cc1')])
-    assert rxn.reconstruct_mapping() == ('deprotect+react:suzuki',)
+    assert rxn.reconstruct_mapping() == ('deprotect:amine_boc+react:suzuki',)
 
 
 def test_a_direct_reaction_outranks_the_composed_rung():
@@ -552,8 +552,27 @@ def test_the_composed_rung_only_walks_what_the_stripping_reached():
     for store, required in ((stripped, {1}), (unstripped, None)):
         pool = [smiles('CC(=O)O'), smiles('CCN'), smiles('CC(C)=C')]
         store.extend(subset for subset, _ in _applications(rxn.products[0], pool, required=required))
-    assert rxn.reconstruct_mapping() == ('deprotect+react:amidation',)
+    assert rxn.reconstruct_mapping() == ('deprotect:amine_boc+react:amidation',)
     assert len(stripped) < len(unstripped), 'a pool the stripping never reached must not be re-walked'
+
+
+@pytest.mark.parametrize('reactants, product, label', [
+    (('CC(C)(C)OC(=O)NCCC(=O)OC',), 'NCCC(=O)O', 'deprotect:amine_boc+ester_hydrolysis'),
+    (('CC(C)(C)OC(=O)NCCC(=O)OC(C)(C)C',), 'NCCC(=O)O', 'deprotect:amine_boc+ester_hydrolysis'),
+    (('COC(=O)CCC(=O)OC',), 'OC(=O)CCC(=O)O', 'deprotect:ester_hydrolysis+ester_hydrolysis'),
+    (('COC(=O)c1ccc(Br)cc1', 'OB(O)c1ccccc1'), 'OC(=O)c1ccc(-c2ccccc2)cc1',
+     'deprotect:ester_hydrolysis+react:suzuki'),
+    (('COC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'react:ester_hydrolysis'),
+    (('CC(C)(C)OC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'react:ester_hydrolysis'),
+    (('COC(=O)c1ccc2cc[nH]c2n1', 'Ic1ccccc1'), 'OC(=O)c1ccc2ccn(-c3ccccc3)c2n1',
+     'deprotect:ester_hydrolysis+react:ullmann_pyrrole'),
+])
+def test_an_ester_cleaved_to_its_acid_is_labelled_ester_hydrolysis(reactants, product, label):
+    # the mechanism and not the protecting-group row: a methyl and a tert-butyl ester read alike
+    rxn = ReactionContainer([smiles(x) for x in reactants], [smiles(product)])
+    for molecule in rxn.molecules():
+        molecule.canonicalize()
+    assert rxn.reconstruct_mapping() == (label,)
 
 
 def test_the_corpus_is_walked_once_for_both_strictnesses():

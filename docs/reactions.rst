@@ -1270,7 +1270,7 @@ share nothing else.
     (GroupHit(id='protective:65', name='amine_boc', count=2),)
 
 ``mol.deprotect(*names, protects=None, partial=False)`` is the action, and it is an **iterator** of
-``EnumeratedDeprotection(names, reaction, rule_ids)``.  It does not mutate the molecule -- a
+``EnumeratedDeprotection(names, reaction, rule_ids, labels)``.  It does not mutate the molecule -- a
 deprotection is a reaction, so it is reported as one, from the untouched input to the unmasked products.
 ``next(mol.deprotect(), None)`` is the one-shot spelling, and ``None`` means nothing was protected:
 
@@ -1418,15 +1418,21 @@ recorded product is the one applied.  Like the reactor, it hands back a 1-1 mapp
 an input atom the product never received, and a component of the record it could not reproduce, is left
 at 0.
 
-==========================  =====================================================================
-label                       the claim it makes about the record
-==========================  =====================================================================
-``purification``            the product went in and came out
-``react:<name>``            a corpus row, applied to the inputs as they arrived, makes this
-``deprotect:<names>``       the product is an input with a protecting group removed
-``deprotect+react:<name>``  strip what can be stripped, then a corpus row fires on what is left
-``protect:<names>``         the product is an input with a protecting group added
-==========================  =====================================================================
+===================================  =====================================================================
+label                                the claim it makes about the record
+===================================  =====================================================================
+``purification``                     the product went in and came out
+``react:<name>``                     a corpus row, applied to the inputs as they arrived, makes this
+``deprotect:<labels>``               the product is an input with a protecting group removed
+``deprotect:<labels>+react:<name>``  strip what can be stripped, then a corpus row fires on what is left
+``protect:<names>``                  the product is an input with a protecting group added
+===================================  =====================================================================
+
+A strip is named by its mechanism, the ``labels`` of the deprotection: one that cuts a carboxylic ester,
+on either side, is ``ester_hydrolysis`` whichever row claimed it, so a Boc amine methyl ester stripped of
+both reads ``deprotect:amine_boc+ester_hydrolysis``.  ``protect:`` keeps the row names.  Where two rows
+claim the two halves of one ester, the smaller half is the protecting group: methyl benzoate is a methyl
+ester of benzoic acid, not a benzoate of methanol.
 
 **Protection is last on purpose.** Every rung above it says what was *made*; that one says only that
 something was covered up, and an amide, an ester and a carbamate are all protecting groups as well as
@@ -1480,7 +1486,7 @@ between them composes: strip every input that can be stripped, then let the corp
     assert stripped.reconstruct_mapping() == ('deprotect:amine_boc',)
 
     composed = smiles('CC(C)(C)OC(=O)NCCN.CC(=O)O>>CC(=O)NCCN')
-    assert composed.reconstruct_mapping() == ('deprotect+react:amidation',)
+    assert composed.reconstruct_mapping() == ('deprotect:amine_boc+react:amidation',)
 
     masked = smiles('Nc1ccccc1.CC(C)(C)OC(=O)OC(=O)OC(C)(C)C>>CC(C)(C)OC(=O)Nc1ccccc1')
     assert masked.reconstruct_mapping() == ('protect:amine_boc',)

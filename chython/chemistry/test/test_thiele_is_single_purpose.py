@@ -19,7 +19,7 @@
 """Asking for the aromatic spelling must not silently choose a tautomer.
 
 `kekule()` repairs, because it is the boundary where input arrives; `thiele()` must not, because by
-then the data is the library's own arena.  The hydrogen move chython 2 did inside `thiele` is owed to
+then the data is the library's own arena.  The hydrogen move chython 2 did inside `thiele` belongs to
 `standardize_isomers` instead.  Both halves are pinned here.
 """
 import pytest
@@ -96,16 +96,9 @@ for line in sys.stdin:
     assert on_smiles != off_smiles
 
 
-@pytest.mark.xfail(strict=True, reason='owed: standardize_isomers has not been ported yet, so the '
-                                       'hydrogen move chython 2 performed inside thiele is '
-                                       'currently unavailable anywhere.  Delete this marker when '
-                                       'the isomer pass lands -- a strict xfail is what makes that '
-                                       'a required edit rather than an optional one')
-def test_the_hydrogen_move_is_owed_to_standardize_isomers():
-    """What the split costs until the isomer pass exists, written down as a failing test.
-
-    The end state is the one chython 2 reached by combining the two jobs, and is what the ported rule
-    must reproduce: the hydrogen on atom 5, not atom 1.
+def test_the_hydrogen_move_belongs_to_standardize_isomers():
+    """The hydrogen move chython 2 made inside `thiele` is `standardize_isomers`' own: an azole N-H
+    outranks an azine N-H, so the hydrogen goes to atom 5, not atom 1.
     """
     molecule = read_smiles(SHIFTED)
     molecule.thiele()

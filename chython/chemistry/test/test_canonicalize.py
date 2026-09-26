@@ -619,3 +619,27 @@ def test_nothing_to_do_is_zero_and_touches_nothing():
         assert explicify_hydrogens(m) == 0, s
         assert len(m) == n
         assert not [r for r in log if r.rule == 'hydrogens:explicify']
+
+
+LACTIMS = ['Oc1cc2ccccc2cn1',                       # 3-hydroxyisoquinoline
+           'Cc1ncc2cnc(O)c(-c3ccccc3)c2n1',         # a fused hydroxypyridine beside a pyrimidine
+           'Oc1ncnc2ccccc12',                       # quinazolin-4-ol
+           'Cc1cc(O)nc(C)n1']                       # 2,6-dimethylpyrimidin-4-ol
+
+
+def test_a_lactim_reaches_its_lactam_from_every_atom_order():
+    """One key per compound, whichever Kekule form `kekule()` happened to return, with the NH beside
+    the C=O."""
+    import random
+    random.seed(0)
+    for lactim in LACTIMS:
+        keys = set()
+        for _ in range(40):
+            molecule = smiles(format(smiles(lactim), 'r'))
+            molecule.canonicalize()
+            keys.add(molecule.canonical_bytes)
+        assert len(keys) == 1, lactim
+        assert not any(molecule.element_of(n) == 8 and molecule.implicit_h_of(n) for n in molecule.atom_numbers)
+        nh = [n for n in molecule.atom_numbers if molecule.element_of(n) == 7 and molecule.implicit_h_of(n)]
+        assert [any(molecule.element_of(x) == 8 for c in molecule.neighbors_of(n) for x in molecule.neighbors_of(c))
+                for n in nh] == [True], f'{lactim}: {molecule}'

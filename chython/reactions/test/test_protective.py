@@ -213,14 +213,16 @@ def test_an_ether_is_not_a_protected_acid(ether, name):
     ('CC(=O)OC(C)(C)C', 'carboxyl_tbu'),                  # 7 > hydroxyl_acyl 4
     ('CC(=O)OCC=C', 'carboxyl_allyl'),                    # 6 > 4
     ('O=C(OCc1ccccc1)c1ccccc1', 'carboxyl_benzyl'),       # 10 > hydroxyl_benzoate 9
-    ('CC(C)(C)OC(=O)c1ccccc1', 'hydroxyl_benzoate'),      # 7 < 9
-    ('C=CCOC(=O)c1ccccc1', 'hydroxyl_benzoate'),          # 6 < 9
-    ('CC(C)(C)OC(=O)C(C)(C)C', 'hydroxyl_piv'),           # 7 = 7, table order
-    ('CC(C)(C)OC(=O)C(F)(F)F', 'hydroxyl_tfa'),           # 7 = 7, table order
+    ('CC(C)(C)OC(=O)c1ccccc1', 'carboxyl_tbu'),           # benzoate first, tBu 4 deleted < benzoyl 7
+    ('C=CCOC(=O)c1ccccc1', 'carboxyl_allyl'),             # allyl 3 < benzoyl 7
+    ('COC(=O)c1ccccc1', 'hydroxyl_methyl'),               # methyl 1 < benzoyl 7
+    ('CC(C)(C)OC(=O)C(C)(C)C', 'carboxyl_tbu'),           # tBu 4 < pivaloyl 6
+    ('CC(C)(C)OC(=O)C(F)(F)F', 'carboxyl_tbu'),           # tBu 4 < trifluoroacetyl 6
+    ('CC(=O)OCc1ccccc1', 'carboxyl_benzyl'),              # the alkyl claim came first and stands
 ])
-def test_an_ester_goes_to_the_larger_claim(ester, name):
+def test_an_ester_goes_to_the_larger_claim_unless_its_alkyl_half_is_smaller(ester, name):
     """Both halves of an ester can be a protecting group; the larger row claims it, a tie falls to file
-    order."""
+    order -- and an acyl-side claim yields to a smaller alkyl group, so the ester is a protected acid."""
     assert protective_groups(read_smiles(ester)) == {name: 1}
 
 
@@ -602,3 +604,22 @@ def test_a_counter_ion_keeps_its_number_across_a_deprotection():
     assert number
     source = next(n for n in reactant.atom_numbers if reactant.map_number_of(n) == number)
     assert reactant.element_of(source) == 17
+
+
+@pytest.mark.parametrize('smiles, names, labels', [
+    ('CCCC(=O)OC(C)(C)C', ('carboxyl_tbu',), ('ester_hydrolysis',)),
+    ('CCCC(=O)OC', ('hydroxyl_methyl',), ('ester_hydrolysis',)),
+    ('c1ccccc1CCOC(C)=O', ('hydroxyl_acyl',), ('ester_hydrolysis',)),
+    ('c1ccccc1C(=O)OC', ('hydroxyl_methyl',), ('ester_hydrolysis',)),
+    ('c1ccccc1CCOC(=O)OC(C)(C)C', ('hydroxyl_boc',), ('hydroxyl_boc',)),
+    ('c1ccccc1CCOC', ('hydroxyl_methyl',), ('hydroxyl_methyl',)),
+    ('c1ccccc1NC(=O)OC(C)(C)C', ('amine_boc',), ('amine_boc',)),
+])
+def test_a_strip_cutting_a_carboxylic_ester_is_labelled_ester_hydrolysis(smiles, names, labels):
+    """`labels` names the mechanism and `names` the row: either side of an ester is one label, a carbonate
+    is not an ester, and methyl benzoate loses its methyl, the smaller half."""
+    molecule = read_smiles(smiles)
+    molecule.canonicalize()
+    outcome = next(deprotect(molecule))
+    assert outcome.names == names
+    assert outcome.labels == labels

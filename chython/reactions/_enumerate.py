@@ -213,14 +213,19 @@ def react(molecule: MoleculeContainer, others=(), reaction: str | None = None
 class EnumeratedDeprotection(NamedTuple):
     """One enumerated deprotection: which groups came off, the reaction, and the rows behind it.
 
-    `names` and `rule_ids` are tuples because one outcome applies a whole set of rules, in the order
-    they fired (most-specific-first).  `reaction` has the untouched molecule as its single reactant and
-    the stripped one as its products, mapped 1-1 from 1 with the cleaved group at 0; the caller's
-    molecule is never mutated.
+    `names`, `rule_ids` and `labels` are parallel tuples because one outcome applies a whole set of
+    rules, in the order they fired (most-specific-first).  `reaction` has the untouched molecule as its
+    single reactant and the stripped one as its products, mapped 1-1 from 1 with the cleaved group at 0;
+    the caller's molecule is never mutated.
+
+    `labels` is the mechanism per strip: `ester_hydrolysis` where the strip cuts a carboxylic ester, on
+    either side and whichever row claimed it (`carboxyl_tbu`, `hydroxyl_methyl` on a methyl ester,
+    `hydroxyl_acyl` on an acetate), and the row's name otherwise.
     """
     names: tuple[str, ...]
     reaction: ReactionContainer
     rule_ids: tuple[str, ...]
+    labels: tuple[str, ...]
 
 
 class _Claim(NamedTuple):
@@ -235,6 +240,39 @@ class _Claim(NamedTuple):
     deleted: frozenset[int]
 
 
+def _carboxyl(molecule: MoleculeContainer, carbon: int, oxygen: int) -> bool:
+    """Is `carbon`, single-bonded to `oxygen`, the acyl carbon of a carboxylic ester: `=O` and no other
+    heteroatom?  Carbonates and carbamates are not."""
+    if molecule.element_of(carbon) != 6 or molecule.order_of(carbon, oxygen) != 1:
+        return False
+    oxo = False
+    for n in molecule.neighbors_of(carbon):
+        if n == oxygen or molecule.element_of(n) in (1, 6):
+            continue
+        if oxo or molecule.element_of(n) != 8 or molecule.order_of(carbon, n) != 2:
+            return False
+        oxo = True
+    return oxo
+
+
+def _label(molecule: MoleculeContainer, claim: _Claim) -> str:
+    """`ester_hydrolysis` when the claim cuts either O-C bond of a carboxylic ester, else the row's name.
+
+    The revealed oxygen lost a bond to the deleted atoms and is single-bonded to a carboxyl carbon: kept on
+    the acyl side (`carboxyl_tbu`, `hydroxyl_methyl` on a methyl ester) or deleted with it
+    (`hydroxyl_acyl`, `hydroxyl_piv`).  Boc, Cbz and Fmoc on oxygen are carbonates and keep their names.
+    """
+    for atom in claim.atoms - claim.deleted:
+        if molecule.element_of(atom) != 8:
+            continue
+        neighbors = tuple(molecule.neighbors_of(atom))
+        if claim.deleted.isdisjoint(neighbors):
+            continue
+        if any(_carboxyl(molecule, carbon, atom) for carbon in neighbors):
+            return 'ester_hydrolysis'
+    return claim.rule.name
+
+
 def _claims(molecule: MoleculeContainer, rules: Iterable[ProtectiveGroup]) -> list[_Claim]:
     """Every protecting group in `molecule`, one claim per site, most specific first.
 
@@ -247,8 +285,9 @@ def _claims(molecule: MoleculeContainer, rules: Iterable[ProtectiveGroup]) -> li
     A revealed atom must keep a substituent.  Each row guards its own site with a degree primitive
     (`amine_boc` demands `[N;D2,D3]`), but two rows together can consume every neighbour of the atom
     they reveal, and then the product is a bare heteroatom rather than a deprotection.  Only one reading
-    of a doubly substituted O can be true, so the second claim is refused; a genuinely nested group is
-    seen by the next pass, once the outer one is gone.
+    of a doubly substituted O can be true, so the second claim is refused -- except on an ester claimed
+    from its acyl side, where a smaller alkyl group displaces the acyl claim (`_acyl_rival`).  A genuinely
+    nested group is seen by the next pass, once the outer one is gone.
     """
     claimed = set()
     out = []
@@ -258,13 +297,43 @@ def _claims(molecule: MoleculeContainer, rules: Iterable[ProtectiveGroup]) -> li
             deleted = frozenset(mapping[n] for n in deleted_query_atoms)
             if not claimed.isdisjoint(deleted):
                 continue
-            after = claimed | deleted
-            if any(all(n in after for n in molecule.neighbors_of(atom))
-                   for atom in mapping.values() if atom not in deleted):
-                continue                    # nothing of the substrate would be left on a revealed atom
-            claimed = after
+            bare = _bare(molecule, mapping.values(), deleted, claimed)
+            if bare:
+                rival = _acyl_rival(molecule, out, bare, deleted)
+                if rival is None or _bare(molecule, mapping.values(), deleted, claimed - rival.deleted):
+                    continue                # nothing of the substrate would be left on a revealed atom
+                out.remove(rival)
+                claimed -= rival.deleted
+            claimed = claimed | deleted
             out.append(_Claim(rule, frozenset(mapping.values()), deleted))
     return out
+
+
+def _acyl_rival(molecule: MoleculeContainer, claims: list[_Claim], bare: list[int],
+                deleted: frozenset[int]) -> _Claim | None:
+    """The acyl-side claim a smaller alkyl-side one displaces from an ester, or `None`.
+
+    One standing claim must be what leaves `bare` bare, it must have deleted the carboxyl carbon of a bare
+    ester oxygen, and the new claim must delete fewer atoms.  Then the ester is a protected acid: methyl
+    benzoate is `hydroxyl_methyl` and not `hydroxyl_benzoate`.  The other direction never displaces, so a
+    tert-butyl acetate stays `carboxyl_tbu`.
+    """
+    touching = {n for atom in bare for n in (atom, *molecule.neighbors_of(atom))}
+    rivals = [claim for claim in claims if not claim.deleted.isdisjoint(touching)]
+    if len(rivals) != 1 or len(deleted) >= len(rivals[0].deleted):
+        return None
+    rival = rivals[0]
+    if any(molecule.element_of(atom) == 8 and atom not in rival.deleted
+           and any(n in rival.deleted and _carboxyl(molecule, n, atom) for n in molecule.neighbors_of(atom))
+           for atom in bare):
+        return rival
+    return None
+
+
+def _bare(molecule: MoleculeContainer, atoms, deleted: frozenset[int], claimed: set[int]) -> list[int]:
+    """The atoms of a match it would leave with no neighbour outside the deleted atoms."""
+    after = claimed | deleted
+    return [atom for atom in atoms if atom not in deleted and all(n in after for n in molecule.neighbors_of(atom))]
 
 
 def protective_group_hits(molecule: MoleculeContainer) -> tuple[GroupHit, ...]:
@@ -408,20 +477,21 @@ def _strip_sites(molecule: MoleculeContainer, chosen: Sequence[int],
     if not all(0 <= index < len(claims) for index in chosen):
         return None
     working = molecule.copy()
-    acted: list[_Claim] = []
+    acted: list[tuple[_Claim, str]] = []
     for index in sorted(chosen, reverse=True):
         claim = _claims(working, rules)[index]
         patched = _patch_within(claim.rule.template, working, claim.deleted)
         if patched is None:                 # the claim stood but no outcome stayed inside it
             continue
+        acted.append((claim, _label(working, claim)))
         working = patched
-        acted.append(claim)
     if not acted:
         return None
     acted.reverse()                         # report in claim order, which is most-specific-first
-    return EnumeratedDeprotection(tuple(claim.rule.name for claim in acted),
+    return EnumeratedDeprotection(tuple(claim.rule.name for claim, _ in acted),
                                   _numbered(molecule, tuple(working.split())),
-                                  tuple(claim.rule.id for claim in acted))
+                                  tuple(claim.rule.id for claim, _ in acted),
+                                  tuple(label for _, label in acted))
 
 
 def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
@@ -442,6 +512,7 @@ def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
     working = molecule.copy()
     names: list[str] = []
     ids: list[str] = []
+    labels: list[str] = []
     for _ in range(len(molecule)):
         claim = next((c for c in _claims(working, rules) if c.rule.name in chosen), None)
         if claim is None:
@@ -449,13 +520,14 @@ def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
         patched = _patch_within(claim.rule.template, working, claim.deleted)
         if patched is None:                 # the claim stood but no outcome stayed inside it
             break
+        labels.append(_label(working, claim))
         working = patched
         names.append(claim.rule.name)
         ids.append(claim.rule.id)
     if not names:
         return None
     return EnumeratedDeprotection(tuple(names), _numbered(molecule, tuple(working.split())),
-                                  tuple(ids))
+                                  tuple(ids), tuple(labels))
 
 
 def _heavy_formula(molecule: MoleculeContainer) -> Counter:

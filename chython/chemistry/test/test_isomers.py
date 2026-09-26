@@ -212,6 +212,23 @@ def test_a_fused_lactam_keeps_its_pyridine_aromatic():
         assert ma.canonical_bytes == mb.canonical_bytes, f'{label}: {ma} vs {mb}'
 
 
+AZOLE_FIRST = [('c1cnc2[nH]ccc2c1', 'C1=CNC2=NC=CC2=C1', '7-azaindole'),
+               ('OC(=O)c1ccc2cc[nH]c2n1', 'OC(=O)C1=CC=C2C=CN=C2N1', '7-azaindole-6-carboxylic acid'),
+               ('NC(=O)c1ccc2cc[nH]c2n1', 'NC(=O)C1=CC=C2C=CN=C2N1', '7-azaindole-6-carboxamide')]
+
+
+def test_an_azole_nh_outranks_an_azine_nh():
+    """Both forms are aromatic, so the ring size decides: the hydrogen sits on the five-membered ring."""
+    for azole, azine, label in AZOLE_FIRST:
+        ma, mb = read_smiles(azole), read_smiles(azine)
+        canonicalize(ma)
+        canonicalize(mb)
+        assert ma.canonical_bytes == mb.canonical_bytes, f'{label}: {ma} vs {mb}'
+        nh = [n for n in ma.atom_numbers if ma.element_of(n) == 7 and ma.total_h_of(n)
+              and len(tuple(ma.neighbors_of(n))) == 2]
+        assert [5 in ma.ring_sizes_of(n) for n in nh] == [True], f'{label}: {ma}'
+
+
 def test_a_kekule_placement_never_changes_the_formula():
     """The working copy is spelled aromatic and kekulised back, and `kekule()` repairs when it must.
 

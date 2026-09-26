@@ -250,10 +250,16 @@ def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]
     """The canonical placement for one group, `None` when nothing must move, `'budget'` when too big.
 
     The hydrogens and the charges are read off the group rather than assumed, and dealt back over it.  The
-    key is the aromatic bond count `thiele()` gives the placement, most first, then the sorted ranks of the
-    sites holding the hydrogens, then of those holding each charge in turn -- a strict total order, because
-    `atoms_order` is a permutation and those two sets fix the placement, so no two placements share a key
-    and no tie is left for an arbitrary rule to break.
+    key is the aromatic bond count `thiele()` gives the placement, most first, then the hydrogens beside a
+    C=O or C=S carbon, then the hydrogens on five-membered rings, each most first, then the sorted ranks
+    of the sites holding the hydrogens, then of those holding each charge in turn -- a strict total order,
+    because `atoms_order` is a permutation and those two sets fix the placement, so no two placements
+    share a key and no tie is left for an arbitrary rule to break.
+
+    A lactam N-H sits next to its carbonyl: 6-methylpyrimidin-4(3H)-one, not its 1H form.  An azole N-H
+    outranks an azine N-H whenever both forms are equally aromatic, so every 7-azaindole reads 1H
+    (`c1cnc2[nH]ccc2c1`), its carboxylic acid too.  Ring size and bond order are graph facts, so both
+    terms are as spelling-independent as the ranks after them.
 
     Aromaticity leads because a fused system spelled aromatic joins rings a hydrogen cannot cross for
     free: pyrido[4,3-d]pyrimidine-2,4-dione `O=C1NC(=O)c2cnccc2N1` with its N1-H moved onto the pyridine
@@ -278,6 +284,10 @@ def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]
     if trials == 1:
         return None                       # one way to deal them: there is no distribution to choose
     signs = [q for q in sorted(charges) if q]
+    azole = {n for n in carriers if 5 in molecule.ring_sizes_of(n)}
+    lactam = {n for n in carriers
+              if any(any(molecule.order_of(c, x) == 2 and molecule.element_of(x) in _DONOR
+                         for x in molecule.neighbors_of(c)) for c in molecule.neighbors_of(n))}
     current = {n: (molecule.implicit_h_of(n) or 0, molecule.charge_of(n)) for n in group}
     best = None
     for protonated in combinations(carriers, hydrogens):
@@ -286,7 +296,8 @@ def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]
             aromatic = _admissible(molecule, group, placement)
             if aromatic is None:
                 continue
-            key = [[-aromatic], sorted(ranks[n] for n in protonated)]
+            key = [[-aromatic, -sum(n in lactam for n in protonated), -sum(n in azole for n in protonated)],
+                   sorted(ranks[n] for n in protonated)]
             key.extend(sorted(ranks[n] for n in group if dealt[n] == q) for q in signs)
             if best is None or key < best[0]:
                 best = (key, placement)
