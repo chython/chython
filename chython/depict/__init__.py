@@ -24,7 +24,8 @@ onto the same scene.  `x3dom.py` is the 3D side and shares none of it -- a store
 X3DOM.  Importing this package runs `_hooks.register()`, which is what makes the eleven depiction
 methods (`mol.clean2d()`, `mol.depict()`, `rxn.scene()`, `mol.view3d()`, ...) exist on the containers.
 """
-from ._config import Clean2DEngine, cpk, get_clean2d_engine, set_clean2d_engine
+from ._config import Clean2DEngine, cpk, get_clean2d_engine, get_peptide_layout, set_clean2d_engine, \
+    set_peptide_layout
 from ._hooks import register as _register
 from .colormap import NAMED_COLORMAPS, Colormap
 from .field import ScalarField
@@ -37,10 +38,11 @@ from .style import DepictStyle, get_depict_style, set_depict_style
 from .x3dom import JupyterWidget, molecule_depict3d, molecule_view3d
 
 
-# `clean2d_engine` is deliberately absent: it is rebindable, and a copy taken at import time here
-# would go stale on the first `set_clean2d_engine()`.  Read it through `get_clean2d_engine()`, or as
-# `chython.clean2d_engine`.
+# `clean2d_engine` and `peptide_layout` are deliberately absent: they are rebindable, and a copy taken at
+# import time here would go stale on the first setter call.  Read them through the getters, or as
+# `chython.clean2d_engine` and `chython.peptide_layout`.
 __all__ = ['cpk', 'Clean2DEngine', 'get_clean2d_engine', 'set_clean2d_engine',
+           'get_peptide_layout', 'set_peptide_layout',
            'DepictStyle', 'get_depict_style', 'set_depict_style',
            'molecule_scene', 'molecule_depict', 'reaction_scene', 'reaction_depict',
            'clean2d', 'layout2d', 'rescale2d', 'reaction_clean2d', 'reaction_layout2d',

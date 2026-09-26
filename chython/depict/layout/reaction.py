@@ -27,7 +27,7 @@ from . import molecule as _molecule
 Plane = dict[int, tuple[float, float]]
 
 
-def layout2d(rxn, *, engine=None, force: bool = False) \
+def layout2d(rxn, *, engine=None, force: bool = False, peptide: bool = None) \
         -> tuple[list[Plane], tuple[float, float, float], list[tuple[float, float]]]:
     """Lay the reaction out and return `(planes, arrow, signs)` without touching anything.
 
@@ -38,27 +38,28 @@ def layout2d(rxn, *, engine=None, force: bool = False) \
 
     :param engine: override the globally set 2d engine
     :param force: lay every molecule out again, whatever coordinates it already has
+    :param peptide: override the global peptide layout switch, as the molecule's `layout2d` does
     """
     planes = []
     for m in rxn.molecules():
-        planes.append(_molecule.layout2d(m, engine=engine, force=force))
+        planes.append(_molecule.layout2d(m, engine=engine, force=force, peptide=peptide))
     arrow, signs = _position(rxn, planes)
     return planes, arrow, signs
 
 
-def clean2d(rxn, *, engine=None, force: bool = False) \
+def clean2d(rxn, *, engine=None, force: bool = False, peptide: bool = None) \
         -> tuple[tuple[float, float, float], list[tuple[float, float]]]:
     """Lay the reaction out, store each molecule's plane, and return the arrow and the signs.
 
     This always stores, unlike the molecule's `clean2d`: the arrangement is what the call produces, and
-    a member that already had a layout still has to be moved onto the row.  `force` reaches only the
-    members' own layouts.
+    a member that already had a layout still has to be moved onto the row.  `force` and `peptide` reach
+    only the members' own layouts.
 
     The arrow is not bit-idempotent across the first two calls, by one quantisation step: storing rounds
     a coordinate onto the arena's 1e-4 grid, so the arrow -- derived from the members' extents -- moves
     once by under 5e-5 and is exact from the second call onward.
     """
-    planes, arrow, signs = layout2d(rxn, engine=engine, force=force)
+    planes, arrow, signs = layout2d(rxn, engine=engine, force=force, peptide=peptide)
     for m, plane in zip(rxn.molecules(), planes):
         _molecule._store_plane(m, plane)
     return arrow, signs

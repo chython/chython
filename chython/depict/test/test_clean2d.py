@@ -210,6 +210,21 @@ def test_rescale2d_answers_false_and_stores_nothing_when_there_is_no_plane_to_re
     assert not lone.has_layout
 
 
+def test_reaction_rescale2d_rescales_each_member():
+    """The molecule's pass per member: True when any member rescaled, False when none had a plane."""
+    rxn = smiles('CC(=O)O.NCC>>CC(=O)NCC')
+    assert not rxn.rescale2d()
+    rxn.clean2d(engine='smilesdrawer')
+    first = next(iter(rxn.molecules()))
+    with first.edit():
+        for n, (x, y) in first.coordinates().items():
+            first.set_xy(n, x * 4., y * 4.)
+    assert rxn.rescale2d()
+    for m in rxn.molecules():
+        stored = _bond_lengths(m)
+        assert sum(stored) / len(stored) == approx(.825, abs=2e-4)
+
+
 def test_disconnected_components_are_separated():
     """`.`-joined components are laid out side by side, not on top of each other"""
     mol = smiles('CCO.c1ccccc1')

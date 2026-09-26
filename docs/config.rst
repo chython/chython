@@ -15,6 +15,9 @@ Configuration Reference
     chython.clean2d_engine = 'smilesdrawer'  # default
     # Options: 'rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo'
 
+    # a peptide of 4+ residues lays out on its backbone; the engine lays out its side-chain rings
+    chython.peptide_layout = True  # default
+
     # 3D conformer engine
     chython.conformer_engine = 'rdkit'  # default
     # Options: 'rdkit', 'cdpkit'

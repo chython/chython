@@ -56,6 +56,7 @@ from ._tables import (ACID_ROLES, AbbreviationRow, AcidRow, Endpoint, RESONANCE_
                       resonance_table_text, salts_rows, salts_rows_by_klass, salts_species_keys,
                       salts_table_text, standardize_rules)
 from ._tpsa import tpsa
+from ..core.monomers import PeptideBranch, Peptide, Residue, monomers
 from ..core._core import (_set_canonicalize_fn, _set_featurizer_fns, _set_hydrogens_fns,
                           _set_isomers_fn, _set_kekule_form_fn, _set_protomers_fn,
                           _set_resonance_fn, _set_salts_fns, _set_standardize_fn,
@@ -63,13 +64,13 @@ from ..core._core import (_set_canonicalize_fn, _set_featurizer_fns, _set_hydrog
 
 
 __all__ = ['ACID_ROLES', 'AbbreviationRow', 'ComponentRow', 'DEFAULT_STABILIZER_CLASSES',
-           'LogRecord', 'SALT_CLASSES', 'SALT_MATCHES', 'SaltComposition',
+           'LogRecord', 'Peptide', 'PeptideBranch', 'Residue', 'SALT_CLASSES', 'SALT_MATCHES', 'SaltComposition',
            'abbreviation_row', 'abbreviations_rows', 'alert_count',
            'calc_implicit', 'canonicalize', 'check_valence', 'crippen_logp', 'crippen_mr',
            'decompose_salts', 'expand_abbreviations', 'explicify_hydrogens', 'fix_resonance',
            'hydrogen_bond_acceptors_count',
            'hydrogen_bond_donors_count', 'implicify_hydrogens', 'maccs_bit_set', 'maccs_keys',
-           'neutralize', 'perceive_bonds', 'pharmacophore_invariants', 'qed', 'qed_properties',
+           'monomers', 'neutralize', 'perceive_bonds', 'pharmacophore_invariants', 'qed', 'qed_properties',
            'rotatable_bonds_count',
            'saturate', 'split_salts', 'standardize', 'standardize_isomers',
            'standardize_kekule', 'tpsa']

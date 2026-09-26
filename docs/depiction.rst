@@ -214,6 +214,58 @@ atom is withheld from the tree the engine sees and afterwards put in the widest 
 neighbour, one at a time, so a second hydrogen on one atom sees the first as occupied.  A component with
 no heavy atom at all (``[H][H]``, ``[H-]``) is a chain along +x.
 
+Peptides
+~~~~~~~~
+
+A molecule whose main chain has four or more residues, as segmented by ``monomers()``, is laid out on
+its backbone: a zigzag on the 120-degree lattice, side chains hung off it, cross-links routed around it.
+The backbone steps only where a side chain needs room, and takes the lowest such chain found.  Each
+connected component is its own case: every peptide gets its own backbone, every other component -- a
+counter-ion, a solvent -- goes to the engine, and the components are then placed side by side.
+Only side-chain rings -- Phe, Tyr, Trp, His -- go to the configured engine, one call per distinct ring
+system, so ``clean2d_engine`` still decides how an aromatic side chain looks.  A proline ring on the
+backbone is its lattice hexagon less the top or bottom vertex, so its chord is horizontal and its bonds
+to the chain meet at 120 degrees; the amide joining two such rings is a bridge twice a bond long.
+
+A cross-link longer than one and a half bonds is drawn by routing, not as a straight bond:
+
+================  ========================================================================
+drawing           when
+================  ========================================================================
+bracket           both ends on one side of the backbone, and no crossing a same-side bracket
+head-to-tail      the ring-closing amide of a cyclic peptide, a bar below every atom
+teleport          otherwise: a dashed stub and a numbered badge at each end
+================  ========================================================================
+
+A bracket leg leaves its atom along that atom's free direction -- a ring's exterior bisector, straight on
+from a vertical bond, else a chain's 120-degree slot -- and runs straight into the bar, its corner rounded at whatever angle it meets it; a
+leg too shallow, long or blocked is a short stub and then a vertical.  A terminal atom at a link end
+trades slots with the link when that turns the link toward its bar: a lactam's carbonyl oxygen faces
+the backbone and the leg drops straight.  A link end hanging at the tip of a chain takes the chain's other
+slot when that leans it toward its partner, so a bracket's two legs mirror each other: a cystine's
+sulfurs both lean in.
+
+Routing is read back from the plane alone, so a stored peptide plane draws the same way again; a plane
+whose backbone is off the lattice draws every cross-link as a plain bond.
+
+.. testcode::
+
+    import chython
+    from chython.chemistry import monomers
+
+    oxytocin = smiles('NC(CS%10)C(=O)NC(Cc1ccc(O)cc1)C(=O)NC(C(C)CC)C(=O)NC(CCC(N)=O)C(=O)'
+                      'NC(CC(N)=O)C(=O)NC(CS%10)C(=O)N%11CCCC%11C(=O)NC(CC(C)C)C(=O)NCC(=O)N')
+    print(len(monomers(oxytocin).main))
+
+    plane = oxytocin.layout2d()                    # on the backbone
+    plane = oxytocin.layout2d(peptide=False)       # the engine, as for any molecule
+    chython.peptide_layout = False                 # process-wide; validated at assignment
+    chython.peptide_layout = True
+
+.. testoutput::
+
+    9
+
 Reaction Layout
 ~~~~~~~~~~~~~~~
 
@@ -236,6 +288,9 @@ split -- ``layout2d()`` returns everything and stores nothing, ``clean2d()`` sto
 ``arrow`` is ``(x1, x2, y)`` -- the whole span, with the head inside it -- and ``signs`` is one
 ``(x, y)`` per gap.  The arrangement shifts plane dicts and never touches the molecules, so the members'
 own coordinates do not change.
+
+The molecule's keywords reach every member: ``engine=``, ``force=`` and ``peptide=``.
+``rxn.rescale2d()`` is each member's ``rescale2d()``, true when any of them rescaled.
 
 
 Depiction Style

@@ -17,7 +17,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""The CPK palette, and the choice of 2D layout engine.
+"""The CPK palette, the choice of 2D layout engine, and the peptide layout switch.
 
 Owned here rather than by the facade, which only proxies `clean2d_engine`: state read by `depict/` is
 `depict/`'s, and nothing may import the facade.  That is what makes `import chython.depict` work on
@@ -31,6 +31,10 @@ Clean2DEngine = Literal['rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo']
 # Which 2D layout backend `clean2d()` uses when the caller does not name one.  `smilesdrawer` is a
 # JavaScript bundle on QuickJS: ~1 MB installed, and its behaviour does not move between releases.
 clean2d_engine: Clean2DEngine = 'smilesdrawer'
+
+# Whether `layout2d()` lays a peptide of `MIN_RESIDUES`+ residues out on its backbone.  The engine above
+# still lays out its ring tiles and anything the backbone layout leaves.
+peptide_layout: bool = True
 
 cpk = tuple('''
  #909090                                                                                         #D9FFFF
@@ -75,4 +79,22 @@ def set_clean2d_engine(engine: Clean2DEngine):
     clean2d_engine = engine
 
 
-__all__ = ['cpk', 'R_COLOUR', 'Clean2DEngine', 'clean2d_engine', 'get_clean2d_engine', 'set_clean2d_engine']
+def get_peptide_layout(flag: bool = None) -> bool:
+    """Resolve the peptide switch for one call: the argument if given, otherwise the module default."""
+    if flag is None:
+        return peptide_layout
+    if not isinstance(flag, bool):
+        raise TypeError(f'peptide takes a bool or None, not {type(flag).__name__}')
+    return flag
+
+
+def set_peptide_layout(flag: bool):
+    """Set the default peptide switch."""
+    if not isinstance(flag, bool):
+        raise TypeError(f'peptide_layout takes a bool, not {type(flag).__name__}')
+    global peptide_layout
+    peptide_layout = flag
+
+
+__all__ = ['cpk', 'R_COLOUR', 'Clean2DEngine', 'clean2d_engine', 'get_clean2d_engine', 'set_clean2d_engine',
+           'peptide_layout', 'get_peptide_layout', 'set_peptide_layout']

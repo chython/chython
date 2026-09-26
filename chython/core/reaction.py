@@ -474,20 +474,21 @@ class ReactionContainer:
 
     # --- 2D layout, registered by `chython.depict` ------------------------------------------------
 
-    def layout2d(self, *, engine=None, force: bool = False):
+    def layout2d(self, *, engine=None, force: bool = False, peptide: bool | None = None):
         """Arrange this reaction left to right and return `(planes, arrow, signs)`, storing nothing.
 
         `planes` is one `{n: (x, y)}` per molecule in `molecules()` order, `arrow` is
         `(x1, x2, y)`, and `signs` is one `(x, y)` per `+` between two members of a side.  A member
         that already carries a layout keeps it and is only shifted; `force=True` relays every one.
+        `engine` and `peptide` reach each member's own `layout2d`.
 
         Registered by `chython.depict` -- the body is a JavaScript layout engine or a third-party
         toolkit, neither of which this layer knows about.
         """
         _, layout = _reaction_depict_fns()
-        return layout(self, engine=engine, force=force)
+        return layout(self, engine=engine, force=force, peptide=peptide)
 
-    def clean2d(self, *, engine=None, force: bool = False):
+    def clean2d(self, *, engine=None, force: bool = False, peptide: bool | None = None):
         """Arrange this reaction, STORE each molecule's plane, and return `(arrow, signs)`.
 
         THE ARROW AND THE SIGNS ARE RETURNED AND NOT STORED, and that is a decision.  An arrow is a
@@ -499,7 +500,15 @@ class ReactionContainer:
         Registered by `chython.depict`.
         """
         clean, _ = _reaction_depict_fns()
-        return clean(self, engine=engine, force=force)
+        return clean(self, engine=engine, force=force, peptide=peptide)
+
+    def rescale2d(self) -> bool:
+        """Rescale each molecule's STORED coordinates to average bond length 0.825.  Did any rescale?
+
+        Each member is rescaled on its own, by its own `rescale2d()`; nothing is arranged, so a
+        `clean2d()` afterwards puts the members back on one row.
+        """
+        return any([m.rescale2d() for m in self.molecules()])
 
     # --- drawing, registered by `chython.depict` ---------------------------------------------------
 

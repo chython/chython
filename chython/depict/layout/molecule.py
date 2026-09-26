@@ -24,9 +24,11 @@ A plane is a plain `{n: (x, y)}` dict and is never the molecule -- only `clean2d
 and `_store_plane` write to the arena, so a renderer can lay a molecule out without changing it.
 """
 from importlib.resources import files
-from math import atan2, cos, fsum, hypot, pi, sin
+from math import atan2, cos, fsum, hypot, pi, radians, sin
 from ...exceptions import ImplementationError
-from .._config import Clean2DEngine, get_clean2d_engine
+from ...core.monomers import monomers
+from .._config import Clean2DEngine, get_clean2d_engine, get_peptide_layout
+from .peptide import peptide_layout
 
 # `clean2d.js` is an esbuild IIFE bundle publishing a single global `$`; this line gives the binding a
 # top-level name to fetch, and lives here so the shipped bundle stays byte-identical to esbuild's output.
@@ -76,7 +78,7 @@ def _stored_plane(mol):
     return dict.fromkeys(mol, (0., 0.))
 
 
-def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False):
+def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: bool = None):
     """Compute a 2d layout and return it as `{n: (x, y)}`, leaving the molecule untouched.
 
     This is the form a renderer wants -- drawing must not change what it draws.  `clean2d()` is this
@@ -87,14 +89,23 @@ def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False):
     https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 is used; it can be changed globally with the
     `chython.clean2d_engine` parameter.
 
+    A peptide of `MIN_RESIDUES`+ residues lays out on its backbone (`layout/peptide.py`), the engine
+    laying out its ring tiles; `peptide=None` follows `chython.peptide_layout`.  Each component is its own
+    peptide or not: the peptides are laid out one by one, every other component by the engine in one call.
+    A peptide the lattice cannot take goes to the engine; with no peptide the engine takes `mol` whole.
+
     :param engine: override globally set engine
     :param force: recompute even if the molecule already carries a layout
+    :param peptide: override the global peptide switch
     """
     if not force and mol.has_layout:
         return mol.coordinates()
 
-    plane = _engine_layout(mol, get_clean2d_engine(engine))
-    _rescale_plane(mol, plane)
+    engine = get_clean2d_engine(engine)
+    plane = _peptide_planes(mol, engine) if get_peptide_layout(peptide) else None
+    if plane is None:
+        plane = _engine_layout(mol, engine)
+        _rescale_plane(mol, plane)
     # EVERY COMPONENT IS PLACED, including the only one.  A backend returns a plane wherever its own
     # arithmetic landed, so a single-component molecule that skipped this kept the engine's offset --
     # which is what put a laid-out drawing thousands of units from the origin and outside a format's
@@ -107,7 +118,7 @@ def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False):
     return plane
 
 
-def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False):
+def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: bool = None):
     """Compute a 2d layout and store it on the molecule.
 
     Not always a recomputation: a molecule that already `has_layout` is left exactly as it is, since the
@@ -115,12 +126,106 @@ def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False):
 
     :param engine: override globally set engine
     :param force: lay the molecule out again whatever coordinates it already has
+    :param peptide: override the global peptide switch
     """
     if not force and mol.has_layout:
         return
     # `force=True` below: the has_layout question is already answered, and asking it again would send a
     # molecule that has a layout down the stored-plane branch.
-    _store_plane(mol, layout2d(mol, engine=engine, force=True))
+    _store_plane(mol, layout2d(mol, engine=engine, force=True, peptide=peptide))
+
+
+def _peptide_planes(mol, engine: Clean2DEngine):
+    """A plane with each peptide component of `mol` on its backbone and the rest by `engine`, or None when
+    no component is a peptide the lattice takes."""
+    components = mol.connected_components
+    if len(components) == 1:
+        return _peptide_plane(mol, engine)
+    plane, rest = {}, []
+    for c in components:
+        sub = _peptide_plane(mol.substructure(c), engine) if len(c) > 1 else None
+        if sub is None:
+            rest.extend(c)
+        else:
+            plane.update(sub)
+    if not plane:
+        return None
+    if rest:
+        other = mol.substructure(rest)
+        sub = _engine_layout(other, engine)
+        _rescale_plane(other, sub)
+        plane.update(sub)
+    return plane
+
+
+def _peptide_plane(mol, engine: Clean2DEngine):
+    """The peptide layout of `mol`, or None when it is no peptide or the lattice cannot take it.
+
+    Explicit hydrogens are withheld as for an engine and placed afterwards at one bond length.  No
+    `_rescale_plane`: the cross-link bonds are long by construction and would shrink the drawing.
+    """
+    segmentation = monomers(mol)
+    if segmentation is None:
+        return None
+    deferred = _deferred_hydrogens(mol, _adjacency(mol))
+    heavy = mol
+    if deferred:
+        heavy = mol.substructure(sorted(set(mol).difference(deferred)))
+        segmentation = monomers(heavy)
+        if segmentation is None:
+            return None
+    plane = peptide_layout(heavy, segmentation, _tile_fn(engine))
+    if plane is None or not deferred:
+        return plane
+    _place_peptide_hydrogens(mol, plane, deferred, {frozenset(x) for x in segmentation.crosslinks})
+    return plane
+
+
+def _place_peptide_hydrogens(mol, plane, deferred, links):
+    """Each withheld hydrogen at one bond from its partner, 50+ degrees off the partner's drawn bonds, in
+    the direction farthest from every other atom; a hydrogen-only component is a chain along +x."""
+    cells = {}
+
+    def put(n):
+        x, y = plane[n]
+        cells.setdefault((int(x // 1.), int(y // 1.)), []).append(n)
+
+    def clearance(n, partner, x, y):
+        i, j = int(x // 1.), int(y // 1.)
+        return min((hypot(plane[m][0] - x, plane[m][1] - y) for a in (i - 1, i, i + 1) for b in (j - 1, j, j + 1)
+                    for m in cells.get((a, b), ()) if m != partner and m != n), default=2.)
+    for n in plane:
+        put(n)
+    for n in sorted(deferred):
+        partner = next((y for y in mol.neighbors_of(n) if y in plane), None)
+        if partner is None:                           # a hydrogen-only component
+            plane[n] = (max((x for x, _ in plane.values()), default=0.) + .825, 0.)
+            put(n)
+            continue
+        px, py = plane[partner]
+        taken = [atan2(plane[y][1] - py, plane[y][0] - px) for y in mol.neighbors_of(partner)
+                 if y != n and y in plane and frozenset((partner, y)) not in links]
+        best = None
+        for q in range(36):
+            t = pi * q / 18
+            gap = min((abs((t - u + pi) % (2 * pi) - pi) for u in taken), default=pi)
+            if gap < radians(50):
+                continue
+            x, y = px + .825 * cos(t), py + .825 * sin(t)
+            score = (min(clearance(n, partner, x, y), .825), gap)
+            if best is None or score > best[0]:
+                best = (score, (x, y))
+        plane[n] = best[1] if best else (px + .825, py)
+        put(n)
+
+
+def _tile_fn(engine: Clean2DEngine):
+    """The peptide layout's tile: `engine`'s plane of a fragment, at mean bond `.825`."""
+    def tile(sub):
+        plane = _engine_layout(sub, engine)
+        _rescale_plane(sub, plane)
+        return plane
+    return tile
 
 
 def _engine_layout(mol, engine: Clean2DEngine):

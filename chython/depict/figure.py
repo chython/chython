@@ -32,6 +32,7 @@ from .field import contour_levels
 from .label import element_colour, labels
 from .layout import molecule as _molecule_layout, reaction as _reaction_layout
 from .overlay import BondScale, bands_of, render_overlays, scale_of, tiled_swatches
+from .peptide import link_paths, routed_links
 from .scene import (Box, Path, Scene, Text, TextRun, WHITE, circle, ellipse, polyline, rounded_box)
 from .style import DepictStyle, get_depict_style
 from .wedge import wedge_paths
@@ -190,8 +191,11 @@ def _molecule_nodes(mol, plane, style: DepictStyle, log, overlays=()) -> tuple[l
             if o.encode in ('color', 'both'):
                 colours.update(o.bond_colours(mol, style))
 
-    # The stereo bonds claim their keys, and the plain bonds skip them.
+    # The stereo bonds claim their keys, and the plain bonds skip them; so do routed peptide cross-links.
     wedges, claimed = wedge_paths(mol, plane, boxes, style, log=log)
+    links = routed_links(mol, plane)
+    if links:
+        claimed = set(claimed) | {(min(k.a, k.b), max(k.a, k.b)) for k in links}
     bond_nodes = bond_paths(mol, plane, boxes, style, skip=claimed,
                             widths=widths if widths else None,
                             colours=colours if colours else None,
@@ -213,7 +217,8 @@ def _molecule_nodes(mol, plane, style: DepictStyle, log, overlays=()) -> tuple[l
     # The z-order is fixed -- no node carries a z and nothing is sorted.  Wedges come AFTER bonds
     # because a wedge's wide base overlaps the adjacent bonds at the shared vertex and must win that
     # overlap; `skip=claimed` only covers the wedge's own axis.
-    under = [*overlay_under, *bond_nodes, *wedges, *radical_nodes]
+    link_nodes = link_paths(mol, plane, links, boxes, style) if links else []
+    under = [*overlay_under, *bond_nodes, *wedges, *link_nodes, *radical_nodes]
     over = [*plates, *label_nodes, *annotations, *overlay_over]
     return under, over
 

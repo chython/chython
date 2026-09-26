@@ -505,11 +505,11 @@ def _set_depict_fns(*, clean2d=None, layout2d=None, rescale2d=None, reaction_cle
     `mol.clean2d()` worked, and no caller could tell why.  `chython.depict` calls this at its own import
     time.
 
-    THE LAYOUT GROUP.  The molecule pair takes `(molecule, *, engine=None, force=False)`; `clean2d`
-    stores and returns None, `layout2d` returns `{n: (x, y)}` and stores nothing.  `rescale2d` takes
-    the molecule alone, rewrites the stored plane to average bond length 0.825 and answers whether it
-    rescaled.  The reaction pair takes `(reaction, *, engine=None, force=False)`; `layout2d` returns
-    `(planes, arrow, signs)` and `clean2d` stores the planes and returns `(arrow, signs)`.
+    THE LAYOUT GROUP.  The molecule pair takes `(molecule, *, engine=None, force=False, peptide=None)`;
+    `clean2d` stores and returns None, `layout2d` returns `{n: (x, y)}` and stores nothing.  `rescale2d`
+    takes the molecule alone, rewrites the stored plane to average bond length 0.825 and answers whether
+    it rescaled.  The reaction pair takes the same keywords; `layout2d` returns `(planes, arrow, signs)`
+    and `clean2d` stores the planes and returns `(arrow, signs)`.
 
     THE 3D GROUP.  `depict3d` takes `(molecule, index)` and returns an X3DOM document; `view3d` takes
     `(molecule, index, width, height)` and returns a notebook widget.  A molecule side only -- a
@@ -7516,21 +7516,21 @@ cdef class MoleculeContainer:
         """
         return _resonance_fn()(self)
 
-    def layout2d(self, *, engine=None, force=False):
+    def layout2d(self, *, engine=None, force=False, peptide=None):
         """Compute a 2D layout and RETURN it as `{n: (x, y)}`, storing nothing.
 
         THE FORM A RENDERER WANTS: drawing must not change what it draws, so a layout computed for a
         picture is handed back rather than stored.  `clean2d()` is this plus the decision to keep it.
 
         `force=False` on a molecule that already `has_layout` hands back the STORED plane and computes
-        nothing; `force=True` always recomputes.  `engine` overrides `chython.clean2d_engine` for this
-        one call.
+        nothing; `force=True` always recomputes.  `engine` overrides `chython.clean2d_engine` and `peptide`
+        overrides `chython.peptide_layout` for this one call.
 
         Registered by `chython.depict`, not implemented here -- see `_depict_fn`.
         """
-        return _depict_fn(_layout2d_impl, 'layout2d')(self, engine=engine, force=force)
+        return _depict_fn(_layout2d_impl, 'layout2d')(self, engine=engine, force=force, peptide=peptide)
 
-    def clean2d(self, *, engine=None, force=False):
+    def clean2d(self, *, engine=None, force=False, peptide=None):
         """Compute a 2D layout and STORE it on this molecule.
 
         NOT ALWAYS A RECOMPUTATION: a molecule that already carries a non-degenerate plane
@@ -7539,7 +7539,7 @@ cdef class MoleculeContainer:
 
         Registered by `chython.depict`, not implemented here -- see `_depict_fn`.
         """
-        return _depict_fn(_clean2d_impl, 'clean2d')(self, engine=engine, force=force)
+        return _depict_fn(_clean2d_impl, 'clean2d')(self, engine=engine, force=force, peptide=peptide)
 
     def rescale2d(self):
         """Rescale the STORED coordinates to average bond length 0.825.  Did it rescale?

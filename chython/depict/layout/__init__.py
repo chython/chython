@@ -16,9 +16,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""2D layout, one module per container.
+"""2D layout, one module per container; `peptide` is the backbone layout `molecule.layout2d` calls.
 
-The two modules are exported and their contents are not: both define `clean2d` and `layout2d`, so a
+The two container modules are exported and their contents are not: both define `clean2d` and `layout2d`, so a
 star import would let one silently shadow the other.  Write `layout.molecule.clean2d(mol)`, or call the
 method the core container carries.
 """
