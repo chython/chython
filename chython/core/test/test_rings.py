@@ -16,8 +16,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
+import random
 import pytest
-from chython.core import MoleculeContainer
+from chython.core import MoleculeContainer, read_smiles
 
 
 def build(bonds, n=None, elements=None):
@@ -810,3 +811,129 @@ def test_a_dative_bond_cannot_close_a_ring():
     for s in ids:
         assert m.in_ring_of(s) is False
         assert m.ring_sizes_of(s) == frozenset()
+
+
+# Ring families: relevant cycles of one length whose pairwise sums lie in the span of the
+# shorter cycles. The descriptors count and share by family, so they are graph invariants.
+
+def _reference_families(bonds):
+    """Brute-force ring families as (length, vertex union) pairs. Exponential; small graphs only."""
+    adj = {}
+    for i, j, _ in bonds:
+        adj.setdefault(i, set()).add(j)
+        adj.setdefault(j, set()).add(i)
+    edge_id = {frozenset((i, j)): k for k, (i, j, _) in enumerate(bonds)}
+
+    def vector(ring):
+        return sum(1 << edge_id[frozenset((ring[k], ring[k - 1]))] for k in range(len(ring)))
+
+    def normal_form(v, table):
+        for lead in sorted(table, reverse=True):
+            if v >> lead & 1:
+                v ^= table[lead]
+        return v
+
+    cycles = sorted(_all_cycles(adj), key=len)
+    families, table, k = [], {}, 0
+    while k < len(cycles):
+        length = len(cycles[k])
+        group = [c for c in cycles[k:] if len(c) == length]
+        classes = {}
+        for c in group:
+            nf = normal_form(vector(c), table)
+            if nf:                                # not spanned by shorter cycles: relevant
+                classes.setdefault(nf, set()).update(c)
+        families.extend((length, members) for members in classes.values())
+        for c in group:
+            v = normal_form(vector(c), table)
+            if v:
+                table[v.bit_length() - 1] = v
+        k += len(group)
+    return families
+
+
+def _bicyclo(a, b, c):
+    """Bridgeheads 0 and 1 joined by bridges of a, b and c atoms."""
+    bonds, nxt = [], 2
+    for size in (a, b, c):
+        prev = 0
+        for _ in range(size):
+            bonds.append((prev, nxt, 1))
+            prev = nxt
+            nxt += 1
+        bonds.append((prev, 1, 1))
+    return bonds
+
+
+FAMILY_CASES = dict(BASIS_CASES, **{
+    'bicyclo[1.1.1]pentane': _bicyclo(1, 1, 1),
+    'bicyclo[2.1.1]hexane': _bicyclo(2, 1, 1),
+    'bicyclo[3.1.1]heptane': _bicyclo(3, 1, 1),
+    'bicyclo[4.1.1]octane': _bicyclo(4, 1, 1),
+    'bicyclo[3.2.2]nonane': _bicyclo(3, 2, 2),
+    'cubane': [(0, 1, 1), (1, 2, 1), (2, 3, 1), (3, 0, 1), (4, 5, 1), (5, 6, 1), (6, 7, 1),
+               (7, 4, 1), (0, 4, 1), (1, 5, 1), (2, 6, 1), (3, 7, 1)],
+})
+
+
+@pytest.mark.parametrize('name', sorted(FAMILY_CASES))
+def test_ring_descriptors_count_and_share_by_ring_family(name):
+    bonds = FAMILY_CASES[name]
+    m, ids = build(bonds)
+    families = _reference_families(bonds)
+    for p, n in enumerate(ids):
+        mine = [length for length, members in families if p in members]
+        assert m.ring_count_of(n) == len(mine), f'atom {p}'
+        assert m.ring_sizes_of(n) == frozenset(x for x in mine if x <= 24), f'atom {p}'
+        for q, k in enumerate(ids):
+            shared = any(p in members and q in members for _, members in families)
+            assert m.shares_ring(n, k) is shared, f'atoms {p}, {q}'
+
+
+def test_two_equal_bridges_make_one_ring_family():
+    # 2-azabicyclo[2.1.1]hexane: the two 5-rings sum to the 4-ring, so they are one family, and
+    # the nitrogen is on one ring in either atom order
+    for smiles in ('N1CC2CC1C2', 'C12NCC(C1)C2'):
+        m = read_smiles(smiles)
+        nitrogen = next(n for n in m if m.element_of(n) == 7)
+        assert m.ring_count_of(nitrogen) == 1
+        assert m.ring_sizes_of(nitrogen) == frozenset({5})
+        assert sorted(m.ring_count_of(n) for n in m) == [1, 1, 2, 2, 2, 2]
+
+
+INVARIANCE_CASES = {
+    '2-azabicyclo[2.1.1]hexane': 'N1CC2CC1C2',
+    'bicyclo[1.1.1]pentane': 'C1C2CC1C2',
+    'bicyclo[3.1.1]heptane': 'C1CCC2CC1C2',
+    'norbornane': 'C1CC2CCC1C2',
+    'cubane': 'C12C3C4C1C5C2C3C45',
+    'adamantane': 'C1C2CC3CC1CC(C2)C3',
+    'C60': 'c12c3c4c5c1c1c6c7c2c2c8c3c3c9c4c4c%10c5c5c1c1c6c6c%11c7c2c2c7c8c3c3c8c9c4c4c9c%10c5c5c1c1c6c6'
+           'c%11c2c2c7c3c3c8c4c4c9c5c1c1c6c2c3c41',
+    '2,4-methanoproline': 'N1CC2CC1(C(=O)O)C2',   # 2-azabicyclo[2.1.1]hexane-1-carboxylic acid
+    'sulfone-cyclophane': 'O=S1(=O)' + 'c2ccc(cc2)S(=O)(=O)' * 5 + 'c2ccc1cc2',
+}
+
+
+def _ring_profile(m):
+    """Per-atom ring descriptors and the shares_ring relation, keyed by canonical symmetry class."""
+    rank = m.atoms_order
+    atoms = sorted((rank[n], m.ring_count_of(n), tuple(sorted(m.ring_sizes_of(n)))) for n in m)
+    pairs = sorted((min(rank[n], rank[k]), max(rank[n], rank[k]))
+                   for n in m for k in m if n < k and m.shares_ring(n, k))
+    return atoms, pairs
+
+
+@pytest.mark.parametrize('name', sorted(INVARIANCE_CASES))
+def test_ring_descriptors_do_not_depend_on_atom_order(name):
+    state = random.getstate()
+    random.seed(20260927)
+    try:
+        m = read_smiles(INVARIANCE_CASES[name])
+        reference = _ring_profile(m)
+        for _ in range(20):
+            other = read_smiles(format(m, 'r'))
+            assert _ring_profile(other) == reference
+            assert other == m
+    finally:
+        random.setstate(state)

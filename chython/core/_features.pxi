@@ -74,6 +74,7 @@ DEF W1_ELEMENT_SPAN        = 0x3FFFFFFFFFFFFFFF   # word 1 bits 0-61: heavy-elem
 # handles it.
 DEF W4_BIT_STEREO          = 6
 DEF W4_FRAME_FREE_MASK     = 0xFFFFFFFFFFFFFFBF   # word IV minus bit 6 (the stored parity)
+DEF W4_IDENTITY_MASK       = 0xFFFFFFFFFFFFFE3F   # word IV minus bits 6-8: `__eq__` reads no raw parity
 DEF W0_LIGHT_ELEMENT_SPAN  = 0x01FFFFFFFFFFFFFE   # word 0 bits 1-56: the light elements only
 # (bit 0 of word 0 is the heavy-element flag, not an element identity bit; excluded here so
 #  that forbidding every bit in W0_LIGHT_ELEMENT_SPAN + the flag together means no element matches)
@@ -162,14 +163,14 @@ cdef inline uint64_t atom_feature_word4(atom_t *a, uint8_t parity) noexcept nogi
     # `perceive_rings` passes 0 for the aromatic ring count on every atom and only
     # `_atom_field_probe` ever writes a non-zero one, so no corpus can distinguish this term from
     # any other formula over that count.  Storing order 4 did NOT make the count derivable: the
-    # ring bitmap is VERTEX-scoped (`_fill_descriptors`), and "every bond of this prototype is
+    # ring bitmap is VERTEX-scoped (`_fill_descriptors`), and "every bond of this ring family is
     # order 4" is a question about its EDGES.  The vertex-only approximation -- every vertex of the
-    # prototype has two aromatic bonds -- is wrong on biphenylene, whose central four-ring has four
+    # family has two aromatic bonds -- is wrong on biphenylene, whose central four-ring has four
     # such vertices and two single bonds of its own, so it would report an aromatic cyclobutadiene.
-    # Deriving it properly means carrying an edge set per prototype, which costs memory on every
+    # Deriving it properly means carrying an edge set per family, which costs memory on every
     # molecule to feed a term no query can screen on (it is outside every SPAN_MASK entry).  Left
-    # constant until something needs the number; whoever needs it must widen the prototype, not
-    # this formula.
+    # constant until something needs the number; whoever needs it must widen the family record,
+    # not this formula.
     w4 |= <uint64_t> 1 << (56 + _bit_of(at_aromatic_ring_count(a), 0, 7))
     return w4
 

@@ -74,8 +74,15 @@
 # is order-dependent again -- so it is the honest ceiling of last resort, and like the per-search
 # bound it sets CANON_BUDGET_EXCEEDED. Both are counted in candidates CONSIDERED (a candidate
 # that survives the class prune and reaches the colour test).
+#
+# CANON_ORBIT_WORK bounds every orbit search of ONE canonical labelling together: `_canon_branch`
+# calls `mol_automorphisms` at each tree node, and each call may spend CANON_MAX_NODES_CALL. It
+# costs no answer: a search that finds the allowance spent truncates, and a truncated orbit
+# partition only turns the prune off (`use_orbits`), so the tree walks more and the node budget
+# below stays the one hard limit. The whole labelling gets what one call gets.
 DEF CANON_MAX_NODES_SEARCH = 100000
 DEF CANON_MAX_NODES_CALL = 20000000
+DEF CANON_ORBIT_WORK = 20000000
 
 # A typed global rather than a DEF, like Q_NO_SLOT on the query side: the search compares against
 # it inside `nogil`, and a DEF's value is a Python int there.
@@ -129,6 +136,54 @@ ctypedef int (*canon_prepare_fn)(Structure structure) except -1
 
 cdef canon_stereo_fn _canon_stereo_hook = NULL
 cdef canon_prepare_fn _canon_prepare_hook = NULL
+
+
+# ENHANCED STEREO IN THE CANONICAL ORDER: a third tail and two more pointers, filled by `_stereo.pxi`.
+#
+# | mode                   | members counted                          | caller                         |
+# | CANON_GROUPS_NONE      | none                                     | `!s`, `!e`, `isomorphism`      |
+# | CANON_GROUPS_IDENTITY  | ABS, AND and OR on a configured anchor   | identity, `canonical_order()`, |
+# |                        |                                          | canonical group ids            |
+# | CANON_GROUPS_WRITTEN   | every stored ABS, AND and OR byte        | the CXSMILES writer            |
+# |                        | of the arena given; the writer gives the |                                |
+# |                        | live view, `structure_live_groups_view`  |                                |
+#
+# An explicit ABS label is in identity: a configured unit in no collection is a sign of unknown
+# reliability, and `C[C@H](O)CC |a:1|` is not `C[C@H](O)CC`.
+#
+#   * `_canon_group_hook(structure, mode, pos, out, pin)` returns the tail's length in words, 0 when
+#     the mode counts no member.  With `pos` (a discrete 1-based colouring) and `out` it writes the
+#     tail: per member two words, `kind << 62 | rlo << 31 | rhi` and `lo << 32 | hi`, sorted ascending,
+#     where `lo`/`hi` are the 0-based positions of the atoms the member is named on and `(rlo, rhi)` is
+#     the smallest `(lo, hi)` of the member's collection.  Kind and partition, never the stored id.  With
+#     `pin` it marks every named atom 2 where the byte is still 0, `unnamed_out`'s frame-member code.
+#   * `_canon_group_span_hook(structure, mode, comp)` is True when one collection has members in two
+#     components; the record is then searched whole, since a per-component key cannot see the link.
+#   * `_canon_group_phase_hook(structure, mode, pos, digits, flip)` puts each AND collection's
+#     parity digits in one phase, since inverting every member of one is the same statement.  With
+#     `pos` (discrete, 1-based) the collection's first-positioned member with a readable digit is made
+#     even (2) by flipping 2 <-> 3 on every member, and `flip`, when not NULL, receives per stored byte
+#     whether it flipped.  With `pos` NULL a member's readable digit becomes whether most of its
+#     collection agrees with it, so a colouring refined by digits is the same under either phase.  ABS
+#     and OR state signs that are never touched.
+#
+# The tail follows the parity tail, so a labelling's graph and parity words decide first and `!e`
+# output of a grouped molecule is the ungrouped molecule's character for character.
+cdef enum:
+    CANON_GROUPS_NONE = 0
+    CANON_GROUPS_IDENTITY = 1
+    CANON_GROUPS_WRITTEN = 2
+
+ctypedef size_t (*canon_group_fn)(Structure structure, uint32_t mode, uint32_t *pos, uint64_t *out,
+                                  uint8_t *pin) noexcept nogil
+ctypedef bint (*canon_group_span_fn)(Structure structure, uint32_t mode,
+                                     const uint32_t *comp) noexcept nogil
+ctypedef void (*canon_group_phase_fn)(Structure structure, uint32_t mode, uint32_t *pos, uint32_t *digits,
+                                      uint8_t *flip) noexcept nogil
+
+cdef canon_group_fn _canon_group_hook = NULL
+cdef canon_group_span_fn _canon_group_span_hook = NULL
+cdef canon_group_phase_fn _canon_group_phase_hook = NULL
 
 
 with cython.warn.undeclared(False):
@@ -200,8 +255,10 @@ cdef inline bint _bond_colour_equal(halfedge_t *e, halfedge_t *f) noexcept nogil
 
 
 cdef void _canon_search_order(uint32_t n, uint32_t *ptr, halfedge_t *edges, uint32_t *pin,
-                              uint32_t *order, uint32_t *anchor, uint8_t *seen) noexcept nogil:
-    """The order the search assigns slots in: every PINNED slot first, then breadth-first from them.
+                              uint32_t *order, uint32_t *anchor, uint8_t *state, uint32_t *walk,
+                              bint depth_first) noexcept nogil:
+    """The order the search assigns slots in: every PINNED slot first, then each ring closed as soon
+    as it can be, and breadth-first -- or, with `depth_first`, depth-first -- otherwise.
 
     `pin` is the per-slot pin array the search is about to run with -- `pin[s]` is the required
     image of slot `s`, or CANON_NO_SLOT to leave it free -- and AT LEAST ONE SLOT MUST BE PINNED.
@@ -215,44 +272,85 @@ cdef void _canon_search_order(uint32_t n, uint32_t *ptr, halfedge_t *edges, uint
     from its pin and never from a neighbour's image, so the anchor would only be read for the early
     bond test, and the verification walk covers that bond anyway.
 
-    Every slot after the pinned prefix is adjacent to one already assigned, and `anchor` names
-    which: anchor[d] is the DEPTH of that already-assigned neighbour, so order[anchor[d]] is the
-    slot itself. Component roots get CANON_NO_SLOT. The search reads it twice over -- to draw its
-    candidates from the neighbour's image instead of from all n slots, and to reject a wrong
-    candidate at the shallowest depth that can see it.
+    The next free slot is, in this order of preference:
 
-    Disconnected components follow, each rooted at the lowest slot left. `seen` is scratch and is
-    left dirty.
+    | slot                                               | discipline                 |
+    | -------------------------------------------------- | -------------------------- |
+    | two or more assigned neighbours (it closes a ring) | LIFO                       |
+    | one assigned neighbour                             | FIFO; LIFO if depth_first  |
+    | none (a new component)                             | lowest slot                |
+
+    A ring-closing slot goes first because its extra bond rejects a wrong image at the next depth.
+    The two disciplines for the rest fail on different shapes, which is why `mol_automorphisms` runs
+    the second when the first truncates:
+
+    | order         | fails on                          | because                                 |
+    | ------------- | --------------------------------- | --------------------------------------- |
+    | breadth-first | a hub closing k identical rings   | both ends of one ring are hub           |
+    |               | (a nitrogen with k O-C-C loops)   | neighbours, assigned apart, and a wrong |
+    |               |                                   | pairing surfaces up to 2k depths late:  |
+    |               |                                   | backtracking exponential in k           |
+    | depth-first   | large fused polycycles, fullerene | a long path closes few rings early;     |
+    |               | fragments                         | ten times the time on 70-atom ones      |
+
+    Every slot after the pinned prefix except a component root is adjacent to one already assigned,
+    and `anchor` names which: anchor[d] is the DEPTH of the latest-assigned such neighbour, so
+    order[anchor[d]] is adjacent to order[d]. Component roots get CANON_NO_SLOT. The search reads it
+    twice over -- to draw its candidates from the neighbour's image instead of from all n slots, and
+    to reject a wrong candidate at the shallowest depth that can see it.
+
+    `state` (n bytes: assigned neighbours seen, capped at 2; 3 once assigned) and `walk` (3n slots:
+    the latest assigned neighbour's depth, the one-neighbour list, the ring-closing stack) are
+    scratch and are left dirty.
     """
-    cdef uint32_t head = 0, tail = 0, v, u, k, d
-    memset(seen, 0, <size_t> n)
-    for u in range(n):
-        if pin[u] != CANON_NO_SLOT:
-            seen[u] = 1
-            order[tail] = u
-            anchor[tail] = CANON_NO_SLOT
-            tail += 1
-    while True:
-        while head < tail:
-            d = head
-            v = order[head]
-            head += 1
-            for k in range(ptr[v], ptr[v + 1]):
-                u = edges[k].to
-                if not seen[u]:
-                    seen[u] = 1
-                    order[tail] = u
-                    anchor[tail] = d
-                    tail += 1
-        if tail == n:
-            return
-        for u in range(n):          # next component, rooted at the lowest slot not yet taken
-            if not seen[u]:
-                seen[u] = 1
-                order[tail] = u
-                anchor[tail] = CANON_NO_SLOT
-                tail += 1
-                break
+    cdef uint32_t *via = walk
+    cdef uint32_t *queue = walk + n
+    cdef uint32_t *closers = walk + 2 * <size_t> n
+    cdef uint32_t tail = 0, head = 0, queued = 0, top = 0, scan = 0, root = 0, u, v, k, anc
+    memset(state, 0, <size_t> n)
+    while tail < n:
+        v = CANON_NO_SLOT
+        anc = CANON_NO_SLOT
+        while v == CANON_NO_SLOT and scan < n:
+            if pin[scan] != CANON_NO_SLOT:
+                v = scan
+            scan += 1
+        while v == CANON_NO_SLOT and top:
+            top -= 1
+            if state[closers[top]] != 3:
+                v = closers[top]
+                anc = via[v]
+        while v == CANON_NO_SLOT and head < queued:
+            if depth_first:
+                queued -= 1
+                u = queue[queued]
+            else:
+                u = queue[head]
+                head += 1
+            if state[u] != 3:
+                v = u
+                anc = via[u]
+        if v == CANON_NO_SLOT:
+            while state[root] == 3:     # an unassigned slot with an assigned neighbour is queued,
+                root += 1               # so this one is in a component not yet entered
+            v = root
+        state[v] = 3
+        order[tail] = v
+        anchor[tail] = anc
+        for k in range(ptr[v], ptr[v + 1]):
+            u = edges[k].to
+            if state[u] == 3:
+                continue
+            via[u] = tail
+            if state[u] == 0:
+                state[u] = 1
+                queue[queued] = u
+                queued += 1
+            elif state[u] == 1:
+                state[u] = 2
+                closers[top] = u
+                top += 1
+        tail += 1
 
 
 # THE SEARCH'S RESUMABLE STATE. Every array is CALLER-OWNED scratch of `n` entries; the three
@@ -310,7 +408,7 @@ cdef bint mol_find_pinned_next(uint32_t *ptr, halfedge_t *edges, atom_t *atoms,
         which is what keeps the counting argument below intact. See that argument for why
         pre-seeding `sigma` with the pins instead would silently break the search.
       * a depth with an anchor draws from the CSR adjacency of the anchor's image. Everything the
-        BFS order reaches has an assigned neighbour, so nothing legal is outside that list, and
+        search order reaches has an assigned neighbour, so nothing legal is outside that list, and
         the bond check to the anchor comes free with the half-edge the scan is already holding.
       * a component root has no anchor and scans the class over all n slots.
 
@@ -358,7 +456,7 @@ cdef bint mol_find_pinned_next(uint32_t *ptr, halfedge_t *edges, atom_t *atoms,
             img = sigma[order[anc]]
             base = ptr[img]
             stop = ptr[img + 1]
-            anchor_src = csr_find_at(ptr, edges, s, order[anc])  # exists: the BFS order says so
+            anchor_src = csr_find_at(ptr, edges, s, order[anc])  # exists: the search order says so
         t = cursor[depth]
         while True:
             if pinned:
@@ -479,7 +577,7 @@ cdef bint mol_find_pinned_next(uint32_t *ptr, halfedge_t *edges, atom_t *atoms,
 
 
 cdef int mol_automorphisms(Structure structure, uint32_t *seed,
-                           uint32_t *orbits_out, uint32_t *flags_out) except -1:
+                           uint32_t *orbits_out, uint32_t *flags_out, uint64_t *work=NULL) except -1:
     """The molecule's symmetry orbits.
 
     `orbits_out` is the deliverable, and the only one. It is a CALLER-SUPPLIED array of atom_count
@@ -498,27 +596,36 @@ cdef int mol_automorphisms(Structure structure, uint32_t *seed,
     distinctions back in.
 
     flags_out[0] receives CANON_ASYMMETRIC exactly when the group is known to be trivial, and
-    CANON_BUDGET_EXCEEDED when any search was truncated -- see the two budget constants. A
+    CANON_BUDGET_EXCEEDED when any search was truncated -- see the budget constants. A
     truncated result is not exact: its orbits may be FINER than the truth, never coarser, so
     CANON_ASYMMETRIC is withheld whenever the bit is set, even with no merge at all. Consumers
     must treat the bit as "do not trust this partition"; `automorphism_orbits` raises on it.
+
+    `work` is a caller's running candidate allowance shared across calls, or NULL for none: each pair
+    search gets the smaller of CANON_MAX_NODES_SEARCH and what is left, its spend is deducted, and an
+    empty allowance truncates.  `_canon_branch` passes CANON_ORBIT_WORK per canonical call.
     """
     cdef uint32_t n = structure.header.atom_count
     cdef uint32_t *ptr
     cdef halfedge_t *edges
     cdef atom_t *atoms
-    cdef uint32_t *cls = NULL
-    cdef uint32_t *parent = NULL
-    cdef uint32_t *order = NULL
-    cdef uint32_t *anchor = NULL
-    cdef uint32_t *sigma = NULL
-    cdef uint32_t *cursor = NULL
-    cdef uint32_t *pin = NULL
-    cdef uint8_t *taken = NULL
-    cdef uint32_t a, b, s, ra, rb, budget, successes = 0
+    cdef void *block = NULL
+    cdef size_t words
+    cdef uint32_t *cls
+    cdef uint32_t *parent
+    cdef uint32_t *order[2]
+    cdef uint32_t *anchor[2]
+    cdef uint32_t *sigma
+    cdef uint32_t *cursor
+    cdef uint32_t *pin
+    cdef uint32_t *walk
+    cdef uint8_t *taken
+    cdef uint32_t a, b, s, ra, rb, budget, allowed, successes = 0
     cdef uint64_t spent = 0
     cdef Py_ssize_t classes
-    cdef bint ok = False, truncated = False, stop = False, ordered = False
+    cdef bint ok = False, truncated = False, stop = False, lead = False, mode = False, pair_truncated
+    cdef bint ordered[2]
+    cdef int attempt
     cdef pinned_search_t st
 
     flags_out[0] = 0
@@ -535,17 +642,23 @@ cdef int mol_automorphisms(Structure structure, uint32_t *seed,
     atoms = structure.atoms()
 
     try:
-        cls = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
-        parent = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
-        order = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
-        anchor = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
-        sigma = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
-        cursor = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
-        pin = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
-        taken = <uint8_t *> PyMem_Malloc(<size_t> n * sizeof(uint8_t))
-        if (cls is NULL or parent is NULL or order is NULL or anchor is NULL or sigma is NULL
-                or cursor is NULL or pin is NULL or taken is NULL):
+        # One block: nine n-slot regions (two orders and two anchors among them), the 3n-slot `walk`
+        # of `_canon_search_order`, then `taken`.
+        words = align8(<size_t> n * sizeof(uint32_t)) // sizeof(uint32_t)
+        block = PyMem_Malloc(12 * words * sizeof(uint32_t) + <size_t> n)
+        if block is NULL:
             raise MemoryError('automorphism scratch allocation failed')
+        cls = <uint32_t *> block
+        parent = cls + words
+        order[0] = parent + words
+        order[1] = order[0] + words
+        anchor[0] = order[1] + words
+        anchor[1] = anchor[0] + words
+        sigma = anchor[1] + words
+        cursor = sigma + words
+        pin = cursor + words
+        walk = pin + words
+        taken = <uint8_t *> (walk + 3 * words)
 
         with nogil:
             classes = compute_atoms_order(structure, cls, seed)
@@ -566,17 +679,16 @@ cdef int mol_automorphisms(Structure structure, uint32_t *seed,
         st.n = n
         st.cls = cls
         st.pin = pin
-        st.order = order
-        st.anchor = anchor
         st.sigma = sigma
         st.cursor = cursor
         st.taken = taken
         for a in range(n):
             if stop:
                 break
-            ordered = False         # the walk order depends on the source slot only, so it is
-            for b in range(a + 1, n):               # built once per source -- and only for a
-                if cls[b] != cls[a]:                # source that some pair actually searches
+            ordered[0] = False      # the walk orders depend on the source slot only, so each
+            ordered[1] = False      # is built once per source -- and only for a source that
+            for b in range(a + 1, n):               # some pair actually searches with it
+                if cls[b] != cls[a]:
                     continue
                 ra = _uf_find(parent, a)
                 rb = _uf_find(parent, b)
@@ -585,27 +697,49 @@ cdef int mol_automorphisms(Structure structure, uint32_t *seed,
                     # there is nothing an automorphism mapping a onto b could add to the
                     # partition. Skipping these is what keeps the successful searches to n - 1.
                     continue
-                if spent >= CANON_MAX_NODES_CALL:
+                if spent >= CANON_MAX_NODES_CALL or (work is not NULL and work[0] == 0):
                     truncated = True
                     stop = True
                     break
                 # ONE pinned slot, `a`, whose required image is `b`. That is Task 1's pair search
                 # expressed in the general kernel: the order's pinned prefix is then `a` alone, so
-                # it is a BFS rooted at `a` and depends on `a` only -- which is why `ordered` can
+                # it is rooted at `a` and depends on `a` only -- which is why `ordered` can
                 # hoist it out of the `b` loop.
+                #
+                # TWO WALK ORDERS, EACH WITH A FULL PAIR BUDGET: the breadth-first one, and the
+                # depth-first one a hub of identical rings needs (see `_canon_search_order`). The
+                # second runs only when the first truncates, so the pair is undecided only when both
+                # are, whichever leads; `lead` is the one that last decided a pair, and only saves
+                # the losing attempt on the pairs after it.
                 pin[a] = b
-                if not ordered:
+                ok = False
+                pair_truncated = False
+                for attempt in range(2):
+                    mode = lead != (attempt == 1)
+                    if not ordered[mode]:
+                        with nogil:
+                            _canon_search_order(n, ptr, edges, pin, order[mode], anchor[mode], taken, walk,
+                                                mode)
+                        ordered[mode] = True
+                    allowed = CANON_MAX_NODES_SEARCH
+                    if work is not NULL and work[0] < allowed:
+                        allowed = <uint32_t> work[0]
+                    budget = allowed
+                    st.order = order[mode]
+                    st.anchor = anchor[mode]
                     with nogil:
-                        _canon_search_order(n, ptr, edges, pin, order, anchor, taken)
-                    ordered = True
-                budget = CANON_MAX_NODES_SEARCH
-                with nogil:
-                    mol_find_pinned_begin(&st)
-                    ok = mol_find_pinned_next(ptr, edges, atoms, &st, &budget)
+                        mol_find_pinned_begin(&st)
+                        ok = mol_find_pinned_next(ptr, edges, atoms, &st, &budget)
+                    spent += <uint64_t> (allowed - budget)
+                    if work is not NULL:
+                        work[0] -= allowed - budget
+                    pair_truncated = st.truncated
+                    if not pair_truncated:
+                        lead = mode
+                        break
                 pin[a] = CANON_NO_SLOT
-                spent += <uint64_t> CANON_MAX_NODES_SEARCH - budget
                 if not ok:
-                    if st.truncated:
+                    if pair_truncated:
                         # This pair is undecided. Every OTHER pair still gets its own budget, so
                         # one expensive pair no longer coarsens -- or refines -- the whole answer.
                         truncated = True
@@ -631,14 +765,7 @@ cdef int mol_automorphisms(Structure structure, uint32_t *seed,
             with nogil:
                 _uf_emit(n, parent, orbits_out)
     finally:
-        PyMem_Free(cls)
-        PyMem_Free(parent)
-        PyMem_Free(order)
-        PyMem_Free(anchor)
-        PyMem_Free(sigma)
-        PyMem_Free(cursor)
-        PyMem_Free(pin)
-        PyMem_Free(taken)
+        PyMem_Free(block)
     return 0
 
 
@@ -735,7 +862,7 @@ cdef struct canon_ctx_t:
     halfedge_t *edges
     atom_t *atoms
     size_t graph_len              # 2 * atom_count + bond_count: the certificate's graph part
-    size_t cert_len               # graph_len, plus atom_count when `digits` is live
+    size_t cert_len               # graph_len, plus atom_count when `digits` is live, plus group_len
     uint64_t *best                # the greatest certificate seen, cert_len words
     uint64_t *cert                # scratch for the candidate certificate
     uint64_t *nb                  # scratch for one atom's neighbour row, maxdeg words
@@ -745,8 +872,11 @@ cdef struct canon_ctx_t:
     uint32_t *sscratch            # 2n uint32_t lent to `_canon_stereo_hook`
     uint32_t *pcls                # n uint32_t: the colouring the orbit search is seeded with
     uint8_t *unnamed              # n bytes: the atoms of the frames this colouring cannot name
+    size_t group_len              # the stereo-group tail's words; 0 under CANON_GROUPS_NONE
+    uint32_t groups               # the CANON_GROUPS_* mode
     uint64_t nodes                # nodes entered so far, against `budget`
     uint64_t budget               # CANON_NODE_BUDGET, except through the seam; see _canon_order
+    uint64_t orbit_work           # orbit-search candidates left to this call, from CANON_ORBIT_WORK
     bint have_best
     bint asymmetric               # the root's group is trivial, so the extremum is unique
     bint exceeded
@@ -781,6 +911,9 @@ cdef void _canon_certificate(Structure structure, canon_ctx_t *ctx, uint32_t *po
     publishes are the same string, which is a property worth having structurally instead of by
     coincidence: they must agree, or the labelling the search chose would not be the labelling the
     published bytes were read in.
+
+    THEN THE STEREO-GROUP TAIL, `ctx.group_len` words from `_canon_group_hook`, last for the same
+    reason the parity tail follows the graph part: it only chooses among labellings that already tie.
 
     `ctx.digits` NULL leaves the graph part alone and writes no tail, which is what
     `mol_certificate_words` wants -- there the caller supplies `extra` itself.
@@ -825,8 +958,12 @@ cdef void _canon_certificate(Structure structure, canon_ctx_t *ctx, uint32_t *po
             w += 1
     if ctx.digits is not NULL:
         _canon_stereo_hook(structure, pos, ctx.digits, ctx.sscratch, NULL)
+        if ctx.group_len:
+            _canon_group_phase_hook(structure, ctx.groups, pos, ctx.digits, NULL)
         for s in range(n):
             out[w + pos[s] - 1] = <uint64_t> ctx.digits[s]
+        if ctx.group_len:
+            _canon_group_hook(structure, ctx.groups, pos, out + w + n, NULL)
 
 
 cdef inline int _canon_cert_cmp(uint64_t *a, uint64_t *b, size_t count) noexcept nogil:
@@ -1039,7 +1176,7 @@ cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uin
                 break
         if may_be_symmetric:
             if ctx.digits is NULL:
-                mol_automorphisms(structure, cls, orbits, &flags)
+                mol_automorphisms(structure, cls, orbits, &flags, &ctx.orbit_work)
                 use_orbits = not (flags & CANON_BUDGET_EXCEEDED)
                 child_symmetric = not (flags & CANON_ASYMMETRIC)
             else:
@@ -1052,6 +1189,12 @@ cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uin
                 with nogil:
                     all_named = _canon_stereo_hook(structure, cls, ctx.digits, ctx.sscratch,
                                                    ctx.unnamed)
+                    if ctx.group_len:
+                        # A collection's atoms are pinned too: a symmetry fixing every named atom
+                        # carries each collection onto itself, so the group tail cannot move.
+                        _canon_group_hook(structure, ctx.groups, NULL, NULL, ctx.unnamed)
+                        _canon_group_phase_hook(structure, ctx.groups, NULL, ctx.digits, NULL)
+                        all_named = False
                     for s in range(n):
                         ctx.pcls[s] = cls[s] * 4 + ctx.digits[s]
                 # Step two: WHERE THIS COLOURING CANNOT NAME A CONFIGURED UNIT'S FRAME, DO NOT PRUNE
@@ -1095,7 +1238,8 @@ cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uin
                 # not a subgroup element -- which stays a refusal, since proving that swap
                 # parity-preserving needs the group elements the search does not hand back.
                 mol_automorphisms(structure, ctx.pcls if all_named else
-                                  _canon_pinned(n, ctx.pcls, ctx.unnamed), orbits, &flags)
+                                  _canon_pinned(n, ctx.pcls, ctx.unnamed), orbits, &flags,
+                                  &ctx.orbit_work)
                 use_orbits = not (flags & CANON_BUDGET_EXCEEDED)
                 # A subgroup being trivial says nothing about a child's, whose marked set may be
                 # smaller, so only the unpinned group may answer for the subtree or for the root.
@@ -1150,14 +1294,14 @@ cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uin
 
 
 cdef inline int mol_canonical_order(Structure structure, uint32_t *seed, uint32_t *order_out,
-                                    uint32_t *flags_out, bint stereo) except -1:
+                                    uint32_t *flags_out, bint stereo, uint32_t groups) except -1:
     """The molecule's canonical atom order, with the shipped node budget. See `_canon_order`, which
     is the same call with the budget spelled out; this is the entry point every consumer wants."""
-    return _canon_order(structure, seed, order_out, flags_out, CANON_NODE_BUDGET, stereo)
+    return _canon_order(structure, seed, order_out, flags_out, CANON_NODE_BUDGET, stereo, groups)
 
 
 cdef int _canon_order(Structure structure, uint32_t *seed, uint32_t *order_out,
-                      uint32_t *flags_out, uint32_t budget, bint stereo) except -1:
+                      uint32_t *flags_out, uint32_t budget, bint stereo, uint32_t groups) except -1:
     """The molecule's canonical atom order: the extremal labelling of the refinement tree.
 
     `order_out` is a CALLER-SUPPLIED array of atom_count uint32_t. Entry i receives atom slot i's
@@ -1197,6 +1341,10 @@ cdef int _canon_order(Structure structure, uint32_t *seed, uint32_t *order_out,
         corpus of `test/`: folding it moved 63 strings, and all 63 stopped surviving a
         write-as-`!s`-then-read-then-write-as-`!s` round trip.
 
+    `groups` is a CANON_GROUPS_* mode, the table above `canon_group_fn`: which stereo-group members
+    the leaf certificate's third tail carries.  NONE leaves every answer as the stereo-only search
+    gives it; a record the mode counts no member of takes that path exactly.
+
     `budget` is a parameter and not the constant inline BECAUSE OF THAT PARAGRAPH: the guarantee it
     states is only checkable by a test that can reach the failure, and no record small enough for a
     test comes anywhere near 1,000,000 nodes. Every real caller goes through
@@ -1225,6 +1373,12 @@ cdef int _canon_order(Structure structure, uint32_t *seed, uint32_t *order_out,
     # stereo-blind configuration.
     if _canon_prepare_hook is not NULL:
         _canon_prepare_hook(structure)
+    # After the unit table exists: the hook reads which units the collections name.
+    ctx.groups = CANON_GROUPS_NONE
+    ctx.group_len = 0
+    if groups and _canon_group_hook is not NULL and _canon_stereo_hook is not NULL:
+        ctx.groups = groups
+        ctx.group_len = _canon_group_hook(structure, groups, NULL, NULL, NULL)
 
     # Read-only from here on: nothing in this fragment appends to the arena, so caching the
     # segment pointers cannot outlive a reallocation.
@@ -1234,6 +1388,7 @@ cdef int _canon_order(Structure structure, uint32_t *seed, uint32_t *order_out,
     ctx.atoms = structure.atoms()
     ctx.nodes = 0
     ctx.budget = budget
+    ctx.orbit_work = CANON_ORBIT_WORK
     ctx.have_best = False
     ctx.asymmetric = False
     ctx.exceeded = False
@@ -1301,6 +1456,8 @@ cdef int _canon_order(Structure structure, uint32_t *seed, uint32_t *order_out,
         if _canon_stereo_hook is not NULL and seed is NULL and stereo:
             with nogil:
                 _canon_stereo_hook(structure, cls, ctx.digits, ctx.sscratch, NULL)
+                if ctx.group_len:
+                    _canon_group_phase_hook(structure, ctx.groups, NULL, ctx.digits, NULL)
                 for i in range(n):
                     ctx.pcls[i] = cls[i] * 4 + ctx.digits[i]
                 classes = compute_atoms_order(structure, cls, ctx.pcls)
@@ -1324,8 +1481,9 @@ cdef int _canon_order(Structure structure, uint32_t *seed, uint32_t *order_out,
                 k = label_components(structure, comp)
             if k < 0:
                 raise MemoryError('component labelling failed to allocate')
-            if k > 1:
+            if k > 1 and not (ctx.group_len and _canon_group_span_hook(structure, ctx.groups, comp)):
                 return _canon_order_split(structure, seed, order_out, flags_out, budget, stereo,
+                                          ctx.groups if ctx.group_len else CANON_GROUPS_NONE,
                                           comp, <uint32_t> k)
         finally:
             PyMem_Free(comp)
@@ -1340,7 +1498,7 @@ cdef int _canon_order(Structure structure, uint32_t *seed, uint32_t *order_out,
         # for this block -- the two discrete-refinement paths above return first. A NULL hook keeps
         # the old sizes exactly, so nothing here is a cost the stereo-blind build would not have had.
         if _canon_stereo_hook is not NULL:
-            ctx.cert_len = ctx.graph_len + n
+            ctx.cert_len = ctx.graph_len + n + ctx.group_len
         else:
             ctx.cert_len = ctx.graph_len
         u64_len = (2 * ctx.cert_len + maxdeg) * sizeof(uint64_t)
@@ -1389,7 +1547,21 @@ cdef inline int _canon_key_cmp(const uint64_t *a, uint32_t alen,
     return 0
 
 
+cdef inline int _canon_key_pair_cmp(const uint64_t *keys, const uint32_t *koff, const uint64_t *gkeys,
+                                    const uint32_t *goff, uint32_t a, uint32_t b) noexcept nogil:
+    """`_canon_key_cmp` on components `a` and `b`, then on their stereo-group keys when `gkeys` is live.
+
+    Secondary rather than appended, so a group key only orders components whose primary keys tie --
+    isomorphic components, whose `!e` spelling is one string either way.
+    """
+    cdef int r = _canon_key_cmp(keys + koff[a], koff[a + 1] - koff[a], keys + koff[b], koff[b + 1] - koff[b])
+    if r or gkeys is NULL:
+        return r
+    return _canon_key_cmp(gkeys + goff[a], goff[a + 1] - goff[a], gkeys + goff[b], goff[b + 1] - goff[b])
+
+
 cdef void _canon_key_sort(uint32_t k, const uint64_t *keys, const uint32_t *koff,
+                          const uint64_t *gkeys, const uint32_t *goff,
                           uint32_t *idx, uint32_t *tmp) noexcept nogil:
     """Fill `idx[0:k]` with component ids ordered by key DESCENDING, stably.
 
@@ -1422,8 +1594,7 @@ cdef void _canon_key_sort(uint32_t k, const uint64_t *keys, const uint32_t *koff
                 elif i >= mid:
                     tmp[o] = idx[j]
                     j += 1
-                elif _canon_key_cmp(keys + koff[idx[i]], koff[idx[i] + 1] - koff[idx[i]],
-                                    keys + koff[idx[j]], koff[idx[j] + 1] - koff[idx[j]]) >= 0:
+                elif _canon_key_pair_cmp(keys, koff, gkeys, goff, idx[i], idx[j]) >= 0:
                     tmp[o] = idx[i]
                     i += 1
                 else:
@@ -1437,7 +1608,7 @@ cdef void _canon_key_sort(uint32_t k, const uint64_t *keys, const uint32_t *koff
 
 
 cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order_out,
-                            uint32_t *flags_out, uint32_t budget, bint stereo,
+                            uint32_t *flags_out, uint32_t budget, bint stereo, uint32_t groups,
                             const uint32_t *comp, uint32_t k) except -1:
     """`_canon_order` for a record of `k` > 1 connected components: each component's own order, blocked.
 
@@ -1454,6 +1625,11 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
     respected -- and a seed that separates two otherwise isomorphic components has to separate their
     blocks too, or the promise holds inside a component and breaks between them.
 
+    UNDER A `groups` MODE each component is searched with its own collections, which
+    `structure_component_graph` carries, and its group tail is a SECONDARY key (`_canon_key_pair_cmp`).
+    The caller has already routed a record whose collection spans two components to the whole-record
+    search, so every collection here is local to one component.
+
     EACH COMPONENT GETS THE FULL NODE BUDGET. A budget bounds ONE extremal search and each component is
     its own search; sharing one across components would make a component's labelling depend on how many
     components happened to be searched before it, which is the dependency `CANON_MAX_NODES_SEARCH`'s own
@@ -1464,6 +1640,8 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
     cdef atom_t *atoms = structure.atoms()
     cdef uint32_t *block = NULL
     cdef uint64_t *keys = NULL
+    cdef uint64_t *gkeys = NULL
+    cdef uint32_t *goff = NULL
     cdef uint32_t *start
     cdef uint32_t *koff
     cdef uint32_t *idx
@@ -1487,12 +1665,14 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
     # inverse map `structure_component_graph` fills, the restricted seed, and the parity hook's 1-based
     # colouring, digits and 2m of scratch. Every span is sized at n rather than at the largest
     # component, which costs one array and removes a pass to find that size.
-    block = <uint32_t *> PyMem_Malloc((<size_t> 4 * k + 2 + <size_t> 8 * n) * sizeof(uint32_t))
+    # Under `groups`, k + 1 more for the group key offsets.
+    block = <uint32_t *> PyMem_Malloc((<size_t> 5 * k + 3 + <size_t> 8 * n) * sizeof(uint32_t))
     if block is NULL:
         raise MemoryError('canonical order component scratch allocation failed')
     # 2n + bonds words of certificate per component, n of parity tail, n of seed -- so the whole record
-    # fits in 4n + bond_count however it is divided.
-    keys = <uint64_t *> PyMem_Malloc((<size_t> 4 * n + structure.header.bond_count)
+    # fits in 4n + bond_count however it is divided -- then at most two words per atom of group keys,
+    # a member being one anchor slot.
+    keys = <uint64_t *> PyMem_Malloc((<size_t> (6 if groups else 4) * n + structure.header.bond_count)
                                     * sizeof(uint64_t))
     if keys is NULL:
         PyMem_Free(block)
@@ -1509,6 +1689,10 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
         pos1 = sseed + n
         digits = pos1 + n
         sscratch = digits + n                       # 2n
+        if groups:
+            goff = sscratch + 2 * n
+            gkeys = keys + 4 * n + structure.header.bond_count
+            goff[0] = 0
         # Counting sort of the slots by component label. Ascending within a block, which is
         # `structure_component_graph`'s precondition: a monotone renumbering preserves every parity
         # frame, so no configuration has to be rewritten.
@@ -1528,7 +1712,7 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
         for c in range(k):
             off = start[c]
             m = start[c + 1] - off
-            if m == 1:
+            if m == 1 and not groups:
                 # A LONE ION NEEDS NO SEARCH: its order is [0] and its key is the two words
                 # `_canon_certificate` would write for it -- the atom's invariant, then a bond count of
                 # zero -- with a zero parity digit under `tail`, a single atom having no stereo unit.
@@ -1558,7 +1742,7 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
                     sseed[i] = seed[slots[off + i]]
             try:
                 _canon_order(sub, sseed if seed is not NULL else NULL, lpos + off, &sflags,
-                             budget, stereo)
+                             budget, stereo, groups)
             except:
                 # The sub wrote its own flags before raising, and CANON_BUDGET_EXCEEDED is the one bit
                 # the caller is promised to see beside the exception.
@@ -1566,11 +1750,15 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
                 raise
             asym &= sflags
             flags_out[0] |= sflags & CANON_BUDGET_EXCEEDED
+            for i in range(m):
+                pos1[i] = lpos[off + i] + 1
+            if groups:
+                goff[c + 1] = goff[c] + <uint32_t> _canon_group_hook(sub, groups, pos1, gkeys + goff[c], NULL)
             if tail:
-                for i in range(m):
-                    pos1[i] = lpos[off + i] + 1
                 with nogil:
                     _canon_stereo_hook(sub, pos1, digits, sscratch, NULL)
+                    if groups:
+                        _canon_group_phase_hook(sub, groups, pos1, digits, NULL)
                 mol_certificate_words(sub, lpos + off, digits, keys + koff[c])
             else:
                 mol_certificate_words(sub, lpos + off, NULL, keys + koff[c])
@@ -1582,7 +1770,7 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
             koff[c + 1] = koff[c] + w
 
         with nogil:
-            _canon_key_sort(k, keys, koff, idx, tmp)
+            _canon_key_sort(k, keys, koff, gkeys, goff, idx, tmp)
             base = 0
             for j in range(k):
                 c = idx[j]
@@ -1593,8 +1781,7 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
             # components -- so the record is asymmetric only when every component is and no two of them
             # are alike. Adjacent is enough: the sort put equal keys together.
             for j in range(1, k):
-                if _canon_key_cmp(keys + koff[idx[j]], koff[idx[j] + 1] - koff[idx[j]],
-                                  keys + koff[idx[j - 1]], koff[idx[j - 1] + 1] - koff[idx[j - 1]]) == 0:
+                if _canon_key_pair_cmp(keys, koff, gkeys, goff, idx[j], idx[j - 1]) == 0:
                     asym = 0
                     break
         flags_out[0] |= asym
@@ -1665,6 +1852,8 @@ cdef int mol_certificate_words(Structure structure, uint32_t *order, uint32_t *e
         # write them.
         ctx.digits = NULL
         ctx.sscratch = NULL
+        ctx.group_len = 0
+        ctx.groups = CANON_GROUPS_NONE
         for i in range(n):
             pos[i] = order[i] + 1
         _canon_certificate(structure, &ctx, pos, out)

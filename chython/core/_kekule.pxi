@@ -1161,7 +1161,80 @@ cdef _AromRun arom_prepare(MoleculeContainer mol, aromatic_bonds, stated_h):
     return run
 
 
-def kekule(MoleculeContainer mol not None, aromatic_bonds=None, stated_h=None):
+cdef list arom_canonical_rank(MoleculeContainer mol, _AromRun run):
+    """Each atom index's canonical position with the live aromatic edge set collapsed, or `None`.
+
+    Ranked on a copy holding order 4 on every live edge, which is the same graph whichever Kekule form
+    or atom order arrived, so a search steered by these ranks makes the same choice for the same
+    compound.  Stereo-aware, as `canonical_order` is: a constitutional automorphism that is not a
+    stereo one would otherwise let two drawings of one diastereomer take different forms.  `None`, with
+    a `LOST` record, when the canonical search exceeds its budget.
+    """
+    cdef arom_scratch_t *sc = &run.sc
+    cdef list numbers = mol._numbers
+    cdef MoleculeContainer work = mol
+    cdef Structure structure = mol._structure
+    cdef halfedge_t *e
+    cdef list pairs = []
+    cdef uint32_t k
+    cdef object pair, order
+    for k in range(run.m):
+        if not sc.e_alive[k]:
+            continue
+        e = csr_find(structure, sc.e_u[k], sc.e_v[k])
+        if e is not NULL and e.order != 4:
+            pairs.append((numbers[sc.e_u[k]], numbers[sc.e_v[k]]))
+    if pairs:
+        work = mol.copy()
+        with work.edit():
+            for pair in pairs:
+                work.set_order(pair[0], pair[1], 4)
+    try:
+        order = work.canonical_order()
+    except AutomorphismBudgetExceeded:
+        run.log.append(mc_record('kekule:canonical-budget', (),
+                                 'the canonical order of this molecule exceeds its search budget; the '
+                                 'Kekule form follows the atom order, which two drawings of one compound '
+                                 'may not share',
+                                 mc_lost()))
+        return None
+    cdef list rank = []
+    for k in range(run.n):
+        rank.append(order[numbers[k]])
+    return rank
+
+
+cdef void arom_rank_adjacency(arom_scratch_t *sc, uint32_t n, list rank):
+    """Sort every atom's aromatic adjacency by neighbour rank, so partners are tried in that order."""
+    cdef uint32_t i, a, b, to, eid
+    cdef object key
+    for i in range(n):
+        # insertion sort: an aromatic atom has at most a handful of aromatic neighbours
+        for a in range(sc.aptr[i] + 1, sc.aptr[i + 1]):
+            to = sc.aadj[a]
+            eid = sc.aeid[a]
+            key = rank[to]
+            b = a
+            while b > sc.aptr[i] and rank[sc.aadj[b - 1]] > key:
+                sc.aadj[b] = sc.aadj[b - 1]
+                sc.aeid[b] = sc.aeid[b - 1]
+                b -= 1
+            sc.aadj[b] = to
+            sc.aeid[b] = eid
+
+
+cdef void arom_rank_atoms(uint32_t *atoms, uint32_t count, list rank):
+    """Sort one system's atom list by rank, so the search branches on the lowest-ranked tie first."""
+    cdef list keyed = []
+    cdef uint32_t j
+    for j in range(count):
+        keyed.append((rank[atoms[j]], atoms[j]))
+    keyed.sort()
+    for j in range(count):
+        atoms[j] = <uint32_t> keyed[j][1]
+
+
+def kekule(MoleculeContainer mol not None, aromatic_bonds=None, stated_h=None, *, bint canonical=False):
     """Turn a set of aromatic bonds into Kekule orders 1 and 2.  `MoleculeContainer.kekule`.
 
     This is a DELIBERATE operation and one of the two in the library allowed to change a
@@ -1228,6 +1301,15 @@ def kekule(MoleculeContainer mol not None, aromatic_bonds=None, stated_h=None):
     orders it would read are still pending.  Such a caller calls `derive_hydrogens(fill_only=True)`
     itself once its scope has closed.
 
+    `canonical` makes the form a function of the compound and not of the atom order.  The matching
+    is complete backtracking, so the form it lands on otherwise follows the arena's index order: C60
+    has 12500 Kekule forms and two atom orders of it get two of them.  With `canonical` the search
+    visits atoms and partners by canonical rank on the molecule with the aromatic edge set collapsed
+    (`arom_canonical_rank`), so any drawing and any atom order of one compound get one form.  It costs
+    one canonical order, and where that search exceeds its budget the form falls back to the index
+    order with a `LOST` record.  `canonicalize()` passes it; a caller that wants a Kekule form and not
+    the canonical one need not pay for it.
+
     Returns a `KekuleResult`.  `.changed` is False when nothing moved -- a molecule with no
     aromatic bonds, or a second call -- so a caller can see idempotence rather than take it on
     trust.  `.log` is a list of human-readable lines, one per repair: a bond in no ring, a
@@ -1270,6 +1352,9 @@ def kekule(MoleculeContainer mol not None, aromatic_bonds=None, stated_h=None):
     cdef set unresolved_roots = set()
     cdef object picked, c, key, why, root
     cdef bint ok
+    cdef list rank = arom_canonical_rank(mol, run) if canonical else None
+    if rank is not None:
+        arom_rank_adjacency(sc, n, rank)
     for i in range(n):
         sc.comp[i] = -1
     for i in range(n):
@@ -1291,6 +1376,8 @@ def kekule(MoleculeContainer mol not None, aromatic_bonds=None, stated_h=None):
                     sc.comp[w] = <int32_t> i
                     sc.clist[count] = w
                     count += 1
+        if rank is not None:
+            arom_rank_atoms(sc.clist, count, rank)
         nodes = 0
         names = None
         relaxed_h = None
@@ -1471,7 +1558,7 @@ def kekule(MoleculeContainer mol not None, aromatic_bonds=None, stated_h=None):
                 # for the one line this replaced, and RULES.md 9.7 is exactly about not leaving an
                 # inferred Python local where a declaration was meant.
                 pool = []
-                for key in sorted(seen):
+                for key in (sorted(seen) if rank is None else sorted(seen, key=rank.__getitem__)):
                     pool.append(seen[key])
                 # kind first, plain cation last: a relaxation that conserves charge (kind 1) or takes
                 # away a hydrogen the ring could not afford (kind 2) is a smaller claim about the

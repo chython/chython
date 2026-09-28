@@ -23,8 +23,8 @@ The invariants these tests exist to protect, in order of how expensive they are 
   * aromatic input is stored aromatic and the reader NEVER kekulises
   * a Kekule input is stored exactly as written
   * a syntax error raises with an offset; chemistry never raises
-  * atom-case aromatic promotion fires on an all-lowercase ring and NOT on biphenyl's inter-ring
-    bond, and every promotion is logged
+  * stated bond orders with a Kekule form are believed; atom-case aromatic promotion is the fallback
+    for an all-lowercase ring that has none, never reaches biphenyl's inter-ring bond, and is logged
   * `@`, `/` and `\\` mean what the string said: the sign is measured against RDKit's InChI, and a
     configuration the reader cannot place is NAMED in the log rather than dropped
 """
@@ -295,23 +295,39 @@ def test_an_explicit_aromatic_bond_between_uppercase_atoms_is_believed():
 BENZENE_BONDS = {(1, 2): 4, (2, 3): 4, (3, 4): 4, (4, 5): 4, (5, 6): 4, (1, 6): 4}
 
 
-def test_every_all_lowercase_six_ring_reads_as_benzene():
-    """The ruling, verbatim: for each smallest ring whose every atom was written lowercase, every
-    bond of that ring joins the pi edge set, whatever order the string wrote.
+def test_stated_orders_with_a_kekule_form_are_believed():
+    """The ruling: the orders the string wrote are kept when they have a Kekule form and every ring
+    atom keeps an aromatic bond, and then nothing is logged.  `c1cccc-c1` states a six-atom aromatic
+    path, which pairs off."""
+    for text in ('c1cccc-c1', 'c1ccccc-1'):
+        log = []
+        mol = read_smiles(text, log)
+        assert log == [], text
+        assert sorted(orders(mol).values()) == [1, 4, 4, 4, 4, 4], text
+        assert hydrogens(mol) == [1] * 6, text
 
-    The aromatic set comes from atom case and never from bond order, so an explicit `-` inside an
-    all-lowercase ring is a preference WITHIN the pi system.  The last two strings are exactly where
-    chython 2 raises instead, and raising is an answer this reader may not give.
-    """
-    for text in ('c1ccccc1', 'c1cccc-c1', 'c1ccccc-1', 'c1cccc-c-1', 'c1c-c-cc-c-1'):
-        assert orders(read_smiles(text)) == BENZENE_BONDS, text
-        assert hydrogens(read_smiles(text)) == [1] * 6, text
+
+def test_a_lowercase_ring_atom_with_no_aromatic_bond_is_promoted():
+    """The stated set is believed only when every atom of the ring keeps an aromatic bond.  Two
+    isolated aromatic pairs have a Kekule form, but carbons 3 and 6 are walled off from every pi bond,
+    so the ring is promoted to benzene; so is a lowercase ring written all single."""
+    for text in ('c1c-c-cc-c-1', 'c1-c-c-c-c-c-1'):
+        log = []
+        mol = read_smiles(text, log)
+        assert orders(mol) == BENZENE_BONDS, text
+        assert hydrogens(mol) == [1] * 6, text
+        assert [x.rule for x in log] == ['smiles:aromatic-promoted'], text
 
 
-def test_promotion_is_logged_as_the_repair_it_is():
+def test_stated_orders_with_no_kekule_form_are_promoted():
+    """The fallback: five lowercase carbons on an aromatic path cannot pair off, and promoting the
+    all-lowercase ring gives benzene, which can.  Promotion is a repair and is logged as one."""
     log = []
-    read_smiles('c1cccc-c1', log)
+    mol = read_smiles('c1cccc-c-1', log)
+    assert orders(mol) == BENZENE_BONDS
+    assert hydrogens(mol) == [1] * 6
     assert len(log) == 1
+    assert log[0].rule == 'smiles:aromatic-promoted'
     assert 'lowercase' in log[0] and 'stored aromatic' in log[0]
     # and a string that needed no repair says nothing
     log = []
@@ -320,8 +336,8 @@ def test_promotion_is_logged_as_the_repair_it_is():
 
 
 def test_biphenyl_inter_ring_bond_is_not_promoted():
-    """The case that makes the rule safe.  The bond between the rings lies in no smallest ring, so
-    no rule here can reach it -- and `c1ccc(-c2ccccc2)cc1` is what every writer in the world emits.
+    """The bond between the rings lies in no smallest ring, so no rule here can reach it -- and
+    `c1ccc(-c2ccccc2)cc1` is what every writer emits.
     """
     for text in ('c1ccccc1-c1ccccc1', 'c1ccc(-c2ccccc2)cc1'):
         log = []
@@ -336,46 +352,59 @@ def test_biphenyl_inter_ring_bond_is_not_promoted():
         assert sorted(hydrogens(mol)) == [0, 0] + [1] * 10, text
 
 
-def test_biphenylene_promotes_and_still_has_a_kekule_form():
-    # the four-ring joining the two six-rings is all-lowercase, so its two written-single bonds are
-    # promoted; the ruling requires that the result be kekulisable, and it is
+def test_biphenylene_keeps_its_written_single_bonds():
+    # the four-ring joining the two six-rings is all-lowercase, and its two written-single bonds are
+    # kept: the stated set has a Kekule form
     log = []
     mol = read_smiles('c1ccc2c(c1)-c1ccccc1-2', log)
-    assert len(log) == 1
-    assert set(orders(mol).values()) == {4}
+    assert log == []
+    assert sorted(orders(mol).values()) == [1, 1] + [4] * 12
     assert kekule(mol).unresolved == []
 
 
-def test_promotion_falls_back_to_the_stated_orders_when_it_has_no_kekule_form():
-    """Free insurance: the stated set cannot do worse than itself.
+@mark.parametrize('text', ['c1ccc2c(c1)-c1ccccc1-2',                                  # biphenylene
+                           'c1ccc2c(c1)-c1cccc3cccc-2c13',                            # fluoranthene, CAS 206-44-0
+                           'c1ccc2c(c1)-c1ccccc1-n1cccc-21',                          # pyrrolo[1,2-f]phenanthridine
+                           'c1cc2ccc1-c1ccc(cc1)-c1ccc(cc1)-c1ccc(cc1)-c1ccc(cc1)-c1ccc-2cc1'])  # [6]CPP
+def test_canonical_output_with_a_non_aromatic_ring_of_aromatic_atoms_reads_back(text):
+    # `thiele()` leaves these rings non-aromatic and the writer spells their bonds `-`; the stated
+    # set restricts from a Kekule structure, so it is believed and the string is a fixed point
+    mol = read_smiles(text)
+    mol.canonicalize()
+    written = str(mol)
+    back = read_smiles(written)
+    assert back == mol, written
+    assert str(back) == written
+    assert all(x.rule != 'smiles:aromatic-promoted' for x in back.log)
 
-    Five lowercase carbons cannot all take a ring double bond, so promoting this ring produces a
-    system with no Kekule form.  The reader keeps what the string wrote and says so.
-    """
+
+def test_neither_reading_with_a_kekule_form_keeps_the_stated_orders():
+    """Five lowercase carbons pair off neither as written nor promoted.  The reader keeps what the
+    string wrote and refuses."""
     log = []
     mol = read_smiles('c1ccc-c1', log)
     assert orders(mol) == {(1, 2): 4, (2, 3): 4, (3, 4): 4, (4, 5): 1, (1, 5): 4}
     assert len(log) == 1
+    assert log[0].rule == 'smiles:no-kekule-form'
     assert 'no Kekule form' in log[0]
 
 
-def test_promotion_redecides_every_hydrogen_count_and_rolls_them_back_with_the_orders():
-    """A promoted bond changes the aromatic count of its two atoms, hence their classification,
-    hence their hydrogens -- so the repair re-derives all of them rather than patching locally.
-
-    A written TRIPLE is what makes that visible: it spends its atoms' pi electrons, so before
-    promotion they are must-not-match atoms with no hydrogen, and after it they are ordinary
-    aromatic CH.  Promoting a written SINGLE happens to leave carbon's bond-order sum alone, which
-    is why the four benzene spellings above cannot see this at all.
-    """
-    # six-ring: the promotion sticks, and the two atoms of the triple gain their hydrogen
-    assert hydrogens(read_smiles('c1cccc#c1')) == [1] * 6
-    assert set(orders(read_smiles('c1cccc#c1')).values()) == {4}
-    # five-ring: the promotion is rolled back, and so are the hydrogens.  A 1 here would mean the
-    # molecule kept counts describing a graph it no longer holds.
+def test_hydrogen_counts_follow_the_orders_that_are_kept():
+    """A written TRIPLE spends its atoms' pi electrons, so they are must-not-match atoms with no
+    hydrogen.  Promotion re-derives every count; a kept stated set keeps the counts it implies."""
+    # six-ring: the four CH atoms pair off beside the triple, so the stated set is kept
+    mol = read_smiles('c1cccc#c1')
+    assert orders(mol)[(5, 6)] == 3
+    assert hydrogens(mol) == [1, 1, 1, 1, 0, 0]
+    # five-ring: a three-atom path cannot pair off, nor can five promoted carbons; the promotion is
+    # rolled back, and so are the hydrogens
     mol = read_smiles('c1ccc#c1')
     assert orders(mol)[(4, 5)] == 3
     assert hydrogens(mol) == [1, 1, 1, 0, 0]
+    # a promotion that sticks re-derives them: atom 6, with no aromatic bond as written, drops
+    # from two hydrogens to one
+    mol = read_smiles('c1cccc-c-1')
+    assert hydrogens(mol) == [1] * 6
 
 
 def test_a_lowercase_atom_with_no_aromatic_bond_is_reported():
@@ -1165,17 +1194,14 @@ def test_only_a_configured_centre_is_made_absolute_by_its_descriptor():
     assert read_smiles('C[C@H](N)C {A1=E}').stereo_groups() == {}      # refused, so nothing to infer from
 
 
-def test_the_absolute_collection_a_descriptor_implies_is_written_but_is_not_identity():
-    # a configured atom in no collection already means absolute, so the two molecules below are one
-    # compound: they compare and hash EQUAL, the collection not being part of the canonical form.  This
-    # is the test that fails if ABS ever enters the canonical bytes.
+def test_the_absolute_collection_a_descriptor_implies_is_written_and_is_identity():
+    # a descriptor states the centre absolute, which an unlabelled sign does not: the ABS collection it
+    # implies is part of the canonical form, so the two molecules below compare and hash unequal
     a, b = read_smiles('F[C@H](Cl)Br'), read_smiles('F[C@H](Cl)Br {A1=R}')
     a.canonicalize()
     b.canonicalize()
-    assert a == b and hash(a) == hash(b)
-    # and the writer states the collection anyway, so what the input said survives a round trip.  The
-    # cost is here and only here: one compound, two strings, so a cache keyed on the TEXT stores both
-    # while one keyed on the container does not.
+    assert a != b and hash(a) != hash(b)
+    # and the writer states the collection, so what the input said survives a round trip
     assert format(a, '') == '[C@@H](F)(Cl)Br'
     assert format(b, '') == '[C@@H](F)(Cl)Br |a:0|'
     assert format(read_smiles(format(b, '')), '') == format(b, '')
@@ -1234,9 +1260,9 @@ def test_a_brace_block_names_the_dialect_it_is_reporting_on():
 
 def test_the_log_is_optional_and_the_default_is_not_shared():
     # a mutable default would accumulate across calls; there is none, and no call may need one
-    assert read_smiles('c1cccc-c1') is not None
+    assert read_smiles('c1cccc-c-1') is not None
     log = []
-    read_smiles('c1cccc-c1', log)
+    read_smiles('c1cccc-c-1', log)
     assert len(log) == 1
-    read_smiles('c1cccc-c1', log)
+    read_smiles('c1cccc-c-1', log)
     assert len(log) == 2

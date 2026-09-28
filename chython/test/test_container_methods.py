@@ -52,6 +52,26 @@ BLOCK_2D = """
 M  END
 """
 
+#: (2S)-pent-3-en-2-ol with 2D coordinates: a `StereoLabel` is written only where it names a configured
+#: stereogenic unit, and C2 is one.
+BLOCK_CHIRAL = """
+  chython
+
+  6  5  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0000   -1.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0000    1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.0000    1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    4.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  2  1  1  0  0  0  0
+  2  3  1  1  0  0  0
+  2  4  1  0  0  0  0
+  4  5  2  0  0  0  0
+  5  6  1  0  0  0  0
+M  END
+"""
+
 
 # ------------------------------------------------------------------------------------------------
 # `chemistry` BODIES REACHED BY INJECTION
@@ -177,9 +197,9 @@ def test_the_data_label_helpers_are_methods_and_the_functions():
 
 
 def test_the_data_label_method_appends_and_survives_both_ctab_versions():
-    molecule = mol(BLOCK_2D)
+    molecule = mol(BLOCK_CHIRAL)
     n, m = molecule.atom_numbers[1], molecule.atom_numbers[2]
-    molecule.add_data_sgroup('StereoLabel', '(R)', atoms=[n])
+    molecule.add_data_sgroup('StereoLabel', '(S)', atoms=[n])
     molecule.add_data_sgroup('NOTE', ['first', 'second'], atoms=[n, m], bonds=[(n, m)])
     assert sorted(r.name for r in molecule.data_sgroups()) == ['NOTE', 'StereoLabel']
     for version in (2000, 3000):

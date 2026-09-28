@@ -19,6 +19,7 @@
 import re
 from itertools import permutations
 from random import Random
+from time import perf_counter
 
 import pytest
 from chython.core import AutomorphismBudgetExceeded, MoleculeContainer
@@ -533,6 +534,37 @@ def test_canonical_order_survives_many_identical_fragments():
     rng = Random(20260901)
     m = _cycloalkanes([3, 4, 5] * 4)
     assert len({_canonical_string(_relabel(m, rng)) for _ in range(10)}) == 1
+
+
+def _hub(k):
+    """A nitrogen closing k identical N-O-C-C-N rings, plus an N-C-C-O-C-C-N arm to a second N.
+
+    The hub's 2k ring neighbours are bonded to it first, all oxygens and then all carbons, and the
+    ring bonds last, so a search order that assigns every hub neighbour before any ring bond pairs
+    the two ends of each ring blind.
+    """
+    atoms = 'N' + 'O' * k + 'C' * k + 'C' * k + 'CCOCCN'
+    oxygen, near, far = 1, 1 + k, 1 + 2 * k
+    bonds = [(0, oxygen + i, 1) for i in range(k)] + [(0, near + i, 1) for i in range(k)]
+    bonds += [(oxygen + i, far + i, 1) for i in range(k)] + [(far + i, near + i, 1) for i in range(k)]
+    arm = 1 + 3 * k
+    bonds += [(0, arm, 1)] + [(arm + i, arm + i + 1, 1) for i in range(5)]
+    return _mol(atoms=atoms, bonds=bonds)[0]
+
+
+def test_canonical_order_of_a_hub_with_many_identical_rings_is_fast():
+    # The guard for the depth-first walk order `mol_automorphisms` falls back to. With the
+    # breadth-first order alone, three of these five labellings spend the orbit allowance, the prune
+    # stands down, and the tree raises AutomorphismBudgetExceeded after 6.5 s; with the fallback each
+    # takes under 10 ms.
+    rng = Random(20260928)
+    m = _hub(14)
+    strings = set()
+    for r in [m] + [_relabel(m, rng) for _ in range(4)]:
+        start = perf_counter()
+        strings.add(_canonical_string(r))
+        assert perf_counter() - start < 2
+    assert len(strings) == 1
 
 
 def _srg16(kind):

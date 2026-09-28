@@ -353,17 +353,32 @@ _FILTER_EXEMPT = frozenset((_purification, _protect))
 def _same(a: MoleculeContainer, b: MoleculeContainer, loose: bool) -> bool:
     """Are these two components the same structure?  `loose` drops the configuration from the question.
 
-    `__eq__` is the canonical form and carries every parity.  `isomorphism()` asks the same question with
-    the invariant's stereo term off and still requires the whole constitution -- element, charge,
-    isotope, radical, R index, implicit hydrogen count and every bond order -- so loose relaxes the
-    configuration and NOTHING else.
+    `__eq__` is the canonical form and carries every parity and every OR/AND collection.  Strict compares
+    it with the collections dropped: they are a claim about the mixture, which `_report_stereo` and
+    `_heal` read per unit, and not a configuration a row carries through or turns over.  `isomorphism()`
+    asks the same question with the invariant's stereo term off and still requires the whole
+    constitution -- element, charge, isotope, radical, R index, implicit hydrogen count and every bond
+    order -- so loose relaxes the configuration and NOTHING else.
     """
-    return a.isomorphism(b) is not None if loose else a == b
+    if loose:
+        return a.isomorphism(b) is not None
+    return _ungrouped(a) == _ungrouped(b)
+
+
+def _ungrouped(molecule: MoleculeContainer) -> MoleculeContainer:
+    """`molecule`, or a copy of it with no ABS/AND/OR collection when it states one."""
+    if not molecule.stereo_groups():
+        return molecule
+    molecule = molecule.copy()
+    molecule.clean_stereo_groups()
+    return molecule
 
 
 def _pairs_of(a: MoleculeContainer, b: MoleculeContainer, loose: bool) -> dict | None:
-    """`{a id: b id}` when the two are the same structure under this pass's question, else None."""
-    return a.isomorphism(b) if loose else fast_mapping(a, b)
+    """`{a id: b id}` when the two are the same structure under this pass's question, else None.
+
+    Strict maps through `_ungrouped` copies for `_same`'s reason; a copy keeps every stable id."""
+    return a.isomorphism(b) if loose else fast_mapping(_ungrouped(a), _ungrouped(b))
 
 
 def _number_product(recorded: MoleculeContainer, sources: Sequence[MoleculeContainer],
@@ -809,8 +824,7 @@ def _heal_groups(log, site, target, unit, from_source) -> None:
         return
     if kind == STEREO_UNSPECIFIED:
         target.set_stereo_group(owners, STEREO_UNSPECIFIED)
-        message = ('the collection at %s was dropped: the side the caller named states none there, and a '
-                   'configured unit in no collection is already an absolute one'
+        message = ('the collection at %s was dropped: the side the caller named states none there'
                    % _owners_text([owners]))
     else:
         target.set_stereo_group(owners, kind, _fresh_group(target))
@@ -939,9 +953,9 @@ def _reproduces(recorded: MoleculeContainer, products: Sequence[MoleculeContaine
     """True when a connected component of `recorded` is a component the row built into `products`.
 
     Per component, because a template answers the reaction centre while the record carries the salt too;
-    and by container equality, never by SMILES -- `__eq__` is the canonical form.  The loose pass asks
-    `_same` instead, which costs the set: components per record are two or three, so the pairwise scan
-    is the same work.
+    and by container equality on `_ungrouped` copies, never by SMILES -- `__eq__` is the canonical form.
+    The loose pass asks `_same` instead, which costs the set: components per record are two or three, so
+    the pairwise scan is the same work.
 
     A PASSENGER IS NOT EVIDENCE.  A product component equal to a component of the `consumed` molecules
     is one the reactor carried through untouched -- the `[K+]` of `tBuO-.K+` -- and matching it would
@@ -953,8 +967,8 @@ def _reproduces(recorded: MoleculeContainer, products: Sequence[MoleculeContaine
     built = [candidate for product in products for candidate in product.split()
              if candidate not in passengers]
     if not loose:
-        want = set(parts)
-        return any(candidate in want for candidate in built)
+        want = {_ungrouped(part) for part in parts}
+        return any(_ungrouped(candidate) in want for candidate in built)
     return any(_same(candidate, part, True) for candidate in built for part in parts)
 
 

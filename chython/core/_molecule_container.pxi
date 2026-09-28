@@ -346,6 +346,29 @@ cdef int32_t _fixed_point(object value) except? -1:
     return <int32_t> round(x * XY_SCALE)
 
 
+cdef tuple mc_group_ambiguities_in(Structure structure):
+    """`MoleculeContainer.canonical_stereo_group_ambiguities()` read from `structure`, stored or a view."""
+    if not structure_has(structure, SEG_STEREO_GROUPS):
+        return ()
+    cdef uint8_t ids[256]
+    cdef uint8_t amb[256]
+    canonical_stereo_group_ids(structure, ids, amb)
+    cdef uint8_t *sg = structure_stereo_groups(structure)
+    cdef uint32_t i
+    cdef dict classes = {}
+    cdef list out = []
+    cdef object number
+    for i in range(structure.header.atom_count):
+        if sg[i] and amb[sg[i]]:
+            classes.setdefault(amb[sg[i]], set()).add((sg_kind(sg[i]), ids[sg[i]]))
+    # The C side numbers the classes by ascending smallest canonical id (ruling F92), which is
+    # invariant because an ambiguity permutes ids only inside its own class and so cannot move a
+    # class's minimum -- so this sort is the invariant order and the tuple compares with `==`.
+    for number in sorted(classes):
+        out.append(frozenset(classes[number]))
+    return tuple(out)
+
+
 cdef dict _sgroup_normalise(object src, bint alias):
     """Normalise one caller-supplied S-group dict: fill defaults, reject unknown keys, check ranges.
 
@@ -3084,16 +3107,18 @@ cdef class MoleculeContainer:
         """Same compound?  Equal iff the two canonical forms are equal.
 
         WHAT COUNTS AS THE SAME COMPOUND: the graph, elements, isotopes, charges, radicals, implicit
-        hydrogen counts, bond orders, aromatic bits and one stereo parity per centre.  Atom NUMBERS
+        hydrogen counts, bond orders, aromatic bits and one parity per stereogenic unit.  Atom NUMBERS
         do not count, nor does creation order, nor do coordinates, wedges or map numbers -- `==` is a
         question about the compound and those four are annotation.  A REPRESENTATION DOES count: an
         aromatic ring and its Kekule twin are two different records of two different inputs and they
         compare unequal, which is what storing an input faithfully means.  Kekulise both first if
         that is not the question you meant to ask.
 
-        Enhanced stereo (ABS / AND / OR groups) is NOT part of this yet, so a racemate and a single
-        enantiomer of the same skeleton compare equal.  That is a real gap and it is stated rather
-        than hidden; the groups are stored, they are simply not in the canonical form.
+        ENHANCED STEREO COUNTS AS KIND AND PARTITION: which configured units are labelled ABS and
+        which share an AND or an OR collection.  A racemate (`&1`) and the single enantiomer of one
+        skeleton compare unequal, and two files numbering one partition differently compare equal -- a
+        group id is a label.  An explicit ABS label counts: `C[C@H](O)CC |a:1|` is not `C[C@H](O)CC`,
+        whose sign is unlabelled.  A label on an unconfigured or non-stereogenic unit states nothing.
 
         Raises `AutomorphismBudgetExceeded` if a canonical search is truncated, and it is allowed to:
         an exception from `==` is a caller's problem to see, while a fallback answer would be a wrong
@@ -3117,14 +3142,16 @@ cdef class MoleculeContainer:
         cdef uint64_t *fa = structure_features(self._structure)
         cdef uint64_t *fb = structure_features(o._structure)
         cdef uint32_t i
-        # WORDS I..III ONLY, AND WORD IV WITH ITS FRAME-RELATIVE BIT MASKED OFF.  Word IV bit 6 is the
-        # raw SEG_PARITY sign, a statement in each molecule's own slot frame and not a property of the
+        # WORDS I..III ONLY, AND WORD IV WITH ITS PARITY BITS MASKED OFF.  Word IV bit 6 is the raw
+        # SEG_PARITY sign, a statement in each molecule's own slot frame and not a property of the
         # compound -- so two spellings of one meso compound differ there while their canonical forms
-        # agree, and an unmasked screen rejects them.  See W4_FRAME_FREE_MASK.
+        # agree, and an unmasked screen rejects them.  Bits 7 and 8, configured and unconfigured, read
+        # the raw byte too, and identity drops a parity on a unit that is not stereogenic.  See
+        # W4_IDENTITY_MASK.
         for i in range(3):
             if fa[i] != fb[i]:
                 return False
-        if fa[3] & W4_FRAME_FREE_MASK != fb[3] & W4_FRAME_FREE_MASK:
+        if fa[3] & W4_IDENTITY_MASK != fb[3] & W4_IDENTITY_MASK:
             return False
         return self._identity() == o._identity()
 
@@ -4895,6 +4922,23 @@ cdef class MoleculeContainer:
             anchor = stereo_group_pair_anchor(structure, i, j)
         return None if anchor == SU_NO_REF else self._numbers[anchor]
 
+    def stereo_is_live(self, element):
+        """Does `element` state a configuration: configured, and stereogenic in some AND phase combination?
+
+        `element` resolves as `stereo_group_anchor_of` resolves it, and an atom that anchors and owns
+        nothing answers at its own slot.  The member half of what `live_stereo_groups()` filters on; the
+        group half, a group whose inversion restates the molecule, needs a group, so a writer dropping a
+        stored stereo label that is not a collection asks here.
+        """
+        cdef object anchor = self.stereo_group_anchor_of(element)
+        cdef Structure view
+        if anchor is None:
+            if isinstance(element, tuple):
+                return False
+            anchor = element
+        view = structure_stereogenic_view(self._structure)
+        return structure_parity_at(view, <uint32_t> self._index_of[anchor]) != 0
+
     def stereo_groups(self):
         """`{(kind, id): [member, ...]}` over ONE id namespace.
 
@@ -5015,10 +5059,56 @@ cdef class MoleculeContainer:
         route: there is no degraded canonical id.
         """
         self._require_clean()
-        if not structure_has(self._structure, SEG_STEREO_GROUPS):
+        return self._canonical_groups_in(self._structure)
+
+    def live_stereo_groups(self):
+        """`canonical_stereo_groups()` over the LIVE members only: the collections a writer emits.
+
+        A member is dead on a unit that is unconfigured or not stereogenic in any combination of AND
+        phases, which is exactly what identity ignores; a group with no live member is absent.  The
+        ids are canonical over the live members, so two molecules equal only up to dead labels get
+        one dict: `CC(O)CC |o1:1|` gives `{}`.  A read: the stored bytes are kept.
+        """
+        self._require_clean()
+        return self._canonical_groups_in(structure_live_groups_view(self._structure))
+
+    def dead_stereo_groups(self):
+        """`stereo_groups()` over the DEAD members only, under the stored ids: what a writer drops.
+
+        The complement of `live_stereo_groups()`, member for member; `{}` when every label states
+        something.
+        """
+        self._require_clean()
+        cdef list dead = []
+        structure_live_groups_view(self._structure, dead)
+        if not dead:
+            return {}
+        cdef Structure structure = self._structure
+        ensure_stereo_units_unmarked(structure)     # reallocates: every pointer below is taken after it
+        cdef uint8_t *sg = structure_stereo_groups(structure)
+        cdef atom_t *atoms = structure.atoms()
+        cdef uint32_t *ptr = csr_ptr(structure)
+        cdef halfedge_t *edges = csr_edges(structure)
+        cdef list numbers = self._numbers
+        cdef stereo_unit_t *u
+        cdef uint32_t i, a = 0, b = 0
+        cdef dict out = {}
+        cdef object member, slot
+        for slot in dead:
+            i = <uint32_t> slot
+            u = stereo_unit_of(structure, i)
+            if u is not NULL and stereo_unit_owners(atoms, ptr, edges, u, &a, &b) == 2:
+                member = tuple(sorted((numbers[a], numbers[b])))
+            else:
+                member = numbers[i]
+            out.setdefault((sg_kind(sg[i]), sg_group(sg[i])), []).append(member)
+        return out
+
+    cdef dict _canonical_groups_in(self, Structure structure):
+        """`canonical_stereo_groups()` read from `structure`, the stored arena or a view of it."""
+        if not structure_has(structure, SEG_STEREO_GROUPS):
             return {}
         cdef uint8_t ids[256]
-        cdef Structure structure = self._structure
         canonical_stereo_group_ids(structure, ids, NULL)
         # REALLOCATES THE ARENA (the call above already did): every pointer below is taken after it.
         ensure_stereo_units_unmarked(structure)
@@ -5089,25 +5179,13 @@ cdef class MoleculeContainer:
         not both, if the cost matters.  Raises `AutomorphismBudgetExceeded` on the same path.
         """
         self._require_clean()
-        if not structure_has(self._structure, SEG_STEREO_GROUPS):
-            return ()
-        cdef uint8_t ids[256]
-        cdef uint8_t amb[256]
-        canonical_stereo_group_ids(self._structure, ids, amb)
-        cdef uint8_t *sg = structure_stereo_groups(self._structure)
-        cdef uint32_t i
-        cdef dict classes = {}
-        cdef list out = []
-        cdef object number
-        for i in range(self._structure.header.atom_count):
-            if sg[i] and amb[sg[i]]:
-                classes.setdefault(amb[sg[i]], set()).add((sg_kind(sg[i]), ids[sg[i]]))
-        # The C side numbers the classes by ascending smallest canonical id (ruling F92), which is
-        # invariant because an ambiguity permutes ids only inside its own class and so cannot move a
-        # class's minimum -- so this sort is the invariant order and the tuple compares with `==`.
-        for number in sorted(classes):
-            out.append(frozenset(classes[number]))
-        return tuple(out)
+        return mc_group_ambiguities_in(self._structure)
+
+    def live_stereo_group_ambiguities(self):
+        """`canonical_stereo_group_ambiguities()` for the keys of `live_stereo_groups()`."""
+        self._require_clean()
+        return mc_group_ambiguities_in(structure_live_groups_view(self._structure))
+
 
     def canonical_bond_stereo_groups(self):
         """A view of `canonical_stereo_groups()`: its AXIS members, under the same ids.
@@ -6704,8 +6782,8 @@ cdef class MoleculeContainer:
     def rings(self):
         # A minimum cycle basis: the shortest independent cycles, one per unit of circuit rank.
         # Not the relevant-cycle set -- that is exponential, and the per-atom descriptors
-        # (ring_sizes_of, ring_count_of, shares_ring) are the ones that carry its full
-        # semantics, derived from prototypes without ever materialising the cycles.
+        # (ring_sizes_of, ring_count_of, shares_ring) carry it, per ring family and without
+        # materialising the cycles (`_rings.pxi:_fill_descriptors`).
         #
         # Order-8 bonds are excluded, so ferrocene is two five-rings and its iron is in none of
         # them. `mark_bridges` is where that happens; see its docstring for why it has to.
@@ -6956,7 +7034,9 @@ cdef class MoleculeContainer:
 
         THE ONLY CALLER THAT PASSES False IS `isomorphism`, and there is no public spelling of it:
         a stereo-blind labelling is canonical for the CONSTITUTION and not for the molecule, so a
-        caller hashing it would call two diastereomers one compound.
+        caller hashing it would call two diastereomers one compound.  True also carries the ABS, AND
+        and OR collections (CANON_GROUPS_IDENTITY), so the order is the one `canonical_bytes` is read
+        in.
         """
         self._require_clean()
         cdef uint32_t n_atoms = self._structure.header.atom_count
@@ -6966,6 +7046,7 @@ cdef class MoleculeContainer:
         cdef uint32_t flags = 0
         cdef uint32_t i
         cdef dict out = {}
+        cdef Structure structure
         if n_atoms == 0:
             return out
         if seed is not None:
@@ -6977,10 +7058,13 @@ cdef class MoleculeContainer:
         try:
             # Raises on a truncated search, and leaves `order` untouched when it does -- the flag
             # is read by no one here because the exception is the answer.
+            structure = structure_live_groups_view(self._structure) if stereo else self._structure
             if node_budget:
-                _canon_order(self._structure, labels, order, &flags, node_budget, stereo)
+                _canon_order(structure, labels, order, &flags, node_budget, stereo,
+                             CANON_GROUPS_IDENTITY if stereo else CANON_GROUPS_NONE)
             else:
-                mol_canonical_order(self._structure, labels, order, &flags, stereo)
+                mol_canonical_order(structure, labels, order, &flags, stereo,
+                                    CANON_GROUPS_IDENTITY if stereo else CANON_GROUPS_NONE)
             for i in range(n_atoms):
                 out[numbers[i]] = order[i]
         finally:
@@ -7086,20 +7170,21 @@ cdef class MoleculeContainer:
             return 0
         return max(order.values())
 
-    def kekule(self, aromatic_bonds=None, stated_h=None):
+    def kekule(self, aromatic_bonds=None, stated_h=None, *, bint canonical=False):
         """Rewrite this molecule's aromatic bonds as Kekule orders 1 and 2, in place.
 
         One of exactly two operations allowed to change a molecule's representation (`thiele` is
         the other), and it is always the caller's decision: nothing in the library kekulises
         behind your back, and no reader normalises what its input said.  Returns a
         `KekuleResult`: `.changed` is False on a molecule with no aromatic bonds and False on a
-        second call.  The body is the module-level `kekule` in `_kekule.pxi` -- one operation, one
-        name, reachable as a method on the thing it mutates and as a function for a caller holding
-        the molecule at arm's length.
+        second call.  `canonical` picks the form by canonical rank rather than by atom order, so one
+        compound gets one form however it was drawn or numbered.  The body is the module-level `kekule`
+        in `_kekule.pxi` -- one operation, one name, reachable as a method on the thing it mutates and
+        as a function for a caller holding the molecule at arm's length.
         """
         # the bare name is the module-level function and not this method: an unqualified lookup
         # inside a method body goes to module globals, never back through `self`
-        return kekule(self, aromatic_bonds, stated_h)
+        return kekule(self, aromatic_bonds, stated_h, canonical=canonical)
 
     def derive_hydrogens(self, stated=None, *, fill_only=False):
         """Fill every derivable implicit hydrogen count from what this molecule is storing.
@@ -7822,7 +7907,9 @@ cdef class MoleculeContainer:
         self._require_clean()
         if self._identity_cache is not None and self._identity_gen == self._gen:
             return self._identity_cache
-        cdef bytes out = mol_identity_bytes(self._structure)
+        # `structure_live_groups_view`: a parity on a unit `mark_stereogenic` refused is not identity,
+        # and neither is a dead group member
+        cdef bytes out = mol_identity_bytes(structure_live_groups_view(self._structure))
         self._identity_cache = out
         self._identity_gen = self._gen
         return out
@@ -8457,9 +8544,9 @@ with cython.warn.undeclared(False):
     WEDGE_DOWN = 2
     WEDGE_EITHER = 3
     STEREO_UNSPECIFIED = 0
-    STEREO_ABS = 1
+    STEREO_ABS = SG_KIND_ABS
     STEREO_OR = 2
-    STEREO_AND = 3
+    STEREO_AND = SG_KIND_AND
     # The implicit-hydrogen sentinel, on the surface so a parser can WRITE it.  Readers get None
     # (`implicit_h_of`, `Atom.implicit_h`, `Atom.total_h`); only a writer needs the number, and it
     # is published from the C DEF so the two cannot drift apart -- this is the same 15 the nibble

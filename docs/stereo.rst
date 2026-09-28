@@ -95,13 +95,112 @@ not a rank, not a count, and two records' ``OR 1`` are unrelated.  Three consequ
   shares its ids.
 
 
-What identity does not include
--------------------------------
+What identity includes
+----------------------
 
-``canonical_bytes``, ``hash(mol)`` and ``mol == other`` fold **no** group membership, atom
-or bond.  Two molecules differing only in which AND group their centres belong to have the
-same identity bytes.  A grouped molecule is equal to its ungrouped self, and the two group
-kinds are indistinguishable to identity.  This holds across the whole namespace.
+``canonical_bytes``, ``hash(mol)``, ``mol == other`` and ``str(mol)`` read a parity only on a
+**stereogenic** unit.  A parity on a unit ``stereogenic_units()`` refuses is stored and ignored:
+``C[C@H](C)C`` is isobutane and writes ``C(C)(C)C``, and the writer logs one
+``smiles:stereo-not-stereogenic`` record per dropped sign.
+
+.. testcode::
+
+    print(smiles('C[C@H](C)C') == smiles('CC(C)C'), str(smiles('C[C@H](C)C')))
+
+.. testoutput::
+
+    True C(C)(C)C
+
+``canonical_bytes``, ``hash(mol)`` and ``mol == other`` fold each ABS, OR and AND group's **kind and
+membership**, atom and bond, and never its id.  ``str(mol)`` is seeded by the same partition.
+
+==================================================  ========
+Pair                                                ``==``
+==================================================  ========
+``C[C@H](O)CC |&1:1|`` and ``C[C@H](O)CC``           False
+``C[C@H](O)CC |&1:1|`` and ``C[C@H](O)CC |o1:1|``    False
+``C[C@H](O)CC |a:1|`` and ``C[C@H](O)CC``            False
+``...|o1:1,o2:3|`` and ``...|o2:1,o1:3|``            True
+==================================================  ========
+
+An explicit ABS label counts: a configured centre in no collection is a sign of unknown reliability,
+and one labelled ABS is stated absolute.  A group member on a unit that is unconfigured, or not
+stereogenic in any combination of AND phases, is **dead**: it states nothing, does not count, and no
+writer writes it.  The byte stays stored -- ``copy()`` and pach keep it -- while CXSMILES in every mode,
+V2000, V3000 and MRV write the molecule as if it were absent, so ``str(a) == str(b)`` whenever
+``a == b`` holds only because of dead members.  A collection with no live member is not written at all.
+A whole group is dead when inverting its live members restates the molecule in every phase of the other
+AND groups, which is a meso pair under any kind: ``C[C@H](O)C[C@H](O)C |&1:1,4|`` is meso-pentane-2,4-diol
+and nothing more, while ``|&1:1,&2:4|`` splits the pair and both groups stay.
+``mol.live_stereo_groups()`` answers the written membership in ``canonical_stereo_groups()`` shape,
+``mol.dead_stereo_groups()`` the dropped members under their stored ids, and ``mol.stereo_is_live(x)``
+one member.
+
+.. testcode::
+
+    racemate = smiles('C[C@H](O)CC |&1:1|')
+    print(racemate == smiles('C[C@H](O)CC'), smiles('C[C@H](O)CC |a:1|') == smiles('C[C@H](O)CC'))
+
+.. testoutput::
+
+    False False
+
+.. testcode::
+
+    print(str(smiles('CC(O)CC |o1:1|')), str(smiles('CCCC |a:1|')), str(smiles('C[C@H](C)C |&1:1|')))
+    print(smiles('CC(O)CC |o1:1|').stereo_groups(), smiles('CC(O)CC |o1:1|').live_stereo_groups())
+
+.. testoutput::
+
+    C(C)C(O)C C(C)CC C(C)(C)C
+    {(2, 1): [2]} {}
+
+Signs inside a group
+--------------------
+
+**An AND group's signs are relative; an OR group's signs name the isomer.**
+
+- **AND** is a racemate.  Inverting every member states the same mixture, so identity and ``str(mol)``
+  read the group in one canonical phase.  Inverting some members and not others is another
+  diastereomer.  An AND group of one member carries no parity: ``C[C@H](O)CC |&1:1|`` is racemic
+  butan-2-ol whichever enantiomer it is drawn from.
+- **OR** is one pure isomer whose absolute configuration is unknown.  The drawn signs tell two isolated
+  isomers apart, so they are kept as drawn: inverting an OR group gives the other isomer, and an OR
+  group of one member keeps its sign.
+
+Only a mirror symmetry makes the inverted signs the same compound, since a meso form is its own mirror
+image.  A C2 axis is not a mirror: trans-cyclohexane-1,2-diol is chiral, and its two OR drawings are
+its two enantiomers.
+
+================================================================  ======  ======  =============
+Pair, second drawing with every group member's sign inverted      ``&1``  ``o1``  ``*1`` = none
+================================================================  ======  ======  =============
+butan-2-ol ``C[C@H](O)CC |*1:1|``                                 True    False   False
+ephedrine ``C[C@H](NC)[C@@H](O)c1ccccc1 |*1:1,4|``                True    False   False
+trans-cyclohexane-1,2-diol ``O[C@@H]1CCCC[C@H]1O |*1:1,6|``       True    False   False
+cis-cyclohexane-1,2-diol ``O[C@@H]1CCCC[C@@H]1O |*1:1,6|``, meso  True    True    True
+================================================================  ======  ======  =============
+
+``*1`` stands for the group in the column; ``*1`` = none compares the labelled drawing with the unlabelled
+one under ``&1``, ``o1`` and ``a`` alike.  Inverting one member of a two-member group is unequal under
+both kinds: ephedrine becomes pseudoephedrine.
+
+.. testcode::
+
+    def inverted(text):
+        return text.replace('@@', '#').replace('@', '@@').replace('#', '@')
+
+    for kind in ('&1', 'o1'):
+        drawn = f'C[C@H](NC)[C@@H](O)c1ccccc1 |{kind}:1,4|'
+        print(kind, smiles(drawn) == smiles(inverted(drawn)), str(smiles(drawn)))
+    cis = 'O[C@@H]1CCCC[C@@H]1O'
+    print(all(smiles(f'{cis} |{kind}:1,6|') == smiles(cis) for kind in ('&1', 'o1', 'a')), str(smiles(cis)))
+
+.. testoutput::
+
+    &1 True N([C@H](C)[C@@H](c1ccccc1)O)C |&1:1,3|
+    o1 False N([C@@H](C)[C@H](c1ccccc1)O)C |o1:1,3|
+    True C1C[C@@H]([C@H](O)CC1)O
 
 ``canonical_bond_stereo_group_ambiguities()`` reports two groups the colouring cannot
 separate, and it errs toward reporting: a caller may be told two ids are unreliable where
@@ -156,8 +255,8 @@ same way again.
 An atom that owns two units names neither of them.  Where both owners of an axis do, the lower one is
 written anyway -- a token is never suppressed on a prediction -- and the axis is reported
 ``smiles:stereo-group-axis-ambiguous``: the index carries the collection, and which of that atom's two
-elements the collection is on is what it cannot carry.  ``C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12`` is the
-case, its pivots being atropisomer owners and ring cis/trans terminals at once.
+elements the collection is on is what it cannot carry.  ``C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12`` with its
+axis configured is the case, its pivots being atropisomer owners and ring cis/trans terminals at once.
 
 
 The names a caller sees in the log
@@ -172,7 +271,19 @@ On write, in the writer's ``log=`` list, what a format cannot spell and what is 
 =============================================  ==========================================================
 Rule                                           When
 =============================================  ==========================================================
-``v2000:enhanced-stereo-not-written``          V2000 write; the molecule carries any AND or OR group
+``v2000:enhanced-stereo-not-written``          V2000 write; the molecule carries any live group, ABS
+                                               included: the chiral flag is not an ABS label
+``smiles:stereo-group-dead``                   CXSMILES write stating collections; one INFO per dead
+                                               member, which is not written
+``v2000:stereo-group-dead``                    V2000 write; one INFO per dead member, which neither sets
+                                               the chiral flag nor asks for V3000
+``v3000:stereo-group-dead``                    V3000 write; one INFO per dead member, left out of its
+                                               ``STE*`` collection; an emptied collection is not written
+``mrv:stereo-group-dead``                      MRV write; one INFO per dead member, which gets no
+                                               ``mrvStereoGroup``
+``sgroup:stereo-label-dead``                   V2000 or V3000 write; a ``STEREOLABEL`` data record none
+                                               of whose atoms or bonds is a configured stereogenic unit
+                                               is not written
 ``v3000:collection-split``                     V3000 write (AND and OR only -- ABS never splits);
                                                one collection holds both atom-spelled and bond-spelled
                                                members, so its bond half is written under a free id;

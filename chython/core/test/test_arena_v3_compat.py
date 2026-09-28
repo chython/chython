@@ -31,11 +31,11 @@ that record, from element counts through canonical order to `validate_stereo`. T
 the generator's own `snapshot()` function, so the comparison is against the same code that produced
 the frozen values and a drift in either direction shows up as a key mismatch rather than as silence.
 
-Exactly ONE of those values is exempt, named as a `(fixture, key)` pair in `MOVED` and justified by a
-test of its own: closing the mirror-automorphism defect in the canonical search moved
-`a_bigger_one`'s canonical order to the other of two labellings related by a reflection of its
-macrocycle. The bytes are untouched and so is every other answer, `atoms_order` included -- what
-moved is which member of a tie an extremal search takes, which is what the fix was for.
+One of those values is exempt, named as a `(fixture, key)` pair in `MOVED` and justified by a test of
+its own: `a_bigger_one`'s canonical order moved to the other of two labellings related by a reflection
+of its macrocycle, where the parity tail on the leaf certificate chooses. The bytes are untouched and so
+is every other answer, `atoms_order` included -- what moved is which member of a tie an extremal search
+takes.
 
 WHAT MAKES THIS EVIDENCE RATHER THAN DECORATION (ruling F102). Two of the tests here exist only to
 show the suite could have failed: `test_a_single_flipped_payload_byte_does_not_go_unnoticed` sweeps
@@ -58,17 +58,13 @@ from .v3_fixtures import V3_FIXTURES
 ALL = sorted(V3_FIXTURES)
 BOTH = [(name, warmth) for name in ALL for warmth in ('cold', 'warm')]
 
-# THE ONE FROZEN ANSWER A LATER BUILD IS ALLOWED TO MOVE, LISTED RATHER THAN TOLERATED.
-# `a_bigger_one` is a twenty-membered ring carrying twenty methyls and twenty configured centres, and
-# the v3 build's canonical order for it was one of TWO extremal labellings related by a reflection of
-# the macrocycle -- the mirror automorphism defect. Closing that defect (a parity tail on the leaf
-# certificate, an orbit prune refined by parity) made the search choose the other one. The bytes did
-# not move and neither did any other answer, including `atoms_order`: the CONSTITUTIONAL colouring is
-# identical, so what changed is which member of a tie the search takes. It is named here as a pair
-# rather than excluded as a key, so a drift in `canonical_order` on any of the other six fixtures --
-# none of which has a symmetry that could excuse one -- is still a failure, and
-# `test_the_one_moved_answer_is_a_REFLECTION_and_nothing_else_moved` both justifies this entry and
-# fails if the answer ever comes back, so the entry cannot outlive its reason.
+# THE FROZEN ANSWERS A LATER BUILD IS ALLOWED TO MOVE, LISTED RATHER THAN TOLERATED.
+# | fixture           | skeleton symmetry                    | what breaks the tie now                   |
+# | `a_bigger_one`    | reflection of a 20-membered ring     | the parity tail of the leaf certificate   |
+# The CONSTITUTIONAL colouring is identical, so what changed is which member of a tie the search
+# takes. Each is named as a pair rather than excluded as a key, so a drift in `canonical_order` on any other
+# fixture is still a failure, and `test_a_moved_answer_is_a_REFLECTION_and_nothing_else_moved` both
+# justifies each entry and fails if its answer ever comes back, so no entry outlives its reason.
 MOVED = {('a_bigger_one', 'canonical_order')}
 
 V3_HEADER_LEN = 128
@@ -156,9 +152,9 @@ def test_a_v3_record_reproduces_every_answer_the_v3_build_gave(name, warmth):
     assert set(got) == set(expected), 'snapshot() changed shape, so the fixtures are stale'
 
 
-@mark.parametrize('warmth', ('cold', 'warm'))
-def test_the_one_moved_answer_is_a_REFLECTION_and_nothing_else_moved(warmth):
-    """The justification for `MOVED`, and the thing that deletes it if the answer ever comes back.
+@mark.parametrize('name,warmth', [(name, warmth) for name, _ in sorted(MOVED) for warmth in ('cold', 'warm')])
+def test_a_moved_answer_is_a_REFLECTION_and_nothing_else_moved(name, warmth):
+    """The justification for a `MOVED` entry, and the thing that deletes it if the answer ever comes back.
 
     An exemption list is a liability unless something proves the exemption is earned, so this test
     makes the case in four measurements rather than in prose.
@@ -174,18 +170,17 @@ def test_the_one_moved_answer_is_a_REFLECTION_and_nothing_else_moved(warmth):
 
     THE TWO ORDERS ARE RELATED BY A GRAPH AUTOMORPHISM OF ORDER TWO. Compose the v3 labelling with the
     inverse of the new one and the result is a bijection that preserves element, charge, hydrogen count
-    and the whole adjacency relation, and squares to the identity: a REFLECTION of the macrocycle. So
-    both labellings are extremal labellings of one graph -- the v3 build was not wrong about the graph,
-    it just had no way to choose between two mirror candidates, which is the defect by name. An
-    arbitrary renumbering would fail this assertion, so it is not a formality.
+    and the whole adjacency relation, and squares to the identity: a REFLECTION of the skeleton. So
+    both labellings are extremal labellings of one graph, and what chose between the two mirror
+    candidates is the stereo information the v3 build did not rank. An arbitrary renumbering would fail
+    this assertion, so it is not a formality.
 
     AND THE NEW ONE IS THE STABLE ONE. The molecule's canonical SMILES is a fixed point of write-read-
     write, and the molecule read back out of it is `==` to the original with the same
     `canonical_bytes`. Reading a string is a genuinely different presentation -- slots come from string
-    position -- so this is the invariant the fix was specified against, checked on the one record in
-    this file big enough to have exercised the defect.
+    position -- so this is the invariant the tie-break was specified against, checked on each record whose tie
+    it broke.
     """
-    name = 'a_bigger_one'
     expected = V3_FIXTURES[name]['answers']
     m = MoleculeContainer.from_bytes(V3_FIXTURES[name][warmth])
     got = snapshot(m)

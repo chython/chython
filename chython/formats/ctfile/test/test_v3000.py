@@ -818,9 +818,10 @@ def test_an_allene_collection_is_written_on_its_midpoint_atom():
     """V3000's member list is `ATOMS=` or `BONDS=` and never both, so an axis is named by its
     MIDPOINT -- an atom when the chain has an odd atom count, a bond when even.  `CC=C=CC` has the odd
     count: the container spells this axis `(2, 4)`, its two chain terminals, which are not bonded, and
-    the file spells it as atom 3, the midpoint, which is also the slot the byte lives at.
+    the file spells it as atom 3, the midpoint, which is also the slot the byte lives at.  The axis is
+    configured: a collection on an unconfigured one is not written.
     """
-    mol = read_smiles('CC=C=CC')
+    mol = read_smiles('C[CH]=[C@]=[CH]C')
     mol.set_stereo_group(3, 3, 1)               # the anchor; `stereo_groups()` reads back `(2, 4)`
     assert mol.bond_stereo_groups() == {(3, 1): [(2, 4)]}, mol.stereo_groups()
     lines = emit_v3000(mol)[0]
@@ -833,7 +834,7 @@ def test_a_cumulene_collection_is_written_on_its_midpoint_bond():
     and 5, three bonds apart, so the container spells the axis as that pair and the file spells it as
     bond 3, the middle of the chain -- a bond neither owner is an endpoint of.
     """
-    mol = read_smiles('CC=C=C=CC')
+    mol = read_smiles('C/C=C=C=C/C')
     axis = next(iter(mol.chiral_bonds()))
     assert axis == (2, 5), axis
     with mol.edit() as e:
@@ -849,7 +850,7 @@ def test_a_cumulene_collection_round_trips_through_the_midpoint_bond():
     the file stated and the container walks.  What this caught was the writer emitting an empty member
     list, `BONDS=(0 )`, having no bond of the owner pair to name.
     """
-    mol = read_smiles('CC=C=C=CC')
+    mol = read_smiles('C/C=C=C=C/C')
     axis = next(iter(mol.chiral_bonds()))
     with mol.edit() as e:
         e.set_bond_stereo_group(axis[0], axis[1], 3, 1)

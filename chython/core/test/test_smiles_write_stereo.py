@@ -486,22 +486,23 @@ def test_no_sign_under_the_no_stereo_key():
     assert smw_traversal(m, '!s')['directions'] == {}
 
 
-def test_a_stated_parity_is_written_even_where_it_is_not_stereogenic():
-    """Fidelity: the writer spells what the molecule HOLDS, and does not audit it.
+def test_a_parity_on_a_unit_that_is_not_stereogenic_is_not_written_and_is_logged():
+    """A sign on a unit `mark_stereogenic` refused names no configuration, so it is not written.
 
     Dichlorofluoromethane's carbon anchors a unit -- four directions, two of them the same chlorine
-    twice over -- and `stereogenic_units()` correctly refuses it, so a parity stated on it means
-    nothing.  It is still written.  Dropping it would be a silent edit of the input, and the caller
-    who wants to know already has `stereo_rejections`; the reader stores what it reads for the same
-    reason, so the round trip is stable in both directions.
-
-    Overturning this is one condition in `smw_sign_of` -- it is a decision, not an accident.
+    twice over -- and `stereogenic_units()` refuses it.  Identity ignores that parity, so writing it
+    would make two equal molecules write two strings.  The stored parity is untouched and the drop is
+    one INFO `smiles:stereo-not-stereogenic` record on the writer's log.
     """
     m, sids = build([(6, 1), (9, 0), (17, 0), (17, 0)], [(0, 1, 1), (0, 2, 1), (0, 3, 1)])
     assert [u['anchor'] for u in m.stereogenic_units()] == []
     assert any(u['anchor'] == sids[0] for u in m.stereo_units())
+    plain = write_smiles(m)
     m.set_parity(sids[0], 2)
-    assert sign_in(write_smiles(m)) != 0
+    log = []
+    assert write_smiles(m, log=log) == plain
+    assert [(r.rule, r.atoms) for r in log] == [('smiles:stereo-not-stereogenic', (sids[0],))]
+    assert any(u['anchor'] == sids[0] and u['parity'] == 2 for u in m.stereo_units())
 
 
 def test_cis_trans_configuration_is_written_as_a_direction_and_never_as_a_sign():
@@ -670,17 +671,18 @@ def test_an_allene_group_round_trips_through_an_owner_and_through_its_anchor():
     """THE CASE THAT CANNOT WORK BY ACCIDENT.  An allene's owners are its chain terminals, 2 and 4, and
     its byte lives on the midpoint atom 3, which is neither.  The write names an owner, so the group set
     on the anchor has to reach an index two bonds away; the read takes EITHER spelling, because an atom
-    index resolves both to the unit it owns and to the unit anchored there.
+    index resolves both to the unit it owns and to the unit anchored there.  The axis is configured: a
+    group on an unconfigured one is not written.
     """
-    mol = read_smiles('CC=C=CC')
+    mol = read_smiles('C[CH]=[C@]=[CH]C')
     mol.set_stereo_group(3, 2, 1)               # the anchor, a bare int naming the unit anchored there
     assert mol.stereo_groups() == {(2, 1): [(2, 4)]}, mol.stereo_groups()
     assert mol.bond_stereo_groups() == {(2, 1): [(2, 4)]}, 'an allene IS an axis member'
     assert mol.stereo_group_anchor_of((2, 4)) == 3
     text = write_smiles(mol, 'x')
-    assert text == 'CC=C=CC |o1:3|', text
+    assert text == 'CC=[C@]=CC |o1:3|', text
     assert read_smiles(text).stereo_groups() == {(2, 1): [(2, 4)]}, text
-    assert read_smiles('CC=C=CC |o1:2|').stereo_groups() == {(2, 1): [(2, 4)]}, 'the anchor still reads'
+    assert read_smiles('CC=[C@]=CC |o1:2|').stereo_groups() == {(2, 1): [(2, 4)]}, 'the anchor still reads'
 
 
 def test_a_bond_group_tail_is_the_same_from_three_creation_orders():
@@ -714,12 +716,16 @@ def test_an_atropisomer_group_is_a_fixed_point_of_three_write_read_cycles():
     The axis is unnameable without loss here -- both biaryl pivots also own a ring double bond, so
     neither index says which of that atom's two elements AND 1 is on -- and the writer reports that on
     every cycle while still writing the tail (note 4 at the top of `_smiles_write.pxi`).
+
+    SMILES carries no atropisomer configuration, so each cycle configures the read-back axis again: a
+    group on an unconfigured axis is not written.
     """
     mol = read_smiles('C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12')
     with mol.edit() as e:
         e.set_stereo_group(next(iter(mol.chiral_bonds())), 3, 1)
     previous = None
     for cycle in range(3):
+        mol.set_parity(mol.stereo_group_anchor_of(next(iter(mol.chiral_bonds()))), 1)
         log = []
         text = write_smiles(mol, 'x', log=log)
         assert text.endswith(' |&1:3|'), (cycle, text)
@@ -732,24 +738,21 @@ def test_an_atropisomer_group_is_a_fixed_point_of_three_write_read_cycles():
         assert list(mol.log) == [], (cycle, list(mol.log))
 
 
-def test_both_owners_in_same_collection_is_reported():
-    """AN AXIS WITH NO INDEX LEFT IS REPORTED, and the report does not depend on which collection
-    exhausted its owners.  Three members of one collection -- two labels and the axis those two atoms
-    own -- take both owners as tail indices, so the axis has no atom to speak for it.  Both owners name
-    THIS collection rather than a foreign one, which is the arm where the tail carries fewer members
-    than the collection states.
-
-    The written string is unchanged -- note 4, a token is never suppressed on a prediction, and the
-    axis has no index left either way.
+def test_dead_owner_members_leave_the_axis_its_own_index():
+    """An allene's owners are sp2 terminals, so a collection member on either owner atom names no
+    configured unit: both are dropped from the tail and logged, and the configured axis they would have
+    crowded out writes on its anchor with no ambiguity to report.
     """
-    mol = read_smiles('CC=C=CC')
+    mol = read_smiles('C[CH]=[C@]=[CH]C')
     mol.set_stereo_group(3, 3, 1)                         # AND 1 on the allene anchor -> axis (2, 4)
     with mol.edit() as e:
         e.set_stereo_group((2, 5), 3, 1)                  # not a bond, so it needs a session; the
         #                                                   pair names no axis and degrades to atom 2
     mol.set_stereo_group((4, 5), 3, 1)                    # a bond, and likewise degrades, to atom 4
     assert mol.stereo_groups() == {(3, 1): [2, (2, 4), 4]}, mol.stereo_groups()
+    assert mol.live_stereo_groups() == {(3, 1): [(2, 4)]}
+    assert mol.dead_stereo_groups() == {(3, 1): [2, 4]}
     log = []
     text = write_smiles(mol, 'x', log=log)
-    assert text == 'CC=C=CC |&1:1,3|', text
-    assert [r.rule for r in log] == ['smiles:stereo-group-axis-ambiguous'], log
+    assert text == 'CC=[C@]=CC |&1:3|', text
+    assert [r.rule for r in log] == ['smiles:stereo-group-dead'] * 2, log

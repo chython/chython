@@ -1368,7 +1368,10 @@ def test_a_stereo_query_is_screened_out_before_the_unit_table_is_built():
 # it preserves both parities exactly when the two are EQUAL.  Equal frame parities are therefore the
 # C2-symmetric diastereomer, whose two centres are homotopic and whose two stereo groups nothing can
 # tell apart; opposite parities are the meso diastereomer, whose centres are R and S and are
-# separable by any rule that reads the parity at all.
+# separable by any rule that reads the parity at all.  That holds for OR, whose signs name one isolated
+# isomer.  An AND group is a mixture of its drawing and the drawing's full inverse, so an AND group of
+# one states no parity: one AND group per centre makes every frame assignment one molecule, and one AND
+# group over both centres tells the C2-symmetric from the meso diastereomer.
 _BUTANE_ATOMS = (('C', 3), ('C', 1), ('C', 1), ('C', 3), ('Cl', 0), ('Cl', 0))
 _BUTANE_BONDS = ((0, 1), (1, 2), (2, 3), (1, 4), (2, 5))
 _BUTANE_FRAMES = ((0, 2, 4), (3, 1, 5))     # C2's refs then C3's, both (methyl, centre, chlorine)
@@ -1459,27 +1462,44 @@ def test_the_canonical_view_pairs_a_group_with_the_same_parity_under_every_relab
         assert view_by_parity(order) == reference, f'creation order {order} moved the pairing'
 
 
+def test_an_and_group_of_one_carries_no_parity_under_any_relabelling():
+    """An AND group is its drawing and the drawing's full inverse, so an AND group of one states no
+    parity: inverting it restates the molecule.
+
+    2,3-dichlorobutane with one AND group per centre is therefore ONE molecule for all four frame
+    assignments -- the C2-symmetric (1, 1) and (2, 2) and the meso (1, 2) and (2, 1) alike -- in every
+    creation order: one `==` class, one identity, one string, and one ambiguity class covering both
+    keys, because the swap of the centres is now a symmetry of every assignment.
+    """
+    reference = None
+    for frame in ((1, 1), (1, 2), (2, 1), (2, 2)):
+        for order in permutations(range(6)):
+            m, _ = _butane(order, frame, kind=SG_AND)
+            view = m.canonical_stereo_groups()
+            assert sorted(view) == [(SG_AND, 1), (SG_AND, 2)], 'two AND groups, densely numbered'
+            assert m.canonical_stereo_group_ambiguities() == (frozenset(view),), \
+                f'frame {frame}, creation order {order}: the swap of the centres is a symmetry'
+            if reference is None:
+                reference = m
+            else:
+                assert m == reference, f'frame {frame}, creation order {order}: one molecule'
+                assert m.canonical_bytes == reference.canonical_bytes, 'one identity'
+                assert str(m) == str(reference), 'one string'
+
+
 def test_an_and_pair_off_a_ring_is_reported_as_one_ambiguity_class_in_every_encoding():
     """Ruling F89's second half again, on the two axes the ring fixtures never reach: AND, and no ring.
 
-    The C2-symmetric diastereomer with one AND group per centre.  The swap of the two centres
-    preserves both frame parities, so it is an automorphism of the annotated molecule and the two
-    groups are interchangeable: the view must report one class covering both keys and must still
-    report TWO groups, because an AND pair of one member each is not one AND group of two.
+    The C2-symmetric diastereomer with one AND group per centre.  The swap of the two centres is an
+    automorphism of the annotated molecule and the two groups are interchangeable: the view must report
+    one class covering both keys and must still report TWO groups, because an AND pair of one member
+    each is not one AND group of two.
 
-    Both halves of the fixture are deliberate.  The kind is a term of the seed in its own right, and
-    every other ambiguity fixture in this file is OR.  And a unit's directions come from a methyl and a
-    chlorine here rather than from two ring neighbours, so the parity term of the seed is read in a
-    frame no ring supplies.  The second loop is what stops the first from passing vacuously: give the
-    same skeleton OPPOSITE frame parities and the swap can no longer preserve them, so the tie has to
-    disappear and every id has to pin -- if it did not, the first loop would be measuring the skeleton
-    rather than the stereochemistry.
-
-    This is also the file's one measurement of what a surviving tie actually costs, because it is the
-    only ambiguity fixture whose tied members are told apart by something other than the labelling:
-    the raw id -> WHICH CENTRE direction takes two values over the 720 encodings -- both assignments
-    occur -- while the collapsed reading asserted below takes one.  The opposite-parity half takes one
-    value in the raw direction too, which is the same statement as its empty ambiguity tuple.
+    The kind is a term of the seed in its own right, and the ring fixtures are OR.  And a unit's
+    directions come from a methyl and a chlorine here rather than from two ring neighbours, so the
+    parity term of the seed is read in a frame no ring supplies.  The second loop is what stops the
+    first from passing vacuously: put both centres in ONE AND group and the relative configuration is
+    stated, so the C2-symmetric and the meso diastereomer are two molecules in every encoding.
     """
     reference = None
     for order in permutations(range(6)):
@@ -1497,17 +1517,17 @@ def test_an_and_pair_off_a_ring_is_reported_as_one_ambiguity_class_in_every_enco
         else:
             assert collapsed == reference, f'creation order {order} moved the collapsed reading'
 
-    pinned = None
+    first = {}
     for order in permutations(range(6)):
-        m, sids = _butane(order, (1, 2), kind=SG_AND)
-        assert m.canonical_stereo_group_ambiguities() == (), \
-            f'creation order {order}: opposite parities leave the swap no way to preserve them'
-        view = {key: sorted(_butane_parity(m, sids, 1 if v == sids[1] else 2) for v in members)
-                for key, members in m.canonical_stereo_groups().items()}
-        if pinned is None:
-            pinned = view
-        else:
-            assert view == pinned, f'creation order {order} moved a pinned id'
+        for frame in ((1, 1), (1, 2)):
+            m, _ = _butane(order, frame, groups=(1, 1), kind=SG_AND)
+            assert sorted(len(v) for v in m.canonical_stereo_groups().values()) == [2], 'one AND group'
+            assert m.canonical_stereo_group_ambiguities() == (), 'one group has nothing to tie with'
+            first.setdefault(frame, m)
+            assert m == first[frame], f'creation order {order}, frame {frame}: one molecule'
+            assert str(m) == str(first[frame]), 'and one string'
+    assert first[(1, 1)] != first[(1, 2)], 'like and unlike members of one group are two molecules'
+    assert str(first[(1, 1)]) != str(first[(1, 2)]), 'written as two strings'
 
 
 # --- ruling F95 on the three NON-TETRAHEDRAL kinds ----------------------------------------------
@@ -1523,7 +1543,9 @@ def test_an_and_pair_off_a_ring_is_reported_as_one_ambiguity_class_in_every_enco
 # carries that frame onto that frame in order and therefore preserves both parities exactly when the
 # two are EQUAL.  Equal frame parities are two interchangeable groups; opposite parities are two groups
 # that any rule reading the parity at all must pin, and that half is what stops the first from passing
-# on the skeleton alone.
+# on the skeleton alone.  That is OR.  An AND group of one states no parity, so one AND group per
+# component makes like and unlike one molecule; one AND group over both components states the relative
+# configuration, and like and unlike are then two molecules.
 #
 # Each kind is carried by a molecule with FOUR named directions and not two, and the obvious smaller
 # fixtures are the reason.  Hold one frame parity fixed on 2-butene (SU_CIS_TRANS) or penta-2,3-diene
@@ -1558,12 +1580,12 @@ _HALOBIPHENYL = ((('C', 0), ('C', 0), ('C', 1), ('C', 1), ('C', 1), ('C', 1),
 _KIND_SPECS = (_DIFLUOROETHENE, _DIFLUOROALLENE, _HALOBIPHENYL)
 
 
-def _two_components(spec, order, parities, kind=SG_OR):
-    """`spec` doubled, written in creation `order`, one stereo group per component.
+def _two_components(spec, order, parities, kind=SG_OR, numbers=(1, 2)):
+    """`spec` doubled, written in creation `order`, component c in stereo group `numbers[c]`.
 
     `parities[c]` is component c's parity in the frame `spec` names, so the molecule is a function of
-    `parities` alone and `order` chooses only how it is encoded.  Returns the molecule, the logical
-    slot -> atom id table over both components, and the two anchors in component order.
+    `parities` and `numbers` alone and `order` chooses only how it is encoded.  Returns the molecule, the
+    logical slot -> atom id table over both components, and the two anchors in component order.
     """
     atoms, bonds, owners, _, group_atom, expected, name = spec
     n = len(atoms)
@@ -1576,7 +1598,7 @@ def _two_components(spec, order, parities, kind=SG_OR):
         for shift in (0, n):
             for i, j, o in bonds:
                 m.add_bond(sids[i + shift], sids[j + shift], o)
-        for number, shift in enumerate((0, n), 1):
+        for number, shift in zip(numbers, (0, n)):
             m.set_stereo_group(sids[group_atom + shift], kind, number)
     # which end anchors is a choice ruling F45 leaves to slot order, so the anchor is DISCOVERED from
     # perception rather than assumed; the frame is stated on the refs, which no such choice touches
@@ -1648,12 +1670,12 @@ def test_a_non_tetrahedral_kind_reads_the_same_in_every_encoding(spec):
     """Ruling F95 for SU_CIS_TRANS, SU_ALLENE and SU_ATROPISOMER: the reading is a function of the
     molecule, and the stored parity byte is not.
 
-    Two copies of the fixture, one stereo group each, in both numbered kinds and in both halves of the
-    ground truth above.  Opposite frame parities: the component swap cannot preserve them, so the two
-    groups are distinguishable and every id must be pinned AND must sit on the same parity in every
-    encoding.  Equal frame parities: the swap is an automorphism of the annotated molecule, so the two
-    groups are interchangeable and the report must be one ambiguity class covering both keys -- while
-    still reporting TWO groups of one member each, because two tied groups are not one group of two.
+    Two copies of the fixture, one OR group each, in both halves of the ground truth above.  Opposite
+    frame parities: the component swap cannot preserve them, so the two groups are distinguishable and
+    every id must be pinned AND must sit on the same parity in every encoding.  Equal frame parities:
+    the swap is an automorphism of the annotated molecule, so the two groups are interchangeable and the
+    report must be one ambiguity class covering both keys -- while still reporting TWO groups of one
+    member each, because two tied groups are not one group of two.
 
     The premise is asserted rather than assumed, twice over.  Each half stores three distinct byte
     patterns over the orders swept, so an implementation seeding its refinement on the byte cannot pass
@@ -1668,36 +1690,89 @@ def test_a_non_tetrahedral_kind_reads_the_same_in_every_encoding(spec):
     same 8, 8 and 32, which is the unsafe direction rule 3 forbids -- two encodings of one molecule both
     claiming to be pinned and naming different ids, which is the whole of ruling F95.
     """
-    shared = None
-    for kind in (SG_OR, SG_AND):
-        halves = {}
-        for parities, truth in (((1, 2), 'pinned'), ((1, 1), 'tied')):
-            reference = None
-            bytes_seen = set()
-            for order in _kind_orders(2 * len(spec[0])):
-                m, sids, anchors = _two_components(spec, order, parities, kind)
-                bytes_seen.add(tuple(m.parity_of(a) for a in anchors))
-                view = _kind_view(m, sids, spec, anchors)
-                ambiguities = m.canonical_stereo_group_ambiguities()
-                assert sorted(view) == [(kind, 1), (kind, 2)], 'two groups, densely numbered'
-                assert sorted(len(v) for v in view.values()) == [1, 1], \
-                    'and neither of them absorbed the other'
-                if truth == 'pinned':
-                    assert ambiguities == (), \
-                        f'order {order}: opposite parities leave the swap nothing to preserve'
-                    assert sorted(view.values()) == [[1], [2]], 'one parity each, and opposite'
-                else:
-                    assert ambiguities == (frozenset(view),), \
-                        f'order {order}: the component swap is an automorphism, so the groups tie'
-                if reference is None:
-                    reference = view
-                else:
-                    assert view == reference, f'order {order} moved the id -> parity pairing'
-            assert len(bytes_seen) == 3, \
-                f'the sweep must vary the ENCODING, and this half stored {sorted(bytes_seen)}'
-            halves[truth] = bytes_seen
-        common = halves['pinned'] & halves['tied']
-        assert common == {(1, 1), (1, 2)}, \
-            f'one byte pattern must serve both a tied and a pinned molecule, not {sorted(common)}'
-        assert shared is None or shared == common, 'and the same ones under either group kind'
-        shared = common
+    kind = SG_OR
+    halves = {}
+    for parities, truth in (((1, 2), 'pinned'), ((1, 1), 'tied')):
+        reference = None
+        bytes_seen = set()
+        for order in _kind_orders(2 * len(spec[0])):
+            m, sids, anchors = _two_components(spec, order, parities, kind)
+            bytes_seen.add(tuple(m.parity_of(a) for a in anchors))
+            view = _kind_view(m, sids, spec, anchors)
+            ambiguities = m.canonical_stereo_group_ambiguities()
+            assert sorted(view) == [(kind, 1), (kind, 2)], 'two groups, densely numbered'
+            assert sorted(len(v) for v in view.values()) == [1, 1], \
+                'and neither of them absorbed the other'
+            if truth == 'pinned':
+                assert ambiguities == (), \
+                    f'order {order}: opposite parities leave the swap nothing to preserve'
+                assert sorted(view.values()) == [[1], [2]], 'one parity each, and opposite'
+            else:
+                assert ambiguities == (frozenset(view),), \
+                    f'order {order}: the component swap is an automorphism, so the groups tie'
+            if reference is None:
+                reference = view
+            else:
+                assert view == reference, f'order {order} moved the id -> parity pairing'
+        assert len(bytes_seen) == 3, \
+            f'the sweep must vary the ENCODING, and this half stored {sorted(bytes_seen)}'
+        halves[truth] = bytes_seen
+    common = halves['pinned'] & halves['tied']
+    assert common == {(1, 1), (1, 2)}, \
+        f'one byte pattern must serve both a tied and a pinned molecule, not {sorted(common)}'
+
+
+@pytest.mark.parametrize('spec', _KIND_SPECS, ids=[s[6] for s in _KIND_SPECS])
+def test_an_and_group_of_a_non_tetrahedral_kind_reads_the_same_in_every_encoding(spec):
+    """The AND half of ruling F95 for SU_CIS_TRANS, SU_ALLENE and SU_ATROPISOMER.
+
+    Two copies of the fixture in AND groups.  In ONE group, like and unlike are two molecules:
+    every encoding of each is `==` to the first and writes one string, and the two are not equal.  In
+    one group PER component, like and unlike are one molecule, and the report is one ambiguity class
+    covering both keys -- while still reporting TWO groups of one member each, because two tied groups
+    are not one group of two.
+
+    The premise is asserted rather than assumed, twice over.  Each half stores three distinct byte
+    patterns over the orders swept, so an implementation seeding its refinement on the byte cannot pass
+    by luck; and the like and unlike halves SHARE byte patterns -- (1, 1) and (1, 2) occur in both -- so
+    no rule that reads the byte can even tell the two molecules apart here.
+    """
+    kind = SG_AND
+    halves = {}
+    split = None
+    for parities, truth in (((1, 2), 'unlike'), ((1, 1), 'like')):
+        reference = None
+        bytes_seen = set()
+        for order in _kind_orders(2 * len(spec[0])):
+            m, sids, anchors = _two_components(spec, order, parities, kind, numbers=(1, 1))
+            bytes_seen.add(tuple(m.parity_of(a) for a in anchors))
+            view = _kind_view(m, sids, spec, anchors)
+            assert sorted(view) == [(kind, 1)] and len(view[(kind, 1)]) == 2, 'one group of two'
+            assert m.canonical_stereo_group_ambiguities() == (), 'one group has nothing to tie with'
+            if reference is None:
+                reference = m
+            else:
+                assert m == reference, f'order {order}: one molecule in every encoding'
+                assert str(m) == str(reference), f'order {order}: written as one string'
+
+            m, sids, anchors = _two_components(spec, order, parities, kind)
+            view = _kind_view(m, sids, spec, anchors)
+            assert sorted(view) == [(kind, 1), (kind, 2)], 'two groups, densely numbered'
+            assert sorted(len(v) for v in view.values()) == [1, 1], \
+                'and neither of them absorbed the other'
+            assert m.canonical_stereo_group_ambiguities() == (frozenset(view),), \
+                f'order {order}: the component swap is an automorphism, so the groups tie'
+            if split is None:
+                split = m
+            else:
+                assert m == split, f'order {order}: a group of one states no parity'
+                assert str(m) == str(split), f'order {order}: written as one string'
+        assert len(bytes_seen) == 3, \
+            f'the sweep must vary the ENCODING, and this half stored {sorted(bytes_seen)}'
+        halves[truth] = (bytes_seen, reference)
+    assert halves['like'][1] != halves['unlike'][1], 'like and unlike in one group are two molecules'
+    if spec[5] != SU_ATROPISOMER:           # SMILES has no notation for an axis
+        assert str(halves['like'][1]) != str(halves['unlike'][1]), 'written as two strings'
+    common = halves['unlike'][0] & halves['like'][0]
+    assert common == {(1, 1), (1, 2)}, \
+        f'one byte pattern must serve both the like and the unlike molecule, not {sorted(common)}'

@@ -33,7 +33,7 @@ from ._tree import local, text_of
 from ..ctfile import Ctab, CtabAtom, CtabBond
 from ..ctfile._ctab import WEDGE_FROM_V2000, WEDGE_TO_V2000
 from ..ctfile._hydrogens import H_MAX, StatedChannels
-from ..ctfile._sgroup import NO_INDEX, SGroup, UNSUPPORTED, resolve_output
+from ..ctfile._sgroup import NO_INDEX, SGroup, UNSUPPORTED, live_groups_for_write, resolve_output
 from ...core.wedge import cis_trans_for_write, wedges_for_write
 from ...core import (LogRecord, LOST, MoleculeContainer, REPAIRED, STEREO_ABS, STEREO_AND, STEREO_OR,
                      WEDGE_DOWN, WEDGE_NONE, WEDGE_UP)
@@ -1125,16 +1125,17 @@ def record_from_molecule(mol, *, title=None, log=None):
     # Aggregated, as `_finish` aggregates its own: a molecule built in code has an unknown count on every
     # atom, so one line, a count, and the first atom it happened on.
     unknown, first_unknown = 0, None
-    # The canonical form of the groups, which the V3000 emitter asks for too: a group's *number* is
-    # arbitrary, so two writes of one molecule must not disagree about which arbitrary number it got.
+    # The canonical form of the live groups, which the V3000 emitter asks for too: a group's *number*
+    # is arbitrary, so two writes of one molecule must not disagree about which arbitrary number it got,
+    # and a member on an unconfigured or non-stereogenic unit states nothing and is not written.
     # `mrvStereoGroup` is an atomArray column, so a member spelled as an owner pair is named by its
     # anchor -- the one atom its group byte lives at, and the same spelling CXSMILES uses.
     groups = {}
     if mol.has_stereo_groups:
-        for (kind, group), members in mol.canonical_stereo_groups().items():
+        for (kind, group), members in live_groups_for_write(mol, 'mrv:stereo-group-dead', out).items():
             for member in members:
-                # AN INT MEMBER IS ALREADY THE SLOT the byte lives at -- including a bare label on an atom
-                # that anchors no unit, which has no anchor to resolve to and is still written.
+                # AN INT MEMBER IS ALREADY THE SLOT the byte lives at -- including a configured atom that
+                # anchors no unit, which has no anchor to resolve to and is still written.
                 anchor = member if isinstance(member, int) else mol.stereo_group_anchor_of(member)
                 groups[anchor] = (kind, group)
     for sid in sids:

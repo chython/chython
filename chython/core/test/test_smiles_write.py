@@ -477,9 +477,13 @@ def test_the_abs_collection_is_written_alone_and_beside_another_one():
     # negative control that a plain configured centre still writes bare.
     assert write_smiles(read_smiles('F[C@H](Cl)Br |a:1|')) == '[C@@H](F)(Cl)Br |a:0|'
     assert write_smiles(read_smiles('F[C@H](Cl)Br {a:1}')) == '[C@@H](F)(Cl)Br |a:0|'
-    # beside an AND or OR collection it keeps its older job as well, naming the centres NOT in one
+    # beside an AND or OR collection it keeps its older job as well, naming the centres NOT in one.  An
+    # AND collection is written in its canonical phase, so an AND collection of one member reads `@`
+    # whatever it was read as; the ABS and the OR centre keep their stated signs
     text = write_smiles(read_smiles('C[C@H](O)[C@H](N)[C@H](F)C |a:1,&1:3,o1:5|'))
     assert text == 'C[C@@H](F)[C@H]([C@@H](O)C)N |a:4,&1:3,o1:1|'
+    assert write_smiles(read_smiles('C[C@H](O)[C@@H](N)[C@H](F)C |a:1,&1:3,o1:5|')) == text
+    assert write_smiles(read_smiles('C[C@H](O)[C@H](N)[C@@H](F)C |a:1,&1:3,o1:5|')) != text
     # a fixed point, which is the round trip stated without naming a stable id: reading the string back
     # and writing it again reproduces it, so every collection landed on the atom it named
     assert write_smiles(read_smiles(text)) == text
@@ -534,7 +538,9 @@ def test_a_reaction_drops_its_collections_under_not_e_and_keeps_its_fragment_gro
     # assembles it and not only the per-molecule one; `f:` is what `!x` would cost here, a
     # two-component reactant reading back as two reactants
     rxn = read_reaction_smiles('C[C@H](O)CC.[Na+].[Cl-]>>C[C@@H](N)CC |&1:1,o1:8,f:1.2|')
-    assert format(rxn, '') == 'C(C)[C@@H](O)C.[Na+].[Cl-]>>C(C)[C@H](N)C |&1:2,o1:9,f:1.2|'
+    # the AND collection is written in its canonical phase and the OR one as stored; `!e` states the
+    # stored signs as plain ones
+    assert format(rxn, '') == 'C(C)[C@H](O)C.[Na+].[Cl-]>>C(C)[C@H](N)C |&1:2,o1:9,f:1.2|'
     assert format(rxn, '!e') == 'C(C)[C@@H](O)C.[Na+].[Cl-]>>C(C)[C@H](N)C |f:1.2|'
     assert format(rxn, '!x') == 'C(C)[C@@H](O)C.[Na+].[Cl-]>>C(C)[C@H](N)C'
 

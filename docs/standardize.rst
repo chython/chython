@@ -198,6 +198,25 @@ do:
     True [] C1=CC=CC=C1
     True [] c1ccccc1
 
+Which Kekule form ``kekule()`` writes follows the atom order. ``kekule(canonical=True)`` walks the atoms
+in canonical rank instead and writes one form per compound, whatever the order it was drawn in:
+
+.. testcode::
+
+    a = smiles('c1cc2ccc3cccc4ccc(c1)c2c34')     # pyrene, two atom orders
+    b = smiles('c1cc2cccc3ccc4cccc1c4c32')
+    c, d = a.copy(), b.copy()
+
+    a.kekule()
+    b.kekule()
+    c.kekule(canonical=True)
+    d.kekule(canonical=True)
+    print(a == b, c == d)
+
+.. testoutput::
+
+    False True
+
 .. testcode::
 
     svg = before_after(smiles('c1ccccc1'), kekule)
@@ -340,6 +359,8 @@ Rule                                           When
                                                outside it
 ``kekule-form:ring-phase`` (``INFO``)          the ring's double bonds were shifted by one bond, the
                                                alternation with the smaller canonical form
+``kekule-form:canonical`` (``INFO``)           the small rings were given their canonical Kekule form,
+                                               which ``thiele()`` reads differently from the one reached
 ``kekule-form:budget`` (``LOST``)              512 kekulisations were tried; the ring named and the
                                                ones after it were not
 =============================================  ==========================================================
@@ -357,6 +378,12 @@ Rule                                           When
 ``kekule-form:budget`` is ``LOST`` because the molecule keeps whichever form it had reached: on that
 record alone, two drawings of one compound may store different forms, so the convergence the rest of
 this section describes does not hold for it.
+
+The rounds fill rings; they cannot choose between forms that score alike. C60's 12500 Kekule forms all
+hold every double bond inside a ring, and a porphyrinoid's forms do not all aromatise alike.
+So the pass ends by re-kekulising the bonds a matching can move inside the window with
+``kekule(canonical=True)`` on a copy, and stores that form when ``thiele()`` reads it differently from
+the one reached. Benzene, naphthalene and pyrene aromatise alike from every form and are left as drawn.
 
 A ring **outside** that window gets a canonical alternation instead of a score, nothing downstream
 collapsing its two: the bond-shift drawings of 1,2-dimethylcyclooctatetraene are one compound, and the

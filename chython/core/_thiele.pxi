@@ -83,6 +83,13 @@ cdef enum:
 cdef enum:
     THIELE_INVALID = 3
 
+# the longest cycle `thiele()` reads: the candidate window's top, 5..7
+cdef enum:
+    THIELE_CYCLE_MAX = 7
+
+# half-edge steps the short-cycle walk may take before `thiele()` falls back to the stored basis
+cdef uint64_t THIELE_CYCLE_BUDGET = 2000000
+
 # WHY THE PRE-FILTER DROPPED A RING, for the two of its five exits that owe the caller a reason.
 # `arom_thiele_ring_ok` is `noexcept nogil` and cannot append to a Python list, so it names the state
 # and the atom through out-parameters and `thiele` does the reporting.
@@ -101,7 +108,7 @@ cdef struct thiele_t:
     void *block
     uint8_t *ring_ok           # [nrings]  1 while the ring is still a candidate
     uint8_t *he_arom           # [nhalf]   1 when this half-edge is in the candidate edge set
-    uint8_t *he_share          # [nhalf]   rings of the basis holding this half-edge, saturating at 2
+    uint8_t *he_share          # [nhalf]   candidate rings holding this half-edge, saturating at 2
     uint8_t *cand              # [n]       1 when the atom is in a candidate ring
     uint8_t *cls               # [n]       AROM_MUST / AROM_MAY / AROM_MUST_NOT / THIELE_INVALID
     int32_t *comp              # [n]       component label over the candidate edge set, -1 outside
@@ -145,18 +152,159 @@ cdef class _ThieleRun:
     cdef thiele_t t
     cdef uint32_t n
     cdef uint32_t nrings
+    cdef uint32_t *rings           # the candidate cycles, in the layout `structure_rings` returns
     cdef list log
 
     def __cinit__(self):
         self.t.block = NULL
         self.n = 0
         self.nrings = 0
+        self.rings = NULL
         self.log = []
 
     def __dealloc__(self):
         if self.t.block is not NULL:
             PyMem_Free(self.t.block)
             self.t.block = NULL
+        if self.rings is not NULL:
+            PyMem_Free(self.rings)
+            self.rings = NULL
+
+
+cdef list arom_thiele_short_cycles(Structure structure, uint64_t budget):
+    """Every simple cycle of 3 to `THIELE_CYCLE_MAX` atoms, as index tuples in ring order, or `None`.
+
+    Walked over ring bonds (`HE_IN_RING`) from each atom as the smallest of its cycle, and kept once per
+    direction by `path[1] < path[-1]`.  `None` once `budget` half-edge steps are spent.
+    """
+    cdef uint32_t n = structure.header.atom_count
+    cdef uint32_t *ptr = csr_ptr(structure)
+    cdef halfedge_t *edges = csr_edges(structure)
+    cdef uint32_t path[THIELE_CYCLE_MAX]
+    cdef uint32_t slot[THIELE_CYCLE_MAX]
+    cdef uint8_t *onpath = <uint8_t *> PyMem_Malloc(n if n else 1)
+    if onpath is NULL:
+        raise MemoryError('aromatisation cycle scratch allocation failed')
+    memset(onpath, 0, n)
+    cdef list out = []
+    cdef uint64_t steps = 0
+    cdef uint32_t s, v, w, k, j
+    cdef int depth
+    cdef list cycle
+    try:
+        for s in range(n):
+            path[0] = s
+            slot[0] = ptr[s]
+            onpath[s] = 1
+            depth = 0
+            while depth >= 0:
+                v = path[depth]
+                if slot[depth] == ptr[v + 1]:
+                    onpath[v] = 0
+                    depth -= 1
+                    continue
+                k = slot[depth]
+                slot[depth] += 1
+                if not edges[k].flags & HE_IN_RING:
+                    continue
+                steps += 1
+                if steps > budget:
+                    return None
+                w = edges[k].to
+                if w == s:
+                    if depth >= 2 and path[1] < path[depth]:
+                        cycle = []
+                        for j in range(<uint32_t> depth + 1):
+                            cycle.append(path[j])
+                        out.append(tuple(cycle))
+                    continue
+                if w < s or onpath[w] or depth + 2 > THIELE_CYCLE_MAX:
+                    continue
+                depth += 1
+                path[depth] = w
+                slot[depth] = ptr[w]
+                onpath[w] = 1
+    finally:
+        PyMem_Free(onpath)
+    return out
+
+
+cdef list arom_thiele_relevant(list cycles):
+    """The relevant ones among `cycles`: those no set of strictly shorter cycles sums to over GF(2).
+
+    Exact because `cycles` is every cycle up to its longest member, so the shorter ones span what any
+    shorter cycle could.  Sorted by size, then by atoms, so the result is a set and not a walk order.
+    """
+    cdef dict bit = {}
+    cdef dict pivots = {}
+    cdef list relevant = []
+    cdef list keyed = []
+    cdef list sized = []
+    cdef list pending
+    cdef Py_ssize_t i = 0, j, k, size, count = len(cycles)
+    cdef object vec, key, top
+    cdef tuple cycle
+    for cycle in cycles:
+        keyed.append((len(cycle), sorted(cycle), cycle))
+    keyed.sort()
+    for key in keyed:
+        sized.append(key[2])
+    while i < count:
+        size = len(<tuple> sized[i])
+        j = i
+        pending = []
+        # reduced against the shorter cycles only: two cycles of one size are both relevant when
+        # neither shorter set spans them, even if they span each other
+        while j < count and len(<tuple> sized[j]) == size:
+            cycle = <tuple> sized[j]
+            vec = 0
+            for k in range(size):
+                key = (cycle[k], cycle[k + 1 if k + 1 < size else 0])
+                if key[0] > key[1]:
+                    key = (key[1], key[0])
+                if key not in bit:
+                    bit[key] = len(bit)
+                vec ^= 1 << bit[key]
+            while vec:
+                top = vec.bit_length() - 1
+                if top not in pivots:
+                    break
+                vec ^= pivots[top]
+            if vec:
+                relevant.append(cycle)
+            pending.append(vec)
+            j += 1
+        for vec in pending:
+            while vec:
+                top = vec.bit_length() - 1
+                if top not in pivots:
+                    pivots[top] = vec
+                    break
+                vec ^= pivots[top]
+        i = j
+    return relevant
+
+
+cdef uint32_t *arom_thiele_pack(list cycles) except NULL:
+    """`cycles` in the `structure_rings` layout: count, `count + 1` offsets, then the atoms."""
+    cdef uint32_t nrings = <uint32_t> len(cycles)
+    cdef size_t total = 2 + nrings
+    cdef tuple cycle
+    for cycle in cycles:
+        total += len(cycle)
+    cdef uint32_t *out = <uint32_t *> PyMem_Malloc(total * sizeof(uint32_t))
+    if out is NULL:
+        raise MemoryError('aromatisation ring allocation failed')
+    cdef uint32_t i, k, off = 0, base = 2 + nrings
+    out[0] = nrings
+    for i in range(nrings):
+        cycle = <tuple> cycles[i]
+        out[1 + i] = off
+        for k in range(<uint32_t> len(cycle)):
+            out[base + off + k] = <uint32_t> cycle[k]
+        off += <uint32_t> len(cycle)
+    out[1 + nrings] = off
+    return out
 
 
 cdef class ThieleResult:
@@ -251,12 +399,13 @@ cdef inline void arom_thiele_bonds(Structure structure, uint32_t i, uint32_t *nb
 
 cdef void arom_thiele_share(Structure structure, thiele_t *t, uint32_t *rings,
                             uint32_t nrings) noexcept nogil:
-    """How many rings of the basis hold each half-edge, saturating at two.
+    """How many candidate rings hold each half-edge, saturating at two.
 
     Two is all `arom_thiele_ring_ok` asks -- own bond or shared one -- so the counter saturates and
-    a bond in five rings cannot overflow it.  Over the whole basis and not the candidate rings: which
-    ring a fused system's double bond was drawn in is a property of the graph, and it is read before
-    candidacy is known.
+    a bond in five rings cannot overflow it.  Over every candidate `rings` holds, before the pre-filter
+    drops any: which ring a fused system's double bond was drawn in is a property of the graph, and it
+    is read before candidacy is known.  The set is the relevant cycles of at most seven atoms, so a
+    fusion bond to a ring of eight or more counts as the small ring's own.
     """
     cdef uint32_t base = 2 + nrings
     cdef uint32_t i, k, u, v, size, slot
@@ -329,7 +478,7 @@ cdef bint arom_thiele_ring_ok(Structure structure, uint32_t *ring, uint32_t size
     so the rule costs none of them.
 
     A BORROWED SEXTET IS COUNTED, and this is the one place Huckel is applied per ring.  A ring holds pi
-    of its own when one of its bonds is a double bond that no other ring of the basis contains, and such
+    of its own when one of its bonds is a double bond that no other candidate ring contains, and such
     a ring is exempt from the count -- which is what keeps azulene's five-ring (five MUST atoms) and
     ring A of `N1C=CN2C=CC=C12` (seven pi) aromatic, per-ring parity being wrong for them.  A ring with
     no such bond holds nothing of its own: every double bond it has is a fusion bond, so which of the
@@ -463,12 +612,12 @@ cdef uint32_t arom_thiele_prune(Structure structure, thiele_t *t, uint32_t *ring
     """Drop every candidate ring holding an atom whose pi electron went elsewhere, to a fixpoint.
 
     Returns the number of rings dropped.  THE RING IS DROPPED AND THE ATOM IS NOT: deleting the atom
-    from the ring graph and re-running SSSR over what is left gives the same answer wherever the
-    surviving aromatic ring is itself a member of the cycle basis -- naphthoquinone's benzene is, and
-    so is every fused case in the fixtures.  Where the two could differ is a cycle that only appears
-    once a quinone carbon is deleted, and such a cycle is longer than the basis rings it replaces,
-    hence longer than 7, hence not a candidate here at all.  A second SSSR pass with no size bound
-    can emit a ten-membered aromatic ring.
+    from the ring graph and re-running the cycle search over what is left gives the same answer
+    wherever the surviving aromatic ring is itself a candidate -- naphthoquinone's benzene is, and so is
+    every fused case in the fixtures.  Where the two could differ is a cycle that only appears once a
+    quinone carbon is deleted, and such a cycle is longer than the rings it replaces, hence longer than
+    7, hence not a candidate here at all.  A second pass with no size bound can emit a ten-membered
+    aromatic ring.
     """
     cdef uint32_t base = 2 + nrings
     cdef uint32_t i, k, size, dropped = 0
@@ -607,14 +756,31 @@ def thiele(MoleculeContainer mol not None):
     if not n or not structure_has(structure, SEG_RELEVANT_RINGS):
         return arom_thiele_result(mol, False, log, refused)
 
-    cdef uint32_t *rings = structure_rings(structure)
+    # THE CANDIDATES ARE EVERY RELEVANT CYCLE OF AT MOST SEVEN ATOMS, a set the graph fixes.  The stored
+    # basis is one choice among equally short rings wherever the relevant cycles outnumber it: C60's
+    # basis holds 31 of its 32 faces, and which face is left out follows the atom order.
+    cdef _ThieleRun run = _ThieleRun.__new__(_ThieleRun)
+    cdef uint32_t *rings
+    cdef list cycles = arom_thiele_short_cycles(structure, THIELE_CYCLE_BUDGET)
+    if cycles is None:
+        rings = structure_rings(structure)
+        log.append(mc_record('thiele:cycle-budget', (),
+                             f'the short cycles of this molecule exceed the {THIELE_CYCLE_BUDGET}-step '
+                             f'walk; the stored ring basis is read instead, which two atom orders of '
+                             f'one compound may not share',
+                             mc_lost()))
+    else:
+        cycles = arom_thiele_relevant(cycles)
+        if not cycles:
+            return arom_thiele_result(mol, False, log, refused)
+        run.rings = arom_thiele_pack(cycles)
+        rings = run.rings
     cdef uint32_t nrings = rings[0]
     if not nrings:
         return arom_thiele_result(mol, False, log, refused)
 
     cdef uint32_t *ptr = csr_ptr(structure)
     cdef halfedge_t *edges = csr_edges(structure)
-    cdef _ThieleRun run = _ThieleRun.__new__(_ThieleRun)
     run.n = n
     run.nrings = nrings
     arom_thiele_alloc(&run.t, n, ptr[n], nrings)

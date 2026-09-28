@@ -146,9 +146,14 @@ def _ring(n, doubles, hydrogens=None):
 # ones (`_terminals_share_small_ring`), which is the boundary test_smiles_write_stereo.py's sibling
 # suite pins from the other side.
 CYCLODODECENE = _ring(12, {0})
-# Cyclooctatetraene: four units around one ring, so the constraint graph has a CYCLE and an odd number
-# of trans units makes the set unsatisfiable.  The only fixture that reaches the unwind path.
+# Cyclooctatetraene: four units on an alternating cycle, so each is SU_SHIFTABLE and not stereogenic;
+# its parities name the drawing and the writer drops them.
 COT = _ring(8, {0, 2, 4, 6}, hydrogens=1)
+# Cyclohexadeca-1,2,3,5,6,7,9,10,11,13,14,15-dodecaene: four butatriene units around one ring, linked by
+# single bonds.  The constraint graph has a CYCLE of stereogenic units, so an odd number of trans units
+# makes the set unsatisfiable.  The fixture that reaches the unwind path.
+CUMULENE_RING = ([(6, 1 if i % 4 in (0, 3) else 0) for i in range(16)],
+                 [(i, (i + 1) % 16, 1 if i % 4 == 3 else 2) for i in range(16)])
 # 1,3-difluoroallene: a bond kind whose configuration is NOT a direction, and is not written yet.
 DIFLUOROALLENE = ([(6, 1), (6, 0), (6, 1), (9, 0), (9, 0)],
                   [(0, 1, 2), (1, 2, 2), (0, 3, 1), (2, 4, 1)])
@@ -303,19 +308,19 @@ def test_a_ring_closure_bond_carries_its_token_at_the_opening_only():
 # ------------------------------------------------------------------------------------------------
 # THE LOSS REPORT.
 def test_contradictory_configurations_are_dropped_together_and_reported():
-    """Cyclooctatetraene, where the constraint graph is a CYCLE and parity can make it odd.
+    """A ring of four cis/trans units, where the constraint graph is a CYCLE and parity can make it odd.
 
     Around the ring each unit contributes one same/opposite relation and each of the four shared
     single bonds contributes one more (a bond is opposite to itself reversed), so the total is
     `xor(units) ^ 0` and the set is unsatisfiable exactly when an ODD number of the four units is
-    trans.  That is a prediction of the model, not a description of the code, and both halves are
-    asserted: three cis plus one trans loses ALL FOUR, and four cis writes all four.
+    trans.  Both halves are asserted: three cis plus one trans loses ALL FOUR, and four cis writes all
+    four.
 
     All four rather than the one that could not be satisfied: writing three of a contradictory set
     would hand back a string that reads as a molecule nobody stated, which is worse than a string
     that carries no configuration at all and says so.
     """
-    atoms, bonds = COT
+    atoms, bonds = CUMULENE_RING
     m, sids = build(atoms, bonds)
     anchors = configure(m, (2, 2, 2, 1))
     written = write_smiles(m)
@@ -330,16 +335,26 @@ def test_contradictory_configurations_are_dropped_together_and_reported():
 
 def test_an_even_number_of_trans_units_around_the_ring_is_satisfiable():
     """The other half of the prediction, so the test above cannot pass by refusing everything."""
-    chem = importorskip('rdkit.Chem')
-    atoms, bonds = COT
+    atoms, bonds = CUMULENE_RING
     for parities in ((1, 1, 1, 1), (1, 1, 2, 2), (2, 1, 1, 2)):
         m, sids = build(atoms, bonds)
         configure(m, parities)
         written = write_smiles(m)
         assert smw_traversal(m)['lost'] == (), (parities, written)
-        mol = chem.MolFromSmiles(written)
-        assert mol is not None, written
-        assert sum(1 for b in mol.GetBonds() if str(b.GetStereo()) != 'STEREONONE') == 4, written
+        assert directions(written) == 4, written
+        assert read_smiles(written) == m, (parities, written)
+
+
+def test_a_shiftable_ring_parity_is_neither_written_nor_reported_lost():
+    """Cyclooctatetraene's units are not stereogenic, so no parity on them reaches the writer."""
+    atoms, bonds = COT
+    for parities in ((2, 2, 2, 1), (2, 2, 2, 2), (1, 1, 2, 2)):
+        m, sids = build(atoms, bonds)
+        configure(m, parities)
+        assert not any(u['stereogenic'] for u in m.stereo_units())
+        written = write_smiles(m)
+        assert directions(written) == 0, written
+        assert smw_traversal(m)['lost'] == ()
 
 
 def test_an_atropisomer_is_reported_lost_every_time():

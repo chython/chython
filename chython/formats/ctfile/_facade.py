@@ -67,8 +67,7 @@ def needs_v3000(molecule):
             for value in (atom.x, atom.y):
                 if value is not None and len(f'{value:10.4f}') > 10:
                     return f'the coordinate {value} does not fit the V2000 10-character column'
-    if molecule.has_stereo_groups and any(kind != 1 for kind, _ in
-                                          molecule.canonical_stereo_groups()):
+    if molecule.has_stereo_groups and any(kind != 1 for kind, _ in molecule.live_stereo_groups()):
         return 'an AND/OR stereo group has no V2000 spelling'
     return None
 

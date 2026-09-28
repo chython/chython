@@ -30,7 +30,7 @@ from ._errors import MalformedCtfile, UnsupportedCtfile
 from ._hydrogens import (MRV_IMPLICIT_H, ZERO_VALENCE, apply_mrv_implicit_h, implicit_h_records,
                          valence_for_write)
 from ._sgroup import (NO_INDEX, SGroup, SGroupStore, checked_index, format_fielddisp,
-                      merge_log, normalize_indices, parse_fielddisp, resolve_output)
+                      live_groups_for_write, merge_log, normalize_indices, parse_fielddisp, resolve_output)
 from ...core.wedge import wedge_in_file_order, wedges_for_write
 from ...core import INFO, LogRecord, LOST, R_INDEX_MAX, REPAIRED, WEDGE_EITHER, WEDGE_NONE
 from ...core._core import element_symbols
@@ -711,7 +711,7 @@ def emit_v2000(mol, sgroups=None, *, title=None, program='', comment='', log=Non
         raise MalformedCtfile(f'{len(bonds)} bonds will not fit the V2000 3-character count field; '
                               f'write this structure as V3000')
 
-    groups = mol.canonical_stereo_groups() if mol.has_stereo_groups else {}
+    groups = live_groups_for_write(mol, 'v2000:stereo-group-dead', out)
     relative = any(kind != 1 for kind, _ in groups)
     configured = any(mol.parity_of(sid) for sid in sids)
     chiral = 1 if configured and not relative else 0
@@ -723,6 +723,13 @@ def emit_v2000(mol, sgroups=None, *, title=None, program='', comment='', log=Non
         out.append(LogRecord('v2000:enhanced-stereo-not-written', (),
                              'V2000 has no enhanced stereo groups; the AND/OR collections in this structure '
                              'are not written. Write V3000 to keep them',
+                             LOST))
+    elif groups:
+        # The chiral flag is not an ABS label: a reader ignores it, and an explicit ABS label is part
+        # of the identity, so a V2000 record of an ABS-labelled molecule reads back as another one.
+        out.append(LogRecord('v2000:enhanced-stereo-not-written', (),
+                             'V2000 has no enhanced stereo groups; the ABS collection in this structure is '
+                             'not written and the chiral flag does not state it. Write V3000 to keep it',
                              LOST))
 
     lines = [title[:80], program[:80], comment[:80],

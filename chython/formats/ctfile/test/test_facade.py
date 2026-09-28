@@ -149,7 +149,7 @@ def test_needs_v3000_names_an_and_or_stereo_group(kind):
     Why needs_v3000 is a predicate and not a try/except: emit_v2000 does not raise here, it logs and
     writes the record with the collections absent, so a catch-and-retry dispatcher loses the stereo.
     """
-    m = read_smiles('ClC(Br)(F)I')
+    m = read_smiles('Cl[C@](Br)(F)I')
     c = next(sid for sid in m.atom_numbers if m.atom(sid).element == 6)
     m.set_stereo_group(c, kind, 1)
     reason = needs_v3000(m)
@@ -158,6 +158,16 @@ def test_needs_v3000_names_an_and_or_stereo_group(kind):
     out = mol(m, log=log)
     assert 'V3000' in out.split('\n')[3]
     assert any('V3000' in x for x in log), log
+
+
+@pytest.mark.parametrize('kind', [3, 2])
+def test_a_group_on_an_unconfigured_centre_does_not_need_v3000(kind):
+    """A dead member is not written in any version, so it asks for none."""
+    m = read_smiles('ClC(Br)(F)I')
+    c = next(sid for sid in m.atom_numbers if m.atom(sid).element == 6)
+    m.set_stereo_group(c, kind, 1)
+    assert needs_v3000(m) is None
+    assert 'V2000' in mol(m).split('\n')[3]
 
 
 def test_abs_stereo_does_not_escalate():

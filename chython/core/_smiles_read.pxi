@@ -23,8 +23,8 @@
 # 1. Aromatic bonds are STORED AROMATIC.  A lowercase string produces order-4 bonds and this file
 #    never calls `kekule()` to convert one.  `kekule` is a deliberate operation the caller runs; a
 #    reader that ran it would make "what the string said" unrecoverable.  The single place this
-#    file touches `kekule` at all is the promotion fallback below, where it asks a QUESTION of a
-#    discarded copy -- see `smi_promote`.
+#    file touches `kekule` at all is the promotion fallback below, where it asks QUESTIONS of
+#    discarded copies -- see `smi_promote`.
 #
 # 2. Hydrogen counts come from the SMILES NOTATION model, `smv_default_h` in `_smiles_write.pxi`,
 #    not from the chemistry rules in `_valence.pxi`.  The two models answer different questions
@@ -40,19 +40,26 @@
 #
 # ATOM-CASE AROMATIC PROMOTION
 #
-# For each smallest ring whose every atom was written lowercase, every bond of that ring is
-# aromatic, whatever order the string wrote.  `c1cccc-c-1` and `c1cccc-c1` and `c1ccccc-1` all
-# read as benzene.  The aromatic set comes from atom case and never from bond order, so an
-# explicit `-` inside an all-lowercase ring is a preference WITHIN the pi system, not a statement
-# that leaves it.
+# The bond orders the string wrote are believed.  Promotion is the fallback for a stated set with no
+# Kekule form: then, for each smallest ring whose every atom was written lowercase, every bond of
+# that ring becomes aromatic whatever order the string wrote.
 #
-# Promotion is a REPAIR and is logged as one, because the stored orders are then not the written
-# ones and the caller has to be able to see that.  Biphenyl's inter-ring bond is in no smallest
-# ring and is therefore never promoted -- that case is what makes the rule safe, and
-# `test_biphenyl_inter_ring_bond_is_not_promoted` pins it.  If the promoted set has no Kekule form
-# the promotion is reverted to the stated orders and the revert is logged; the stated set cannot do
-# worse than itself, so the fallback is free insurance.
+# The stated set is BELIEVED when it has a Kekule form and every atom of each all-lowercase ring
+# holding a non-aromatic bond still carries an aromatic bond.
 #
+# | stated set believed | promoted set kekulisable | stored          | log                          |
+# | ------------------- | ------------------------ | --------------- | ---------------------------- |
+# | yes                 | not asked                | stated orders   | nothing                      |
+# | no                  | yes                      | promoted orders | `smiles:aromatic-promoted`   |
+# | no                  | no                       | stated orders   | `smiles:no-kekule-form`      |
+#
+# `c1cccc-c1` keeps its single bond.  `c1cccc-c-1` (five carbons on an aromatic path, no Kekule
+# form) and `c1c-c-cc-c-1` (two carbons with no aromatic bond) are promoted to benzene.  The first row is what makes the canonical writer's output read back: a ring
+# of aromatic atoms that `thiele()` left non-aromatic -- biphenylene's four-ring -- is written with
+# `-` bonds, and restricts from a Kekule structure, so its stated set always has a Kekule form.
+# Biphenyl's inter-ring bond is in no smallest ring and is never a candidate at all;
+# `test_biphenyl_inter_ring_bond_is_not_promoted` pins it.
+
 # THE CXSMILES TAIL
 #
 # `^N:` radicals are applied.  Every other field -- coordinates, atom labels, fragment grouping,
@@ -1739,13 +1746,18 @@ cdef MoleculeContainer smi_build(smi_parse_t *p):
 
 
 cdef int smi_promote(smi_parse_t *p, MoleculeContainer mol, object log) except -1:
-    """Atom-case aromatic promotion.  Returns 1 when the molecule was changed, 0 when it was not.
+    """Atom-case aromatic promotion, the fallback for a stated set that is not believed (see the
+    file header).  Returns 1 when the molecule was changed, 0 when it was not.
 
     Reached only when the tokeniser saw a bond between two lowercase atoms whose stated order was
     not aromatic, which is why the ordinary string never pays for this at all.  Biphenyl DOES reach
     it -- `c1ccc(-c2ccccc2)cc1` is what every writer emits -- and pays ring perception and nothing
     else: the inter-ring bond lies in no smallest ring, so no ring here is all-lowercase-with-a-
-    non-aromatic-bond and the function returns 0 having touched neither the graph nor the molecule.
+    non-aromatic-bond and the function returns 0 before any Kekule probe.
+
+    Each Kekule probe is a QUESTION asked of a discarded copy, not a conversion: the molecule this reader
+    returns has never been kekulised.  `stated_h` is passed because it changes the answer -- `[nH]`
+    cannot take a ring double bond and `[n]` must.
 
     Ring perception needs a built molecule, and hydrogen counts are arguments to `add_atom`, so the
     order is forced: build once with the stated orders, then repair in a second edit scope.  The
@@ -1761,6 +1773,7 @@ cdef int smi_promote(smi_parse_t *p, MoleculeContainer mol, object log) except -
     for i in range(p.n_atoms):
         index_of[p.atoms[i].sid] = i
     cdef set targets = set()
+    cdef set ring_atoms = set()
     cdef list plog = []
     cdef list names, members
     cdef tuple ring
@@ -1788,11 +1801,27 @@ cdef int smi_promote(smi_parse_t *p, MoleculeContainer mol, object log) except -
                 targets.add(bi)
                 names.append('%d-%d' % (u + 1, v + 1))
         if names:
+            for i in range(count):
+                ring_atoms.add(<uint32_t> index_of[ring[i]])
             plog.append(mc_record('smiles:aromatic-promoted', (),
                                   'every atom of ring %s is written lowercase, so its bond(s) %s are stored '
                                   'aromatic although the string wrote them otherwise'
                                   % (tuple(members), ', '.join(names)), mc_repaired()))
     if not targets:
+        return 0
+
+    # the stated set is believed only when every atom of a targeted ring keeps an aromatic bond: a
+    # lowercase atom the string walled off from every pi bond is what promotion exists to repair
+    cdef set pi_atoms = set()
+    for bi in range(p.n_bonds):
+        if p.bonds[bi].order == 4:
+            pi_atoms.add(p.bonds[bi].u)
+            pi_atoms.add(p.bonds[bi].v)
+    cdef dict stated = {}
+    for i in range(p.n_atoms):
+        if p.atoms[i].stated_h >= 0:
+            stated[p.atoms[i].sid] = p.atoms[i].stated_h
+    if ring_atoms <= pi_atoms and not kekule(mol.copy(), None, stated).unresolved:
         return 0
 
     cdef list old_orders = []
@@ -1813,14 +1842,6 @@ cdef int smi_promote(smi_parse_t *p, MoleculeContainer mol, object log) except -
             if p.atoms[i].implicit_h != <int8_t> old_h[i]:
                 mol.set_hydrogens(p.atoms[i].sid, p.atoms[i].implicit_h)
 
-    # Does the promoted set have a Kekule form?  This is a QUESTION asked of a discarded copy, not
-    # a conversion: the molecule this reader returns has never been kekulised and still holds
-    # order-4 bonds.  `stated_h` is passed because it changes the answer -- `[nH]` cannot take a
-    # ring double bond and `[n]` must.
-    cdef dict stated = {}
-    for i in range(p.n_atoms):
-        if p.atoms[i].stated_h >= 0:
-            stated[p.atoms[i].sid] = p.atoms[i].stated_h
     if kekule(mol.copy(), None, stated).unresolved:
         with mol.edit():
             for item in old_orders:
@@ -1832,9 +1853,9 @@ cdef int smi_promote(smi_parse_t *p, MoleculeContainer mol, object log) except -
                 if p.atoms[i].implicit_h != <int8_t> old_h[i]:
                     p.atoms[i].implicit_h = <int8_t> old_h[i]
                     mol.set_hydrogens(p.atoms[i].sid, p.atoms[i].implicit_h)
-        log.append(mc_record('smiles:promotion-failed', (),
-                            'promoting the all-lowercase rings gives an aromatic system with no Kekule '
-                            'form, so the bond orders the string wrote are kept instead',
+        log.append(mc_record('smiles:no-kekule-form', (),
+                            'the bond orders the string wrote have no Kekule form, and neither does '
+                            'promoting the all-lowercase rings, so the written orders are kept',
                             mc_refused()))
         return 0
     log.extend(plog)

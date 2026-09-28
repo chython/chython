@@ -631,13 +631,17 @@ def test_v2000_reports_a_bond_group_as_lost():
     assert 'v2000:enhanced-stereo-not-written' in [r.rule for r in log]
 
 
-def test_an_abs_bond_group_is_not_a_loss_for_v2000():
-    """ABS is what the chiral flag itself states, so a bond collection of kind 1 loses nothing.
-
-    The test the positive one above cannot be: a gate reading `bond_groups` as a plain truth value
-    passes that one and reports a loss here, where there is none.
-    """
+def test_an_abs_bond_group_is_a_loss_for_v2000():
+    """The chiral flag is not an ABS label and an explicit ABS label is identity, so dropping it is a loss."""
     log = []
     emit_v2000(_diene_with_a_bond_group(1, 0), log=log)
-    # `wedge:double-bond-no-coords` is expected here: the fixture has no layout.
-    assert 'v2000:enhanced-stereo-not-written' not in [r.rule for r in log], [r.rule for r in log]
+    records = [r for r in log if r.rule == 'v2000:enhanced-stereo-not-written']
+    assert len(records) == 1 and 'ABS' in records[0].message, [r.rule for r in log]
+
+
+def test_an_abs_atom_label_is_a_loss_and_signs_alone_are_not():
+    from ....core import read_smiles
+    for text, lost in (('C[C@H](O)CC |a:1|', True), ('C[C@H](O)CC', False)):
+        log = []
+        emit_v2000(read_smiles(text), log=log)
+        assert ('v2000:enhanced-stereo-not-written' in [r.rule for r in log]) is lost, (text, log)

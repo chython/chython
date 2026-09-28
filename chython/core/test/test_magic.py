@@ -779,17 +779,18 @@ def test_the_identity_survives_a_bytes_round_trip_with_stereo():
         assert MoleculeContainer.from_bytes(m.to_bytes()) == m
 
 
-def test_enhanced_stereo_is_NOT_in_the_identity_yet():
-    """The one gap, asserted so it is a known state rather than a surprise: the groups are stored and
-    they are not in the canonical form, so a racemate and a single enantiomer of one skeleton compare
-    equal.  Delete this test when the canonical form carries them; do not weaken it in place."""
+def test_a_stereo_group_set_by_edit_is_in_the_identity():
+    """A collection stated through `set_stereo_group` counts as kind and membership: an explicit ABS
+    label and an AND group each make the centre a different compound from the unlabelled sign."""
     single, ssids = build([('C', {'implicit_h': 1}), 'F', 'Cl', 'Br'],
                           [(0, 1, 1), (0, 2, 1), (0, 3, 1)])
     single.set_parity(ssids[0], 1)
-    racemate = single.copy()
-    racemate.set_stereo_group(list(racemate.atom_numbers)[0], 1, 1)
-    assert racemate.has_stereo_groups and not single.has_stereo_groups
-    assert racemate == single, 'a known gap, not a passing grade'
+    absolute, racemate = single.copy(), single.copy()
+    absolute.set_stereo_group(list(absolute.atom_numbers)[0], 1)
+    racemate.set_stereo_group(list(racemate.atom_numbers)[0], 3, 1)
+    assert absolute.has_stereo_groups and racemate.has_stereo_groups and not single.has_stereo_groups
+    assert absolute != single and racemate != single and absolute != racemate
+    assert absolute.canonical_bytes != single.canonical_bytes
 
 
 def test_bond_stereo_group_survives_an_unrelated_invalidating_edit():

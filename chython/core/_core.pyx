@@ -90,7 +90,7 @@ Fragments, in include order:
   _smiles_read        the SMILES reader: the tokeniser, the parse graph, the notation-model
                       hydrogen counts, and atom-case aromatic promotion. AFTER _kekule, whose
                       atom classifier decides the hydrogen count of an aromatic atom and whose
-                      kekuliser answers the one question promotion has to ask
+                      kekuliser answers the question promotion has to ask
   _smarts_read        the SMARTS reader: the tokeniser and the bracket-body grammar, emitting journal
                       ops into a QueryContainer. AFTER _smiles_read, whose element table, digit
                       scanners and CXSMILES field scanner it shares rather than restating them

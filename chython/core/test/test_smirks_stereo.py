@@ -619,12 +619,13 @@ def test_the_same_template_on_an_achiral_substrate_gives_the_racemate_of_one_dia
     configuration is fixed and the absolute one is not.  That is the product of epoxidising a racemic
     allylic alcohol, and no absolute-setting notation could have expressed it.
 
-    `canonical_bytes` does not carry group membership, so the diastereomer is checked against `SYN` and
-    the mixture against `stereo_groups()` -- one assertion each, for two separate claims.
+    `canonical_bytes` carries group kind and membership, so the product equals `SYN` with its three
+    centres in one AND group and differs from the single enantiomer `SYN` names.
     """
     product = product_of(EPOXIDATION, 'CC(O)C(C)=CC')
 
-    assert product.canonical_bytes == smiles(SYN).canonical_bytes
+    assert product.canonical_bytes == smiles(SYN + ' |&1:1,3,4|').canonical_bytes
+    assert product.canonical_bytes != smiles(SYN).canonical_bytes
     assert len(product.stereo_groups()) == 1
     assert sorted(next(iter(product.stereo_groups().values()))) == [2, 4, 6]
     assert next(iter(product.stereo_groups()))[0] == 3, 'AND, not OR: one diastereomer, both hands'
@@ -674,7 +675,7 @@ def test_the_OR_kind_correlates_the_same_way():
     assert len(t.product_stereo_correlated) == 3
 
     product = product_of(EPOXIDATION.replace('&1', 'o1'), 'CC(O)C(C)=CC')
-    assert product.canonical_bytes == smiles(SYN).canonical_bytes
+    assert product.canonical_bytes == smiles(SYN + ' |o1:1,3,4|').canonical_bytes
     assert next(iter(product.stereo_groups()))[0] == 2, 'OR'
 
 

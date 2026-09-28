@@ -874,7 +874,7 @@ the mechanism does not hold it:
 
 .. testoutput::
 
-    C(O)[C@@H](N(C)C)C |&1:2|
+    C(O)[C@H](N(C)C)C |&1:2|
 
 .. figure:: images/smirks-stereo-racemic.svg
    :width: 480px
@@ -925,7 +925,7 @@ reactant sign:
 
 .. testoutput::
 
-    C1C[C@@H]([C@H](CC1)N(C)C)O |&1:2,3|
+    C1C[C@H]([C@@H](CC1)N(C)C)O |&1:2,3|
 
 .. figure:: images/smirks-stereo-relative.svg
    :width: 500px
@@ -1645,8 +1645,7 @@ rule                         what it says
 
 **The side named wins, and a line says where it did.** An enhanced-stereo collection travels with the
 configuration it describes, under a **fresh id** -- two records numbering their ``&1`` differently must
-not have their racemates merged -- and is dropped where the named side states none, a configured unit in
-no collection already being an absolute one.
+not have their racemates merged -- and is dropped where the named side states none.
 
 A healed record is one the strict walk accepts, which is the way to check a repair over a corpus:
 

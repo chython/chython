@@ -621,12 +621,12 @@ def test_the_labels_are_concatenated_on_a_join_and_not_shifted():
 
 
 def _bond_group_fixture():
-    """(E)-2-butene with its C=C in AND 1, and a methyl for the cut to drop.
+    """(E)-2-butene with its C=C configured and in AND 1, and a methyl for the cut to drop.
 
-    No parity is stated: the group is what these tests are about, and a configuration would bring the
-    cut's own refusals into a test that is not about them.
+    The parity is what makes the member live: a group on an unconfigured unit is not written.
     """
     m, sids = build([(6, 3), (6, 1), (6, 1), (6, 3)], [(0, 1, 1), (1, 2, 2), (2, 3, 1)])
+    m.set_parity(next(u['anchor'] for u in m.stereo_units() if u['kind'] == 1), 1)
     with m.edit() as e:
         e.set_bond_stereo_group(sids[1], sids[2], 3, 1)
     return m, sids

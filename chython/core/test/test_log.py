@@ -265,8 +265,8 @@ def test_a_record_is_hashable_and_comparable_as_a_tuple():
 def test_a_smiles_reader_record_is_findable_by_rule_and_severity():
     """The point of the conversion, on the shortest real emitter: a reader's line is now queryable.
 
-    `c1ccc-c1` promotes to an aromatic system with no Kekule form, so the reader keeps the written
-    orders and refuses -- the severity a reader may state without repairing anything.
+    `c1ccc-c1` has no Kekule form as written or promoted, so the reader keeps the written orders and
+    refuses -- the severity a reader may state without repairing anything.
     """
     log = Log()
     read_smiles('c1ccc-c1', log)

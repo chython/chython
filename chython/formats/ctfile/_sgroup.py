@@ -30,7 +30,7 @@ from ...core import INFO, LogRecord, LOST, REPAIRED, STEREO_ABS, STEREO_AND, STE
 
 
 __all__ = ['SGroup', 'SGroupStore', 'SGROUP_TYPES', 'NO_INDEX', 'DISP_MAX', 'DISP_MIN',
-           'resolve_output', 'UNSUPPORTED', 'merge_log',
+           'resolve_output', 'live_groups_for_write', 'UNSUPPORTED', 'merge_log',
            'add_data_sgroup', 'data_sgroups', 'FIELDDISP_TAIL', 'MAX_STEREO_GROUP',
            'STEREOLABEL', 'stereo_labels', 'promote_stereo_labels']
 
@@ -698,5 +698,46 @@ def resolve_output(mol, title, sgroups, log=None):
         # the writer, which re-encodes it.  Only XML cannot carry it -- see `xml_text`.
         title = bytes(title).decode('utf8', 'surrogateescape')
     if sgroups is None:
-        sgroups = SGroupStore.from_molecule(mol)
+        sgroups = _drop_dead_stereo_labels(mol, SGroupStore.from_molecule(mol), log)
     return title, sgroups
+
+
+def _drop_dead_stereo_labels(mol, store, log):
+    """`store` without the ``STEREOLABEL`` records that state nothing, one INFO line per record dropped.
+
+    A label is dead where no atom and no bond it names carries a live configuration
+    (:meth:`MoleculeContainer.stereo_is_live`): a word on an unconfigured or non-stereogenic unit is not
+    written, as a dead collection member is not.  A record another names as its ``PARENT`` is kept.
+    """
+    parents = {r.parent for r in store.records if r.parent != NO_INDEX}
+    kept = []
+    for record in store.records:
+        if (record.is_data() and record.name is not None and record.name.upper() == STEREOLABEL
+                and record.index not in parents
+                and not any(mol.stereo_is_live(n) for n in record.atoms)
+                and not any(mol.stereo_is_live(tuple(sorted(b))) for b in record.bonds)):
+            if log is not None:
+                log.append(LogRecord('sgroup:stereo-label-dead', tuple(record.atoms),
+                                     f'STEREOLABEL {b"".join(record.data).decode("utf8", "replace")!r} '
+                                     f'names no configured stereogenic unit, and is not written', INFO))
+            continue
+        kept.append(record)
+    if len(kept) == len(store.records):
+        return store
+    return SGroupStore(kept, store.aliases, store.log)
+
+
+def live_groups_for_write(mol, rule, log):
+    """`mol.live_stereo_groups()`, with one INFO `rule` line on `log` per dead member dropped.
+
+    What every CTfile and MRV writer states collections from: a member on an unconfigured or
+    non-stereogenic unit states nothing and is not written, so `CC(O)CC |o1:1|` writes no collection.
+    """
+    if not mol.has_stereo_groups:
+        return {}
+    for (kind, group), members in mol.dead_stereo_groups().items():
+        for member in members:
+            log.append(LogRecord(rule, member if isinstance(member, tuple) else (member,),
+                                 f'{member} is in a stereo collection on a unit that is unconfigured or not '
+                                 f'stereogenic, and no label is written for it', INFO))
+    return mol.live_stereo_groups()

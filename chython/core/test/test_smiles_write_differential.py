@@ -62,7 +62,7 @@ from random import Random
 from pytest import fixture, mark, skip
 
 from chython.core import H_UNKNOWN, MoleculeContainer
-from chython.core._core import smw_traversal, write_smiles
+from chython.core._core import read_smiles, smw_traversal, write_smiles
 from . import oracle as oracle_module
 
 
@@ -494,7 +494,9 @@ def _stereo_agreement(records, flip=False):
 # ------------------------------------------------------------------------------------------------
 # ORACLE 1 AGAIN, now with the configuration in it.
 def test_rdkit_agrees_on_the_CONFIGURATION_and_not_only_the_constitution(stereo_sdf):
-    """212 of 212 records that carry a configuration -- 975 signs, 964 tetrahedral and 11 allene.
+    """212 records that carry a configuration -- 975 signs, 964 tetrahedral and 11 allene.
+
+    Every record agrees except those in `NOT_STEREOGENIC_IN_SOURCE`.
 
     This is the fixture the epic's warning is about, and the reason it is a differential rather than
     a handful of hand-built centres: a wrong sign convention, a frame read in the wrong direction, or
@@ -509,9 +511,27 @@ def test_rdkit_agrees_on_the_CONFIGURATION_and_not_only_the_constitution(stereo_
     because a record with nothing to get wrong is not evidence.
     """
     agreed, disagreed, skipped = _stereo_agreement(stereo_sdf)
-    assert disagreed == []
-    assert len(agreed) >= 212
+    assert [source for source, _ in disagreed] == list(NOT_STEREOGENIC_IN_SOURCE), disagreed
+    assert len(agreed) + len(disagreed) >= 212
     assert skipped <= 6
+
+
+# Records whose source states a parity on a unit that is not stereogenic.  The writer drops that parity;
+# RDKit's canonical string of the source keeps it, so the two strings differ by design.
+#
+# | record                                       | stereogenic          | not stereogenic               |
+# | -------------------------------------------- | -------------------- | ----------------------------- |
+# | trispiro, cyclopentane-capped at both ends   | the C2 middle spiro  | both terminal spiro atoms     |
+NOT_STEREOGENIC_IN_SOURCE = ('C1CC[C@]2(C1)C[C@]1(C[C@]3(CCCC3)CC1)CC2',)
+
+
+def test_a_parity_on_a_symmetric_spiro_end_is_not_written():
+    """The terminal spiro atom of the trispiro record carries a cyclopentane whose two arms are
+    exchanged by an automorphism, so only the middle atom's parity is written."""
+    m = read_smiles(NOT_STEREOGENIC_IN_SOURCE[0])
+    out = write_smiles(m)
+    assert out.count('@') == 1, out
+    assert read_smiles(out) == m
 
 
 def test_rdkit_agrees_on_every_cis_trans_double_bond(cis_trans):

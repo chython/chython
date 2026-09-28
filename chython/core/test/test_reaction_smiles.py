@@ -236,7 +236,7 @@ def test_enhanced_stereo_groups_survive_a_reaction_round_trip():
     them per side exactly as `DetachedSmiles.join` does, so `&1` on the product side of the input is
     not promised to still be spelled `&1`.
     """
-    r = read_reaction_smiles('C[C@H](N)O.C[C@@H](N)O>>CC=O |&1:1,&2:6|')
+    r = read_reaction_smiles('C[C@H](N)O.C[C@@H](N)O>>CC=O |&1:1,&2:5|')
     written = str(r)
     assert '&1:' in written and '&2:' in written
     back = read_reaction_smiles(written)
@@ -256,8 +256,8 @@ def test_a_carried_stereo_group_is_one_group_across_the_arrow():
 
 def test_two_unmapped_stereo_groups_stay_two_groups():
     # The negative control: nothing links them, so nothing may merge them.
-    r = read_reaction_smiles('C[C@H](N)O.C[C@@H](N)O>>CC=O |&1:1,&2:6|')
-    assert str(r) == '[C@@H](C)(N)O.[C@H](C)(N)O>>C(C)=O |&1:0,&2:6|'
+    r = read_reaction_smiles('C[C@H](N)O.C[C@@H](N)O>>CC=O |&1:1,&2:5|')
+    assert str(r) == '[C@@H](C)(N)O.[C@@H](C)(N)O>>C(C)=O |&1:0,&2:4|'
 
 
 def test_an_and_group_and_an_or_group_never_merge():

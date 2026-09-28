@@ -238,12 +238,33 @@ def _admissible(molecule: MoleculeContainer, group: list[int],
             work.set_charge(n, charge)
             work.set_hydrogens(n, hydrogens)
     members = frozenset(group)
-    if any(members.intersection(system) for system in work.kekule().unresolved):
+    # canonically: the count `thiele()` gives depends on the form, and ranking placements by a count
+    # that follows the atom order would place the hydrogen by the atom order
+    if any(members.intersection(system) for system in work.kekule(canonical=True).unresolved):
         return None
     if any((work.implicit_h_of(n), work.charge_of(n)) != state for n, state in placement.items()):
         return None
     work.thiele()
     return work.aromatic_bond_count
+
+
+def _placed(molecule: MoleculeContainer, states: dict[int, tuple[int, int]],
+            orders: Sequence[tuple[int, int, int]] = ()) -> bytes:
+    """`canonical_bytes` of a copy holding these `{n: (hydrogens, charge)}` and `(u, v, order)` edits.
+
+    The tie-break after the rank key.  `atoms_order` is a partition and not a permutation, so on a
+    symmetric skeleton two placements that no automorphism relates can share every rank -- porphine's
+    two N-H on adjacent and on opposite pyrroles -- and the first one enumerated, which follows the atom
+    order, would win.  Placements that some automorphism relates give one molecule and one key.
+    """
+    work = molecule.copy()
+    with work.edit():
+        for u, v, order in orders:
+            work.set_order(u, v, order)
+        for n, (hydrogens, charge) in states.items():
+            work.set_charge(n, charge)
+            work.set_hydrogens(n, hydrogens)
+    return work.canonical_bytes
 
 
 def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]):
@@ -252,9 +273,8 @@ def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]
     The hydrogens and the charges are read off the group rather than assumed, and dealt back over it.  The
     key is the aromatic bond count `thiele()` gives the placement, most first, then the hydrogens beside a
     C=O or C=S carbon, then the hydrogens on five-membered rings, each most first, then the sorted ranks
-    of the sites holding the hydrogens, then of those holding each charge in turn -- a strict total order,
-    because `atoms_order` is a permutation and those two sets fix the placement, so no two placements
-    share a key and no tie is left for an arbitrary rule to break.
+    of the sites holding the hydrogens, then of those holding each charge in turn, and last the canonical
+    bytes of the placed molecule (`_placed`), which leaves no tie for the enumeration order to break.
 
     A lactam N-H sits next to its carbonyl: 6-methylpyrimidin-4(3H)-one, not its 1H form.  An azole N-H
     outranks an azine N-H whenever both forms are equally aromatic, so every 7-azaindole reads 1H
@@ -290,6 +310,7 @@ def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]
                          for x in molecule.neighbors_of(c)) for c in molecule.neighbors_of(n))}
     current = {n: (molecule.implicit_h_of(n) or 0, molecule.charge_of(n)) for n in group}
     best = None
+    tied: list[dict[int, tuple[int, int]]] = []
     for protonated in combinations(carriers, hydrogens):
         for dealt in _deal(tuple(group), order):
             placement = {n: (1 if n in protonated else 0, dealt[n]) for n in group}
@@ -299,11 +320,16 @@ def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]
             key = [[-aromatic, -sum(n in lactam for n in protonated), -sum(n in azole for n in protonated)],
                    sorted(ranks[n] for n in protonated)]
             key.extend(sorted(ranks[n] for n in group if dealt[n] == q) for q in signs)
-            if best is None or key < best[0]:
-                best = (key, placement)
-    if best is None or best[1] == current:
+            if best is None or key < best:
+                best, tied = key, [placement]
+            elif key == best:
+                tied.append(placement)
+    if best is None:
         return None
-    return best[1]
+    chosen = tied[0] if len(tied) == 1 else min(tied, key=lambda p: _placed(molecule, p))
+    if chosen == current or len(tied) > 1 and _placed(molecule, chosen) == _placed(molecule, current):
+        return None
+    return chosen
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -544,9 +570,9 @@ def _choose_amidines(molecule: MoleculeContainer, unit: list[tuple[int, list[int
     a perfect matching of the carbons onto their sites.
 
     The candidate graph is a forest -- a cycle through it is a ring, and every atom here is acyclic -- so
-    no two assignments share an acceptor set.  That is what leaves the key a strict total order: the
-    sorted ranks of the nitrogens that KEEP their hydrogen, then the sorted ranks holding each charge,
-    the same shape of key the ring path uses.
+    no two assignments share an acceptor set.  The key is the sorted ranks of the nitrogens that KEEP
+    their hydrogen, then the sorted ranks holding each charge, then the canonical bytes of the assigned
+    molecule (`_placed`) -- the same shape of key the ring path uses, and for the same reason.
     """
     carbons = [c for c, _ in unit]
     all_sites = sorted({n for _, sites in unit for n in sites})
@@ -571,6 +597,7 @@ def _choose_amidines(molecule: MoleculeContainer, unit: list[tuple[int, list[int
         return 'budget'
 
     best = None
+    tied: list[tuple[dict[int, int], dict[int, int]]] = []
     for charges in _deal(tuple(all_sites), order):
         free = {n: 3 + charges[n] - degrees[n] for n in all_sites}
         for choice in product(*(sites for _, sites in unit)):
@@ -582,11 +609,33 @@ def _choose_amidines(molecule: MoleculeContainer, unit: list[tuple[int, list[int
             key = [sorted(ranks[n] for n in all_sites if n not in taken)]
             key.extend(sorted(ranks[n] for n in all_sites if charges[n] == charge)
                        for charge, _ in order)
-            if best is None or key < best[0]:
-                best = (key, dict(zip(carbons, choice)), charges)
-    if best is None or (best[1], best[2]) == (current, charged):
+            if best is None or key < best:
+                best, tied = key, [(dict(zip(carbons, choice)), charges)]
+            elif key == best:
+                tied.append((dict(zip(carbons, choice)), charges))
+    if best is None:
         return None
-    return best[1], best[2]
+    if len(tied) == 1:
+        chosen = tied[0]
+    else:
+        chosen = min(tied, key=lambda t: _placed(molecule, *_amidine_edits(molecule, unit, *t)))
+        if _placed(molecule, *_amidine_edits(molecule, unit, *chosen)) == \
+                _placed(molecule, *_amidine_edits(molecule, unit, current, charged)):
+            return None
+    if chosen == (current, charged):
+        return None
+    return chosen
+
+
+def _amidine_edits(molecule: MoleculeContainer, unit: list[tuple[int, list[int]]],
+                   accepted: dict[int, int], charges: dict[int, int]):
+    """`(states, orders)` for `_placed`: what writing this assignment sets, as `_place_amidines` writes it."""
+    acceptors = frozenset(accepted.values())
+    sites = {n for _, s in unit for n in s}
+    states = {n: ((2 if n in acceptors else 3) + charges[n] - len(tuple(molecule.neighbors_of(n))), charges[n])
+              for n in sites}
+    orders = [(carbon, n, 2 if n == accepted[carbon] else 1) for carbon, s in unit for n in s]
+    return states, orders
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -646,7 +695,7 @@ def _place_rings(molecule: MoleculeContainer, work, systems, sites: list[int],
             for n, (hydrogens, charge) in placement.items():
                 work.set_charge(n, charge)
                 work.set_hydrogens(n, hydrogens)
-    if work.kekule().unresolved:
+    if work.kekule(canonical=True).unresolved:
         lines.append((_RULE_REFUSED, tuple(sorted(n for group, _ in plan for n in group)),
                       'the canonical placement has no Kekule form for the molecule as a whole, though '
                       'it had one for each system alone; nothing was written'))

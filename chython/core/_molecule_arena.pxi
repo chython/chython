@@ -806,6 +806,12 @@ cdef inline uint8_t *structure_stereo_groups(Structure structure) noexcept nogil
 DEF STEREO_GROUP_MAX = 0x3f
 
 
+#: `sg_kind` of an AND collection's byte, the one kind with a phase; published as `STEREO_AND`.
+DEF SG_KIND_AND = 3
+#: `sg_kind` of the ABS bucket's byte; published as `STEREO_ABS`.
+DEF SG_KIND_ABS = 1
+
+
 cdef inline uint8_t sg_kind(uint8_t v) noexcept nogil:
     return v >> 6
 
@@ -1047,19 +1053,24 @@ cdef inline uint64_t *structure_ring_bits(Structure structure) noexcept nogil:
 
 
 cdef inline uint32_t structure_ring_words(Structure structure) noexcept nogil:
-    # Derived from the bitmap's own length, not from SEG_RELEVANT_RINGS: the bitmap carries one
-    # bit per relevant-cycle prototype while SEG_RELEVANT_RINGS carries a minimum cycle basis,
-    # and those two counts differ on almost every polycycle.
+    # Derived from the segment's own length, not from SEG_RELEVANT_RINGS: the bitmap carries one
+    # bit per ring family while SEG_RELEVANT_RINGS carries a minimum cycle basis, and those two
+    # counts differ on almost every polycycle.  Each word costs n uint64 plus 64 uint32 lengths.
     cdef uint32_t n = structure.header.atom_count
     cdef uint32_t bits = structure_seg_len(structure, SEG_RING_BITS)
     if n == 0 or bits == 0:
         return 0
-    return <uint32_t> (bits // (<size_t> n * sizeof(uint64_t)))
+    return <uint32_t> (bits // (<size_t> n * sizeof(uint64_t) + 64 * sizeof(uint32_t)))
+
+
+cdef inline uint32_t *structure_ring_family_sizes(Structure structure, uint32_t words) noexcept nogil:
+    # the cycle length of each ring family, indexed by its bit; follows the n * words bitmap
+    return <uint32_t *> (structure_ring_bits(structure) + <size_t> structure.header.atom_count * words)
 
 
 cdef inline bint structure_shares_ring(Structure structure, uint32_t a,
                                        uint32_t b) noexcept nogil:
-    """Do atoms `a` and `b` sit on some common relevant-cycle prototype?
+    """Do atoms `a` and `b` sit on some common ring family (`_rings.pxi:_group_families`)?
 
     `structure_ring_words() == 0` subsumes a `structure_has(SEG_RING_BITS)` guard of its own: an
     absent segment has length zero and the word count is derived from that length.
@@ -1788,11 +1799,14 @@ cdef Structure structure_component_graph(Structure src, const uint32_t *slots, u
 
     Carried: the atom records byte for byte (so the derived scalars, `in_ring` included, arrive already
     right -- they are component-local facts), the CSR with `to` remapped, the header flags, the
-    parities.  NOT carried: coordinates, S-groups, stereo groups, conformers, and every derived
-    segment.  Nothing the canonical search reads consults them; the caller runs `rebuild_derived`,
-    which is what gives the component its own rings and features.
+    parities and the stereo-group bytes, which sit at the same anchors for the reason parities do.
+    NOT carried: coordinates, S-groups, conformers, and every derived segment.  Nothing the canonical
+    search reads consults them; the caller runs `rebuild_derived`, which is what gives the component
+    its own rings and features.
     """
     cdef uint32_t seg_mask = SEG_MASK_PARITY if structure_has(src, SEG_PARITY) else 0
+    if structure_has(src, SEG_STEREO_GROUPS):
+        seg_mask |= SEG_MASK_STEREO
     cdef Structure out = structure_alloc_full(m, bonds, (src.header.flags & FLAG_WIDE_INDEX) != 0,
                                              seg_mask)
     cdef atom_t *sa = src.atoms()
@@ -1821,9 +1835,14 @@ cdef Structure structure_component_graph(Structure src, const uint32_t *slots, u
     # Recounted from the orders just copied, in the loop that copied them -- the rule every path that
     # WALKS the half-edges follows, and here the walk is unavoidable anyway.  `arom` counted half-edges.
     out.aromatic_bond_count = arom // 2
-    if seg_mask:
+    if seg_mask & SEG_MASK_PARITY:
         sp = structure_parities(src)
         dp = structure_parities(out)
+        for i in range(m):
+            dp[i] = sp[slots[i]]
+    if seg_mask & SEG_MASK_STEREO:
+        sp = structure_stereo_groups(src)
+        dp = structure_stereo_groups(out)
         for i in range(m):
             dp[i] = sp[slots[i]]
     return out

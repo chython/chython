@@ -31,7 +31,7 @@ from ._errors import MalformedCtfile, UnsupportedCtfile
 from ._hydrogens import (MRV_IMPLICIT_H, ZERO_VALENCE, apply_mrv_implicit_h, implicit_h_records,
                          valence_for_write)
 from ._sgroup import (MAX_STEREO_GROUP, NO_INDEX, UNSUPPORTED, SGroup, checked_index, format_fielddisp,
-                      merge_log, normalize_indices, parse_fielddisp, resolve_output)
+                      live_groups_for_write, merge_log, normalize_indices, parse_fielddisp, resolve_output)
 from ._tokens import emit_v30, join_continuations, parse_list, quote_value, tokenize
 from ...core import LogRecord, LOST, R_INDEX_MAX, REPAIRED
 from ...core._core import element_symbols
@@ -739,7 +739,7 @@ def emit_v3000(mol, sgroups=None, *, title=None, program='', comment='',
         wedge_of[(narrow, wide)] = code
 
     bonds = list(mol.bonds())
-    groups = mol.canonical_stereo_groups() if mol.has_stereo_groups else {}
+    groups = live_groups_for_write(mol, 'v3000:stereo-group-dead', out)
     # A hydrogen count the valence rules would not reproduce is stated as an MRV_IMPLICIT_H data
     # S-group, and in `VAL=` too when every bond on the atom has an integral order.  Re-derived rather
     # than passed through, so repeated round trips accumulate nothing.  Counted in COUNTS, hence here.

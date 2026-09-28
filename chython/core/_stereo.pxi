@@ -786,30 +786,12 @@ cdef inline uint32_t _chain_nth(uint32_t *ptr, halfedge_t *edges, uint32_t t,
     return cur
 
 
-cdef inline uint32_t _ring_prototype_size(Structure structure, uint32_t words, uint32_t word,
-                                         uint64_t mask) noexcept nogil:
-    """The ring size of the prototype whose bit is `mask` in word `word` of the ring bitmap.
-
-    A prototype's size IS the number of atoms carrying its bit: `_fill_descriptors` sets the bit on
-    every atom of the cycle and on no other, so counting them recovers `psize` exactly with no new
-    storage and no new segment field.  One pass over atoms, run only for a prototype the two
-    terminals actually share -- which is at most a handful of prototypes on any real molecule.
-    """
-    cdef uint64_t *bits = structure_ring_bits(structure)
-    cdef uint32_t i
-    cdef uint32_t size = 0
-    for i in range(structure.header.atom_count):
-        if bits[<size_t> i * words + word] & mask:
-            size += 1
-    return size
-
-
 cdef inline bint _terminals_share_small_ring(Structure structure, atom_t *atoms,
                                              uint32_t a, uint32_t b) noexcept nogil:
     """Do the chain's two terminals sit together in a ring smaller than SU_MIN_STEREO_RING?
 
-    The size test and the identity test are ONE test, deliberately: a shared prototype is found and
-    then that prototype's own size is measured.  Asking them independently -- "is either atom on some
+    The size test and the identity test are ONE test, deliberately: a shared ring family is found and
+    then that family's own cycle length is read.  Asking them independently -- "is either atom on some
     small ring" and separately "do they share some ring" -- refuses a twelve-ring double bond with a
     cyclopropane fused at each terminal, where the cyclopropanes constrain nothing about the
     twelve-ring.  Losing a candidate is the expensive
@@ -825,6 +807,7 @@ cdef inline bint _terminals_share_small_ring(Structure structure, atom_t *atoms,
     """
     cdef uint32_t words, k, bit
     cdef uint64_t *bits
+    cdef uint32_t *sizes
     cdef uint64_t shared
     if not at_in_ring(&atoms[a]) or not at_in_ring(&atoms[b]):
         return False
@@ -832,12 +815,12 @@ cdef inline bint _terminals_share_small_ring(Structure structure, atom_t *atoms,
         return False
     words = structure_ring_words(structure)
     bits = structure_ring_bits(structure)
+    sizes = structure_ring_family_sizes(structure, words)
     for k in range(words):
         shared = bits[<size_t> a * words + k] & bits[<size_t> b * words + k]
         while shared:
             bit = <uint32_t> _lo_bit64(shared)
-            if _ring_prototype_size(structure, words, k,
-                                    <uint64_t> 1 << bit) < SU_MIN_STEREO_RING:
+            if sizes[k * 64 + bit] < SU_MIN_STEREO_RING:
                 return True
             shared &= shared - 1
     return False
@@ -2238,6 +2221,7 @@ cdef int mark_stereogenic(Structure structure) except -1:
     cdef uint32_t *partner_atom = NULL
     cdef uint32_t *pin = NULL
     cdef uint32_t *order = NULL
+    cdef uint32_t *walk = NULL
     cdef uint32_t *anchor = NULL
     cdef uint32_t *sigma = NULL
     cdef uint32_t *cursor = NULL
@@ -2259,7 +2243,7 @@ cdef int mark_stereogenic(Structure structure) except -1:
         partner_of = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
         partner_atom = <uint32_t *> PyMem_Malloc(<size_t> count * sizeof(uint32_t))
         pin = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
-        order = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
+        order = <uint32_t *> PyMem_Malloc(<size_t> 4 * n * sizeof(uint32_t))  # then `walk`, 3n
         anchor = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
         sigma = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
         cursor = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
@@ -2274,6 +2258,7 @@ cdef int mark_stereogenic(Structure structure) except -1:
                 or taken is NULL or verdict is NULL or constrains is NULL or parent is NULL
                 or par is NULL):
             raise MemoryError('stereogenicity scratch allocation failed')
+        walk = order + n
 
         # --- 0. chemistry, one loop, kind-independent above the two kind-aware helpers ---
         for i in range(n):
@@ -2482,7 +2467,7 @@ cdef int mark_stereogenic(Structure structure) except -1:
                         for i in range(n):
                             if comp[i] != home:
                                 pin[i] = i
-                    _canon_search_order(n, ptr, edges, pin, order, anchor, taken)
+                    _canon_search_order(n, ptr, edges, pin, order, anchor, taken, walk, False)
                     witness = False
                     cut = False
                     # SET A is the identity on the axis, SET B exchanges the two terminals.  A unit
@@ -3102,6 +3087,265 @@ cdef int collect_stereo_rejections(Structure structure,
     return 0
 
 
+cdef Structure structure_stereogenic_view(Structure structure):
+    """`structure` with no parity on a unit `mark_stereogenic` refused -- `structure` itself when none.
+
+    What identity, the canonical order and the writer read, so a sign that flipping gives the same
+    molecule back is not a fact about it: `C[C@H](C)C` is isobutane.  NARROWER THAN
+    `collect_stereo_rejections`: a parity on an atom that anchors NO unit is kept, since perception
+    also declines a real centre whose frame it cannot read (CHFClBr with an unknown hydrogen count).
+
+    | verdict                                   | the parity                          |
+    | ----------------------------------------- | ----------------------------------- |
+    | SU_STEREOGENIC, truncated search included | kept                                |
+    | a perceived unit, not marked              | cleared                             |
+    | no unit                                   | kept                                |
+
+    An AND collection states both phases of its members, so a unit counts as stereogenic when it is
+    in ANY combination of AND collection phases: in `C[C@H](O)[C@H](O)[C@H](C)O |&1:1|` the centre at
+    3 is pseudo-asymmetric in one phase and not stereogenic in the other, and its parity is kept in
+    both drawings (`_stereogenic_in_some_phase`).
+
+    A clear loosens `_stereo_consistent`'s pins and can in principle unmark another unit, so the
+    clear repeats on a fresh table until nothing is left to clear; each round clears at least one
+    parity, which bounds the loop.  The clear goes into a CLONE (ruling F65) and the input arena is
+    not written.
+    """
+    cdef Structure view = structure
+    cdef stereo_unit_t *u
+    cdef uint8_t *par
+    cdef uint8_t *keep = NULL
+    cdef uint32_t n, i
+    cdef bint found
+    try:
+        while True:
+            ensure_stereo_units(view)      # can move the buffer: before any pointer is taken
+            n = view.header.atom_count
+            found = False
+            for i in range(n):
+                if structure_parity_at(view, i):
+                    u = stereo_unit_of(view, i)
+                    if u is not NULL and not (u.spare & SU_STEREOGENIC):
+                        found = True
+                        break
+            if not found:
+                break
+            if keep is NULL:
+                keep = <uint8_t *> PyMem_Malloc(<size_t> n + 1)
+                if keep is NULL:
+                    raise MemoryError()
+            if view is structure:
+                view = structure_clone(structure)       # carries the marked table verbatim
+            _stereogenic_in_some_phase(view, keep)
+            ensure_stereo_units(view)
+            found = False
+            par = structure_parities(view)
+            for i in range(n):
+                if par[i] and not keep[i]:
+                    u = stereo_unit_of(view, i)
+                    if u is not NULL and not (u.spare & SU_STEREOGENIC):
+                        par[i] = 0
+                        found = True
+            if not found:
+                break
+            structure_invalidate_stereo_units(view)
+            refresh_parity_features(view)
+    finally:
+        PyMem_Free(keep)
+    return view
+
+
+DEF PHASE_GROUP_LIMIT = 8           # 2**8 - 1 phase combinations; above it every parity is kept
+
+
+cdef inline bint sg_member_live(Structure view, uint8_t *sg, uint32_t i) noexcept nogil:
+    """Is the group byte at slot `i` on a configured unit?  `view` is `structure_stereogenic_view`'s.
+
+    The member half of liveness: a member on an unconfigured unit, or on one the view cleared, is
+    DEAD.  `structure_live_groups_view` adds the group half, `_groups_stating_nothing`.
+    """
+    return sg[i] != 0 and structure_parity_at(view, i) != 0
+
+
+cdef int _groups_stating_nothing(Structure view, uint8_t *mute) except -1:
+    """`mute[b]` = 1 for each group byte `b` whose live members, inverted, restate the molecule.
+
+    One group at a time: every group is read as ABS with its drawn signs, the group's own members are
+    inverted, and the two are compared by `mol_identity_bytes`.  Reading each group as ABS keeps the
+    AND phase rule out of the comparison.  `C[C@H](O)C[C@H](O)C |&1:1,4|` is meso whichever kind the
+    pair is in; `|&1:1,&2:4|` is two groups, and inverting either alone is the dl diastereomer.
+
+    Every other sign is kept as drawn, in every phase combination of the OTHER AND groups, and the
+    group states nothing only when it restates the molecule in all of them.  A drawn phase is not
+    identity: in `C[C@@H](O)[C@H](O)[C@@H](O)C |&1:1,&2:5,o1:3|` the OR member at C3 restates the
+    molecule when C2 and C4 are like and not when they are unlike.  Over PHASE_GROUP_LIMIT other AND
+    groups, or on a truncated search, the group is live.
+
+    A single member on a unit marked stereogenic in the drawn configuration never restates the
+    molecule and is not compared.  Cost: two identities per candidate group and phase combination,
+    none for a molecule with no candidate.  `view` is not written.
+    """
+    cdef uint32_t n = view.header.atom_count
+    cdef uint8_t *sg
+    cdef uint8_t *vsg
+    cdef uint8_t *par
+    cdef uint32_t count[256]
+    cdef uint8_t lone[256]
+    cdef uint8_t index[256]
+    cdef uint8_t ands[256]
+    cdef uint32_t i, b, g = 0, k, mask
+    cdef stereo_unit_t *u
+    cdef Structure base, v
+    cdef bytes before
+    cdef bint any_candidate = False, same
+    memset(mute, 0, 256)
+    if not structure_has(view, SEG_STEREO_GROUPS) or not structure_has(view, SEG_PARITY):
+        return 0
+    memset(count, 0, sizeof(count))
+    memset(lone, 0, sizeof(lone))
+    ensure_stereo_units(view)
+    vsg = structure_stereo_groups(view)
+    for i in range(n):
+        if sg_member_live(view, vsg, i):
+            if not count[vsg[i]] and sg_kind(vsg[i]) == SG_KIND_AND:
+                ands[g] = vsg[i]
+                g += 1
+            count[vsg[i]] += 1
+            u = stereo_unit_of(view, i)
+            lone[vsg[i]] = u is not NULL and (u.spare & SU_STEREOGENIC) != 0
+    for b in range(1, 256):
+        if count[b] > 1 or (count[b] == 1 and not lone[b]):
+            any_candidate = True
+            break
+    if not any_candidate:
+        return 0
+    base = structure_clone(view)
+    sg = structure_stereo_groups(base)
+    for i in range(n):
+        if sg[i]:
+            sg[i] = sg_pack(SG_KIND_ABS, 0) if structure_parity_at(base, i) else 0
+    vsg = structure_stereo_groups(view)
+    for b in range(1, 256):
+        if not count[b] or (count[b] == 1 and lone[b]):
+            continue
+        memset(index, 0xFF, 256)
+        k = 0
+        for i in range(g):
+            if ands[i] != b:
+                index[ands[i]] = <uint8_t> k
+                k += 1
+        if k > PHASE_GROUP_LIMIT:
+            continue
+        same = True
+        for mask in range(1u << k):
+            v = structure_clone(base)
+            par = structure_parities(v)
+            for i in range(n):
+                if sg_member_live(view, vsg, i) and index[vsg[i]] != 0xFF and (mask >> index[vsg[i]]) & 1:
+                    par[i] = 3 - par[i]
+            structure_invalidate_stereo_units(v)
+            refresh_parity_features(v)
+            try:
+                before = mol_identity_bytes(structure_stereogenic_view(v))
+                v = structure_clone(v)
+                par = structure_parities(v)
+                for i in range(n):
+                    if vsg[i] == b and sg_member_live(view, vsg, i):
+                        par[i] = 3 - par[i]
+                structure_invalidate_stereo_units(v)
+                refresh_parity_features(v)
+                same = mol_identity_bytes(structure_stereogenic_view(v)) == before
+            except AutomorphismBudgetExceeded:
+                same = False
+            if not same:
+                break
+        if same:
+            mute[b] = 1
+    return 0
+
+
+cdef Structure structure_live_groups_view(Structure structure, list dead=None):
+    """`structure_stereogenic_view(structure)` with every dead group byte cleared.
+
+    A member is dead off a configured unit (`sg_member_live`), and every member of a group is dead
+    when inverting the group restates the molecule (`_groups_stating_nothing`): a meso pair's label.
+    What identity reads and every text writer emits collections from, so a dead label writes what no
+    label writes: `CC(O)CC |o1:1|` writes `C(C)C(O)C`.  `dead`, when given, receives each cleared
+    slot.  The clear goes into a clone and the input arena is not written; pach and `copy()` keep the
+    stored byte.
+    """
+    cdef Structure view = structure_stereogenic_view(structure)
+    cdef uint8_t *sg
+    cdef uint8_t mute[256]
+    cdef uint32_t i, n = view.header.atom_count
+    cdef bint found = False
+    if n == 0 or not structure_has(view, SEG_STEREO_GROUPS):
+        return view
+    _groups_stating_nothing(view, mute)
+    sg = structure_stereo_groups(view)
+    for i in range(n):
+        if sg[i] and (mute[sg[i]] or not sg_member_live(view, sg, i)):
+            found = True
+            break
+    if not found:
+        return view
+    if view is structure:
+        view = structure_clone(structure)
+    sg = structure_stereo_groups(view)
+    for i in range(n):
+        if sg[i] and (mute[sg[i]] or not sg_member_live(view, sg, i)):
+            sg[i] = 0
+            if dead is not None:
+                dead.append(i)
+    return view
+
+
+cdef int _stereogenic_in_some_phase(Structure structure, uint8_t *keep) except -1:
+    """`keep[slot]` = 1 where the parity at `slot` is on a unit stereogenic under some non-identity
+    combination of AND collection phases, 0 elsewhere.  `structure` is not written.
+
+    Each combination inverts every configured member of the chosen collections in a clone and marks it
+    afresh.  Over PHASE_GROUP_LIMIT collections every parity is kept: an unneeded parity makes two
+    spellings of one compound compare unequal, never two compounds equal.
+    """
+    cdef uint32_t n = structure.header.atom_count
+    cdef uint8_t *sg
+    cdef uint8_t *par
+    cdef uint8_t index[256]
+    cdef uint32_t i, g = 0, mask
+    cdef stereo_unit_t *u
+    cdef Structure v
+    memset(keep, 0, <size_t> n)
+    if not structure_has(structure, SEG_STEREO_GROUPS) or not structure_has(structure, SEG_PARITY):
+        return 0
+    memset(index, 0xFF, 256)
+    sg = structure_stereo_groups(structure)
+    par = structure_parities(structure)
+    for i in range(n):
+        if sg[i] and sg_kind(sg[i]) == SG_KIND_AND and par[i] and index[sg[i]] == 0xFF:
+            if g == PHASE_GROUP_LIMIT:
+                memset(keep, 1, <size_t> n)
+                return 0
+            index[sg[i]] = <uint8_t> g
+            g += 1
+    for mask in range(1, 1u << g):
+        v = structure_clone(structure)
+        sg = structure_stereo_groups(v)
+        par = structure_parities(v)
+        for i in range(n):
+            if sg[i] and par[i] and index[sg[i]] != 0xFF and (mask >> index[sg[i]]) & 1:
+                par[i] = 3 - par[i]
+        structure_invalidate_stereo_units(v)
+        refresh_parity_features(v)
+        ensure_stereo_units(v)
+        for i in range(n):
+            if structure_parity_at(v, i):
+                u = stereo_unit_of(v, i)
+                if u is not NULL and u.spare & SU_STEREOGENIC:
+                    keep[i] = 1
+    return 0
+
+
 def _permutation_parity_probe(p):
     """`permutation_parity_of` on a Python 4-tuple, so a test can regenerate PERM_ODD_4's filter."""
     cdef uint32_t perm[4]
@@ -3426,12 +3670,243 @@ cdef bint _canon_stereo_digits(Structure structure, uint32_t *colour, uint32_t *
     return False
 
 
+cdef inline bint _canon_group_member(Structure structure, atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
+                                     uint8_t *sg, uint32_t mode, uint32_t i, uint32_t *oa,
+                                     uint32_t *ob) noexcept nogil:
+    """Does mode `mode` count slot `i`'s group byte as a member?  Then `oa`/`ob` are the atoms it is
+    named on: an axis's two owners, else the slot itself twice -- never the anchor, which for a
+    two-owner unit is a slot-order choice (ruling F95)."""
+    cdef uint8_t kind = sg_kind(sg[i])
+    cdef stereo_unit_t *u
+    if not kind:
+        return False
+    if mode == CANON_GROUPS_IDENTITY and not sg_member_live(structure, sg, i):
+        return False
+    u = stereo_unit_of(structure, i)
+    if u is NULL or stereo_unit_owners(atoms, ptr, edges, u, oa, ob) != 2:
+        oa[0] = i
+        ob[0] = i
+    return True
+
+
+cdef size_t _canon_group_tail(Structure structure, uint32_t mode, uint32_t *pos, uint64_t *out,
+                              uint8_t *pin) noexcept nogil:
+    """`_canon_group_hook`: the stereo-group tail of the leaf certificate.  The word layout and the
+    three calling shapes are stated above `canon_group_fn` in `_canonical.pxi`.
+
+    Exact on the partition: a member's second word names it by position, and its first word names its
+    collection by the collection's least member.  ABS is one bucket stating each member absolute on
+    its own, so an ABS member's first word names the member itself and never ties two components.  Two
+    members share a position pair only where a byte sits on a slot that anchors no unit and that atom
+    owns a unit as well.  Kind and partition only -- the stored id never reaches a word, so two files
+    numbering one partition differently write one tail.  The unit table must already be built.
+    """
+    cdef uint32_t n = structure.header.atom_count
+    cdef uint8_t *sg
+    cdef atom_t *atoms
+    cdef uint32_t *ptr
+    cdef halfedge_t *edges
+    cdef uint32_t i, j, oa = 0, ob = 0, lo, hi
+    cdef uint64_t key, w0, w1
+    cdef uint64_t rep[256]
+    cdef size_t count = 0
+    if mode == CANON_GROUPS_NONE or n == 0 or not structure_has(structure, SEG_STEREO_GROUPS):
+        return 0
+    sg = structure_stereo_groups(structure)
+    atoms = structure.atoms()
+    ptr = csr_ptr(structure)
+    edges = csr_edges(structure)
+    if pos is not NULL:
+        for i in range(256):
+            rep[i] = ~(<uint64_t> 0)
+    for i in range(n):
+        if not sg[i] or not _canon_group_member(structure, atoms, ptr, edges, sg, mode, i, &oa, &ob):
+            continue
+        count += 1
+        if pin is not NULL:
+            if not pin[oa]:
+                pin[oa] = 2
+            if not pin[ob]:
+                pin[ob] = 2
+        if pos is not NULL:
+            lo = pos[oa] - 1
+            hi = pos[ob] - 1
+            if lo > hi:
+                lo, hi = hi, lo
+            key = (<uint64_t> lo << 32) | hi
+            if key < rep[sg[i]]:
+                rep[sg[i]] = key
+    if pos is NULL or out is NULL:
+        return 2 * count
+    count = 0
+    for i in range(n):
+        if not sg[i] or not _canon_group_member(structure, atoms, ptr, edges, sg, mode, i, &oa, &ob):
+            continue
+        lo = pos[oa] - 1
+        hi = pos[ob] - 1
+        if lo > hi:
+            lo, hi = hi, lo
+        w1 = (<uint64_t> lo << 32) | hi
+        key = w1 if sg_kind(sg[i]) == SG_KIND_ABS else rep[sg[i]]
+        w0 = (<uint64_t> sg_kind(sg[i]) << 62) | ((key >> 32) << 31) | (key & <uint64_t> 0xFFFFFFFF)
+        j = <uint32_t> count        # insertion into the sorted prefix of pairs
+        while j and (out[2 * j - 2] > w0 or (out[2 * j - 2] == w0 and out[2 * j - 1] > w1)):
+            out[2 * j] = out[2 * j - 2]
+            out[2 * j + 1] = out[2 * j - 1]
+            j -= 1
+        out[2 * j] = w0
+        out[2 * j + 1] = w1
+        count += 1
+    return 2 * count
+
+
+cdef bint _canon_group_spans(Structure structure, uint32_t mode, const uint32_t *comp) noexcept nogil:
+    """`_canon_group_span_hook`: does one collection the mode counts have members in two components?
+    ABS never does: it states each member on its own."""
+    cdef uint32_t n = structure.header.atom_count
+    cdef uint8_t *sg
+    cdef atom_t *atoms
+    cdef uint32_t *ptr
+    cdef halfedge_t *edges
+    cdef uint32_t i, oa = 0, ob = 0
+    cdef uint32_t where[256]
+    if mode == CANON_GROUPS_NONE or n == 0 or not structure_has(structure, SEG_STEREO_GROUPS):
+        return False
+    sg = structure_stereo_groups(structure)
+    atoms = structure.atoms()
+    ptr = csr_ptr(structure)
+    edges = csr_edges(structure)
+    for i in range(256):
+        where[i] = <uint32_t> 0xFFFFFFFF
+    for i in range(n):
+        if not sg[i] or sg_kind(sg[i]) == SG_KIND_ABS:
+            continue
+        if not _canon_group_member(structure, atoms, ptr, edges, sg, mode, i, &oa, &ob):
+            continue
+        if where[sg[i]] == <uint32_t> 0xFFFFFFFF:
+            where[sg[i]] = comp[oa]
+        elif where[sg[i]] != comp[oa]:
+            return True
+    return False
+
+
+cdef void _canon_group_phase(Structure structure, uint32_t mode, uint32_t *pos, uint32_t *digits,
+                             uint8_t *flip) noexcept nogil:
+    """`_canon_group_phase_hook`: one phase per AND collection in `digits`, as stated above
+    `canon_group_fn` in `_canonical.pxi`.
+
+    An AND collection is a mixture of its members' drawn configuration and its full inverse, so a record
+    and the record with every member of one AND collection inverted are one compound: `C[C@H](O)CC |&1:1|`
+    is `C[C@@H](O)CC |&1:1|`.  An OR collection is one isomer of the two, unknown which, and its signs
+    tell isolated isomers apart: `C[C@H](O)CC |o1:1|` is not `C[C@@H](O)CC |o1:1|`, so OR, like ABS,
+    has no phase.  A member's digit sits on its unit's anchor and partner, the atoms
+    `_frame_free_parity_seed` writes; readable digits are 2 and 3.
+
+    | `pos`    | a member's digit 2 or 3 becomes                                                     |
+    | -------- | ----------------------------------------------------------------------------------- |
+    | NULL     | 2 when more readable members of its collection share its digit than not, 3 when     |
+    |          | fewer, 1 on a tie -- counts of agreement, which inverting the collection keeps      |
+    | discrete | its inverse across the collection when the representative reads 3                   |
+
+    The representative is the member with a readable digit named on the smallest position pair, a
+    function of the labelling alone.  Rewrites go through markers above 3 so an atom two members reach
+    is rewritten once.  `flip[b]`, when not NULL, is 1 for a stored byte `b` whose collection flipped.
+    """
+    cdef uint32_t n = structure.header.atom_count
+    cdef uint8_t *sg
+    cdef atom_t *atoms
+    cdef uint32_t *ptr
+    cdef halfedge_t *edges
+    cdef stereo_unit_t *u
+    cdef uint32_t i, j, a, oa = 0, ob = 0, lo, hi, same, other
+    cdef uint32_t at[2]
+    cdef uint32_t count[256][2]
+    cdef uint64_t key
+    cdef uint64_t rep[256]
+    cdef uint8_t odd[256]
+    if flip is not NULL:
+        memset(flip, 0, 256)
+    if mode == CANON_GROUPS_NONE or n == 0 or not structure_has(structure, SEG_STEREO_GROUPS):
+        return
+    sg = structure_stereo_groups(structure)
+    atoms = structure.atoms()
+    ptr = csr_ptr(structure)
+    edges = csr_edges(structure)
+    if pos is NULL:
+        for i in range(256):
+            count[i][0] = 0
+            count[i][1] = 0
+        for i in range(n):
+            if sg[i] and sg_kind(sg[i]) == SG_KIND_AND and structure_parity_at(structure, i):
+                u = stereo_unit_of(structure, i)
+                if u is not NULL and u.anchor < n and (digits[u.anchor] == 2 or digits[u.anchor] == 3):
+                    count[sg[i]][digits[u.anchor] - 2] += 1
+        for i in range(n):
+            if sg[i] and sg_kind(sg[i]) == SG_KIND_AND and structure_parity_at(structure, i):
+                u = stereo_unit_of(structure, i)
+                if u is NULL:
+                    continue
+                at[0] = u.anchor
+                at[1] = stereo_unit_partner(structure, u)
+                for j in range(2):
+                    a = at[j]
+                    if a < n and (digits[a] == 2 or digits[a] == 3):
+                        same = count[sg[i]][digits[a] - 2]
+                        other = count[sg[i]][3 - digits[a]]
+                        digits[a] = 6 if same > other else 7 if same < other else 8
+        for i in range(n):
+            if digits[i] >= 6:
+                digits[i] -= 4 if digits[i] < 8 else 7
+        return
+    for i in range(256):
+        rep[i] = ~(<uint64_t> 0)
+        odd[i] = 0
+    for i in range(n):
+        if not sg[i] or sg_kind(sg[i]) != SG_KIND_AND or not structure_parity_at(structure, i):
+            continue
+        u = stereo_unit_of(structure, i)
+        if u is NULL or u.anchor >= n or (digits[u.anchor] != 2 and digits[u.anchor] != 3):
+            continue
+        if not _canon_group_member(structure, atoms, ptr, edges, sg, mode, i, &oa, &ob):
+            continue
+        lo = pos[oa] - 1
+        hi = pos[ob] - 1
+        if lo > hi:
+            lo, hi = hi, lo
+        key = (<uint64_t> lo << 32) | hi
+        if key < rep[sg[i]]:
+            rep[sg[i]] = key
+            odd[sg[i]] = digits[u.anchor] == 3
+    for i in range(n):
+        if not sg[i] or not odd[sg[i]] or not structure_parity_at(structure, i):
+            continue
+        u = stereo_unit_of(structure, i)
+        if u is NULL:
+            continue
+        at[0] = u.anchor
+        at[1] = stereo_unit_partner(structure, u)
+        for j in range(2):
+            a = at[j]
+            if a < n and (digits[a] == 2 or digits[a] == 3):
+                digits[a] += 2              # 2 -> 4, 3 -> 5: flipped, and not flipped again
+    for i in range(n):
+        if digits[i] == 4:
+            digits[i] = 3
+        elif digits[i] == 5:
+            digits[i] = 2
+    if flip is not NULL:
+        memcpy(flip, odd, 256)
+
+
 # INSTALLED AT IMPORT, ONCE, and never cleared.  Written here rather than passed as a parameter at the
 # four `mol_canonical_order` call sites so that there is exactly one canonical order in the process: a
 # hook a caller could forget would give `mol_identity_bytes` and the SMILES writer two different
 # labellings of one molecule, and they would then disagree about which molecules are equal.
 _canon_stereo_hook = _canon_stereo_digits
 _canon_prepare_hook = _canon_stereo_prepare
+_canon_group_hook = _canon_group_tail
+_canon_group_span_hook = _canon_group_spans
+_canon_group_phase_hook = _canon_group_phase
 
 
 cdef inline bint _sg_key_less(uint32_t b1, uint32_t b2, uint32_t *count, uint32_t *off,
@@ -3574,16 +4049,11 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
        is label-invariant; refinement is monotone, so the class count only grows and the loop ends in
        at most n rounds.  A group alone in its label at the fixpoint is pinned: its key differs from
        every other key of its kind, so step 2 ranks it without ever reaching the position tie-break.
-       More than two rounds are sometimes needed and are measured to be, by replacing the bound below
-       with a literal cap: at one round five of this file's stereo-group fixtures fail, at two rounds
-       three, at three rounds exactly one -- always
-       test_the_fixpoint_runs_past_a_third_round_when_the_molecule_needs_it, a C6 ring with four
-       singleton OR groups and one pair, whose singletons are told apart only by the FOURTH round and
-       where a cap of three invents two ambiguity classes the molecule does not have -- and at the full
-       bound none.  Over ALL 12,992 (ring-frame parity pattern, group partition) fixtures of that C6
-       ring, 7,472 settle after one round, 1,152 need a second, 4,248 a third and 120 a fourth; the C8
-       ring with its all-equal and its alternating frame runs 1,748 / 4,560 / 1,956 / 16 over its 8,280
-       fixtures.  So a fourth round is not exotic, and n is the only bound the loop can honestly carry.
+       A fourth round is sometimes needed, measured by replacing the bound below with a literal cap
+       of three: test_the_fixpoint_runs_past_a_third_round_when_the_molecule_needs_it, a C6 ring with
+       four singleton OR groups and one pair, then reports two ambiguity classes the molecule does not
+       have, and 120 of the 12,992 (ring-frame parity pattern, OR group partition) fixtures of that
+       ring need the fourth round.  So n is the only bound the loop can honestly carry.
 
        RULING F89: when two groups still share a label after the fixpoint -- equivalently, when a
        refinement class still spans both of them, see the proof at the ambiguity pass -- no invariant
@@ -3697,6 +4167,7 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
         # coarser.  It is kept because it is free, and because "the seed is the colouring plus the
         # parity read in that colouring" is one rule for every round rather than one plus an exception.
         _frame_free_parity_seed(structure, units, nunits, partner, cls, par, n)
+        _canon_group_phase(structure, CANON_GROUPS_IDENTITY, NULL, par, NULL)
         atoms = structure.atoms()
         ptr = csr_ptr(structure)
         edges = csr_edges(structure)
@@ -3809,6 +4280,7 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
             # under 2**32 / 1024 = 4.19 M atoms.
             span = 256
             _frame_free_parity_seed(structure, units, nunits, partner, cur, par, n)
+            _canon_group_phase(structure, CANON_GROUPS_IDENTITY, NULL, par, NULL)
             _sg_spread_by_owner(structure, atoms, ptr, edges, sg, label, gterm, n)
             for i in range(n):
                 seed_out[i] = (cur[i] * span + gterm[i]) * 4 + par[i]
@@ -3836,7 +4308,7 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
         # Raises AutomorphismBudgetExceeded on a truncated search and writes nothing: a labelling
         # from a truncated extremal search is a different labelling, not an approximate one, and a
         # group id built on it would be a wrong answer that reads like a right one.
-        mol_canonical_order(structure, seed_in, order, &flags, True)
+        mol_canonical_order(structure, seed_in, order, &flags, True, CANON_GROUPS_IDENTITY)
         # Re-borrowed after the calls above rather than reused across them (ruling F60).  None of
         # them canonicalises through the arena -- each allocates its own scratch and appends no
         # segment -- but the rule is about what a reader may assume, not about what today's callee
@@ -3951,14 +4423,16 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
 cdef bytes mol_identity_bytes(Structure structure):
     """The molecule's canonical form as bytes: what `==` compares and what `hash()` hashes.
 
-    Two parts, in this order, and both read off CANONICAL POSITIONS so that neither mentions the
+    Three parts, in this order, and all read off CANONICAL POSITIONS so that none mentions the
     caller's atom order:
 
       * `mol_certificate_words`' graph string -- per position, the atom's own invariant word
         (element, isotope, charge, radical, implicit hydrogen count, ring membership) and its bonds
         to higher positions with their orders and aromatic bits;
       * one parity digit per position, ruling F95's frame-free code, so that two molecules
-        differing only in a configured parity do not compare equal.
+        differing only in a configured parity do not compare equal;
+      * the stereo-group tail (`_canon_group_tail`, CANON_GROUPS_IDENTITY): kind and partition of the
+        AND and OR collections, written only when one is stated.
 
     WHY NOT `signature`, WHICH IS THE OBVIOUS CANDIDATE AND IS WRONG.  `signature` is the OR of
     every atom's four feature words -- a molecule-level screen.  Propane, butane and pentane all
@@ -4021,7 +4495,7 @@ cdef bytes mol_identity_bytes(Structure structure):
     cdef uint32_t *seed
     cdef uint32_t nunits, i
     cdef uint32_t flags = 0
-    cdef size_t cert_len
+    cdef size_t cert_len, glen
     if n == 0:
         return b''
 
@@ -4034,6 +4508,7 @@ cdef bytes mol_identity_bytes(Structure structure):
     nunits = structure_stereo_unit_count(structure)
 
     cert_len = mol_certificate_len(structure, True)
+    glen = _canon_group_tail(structure, CANON_GROUPS_IDENTITY, NULL, NULL, NULL)
     units_scratch = <uint32_t *> PyMem_Malloc(<size_t> 5 * n * sizeof(uint32_t))
     if units_scratch is NULL:
         raise MemoryError('canonical identity scratch allocation failed')
@@ -4043,7 +4518,7 @@ cdef bytes mol_identity_bytes(Structure structure):
     partner = par + n           # per UNIT, and nunits <= n by the anchor invariant
     seed = partner + n
     try:
-        cert = <uint64_t *> PyMem_Malloc(cert_len * sizeof(uint64_t))
+        cert = <uint64_t *> PyMem_Malloc((cert_len + glen) * sizeof(uint64_t))
         if cert is NULL:
             raise MemoryError('canonical identity certificate allocation failed')
         if compute_atoms_order(structure, cls, NULL) < 0:
@@ -4061,9 +4536,10 @@ cdef bytes mol_identity_bytes(Structure structure):
         # by ruling F95, and starting the refinement already split costs the extremal search tree
         # nodes it would otherwise have to branch through.  It is an optimisation, not a mechanism.
         _frame_free_parity_seed(structure, units, nunits, partner, cls, par, n)
+        _canon_group_phase(structure, CANON_GROUPS_IDENTITY, NULL, par, NULL)
         for i in range(n):
             seed[i] = cls[i] * 4 + par[i]
-        mol_canonical_order(structure, seed, order, &flags, True)
+        mol_canonical_order(structure, seed, order, &flags, True, CANON_GROUPS_IDENTITY)
         # The digits that go INTO the string are re-read in the POSITION frame, which is discrete --
         # so a centre whose parity had no frame the coarse colouring could name still contributes a
         # real digit here rather than the "frame unnamed" code.  This is the step that makes
@@ -4071,8 +4547,12 @@ cdef bytes mol_identity_bytes(Structure structure):
         for i in range(n):
             cls[i] = order[i] + 1
         _frame_free_parity_seed(structure, units, nunits, partner, cls, par, n)
+        _canon_group_phase(structure, CANON_GROUPS_IDENTITY, cls, par, NULL)
         mol_certificate_words(structure, order, par, cert)
-        return <bytes> (<char *> cert)[:cert_len * sizeof(uint64_t)]
+        # The stereo-group tail, read in the same positions the search maximised it in; absent when no
+        # AND or OR collection is stated, so an ungrouped molecule's bytes carry no trace of it.
+        _canon_group_tail(structure, CANON_GROUPS_IDENTITY, cls, cert + cert_len, NULL)
+        return <bytes> (<char *> cert)[:(cert_len + glen) * sizeof(uint64_t)]
     finally:
         PyMem_Free(cert)
         PyMem_Free(units_scratch)

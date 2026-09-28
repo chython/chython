@@ -32,9 +32,16 @@ considers (`core/_thiele.pxi`).  The kekuliser writes every order outside the ri
 accepted only when it comes back as the same molecule -- `kekule()` repairs by design, so a hydrogen it
 dropped or a charge it added means the trial failed and not that the form is better.
 
+THE FORM `thiele()` READS IS A FUNCTION OF THE COMPOUND.  After the rounds below, the bonds a matching
+can move inside the window -- a ring bond between two atoms that each hold one double bond -- are
+re-kekulised with `kekule(canonical=True)` on a copy.  Every form the rounds can end in is a matching
+over that edge set, so the copy is one form for any drawing and any atom order.  It is kept when it
+scores as well and `thiele()` reads it differently from the form in hand; where both aromatise alike the
+drawing is left as it is.  C60's 12500 forms all score alike, so the rounds alone cannot pick one.
+
 A local optimum and not a proved global one: rings are filled one at a time, each round taking the best
-trial by score and then by canonical bytes.  That is order-independent per round, so a ring that CAN be
-filled is filled whichever form arrived; two forms of equal score are still two forms.
+trial by score and then by canonical bytes, every trial kekulised canonically.  That is order-independent
+per round, so a ring that CAN be filled is filled whichever form arrived.
 
 A RING OUTSIDE THAT WINDOW HAS NO AROMATIC FORM TO COLLAPSE ITS ALTERNATIONS INTO ONE, so the phase it
 is drawn in survives into storage: 1,2-dimethylcyclooctatetraene's two bond-shift drawings are one
@@ -63,11 +70,12 @@ from ._implicit import check_valence
 __all__ = ['standardize_kekule']
 
 
-#: Table-qualified, as every rule id must be.  The budget is a `LOST` record, the fill and the phase
-#: `INFO` ones: both forms of a ring either touches were valid molecules, so nothing here is a repair.
+#: Table-qualified, as every rule id must be.  The budget is a `LOST` record, the fill, the phase and the
+#: canonical form `INFO` ones: every form any of them touches is a valid molecule, so nothing is a repair.
 _RULE = 'kekule-form:ring-filled'
 _RULE_PHASE = 'kekule-form:ring-phase'
 _RULE_BUDGET = 'kekule-form:budget'
+_RULE_CANONICAL = 'kekule-form:canonical'
 
 #: The ring sizes `thiele()` considers, `core/_thiele.pxi`.  A double bond inside one of these is worth
 #: something to the aromatiser and one anywhere else is not, so nothing else scores -- and a ring outside
@@ -193,6 +201,61 @@ def _component(molecule: MoleculeContainer, ring: tuple, doubles: dict[int, int]
             if b.order in (1, 2) and b.n in seen and b.m in seen]
 
 
+def _accepted(molecule: MoleculeContainer, work: MoleculeContainer, result) -> bool:
+    """Is `work`, kekulised from `molecule` with `result`, another form of the same molecule?"""
+    if result.unresolved or any(record.severity != INFO for record in result.log):
+        return False                       # a relaxation fired: this is a repair and not a form
+    if _state(work) != _state(molecule) or check_valence(work):
+        return False
+    return _stated(molecule) <= _stated(work)   # a configuration the form cannot carry fails it
+
+
+def _canonical(molecule: MoleculeContainer, scored: set[frozenset], score: int):
+    """The bonds to re-kekulise canonically, or `None` when the form in hand aromatises the same way.
+
+    The bonds are those a matching can move inside the rings `thiele()` considers: a scored bond between
+    two atoms that each hold one double bond.  Every form this pass can reach is a matching over that
+    edge set, so the canonical one is a function of the compound.  It replaces the form in hand only
+    when it is another form of the same molecule, scores as well, and `thiele()` reads it differently --
+    naphthalene's three forms aromatise alike and are left as drawn, a porphyrin's do not.  Every bond it
+    moves must come out aromatic: a conjugated system `thiele()` does not take has no resonance to
+    collapse its matchings into one, so a 15,16-dihydropyrene's perimeter stays as drawn.
+    """
+    doubles = _doubles(molecule)
+    movable = [(b.n, b.m) for b in molecule.bonds()
+               if b.order in (1, 2) and doubles[b.n] == 1 == doubles[b.m] and frozenset((b.n, b.m)) in scored]
+    if not movable:
+        return None
+    # disjoint alternating six-rings, each with its double bonds inside: benzene's two phases, which
+    # aromatise alike, and the common case, so it is decided without a kekulisation
+    edges = {frozenset(e) for e in movable}
+    lone = [ring for ring in molecule.rings
+            if len(ring) == 6 and all(frozenset(e) in edges for e in _edges(ring))]
+    covered = {frozenset(e) for ring in lone for e in _edges(ring)}
+    disjoint = len({n for ring in lone for n in ring}) == 6 * len(lone)
+    if disjoint and covered == edges:
+        return None
+    work = molecule.copy()
+    result = work.kekule(aromatic_bonds=movable, canonical=True)
+    if all(work.order_of(u, v) == molecule.order_of(u, v) for u, v in movable):
+        return None
+    here = molecule.copy()
+    here.thiele()
+    aromatic = work.copy()
+    aromatic.thiele()
+    # the same atoms, so equal orders are the same molecule; unequal ones may still be an automorphic
+    # image, and rewriting those as well costs a representation change and not the invariance
+    if all(aromatic.order_of(b.n, b.m) == b.order for b in here.bonds()):
+        return None
+    # a bond the canonical form moves and does not aromatise is a bond-shift isomer and not a form: the
+    # stated parities read against the moved bonds describe another compound, often the enantiomer
+    if any(aromatic.order_of(u, v) != 4 for u, v in movable if work.order_of(u, v) != molecule.order_of(u, v)):
+        return None
+    if not _accepted(molecule, work, result) or _score(work, scored) < score:
+        return None
+    return movable
+
+
 def _filled(molecule: MoleculeContainer, ring: tuple, phase: int, doubles: dict[int, int]):
     """`ring` spelled alternating and the rest of its component re-kekulised, or `None`.
 
@@ -202,21 +265,12 @@ def _filled(molecule: MoleculeContainer, ring: tuple, phase: int, doubles: dict[
     edges = _edges(ring)
     fixed = {frozenset(e) for e in edges}
     aromatic = [(u, v) for u, v in _component(molecule, ring, doubles) if frozenset((u, v)) not in fixed]
-    state = _state(molecule)
-    stated = _stated(molecule)
-
     work = molecule.copy()
     with work.edit():
         for i, (u, v) in enumerate(edges):
             work.set_order(u, v, 2 if i % 2 == phase else 1)
-    result = work.kekule(aromatic_bonds=aromatic)
-    if result.unresolved or any(record.severity != INFO for record in result.log):
-        return None                        # a relaxation fired: this is a repair and not a form
-    if _state(work) != state or check_valence(work):
-        return None
-    if not stated <= _stated(work):
-        return None                        # a configuration the form cannot carry
-    return work
+    result = work.kekule(aromatic_bonds=aromatic, canonical=True)
+    return work if _accepted(molecule, work, result) else None
 
 
 def standardize_kekule(molecule: MoleculeContainer) -> bool:
@@ -231,14 +285,19 @@ def standardize_kekule(molecule: MoleculeContainer) -> bool:
     collapse its two alternations: `C/C1=C/C=C\\C=C/C=C\\1/C` and `C/C1=C(\\C)/C=C\\C=C/C=C\\1` are
     1,2-dimethylcyclooctatetraene's two bond-shift drawings and share a form once this has run.
 
+    AND IT ENDS IN A FORM `thiele()` READS ONE WAY: where the form reached aromatises differently from
+    the canonical Kekule form of its small rings, the canonical form is stored, so any atom order and any
+    drawing of C60, of a porphyrin or of a methanofullerene aromatise alike.  That rewrite goes through
+    `kekule()`, keeping stored CIP descriptors; a ring filled or phased writes its orders directly.
+
     Run on a kekulised molecule and before `thiele()`, which is where `canonicalize()` runs it.  On an
     aromatic molecule there is nothing to choose and the answer is `False`: a ring `thiele()` has taken
     is a ring this pass leaves alone.
 
     Neither a repair nor a refusal: every form involved kekulises and holds the same atoms, hydrogens
-    and charges, so `molecule.log` gets one `INFO` record per ring filled or phased -- and one `LOST`
-    record when a fused system has more trials than the budget allows, which leaves the molecule as it
-    arrived.  Never raises.
+    and charges, so `molecule.log` gets one `INFO` record per ring filled or phased and one for a
+    canonical rewrite -- and one `LOST` record when a fused system has more trials than the budget
+    allows, which leaves the molecule as it arrived.  Never raises.
     """
     if not molecule.rings:
         return False                       # a form is a ring's to choose
@@ -310,7 +369,8 @@ def standardize_kekule(molecule: MoleculeContainer) -> bool:
         _, ring, current = min(pool, key=lambda t: t[0])
         phased.append(ring)
 
-    if current is molecule:
+    canonical = None if budget else _canonical(current, scored, score)
+    if current is molecule and canonical is None:
         if lines:
             with recording(molecule, stage='kekule-form') as log:
                 for rule, atoms, message in lines:
@@ -321,9 +381,14 @@ def standardize_kekule(molecule: MoleculeContainer) -> bool:
     # written -- each trial gave back the hydrogens, charges and radicals it was handed, so there is
     # nothing else the chosen form differs by.
     orders = [(b.n, b.m, b.order) for b in current.bonds() if molecule.order_of(b.n, b.m) != b.order]
-    with molecule.edit():
-        for u, v, order in orders:
-            molecule.set_order(u, v, order)
+    if orders:
+        with molecule.edit():
+            for u, v, order in orders:
+                molecule.set_order(u, v, order)
+    # through `kekule()` and not by copying orders across, so the rewrite is the representation change
+    # it is and stored CIP descriptors survive it
+    if canonical is not None:
+        molecule.kekule(aromatic_bonds=canonical, canonical=True)
 
     with recording(molecule, stage='kekule-form') as log:
         for ring in filled:
@@ -336,6 +401,11 @@ def standardize_kekule(molecule: MoleculeContainer) -> bool:
                                  f'ring {tuple(ring)!r} had its double bonds shifted by one bond: no '
                                  f'aromatic form collapses a ring this size, so the alternation with '
                                  f'the smaller canonical form is the one stored', INFO))
+        if canonical is not None:
+            log.append(LogRecord(_RULE_CANONICAL, tuple(sorted({n for e in canonical for n in e})),
+                                 'the small rings were given their canonical Kekule form: the form in '
+                                 'hand aromatises differently, and the canonical one is the same for '
+                                 'every drawing and atom order of the compound', INFO))
         for rule, atoms, message in lines:
             log.append(LogRecord(rule, atoms, message, LOST))
     return True

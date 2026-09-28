@@ -73,14 +73,14 @@ def _pin_lactim(molecule: MoleculeContainer) -> bool:
         trial = molecule.copy()
         with trial.edit():
             trial.set_order(c, n, 2)
-        if trial.kekule().unresolved or trial.order_of(c, n) != 2:
+        if trial.kekule(canonical=True).unresolved or trial.order_of(c, n) != 2:
             continue
         standardize(trial)
         if trial.order_of(o, c) != 2:
             continue
         with molecule.edit():
             molecule.set_order(c, n, 2)
-        molecule.kekule()
+        molecule.kekule(canonical=True)
         return True
     return False
 
@@ -132,7 +132,8 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     #    Nothing is recorded here about `result.unresolved`: the kekuliser writes a `LOST` record per
     #    system to `molecule.log` itself, naming it in `atoms`, so a second one here would summarise an
     #    event already reported.  `check_valence()` is still how those atoms are found.
-    molecule.kekule()
+    #    Canonically, so the group rules see one form of the compound whatever the atom order.
+    molecule.kekule(canonical=True)
 
     # 2. Drop the parities the constitution does not justify, on the localised form and before step 6
     #    hides a bond order behind an aromatic one.  A cis/trans sign on a double bond an alternating
@@ -202,7 +203,7 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     #    reaches isoquinolin-3(2H)-one from every order.
     for _ in range(_ROUNDS_MAX):
         if moved:
-            molecule.kekule()
+            molecule.kekule(canonical=True)
         elif not (fix_tautomers and _pin_lactim(molecule)):
             break
         changed = standardize(molecule, fix_tautomers=fix_tautomers)
@@ -222,8 +223,9 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     # 10. `keep_kekule` undoes step 7 rather than skipping it: skipping 7 would skip 8 with it, and the
     #     flag would then decide which tautomer the caller gets.  Step 6 is not re-run behind it and
     #     would have nothing to do: an aromatic ring is unwound into a ring holding every double bond it
-    #     has room for, and which of its alternations comes back is the kekuliser's answer to give.
+    #     has room for, and which of its alternations comes back is the kekuliser's answer to give --
+    #     canonical, so the flag keeps the guarantee.
     if keep_kekule:
-        molecule.kekule()
+        molecule.kekule(canonical=True)
 
     return molecule.canonical_bytes != before

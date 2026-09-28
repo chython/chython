@@ -87,6 +87,10 @@ ctypedef struct ring_ctx_t:
     Py_ssize_t *order_tmp         # pcap, merge sort scratch
     Py_ssize_t *keep              # pcap, the relevant prototypes
     Py_ssize_t keep_count
+    uint64_t *kres                # kres_cap * we, keep[i]'s normal form modulo shorter cycles
+    Py_ssize_t kres_cap
+    Py_ssize_t *kfamily           # pcap, ring family of keep[i]
+    Py_ssize_t family_count
     Py_ssize_t *basis_idx         # pcap, the minimum cycle basis
     Py_ssize_t basis_count
 
@@ -143,6 +147,7 @@ cdef void _free_ctx(ring_ctx_t *ctx) noexcept nogil:
     free(ctx.psize); free(ctx.pvbits); free(ctx.pebits); free(ctx.pcyc_ofs); free(ctx.pcyc)
     free(ctx.hslot); free(ctx.basis); free(ctx.basis_used)
     free(ctx.order); free(ctx.order_tmp); free(ctx.keep); free(ctx.basis_idx)
+    free(ctx.kres); free(ctx.kfamily)
     memset(ctx, 0, sizeof(ring_ctx_t))
 
 
@@ -268,6 +273,10 @@ cdef int _grow_pool(ring_ctx_t *ctx) noexcept nogil:
     if p is NULL:
         return -1
     ctx.basis_idx = <Py_ssize_t *> p
+    p = realloc(ctx.kfamily, <size_t> cap * sizeof(Py_ssize_t))
+    if p is NULL:
+        return -1
+    ctx.kfamily = <Py_ssize_t *> p
     ctx.pcap = cap
     return 0
 
@@ -638,11 +647,60 @@ cdef inline void _basis_store(ring_ctx_t *ctx, Py_ssize_t pivot, uint64_t *row) 
     ctx.basis_used[pivot] = 1
 
 
+cdef bint _normal_form(ring_ctx_t *ctx, uint64_t *row) noexcept nogil:
+    """Clear every pivot bit of `row` against the elimination table in place; True if nonzero.
+
+    Each stored row's highest bit is its pivot, so one high-to-low sweep leaves no pivot bit set,
+    and that form is unique per coset of the table's span: two rows reduce to the same form exactly
+    when their sum lies in the span, whatever order built the table.
+    """
+    cdef Py_ssize_t we = ctx.we
+    cdef Py_ssize_t w, v
+    cdef int b
+    cdef uint64_t word, below
+    cdef uint64_t *br
+    cdef bint nonzero = False
+    w = we - 1
+    while w >= 0:
+        word = row[w]
+        while word:
+            b = _hi_bit64(word)
+            below = (<uint64_t> 1 << b) - 1
+            if ctx.basis_used[w * 64 + b]:
+                br = ctx.basis + <size_t> (w * 64 + b) * <size_t> we
+                for v in range(w + 1):
+                    row[v] ^= br[v]
+                word = row[w] & below
+            else:
+                nonzero = True
+                word &= below
+        w -= 1
+    return nonzero
+
+
+cdef int _keep_residue(ring_ctx_t *ctx, uint64_t *row) noexcept nogil:
+    """Store `row` as the normal form of keep[keep_count], growing kres by doubling."""
+    cdef Py_ssize_t cap = ctx.kres_cap
+    cdef void *p
+    if ctx.keep_count == cap:
+        cap = cap * 2 if cap else POOL_INIT
+        p = realloc(ctx.kres, <size_t> cap * <size_t> ctx.we * sizeof(uint64_t))
+        if p is NULL:
+            return -1
+        ctx.kres = <uint64_t *> p
+        ctx.kres_cap = cap
+    memcpy(ctx.kres + <size_t> ctx.keep_count * <size_t> ctx.we, row,
+           <size_t> ctx.we * sizeof(uint64_t))
+    return 0
+
+
 cdef int _filter_relevant(ring_ctx_t *ctx) noexcept nogil:
     """Keep prototypes whose representative is not spanned by strictly shorter ones.
 
     One representative per prototype is sufficient and is what makes the filter polynomial:
     relevance is uniform over a prototype, so the representative's verdict is the family's.
+    Each kept representative's normal form modulo the shorter cycles goes to kres, where
+    `_group_families` reads it.
     """
     cdef Py_ssize_t total = ctx.pcount
     cdef Py_ssize_t we = ctx.we
@@ -664,7 +722,9 @@ cdef int _filter_relevant(ring_ctx_t *ctx) noexcept nogil:
             idx = ctx.order[k]
             memcpy(ctx.tmprow, ctx.pebits + <size_t> idx * <size_t> we,
                    <size_t> we * sizeof(uint64_t))
-            if _reduce_row(ctx, ctx.tmprow) >= 0:
+            if _normal_form(ctx, ctx.tmprow):
+                if _keep_residue(ctx, ctx.tmprow):
+                    return -1
                 ctx.keep[ctx.keep_count] = idx
                 ctx.keep_count += 1
         # then admit the whole class
@@ -676,6 +736,56 @@ cdef int _filter_relevant(ring_ctx_t *ctx) noexcept nogil:
             if pivot >= 0:
                 _basis_store(ctx, pivot, ctx.tmprow)
         i = j
+    return 0
+
+
+cdef int _group_families(ring_ctx_t *ctx) noexcept nogil:
+    """Partition the relevant prototypes into ring families.
+
+    A ring family is a class of relevant cycles of one length L whose pairwise GF(2) sums lie in
+    the span of the cycles shorter than L. The relation is defined on the cycle space alone, so the
+    partition is a graph invariant; Vismara's prototypes are not, since which relevant cycles
+    share a prototype depends on vertex order. Every cycle of a prototype differs from its
+    representative by shorter cycles, so a family is a union of prototypes, and two prototypes
+    fall together exactly when their representatives' normal forms (kres) are equal.
+
+    2-azabicyclo[2.1.1]hexane is the case: its two 5-rings sum to the 4-ring, so they are one
+    family in every atom order, and one prototype or two depending on it.
+    """
+    cdef Py_ssize_t count = ctx.keep_count
+    cdef Py_ssize_t we = ctx.we
+    cdef Py_ssize_t cap = 1
+    cdef Py_ssize_t mask, pos, i, j
+    cdef Py_ssize_t *slots
+    cdef uint32_t size
+    cdef uint64_t *row
+    cdef size_t nbytes = <size_t> we * sizeof(uint64_t)
+    while cap < 2 * count:
+        cap *= 2
+    slots = <Py_ssize_t *> malloc(<size_t> cap * sizeof(Py_ssize_t))
+    if slots is NULL:
+        return -1
+    for i in range(cap):
+        slots[i] = -1
+    mask = cap - 1
+    ctx.family_count = 0
+    for i in range(count):
+        size = ctx.psize[ctx.keep[i]]
+        row = ctx.kres + <size_t> i * <size_t> we
+        pos = <Py_ssize_t> ((_row_hash(row, we) ^ <uint64_t> size) & <uint64_t> mask)
+        while True:
+            j = slots[pos]
+            if j < 0:
+                slots[pos] = i
+                ctx.kfamily[i] = ctx.family_count
+                ctx.family_count += 1
+                break
+            if (ctx.psize[ctx.keep[j]] == size
+                    and memcmp(ctx.kres + <size_t> j * <size_t> we, row, nbytes) == 0):
+                ctx.kfamily[i] = ctx.kfamily[j]
+                break
+            pos = (pos + 1) & mask
+    free(slots)
     return 0
 
 
@@ -734,39 +844,52 @@ cdef int _write_ring_segment(Structure structure, ring_ctx_t *ctx) except -1:
 
 
 cdef int _fill_descriptors(Structure structure, ring_ctx_t *ctx) except -1:
-    """Per-atom ring sizes, ring bitmap and ring counts, one bit per relevant-cycle prototype.
+    """Per-atom ring sizes, ring bitmap and ring counts, one bit per ring family.
 
-    The bitmap is prototype-scoped, not basis-scoped: `shares_ring(a, b)` asks whether some
-    relevant prototype covers both atoms. That is exact whenever a prototype generates a single
-    cycle -- every fused, spiro and cage system in practice -- and conservative only where two
-    atoms sit on arcs of one prototype that no single cycle of it uses together, as in a
-    macrocyclic cyclophane. Scoping it to the stored basis instead would be worse: which of a
-    cage's equivalent faces the basis drops is an artefact of the greedy order, so cubane atoms
-    that plainly share a face would answer False.
+    | descriptor | meaning |
+    |---|---|
+    | ring sizes | lengths of the relevant cycles through the atom |
+    | bitmap bit | the atom lies on some cycle of that family |
+    | ring count | families through the atom, saturating at 255 |
 
-    Ring sizes and counts likewise derive from the prototypes rather than the basis. The basis
-    is one cycle short of the full relevant set on nearly every polycycle -- C60 has 32 faces at
-    circuit rank 31 -- so reading descriptors off the basis would lose a real ring.
+    Each is a graph invariant: the relevant cycle set is unique, `_group_families` partitions it
+    by the cycle space alone, and a prototype's pvbits is exactly the union of its cycles' vertices.
+    The count is not the number of relevant cycles, which is exponential -- a macrocycle of k
+    para-phenylenes has 2**k -- and counts interchangeable cycles once: in
+    2-azabicyclo[2.1.1]hexane the nitrogen reads 1, the bridgeheads 2.
+
+    `shares_ring(a, b)` asks whether some family covers both atoms: exact where a family is one
+    cycle, conservative only where the two atoms sit on alternative arcs of one family that no
+    single cycle uses together, as in a cyclophane. Descriptors do not come from the stored basis:
+    which of a cage's equivalent faces a basis drops is an artefact of the greedy order, and the
+    basis is one cycle short of the relevant set on nearly every polycycle -- C60 has 32 faces at
+    circuit rank 31.
+
+    SEG_RING_BITS is `n * words` uint64 bitmap words, then `words * 64` uint32 family lengths.
     """
     cdef uint32_t n = ctx.n
     cdef Py_ssize_t count = ctx.keep_count
-    cdef uint32_t words = <uint32_t> ((count + 63) // 64)
+    cdef uint32_t words = <uint32_t> ((ctx.family_count + 63) // 64)
     cdef Py_ssize_t wv = ctx.wv
-    cdef Py_ssize_t r, w
+    cdef Py_ssize_t r, w, f
     cdef atom_t *atoms
     cdef uint64_t *bits
     cdef uint64_t *pv
+    cdef uint32_t *sizes
     cdef uint64_t word
     cdef uint32_t v, k, size, total
     if words == 0 or n == 0:
         return 0
     structure_append(structure, SEG_RING_BITS,
-                     <size_t> n * <size_t> words * sizeof(uint64_t))
+                     <size_t> words * (<size_t> n * sizeof(uint64_t) + 64 * sizeof(uint32_t)))
     bits = structure_ring_bits(structure)
+    sizes = structure_ring_family_sizes(structure, words)
     atoms = structure.atoms()          # structure_append may have moved the buffer
     with nogil:
         for r in range(count):
             size = ctx.psize[ctx.keep[r]]
+            f = ctx.kfamily[r]
+            sizes[f] = size
             pv = ctx.pvbits + <size_t> ctx.keep[r] * <size_t> wv
             for w in range(wv):
                 word = pv[w]
@@ -774,7 +897,7 @@ cdef int _fill_descriptors(Structure structure, ring_ctx_t *ctx) except -1:
                     v = <uint32_t> (w * 64 + _lo_bit64(word))
                     word &= word - 1
                     at_add_ring_size(&atoms[v], size)
-                    bits[<size_t> v * <size_t> words + (r >> 6)] |= <uint64_t> 1 << (r & 63)
+                    bits[<size_t> v * <size_t> words + (f >> 6)] |= <uint64_t> 1 << (f & 63)
         for v in range(n):
             total = 0
             for k in range(words):
@@ -827,6 +950,8 @@ cdef int perceive_rings(Structure structure) except -1:
                 rc = _build_prototypes(&ctx)
                 if rc == 0:
                     rc = _filter_relevant(&ctx)
+                if rc == 0:
+                    rc = _group_families(&ctx)
                 if rc == 0:
                     rc = _select_basis(&ctx)
         _raise_rc(rc, n)

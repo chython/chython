@@ -163,7 +163,7 @@ cycles. Ask the atom.
     n = naph.atom_numbers[0]
 
     naph.in_ring_of(n)      # True -- is this atom in any ring at all
-    naph.ring_count_of(n)   # how many relevant rings pass through it
+    naph.ring_count_of(n)   # ring families through it: interchangeable equal rings count once
     naph.ring_sizes_of(n)   # frozenset({6}) -- the sizes, not the rings
     naph.macrocycle_of(n)   # is it on a ring larger than 24?  False here
 
@@ -396,7 +396,7 @@ Atom Properties
     atom.heteroatoms         # bonded atoms that are neither C nor H
     atom.hybridization       # 1=sp3, 2=sp2, 3=sp, 4=aromatic, 5=cumulated, 6=other
     atom.in_ring             # bool
-    atom.ring_count          # relevant rings through this atom
+    atom.ring_count          # ring families through this atom
     atom.ring_sizes          # frozenset of ring sizes, 3..24
     atom.macrocycle          # bool: on a ring larger than 24
     atom.map_number          # atom-atom mapping, 0 when unmapped -- SEPARATE from atom.n

@@ -764,42 +764,50 @@ it, so the label survives a round trip through either CTAB version:
     block = """
       chython
 
-      4  3  0  0  0  0            999 V2000
+      6  5  0  0  0  0            999 V2000
         0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
         1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+        1.0000   -1.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
         2.0000    1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
         3.0000    1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-      1  2  1  0  0  0  0
-      2  3  1  0  0  0  0
-      3  4  1  0  0  0  0
+        4.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+      2  1  1  0  0  0  0
+      2  3  1  1  0  0  0
+      2  4  1  0  0  0  0
+      4  5  2  0  0  0  0
+      5  6  1  0  0  0  0
     M  END
     """
-    butane = mol_facade(block)          # 2D coordinates, so an anchor can be computed
-    n, m = butane.atom_numbers[1], butane.atom_numbers[2]
+    pentenol = mol_facade(block)        # (2S,3Z)-pent-3-en-2-ol; 2D coordinates give an anchor
+    n = pentenol.atom_numbers[1]
+    c, d = pentenol.atom_numbers[3], pentenol.atom_numbers[4]
 
-    record = butane.add_data_sgroup('StereoLabel', '(R)', atoms=[n])
+    record = pentenol.add_data_sgroup('StereoLabel', '(S)', atoms=[n])
     print(record.field_data, record.disp[:2])
 
     # both versions carry it; `data_sgroups` reads them back by FIELDNAME
-    back, = mol_facade(mol_facade(butane, version=3000)).data_sgroups('StereoLabel')
+    back, = mol_facade(mol_facade(pentenol, version=3000)).data_sgroups('StereoLabel')
     print(back.field_data)
 
 .. testoutput::
 
-    (R) (1.0, 0.0)
-    (R)
+    (S) (1.0, 0.0)
+    (S)
+
+A ``STEREOLABEL`` record is written only where one of its atoms or bonds is a configured stereogenic
+unit; any other is dropped on write and logged as ``sgroup:stereo-label-dead``.  The stored record stays.
 
 The anchor is the ``FIELDDISP`` display position.  By default it is the mean of the referenced atoms'
 coordinates, which puts a bond label between its endpoints when the bond's atoms are listed too:
 
 .. testcode::
 
-    label = butane.add_data_sgroup('StereoLabel', '(Z)', atoms=[n, m], bonds=[(n, m)])
+    label = pentenol.add_data_sgroup('StereoLabel', '(Z)', atoms=[c, d], bonds=[(c, d)])
     print(label.disp[:2])
 
 .. testoutput::
 
-    (1.5, 0.5)
+    (2.5, 1.0)
 
 ``disp=(x, y)`` states the position instead, and ``disp=False`` writes no anchor at all.  A molecule
 with no coordinates has none to give, so the record is written without one and the reason is logged
@@ -808,8 +816,8 @@ appends -- unlike ``set_sgroups``, which replaces the whole set:
 
 .. testcode::
 
-    butane.add_data_sgroup('NOTE', ['first', 'second'], atoms=[n])    # a multi-value datum
-    print(sorted(r.name for r in butane.data_sgroups()))
+    pentenol.add_data_sgroup('NOTE', ['first', 'second'], atoms=[n])    # a multi-value datum
+    print(sorted(r.name for r in pentenol.data_sgroups()))
 
 .. testoutput::
 

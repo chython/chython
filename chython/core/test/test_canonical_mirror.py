@@ -433,14 +433,16 @@ def test_a_relabelled_molecule_is_not_confused_with_a_different_constitution():
 #
 # `nodes_before` is measured on the unfolded search and `nodes_after` on the folded one, both by
 # bisecting `_node_budget` on this exact string, and `nodes_after` is asserted from both sides -- so
-# a change that regrows the tree fails here rather than in a benchmark nobody runs.
+# a change that regrows the tree fails here rather than in a benchmark nobody runs.  `nodes_after` is
+# the search over the stereogenic parities only: a branch whose two arms carry one configuration is not
+# stereogenic, and its parity is not searched.
 _NESTED = [
     ('one branching', 13, 3,
      'C([C@H]([C@H](C)Cl)[C@@H](C)Cl)[C@@H]([C@H](C)Cl)[C@@H](C)Cl'),
-    ('two branchings', 79, 7,
+    ('two branchings', 79, 4,
      'C([C@H]([C@H](C)Cl)[C@@H](C)Cl)([C@@H]([C@H](C)Cl)[C@@H](C)Cl)'
      '[C@H]([C@H](C)Cl)[C@H](C)Cl'),
-    ('three branchings', 729, 13,
+    ('three branchings', 729, 7,
      'C([C@H]([C@H](C)Cl)[C@@H](C)Cl)([C@@H]([C@H](C)Cl)[C@@H](C)Cl)'
      '([C@H]([C@H](C)Cl)[C@H](C)Cl)[C@H]([C@H](C)Cl)[C@@H](C)Cl'),
 ]
