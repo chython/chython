@@ -184,6 +184,26 @@ split as ``mol.smiles`` and ``format(mol, spec)``, so a property never grows a p
 Both properties raise ``ImportError`` when libinchi is not loaded, and neither is cached: a string
 cached on a mutable container outlives the edit that makes it wrong.
 
+Standard InChI has no layer for an AND or OR stereo group. Such a member's sign is not written, the
+rest are written from the least labelling of the same meaning (:doc:`stereo`), and one LOST
+``inchi:enhanced-stereo-not-stated`` record goes to ``mol.log``; so equal molecules write one InChI.
+ABS labels and unlabelled signs are written as drawn:
+
+.. testcode::
+
+    racemate = smiles('C[C@H](O)[C@H](O)[C@H](O)C |&1:1,5,&2:3|')
+    same = smiles('C[C@H](O)[C@H](O)[C@H](O)C |a:1,5,&1:3|')
+    assert racemate == same and racemate.inchi == same.inchi
+    print(racemate.inchi)
+    print([r.rule for r in racemate.log])
+    print(smiles('C[C@H](O)CC |a:1|').inchi)
+
+.. testoutput::
+
+    InChI=1S/C5H12O3/c1-3(6)5(8)4(2)7/h3-8H,1-2H3
+    ['inchi:enhanced-stereo-not-stated']
+    InChI=1S/C4H10O/c1-3-4(2)5/h4-5H,3H2,1-2H3/t4-/m0/s1
+
 
 IUPAC Name
 ~~~~~~~~~~
@@ -222,6 +242,11 @@ an RXN block.  A record copied out of an SD file brings its ``$$$$`` along, whic
     """
     ethanol = mol(mol_block)
     block = mol(ethanol)                 # and back, V2000 unless the molecule needs V3000
+
+Stereo is read from the wedges, or from the coordinates in 3D.  A drawing that states no configuration
+-- an either bond, a sign one 5 degree bond turn inverts, both substituents of a double-bond end on one
+side -- leaves the element unset and logs why.  The chiral flag is not an ABS label: a configuration
+outside every collection is stored as drawn.  The rules are tabled in :doc:`stereo`.
 
 
 XYZ Coordinates
@@ -643,7 +668,7 @@ specifier  effect
 ``r``      a fresh random atom order instead of the canonical one
 ``!s``     without stereo
 ``!e``     without enhanced stereo: the ``a:``/``&n:``/``on:`` collections, nothing else
-``!x``     without CXSMILES extensions
+``!x``     without CXSMILES extensions, atropisomer axes included (:doc:`stereo`)
 ``!z``     without charges
 ``!b``     without bond tokens
 =========  ===============================================================

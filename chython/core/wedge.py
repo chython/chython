@@ -64,14 +64,16 @@ negative.  So::
 reader-writer-reader round trip passes with the sign globally inverted and is therefore not evidence.
 """
 
+from math import cos, radians, sin
 from ._core import WEDGE_DOWN, WEDGE_EITHER, WEDGE_NONE, WEDGE_UP
-from ._log import LogRecord, LOST, REFUSED, REPAIRED
+from ._log import INFO, LogRecord, LOST, REFUSED, REPAIRED
 
 
 __all__ = ['assign_parities', 'tetrahedral_parity', 'cis_trans_parity', 'cis_trans_frame',
            'cis_trans_letter', 'cis_trans_for_write', 'allene_parity', 'atropisomer_parity',
            'stated_parity', 'stated_cis_trans', 'wedges_for_write', 'wedge_in_file_order',
-           'signed_volume', 'SU_TETRA', 'SU_CIS_TRANS', 'SU_ALLENE', 'SU_ATROPISOMER']
+           'helical_parity', 'planar_parity', 'signed_volume', 'SU_TETRA', 'SU_CIS_TRANS', 'SU_ALLENE',
+           'SU_ATROPISOMER', 'SU_HELICAL', 'SU_PLANAR']
 
 
 # The core's stereo-unit kinds.  Mirrored rather than imported because they are `DEF` constants in
@@ -81,6 +83,8 @@ SU_TETRA = 0
 SU_CIS_TRANS = 1
 SU_ALLENE = 2
 SU_ATROPISOMER = 3
+SU_HELICAL = 4
+SU_PLANAR = 5
 
 # The out-of-plane displacement a wedge stands for.  The magnitude is arbitrary -- the determinant is
 # linear in it, so the sign of the answer does not depend on the number -- but 1.0 is what chython 2
@@ -105,7 +109,7 @@ def _plane_sign(a, b, c):
     return (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
 
 
-def tetrahedral_parity(mol, unit, z=None, wedge_of=None, log=None):
+def tetrahedral_parity(mol, unit, z=None, wedge_of=None, log=None, robust=False):
     """Parity of a tetrahedral `unit` from the drawing: 0 unset, 1 even, 2 odd.
 
     `z` maps stable id to a third coordinate, for a genuinely 3D file; when it is given and not flat
@@ -113,8 +117,12 @@ def tetrahedral_parity(mol, unit, z=None, wedge_of=None, log=None):
     of it is at best redundant.  `wedge_of` overrides where the wedge codes come from, which is what
     lets the writer ask "what would I read back if I drew *this*".
 
+    `robust` is the reader's check: a flat drawing whose sign a 5 degree turn of any one drawn bond
+    inverts states nothing (IUPAC ST-1.1.9, a T-shape one degree off straight).  The writer and a
+    renderer ask about exact geometry and leave it off.
+
     Returns 0 -- deliberately, not an exception -- when the drawing says nothing: no wedge at all, a
-    wavy "either" bond, a degenerate layout, or two undrawn directions.  Every one of those is a real
+    wavy "either" bond, a degenerate or ambiguous layout, or two undrawn directions.  Every one of those is a real
     statement by the file and none of them is an error in it.
     """
     anchor = unit['anchor']
@@ -123,6 +131,15 @@ def tetrahedral_parity(mol, unit, z=None, wedge_of=None, log=None):
         wedge_of = mol.wedge_of
     z = z or {}
     flat = not any(z.values())
+
+    # An either bond states "unknown" in 2D and in 3D alike, so it is checked before the coordinates.
+    for r in refs:
+        if r is not None and wedge_of(anchor, r) == WEDGE_EITHER:
+            if log is not None:
+                log.append(LogRecord('wedge:either-bond', (anchor, r),
+                                     f'atom {anchor}: bond to {r} drawn as either, configuration '
+                                     f'left unset', LOST))
+            return 0
 
     cx, cy = mol.xy_of(anchor)
     cz = z.get(anchor, 0.0)
@@ -136,14 +153,7 @@ def tetrahedral_parity(mol, unit, z=None, wedge_of=None, log=None):
             continue
         x, y = mol.xy_of(r)
         if flat:
-            w = wedge_of(anchor, r)
-            if w == WEDGE_EITHER:
-                if log is not None:
-                    log.append(LogRecord('wedge:either-bond', (anchor, r),
-                                         f'atom {anchor}: bond to {r} drawn as either, configuration '
-                                         f'left unset', LOST))
-                return 0
-            dz = _WEDGE_Z.get(w, 0.0)
+            dz = _WEDGE_Z.get(wedge_of(anchor, r), 0.0)
             if dz:
                 drawn = True
         else:
@@ -178,7 +188,39 @@ def tetrahedral_parity(mol, unit, z=None, wedge_of=None, log=None):
             log.append(LogRecord('wedge:degenerate-geometry', (anchor,),
                                  f'atom {anchor}: degenerate geometry, configuration left unset', LOST))
         return 0
+    if robust and flat and not _sign_is_robust(vectors, holes, volume):
+        if log is not None:
+            log.append(LogRecord('wedge:ambiguous-drawing', (anchor,),
+                                 f'atom {anchor}: a {_ROBUST_DEGREES:g} degree turn of one drawn bond inverts '
+                                 f'the configuration, left unset', LOST))
+        return 0
     return 2 if volume < 0.0 else 1
+
+
+# A 2D drawing states a configuration only when no single drawn bond turned by up to this angle inverts
+# it: a T-shaped centre 4 degrees off collinear is refused; morphine's C20, a wedge 11 degrees from a
+# plain bond in a bridged layout, is read.
+_ROBUST_DEGREES = 5.0
+_ROBUST_TURNS = tuple((cos(radians(t)), sin(radians(t))) for t in (-_ROBUST_DEGREES, _ROBUST_DEGREES))
+
+
+def _sign_is_robust(vectors, holes, volume):
+    """True when turning any one drawn in-plane direction by +-5 degrees keeps the sign.
+
+    The hole is recomputed opposite the turned directions, as :func:`tetrahedral_parity` places it.
+    """
+    drawn = [i for i in range(len(vectors)) if i not in holes]
+    for i in drawn:
+        x, y, dz = vectors[i]
+        for c, s in _ROBUST_TURNS:
+            turned = list(vectors)
+            turned[i] = (x * c - y * s, x * s + y * c, dz)
+            if holes:
+                turned[holes[0]] = (-sum(turned[j][0] for j in drawn), -sum(turned[j][1] for j in drawn),
+                                    -sum(turned[j][2] for j in drawn))
+            if signed_volume(*turned) * volume <= 0.0:
+                return False
+    return True
 
 
 def cis_trans_parity(mol, unit, log=None, plane=None):
@@ -203,6 +245,8 @@ def cis_trans_parity(mol, unit, log=None, plane=None):
     """
     if plane is not None:
         mol = _Planar(mol, plane)
+    elif _cis_trans_either(mol, unit, log):
+        return 0
     # The frame comes from `cis_trans_frame`, which is also what a writer names in an `atomRefs4`: the
     # partner terminal is the anchor's neighbour that also neighbours the far substituent, found rather
     # than assumed, because the double bond's order is not a reliable marker here (an atropisomeric or
@@ -232,7 +276,56 @@ def cis_trans_parity(mol, unit, log=None, plane=None):
             log.append(LogRecord('wedge:collinear', (anchor,),
                                  f'bond stereo at atom {anchor}: collinear layout, left unset', LOST))
         return 0
+    if plane is None:
+        # IUPAC ST-4.1: both substituents of one terminal on one side of the double bond state nothing.
+        refs = unit['refs']
+        for base, (t, o) in ((0, (anchor, partner)), (2, (partner, anchor))):
+            second = refs[base + 1]
+            if second is not None and _plane_sign(mol.xy_of(o), mol.xy_of(t), mol.xy_of(refs[base])) * \
+                    _plane_sign(mol.xy_of(o), mol.xy_of(t), mol.xy_of(second)) > 0.0:
+                if log is not None:
+                    log.append(LogRecord('wedge:same-side-substituents', (t, refs[base], second),
+                                         f'bond stereo at atom {anchor}: both substituents of atom {t} drawn on '
+                                         f'one side of the double bond, left unset', LOST))
+                return 0
     return 2 if s1 * s2 > 0.0 else 1
+
+
+def _cis_trans_either(mol, unit, log):
+    """True when an either bond marks the unit unknown: on the double bond, or a single bond at a terminal.
+
+    IUPAC ST-4.4 draws the wavy bond at a terminal.  A wavy bond whose narrow end is the substituent and
+    that substituent a tetrahedral stereocentre is the centre's statement, not the double bond's.
+    """
+    frame = cis_trans_frame(mol, unit)
+    if frame is None:
+        return False
+    _, anchor, partner, _ = frame
+    if WEDGE_EITHER in (mol.wedge_of(anchor, partner), mol.wedge_of(partner, anchor)):
+        found = (anchor, partner)
+    else:
+        found = None
+        for t, o in ((anchor, partner), (partner, anchor)):
+            for s in mol.neighbors_of(t):
+                if s == o:
+                    continue
+                if mol.wedge_of(t, s) == WEDGE_EITHER:
+                    found = (t, s)
+                elif mol.wedge_of(s, t) == WEDGE_EITHER:
+                    owner = mol.unit_of(s)
+                    if owner is None or owner['kind'] != SU_TETRA or not owner['stereogenic']:
+                        found = (s, t)
+                if found:
+                    break
+            if found:
+                break
+    if found is None:
+        return False
+    if log is not None:
+        log.append(LogRecord('wedge:either-bond', (anchor, *found),
+                             f'bond stereo at atom {anchor}: bond {found[0]}-{found[1]} drawn as either, '
+                             f'configuration left unset', LOST))
+    return True
 
 
 def cis_trans_frame(mol, unit):
@@ -636,7 +729,21 @@ def atropisomer_parity(mol, unit, z=None, wedge_of=None, log=None):
                                  f'atom {anchor}: bond {t}-{r} drawn as either, configuration left unset', LOST))
         return 0
     if reason == 'flat':
-        return 0  # a biaryl drawn without an axial statement, which is most of them
+        # A biaryl drawn without an axial statement, which is most of them.  A wedge on the pivot bond
+        # or from an ortho atom to its substituent is a mark the ring-bond reading does not take.
+        if log is not None:
+            p0, p1 = pivots
+            orthos = set(unit['refs'])
+            for narrow, wide, code in mol.wedges():
+                if code in (WEDGE_UP, WEDGE_DOWN) and ({narrow, wide} == {p0, p1} or
+                                                      narrow in orthos and wide not in inward):
+                    owner = mol.unit_of(narrow)
+                    if owner is not None and owner['kind'] == SU_TETRA and owner['stereogenic']:
+                        continue
+                    log.append(LogRecord('wedge:atropisomer-unsupported-mark', (anchor, narrow, wide),
+                                         f'atom {anchor}: the axis is marked on bond {narrow}-{wide}, not on a '
+                                         f'ring bond at a pivot; configuration left unset', LOST))
+        return 0
     if reason == 'both-ends':
         if log is not None:
             log.append(LogRecord('wedge:atropisomer-both-pivots', (anchor,),
@@ -655,6 +762,153 @@ def atropisomer_parity(mol, unit, z=None, wedge_of=None, log=None):
         if log is not None:
             log.append(LogRecord('wedge:degenerate-geometry', (anchor,),
                                  f'atom {anchor}: degenerate atropisomer layout, configuration left unset', LOST))
+        return 0
+    return 2 if volume < 0.0 else 1
+
+
+def _helix_ends(mol, unit):
+    """``(anchor, partner)`` -- the two fjord atoms of a helix, or ``None``: the partner is the atom
+    bonded to both of the far pair."""
+    refs = unit['refs']
+    for m in mol.neighbors_of(refs[3]):
+        if m != refs[2] and refs[2] in mol.neighbors_of(m):
+            return unit['anchor'], m
+    return None
+
+
+def helical_parity(mol, unit, z=None, wedge_of=None, log=None):
+    """Parity of a helicene `unit`: 0 unset, 1 the M helix, 2 the P helix.
+
+    The signed volume of the four ``refs`` -- each fjord atom's inner-rim ring neighbour, then its other
+    ring neighbour, the anchor's pair first -- by the module's one rule: negative is parity 2.  In 3-D
+    that is the helix itself (a P helix has positive inner-rim torsions and a negative volume).
+
+    A drawing states the sense with a wedge on a terminal ring's inner-rim bond, narrow at the fusion
+    atom and wide at the fjord atom, as IUPAC P-92.1.2.2.1 draws it: a wedge puts that terminal ring
+    above the other, a hash below.  That ring's pair is lifted to ``z = +1`` and the other's lowered to
+    ``z = -1`` over the drawn positions.  Wedges on both ends must agree; a wavy bond or no wedge states
+    nothing.  A wedge narrow at the fjord atom is an atropisomer pivot's and is not read here.
+    """
+    anchor = unit['anchor']
+    if wedge_of is None:
+        wedge_of = mol.wedge_of
+    z = z or {}
+    ends = _helix_ends(mol, unit)
+    if ends is None:  # pragma: no cover - the core emits this kind only for a helix it perceived
+        return 0
+    refs = unit['refs']
+    if any(z.values()):
+        pos = [(*mol.xy_of(r), z.get(r, 0.0)) for r in refs]
+    else:
+        lift = None
+        for end, base in zip(ends, (0, 2)):
+            inner = refs[base]
+            w = wedge_of(inner, end)
+            if w == WEDGE_EITHER:
+                if log is not None:
+                    log.append(LogRecord('wedge:either-bond', (anchor, inner, end),
+                                         f'atom {anchor}: bond {inner}-{end} drawn as either, '
+                                         f'configuration left unset', LOST))
+                return 0
+            if w not in (WEDGE_UP, WEDGE_DOWN):
+                continue
+            said = _WEDGE_Z[w] if base == 0 else -_WEDGE_Z[w]
+            if lift is not None and lift != said:
+                if log is not None:
+                    log.append(LogRecord('wedge:helix-contradictory', (anchor,),
+                                         f'atom {anchor}: the wedges on the helix ends state both senses, '
+                                         f'configuration left unset', LOST))
+                return 0
+            lift = said
+        if lift is None:
+            return 0
+        pos = [(*mol.xy_of(r), lift if j < 2 else -lift) for j, r in enumerate(refs)]
+    volume = signed_volume(*pos)
+    if volume == 0.0:
+        if log is not None:
+            log.append(LogRecord('wedge:degenerate-geometry', (anchor,),
+                                 f'atom {anchor}: degenerate helix layout, configuration left unset', LOST))
+        return 0
+    return 2 if volume < 0.0 else 1
+
+
+def _planar_shape(mol, unit):
+    """``(shape, narrow, wide)`` -- which planar unit this is and the bond its wedge is drawn on.
+
+    ======================  =====================================  ======================
+    Shape                   refs                                   wedge
+    ======================  =====================================  ======================
+    ``'metallocene'``       substituent, metal, ring pair          anchor -> metal
+    ``'cyclophane'``        substituent, bridge atom, bridgehead,  bridgehead -> bridge
+                            other ring neighbour
+    ``'twisted'``           the far double-bond terminal's pair,   anchor -> its ring
+                            then the near terminal's               neighbour
+    ======================  =====================================  ======================
+    """
+    anchor = unit['anchor']
+    refs = unit['refs']
+    neighbors = mol.neighbors_of(anchor)
+    if refs[2] not in neighbors:
+        return 'twisted', anchor, refs[0]
+    if refs[1] in neighbors:
+        return 'metallocene', anchor, refs[1]
+    return 'cyclophane', refs[2], refs[1]
+
+
+def _twisted_terminal(mol, unit):
+    """The near double-bond terminal of a twisted unit: the anchor's neighbour bonded to ``refs[2]``."""
+    anchor = unit['anchor']
+    for m in mol.neighbors_of(anchor):
+        if unit['refs'][2] in mol.neighbors_of(m):
+            return m
+    return None  # pragma: no cover - the core emits this shape only for a double bond it perceived
+
+
+def planar_parity(mol, unit, z=None, wedge_of=None, log=None):
+    """Parity of a planar `unit`: 0 unset, 1 or 2 by the module's one rule over the four ``refs``.
+
+    In 3-D the signed volume of the ``refs`` as placed; a twisted double bond's unnamed hydrogens are
+    placed as :func:`_fill_terminal` places a hole.  A drawing states the sense with one wedge, on the
+    bond :func:`_planar_shape` names, narrow end first: a wedge lifts the wide atom to ``z = +1``, a
+    hash lowers it to ``z = -1``.  A wavy bond or no wedge states nothing.
+    """
+    anchor = unit['anchor']
+    refs = unit['refs']
+    if wedge_of is None:
+        wedge_of = mol.wedge_of
+    z = z or {}
+    shape, narrow, wide = _planar_shape(mol, unit)
+    solid = bool(any(z.values()))
+    if solid:
+        lift = 0.0
+    else:
+        w = wedge_of(narrow, wide)
+        if w == WEDGE_EITHER:
+            if log is not None:
+                log.append(LogRecord('wedge:either-bond', (anchor, narrow, wide),
+                                     f'atom {anchor}: bond {narrow}-{wide} drawn as either, '
+                                     f'configuration left unset', LOST))
+            return 0
+        if w not in (WEDGE_UP, WEDGE_DOWN):
+            return 0
+        lift = _WEDGE_Z[w]
+    if shape == 'twisted':
+        near = _twisted_terminal(mol, unit)
+        if near is None:  # pragma: no cover - see _twisted_terminal
+            return 0
+        pos = [None] * 4
+        _fill_terminal(mol, refs, 0, anchor, near, pos, z if solid else None)
+        _fill_terminal(mol, refs, 2, near, anchor, pos, z if solid else None)
+    else:
+        pos = [(*mol.xy_of(r), z.get(r, 0.0)) for r in refs]
+    if not solid:
+        j = refs.index(wide)
+        pos[j] = (pos[j][0], pos[j][1], lift)
+    volume = signed_volume(*pos)
+    if volume == 0.0:
+        if log is not None:
+            log.append(LogRecord('wedge:degenerate-geometry', (anchor,),
+                                 f'atom {anchor}: degenerate planar layout, configuration left unset', LOST))
         return 0
     return 2 if volume < 0.0 else 1
 
@@ -758,7 +1012,9 @@ def stated_parity(unit, field, positions, log=None):
 def assign_parities(mol, z=None, log=None, stated=None, positions=None, configurations=None):
     """Read every stereo unit's configuration out of the drawing and store it.  Returns log lines.
 
-    Only units the core calls stereogenic get a parity.  A wedge on a non-stereogenic atom is the
+    Only units stereogenic in the drawing, or in some combination of the choices it leaves open -- AND
+    and OR phases, unconfigured units -- get a parity (`MoleculeContainer.stereo_is_live`), so the
+    enhanced-stereo collections are set before this call.  A wedge on a non-stereogenic atom is the
     file over-specifying -- common, and harmless -- and is reported rather than stored, because
     storing it would claim a configuration the constitution cannot distinguish.
 
@@ -824,8 +1080,20 @@ def assign_parities(mol, z=None, log=None, stated=None, positions=None, configur
     #
     # Logging is suppressed during the search and the reasons are collected in a final pass, because
     # an atom that stays undetermined would otherwise be reported once per iteration.
-    # At worst one centre resolves per pass, so the number of stereo units bounds the search.
-    for _ in range(sum(1 for _ in mol.stereo_units()) + 1):
+    #
+    # A UNIT NOT STEREOGENIC IN THE DRAWN PHASE MAY BE IN ANOTHER.  `stereogenic` is perceived at the
+    # stored parities, while the enhanced-stereo collections (set before this call) leave AND and OR
+    # phases and unconfigured units open: in `C[C@H](O)[C@H](O)[C@@H](O)C |&1:3,5|` the C3 wedge
+    # states the pseudo-asymmetric centre of the other phase.  When the stereogenic units are
+    # exhausted, every other unit the drawing configures is set tentatively, and the core's own
+    # phase-aware rule (`stereo_is_live`, the one identity and the SMILES reader answer to) keeps the
+    # live ones; the rest are cleared and reported below.  `dead` holds those judged since the last
+    # parity was kept: a tentative pass tries every readable unit at once, so a pass keeping nothing
+    # is followed by one trying nothing, and the units bound the search.  A kept one is judged again
+    # once the search settles, since a parity read after it can leave it stating nothing.
+    dead = set()
+    tentative = set()
+    for _ in range(2 * sum(1 for _ in mol.stereo_units()) + 1):
         parities = {}
         # Collected, then written in one scope.  Every geometry read needs a clean arena, so a
         # `set_parity` in the middle of the loop would have to apply its journal before the next
@@ -838,13 +1106,40 @@ def assign_parities(mol, z=None, log=None, stated=None, positions=None, configur
             if parity:
                 parities[anchor] = parity
         if not parities:
-            break
-        with mol.edit():
-            for anchor, parity in parities.items():
-                mol.set_parity(anchor, parity)
-    else:  # pragma: no cover - one centre resolves per pass at worst, so the bound cannot be reached
+            for unit in mol.stereo_units():
+                anchor = unit['anchor']
+                if unit['stereogenic'] or mol.parity_of(anchor) or anchor in dead:
+                    continue
+                parity = _unit_parity(mol, unit, z, stated, positions, configurations, geometry, None)
+                if parity:
+                    parities[anchor] = parity
+            if not parities:
+                break
+            with mol.edit():
+                for anchor, parity in parities.items():
+                    mol.set_parity(anchor, parity)
+            judged = {anchor for anchor in parities if not mol.stereo_is_live(anchor)}
+            if judged:
+                dead |= judged
+                with mol.edit():
+                    for anchor in judged:
+                        mol.set_parity(anchor, 0)
+            if len(judged) == len(parities):
+                continue
+            tentative.update(a for a in parities if a not in judged)
+        else:
+            with mol.edit():
+                for anchor, parity in parities.items():
+                    mol.set_parity(anchor, parity)
+        dead.clear()
+    else:  # pragma: no cover - every pass keeps a parity or is the last, so the bound cannot be reached
         out.append(LogRecord('wedge:unsettled', (),
                              'stereo resolution did not settle; some configurations may be unread', LOST))
+    judged = {anchor for anchor in tentative if not mol.stereo_is_live(anchor)}
+    if judged:
+        with mol.edit():
+            for anchor in judged:
+                mol.set_parity(anchor, 0)
 
     # The final pass exists to explain what is left, against the settled constitution.  Anything it
     # says about an atom is true of the molecule the caller gets, which is not something a line
@@ -854,15 +1149,16 @@ def assign_parities(mol, z=None, log=None, stated=None, positions=None, configur
     for unit in mol.stereo_units():
         anchor = unit['anchor']
         kind = unit['kind']
-        if not unit['stereogenic']:
+        if not unit['stereogenic'] and not mol.parity_of(anchor):
             if anchor in wedged:
                 out.append(LogRecord('wedge:non-stereogenic', (anchor,),
                                      f'atom {anchor}: wedge drawn on a non-stereogenic centre, ignored', LOST))
             continue
-        if kind not in (SU_TETRA, SU_CIS_TRANS, SU_ALLENE, SU_ATROPISOMER):  # pragma: no cover
+        if kind not in (SU_TETRA, SU_CIS_TRANS, SU_ALLENE, SU_ATROPISOMER, SU_HELICAL,
+                        SU_PLANAR):  # pragma: no cover
             # THE GUARD FOR A KIND THIS MODULE DOES NOT READ.  No such kind exists -- the core emits
-            # four and all four are read here -- so this is unreachable today and stays as the thing a
-            # fifth kind meets instead of being silently measured in another kind's frame.
+            # six and all six are read here -- so this is unreachable today and stays as the thing a
+            # seventh kind meets instead of being silently measured in another kind's frame.
             unsupported.add(kind)
         elif not mol.parity_of(anchor):
             _unit_parity(mol, unit, z, stated, positions, configurations, geometry, out)
@@ -891,7 +1187,78 @@ def assign_parities(mol, z=None, log=None, stated=None, positions=None, configur
     for kind in sorted(unsupported):  # pragma: no cover - see the guard above
         out.append(LogRecord('wedge:unsupported-kind', (),
                              f'kind {kind} stereo not read from the drawing', LOST))
+    if geometry:
+        _report_wedges(mol, z, out)
     return out
+
+
+def _report_wedges(mol, z, out):
+    """Log each wedge the read above left without effect, against the settled molecule.
+
+    ==============================  ==========================================================
+    Rule                            Wedge
+    ==============================  ==========================================================
+    ``wedge:on-double-bond``        up or down on a double bond not at a tetrahedral centre
+    ``wedge:hash-between-centres``  hashed between two tetrahedral centres (IUPAC ST-0.5), read
+                                    at its narrow end
+    ``wedge:3d-wedge-overridden``   in 3D, reads the opposite of the coordinates, which win
+    ``wedge:hapto-not-bonded``      none: in 3D, an atom of another component sits over a
+                                    five-ring, a metallocene with no bond to name its planar unit
+    ==============================  ==========================================================
+    """
+    tetra = {u['anchor']: u for u in mol.stereo_units()
+             if u['kind'] == SU_TETRA and (u['stereogenic'] or mol.parity_of(u['anchor']))}
+    # a pivot's ring bond carries an atropisomer wedge whatever its Kekule order
+    pivots = {n for u in mol.stereo_units() if u['kind'] == SU_ATROPISOMER for n in u['owners']}
+    # ...and a helix end's inner-rim bond, narrow at the fusion atom
+    pivots.update(u['refs'][j] for u in mol.stereo_units() if u['kind'] == SU_HELICAL for j in (0, 2))
+    for narrow, wide, code in mol.wedges():
+        if code not in (WEDGE_UP, WEDGE_DOWN):
+            continue
+        if mol.order_of(narrow, wide) == 2 and narrow not in tetra and narrow not in pivots:
+            out.append(LogRecord('wedge:on-double-bond', (narrow, wide),
+                                 f'atom {narrow}: wedge on the double bond {narrow}={wide} states nothing '
+                                 f'and is not read', LOST))
+        elif code == WEDGE_DOWN and narrow in tetra and wide in tetra:
+            out.append(LogRecord('wedge:hash-between-centres', (narrow, wide),
+                                 f'atom {narrow}: hashed bond {narrow}-{wide} joins two stereocentres; read at '
+                                 f'its narrow end {narrow} only', INFO))
+    if not (z and any(z.values())):
+        return
+    for anchor, unit in tetra.items():
+        parity = mol.parity_of(anchor)
+        if parity:
+            drawn = tetrahedral_parity(mol, unit, None)
+            if drawn and drawn != parity:
+                out.append(LogRecord('wedge:3d-wedge-overridden', (anchor,),
+                                     f'atom {anchor}: the wedges read {drawn} and the 3D coordinates {parity}; '
+                                     f'keeping the coordinates', LOST))
+    _report_hapto_unbonded(mol, z, out)
+
+
+def _report_hapto_unbonded(mol, z, out):
+    """Log each five-ring with a heavy atom of another component within 2.2 A of its centroid.
+
+    A ring pi-bonded to a metal is a planar unit only through a bond to the metal; a file that writes
+    the ions as separate components (``[Fe+2].[cH-]1cccc1...``) names none, so none is perceived.
+    """
+    rings = [r for r in mol.sssr if len(r) == 5]
+    if not rings:
+        return
+    component = {n: k for k, c in enumerate(mol.connected_components) for n in c}
+    pos = {n: (*mol.xy_of(n), z.get(n, 0.0)) for n in component}
+    for ring in rings:
+        cx, cy, cz = (sum(pos[n][j] for n in ring) / 5.0 for j in range(3))
+        own = component[ring[0]]
+        for n, k in component.items():
+            if k == own or mol.element_of(n) == 1:
+                continue
+            x, y, w = pos[n]
+            if (x - cx) ** 2 + (y - cy) ** 2 + (w - cz) ** 2 <= 4.84:
+                out.append(LogRecord('wedge:hapto-not-bonded', (n, *ring),
+                                     f'atom {n} sits over the five-ring {ring} of another component with no '
+                                     f'bond to it; no planar unit is perceived', LOST))
+                break
 
 
 def _reanchor_wedges(mol, z, out):
@@ -927,6 +1294,12 @@ def _reanchor_wedges(mol, z, out):
             # end, so a wedge at the far pivot is a statement this module now understands and must not
             # be re-anchored onto a neighbouring tetrahedral centre.
             holders.update(_atropisomer_pivots(mol, unit) or (unit['anchor'],))
+        elif unit['kind'] == SU_HELICAL:
+            # the narrow ends `helical_parity` reads
+            holders.update((unit['anchor'], unit['refs'][0], unit['refs'][2]))
+        elif unit['kind'] == SU_PLANAR:
+            # the narrow end `planar_parity` reads
+            holders.add(_planar_shape(mol, unit)[1])
         else:
             holders.add(unit['anchor'])
             if unit['kind'] == SU_TETRA:
@@ -943,7 +1316,7 @@ def _reanchor_wedges(mol, z, out):
         def probe(a, b, _w=wide, _n=narrow, _c=code):
             return _c if (a, b) == (_w, _n) else mol.wedge_of(a, b)
 
-        parity = tetrahedral_parity(mol, unit, z, probe)
+        parity = tetrahedral_parity(mol, unit, z, probe, robust=True)
         if parity:
             moves.append((narrow, wide, code, parity))
     if not moves:
@@ -987,8 +1360,16 @@ def _unit_parity(mol, unit, z, stated, positions, configurations, geometry, log)
     """
     anchor = unit['anchor']
     if unit['kind'] == SU_TETRA:
-        parity = tetrahedral_parity(mol, unit, z, log=log) if geometry else 0
+        parity = tetrahedral_parity(mol, unit, z, log=log, robust=True) if geometry else 0
         if not parity and anchor in stated:
+            if geometry and any(r is not None and mol.wedge_of(anchor, r) == WEDGE_EITHER for r in unit['refs']):
+                # An either bond is the drawing's answer, "unknown", and it outranks the parity field.
+                said = stated_parity(unit, stated[anchor], positions, log)
+                if said and log is not None:
+                    log.append(LogRecord('wedge:drawing-field-disagree', (anchor,),
+                                         f'atom {anchor}: an either bond and the atom parity field disagree '
+                                         f'(field says {said}); keeping the either bond, left unset', REFUSED))
+                return 0
             parity = stated_parity(unit, stated[anchor], positions, log)
         return parity
     if unit['kind'] == SU_CIS_TRANS:
@@ -1005,6 +1386,10 @@ def _unit_parity(mol, unit, z, stated, positions, configurations, geometry, log)
         return allene_parity(mol, unit, z, log=log) if geometry else 0
     if unit['kind'] == SU_ATROPISOMER:
         return atropisomer_parity(mol, unit, z, log=log) if geometry else 0
+    if unit['kind'] == SU_HELICAL:
+        return helical_parity(mol, unit, z, log=log) if geometry else 0
+    if unit['kind'] == SU_PLANAR:
+        return planar_parity(mol, unit, z, log=log) if geometry else 0
     return 0  # pragma: no cover - every kind the core emits has a branch above
 
 
@@ -1130,8 +1515,12 @@ def wedges_for_write(mol, log=None, plane=None, cis_trans_stated=()):
         existing = list(mol.wedges())
         if existing:
             return existing, out
+    # a bridgehead whose sign its partner implies is drawn too: one stated sign wedges both ends of the cage,
+    # which is what lets a viewer see the bicycle in three dimensions
+    implied = mol.implied_parities()
     configured = [u for u in mol.stereo_units()
-                  if u['kind'] in (SU_TETRA, SU_ALLENE, SU_ATROPISOMER) and mol.parity_of(u['anchor'])]
+                  if u['kind'] in (SU_TETRA, SU_ALLENE, SU_ATROPISOMER, SU_HELICAL, SU_PLANAR)
+                  and (mol.parity_of(u['anchor']) or u['anchor'] in implied)]
     if not configured:
         return [], out
     if plane is not None:
@@ -1154,7 +1543,7 @@ def wedges_for_write(mol, log=None, plane=None, cis_trans_stated=()):
     # aesthetic.  Correctness is the gate; the heuristic works on what is left.
     axial_wedges = {}
     taken = set()
-    for unit in sorted((u for u in configured if u['kind'] in (SU_ALLENE, SU_ATROPISOMER)),
+    for unit in sorted((u for u in configured if u['kind'] in (SU_ALLENE, SU_ATROPISOMER, SU_HELICAL, SU_PLANAR)),
                        key=lambda u: (u['kind'], u['anchor'])):
         anchor = unit['anchor']
         target = mol.parity_of(anchor)
@@ -1165,6 +1554,17 @@ def wedges_for_write(mol, log=None, plane=None, cis_trans_stated=()):
             # decoration: the chain bonds are double, and MDL has no wedge for a double bond.
             candidates = [(t, r) for t, _ in _chain_ends(mol, anchor) for r in unit['refs']
                           if r is not None and r in mol.neighbors_of(t) and mol.order_of(t, r) == 1]
+        elif unit['kind'] == SU_PLANAR:
+            reader = planar_parity
+            kind_name = 'planar unit'
+            # the one bond `planar_parity` reads
+            candidates = [_planar_shape(mol, unit)[1:]]
+        elif unit['kind'] == SU_HELICAL:
+            reader = helical_parity
+            kind_name = 'helix'
+            # a terminal ring's inner-rim bond, narrow at the fusion atom as IUPAC draws it
+            ends = _helix_ends(mol, unit)
+            candidates = [] if ends is None else [(unit['refs'][base], t) for t, base in zip(ends, (0, 2))]
         else:
             reader = atropisomer_parity
             kind_name = 'atropisomer'
@@ -1212,7 +1612,7 @@ def wedges_for_write(mol, log=None, plane=None, cis_trans_stated=()):
         if unit['kind'] != SU_TETRA:
             continue
         anchor = unit['anchor']
-        feasible = [(r, code) for r, code in _feasible_wedges(mol, unit, mol.parity_of(anchor))
+        feasible = [(r, code) for r, code in _feasible_wedges(mol, unit, mol.parity_of(anchor) or implied[anchor])
                     if (anchor, r) not in taken and (r, anchor) not in taken]
         if not feasible:
             out.append(LogRecord('wedge:no-writable-bond', (anchor,),
@@ -1301,7 +1701,7 @@ def _feasible_wedges(mol, unit, target):
             def probe(a, b, _r=r, _c=code):
                 return _c if (a, b) == (anchor, _r) else WEDGE_NONE
 
-            if tetrahedral_parity(mol, unit, None, probe) == target:
+            if tetrahedral_parity(mol, unit, None, probe, robust=True) == target:
                 out.append((r, code))
                 break
     return out
@@ -1366,7 +1766,7 @@ def _draw_cost(mol, anchor, r, centres):
        above the terms that are: a wedge whose bond cannot be identified says nothing at all, while a
        wedge with a branch point at its wide end says something imprecise.  It ranks below the ring test
        because that one is measured to dominate and because a near-collinear pair is rare -- 1 centre in
-       282 on the corpus -- so promoting it above ring would trade 21 ring wedges for one.
+       284 on the corpus -- so promoting it above ring would trade 21 ring wedges for one.
 
     3. **A LEAF WIDE END NEXT.**  The wedge widens away from the centre and claims that the neighbour
        at the wide end is toward the viewer.  If that neighbour is a leaf -- hydroxyl oxygen, halogen,
@@ -1407,6 +1807,17 @@ def _draw_cost(mol, anchor, r, centres):
             mol.element_of(r) != 1,
             -((rx - ax) ** 2 + (ry - ay) ** 2),
             r)
+
+
+def _bridge_sets(mol, options):
+    """The coupled bridgehead sets with two or more members to wedge, ascending, from `stereo_units()`."""
+    out = set()
+    for unit in mol.stereo_units():
+        if unit['kind'] == SU_TETRA and unit['coupled'] and unit['anchor'] in options:
+            members = tuple(sorted(a for a in (unit['anchor'], *unit['coupled']) if a in options))
+            if len(members) > 1:
+                out.add(members)
+    return sorted(out)
 
 
 def _assign(mol, options, out, reserved, busy):
@@ -1460,6 +1871,27 @@ def _assign(mol, options, out, reserved, busy):
         chosen[anchor] = (r, code)
         used_bonds.add((anchor, r))
         used_atoms.update((anchor, r))
+
+    # A COUPLED BRIDGEHEAD SET IS DRAWN ON ITS SHORTEST BRIDGE.  Every bond at a bridgehead is a ring bond,
+    # so the cost cannot choose, and the adjacency rule would push the second bridgehead off the atom the
+    # first one took.  The convention for a bicycle is the opposite: both bridgeheads wedged to the one-atom
+    # bridge they share -- norbornane's C7 -- which lifts that bridge out of the plane and reads as one
+    # statement about the cage.  Taken first by every member holding ring bonds only, when it has a wedge
+    # to that atom stating its sign: a member with an acyclic bond -- a bridgehead methyl, camphor's C1 --
+    # keeps the better wedge, and its partner still goes to the bridge.  A bridge atom that is a
+    # configured centre itself is not taken -- a wide end at a stereocentre reads as a statement about it,
+    # as in morphine.
+    for members in _bridge_sets(mol, options):
+        ringed = [a for a in members if all(cost[0] for cost, _, _ in options[a])]
+        if not ringed:
+            continue
+        shared = set.intersection(*(set(mol.neighbors_of(a)) for a in members)) - set(members) - set(options)
+        for b in sorted(shared, key=lambda x: (mol.degree_of(x), x)):
+            picks = {a: next((code for _, r, code in options[a] if r == b), None) for a in ringed}
+            if all(picks.values()) and all(free_bond(a, b) for a in ringed):
+                for a in ringed:
+                    take(a, b, picks[a])
+                break
 
     # Cost terms 1 and 2 -- ring, then near-collinear -- and both are tiers for the same reason: each
     # has to outrank the adjacency constraint, which lives in this pass and not in the cost.  Their

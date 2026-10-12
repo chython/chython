@@ -24,7 +24,7 @@ idempotence, never raising, a legible log -- are what that purpose needs."""
 from pytest import raises
 
 from .. import canonicalize, explicify_hydrogens, implicify_hydrogens   # the import injects the method
-from ...core import LOST, MoleculeContainer, REFUSED, REPAIRED, Log, read_smiles as smiles
+from ...core import LOST, MoleculeContainer, REFUSED, REPAIRED, Log, read_reaction_smiles, read_smiles as smiles
 
 
 #: Pairs measured to store different bytes and mean the same compound.  Each names the stage that
@@ -643,3 +643,31 @@ def test_a_lactim_reaches_its_lactam_from_every_atom_order():
         nh = [n for n in molecule.atom_numbers if molecule.element_of(n) == 7 and molecule.implicit_h_of(n)]
         assert [any(molecule.element_of(x) == 8 for c in molecule.neighbors_of(n) for x in molecule.neighbors_of(c))
                 for n in nh] == [True], f'{lactim}: {molecule}'
+
+
+def test_the_last_stage_stores_the_canonical_collections():
+    one = smiles('C[C@H](O)CC |&1:1|')
+    other = smiles('C[C@@H](O)CC |&2:1|')
+    for m in (one, other):
+        canonicalize(m)
+    assert one.to_bytes() == other.to_bytes()
+    assert one.stereo_groups() == {(3, 1): [2]}
+    assert other.log.by_stage('stereo-groups')
+
+
+def test_stereo_groups_false_keeps_the_stored_labels():
+    m = smiles('C[C@@H](O)CC |&2:1|')
+    canonicalize(m, stereo_groups=False)
+    assert m.stereo_groups() == {(3, 2): [2]}
+    assert canonicalize(m)                  # the stage alone is a change
+
+
+def test_a_reaction_keeps_its_stored_collections():
+    """A racemic input's drawn sign against the product's is what tells retention from inversion before
+    a mapping exists, so no molecule of a reaction is phased."""
+    rxn = read_reaction_smiles('C[C@H](O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O |&2:1|')
+    signs = [m.parity_of(2) for m in rxn.molecules()]
+    rxn.canonicalize()
+    assert [m.parity_of(2) for m in rxn.molecules()] == signs
+    assert rxn.reactants[0].stereo_groups() == {(3, 2): [2]}
+    assert not rxn.log.by_stage('stereo-groups')

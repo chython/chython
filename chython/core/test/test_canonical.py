@@ -567,6 +567,24 @@ def test_canonical_order_of_a_hub_with_many_identical_rings_is_fast():
     assert len(strings) == 1
 
 
+def _dendrimer(depth):
+    """A neopentane dendrimer: every inner carbon quaternary, every branch identical."""
+    def tree(d):
+        return 'C' if d == 0 else 'C(%s)(%s)%s' % ((tree(d - 1),) * 3)
+    from chython.core import read_smiles
+    return read_smiles('C(%s)(%s)(%s)%s' % ((tree(depth),) * 4))
+
+
+def test_canonical_order_of_a_large_symmetric_tree_is_fast():
+    # The orbit allowance scales with the atom pairs: at 1457 atoms the prune needs more than a fixed
+    # 20M candidates, and without it the tree branches unpruned toward its node budget.
+    m = _dendrimer(5)
+    assert m.atom_count == 1457
+    start = perf_counter()
+    m.canonical_bytes
+    assert perf_counter() - start < 15
+
+
 def _srg16(kind):
     """One of the two strongly regular graphs on parameters (16, 6, 2, 2), as a 16-atom record.
 

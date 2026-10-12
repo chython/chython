@@ -35,7 +35,7 @@ from ._sgroup import (MAX_STEREO_GROUP, NO_INDEX, UNSUPPORTED, SGroup, checked_i
 from ._tokens import emit_v30, join_continuations, parse_list, quote_value, tokenize
 from ...core import LogRecord, LOST, R_INDEX_MAX, REPAIRED
 from ...core._core import element_symbols
-from ...core.wedge import wedge_in_file_order, wedges_for_write
+from ...core.wedge import SU_ATROPISOMER, SU_HELICAL, wedge_in_file_order, wedges_for_write
 
 
 __all__ = ['parse_v3000', 'emit_v3000', 'parse_ctab_block', 'V3000_STAMP']
@@ -226,6 +226,7 @@ def parse_ctab_block(logical, log=None):
     """Parse joined, prefix-stripped V3000 logical lines into a `Ctab`."""
     log = [] if log is None else log
     ctab = Ctab()
+    ctab.version = 'v3000'
     index_of = {}      # the file's atom index -> position in ctab.atoms
     bond_of = {}       # the file's bond index -> (position a, position b)
     sgroup_lines = []
@@ -688,12 +689,16 @@ def _parse_collections(body, ctab, index_of, bond_of, log):
         elif obj == 'bond':
             # `moved` holds in-range ids only, so an out-of-range id can never need it.
             group = moved.get((kind, group), group)
-        if obj == 'atom':
-            for position in refs:
-                ctab.groups[position] = (kind, group)
-        else:
-            for pair in refs:
-                ctab.bond_groups[pair] = (kind, group)
+        # The first collection naming an element keeps it, as a CXSMILES atom listed twice does.
+        target = ctab.groups if obj == 'atom' else ctab.bond_groups
+        for ref in refs:
+            held = target.setdefault(ref, (kind, group))
+            if held != (kind, group):
+                name = ref + 1 if obj == 'atom' else f'{ref[0] + 1}-{ref[1] + 1}'
+                log.append(LogRecord(
+                    'v3000:collection-duplicate-member', (),
+                    f'{obj} {name} is in two collections; the first is kept and MDLV30/{tag} '
+                    f'does not apply to it', LOST))
 
 
 def _coord(value):
@@ -754,6 +759,11 @@ def emit_v3000(mol, sgroups=None, *, title=None, program='', comment='',
     relative = any(kind != 1 for kind, _ in groups)
     configured = any(mol.parity_of(sid) for sid in sids)
     chiral = 1 if configured and not relative else 0
+    if chiral and any(mol.parity_of(sid) and mol.stereo_group_of(sid) == (0, 0) and mol.stereo_is_live(sid)
+                      for sid in sids):
+        out.append(LogRecord('v3000:unlabelled-sign-flag', (),
+                             'chiral flag 1 written for configurations in no collection; readers take '
+                             'them as absolute (ABS), which chython does not assume'))
 
     lines = [title[:80], program[:80], comment[:80],
              f'  0  0  0  0  0  0            999 {V3000_STAMP}']
@@ -836,6 +846,13 @@ def emit_v3000(mol, sgroups=None, *, title=None, program='', comment='',
             if not isinstance(member, tuple):
                 if member in position:
                     atom_refs.append(position[member])
+                continue
+            anchor = mol.stereo_group_anchor_of(member)
+            unit = None if anchor is None else mol.unit_of(anchor)
+            if unit is not None and unit['kind'] in (SU_ATROPISOMER, SU_HELICAL):
+                # An atropisomer is written on its anchor pivot and a helix on its anchoring fjord atom,
+                # an atom member; a bond collection names a double bond in the specification.
+                atom_refs.append(position[anchor])
                 continue
             spelling = axis_spelling(mol, member[0], member[1])
             if spelling is None:

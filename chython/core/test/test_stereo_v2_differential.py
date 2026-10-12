@@ -83,7 +83,7 @@ _AMIDES_AND_CARBONYLS = [
     'CC(=O)CC', 'CC=O', 'CC(=O)O', 'CC(=O)OC',
 ]
 
-_IMINES = ['CC=NO', 'CCC(C)=NO', 'c1ccccc1C=NO', 'CC=NC', 'CC=NN']
+_IMINES = ['CC=NO', 'CCC(C)=NO', 'c1ccccc1C=NO']
 
 _RINGS = ['C1=CCCCC1', 'C1=CCCCCC1', 'C1=CCCCCCC1', 'C1=CCCCCCCC1', 'C1CCCCC1', 'C1=CC=CC1']
 
@@ -113,6 +113,12 @@ DIVERGENT = [
     ('C[S](=O)c1ccccc1',
      'sulfoxide: V2 perceives no centre -- not carbon, and it has a double bond, so V2 refuses it '
      'twice over.  Sulfoxide chirality is ordinary published chemistry.'),
+    ('CC=NC',
+     'N-methyl imine: V2 reads its C=N as a cis/trans unit.  E and Z interconvert through nitrogen '
+     'inversion, so V3 refuses every C=N and N=N but an oxime\'s, its ether\'s and a nitrone\'s.'),
+    ('CC=NN',
+     'acetaldehyde hydrazone: V2 reads its C=N as a cis/trans unit; for V3 it is labile, as every C=N '
+     'with no oxygen on the nitrogen is.'),
     ('CC[S](C)=NC',
      'sulfilimine: V2 perceives no tetrahedral centre and reads the S=N as a CIS/TRANS axis -- both '
      'S and N form double bonds and the order is 2, so its cumulene walk accepts them.  The sulfur '

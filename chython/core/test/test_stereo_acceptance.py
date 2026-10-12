@@ -107,17 +107,48 @@ def test_an_amide_bond_is_never_a_cis_trans_unit(name, smi):
     ('acetaldoxime',        'CC=NO'),
     ('butan-2-one oxime',   'CCC(C)=NO'),
     ('benzaldehyde oxime',  'c1ccccc1C=NO'),
-    ('N-methyl imine',      'CC=NC'),
-    ('acetaldehyde hydrazone', 'CC=NN'),
+    ('acetaldoxime O-methyl ether', 'CC=NOC'),
 ])
 def test_a_carbon_nitrogen_double_bond_is_a_cis_trans_unit(name, smi):
-    """C=N is planar-stereogenic; C-N is not.  Order, not sp2 character.
+    """An oxime's C=N is planar-stereogenic; C-N is not.  Order, not sp2 character.  Every other C=N is
+    labile (`test_a_labile_double_bond_states_no_geometry`).
 
     Butan-2-one oxime and not ACETONE oxime: acetone's two methyls make its carbon terminal
     symmetric, so that molecule is a candidate and not stereogenic -- correctly, and it would
     make this test assert the opposite of what it means to.
     """
     assert SU_CIS_TRANS in _kinds(smi), f'{name} lost its C=N unit'
+
+
+# A LABILE DOUBLE BOND states no geometry: E and Z interconvert through nitrogen inversion or
+# tautomerism, so a sign on it names the drawing.  Every C=N and N=N but an oxime's, its ether's or a
+# nitrone's, and a C=C carrying an O-H or N-H: (E)-ethanimine, an N-methyl and an N-phenyl imine,
+# acetaldehyde hydrazone, diazene, azobenzene, an enol and a secondary enamine.
+@pytest.mark.parametrize('e,z', [
+    ('C/C=N/[H]',     'C/C=N\\[H]'),
+    ('C/C=N/C',       'C/C=N\\C'),
+    ('C/C=N/c1ccccc1', 'C/C=N\\c1ccccc1'),
+    ('C/C=N/N',       'C/C=N\\N'),
+    ('[H]/N=N/[H]',   '[H]/N=N\\[H]'),
+    ('c1ccccc1/N=N/c1ccccc1', 'c1ccccc1/N=N\\c1ccccc1'),
+    ('C/C=C/O',       'C/C=C\\O'),
+    ('C/C=C/NC',      'C/C=C\\NC'),
+])
+def test_a_labile_double_bond_states_no_geometry(e, z):
+    assert read_smiles(e) == read_smiles(z)
+    for text in (e, z):
+        assert _stereogenic(text, SU_CIS_TRANS) == [], text
+        first, second = _roundtrip(text)
+        assert first == second and '/' not in first and '\\' not in first, first
+
+
+@pytest.mark.parametrize('e,z', [
+    ('C/C=N/OC',          'C/C=N\\OC'),
+    ('C/C=[N+](/C)[O-]',  'C/C=[N+](\\C)[O-]'),
+    ('C/C=C/N(C)C',       'C/C=C\\N(C)C'),
+])
+def test_an_oxime_ether_a_nitrone_and_a_tertiary_enamine_keep_theirs(e, z):
+    assert read_smiles(e) != read_smiles(z)
 
 
 def test_the_amide_carbonyl_is_not_a_unit_for_want_of_a_second_substituent():
@@ -244,6 +275,82 @@ def test_a_sulfoxide_is_stereogenic_and_uses_the_same_lone_pair_slot():
     assert first == second and '[S@' in first
     # a sulfone has no lone pair left, so it is not a centre however its substituents differ
     assert _stereogenic('CC[S](=O)(=O)C', SU_TETRA) == []
+
+
+# A pyramidal centre whose lone pair is its fourth direction: P, As, Sb and S, Se, Te by the same
+# electron budget, and nitrogen only in a three-membered ring, where inversion is slow enough to
+# isolate the invertomers.  Public compounds: PAMP (the DIPAMP monomer), ethylmethylphenylarsine,
+# methyl phenyl selenoxide, 1-chloro-2-methylaziridine and 2-methyl-3-phenyloxaziridine.
+LONE_PAIR_CENTRES = [
+    ('PAMP',                         'COc1ccccc1[P@](C)c1ccccc1',  'P'),
+    ('ethylmethylphenylarsine',      'CC[As@](C)c1ccccc1',         'As'),
+    ('methyl phenyl selenoxide',     'C[Se@](=O)c1ccccc1',         'Se'),
+    ('ethyl methyl selenonium',      'CC[Se@+](C)c1ccccc1',        'Se'),
+    ('1-chloro-2-methylaziridine',   'Cl[N@]1C[C@@H]1C',           'N'),
+    ('2-methyl-3-phenyloxaziridine', 'C[N@]1O[C@@H]1c1ccccc1',     'N'),
+]
+
+
+def _mirror(smi):
+    return smi.replace('@@', '\0').replace('@', '@@').replace('\0', '@')
+
+
+@pytest.mark.parametrize('name,smi,element', LONE_PAIR_CENTRES)
+def test_a_lone_pair_is_the_fourth_direction_of_a_pyramidal_centre(name, smi, element):
+    mol = read_smiles(smi)
+    centre = [u for u in mol.stereogenic_units()
+              if u['kind'] == SU_TETRA and mol.atom(u['anchor']).atomic_symbol == element]
+    assert len(centre) == 1, name
+    assert centre[0]['parity'], f'{name}: the stated configuration was not stored'
+    assert mol != read_smiles(_mirror(smi)), f'{name}: the enantiomers compare equal'
+    first, second = _roundtrip(smi)
+    assert first == second and read_smiles(first) == mol, first
+    for _ in range(20):
+        spelling = format(mol, 'r')
+        assert read_smiles(spelling) == mol, spelling
+
+
+def test_an_aziridine_nitrogen_is_its_own_centre():
+    """Inverting only the nitrogen of 1-chloro-2-methylaziridine gives the other diastereomer."""
+    assert read_smiles('Cl[N@]1C[C@@H]1C') != read_smiles('Cl[N@@]1C[C@@H]1C')
+
+
+@pytest.mark.skipif(not inchi_library_loaded(), reason='libinchi is not loaded')
+@pytest.mark.parametrize('name,smi,element', LONE_PAIR_CENTRES)
+def test_the_inchi_carries_a_lone_pair_centre(name, smi, element):
+    ours = molecule_to_inchi(read_smiles(smi))
+    theirs = molecule_to_inchi(read_smiles(_mirror(smi)))
+    assert '/t' in ours and '?' not in ours.split('/t')[1].split('/')[0], ours
+    assert ours != theirs, (name, ours)
+
+
+@pytest.mark.skipif(not inchi_library_loaded(), reason='libinchi is not loaded')
+def test_a_ring_closure_on_a_lone_pair_centre_reads_by_the_implicit_hydrogen_rule():
+    """The lone pair holds the implicit hydrogen's written position, so the closure digit follows it.
+
+    Open Babel 3.1.0 gives this InChI for the same string; RDKit 2026.03.4 gives `/t3-,5+`, the
+    other nitrogen invertomer.
+    """
+    inchi = molecule_to_inchi(read_smiles('Cl[N@]1C[C@@H]1C'))
+    assert inchi == 'InChI=1S/C3H6ClN/c1-3-2-5(3)4/h3H,2H2,1H3/t3-,5-/m0/s1'
+
+
+@pytest.mark.parametrize('name,smi', [
+    ('triethylamine',                 'CCN(CC)CC'),
+    ('azetidine N',                   'CC(C)N1CCC1C'),
+    ('aziridine N-H',                 'N1CC1C'),
+    ('methylphenylphosphine P-H',     'C[PH]c1ccccc1'),
+    ('triphenylphosphine',            'P(c1ccccc1)(c1ccccc1)c1ccccc1'),
+    ('dimethyl selenide',             'C[Se]C'),
+    ('phosphinine',                   'c1ccpcc1'),
+    ('selenophene',                   'c1cc[se]c1'),
+])
+def test_no_lone_pair_centre_without_three_distinct_named_directions(name, smi):
+    """Inversion through an N-H or P-H, an amine outside a three-membered ring, a repeated group or
+    too few directions: no tetrahedral unit on the heteroatom."""
+    mol = read_smiles(smi)
+    assert not [u for u in mol.stereogenic_units()
+                if u['kind'] == SU_TETRA and mol.atom(u['anchor']).atomic_symbol in ('N', 'P', 'Se')], name
 
 
 # ============================================================================================

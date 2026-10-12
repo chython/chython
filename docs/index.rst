@@ -44,6 +44,21 @@ and those raise an :class:`ImportError` naming the extra when called rather than
 - 2D layout and depiction, with Jupyter support
 - Interoperability with RDKit, CDK, Indigo, OpenBabel and CDPKit
 
+**Not provided:**
+
+=================================  =========================================================================
+Feature                            What there is instead
+=================================  =========================================================================
+tautomer enumeration               ``standardize_isomers()`` places mobile hydrogens canonically: one
+                                   tautomer per compound, not the set of them
+maximum common substructure        none
+molecule-to-molecule mapping       ``molecule.as_query().get_mapping(other)``; ``MoleculeContainer`` has no
+                                   ``get_mapping`` of its own
+condensed graph of reaction        ``rxn.modeling_view()`` (:doc:`reactions`); there is no ``CGRContainer``
+random access into an SDF          ``SDFRead`` reads in sequence; ``tell()`` and no ``seek()`` or index
+CIP beyond rules 1a, 1b and 2      the centre stays ``None``; see :doc:`stereo`, Limits
+=================================  =========================================================================
+
 Input is treated as unreliable by default: a reader stores and logs what a file says, and repair is a
 pipeline you run afterwards. See :doc:`standardize`.
 

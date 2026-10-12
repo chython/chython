@@ -40,7 +40,7 @@ from ....core import INFO, LOST, REPAIRED, STEREO_ABS, STEREO_AND
 
 #: L-alanine, one tetrahedral centre at atom 2, drawn with a down wedge to atom 1.
 _ALANINE = ['L-alanine', '  chython', '',
-            '  6  5  0  0  1  0            999 V2000',
+            '  6  5  0  0  0  0            999 V2000',
             '    0.3572    1.0312    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
             '    0.3572    0.2062    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
             '    1.0717   -0.2062    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0',
@@ -56,7 +56,7 @@ _ALANINE = ['L-alanine', '  chython', '',
 #: (2R,3R)-butane-2,3-diol: TWO centres, at atoms 2 and 4, so one label can cover a pair and two
 #: labels can ask for two collections.
 _DIOL = ['(2R,3R)-butane-2,3-diol', '  chython', '',
-         '  6  5  0  0  1  0            999 V2000',
+         '  6  5  0  0  0  0            999 V2000',
          '    0.3572    1.0312    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
          '    0.3572    0.2062    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
          '    1.0717   -0.2062    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0',

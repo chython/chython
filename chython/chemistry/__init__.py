@@ -49,6 +49,7 @@ from ._salts import ComponentRow, DEFAULT_STABILIZER_CLASSES, SaltComposition, d
 from ._saturate import saturate
 from ._smarts import SmartsSyntaxError, compile_smarts
 from ._standardize import LogRecord, standardize
+from ._stereo_audit import Fix, Finding, StereoAudit, audit_stereo
 from ._tables import (ACID_ROLES, AbbreviationRow, AcidRow, Endpoint, RESONANCE_ROLES, Rule,
                       SALT_CLASSES, SALT_MATCHES, SaltRow, abbreviation_row, abbreviations_rows,
                       acids_rules, acids_rules_by_role, acids_table_text, groups_rules,
@@ -64,8 +65,9 @@ from ..core._core import (_set_canonicalize_fn, _set_featurizer_fns, _set_hydrog
 
 
 __all__ = ['ACID_ROLES', 'AbbreviationRow', 'ComponentRow', 'DEFAULT_STABILIZER_CLASSES',
-           'LogRecord', 'Peptide', 'PeptideBranch', 'Residue', 'SALT_CLASSES', 'SALT_MATCHES', 'SaltComposition',
-           'abbreviation_row', 'abbreviations_rows', 'alert_count',
+           'Finding', 'Fix', 'LogRecord', 'Peptide', 'PeptideBranch', 'Residue',
+           'SALT_CLASSES', 'SALT_MATCHES', 'SaltComposition', 'StereoAudit',
+           'abbreviation_row', 'abbreviations_rows', 'alert_count', 'audit_stereo',
            'calc_implicit', 'canonicalize', 'check_valence', 'crippen_logp', 'crippen_mr',
            'decompose_salts', 'expand_abbreviations', 'explicify_hydrogens', 'fix_resonance',
            'hydrogen_bond_acceptors_count',

@@ -109,3 +109,149 @@ def test_a_perimeter_thiele_does_not_take_keeps_its_bonds_and_its_configuration(
     molecule.canonicalize()
     assert molecule == before, 'canonicalize() changed the compound'
     assert not any(r.rule == 'kekule-form:canonical' for r in molecule.log)
+
+
+def test_an_amidine_geometry_does_not_depend_on_the_atom_order():
+    """A C=N is labile, so neither N-benzyl-N'-ethyl-N''-methylguanidine drawn E nor N,N-dimethylacetamidine
+    N-methylimine keeps a geometry, and each lands on one string from every atom order."""
+    for text in ('CN/C(/NCc1ccccc1)=N/CC', 'CN(C)/C(/C)=N/C'):
+        m = smiles(text)
+        out = set()
+        for _ in range(20):
+            r = smiles(format(m, 'r'))
+            canonicalize(r)
+            out.add(str(r))
+        assert len(out) == 1, out
+        assert '/' not in out.pop()
+
+
+def test_folding_an_explicit_hydrogen_keeps_the_configuration_from_every_atom_order():
+    """Bromochlorodeuteromethane drawn with an explicit [H]: folding it into the count re-expresses the sign
+    against the implicit direction, so each enantiomer lands on one molecule from every atom order."""
+    from .. import implicify_hydrogens
+    for text, folded in (('[H][C@]([2H])(Cl)Br', '[C@H]([2H])(Cl)Br'), ('[H][C@@]([2H])(Cl)Br', '[C@@H]([2H])(Cl)Br')):
+        m = smiles(text)
+        for _ in range(20):
+            r = smiles(format(m, 'r'))
+            implicify_hydrogens(r)
+            assert r == smiles(folded), (text, str(r))
+
+
+def test_an_and_member_perception_alone_does_not_mark_survives_canonicalize():
+    """3-Phenoxytropane with C3 in an AND group and its bridgeheads open is the exo and endo mixture: C3 is not
+    stereogenic by itself, but its label states something, so the string `str()` writes canonicalizes as the
+    drawing does."""
+    m = smiles('CN1[C@H]2CC[C@@H]1C[C@@H](C2)Oc1ccccc1 |&1:7|')
+    direct = m.copy()
+    canonicalize(direct)
+    written = smiles(str(m))
+    canonicalize(written)
+    assert str(direct) == str(written) and '&1' in str(direct)
+
+
+@mark.parametrize('drawings', [('CN1CC(=O)N=C1N', 'CN1CC(=O)NC1=N'),          # creatinine, CID 588
+                               ('NC1=NCCN1', 'N=C1NCCN1')])                # 2-aminoimidazoline, CID 66213
+def test_a_cyclic_guanidine_or_amidine_is_one_molecule_from_every_tautomer_and_order(drawings):
+    """A ring amidine with no C=C is placed like an acyclic one: an N-H beside a C=O keeps its hydrogen, and
+    the canonical ranks decide the rest, so creatinine lands on its 2-imino form."""
+    out = set()
+    for text in drawings:
+        m = smiles(text)
+        for _ in range(10):
+            r = smiles(format(m, 'r'))
+            canonicalize(r)
+            out.add(str(r))
+    assert len(out) == 1, out
+    if drawings[0].startswith('CN1CC(=O)'):
+        lactam = smiles(out.pop())
+        def carbonyl(x):
+            return lactam.element_of(x) == 6 and any(lactam.order_of(x, y) == 2 and lactam.element_of(y) == 8
+                                                     for y in lactam.neighbors_of(x))
+        assert any(lactam.element_of(n) == 7 and lactam.implicit_h_of(n) and
+                   any(carbonyl(x) for x in lactam.neighbors_of(n)) for n in lactam.atom_numbers)
+
+
+def test_a_sulfonimidamide_is_one_molecule_from_either_tautomer():
+    """N-methylbenzenesulfonimidamide: the S=N moves with the hydrogen as an amidine C=N does, the S=O stays,
+    and a configured sulfur keeps its sign, since its four neighbours are the same atoms either way."""
+    for pair in (('c1ccccc1S(=O)(=N)NC', 'c1ccccc1S(=O)(N)=NC'), ('c1ccccc1[S@](=O)(=N)NC', 'c1ccccc1[S@](=O)(N)=NC')):
+        out = set()
+        for text in pair:
+            m = smiles(text)
+            for _ in range(8):
+                r = smiles(format(m, 'r'))
+                canonicalize(r)
+                out.add(str(r))
+        assert len(out) == 1, out
+
+
+@mark.parametrize('text', ['OC(=O)CN(CC(O)=O)CCN(CC(O)=O)CC(O)=O.[Na].[Na]',        # disodium EDTA, CAS 139-33-3
+                           '[NH4+].[Na+].[Na+].OC(CC([O-])=O)(CC([O-])=O)C([O-])=O'])   # sodium ammonium citrate
+def test_a_salt_charges_the_same_sites_from_every_atom_order(text):
+    """Two of EDTA's four equivalent carboxyls take the sodium charges, and one of citrate's three carboxylates
+    takes the ammonium proton -- which ones is the canonical order's choice and never the atom numbering's."""
+    m = smiles(text)
+    out = set()
+    for _ in range(12):
+        r = smiles(format(m, 'r'))
+        canonicalize(r)
+        out.add(str(r))
+    assert len(out) == 1, out
+
+
+#: (name, PubChem CID, tautomer drawings, the canonical string or None when only convergence is asserted)
+AMIDINES = [
+    ('creatinine', 588, ['CN1CC(=O)N=C1N', 'CN1CC(=O)NC1=N'], 'C1(NC(=N)N(C)C1)=O'),
+    ('2-aminoimidazoline', 66213, ['NC1=NCCN1', 'N=C1NCCN1'], None),
+    ('2-amino-1,4,5,6-tetrahydropyrimidine', 69625, ['NC1=NCCCN1', 'N=C1NCCCN1'], None),
+    ('glycocyamidine', 10979, ['NC1=NC(=O)CN1', 'N=C1NC(=O)CN1', 'NC1=NCC(=O)N1'], 'N1C(=N)NCC1=O'),
+    ('isocytosine', 66950, ['Nc1nccc(=O)[nH]1', 'NC1=NC(=O)C=CN1', 'N=C1NC=CC(=O)N1', 'Nc1nc(O)ccn1'],
+     'O=C1NC(=NC=C1)N'),
+    ('cytosine', 597, ['Nc1cc[nH]c(=O)n1', 'N=c1cc[nH]c(=O)[nH]1', 'NC1=NC(=O)NC=C1'], 'O=C1NC=CC(N)=N1'),
+    ('2-aminopyridine', 10439, ['Nc1ccccn1', 'N=C1C=CC=CN1'], 'c1cccnc1N'),
+    ('2-aminobenzimidazole', 13624, ['Nc1nc2ccccc2[nH]1', 'N=C1Nc2ccccc2N1'], 'c1ccc2c(c1)nc(N)[nH]2'),
+    ('acetamidine', 67170, ['CC(=N)N', 'CC(N)=N'], None),
+    ('N-methylacetamidine', 81059, ['CC(=N)NC', 'CC(=NC)N'], None),
+    ('benzamidine', 2332, ['NC(=N)c1ccccc1', 'N=C(N)c1ccccc1'], None),
+    ("N,N'-diphenylformamidine", 7535, ['C(=Nc1ccccc1)Nc1ccccc1', 'C(Nc1ccccc1)=Nc1ccccc1'], None),
+    ('guanidine', 3520, ['NC(N)=N', 'N=C(N)N'], None),
+    ('methylguanidine', 10111, ['CNC(N)=N', 'CN=C(N)N'], None),
+    ('creatine', 586, ['CN(CC(=O)O)C(N)=N', 'CN(CC(O)=O)C(=N)N'], None),
+    ('L-arginine', 6322, ['N[C@@H](CCCNC(N)=N)C(=O)O', 'N[C@@H](CCCN=C(N)N)C(=O)O'], None),
+    ('metformin', 4091, ['CN(C)C(=N)NC(N)=N', 'CN(C)C(N)=NC(N)=N', 'CN(C)C(=N)N=C(N)N'], None),
+    ('dicyandiamide', 10005, ['N#CN=C(N)N', 'N#CNC(N)=N'], None),
+    ('amiloride', 16231, ['NC(=N)NC(=O)c1nc(Cl)c(N)nc1N', 'NC(N)=NC(=O)c1nc(Cl)c(N)nc1N'], None),
+]
+
+
+@mark.parametrize('name, cid, texts, expected', AMIDINES, ids=[row[0] for row in AMIDINES])
+def test_an_amidine_or_guanidine_is_one_molecule_from_every_tautomer_and_drawing(name, cid, texts, expected):
+    """Every tautomer, in random atom orders, aromatic and Kekule, gives one canonical string, which reads back
+    to itself.  A conjugated ring takes the amino form -- an exocyclic imine hands its hydrogen back to the
+    ring (`isomers:exocyclic-imine`) -- and a ring with no C=C keeps an N-H beside its C=O."""
+    out = set()
+    for text in texts:
+        for m in drawings(text, 8):
+            canonicalize(m)
+            out.add(str(m))
+    assert len(out) == 1, out
+    [canonical] = out
+    if expected is not None:
+        assert canonical == expected
+    back = smiles(canonical)
+    canonicalize(back)
+    assert str(back) == canonical
+
+
+def test_an_exocyclic_imine_on_a_conjugated_ring_is_logged():
+    m = smiles('N=C1C=CC=CN1')
+    canonicalize(m)
+    assert str(m) == 'c1cccnc1N'
+    assert [r.atoms for r in m.log if r.rule == 'isomers:exocyclic-imine'] == [(1, 2, 7)]
+
+
+def test_an_amidoxime_keeps_its_oxime():
+    """A ring imine nitrogen bearing an oxygen is not handed over: 2-pyridone oxime stays an oxime."""
+    m = smiles('ON=C1C=CC=CN1')
+    canonicalize(m)
+    assert not [r for r in m.log if r.rule == 'isomers:exocyclic-imine']

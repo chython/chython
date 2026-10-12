@@ -156,6 +156,85 @@ cdef Py_ssize_t _classify(uint64_t *key, uint32_t *idx, uint32_t *tmp, uint32_t 
     return classes
 
 
+cdef Py_ssize_t _classify_keys(uint64_t *key, uint64_t *sk, uint64_t *tk, uint32_t n,
+                               uint32_t *out) noexcept nogil:
+    """`_classify` without the index indirection: the same dense classes, numbered by ascending key.
+
+    A contiguous copy of the keys is sorted -- insertion runs of 16, then bottom-up merges -- and
+    deduplicated, and each atom's class is its key's position among the distinct keys.  `sk` and `tk`
+    are `n` words of scratch each.
+    """
+    cdef Py_ssize_t total = n, width = 16, i, j, mid, right, li, ri, k, classes, lo, hi, m
+    cdef uint64_t *src = sk
+    cdef uint64_t *dst = tk
+    cdef uint64_t *swap
+    cdef uint64_t x
+    memcpy(sk, key, <size_t> n * sizeof(uint64_t))
+    i = 0
+    while i < total:
+        right = i + width
+        if right > total:
+            right = total
+        for j in range(i + 1, right):
+            x = src[j]
+            k = j
+            while k > i and src[k - 1] > x:
+                src[k] = src[k - 1]
+                k -= 1
+            src[k] = x
+        i = right
+    while width < total:
+        i = 0
+        while i < total:
+            mid = i + width
+            if mid > total:
+                mid = total
+            right = i + 2 * width
+            if right > total:
+                right = total
+            li = i
+            ri = mid
+            k = i
+            while li < mid and ri < right:
+                if src[ri] < src[li]:
+                    dst[k] = src[ri]
+                    ri += 1
+                else:
+                    dst[k] = src[li]
+                    li += 1
+                k += 1
+            while li < mid:
+                dst[k] = src[li]
+                li += 1
+                k += 1
+            while ri < right:
+                dst[k] = src[ri]
+                ri += 1
+                k += 1
+            i += 2 * width
+        swap = src
+        src = dst
+        dst = swap
+        width *= 2
+    classes = 0
+    for i in range(total):
+        if i == 0 or src[i] != src[classes - 1]:
+            src[classes] = src[i]
+            classes += 1
+    for i in range(total):
+        x = key[i]
+        lo = 0
+        hi = classes
+        while lo < hi:
+            m = (lo + hi) >> 1
+            if src[m] < x:
+                lo = m + 1
+            else:
+                hi = m
+        out[i] = <uint32_t> (lo + 1)
+    return classes
+
+
 cdef Py_ssize_t compute_atoms_order(Structure structure, uint32_t *rank,
                                     uint32_t *seed) noexcept nogil:
     """Write each atom's 1-based class into `rank`; return the class count, -1 on failure.
@@ -185,16 +264,16 @@ cdef Py_ssize_t compute_atoms_order(Structure structure, uint32_t *rank,
             maxdeg = d
 
     # one allocation carved into six spans: u64 first so the u32 spans stay aligned
-    cdef char *block = <char *> malloc(<size_t> (n + maxdeg) * sizeof(uint64_t)
-                                       + <size_t> 4 * n * sizeof(uint32_t))
+    cdef char *block = <char *> malloc(<size_t> (3 * n + maxdeg) * sizeof(uint64_t)
+                                       + <size_t> 2 * n * sizeof(uint32_t))
     if block is NULL:
         return -1
     cdef uint64_t *key = <uint64_t *> block
-    cdef uint64_t *nb = key + n
+    cdef uint64_t *sk = key + n
+    cdef uint64_t *tk = sk + n
+    cdef uint64_t *nb = tk + n
     cdef uint32_t *cur = <uint32_t *> (nb + maxdeg)
     cdef uint32_t *nxt = cur + n
-    cdef uint32_t *idx = nxt + n
-    cdef uint32_t *tmp = idx + n
 
     if seed is NULL:
         for v in range(n):
@@ -202,7 +281,7 @@ cdef Py_ssize_t compute_atoms_order(Structure structure, uint32_t *rank,
     else:
         for v in range(n):
             key[v] = <uint64_t> seed[v]
-    classes = _classify(key, idx, tmp, n, cur)
+    classes = _classify_keys(key, sk, tk, n, cur)
 
     rounds = 0
     while classes < <Py_ssize_t> n and rounds < <Py_ssize_t> n:
@@ -215,7 +294,7 @@ cdef Py_ssize_t compute_atoms_order(Structure structure, uint32_t *rank,
                 d += 1
             _sort_words(nb, d)
             key[v] = _xxh64(nb, d, <uint64_t> cur[v])
-        newclasses = _classify(key, idx, tmp, n, nxt)
+        newclasses = _classify_keys(key, sk, tk, n, nxt)
         if newclasses <= classes:  # fixed point, or a collision merged classes: keep the finer
             break
         classes = newclasses

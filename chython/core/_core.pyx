@@ -55,6 +55,8 @@ Fragments, in include order:
                       extremal labelling of the refinement tree (mol_canonical_order)
   _stereo             the derived stereo unit table (SEG_STEREO_UNIT) and the perception that
                       fills it: which atoms and bonds could carry a configuration
+  _stereo_meaning     what a stereo labelling states, and the least labelling stating it: the
+                      identity of an enhanced-stereo drawing. AFTER _stereo, whose views it reads
   _cip                CIP descriptor assignment: the shared hash-consed digraph, the rule 1a/1b/2
                       ranking of a stereo unit's directions, and the letter that ranking implies.
                       AFTER _stereo, whose unit table it reads and whose translate_parity it calls
@@ -139,6 +141,7 @@ include "_sssr.pxi"
 include "_morgan.pxi"
 include "_canonical.pxi"
 include "_stereo.pxi"
+include "_stereo_meaning.pxi"
 include "_cip.pxi"
 include "_inchi.pxi"
 include "_query_arena.pxi"

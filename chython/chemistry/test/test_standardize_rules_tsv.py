@@ -98,7 +98,7 @@ def test_row_counts():
     and `DELETED` say which rows collapsed into which, and the three rows past the port -- `groups:82` to
     `groups:84`, the neutral over-valent nitrogen written Kekule -- are gated by
     `test_standardize_overvalent_nitrogen.py`."""
-    assert len(GROUPS) == 85
+    assert len(GROUPS) == 86
     assert len(METALS) == 19
 
 
@@ -143,8 +143,9 @@ def test_z3_is_gone_where_the_port_ruled_it_z5_or_z6():
         assert translated in emitted, f'no row carries the translation of {original!r}'
         if group != 'A':
             assert 'z3' not in translated, f'{original!r} is group {group} but kept a `z3`'
-    assert sum(r.smarts.count('z3') for r in GROUPS) == 11, (
-        'group A is 14 primitives, three of them on rows that merged into two')
+    assert sum(r.smarts.count('z3') for r in GROUPS) == 12, (
+        'group A is 14 primitives, three of them on rows that merged into two; the twelfth is the sp '
+        'nitrogen of groups:85, a diazonium')
     assert sum(r.smarts.count('z5') for r in GROUPS) == 15, (
         'group C is 15, one of them duplicated and the duplicate absorbed by a merge')
     assert sum(r.smarts.count('z6') for r in GROUPS) == 7

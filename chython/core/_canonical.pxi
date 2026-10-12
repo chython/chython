@@ -79,10 +79,14 @@
 # calls `mol_automorphisms` at each tree node, and each call may spend CANON_MAX_NODES_CALL. It
 # costs no answer: a search that finds the allowance spent truncates, and a truncated orbit
 # partition only turns the prune off (`use_orbits`), so the tree walks more and the node budget
-# below stays the one hard limit. The whole labelling gets what one call gets.
+# below stays the one hard limit. The whole labelling gets what one call gets, or CANON_ORBIT_WORK_PAIR
+# per atom pair when that is more: a search costs about n candidates per node and a tree path is up to
+# n nodes deep, so a fixed allowance runs out on a large symmetric molecule and the unpruned tree is
+# exponential.  Measured: a 1457-atom neopentane dendrimer spends 128 n^2 in 2.7 s.
 DEF CANON_MAX_NODES_SEARCH = 100000
 DEF CANON_MAX_NODES_CALL = 20000000
 DEF CANON_ORBIT_WORK = 20000000
+DEF CANON_ORBIT_WORK_PAIR = 256
 
 # A typed global rather than a DEF, like Q_NO_SLOT on the query side: the search compares against
 # it inside `nogil`, and a DEF's value is a Python int there.
@@ -151,12 +155,13 @@ cdef canon_prepare_fn _canon_prepare_hook = NULL
 # An explicit ABS label is in identity: a configured unit in no collection is a sign of unknown
 # reliability, and `C[C@H](O)CC |a:1|` is not `C[C@H](O)CC`.
 #
-#   * `_canon_group_hook(structure, mode, pos, out, pin)` returns the tail's length in words, 0 when
+#   * `_canon_group_hook(structure, mode, pos, out, colour)` returns the tail's length in words, 0 when
 #     the mode counts no member.  With `pos` (a discrete 1-based colouring) and `out` it writes the
 #     tail: per member two words, `kind << 62 | rlo << 31 | rhi` and `lo << 32 | hi`, sorted ascending,
 #     where `lo`/`hi` are the 0-based positions of the atoms the member is named on and `(rlo, rhi)` is
 #     the smallest `(lo, hi)` of the member's collection.  Kind and partition, never the stored id.  With
-#     `pin` it marks every named atom 2 where the byte is still 0, `unnamed_out`'s frame-member code.
+#     `colour` (n words, zeroed by the caller) it writes at every named atom `2 * byte + single + 1`,
+#     `single` 1 for a member named on one atom, and CANON_GROUP_CLASH where two keys name one atom.
 #   * `_canon_group_span_hook(structure, mode, comp)` is True when one collection has members in two
 #     components; the record is then searched whole, since a per-component key cannot see the link.
 #   * `_canon_group_phase_hook(structure, mode, pos, digits, flip)` puts each AND collection's
@@ -173,9 +178,12 @@ cdef enum:
     CANON_GROUPS_NONE = 0
     CANON_GROUPS_IDENTITY = 1
     CANON_GROUPS_WRITTEN = 2
+    CANON_GROUP_KEYS = 514          # `colour` values 0 .. 512, and the clash
+    CANON_GROUP_CLASH = 513
+    CANON_GROUP_ATOM_LIMIT = 2000000  # (4n + 4) * CANON_GROUP_KEYS + n fits in 32 bits
 
 ctypedef size_t (*canon_group_fn)(Structure structure, uint32_t mode, uint32_t *pos, uint64_t *out,
-                                  uint8_t *pin) noexcept nogil
+                                  uint32_t *colour) noexcept nogil
 ctypedef bint (*canon_group_span_fn)(Structure structure, uint32_t mode,
                                      const uint32_t *comp) noexcept nogil
 ctypedef void (*canon_group_phase_fn)(Structure structure, uint32_t mode, uint32_t *pos, uint32_t *digits,
@@ -603,7 +611,7 @@ cdef int mol_automorphisms(Structure structure, uint32_t *seed,
 
     `work` is a caller's running candidate allowance shared across calls, or NULL for none: each pair
     search gets the smaller of CANON_MAX_NODES_SEARCH and what is left, its spend is deducted, and an
-    empty allowance truncates.  `_canon_branch` passes CANON_ORBIT_WORK per canonical call.
+    empty allowance truncates.  `_canon_branch` passes its call's allowance (`_canon_order`).
     """
     cdef uint32_t n = structure.header.atom_count
     cdef uint32_t *ptr
@@ -1036,6 +1044,36 @@ cdef inline uint32_t *_canon_pinned(uint32_t n, uint32_t *pcls, uint8_t *unnamed
     return pcls
 
 
+cdef void _canon_group_coloured(Structure structure, canon_ctx_t *ctx, bint all_named) noexcept nogil:
+    """`ctx.pcls`, `cls * 4 + digit` per atom, refined by the stereo groups for the orbit prune.
+
+    The prune may use any group of automorphisms that preserve the leaf certificate.  One that
+    preserves the parity digits, every unnamed frame atom and every stored group byte is such a group:
+    it carries the decorated molecule onto itself, so the parity and group tails cannot move.  So each
+    atom a member is named on is coloured by that member's byte, and n copies of one component under
+    one AND group keep the copy swaps, which prune the n! labellings to one.  An unnamed frame atom, and
+    an atom two keys name, takes a colour of its own.  The digits are the drawn ones, not the phase
+    agreement codes: agreement ties an AND group of two R and two S members, and a symmetry preserving
+    it need not preserve the configuration or its inverse.  Over `CANON_GROUP_ATOM_LIMIT` atoms the
+    words do not fit and every named atom takes a colour of its own.
+    """
+    cdef uint32_t n = ctx.n, s
+    cdef uint32_t *colour = ctx.sscratch        # free once the stereo hook has returned
+    cdef uint32_t top = (4 * n + 4) * CANON_GROUP_KEYS
+    memset(colour, 0, <size_t> n * sizeof(uint32_t))
+    _canon_group_hook(structure, ctx.groups, NULL, NULL, colour)
+    if n > CANON_GROUP_ATOM_LIMIT:
+        for s in range(n):
+            if colour[s] or (not all_named and ctx.unnamed[s]):
+                ctx.pcls[s] = 4 * n + 8 + s
+        return
+    for s in range(n):
+        if colour[s] == CANON_GROUP_CLASH or (not all_named and ctx.unnamed[s]):
+            ctx.pcls[s] = top + s
+        else:
+            ctx.pcls[s] = ctx.pcls[s] * CANON_GROUP_KEYS + colour[s]
+
+
 cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uint32_t classes,
                        bint may_be_symmetric) except -1:
     """One node of the refinement tree. `cls` is an equitable colouring with `classes` classes.
@@ -1116,14 +1154,15 @@ cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uin
     cdef uint32_t *child
     cdef uint32_t *orbits
     cdef uint32_t *counts
+    cdef uint32_t *kept
     cdef uint8_t *seen
     cdef uint8_t *alive
     cdef char *block
     cdef uint64_t best_ind = 0
     cdef size_t u64_len = <size_t> 2 * n * sizeof(uint64_t)
-    cdef size_t u32_len = (4 * <size_t> n + 1) * sizeof(uint32_t)
-    cdef uint32_t v, s, c, target = 0, flags = 0
-    cdef Py_ssize_t child_classes
+    cdef size_t u32_len = (5 * <size_t> n + 1) * sizeof(uint32_t)
+    cdef uint32_t v, s, c, target = 0, flags = 0, ties = 0
+    cdef Py_ssize_t child_classes, kept_classes = 0
     cdef bint use_orbits = False, child_symmetric = False, first = True, all_named = True
 
     ctx.nodes += 1
@@ -1152,7 +1191,8 @@ cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uin
     # One block per node. u64 spans first so the u32 spans behind them stay aligned: the per
     # candidate indicator, and the cell-size buffer `_canon_indicator` writes through. Then the
     # individualising seed, the child colouring it refines to, this node's orbits, and the
-    # per-class member counts that locate the target cell. Then two byte maps -- which orbits have
+    # per-class member counts that locate the target cell, and the extremal child's colouring kept
+    # from pass one. Then two byte maps -- which orbits have
     # been used, indexed by orbit id, and which candidates survived the orbit prune, indexed by
     # slot. Class and orbit ids run 1 .. n, so those two spans need n + 1 entries.
     block = <char *> PyMem_Malloc(u64_len + u32_len + <size_t> 2 * n + 2)
@@ -1164,6 +1204,7 @@ cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uin
     child = seed + n
     orbits = child + n
     counts = orbits + n
+    kept = counts + n + 1
     seen = <uint8_t *> (block + u64_len + u32_len)
     alive = seen + n + 1
     try:
@@ -1189,14 +1230,10 @@ cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uin
                 with nogil:
                     all_named = _canon_stereo_hook(structure, cls, ctx.digits, ctx.sscratch,
                                                    ctx.unnamed)
-                    if ctx.group_len:
-                        # A collection's atoms are pinned too: a symmetry fixing every named atom
-                        # carries each collection onto itself, so the group tail cannot move.
-                        _canon_group_hook(structure, ctx.groups, NULL, NULL, ctx.unnamed)
-                        _canon_group_phase_hook(structure, ctx.groups, NULL, ctx.digits, NULL)
-                        all_named = False
                     for s in range(n):
                         ctx.pcls[s] = cls[s] * 4 + ctx.digits[s]
+                    if ctx.group_len:
+                        _canon_group_coloured(structure, ctx, all_named)
                 # Step two: WHERE THIS COLOURING CANNOT NAME A CONFIGURED UNIT'S FRAME, DO NOT PRUNE
                 # AT ALL.  An unnamed frame means two of the unit's directions share a colour, so the
                 # digit is the "configured, value unreadable" code and the refined colouring is blind
@@ -1237,14 +1274,14 @@ cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uin
                 # ANOTHER -- n copies of one symmetric component, where the copy swap is safe but is
                 # not a subgroup element -- which stays a refusal, since proving that swap
                 # parity-preserving needs the group elements the search does not hand back.
-                mol_automorphisms(structure, ctx.pcls if all_named else
+                mol_automorphisms(structure, ctx.pcls if all_named or ctx.group_len else
                                   _canon_pinned(n, ctx.pcls, ctx.unnamed), orbits, &flags,
                                   &ctx.orbit_work)
                 use_orbits = not (flags & CANON_BUDGET_EXCEEDED)
                 # A subgroup being trivial says nothing about a child's, whose marked set may be
                 # smaller, so only the unpinned group may answer for the subtree or for the root.
                 child_symmetric = not all_named or not (flags & CANON_ASYMMETRIC)
-            if ctx.nodes == 1 and not child_symmetric:
+            if ctx.nodes == 1 and not child_symmetric and not ctx.group_len:
                 ctx.asymmetric = True       # the root's own group, the only one worth reporting
         memset(seen, 0, <size_t> n + 1)
         memset(alive, 0, <size_t> n)
@@ -1274,10 +1311,18 @@ cdef int _canon_branch(Structure structure, canon_ctx_t *ctx, uint32_t *cls, uin
             if first or hashes[v] > best_ind:
                 best_ind = hashes[v]
                 first = False
+                ties = 1
+                kept_classes = child_classes
+                memcpy(kept, child, <size_t> n * sizeof(uint32_t))
+            elif hashes[v] == best_ind:
+                ties += 1
 
-        # Pass two: recurse into the extremal children only. The refinement runs a second time
-        # rather than being kept from pass one, which would cost a colouring per candidate held
-        # live across the whole subtree walk below it.
+        # Pass two: recurse into the extremal children only. A unique extremum recurses into the
+        # colouring pass one kept; otherwise the refinement runs a second time rather than being kept
+        # from pass one, which would cost a colouring per candidate held live across the subtree walk.
+        if ties == 1:
+            _canon_branch(structure, ctx, kept, <uint32_t> kept_classes, child_symmetric)
+            return 0
         for v in range(n):
             if not alive[v] or hashes[v] != best_ind:
                 continue
@@ -1388,7 +1433,7 @@ cdef int _canon_order(Structure structure, uint32_t *seed, uint32_t *order_out,
     ctx.atoms = structure.atoms()
     ctx.nodes = 0
     ctx.budget = budget
-    ctx.orbit_work = CANON_ORBIT_WORK
+    ctx.orbit_work = max(<uint64_t> CANON_ORBIT_WORK, <uint64_t> CANON_ORBIT_WORK_PAIR * n * n)
     ctx.have_best = False
     ctx.asymmetric = False
     ctx.exceeded = False

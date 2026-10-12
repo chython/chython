@@ -29,8 +29,8 @@ from ._smarts import compile_smarts
 from ..core import QueryContainer, read_smarts, read_smiles
 
 
-__all__ = ['ACID_ROLES', 'AbbreviationRow', 'AcidRow', 'CRIPPEN_CATCH_ALLS', 'CRIPPEN_ROLES',
-           'CRIPPEN_TYPES', 'CrippenRow', 'Endpoint', 'HBOND_ROLES', 'HBondRow',
+__all__ = ['ACID_ROLES', 'AbbreviationRow', 'AcidRow', 'AuditCode', 'CRIPPEN_CATCH_ALLS',
+           'CRIPPEN_ROLES', 'CRIPPEN_TYPES', 'CrippenRow', 'Endpoint', 'HBOND_ROLES', 'HBondRow',
            'MACCS_EXPECTATIONS', 'MACCS_KINDS', 'MACCS_PREDICATES', 'MACCS_UNSET_KEYS',
            'MaccsCorpusRow', 'MaccsRow', 'PHARMACOPHORE_ROLES', 'PharmacophoreRow', 'QedAlertRow',
            'RESONANCE_ROLES', 'ROTATABLE_ROLES', 'Rule',
@@ -44,8 +44,8 @@ __all__ = ['ACID_ROLES', 'AbbreviationRow', 'AcidRow', 'CRIPPEN_CATCH_ALLS', 'CR
            'pharmacophore_rules', 'pharmacophore_rules_by_role', 'qed_alerts', 'read_table',
            'resonance_rules', 'resonance_rules_by_role', 'resonance_table_text', 'rotatable_rules',
            'rotatable_rules_by_role', 'salts_rows', 'salts_rows_by_klass',
-           'salts_species_keys', 'salts_table_text', 'standardize_rules', 'sybyl_types',
-           'tpsa_rules']
+           'salts_species_keys', 'salts_table_text', 'standardize_rules', 'stereo_audit_codes',
+           'sybyl_types', 'tpsa_rules']
 
 
 class Rule(NamedTuple):
@@ -1177,3 +1177,32 @@ def covalent_radii() -> dict[int, float]:
             radii[z] = radius
         _COVALENT_RADII_CACHE['radii'] = radii
     return _COVALENT_RADII_CACHE['radii']
+
+
+# --- stereo_audit.tsv --------------------------------------------------------------------------- #
+
+class AuditCode(NamedTuple):
+    """One row of `tables/stereo_audit.tsv`.
+
+    `code` is the bare code; the qualified form is `stereo-audit:<code>`.  `severity` is one of
+    `error`, `warning`, `info`.  `template` is a `str.format` template with fields `{atoms}`,
+    `{because}`, `{group}`.  `explain` is a one-sentence explanation.
+    """
+    code: str
+    severity: str
+    template: str
+    explain: str
+
+
+_AUDIT_CACHE: dict[str, dict[str, AuditCode]] = {}
+
+
+def stereo_audit_codes() -> dict[str, AuditCode]:
+    """`stereo_audit.tsv` keyed by bare code; loaded on first use."""
+    if 'codes' not in _AUDIT_CACHE:
+        rows = read_table('stereo_audit.tsv')
+        for r in rows:
+            if r['severity'] not in ('error', 'warning', 'info'):
+                raise ValueError(f"stereo_audit.tsv: {r['code']} has severity {r['severity']!r}")
+        _AUDIT_CACHE['codes'] = {r['code']: AuditCode(**r) for r in rows}
+    return _AUDIT_CACHE['codes']

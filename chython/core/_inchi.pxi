@@ -486,6 +486,92 @@ def _ich_platform_options(str options) -> str:
     return ' '.join(prefix + token[1:] if token[0] in '-/' else token for token in options.split())
 
 
+cdef MoleculeContainer _ich_group_signs_omitted(MoleculeContainer mol):
+    """`mol` when its least labelling has no AND or OR member on a configured unit; else a copy at
+    that labelling's parities, each such member's omitted, and one record on `mol.log`."""
+    cdef Structure view = mol._live_view(True)
+    cdef uint32_t i, n = view.header.atom_count
+    cdef uint8_t *sg
+    cdef uint8_t *vpar
+    cdef uint8_t *spar
+    cdef list members = []
+    cdef MoleculeContainer copy
+    cdef str msg
+    if not structure_has(view, SEG_STEREO_GROUPS) or not structure_has(view, SEG_PARITY):
+        return mol
+    sg = structure_stereo_groups(view)
+    vpar = structure_parities(view)
+    for i in range(n):
+        if sg[i] and sg_kind(sg[i]) != SG_KIND_ABS and vpar[i]:
+            members.append(i)
+    if not members:
+        return mol
+    spar = structure_parities(mol._structure) if structure_has(mol._structure, SEG_PARITY) else NULL
+    copy = mol.copy()
+    with copy.edit() as e:
+        for i in range(n):
+            if sg[i] and sg_kind(sg[i]) != SG_KIND_ABS:
+                if spar is not NULL and spar[i]:
+                    e.set_parity(mol._numbers[i], 0)
+            elif vpar[i] != (spar[i] if spar is not NULL else 0):
+                e.set_parity(mol._numbers[i], vpar[i])
+    msg = ('atoms %s: standard InChI has no layer for an AND or OR group, and their parities are not '
+           'written' % ', '.join([str(mol._numbers[<uint32_t> i]) for i in members]))
+    # once per molecule: a second write of the same members adds nothing
+    if mol._log is None or not [r for r in mol._log if r.rule == 'inchi:enhanced-stereo-not-stated'
+                                and r.message == msg]:
+        mol._log_event('inchi:enhanced-stereo-not-stated', 'inchi', msg, mc_lost())
+    return copy
+
+
+cdef void _ich_kinds_not_represented(MoleculeContainer mol):
+    """Log once per kind, LOST, the configured units of a kind no InChI layer states: a helix and a
+    planar unit.  Neither anchors a tetrahedral centre, so `_ich_fill_stereo` writes nothing for them."""
+    cdef list units = mol.stereo_units()
+    cdef list lost
+    cdef str msg
+    cdef int kind
+    cdef str what, layer
+    for kind, what, layer in ((SU_HELICAL, 'helices', 'a helix'), (SU_PLANAR, 'planar units', 'planar chirality')):
+        lost = [u['anchor'] for u in units if u['kind'] == kind and mol.parity_of(u['anchor'])]
+        if not lost:
+            continue
+        msg = ('%s anchored at atoms %s: InChI has no layer for %s, and their configurations are '
+               'not written' % (what, ', '.join([str(a) for a in lost]), layer))
+        if mol._log is None or not [r for r in mol._log if r.rule == 'inchi:stereo-kind-not-represented'
+                                    and r.message == msg]:
+            mol._log_event('inchi:stereo-kind-not-represented', 'inchi', msg, mc_lost())
+
+
+cdef MoleculeContainer _ich_bridgeheads_stated(MoleculeContainer mol):
+    """`mol`, or a copy at the parities `structure_inchi_bridgeheads` gives it; a member of an AND or OR
+    group stays as `_ich_group_signs_omitted` left it."""
+    cdef Structure s = mol._structure
+    cdef Structure view = structure_inchi_bridgeheads(s)
+    cdef uint32_t i, n = s.header.atom_count
+    cdef uint8_t *vpar
+    cdef uint8_t *sg
+    cdef list changes = []
+    cdef MoleculeContainer copy
+    cdef object k
+    if view is s:
+        return mol
+    vpar = structure_parities(view)
+    sg = structure_stereo_groups(view) if structure_has(view, SEG_STEREO_GROUPS) else NULL
+    for i in range(n):
+        if sg is not NULL and sg[i] and sg_kind(sg[i]) != SG_KIND_ABS:
+            continue
+        if vpar[i] != structure_parity_at(s, i):
+            changes.append((mol._numbers[i], vpar[i]))
+    if not changes:
+        return mol
+    copy = mol.copy()
+    with copy.edit() as e:
+        for k in changes:
+            e.set_parity(k[0], k[1])
+    return copy
+
+
 def molecule_to_inchi(MoleculeContainer mol not None, *,
                       bint standard=True, str options=None) -> str:
     """Generate an InChI string from a MoleculeContainer.
@@ -504,6 +590,14 @@ def molecule_to_inchi(MoleculeContainer mol not None, *,
 
     What is discarded: atom-atom map numbers, enhanced stereo groups, atropisomers,
     XY coordinates.  See the spec for the full list.
+
+    Standard InChI has no layer for an AND or OR group, so a molecule with a live AND or OR member is
+    written from its least labelling (`structure_live_groups_view`) with every such member's parity
+    omitted, so equal molecules write one InChI; a LOST `inchi:enhanced-stereo-not-stated` record goes
+    to `mol.log` once.  A configured helix is omitted the same way, logged LOST
+    `inchi:stereo-kind-not-represented`.  Coupled bridgeheads are written as identity reads them
+    (`_ich_bridgeheads_stated`): camphor signed at C1 alone writes `/t7-,10+`, and an unrealisable pair is
+    logged LOST `stereo:bridgehead-unrealisable`.  Everything else is written as stored.
     """
     cdef ICH_Atom *atoms
     cdef ICH_Stereo0D *s0d
@@ -521,6 +615,10 @@ def molecule_to_inchi(MoleculeContainer mol not None, *,
         raise ImportError('libinchi not loaded; cannot generate InChI')
 
     mol._require_clean()
+    _ich_kinds_not_represented(mol)
+    mol._log_bridgehead_conflicts()
+    mol = _ich_group_signs_omitted(mol)
+    mol = _ich_bridgeheads_stated(mol)
     # Kekulise a copy if needed (input fidelity: never mutate the caller's molecule).
     mol = _ich_ensure_kekule(mol)
     n_atoms = mol._structure.header.atom_count
@@ -852,7 +950,8 @@ cdef int _ich_fill_stereo(MoleculeContainer mol, ICH_Stereo0D *s0d) except -1:
             rec.parity = <signed char> _ich_chython_to_inchi(p, ICH_ALLENE_FLIP)
             n_stereo += 1
 
-        # SU_ATROPISOMER: no InChI layer; skip silently.
+        # SU_ATROPISOMER: no InChI layer; skip silently.  SU_HELICAL and SU_PLANAR: none either, logged
+        # by `_ich_kinds_not_represented`.
 
     return n_stereo
 

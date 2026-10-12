@@ -189,6 +189,14 @@ cdef enum:
     SMI_DIR_DOWN = 2
 
 
+cdef enum:
+    # `smi_bond_t.wedge`: a CXSMILES tail wedge, and one named both ways
+    SMI_WEDGE_NONE = 0
+    SMI_WEDGE_UP = 1
+    SMI_WEDGE_DOWN = 2
+    SMI_WEDGE_BOTH = 3
+
+
 cdef struct smi_atom_t:
     uint8_t element
     int8_t charge
@@ -224,6 +232,7 @@ cdef struct smi_atom_t:
     bint label_tail        # the offset is into the CXSMILES TAIL's bytes and not the body's: the
                            # tail's `$...$` field names labels too, and it is a separate `bytes`.
                            # Which string to slice is the only difference; the alias is the same fact
+    bint wavy              # the CXSMILES `w:` field starts a wavy bond here: configuration unknown
     uint32_t sid           # stable id in the built molecule
 
 
@@ -234,6 +243,9 @@ cdef struct smi_bond_t:
     uint32_t vpos
     uint8_t order          # as the string stated it; promotion may raise it to 4
     uint8_t dir_           # SMI_DIR_*, oriented from u
+    bint ct_unknown        # named by the CXSMILES `ctu:` field: cis/trans unknown
+    uint8_t wedge          # the CXSMILES `wU:`/`wD:` fields: SMI_WEDGE_*
+    bint wedge_v           # the wedge's narrow end is `v`, not `u`
 
 
 cdef struct smi_parse_t:
@@ -254,6 +266,7 @@ cdef struct smi_parse_t:
     uint32_t dative_arrows # `->` / `<-` tokens: order 8 is stored, the arrow's direction is not
     uint32_t sg_marks      # enhanced stereo group marks the tail placed, so the apply can be skipped
     uint32_t cip_marks     # CIP descriptors the tail stated, likewise
+    uint32_t wedge_marks   # bonds the tail's `wU:`/`wD:` fields name
     uint32_t open_atom[SMI_CLOSURES]
     uint32_t open_pos[SMI_CLOSURES]
     uint32_t open_at[SMI_CLOSURES]     # byte offset of the opening label, for the error message
@@ -297,6 +310,7 @@ cdef int smi_alloc(smi_parse_t *p, uint32_t n) except -1:
     p.dative_arrows = 0
     p.sg_marks = 0
     p.cip_marks = 0
+    p.wedge_marks = 0
     cdef uint32_t i
     for i in range(SMI_CLOSURES):
         p.open_live[i] = 0
@@ -1321,6 +1335,102 @@ cdef str smi_cx_name(bytes block, uint32_t i, uint32_t j):
     return block[i:k + 1].decode('ascii', 'replace') + '...'
 
 
+cdef int smi_cx_wavy(smi_parse_t *ps, uint32_t count, const char *s, uint32_t k, uint32_t j,
+                     bytes block, uint32_t i, object log) except -1:
+    """The `w:` field, `<atom>.<bond>` pairs: the configuration at each named atom is unknown.
+
+    Applied in `smi_stereo`, which skips a `@` at a wavy atom and a double bond with a wavy terminal.
+    """
+    cdef uint32_t idx = 0, bond_idx = 0, owner, local = 0
+    while k < j:
+        if not smi_cx_next_index(s, j, &k, &idx) or k >= j or s[k] != 46:     # `.`
+            log.append(mc_record('smiles:cx-field-not-applied', (),
+                                 'the CXSMILES field `%s` is malformed and the rest of it is not applied'
+                                 % smi_cx_name(block, i, j), mc_lost()))
+            return 0
+        k += 1
+        if not smi_cx_next_index(s, j, &k, &bond_idx):
+            log.append(mc_record('smiles:cx-field-not-applied', (),
+                                 'the CXSMILES field `%s` is malformed and the rest of it is not applied'
+                                 % smi_cx_name(block, i, j), mc_lost()))
+            return 0
+        owner = smi_cx_owner(ps, count, idx, &local)
+        if owner == count:
+            log.append(mc_record('smiles:cx-wavy-bad-index', (),
+                                 'the CXSMILES wavy-bond field names atom %d, but the string has %d atom(s); '
+                                 'the mark was dropped' % (idx, smi_cx_total(ps, count)), mc_lost()))
+        else:
+            ps[owner].atoms[local].wavy = True
+    return 0
+
+
+cdef int smi_cx_wedge(smi_parse_t *ps, uint32_t count, const char *s, uint32_t k, uint32_t j,
+                      uint8_t kind, bytes block, uint32_t i, object log) except -1:
+    """One `wU:` / `wD:` field, `<atom>.<bond>` pairs: bond `<bond>` is wedged with its narrow end at
+    `<atom>`.  Bonds count as `ctu:` counts them; applied in `smi_axis_wedges`."""
+    cdef uint32_t idx = 0, bond_idx = 0, owner, local = 0, c, base
+    cdef smi_bond_t *b
+    while k < j:
+        if not smi_cx_next_index(s, j, &k, &idx) or k >= j or s[k] != 46:     # `.`
+            log.append(mc_record('smiles:cx-field-not-applied', (),
+                                 'the CXSMILES field `%s` is malformed and the rest of it is not applied'
+                                 % smi_cx_name(block, i, j), mc_lost()))
+            return 0
+        k += 1
+        if not smi_cx_next_index(s, j, &k, &bond_idx):
+            log.append(mc_record('smiles:cx-field-not-applied', (),
+                                 'the CXSMILES field `%s` is malformed and the rest of it is not applied'
+                                 % smi_cx_name(block, i, j), mc_lost()))
+            return 0
+        owner = smi_cx_owner(ps, count, idx, &local)
+        base = 0
+        b = NULL
+        for c in range(count):
+            if bond_idx - base < ps[c].n_bonds:
+                if c == owner:
+                    b = ps[c].bonds + (bond_idx - base)
+                break
+            base += ps[c].n_bonds
+        if b is NULL or (b.u != local and b.v != local):
+            log.append(mc_record('smiles:cx-wedge-bad-index', (),
+                                 'the CXSMILES wedge `%d.%d` names no bond of that atom; the mark was '
+                                 'dropped' % (idx, bond_idx), mc_lost()))
+            continue
+        if b.wedge == SMI_WEDGE_NONE:
+            ps[owner].wedge_marks += 1
+            b.wedge = kind
+            b.wedge_v = b.v == local
+        elif b.wedge != kind or b.wedge_v != (b.v == local):
+            b.wedge = SMI_WEDGE_BOTH
+    return 0
+
+
+cdef int smi_cx_ctu(smi_parse_t *ps, uint32_t count, const char *s, uint32_t k, uint32_t j,
+                    bytes block, uint32_t i, object log) except -1:
+    """The `ctu:` field, bond indices in the order the string closes them: cis/trans unknown."""
+    cdef uint32_t idx = 0, c, base
+    cdef bint found
+    while k < j:
+        if not smi_cx_next_index(s, j, &k, &idx):
+            log.append(mc_record('smiles:cx-field-not-applied', (),
+                                 'the CXSMILES field `%s` is malformed and the rest of it is not applied'
+                                 % smi_cx_name(block, i, j), mc_lost()))
+            return 0
+        base = 0
+        found = False
+        for c in range(count):
+            if idx - base < ps[c].n_bonds:
+                ps[c].bonds[idx - base].ct_unknown = True
+                found = True
+                break
+            base += ps[c].n_bonds
+        if not found:
+            log.append(mc_record('smiles:cx-ctu-bad-index', (),
+                                 'the CXSMILES `ctu:` field names bond %d, but the string has %d bond(s); '
+                                 'the mark was dropped' % (idx, base), mc_lost()))
+    return 0
+
+
 cdef int smi_cx(smi_parse_t *ps, uint32_t count, bytes block, object log,
                 bint f_handled) except -1:
     """Apply the CXSMILES tail.  Radicals, stereo groups and atom labels are applied; every other
@@ -1362,6 +1472,7 @@ cdef int smi_cx(smi_parse_t *ps, uint32_t count, bytes block, object log,
     cdef uint32_t r_at = 0
     cdef bint have_r = False
     cdef bint have_group = False
+    cdef bint have_coords = False
     cdef char c
     while i + 1 < n:                                 # `n - 1` is the closing `|`
         c = s[i]
@@ -1433,6 +1544,14 @@ cdef int smi_cx(smi_parse_t *ps, uint32_t count, bytes block, object log,
             # they are stored absolute.  Decided after the loop, since the group may be written second.
             have_r = True
             r_at = i
+        elif c == 119 and i + 2 < j and (s[i + 1] == 85 or s[i + 1] == 68) and s[i + 2] == 58:
+            # `wU:` / `wD:` wedges
+            smi_cx_wedge(ps, count, s, i + 3, j, SMI_WEDGE_UP if s[i + 1] == 85 else SMI_WEDGE_DOWN,
+                         block, i, log)
+        elif c == 119 and i + 1 < j and s[i + 1] == 58:           # `w:` wavy bonds
+            smi_cx_wavy(ps, count, s, i + 2, j, block, i, log)
+        elif c == 99 and block[i:i + 4] == b'ctu:':               # `ctu:` cis/trans unknown
+            smi_cx_ctu(ps, count, s, i + 4, j, block, i, log)
         elif c == 111 or c == 38:                                 # `o<n>:` OR, `&<n>:` AND
             k = i + 1
             mult = smi_digits(s, j, &k, 4)
@@ -1449,10 +1568,26 @@ cdef int smi_cx(smi_parse_t *ps, uint32_t count, bytes block, object log,
                 smi_cx_group(ps, count, s, k + 1, j, SMI_SG_OR if c == 111 else SMI_SG_AND, mult,
                              block, i, log, 'CXSMILES')
         else:
+            if c == 40:                                           # `(...)` coordinates
+                have_coords = True
             log.append(mc_record('smiles:cx-field-not-applied', (),
                                  'the CXSMILES field `%s` is not applied' % smi_cx_name(block, i, j),
                                  mc_lost()))
         i = j
+    if have_coords:
+        # WITH COORDINATES A WEDGE IS READ FROM THEM, not by the coordinate-free rule, and these are
+        # not read; so the wedges state nothing this reader can apply.
+        taken = 0
+        for j in range(count):
+            for k in range(ps[j].n_bonds):
+                ps[j].bonds[k].wedge = SMI_WEDGE_NONE
+            taken += ps[j].wedge_marks
+            ps[j].wedge_marks = 0
+        if taken:
+            log.append(mc_record('smiles:cx-wedge-not-applied', (),
+                                 'the CXSMILES tail states %d wedge(s) beside a coordinates field, which '
+                                 'decides what a wedge means; the coordinates are not read, so neither '
+                                 'are the wedges' % taken, mc_lost()))
     if have_r:
         if have_group:
             log.append(mc_record('smiles:cx-relative-flag-redundant', (),
@@ -1726,7 +1861,7 @@ cdef MoleculeContainer smi_build(smi_parse_t *p):
     cdef smi_atom_t *a
     cdef smi_bond_t *b
     with mol.edit():
-        if p.chiral_count or p.dir_count:
+        if p.chiral_count or p.dir_count or p.wedge_marks:
             # `smi_stereo` writes parities into the SEALED arena -- a parity is read against the frame
             # perception derives, so the frame must exist first -- and a persistent segment is laid out
             # once.  So the segment is asked for HERE, where the layout is still open, on the same
@@ -1919,7 +2054,7 @@ cdef int smi_marks(smi_parse_t *p, MoleculeContainer mol, object log) except -1:
             a = p.atoms + i
             if a.sg_kind:
                 group = <int> a.sg_group
-                if group > STEREO_GROUP_MAX and a.sg_kind < 4:
+                if (group > STEREO_GROUP_MAX or group == 0) and a.sg_kind < 4 and a.sg_kind != SMI_SG_ABS:
                     group = 0
                     for j in range(n_remap):
                         if remap_kind[j] == a.sg_kind and remap_from[j] == a.sg_group:
@@ -1989,6 +2124,10 @@ cdef str smi_kind_name(uint8_t kind):
         return 'an allene centre'
     if kind == SU_ATROPISOMER:
         return 'an atropisomer pivot'
+    if kind == SU_HELICAL:
+        return 'a helix end'
+    if kind == SU_PLANAR:
+        return 'a planar unit'
     return 'a tetrahedral centre'
 
 
@@ -2031,6 +2170,38 @@ cdef inline void smi_perm_of(stereo_unit_t *u, uint32_t *want, uint32_t *perm) n
         else:
             for j in range(4):
                 if u.refs[j] == want[k] and not (used & (1u << j)):
+                    perm[k] = j
+                    used |= 1u << j
+                    break
+
+
+cdef inline void smi_pair_perm_of(stereo_unit_t *u, uint32_t *want, uint32_t *perm) noexcept nogil:
+    """`smi_perm_of` for an axis: `want` is two terminal pairs, and each pair maps onto the `refs`
+    pair of the same terminal.
+
+    The pairs are matched by a named member, since the centre may name either arm first -- a ring
+    closure on the centre puts the closing end first.  The unnamed slots are then consumed WITHIN the
+    pair, as `translate_stereo` and `smw_allene_order` consume them: consumed globally, the second
+    terminal's hydrogen lands in the first terminal's slot whenever the arms arrive swapped.  Every
+    perceived terminal has a named direction (`_terminal_pair`), so the match always decides.
+    """
+    cdef uint32_t i, j, k, p, base, used
+    cdef uint32_t owner = 0             # the `want` pair holding `refs[0:2]`
+    perm[0] = 0; perm[1] = 0; perm[2] = 0; perm[3] = 0
+    for i in range(4):
+        if want[i] == SU_NO_REF:
+            continue
+        if want[i] == u.refs[0] or want[i] == u.refs[1]:
+            owner = i >> 1
+        else:
+            owner = 1 - (i >> 1)
+        break
+    for p in range(2):
+        base = 0 if p == owner else 2
+        used = 0
+        for k in range(2 * p, 2 * p + 2):
+            for j in range(base, base + 2):
+                if not (used & (1u << j)) and u.refs[j] == want[k]:
                     perm[k] = j
                     used |= 1u << j
                     break
@@ -2132,7 +2303,7 @@ cdef int smi_allene_want(smi_parse_t *p, dict index_of, uint32_t centre, uint32_
     """The four directions of an allene configuration in the order the string wrote them.
 
     Two pairs, the chain arm the centre names FIRST leading -- the same shape ruling F26 gives the
-    stored `refs`, and `smi_perm_of` reconciles the two orders whichever way round they came out.
+    stored `refs`, and `smi_pair_perm_of` reconciles the two orders whichever way round they came out.
     The end exchange is the pair exchange and therefore EVEN (`_stereo.pxi`: "an allene's C2 axis
     performs it"), so a reader that got the two arms the other way round would still be right; the
     within-pair order is where the information is, and that is the one this takes from the string.
@@ -2173,7 +2344,7 @@ cdef int smi_allene_want(smi_parse_t *p, dict index_of, uint32_t centre, uint32_
 
 
 cdef uint32_t smi_marked_ref(smi_parse_t *p, dict parse_of, stereo_unit_t *u, uint32_t base,
-                             uint32_t terminal, uint8_t *dir_out, set consumed,
+                             uint32_t terminal, uint8_t *dir_out, bint *conflict, set consumed,
                              object log) except 0xFFFFFFFE:
     """Which of a pair's two refs carries a `/` or `\\`, as an index into `refs`.
 
@@ -2183,9 +2354,8 @@ cdef uint32_t smi_marked_ref(smi_parse_t *p, dict parse_of, stereo_unit_t *u, ui
     is the one used, so the caller can tell a direction this reader spent from one it never reached.
 
     Both refs marked is legal and usual -- `C(/F)(\\Cl)=C/Br` says one thing twice -- so the two are
-    compared and only a CONTRADICTION is reported.  The first marked ref is the answer either way:
-    when they agree the second is redundant, and when they disagree the string is broken and taking
-    the first is the only reading that does not invent a third.
+    compared.  When they agree the second is redundant; when they put both substituents on one side
+    (IUPAC ST-4.1) the string states nothing, `conflict` is set and the caller stores no parity.
     """
     cdef uint32_t k, bi, other
     cdef uint32_t found = SU_NO_REF
@@ -2205,9 +2375,10 @@ cdef uint32_t smi_marked_ref(smi_parse_t *p, dict parse_of, stereo_unit_t *u, ui
         elif d == dir_out[0]:
             # the two directions of one terminal must be opposite; equal means the string put both
             # substituents on the same side of the double bond, which no geometry has
+            conflict[0] = True
             log.append(mc_record('smiles:stereo-same-side', (),
                                 'atom %d puts both of its substituents on the same side of the double '
-                                'bond; the first direction is used' % (terminal + 1), mc_repaired()))
+                                'bond; no configuration is stored' % (terminal + 1), mc_lost()))
     return found
 
 
@@ -2231,8 +2402,9 @@ cdef int smi_stereo(smi_parse_t *p, MoleculeContainer mol, object log) except -1
     assertions in `test_inchi.py`).  Frame-relative, so the same sentence reads in any frame: parity
     1 means position 0 and position 2 are trans, and a within-pair swap flips it.
 
-    What is NOT applied is named in the log: an allene or atropisomer configuration, `@?`, a
-    direction on a bond no unit uses.  Nothing here raises.
+    A CXSMILES tail wedge configures an atropisomer axis or a helix (`smi_axis_wedges`).  What is NOT
+    applied is named in the log: `@?`, a direction on a bond no unit uses, a wedge on anything else.
+    Nothing here raises.
     """
     cdef Structure structure = mol._structure
     cdef dict index_of = mol._index_of
@@ -2246,6 +2418,7 @@ cdef int smi_stereo(smi_parse_t *p, MoleculeContainer mol, object log) except -1
     cdef uint8_t dy = SMI_DIR_NONE
     cdef uint8_t parity
     cdef bint wrote = False
+    cdef bint conflict = False
     cdef uint32_t total_dirs = 0
     cdef stereo_unit_t *units
     cdef stereo_unit_t *u
@@ -2274,6 +2447,12 @@ cdef int smi_stereo(smi_parse_t *p, MoleculeContainer mol, object log) except -1
             log.append(mc_record('smiles:stereo-unknown', (),
                                 'atom %d states an unknown configuration (`@?`); this arena has no state for '
                                 '"stated but unresolved" and none is stored' % (i + 1), mc_lost()))
+            continue
+        if a.wavy:
+            log.append(mc_record('smiles:cx-wavy-bond', (),
+                                'atom %d states a configuration and the CXSMILES `w:` field draws a wavy '
+                                'bond from it; the configuration is unknown and none is stored' % (i + 1),
+                                mc_lost()))
             continue
         slot = <uint32_t> index_of[a.sid]
         u = stereo_unit_of(structure, slot)
@@ -2335,7 +2514,10 @@ cdef int smi_stereo(smi_parse_t *p, MoleculeContainer mol, object log) except -1
                                 mc_lost()))
             continue
 
-        smi_perm_of(u, want, perm)
+        if u.kind == SU_ALLENE:
+            smi_pair_perm_of(u, want, perm)
+        else:
+            smi_perm_of(u, want, perm)
         parity = translate_parity(2 if a.chiral == SMI_CHIRAL_AT else 1, perm)
         structure_set_parity(structure, slot, parity)
         wrote = True
@@ -2356,9 +2538,19 @@ cdef int smi_stereo(smi_parse_t *p, MoleculeContainer mol, object log) except -1
             if partner == SU_NO_REF:
                 continue
             tpar = <uint32_t> parse_of[slot]
-            ix = smi_marked_ref(p, parse_of, u, 0, tpar, &dx, consumed, log)
-            iy = smi_marked_ref(p, parse_of, u, 2, <uint32_t> parse_of[partner], &dy, consumed, log)
-            if ix == SU_NO_REF and iy == SU_NO_REF:
+            conflict = False
+            ix = smi_marked_ref(p, parse_of, u, 0, tpar, &dx, &conflict, consumed, log)
+            iy = smi_marked_ref(p, parse_of, u, 2, <uint32_t> parse_of[partner], &dy, &conflict, consumed,
+                                log)
+            if ix == SU_NO_REF and iy == SU_NO_REF or conflict:
+                continue
+            bi = smi_find_bond(p, tpar, <uint32_t> parse_of[partner])
+            if bi != SMI_NONE and p.bonds[bi].ct_unknown or p.atoms[tpar].wavy \
+                    or p.atoms[<uint32_t> parse_of[partner]].wavy:
+                log.append(mc_record('smiles:cx-cis-trans-unknown', (),
+                                    'the double bond between atoms %d and %d is marked unknown by the '
+                                    'CXSMILES tail (`ctu:` or `w:`); its directions are not applied'
+                                    % (tpar + 1, <uint32_t> parse_of[partner] + 1), mc_lost()))
                 continue
             if ix == SU_NO_REF or iy == SU_NO_REF:
                 log.append(mc_record('smiles:stereo-one-sided', (),
@@ -2378,9 +2570,168 @@ cdef int smi_stereo(smi_parse_t *p, MoleculeContainer mol, object log) except -1
                                 '%d bond direction(s) name no configuration this molecule can hold; a `/` or '
                                 '`\\` states nothing on its own and they were dropped'
                                 % (total_dirs - <uint32_t> len(consumed)), mc_lost()))
+    if p.wedge_marks and smi_axis_wedges(p, structure, parse_of, log):
+        wrote = True
     if wrote:
         refresh_parity_features(structure)
     return 0
+
+
+cdef inline uint8_t smi_pivot_wedge(smi_parse_t *p, uint32_t e, uint32_t low, uint32_t high,
+                                    uint32_t *used) noexcept nogil:
+    """What the tail's wedges say at pivot `e`: SMI_WEDGE_UP, _DOWN, _BOTH, or _NONE.
+
+    UP when the ring bond to the lower-index neighbour `low` is wedged or the one to `high` hashed,
+    DOWN for the converse.  A wedge counts only with its narrow end at `e` and on a bond that is not
+    double, which takes no direction.
+    """
+    cdef uint8_t out = SMI_WEDGE_NONE, say
+    cdef uint32_t nb, bi, k
+    cdef smi_bond_t *b
+    for k in range(2):
+        nb = low if k == 0 else high
+        bi = smi_find_bond(p, e, nb)
+        if bi == SMI_NONE:
+            continue
+        b = p.bonds + bi
+        if b.wedge == SMI_WEDGE_NONE or b.order == 2 or (b.v == e) != b.wedge_v:
+            continue
+        used[0] += 1
+        if b.wedge == SMI_WEDGE_BOTH:
+            return SMI_WEDGE_BOTH
+        say = b.wedge if k == 0 else 3 - b.wedge
+        if out != SMI_WEDGE_NONE and out != say:
+            return SMI_WEDGE_BOTH
+        out = say
+    return out
+
+
+cdef inline uint8_t smi_helix_wedge(smi_parse_t *p, uint32_t e, uint32_t inner, bint inner_low,
+                                    uint32_t *used) noexcept nogil:
+    """`smi_pivot_wedge` for a helix end `e`: the one wedge on its inner-rim bond, narrow at the fusion
+    atom `inner`, read as the converse wedge at `e`.  Any bond order: the rim bond is aromatic or
+    either Kekule order."""
+    cdef uint32_t bi = smi_find_bond(p, e, inner)
+    cdef smi_bond_t *b
+    cdef uint8_t say
+    if bi == SMI_NONE:
+        return SMI_WEDGE_NONE
+    b = p.bonds + bi
+    if b.wedge == SMI_WEDGE_NONE or (b.v == inner) != b.wedge_v:
+        return SMI_WEDGE_NONE
+    used[0] += 1
+    if b.wedge == SMI_WEDGE_BOTH:
+        return SMI_WEDGE_BOTH
+    say = 3 - b.wedge
+    return say if inner_low else 3 - say
+
+
+cdef inline uint8_t smi_planar_wedge(smi_parse_t *p, uint32_t narrow, uint32_t wide,
+                                     uint32_t *used) noexcept nogil:
+    """The one wedge on bond `narrow`-`wide` drawn narrow at `narrow`, any bond order."""
+    cdef uint32_t bi = smi_find_bond(p, narrow, wide)
+    cdef smi_bond_t *b
+    if bi == SMI_NONE:
+        return SMI_WEDGE_NONE
+    b = p.bonds + bi
+    if b.wedge == SMI_WEDGE_NONE or (b.v == narrow) != b.wedge_v:
+        return SMI_WEDGE_NONE
+    used[0] += 1
+    return b.wedge
+
+
+cdef bint smi_axis_wedges(smi_parse_t *p, Structure structure, dict parse_of, object log) except -1:
+    """Apply the tail's wedges to the atropisomer axes, helices and planar units, by
+    `_smiles_write.pxi`'s AXIAL WEDGES tables read backwards.  True when a parity was stored; every
+    wedge no unit takes is logged."""
+    cdef uint32_t count = structure_stereo_unit_count(structure)
+    cdef stereo_unit_t *units = structure_stereo_units(structure)
+    cdef stereo_unit_t *u
+    cdef uint32_t k, partner, e, base, end, q0, q1, used = 0
+    cdef uint32_t ends[2]
+    cdef uint8_t say[2]
+    cdef uint32_t want[4]
+    cdef uint32_t perm[4]
+    cdef int ccw
+    cdef bint wrote = False
+    cdef uint8_t parity
+    for k in range(count):
+        u = &units[k]
+        if u.kind == SU_PLANAR and u.n_refs == 4:
+            smw_planar_bond(structure, u, &ends[0], &ends[1])
+            say[0] = smi_planar_wedge(p, <uint32_t> parse_of[ends[0]], <uint32_t> parse_of[ends[1]], &used)
+            if u.spare & SU_TWISTED:
+                # either terminal's ring bond: which terminal anchors the unit follows the atom order
+                partner = _shift_partner(csr_ptr(structure), csr_edges(structure), u.anchor)
+                say[1] = smi_planar_wedge(p, <uint32_t> parse_of[partner], <uint32_t> parse_of[u.refs[2]],
+                                          &used) if partner != SU_NO_REF else SMI_WEDGE_NONE
+                if say[0] == SMI_WEDGE_NONE:
+                    say[0] = say[1]
+                elif say[1] != SMI_WEDGE_NONE and say[1] != say[0]:
+                    say[0] = SMI_WEDGE_BOTH
+            if say[0] == SMI_WEDGE_NONE:
+                continue
+            if say[0] == SMI_WEDGE_BOTH:
+                log.append(mc_record('smiles:cx-wedge-contradictory', (),
+                                     'the CXSMILES wedge on the planar unit at atom %d states both '
+                                     'configurations; none is stored' % (parse_of[u.anchor] + 1), mc_lost()))
+                continue
+            parity = 1 if say[0] == SMI_WEDGE_UP else 2
+            for base in range(0, 4, 2):
+                if u.refs[base + 1] != SU_NO_REF and parse_of[u.refs[base]] > parse_of[u.refs[base + 1]]:
+                    parity = 3 - parity
+            structure_set_parity(structure, u.anchor, parity)
+            wrote = True
+            continue
+        if (u.kind != SU_ATROPISOMER and u.kind != SU_HELICAL) or u.n_refs != 4:
+            continue
+        partner = stereo_unit_partner(structure, u)
+        if partner == SU_NO_REF:
+            continue
+        ends[0] = <uint32_t> parse_of[u.anchor]
+        ends[1] = <uint32_t> parse_of[partner]
+        for end in range(2):
+            base = 2 * end
+            q0 = <uint32_t> parse_of[u.refs[base]]
+            q1 = <uint32_t> parse_of[u.refs[base + 1]]
+            if u.kind == SU_HELICAL:
+                say[end] = smi_helix_wedge(p, ends[end], q0, q0 < q1, &used)
+            if q0 < q1:
+                want[base] = u.refs[base]
+                want[base + 1] = u.refs[base + 1]
+            else:
+                want[base] = u.refs[base + 1]
+                want[base + 1] = u.refs[base]
+                q0, q1 = q1, q0
+            if u.kind == SU_ATROPISOMER:
+                say[end] = smi_pivot_wedge(p, ends[end], q0, q1, &used)
+        if say[0] == SMI_WEDGE_NONE and say[1] == SMI_WEDGE_NONE:
+            continue
+        # the pivot written first is the one with the lower index
+        e = 0 if ends[0] < ends[1] else 1
+        ccw = -1
+        if say[e] != SMI_WEDGE_NONE and say[e] != SMI_WEDGE_BOTH:
+            ccw = 1 if say[e] == SMI_WEDGE_UP else 0
+        if say[1 - e] != SMI_WEDGE_NONE and say[1 - e] != SMI_WEDGE_BOTH:
+            if ccw == -1:
+                ccw = 1 if say[1 - e] == SMI_WEDGE_DOWN else 0
+            elif ccw != (1 if say[1 - e] == SMI_WEDGE_DOWN else 0):
+                ccw = -2
+        if say[0] == SMI_WEDGE_BOTH or say[1] == SMI_WEDGE_BOTH or ccw < 0:
+            log.append(mc_record('smiles:cx-wedge-contradictory', (),
+                                 'the CXSMILES wedges on the %s between atoms %d and %d state both '
+                                 'configurations; none is stored'
+                                 % ('axis' if u.kind == SU_ATROPISOMER else 'helix', ends[0] + 1, ends[1] + 1),
+                                 mc_lost()))
+            continue
+        smi_pair_perm_of(u, want, perm)
+        structure_set_parity(structure, u.anchor, translate_parity(1 if ccw else 2, perm))
+        wrote = True
+    if used < p.wedge_marks:
+        log.append(mc_record('smiles:cx-wedge-not-applied', (),
+                             '%d CXSMILES wedge(s) name no atropisomer axis, helix or planar unit; a wedge is '
+                             'applied to those only, and these were dropped' % (p.wedge_marks - used), mc_lost()))
+    return wrote
 
 
 def read_smiles(text, log=None):
@@ -2537,7 +2888,7 @@ cdef MoleculeContainer smi_parse_build(smi_parse_t *p, bytes src, bytes tail, ob
                                'atom donates is not' % p.dative_arrows, mc_lost()))
     if p.sg_marks or p.cip_marks:
         smi_marks(p, mol, mylog)
-    if p.chiral_count or p.dir_count:
+    if p.chiral_count or p.dir_count or p.wedge_marks:
         # after the groups, which edit, because this writes into the arena the edit leaves
         smi_stereo(p, mol, mylog)
     smi_labels(p, src, tail, mol)

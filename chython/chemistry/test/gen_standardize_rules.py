@@ -187,17 +187,18 @@ DELETED = {'groups:87': 'groups:76'}
 # asserts a superset for this row and equality for the other ten; a second entry needs its own approval.
 WIDENED = frozenset(('metals:11',))
 
-# The rows written after the port, which no V2 rule stands behind: all three repair a NEUTRAL
+# The rows written after the port, which no V2 rule stands behind.  The first three repair a NEUTRAL
 # OVER-VALENT NITROGEN drawn Kekule, the spelling `kekule()` repairs in the reader whenever there is an
 # aromatic system to resolve and the ported table covered only for the radical (`groups:34`,
 # `groups:35`) and four-coordinate (`groups:10`, `groups:33`) cases.  `derive` does not know them and
-# would drop them.  Gated by their own `examples` cells and by `test_standardize_overvalent_nitrogen.py`;
-# they never fire on the V2 gate corpus, which is why `test_standardize_groups_port.py` lists them
-# UNREACHED.
+# would drop them.  `groups:85` charges a diazonium drawn neutral, C-N#N, whose inner nitrogen has four
+# bonds.  Gated by their own `examples` cells and by `test_standardize_overvalent_nitrogen.py`; they never
+# fire on the V2 gate corpus, which is why `test_standardize_groups_port.py` lists them UNREACHED.
 ADDED = {
     'groups:82': 'an N-oxide drawn as a hydroxyl on a nitrogen that already has a double bond',
     'groups:83': 'the same, half separated already, the oxygen holding the minus',
     'groups:84': 'a three-coordinate sp2 nitrogen with nothing to take a counter-charge: a cation',
+    'groups:85': 'a diazonium drawn neutral, the inner nitrogen four-bonded: a cation',
 }
 
 

@@ -18,11 +18,15 @@
 #
 """DEAD STEREO-GROUP MEMBERS: stored, ignored by identity, and never written.
 
-A member is dead when its unit is unconfigured or not stereogenic in any combination of AND phases. A whole
-group is dead when inverting its live members restates the molecule in every phase of the other AND groups:
-a meso pair under any kind. The reader keeps the byte; `str()` and every format spec write the molecule as if
-it were absent.
+A member is dead when its unit is unconfigured or not stereogenic in any combination of the context: the
+other AND and OR groups and the unconfigured stereogenic units. A whole group is dead when inverting its live
+members restates the molecule in every such combination: a meso pair under any kind. A labelling is rewritten
+to the least one stating the same mixture, and an ABS or unlabelled parity whose inversion leaves the mixture
+unchanged is cleared. The reader keeps the byte; `str()` and every format spec write the molecule as if it
+were absent.
 """
+import re
+
 from pytest import mark
 
 from chython.core import INFO, read_smiles, write_smiles
@@ -63,12 +67,34 @@ def test_the_written_string(text, written):
     assert str(read_smiles(text)) == written
 
 
-def test_a_pseudoasymmetric_member_between_two_and_collections_is_live():
-    """Pentane-2,3,4-triol: C3 is stereogenic in some combination of the two AND phases, so it stays."""
-    m = read_smiles('C[C@H](O)[C@H](O)[C@H](O)C |&1:1,&2:5,o1:3|')
-    assert m.dead_stereo_groups() == {}
-    assert (2, 1) in m.live_stereo_groups()
-    assert 'o1:' in str(m)
+#: (template, centre slots): pentane-2,3,4-triol and 2,3,4-trihydroxyglutaric acid, both symmetric chains
+TRIOL = ('C[C%sH](O)[C%sH](O)[C%sH](O)C', ('1', '3', '5'))
+GLUTARIC = ('OC(=O)[C%sH](O)[C%sH](O)[C%sH](O)C(=O)O', ('3', '5', '7'))
+FLIP = {'@': '@@', '@@': '@', '': ''}
+
+
+def both_orders(compound, signs, tail=''):
+    """`compound` with `signs` ('' for open) written from either end; `tail` names the forward slots."""
+    template, slots = compound
+    swap = dict(zip(slots, reversed(slots)))
+    backward = re.sub(r'(?<=[:,])\d+', lambda x: swap[x.group()], tail)
+    return (f'{template % signs} {tail}'.strip(),
+            f'{template % tuple(FLIP[x] for x in reversed(signs))} {backward}'.strip())
+
+
+ANY_TRIOL = [('@', '@', '@'), ('@', '@@', '@'), ('@', '@', '@@'), ('@@', '@', '@')]
+
+
+@mark.parametrize('signs', ANY_TRIOL)
+def test_an_or_member_between_two_and_collections_states_nothing(signs):
+    """Pentane-2,3,4-triol, C2 and C4 in two AND groups: each OR choice at C3 is all four diastereomers."""
+    plain = read_smiles(both_orders(TRIOL, (signs[0], '', signs[2]), '|&1:1,&2:5|')[0])
+    for text in both_orders(TRIOL, signs, '|&1:1,&2:5,o1:3|'):
+        m = read_smiles(text)
+        assert m == plain and hash(m) == hash(plain) and str(m) == str(plain), text
+        assert list(m.dead_stereo_groups()) == [(2, 1)], text
+        back = read_smiles(str(m))
+        assert back == m and str(back) == str(m), text
 
 
 def test_each_dead_member_is_one_info_record_where_the_tail_states_collections():
@@ -113,13 +139,15 @@ MESO_DIOL = ['C[C@H](O)C[C@H](O)C', 'O[C@@H](C)C[C@@H](C)O']
 
 @mark.parametrize('text', MESO_DIOL)
 @mark.parametrize('tail', ['|&1:1,4|', '|o1:1,4|', '|a:1,4|'])
-def test_a_group_over_a_meso_pair_is_dead(text, tail):
+def test_a_group_over_a_meso_pair_reads_as_absolute(text, tail):
+    """A label over a configuration that is its own mirror image states the drawn diastereomer and no
+    enantiomer, as ABS does; unlabelled is unknown, so it is not the unlabelled drawing."""
     plain = read_smiles(MESO_DIOL[0])
+    absolute = read_smiles(f'{MESO_DIOL[0]} |a:1,4|')
     m = read_smiles(f'{text} {tail}')
-    assert m == plain and hash(m) == hash(plain)
-    assert str(m) == str(plain) == 'O[C@@H](C)C[C@@H](C)O'
-    assert m.live_stereo_groups() == {}
-    assert sorted(m.dead_stereo_groups().popitem()[1]) == [2, 5]
+    assert m == absolute and hash(m) == hash(absolute) and m != plain
+    assert str(m) == 'O[C@@H](C)C[C@@H](C)O |a:1,4|'
+    assert m.live_stereo_groups() == {(1, 0): [2, 5]} and m.dead_stereo_groups() == {}
 
 
 @mark.parametrize('tail, other', [
@@ -146,9 +174,10 @@ def test_a_group_over_a_meso_pair_and_a_chiral_centre_is_live():
     assert first != read_smiles('C[C@H](O)C[C@H](O)C.C[C@H](N)CC |&1:1,4|')
 
 
-def test_only_the_meso_group_of_two_dies():
-    """meso-Pentane-2,4-diol and racemic ephedrine: the ephedrine group keeps canonical id 1 in every order."""
-    plain = read_smiles('C[C@H](O)C[C@H](O)C.C[C@H](NC)[C@@H](O)c1ccccc1 |&1:8,11|')
+def test_the_meso_group_of_two_reads_as_absolute():
+    """meso-Pentane-2,4-diol and racemic pseudoephedrine: the meso group reads as ABS and the pseudoephedrine
+    group keeps canonical id 1 in every order."""
+    plain = read_smiles('C[C@H](O)C[C@H](O)C.C[C@H](NC)[C@@H](O)c1ccccc1 |a:1,4,&1:8,11|')
     forms = [
         read_smiles('C[C@H](O)C[C@H](O)C.C[C@H](NC)[C@@H](O)c1ccccc1 |&1:1,4,&2:8,11|'),
         read_smiles('C[C@H](NC)[C@@H](O)c1ccccc1.C[C@H](O)C[C@H](O)C |&1:13,16,&2:1,4|'),
@@ -156,26 +185,88 @@ def test_only_the_meso_group_of_two_dies():
     ]
     for m in forms:
         assert m == plain and hash(m) == hash(plain) and str(m) == str(plain)
-        assert list(m.live_stereo_groups()) == [(3, 1)]
-        assert len(m.dead_stereo_groups()) == 1
-    assert str(plain) == 'c1cccc(c1)[C@@H](O)[C@H](NC)C.C[C@@H](O)C[C@H](C)O |&1:6,8|'
+        assert sorted(m.live_stereo_groups()) == [(1, 0), (3, 1)]
+        assert m.dead_stereo_groups() == {}
+    assert str(plain) == 'c1cccc(c1)[C@H](O)[C@@H](NC)C.C[C@@H](O)C[C@H](C)O |a:13,16,&1:6,8|'
 
 
 @mark.parametrize('text', ['C[C@H](O)[C@H](O)[C@H](O)C', 'C[C@H](O)[C@@H](O)[C@H](O)C'])
 @mark.parametrize('kind', ['&1', 'o1', 'a'])
-def test_a_group_over_every_centre_of_a_meso_triol_is_dead(text, kind):
-    """Both meso pentane-2,3,4-triols: the three centres inverted together are the same compound."""
+def test_a_group_over_every_centre_of_a_meso_triol_reads_as_absolute(text, kind):
+    """Both meso pentane-2,3,4-triols: the three centres inverted together are the same compound, so the group
+    states the diastereomer as ABS does, and not the unlabelled drawing."""
     m = read_smiles(f'{text} |{kind}:1,3,5|')
-    assert m == read_smiles(text) and str(m) == str(read_smiles(text))
-    assert m.live_stereo_groups() == {}
+    assert m == read_smiles(f'{text} |a:1,3,5|') and m != read_smiles(text)
+    assert list(m.live_stereo_groups()) == [(1, 0)]
 
 
-def test_a_group_is_dead_only_in_every_phase_of_the_other_and_groups():
-    """Pentane-2,3,4-triol, C2 and C4 drawn unlike: inverting o1:3 restates the like phase only, so it is live."""
-    for text in ('C[C@@H](O)[C@H](O)[C@@H](O)C', 'C[C@H](O)[C@H](O)[C@@H](O)C'):
-        m = read_smiles(f'{text} |&1:1,&2:5,o1:3|')
-        assert m.dead_stereo_groups() == {}, text
+@mark.parametrize('signs', ANY_TRIOL)
+def test_an_absolute_centre_between_two_and_collections_states_nothing(signs):
+    """`|a:3,&1:1,&2:5|` is `|&1:1,&2:5|` with C3 open, and its string reads back to itself."""
+    plain = read_smiles(both_orders(TRIOL, (signs[0], '', signs[2]), '|&1:1,&2:5|')[0])
+    for text in both_orders(TRIOL, signs, '|a:3,&1:1,&2:5|'):
+        m = read_smiles(text)
+        assert m == plain and str(m) == str(plain), text
         back = read_smiles(str(m))
         assert back == m and str(back) == str(m), text
+
+
+# --- a plain parity whose inversion restates the completions --------------------------------------------------
+
+@mark.parametrize('compound', [TRIOL, GLUTARIC], ids=['triol', 'trihydroxyglutaric'])
+@mark.parametrize('signs', [('@', '@', ''), ('@@', '@', '')])
+def test_a_centre_beside_an_open_one_is_kept(compound, signs):
+    """One end and the middle configured, the other end open: the middle inverted is another mixture."""
+    other = (signs[0], FLIP[signs[1]], '')
+    first = [read_smiles(t) for t in both_orders(compound, signs)]
+    second = [read_smiles(t) for t in both_orders(compound, other)]
+    assert first[0] == first[1] and str(first[0]) == str(first[1])
+    assert second[0] == second[1] and str(second[0]) == str(second[1])
+    assert first[0] != second[0] and str(first[0]) != str(second[0])
+    assert len(re.findall(r'@@?', str(first[0]))) == 2
+    for m in first + second:
+        assert str(read_smiles(str(m))) == str(m)
+
+
+@mark.parametrize('compound', [TRIOL, GLUTARIC], ids=['triol', 'trihydroxyglutaric'])
+@mark.parametrize('sign', ['@', '@@'])
+def test_a_middle_centre_between_two_open_ones_states_nothing(compound, sign):
+    """Both ends open: the completions of C2 and C4 are every diastereomer, whichever sign C3 has."""
+    plain = read_smiles(both_orders(compound, ('', '', ''))[0])
+    for text in both_orders(compound, ('', sign, '')):
+        m = read_smiles(text)
+        assert m == plain and hash(m) == hash(plain) and str(m) == str(plain), text
+        assert '@' not in str(m)
+
+
+@mark.parametrize('tail', ['|&1:1,6,11,16|', '|a:1,6,11,16|', ''])
+def test_both_enantiomers_drawn_apart_read_back_under_any_label(tail):
+    """trans-2-Methylcyclohexane-1-carboxylic acid and its enantiomer as two components: inverting all four
+    centres swaps the components, so an AND over all of them states the pair as ABS does, and either reads
+    back to itself; the unlabelled pair is another identity."""
+    pair = 'C[C@H]1CCCC[C@@H]1C(=O)O.C[C@@H]1CCCC[C@H]1C(=O)O'
+    m = read_smiles(f'{pair} {tail}'.strip())
     back = read_smiles(str(m))
     assert back == m and str(back) == str(m)
+    assert (m == read_smiles(pair)) == (not tail)
+    if tail:
+        assert m == read_smiles(f'{pair} |a:1,6,11,16|')
+
+
+@mark.parametrize('text', ['CC(O)CC |&1:1|', 'C[C@H](O)CC |w:1.0,&1:1|'])
+def test_validate_stereo_heals_an_unsigned_and_singleton(text):
+    """Butan-2-ol with no sign, or a wavy one, alone in an AND group is the racemate whatever its sign: the
+    centre takes one, the group is kept, and the repair is logged."""
+    m = read_smiles(text)
+    assert m.validate_stereo() == []
+    assert m == read_smiles('C[C@H](O)CC |&1:1|')
+    assert [r.severity for r in m.log if r.rule == 'stereo:racemate-unsigned'] == ['repaired']
+
+
+@mark.parametrize('text', ['C[C@H](O)C(N)C |&1:1,3|', 'CC(O)CC |o1:1|'])
+def test_validate_stereo_leaves_an_unsigned_member_that_is_not_an_and_singleton(text):
+    """Beside a signed member the unsigned centre's relation is unknown; an OR names one isomer, and with no
+    sign not which."""
+    m = read_smiles(text)
+    m.validate_stereo()
+    assert not [r for r in m.log if r.rule == 'stereo:racemate-unsigned']

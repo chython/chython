@@ -22,7 +22,7 @@ The shared stereo translation the converters read through, `interop._stereo`.
 Tests marked LATENT pin the spec's reading of an invariant that today's core happens to satisfy
 anyway; the rest pin live behaviour.
 """
-from chython.core import SU_ALLENE, SU_ATROPISOMER, SU_CIS_TRANS, SU_HELICAL, SU_TETRA, read_smiles
+from chython.core import SU_ALLENE, SU_ATROPISOMER, SU_CIS_TRANS, SU_HELICAL, SU_PLANAR, SU_TETRA, read_smiles
 from chython.interop import _stereo
 
 
@@ -35,14 +35,15 @@ def _unit(mol, kind):
 
 def test_kind_names_cover_every_kind_the_core_can_emit():
     """Every kind the core can emit is named, so no unit can fall off a converter's if/elif chain."""
-    for kind in (SU_TETRA, SU_CIS_TRANS, SU_ALLENE, SU_ATROPISOMER, SU_HELICAL):
+    for kind in (SU_TETRA, SU_CIS_TRANS, SU_ALLENE, SU_ATROPISOMER, SU_HELICAL, SU_PLANAR):
         assert kind in _stereo.KIND_NAMES
         assert _stereo.KIND_NAMES[kind]
 
 
 def test_kind_names_are_read_from_the_core():
     """Values come from `chython.core`, not from a hand-copied table that can drift out of step."""
-    assert set(_stereo.KIND_NAMES) == {SU_TETRA, SU_CIS_TRANS, SU_ALLENE, SU_ATROPISOMER, SU_HELICAL}
+    assert set(_stereo.KIND_NAMES) == {SU_TETRA, SU_CIS_TRANS, SU_ALLENE, SU_ATROPISOMER, SU_HELICAL,
+                                       SU_PLANAR}
 
 
 def test_first_of_each_pair_falls_back_past_an_unnamed_slot():

@@ -138,6 +138,8 @@ cdef struct smw_opts_t:
     bint cxsmiles           # append the CXSMILES tail
     bint asymmetric_closure  # write the bond token on the opening side of a closure only
     bint group_phase        # write each AND collection in its canonical phase; not a spec key
+    bint wedges             # an axis writes as a `wU`/`wD` tail wedge; set by the whole-molecule and
+                            # reaction writers under `x`, never by a fragment writer; not a spec key
 
 
 # THE CUTS of a detached fragment (spec §13).  Fixed arrays and no allocation: an attachment id is
@@ -1611,7 +1613,7 @@ cdef uint32_t smw_sign_of(Structure structure, smw_scratch_t *s, uint32_t slot,
     two extra problems -- the four directions are not this atom's neighbours, and the string
     interleaves them -- are argued.
 
-    The unnamed direction that is NOT a hydrogen -- the sulfur lone pair -- goes LAST and does not
+    The unnamed direction that is NOT a hydrogen -- a lone pair -- goes LAST and does not
     move when the atom leads its component.  Measured the same day: `[S@](=O)(C)CC` and
     `O=[S@](C)CC` are one molecule to RDKit, so unlike the hydrogen the lone pair has no positional
     rule, and V2 agrees (its frame is the three named substituents with the fourth direction fixed
@@ -1831,14 +1833,9 @@ cdef bint smw_allene_order(Structure structure, smw_scratch_t *s, uint32_t slot,
         n_ends += 1
     if n_ends != 2 or ends[0] == ends[1]:
         return False
-    # A THREE-ATOM AXIS ONLY, which is `chains[i] == slot` for both ends.  A longer odd cumulene is
-    # axially chiral and the arena names it the same way, but SMILES HAS NO SYNTAX FOR IT: measured
-    # 2026-09-02, Indigo (the one allene-capable reader in reach) refuses `FC=C=[C@@]=C=CF` outright
-    # -- "chirality on atom 3 makes no sense" -- so writing the sign there would produce a string a
-    # real reader rejects, which is worse than a string that says less.  chython 2 does write it, so a
-    # longer cumulene's sign is dropped here, and the refusal reaches `lost`.
-    if chains[0] != slot or chains[1] != slot:
-        return False
+    # Any odd chain: OpenSMILES extended tetrahedral puts the sign on the middle atom of a cumulene of
+    # any odd length, over the terminals' four directions.  `chains[i]` is the atom inward from each
+    # terminal, which is the centre only for a three-atom allene.
     # The same refusal as `smw_sign_of`'s, one atom further out: a terminal whose implicit count is
     # unknown does not say whether its two directions are (heavy, H) or (heavy, nothing), and those are
     # different frames.  `fills` is 3 here -- the chain bond plus both directions -- so a terminal with
@@ -2000,6 +1997,7 @@ cdef void smw_directions(Structure structure, smw_scratch_t *s, smw_opts_t *o) n
     """
     cdef uint32_t *ptr = csr_ptr(structure)
     cdef halfedge_t *edges = csr_edges(structure)
+    cdef atom_t *atoms = structure.atoms()
     cdef stereo_unit_t *u
     cdef halfedge_t *e
     cdef uint32_t i, k, idx, he, frm, to, far, anchor, qfrm, qhe
@@ -2069,11 +2067,11 @@ cdef void smw_directions(Structure structure, smw_scratch_t *s, smw_opts_t *o) n
                 s.nlost += 1
             continue
         if u.kind != SU_CIS_TRANS:
-            # SU_ATROPISOMER, and it will never move out of here, because SMILES HAS NO SYNTAX FOR
-            # IT.  Reporting it every time is the point -- a format that cannot carry a configuration
-            # should say so rather than hand back a string that looks complete.
-            s.lost[i] = 1
-            s.nlost += 1
+            # SU_ATROPISOMER, SU_HELICAL, SU_PLANAR.  SMILES has no syntax for them; the CXSMILES tail carries each
+            # as a wedge (`smw_axis_wedge`), and every other spelling reports it.
+            if not o.wedges or not smw_axis_wedge(structure, s, i, u, NULL, NULL, NULL):
+                s.lost[i] = 1
+                s.nlost += 1
             continue
         far = stereo_unit_partner(structure, u)
         if far == SU_NO_REF or s.dropped[far]:
@@ -2087,10 +2085,14 @@ cdef void smw_directions(Structure structure, smw_scratch_t *s, smw_opts_t *o) n
             s.nlost += 1
             continue
         # Every named direction must sit on a SINGLE bond, because `/` replaces the single-bond
-        # token and there is nowhere to write it otherwise.  A cumulene terminal's non-chain bonds
-        # are single by construction (a second double bond would make it a chain atom, not a
-        # terminal), so this is a guard against a forged arena rather than a live case -- and it is
-        # cheaper than reasoning about one at the point where the token would be emitted.
+        # token and there is nowhere to write it otherwise -- or on an AROMATIC bond between two atoms
+        # written lowercase, whose token is empty because the atoms carry the aromaticity: the
+        # exocyclic C=C of 5-benzylidene-2,4-thiazolidinedione drawn aromatic, `s\\c1=C/c1ccccc1`.
+        # Under `A`, or with an atom that has no lowercase spelling, `/` would replace the bond's `:`.
+        # A cumulene terminal's non-chain bonds are single by construction (a second double bond would
+        # make it a chain atom, not a terminal), so this is a guard against a forged arena rather than a
+        # live case -- and it is cheaper than reasoning about one at the point where the token would be
+        # emitted.
         bad = 0
         for k in range(4):
             if u.refs[k] == SU_NO_REF:
@@ -2104,7 +2106,9 @@ cdef void smw_directions(Structure structure, smw_scratch_t *s, smw_opts_t *o) n
                 bad = 1
                 break
             e = csr_find_at(ptr, edges, i if k < 2 else far, u.refs[k])
-            if e is NULL or e.order != 1:
+            if e is NULL or not (e.order == 1 or (e.order == 4 and not o.aromatic_bond
+                                                  and not smw_no_lowercase(&atoms[i if k < 2 else far])
+                                                  and not smw_no_lowercase(&atoms[u.refs[k]]))):
                 bad = 1
                 break
         if bad:
@@ -2198,6 +2202,194 @@ cdef inline int smw_dir_propagate(Structure structure, smw_scratch_t *s,
 
 
 # ------------------------------------------------------------------------------------------------
+# AXIAL WEDGES.  An atropisomer axis is written as one `wU`/`wD` tail wedge, in the coordinate-free
+# convention RDKit 2026.03.4 reads (`test_cx_wedges.py` holds the measurement):
+#
+# | at pivot E, ring bond to its lower-index neighbour | E written first | E written second |
+# | -------------------------------------------------- | --------------- | ---------------- |
+# | wedged, or the other ring bond hashed               | CCW             | CW               |
+# | hashed, or the other ring bond wedged               | CW              | CCW              |
+#
+# With `refs[0]` and `refs[2]` each pivot's lower-index ring neighbour, parity 1 is CCW and parity 2
+# is CW; each pivot whose pair is the other way round flips it once.  The wedge goes on the pivot
+# written first, on its ring bond to the lower-index neighbour unless that bond is a double bond, which
+# takes no direction.
+#
+# A helix is written by the same table with its two fjord atoms as the pivots, on the fjord atom's
+# inner-rim bond and drawn narrow at the fusion atom, as IUPAC draws a helicene: the wedge is therefore
+# the converse of the one the table puts at the fjord atom.  A fusion atom anchors no other unit, so the
+# wedge cannot be read as an axis whose pivot is also a fjord atom.
+#
+# A planar unit is one wedge on its shape's bond (`_stereo.pxi` PLANAR UNITS), narrow at the first atom:
+#
+# | Shape | bond |
+# | --- | --- |
+# | metallocene | anchor -> `refs[1]`, the metal |
+# | cyclophane | `refs[2]` -> `refs[1]`, bridgehead -> bridge atom |
+# | twisted | anchor -> `refs[0]`; read on the near terminal -> `refs[2]` as well |
+#
+# `wU` is parity 1 with each pair's named refs in written order; each pair written the other way round
+# flips it.  This is a convention of the string, not a drawing.  A twisted unit is anchored at the later
+# of its double bond's two terminals, so a string read back may anchor it at the other one; the reader
+# takes the wedge from either, and an enhanced-stereo member is written on the terminal written later.
+
+cdef inline void smw_planar_bond(Structure structure, stereo_unit_t *u, uint32_t *narrow,
+                                 uint32_t *wide) noexcept nogil:
+    """The bond a planar unit's wedge sits on, narrow end first (see AXIAL WEDGES)."""
+    if u.spare & SU_TWISTED:
+        narrow[0] = u.anchor
+        wide[0] = u.refs[0]
+    elif csr_find_at(csr_ptr(structure), csr_edges(structure), u.anchor, u.refs[1]) is not NULL:
+        narrow[0] = u.anchor
+        wide[0] = u.refs[1]
+    else:
+        narrow[0] = u.refs[2]
+        wide[0] = u.refs[1]
+
+cdef bint smw_axis_wedge(Structure structure, smw_scratch_t *s, uint32_t slot, stereo_unit_t *u,
+                         uint32_t *pivot, uint32_t *far, uint8_t *up, bint second=False) noexcept nogil:
+    """The wedge that writes atropisomer or helix `u` anchored at `slot`: narrow end, far atom, 1 for
+    `wU`.  `second` puts a helix's wedge at the end written second.
+
+    False when the unit cannot be written as one: a missing partner or ref, or a pivot cut away.  The
+    out-parameters may be NULL, for the question alone.
+    """
+    cdef uint32_t *ptr = csr_ptr(structure)
+    cdef halfedge_t *edges = csr_edges(structure)
+    cdef halfedge_t *e
+    cdef uint32_t partner, first, base, low, high, k
+    cdef uint8_t parity = structure_parity_at(structure, slot)
+    cdef bint cw
+    if u.n_refs != 4 or parity == 0:
+        return False
+    if u.kind == SU_PLANAR:
+        smw_planar_bond(structure, u, &first, &low)
+        if s.dropped[slot] or s.dropped[first] or s.dropped[low] or s.dropped[u.refs[0]] \
+                or s.dropped[u.refs[2]]:
+            return False
+        cw = parity == 2
+        for base in range(0, 4, 2):
+            if u.refs[base + 1] != SU_NO_REF and s.out_idx[u.refs[base]] > s.out_idx[u.refs[base + 1]]:
+                cw = not cw
+        if pivot is not NULL:
+            pivot[0] = first
+            far[0] = low
+            up[0] = 0 if cw else 1
+        return True
+    partner = stereo_unit_partner(structure, u)
+    if partner == SU_NO_REF or s.dropped[slot] or s.dropped[partner]:
+        return False
+    for k in range(4):
+        if u.refs[k] == SU_NO_REF or s.dropped[u.refs[k]]:
+            return False
+    cw = parity == 2
+    for base in range(0, 4, 2):
+        if s.out_idx[u.refs[base]] > s.out_idx[u.refs[base + 1]]:
+            cw = not cw
+    first = slot if s.out_idx[slot] < s.out_idx[partner] else partner
+    if second and u.kind == SU_HELICAL:
+        first = partner if first == slot else slot
+    base = 0 if first == slot else 2
+    if s.out_idx[u.refs[base]] < s.out_idx[u.refs[base + 1]]:
+        low = u.refs[base]
+        high = u.refs[base + 1]
+    else:
+        low = u.refs[base + 1]
+        high = u.refs[base]
+    if u.kind == SU_HELICAL:
+        if csr_find_at(ptr, edges, first, u.refs[base]) is NULL:
+            return False
+        if pivot is not NULL:
+            pivot[0] = u.refs[base]
+            far[0] = first
+            up[0] = (1 if cw else 0) if low == u.refs[base] else (0 if cw else 1)
+            if second:
+                up[0] = 1 - up[0]              # DASH at the end written second is CCW
+        return True
+    e = csr_find_at(ptr, edges, first, low)
+    if e is NULL:
+        return False
+    if pivot is not NULL:
+        pivot[0] = first
+        if e.order != 2:
+            far[0] = low
+            up[0] = 0 if cw else 1
+        else:
+            far[0] = high
+            up[0] = 1 if cw else 0
+    return True
+
+
+cdef list smw_axis_wedges(Structure structure, smw_scratch_t *s):
+    """`[(atom index, bond index, 1 for wU), ...]` for every axis the string carries as a wedge.
+
+    A CXSMILES bond index counts bonds in string order, a ring closure at its closing digit: each
+    atom in emission order adds its tree bond, then the closures it closes in written order.
+    """
+    cdef halfedge_t *edges = csr_edges(structure)
+    cdef stereo_unit_t *u
+    cdef uint32_t i, idx, v, k, he, bond = 0
+    cdef uint32_t pivot = 0, far = 0
+    cdef uint8_t up = 0
+    cdef uint8_t kind
+    cdef list wanted = []
+    cdef list out = []
+    cdef tuple w
+    # Axes first: a helix end whose fjord atom is also an axis pivot shares its inner-rim bond with
+    # that axis' wedge, and a bond carries one wedge, so the helix is then written at its other end.
+    for kind in (SU_ATROPISOMER, SU_HELICAL, SU_PLANAR):
+        for i in range(s.n):
+            if s.lost[i] or not structure_parity_at(structure, i):
+                continue
+            u = stereo_unit_of(structure, i)
+            if u is NULL or u.kind != kind or not smw_axis_wedge(structure, s, i, u, &pivot, &far, &up):
+                continue
+            if kind == SU_HELICAL and [w for w in wanted if w[1] == pivot and w[0] == far]:
+                smw_axis_wedge(structure, s, i, u, &pivot, &far, &up, True)
+            wanted.append((pivot, far, up))
+    if not wanted:
+        return out
+    for idx in range(s.nseq):
+        v = s.seq[idx]
+        if s.parent[v] != SMW_NONE:
+            for w in wanted:
+                if (<uint32_t> w[0] == v and <uint32_t> w[1] == s.parent[v]) or \
+                        (<uint32_t> w[1] == v and <uint32_t> w[0] == s.parent[v]):
+                    out.append((s.out_idx[<uint32_t> w[0]], bond, w[2]))
+            bond += 1
+        for k in range(s.nbr_off[v], s.nbr_off[v + 1]):
+            he = s.wnbr[k]
+            if s.he_kind[he] != SMW_HE_CLOSURE or s.out_idx[edges[he].to] > idx:
+                continue
+            for w in wanted:
+                if (<uint32_t> w[0] == v and <uint32_t> w[1] == edges[he].to) or \
+                        (<uint32_t> w[1] == v and <uint32_t> w[0] == edges[he].to):
+                    out.append((s.out_idx[<uint32_t> w[0]], bond, w[2]))
+            bond += 1
+    return out
+
+
+cdef int smw_report_axes(Structure structure, smw_scratch_t *s, list log) except -1:
+    """One `smiles:stereo-not-written` per configured axis the string does not carry."""
+    cdef atom_t *atoms = structure.atoms()
+    cdef stereo_unit_t *u
+    cdef uint32_t idx, i
+    for idx in range(s.nseq):
+        i = s.seq[idx]
+        if not s.lost[i]:
+            continue
+        u = stereo_unit_of(structure, i)
+        if u is not NULL and (u.kind == SU_ATROPISOMER or u.kind == SU_HELICAL or u.kind == SU_PLANAR):
+            log.append(mc_record('smiles:stereo-not-written', (atoms[i].n,),
+                                 'atom %s anchors %s and this spelling has no field for it; its '
+                                 'configuration is not written'
+                                 % (atoms[i].n, 'an atropisomer axis' if u.kind == SU_ATROPISOMER
+                                    else 'a helix' if u.kind == SU_HELICAL else 'a planar unit'),
+                                 mc_lost()))
+    return 0
+
+
+# ------------------------------------------------------------------------------------------------
 # CXSMILES.
 cdef tuple smw_tail_parts(Structure structure, smw_scratch_t *s, dict groups, dict aliases):
     """The tail as STRUCTURE: `(radicals, abs_atoms, and_groups, or_groups, labels)`, indices into
@@ -2246,8 +2438,8 @@ cdef tuple smw_tail_parts(Structure structure, smw_scratch_t *s, dict groups, di
         if aliases:
             labels[idx] = aliases.get(atoms[u].n)
         if groups is None:
-            kind = sg_kind(sg[u])
-            number = sg_group(sg[u])
+            kind = sg_kind(sg[smw_group_source(structure, s, u)])
+            number = sg_group(sg[smw_group_source(structure, s, u)])
         else:
             entry = groups.get(atoms[u].n)
             if entry is None:
@@ -2294,7 +2486,7 @@ cdef str smw_label_text(bytes raw):
     return ''.join(out)
 
 
-cdef str smw_tail_text(tuple t, list fgroups=None):
+cdef str smw_tail_text(tuple t, list fgroups=None, list wedges=None):
     """`(radicals, abs_atoms, and_groups, or_groups, labels)` as ` |...|`, or `''` when there is
     nothing.
 
@@ -2306,6 +2498,8 @@ cdef str smw_tail_text(tuple t, list fgroups=None):
     lists for the `f:` field, which says "these components are one molecule".  A molecule has no use
     for it -- reading its string back gives one container whatever its components -- but a reaction
     does, and without it a salt reactant comes back as two reactants.  It goes LAST, after `^1:`.
+
+    `wedges` is `smw_axis_wedges`' list, already in the string's own atom and bond indices.
     """
     cdef list radicals = <list> t[0]
     cdef list abs_atoms = <list> t[1]
@@ -2314,7 +2508,7 @@ cdef str smw_tail_text(tuple t, list fgroups=None):
     cdef list labels = <list> t[4]
     cdef list parts = []
     cdef list group
-    cdef object key
+    cdef object key, w
 
     if labels and any(labels):
         # ONE ENTRY PER ATOM, trailing empties included, which is what Marvin writes -- a three-atom
@@ -2339,6 +2533,14 @@ cdef str smw_tail_text(tuple t, list fgroups=None):
         parts.append('&%d:%s' % (key, ','.join(map(str, sorted(and_groups[key])))))
     for key in sorted(or_groups):
         parts.append('o%d:%s' % (key, ','.join(map(str, sorted(or_groups[key])))))
+    if wedges:
+        for key in (1, 0):
+            group = []
+            for w in sorted(wedges):
+                if w[2] == key:
+                    group.append('%d.%d' % (w[0], w[1]))
+            if group:
+                parts.append(('wU:' if key else 'wD:') + ','.join(group))
     if fgroups:
         group = []
         for key in fgroups:
@@ -2350,13 +2552,14 @@ cdef str smw_tail_text(tuple t, list fgroups=None):
 
 
 cdef int smw_cxsmiles(Structure structure, smw_scratch_t *s, smw_buf_t *b,
-                      dict groups, dict aliases) except -1:
-    """The ` |...|` tail into the buffer: `$...$` labels, `^1:` radicals and the three
-    enhanced-stereo group forms."""
+                      dict groups, dict aliases, list wedges=None) except -1:
+    """The ` |...|` tail into the buffer: `$...$` labels, `^1:` radicals, the three
+    enhanced-stereo group forms and the axial wedges."""
     # BOUND TO A LOCAL FIRST.  `<char *> (...).encode()` casts a temporary whose last reference is
     # the cast itself, so the pointer is dangling before `smw_puts` reads it -- a use-after-free
     # that works in practice most of the time, which is the worst kind.
-    cdef bytes tail = smw_tail_text(smw_tail_parts(structure, s, groups, aliases)).encode('ascii')
+    cdef bytes tail = smw_tail_text(smw_tail_parts(structure, s, groups, aliases), None,
+                                    wedges).encode('ascii')
     if not tail:
         return 0
     smw_puts(b, <const char *> tail, <size_t> len(tail))
@@ -2600,6 +2803,7 @@ cdef int smw_parse_spec(str spec, smw_opts_t *o) except -1:
     o.cxsmiles = True
     o.asymmetric_closure = False
     o.group_phase = True
+    o.wedges = False
     cdef Py_ssize_t i = 0
     cdef Py_ssize_t k = len(spec)
     cdef bint negate
@@ -2720,9 +2924,42 @@ cdef int smw_random_positions(smw_scratch_t *s, uint32_t n) except -1:
     return 0
 
 
+cdef inline uint32_t smw_group_source(Structure structure, smw_scratch_t *s, uint32_t u) noexcept nogil:
+    """The slot whose stored collection byte is written at `u`: a twisted planar unit's terminals swap
+    theirs when its anchor is written first (see AXIAL WEDGES), so each byte lands where a reader
+    anchors its unit; any other slot is itself."""
+    cdef stereo_unit_t *v
+    cdef uint32_t c = _shift_partner(csr_ptr(structure), csr_edges(structure), u)
+    if c == SU_NO_REF:
+        return u
+    v = stereo_unit_of(structure, u)
+    if v is not NULL and v.kind == SU_PLANAR and (v.spare & SU_TWISTED):
+        return c if s.out_idx[c] > s.out_idx[u] else u
+    v = stereo_unit_of(structure, c)
+    if v is not NULL and v.kind == SU_PLANAR and (v.spare & SU_TWISTED):
+        return c if s.out_idx[c] < s.out_idx[u] else u
+    return u
+
+
+cdef object smw_twisted_speaker(Structure structure, smw_scratch_t *s, dict index, object member):
+    """The atom a collection member is written on: a twisted planar unit's is the terminal of its double
+    bond written later, where a reader anchors it (see AXIAL WEDGES); any other member is itself."""
+    cdef uint32_t slot = <uint32_t> index[member]
+    cdef uint32_t c
+    cdef stereo_unit_t *u = stereo_unit_of(structure, slot)
+    if u is NULL or u.kind != SU_PLANAR or not (u.spare & SU_TWISTED):
+        return member
+    c = _shift_partner(csr_ptr(structure), csr_edges(structure), slot)
+    if c == SU_NO_REF or s.out_idx[c] < s.out_idx[slot]:
+        return member
+    return structure.atoms()[c].n
+
+
 cdef dict smw_group_atoms(MoleculeContainer molecule, Structure structure, smw_scratch_t *s,
-                          list log):
-    """`canonical_stereo_groups()` inverted to {n: (kind, id)}, one atom per collection member.
+                          list log, dict view):
+    """`view`, the written arena's `{(kind, id): [member, ...]}`, inverted to {n: (kind, id)}, one atom
+    per collection member.  The ids are the arena's own: a canonical write has already relabelled its
+    private arena (`structure_canonical_group_labels`).
 
     An axis is NAMED on two atoms and a CXSMILES collection holds one index per member, so one owner has
     to speak for it.  BOTH HALVES OF THE CHOICE READ `pos` AND OWNERSHIP, never the anchor: the anchor is
@@ -2738,44 +2975,17 @@ cdef dict smw_group_atoms(MoleculeContainer molecule, Structure structure, smw_s
 
     Singles claim their atom first and axes second, both in canonical-position order, so which member
     holds a contested atom is a function of `pos` and not of the order the members were stored in.
-
-    INSIDE ONE AMBIGUITY CLASS THE IDS FOLLOW `pos`: the class keeps its block of ids, and the group
-    whose least member position is lowest takes the lowest.  The view numbers a class in the order of
-    its own canonical labelling, which a symmetry exchanging the class's groups leaves free.
     """
     cdef dict index = molecule._index_of
     cdef dict groups = {}
-    cdef dict view = molecule.live_stereo_groups()
-    cdef dict remap = {}
-    cdef dict least = {}
-    cdef list rows = [], members, keys
+    cdef list rows = [], members
     cdef tuple row
-    cdef object gkey, member, lo, hi, pick, cls, where
-    cdef uint32_t plo, phi, numbered = 0
-    for gkey in view:
-        if gkey[0] > 1:
-            numbered += 1
-    if numbered > 1:                        # a class needs two numbered groups
-        for cls in molecule.live_stereo_group_ambiguities():
-            keys = sorted(cls)
-            for gkey in keys:
-                where = []
-                for member in view[gkey]:
-                    if isinstance(member, int):
-                        plo = s.pos[<uint32_t> index[member]]
-                        where.append((plo, plo))
-                    else:
-                        plo = s.pos[<uint32_t> index[(<tuple> member)[0]]]
-                        phi = s.pos[<uint32_t> index[(<tuple> member)[1]]]
-                        where.append((plo, phi) if plo < phi else (phi, plo))
-                least[gkey] = min(where)
-            for gkey, pick in zip(sorted(keys, key=least.__getitem__), keys):
-                remap[gkey] = pick
+    cdef object gkey, member, lo, hi, pick
+    cdef uint32_t plo, phi
     for gkey, members in view.items():
-        gkey = remap.get(gkey, gkey)
         for member in members:
             if isinstance(member, int):
-                groups[member] = gkey
+                groups[smw_twisted_speaker(structure, s, index, member)] = gkey
                 continue
             lo = (<tuple> member)[0]
             hi = (<tuple> member)[1]
@@ -2832,10 +3042,15 @@ cdef Structure smw_structure(MoleculeContainer molecule, smw_opts_t *o, list log
     The input arena is not written; each dropped sign is one INFO `smiles:stereo-not-stereogenic`
     record on `log`, and each dropped member, where the tail states collections, one INFO
     `smiles:stereo-group-dead`.
+    An unrealisable bridgehead pair goes to `molecule.log`, LOST `stereo:bridgehead-unrealisable`, once.
 
-    A canonical write stating collections gets a private arena whenever an AND member is
-    configured, since `smw_prepare` puts each such collection in its canonical phase in place
-    (`smw_group_phase`).  `o.group_phase` off keeps the stored signs.
+    A canonical write stating collections gets a private arena whenever a group byte is in the view,
+    the view being the molecule's cached one (`_live_view`), since `smw_prepare` relabels it in place
+    (`structure_canonical_group_labels`): canonical ids, and each AND collection in its canonical phase
+    unless `o.group_phase` is off.  A coupled set's label is written on every member, as the view fills
+    it from whichever member carried it.  Off, the least labelling
+    is also searched on the stored signs alone, so a collection joined across a reaction's molecules
+    keeps the phase that states retention or inversion.
     """
     cdef Structure view
     cdef atom_t *atoms
@@ -2845,7 +3060,8 @@ cdef Structure smw_structure(MoleculeContainer molecule, smw_opts_t *o, list log
     cdef object slot
     if not o.stereo:
         return molecule._structure
-    view = structure_live_groups_view(molecule._structure, dead)
+    molecule._log_bridgehead_conflicts()
+    view = molecule._live_view(o.group_phase, dead)
     if log is not None and view is not molecule._structure:
         atoms = molecule._structure.atoms()
         for i in range(molecule._structure.header.atom_count):
@@ -2859,58 +3075,14 @@ cdef Structure smw_structure(MoleculeContainer molecule, smw_opts_t *o, list log
                                      'atom %s is in a stereo collection on a unit that is unconfigured '
                                      'or not stereogenic, and no label is written for it'
                                      % atoms[<uint32_t> slot].n))
-    if (view is molecule._structure and o.group_phase and o.enhanced_stereo and o.cxsmiles and o.canonical
+    # the view is the molecule's own, stored or cached, and `smw_prepare` relabels collections in place
+    if (o.enhanced_stereo and o.cxsmiles and o.canonical
             and not o.random_order and structure_has(view, SEG_STEREO_GROUPS)):
         sg = structure_stereo_groups(view)
         for i in range(view.header.atom_count):
-            if sg[i] and sg_kind(sg[i]) == SG_KIND_AND and structure_parity_at(view, i):
+            if sg[i]:
                 return structure_clone(view)
     return view
-
-
-cdef int smw_group_phase(Structure structure, uint32_t *pos) except -1:
-    """Invert every member of each AND collection whose phase under `pos` is not canonical.
-
-    `structure` is the private arena `smw_structure` hands a canonical write, and `pos` its canonical
-    positions.  The phase is `_canon_group_phase`'s, read in the frame the positions name, so the signs
-    written are the ones identity compares: `C[C@@H](O)CC |&1:1|` writes as `C[C@H](O)CC |&1:1|` does.
-    The positions do not move, because the order was searched phase-free.  The unit table must be built.
-    """
-    cdef uint32_t n = structure.header.atom_count
-    cdef stereo_unit_t *units
-    cdef uint32_t nunits, i
-    cdef uint8_t *sg
-    cdef uint8_t *par
-    cdef uint8_t flip[256]
-    cdef bint moved = False
-    if n == 0 or not structure_has(structure, SEG_STEREO_GROUPS) or not structure_has(structure, SEG_PARITY):
-        return 0
-    cdef uint32_t *block = <uint32_t *> PyMem_Malloc(<size_t> 3 * <size_t> n * sizeof(uint32_t))
-    if block is NULL:
-        raise MemoryError()
-    cdef uint32_t *cls = block
-    cdef uint32_t *digits = cls + n
-    cdef uint32_t *partner = digits + n     # per UNIT, and nunits <= n by the anchor invariant
-    try:
-        units = structure_stereo_units(structure)
-        nunits = structure_stereo_unit_count(structure)
-        for i in range(nunits):
-            partner[i] = stereo_unit_partner(structure, &units[i])
-        for i in range(n):
-            cls[i] = pos[i] + 1
-        _frame_free_parity_seed(structure, units, nunits, partner, cls, digits, n)
-        _canon_group_phase(structure, CANON_GROUPS_WRITTEN, cls, digits, flip)
-        sg = structure_stereo_groups(structure)
-        par = structure_parities(structure)
-        for i in range(n):
-            if sg[i] and flip[sg[i]] and par[i]:
-                par[i] = 3 - par[i]
-                moved = True
-        if moved:
-            refresh_parity_features(structure)
-    finally:
-        PyMem_Free(block)
-    return 0
 
 
 cdef dict smw_prepare(MoleculeContainer molecule, Structure structure, smw_scratch_t *s, smw_opts_t *o,
@@ -2956,8 +3128,8 @@ cdef dict smw_prepare(MoleculeContainer molecule, Structure structure, smw_scrat
         # `r` REPLACES THE POSITIONS AND NOTHING ELSE.  Everything downstream -- the adjacency sort, the
         # traversal, the closure numbers, the stereo signs -- reads `pos` as a ranking and does not care
         # where the ranking came from, so a random one gives a valid SMILES of the same molecule by the
-        # same code path.  `o.canonical` stays True under `r` (the two keys are mutually exclusive), so
-        # the stereo groups below are still numbered canonically: a group is chemistry, not order.
+        # same code path.  The collections keep the ids and phase the live view stores: the canonical
+        # labelling is read in the canonical frame, which a random order does not name.
         smw_random_positions(s, n)
     elif o.canonical:
         # `smw_canonical_positions` and not `molecule.canonical_order()`: the C entry point takes the
@@ -2973,8 +3145,6 @@ cdef dict smw_prepare(MoleculeContainer molecule, Structure structure, smw_scrat
         smw_canonical_positions(structure, s.pos, o.stereo,
                                 CANON_GROUPS_WRITTEN if o.stereo and o.enhanced_stereo
                                 else CANON_GROUPS_NONE)
-        if o.group_phase and o.stereo and o.enhanced_stereo and o.cxsmiles and structure is not molecule._structure:
-            smw_group_phase(structure, s.pos)
     else:
         for i in range(n):
             s.pos[i] = i
@@ -2997,11 +3167,6 @@ cdef dict smw_prepare(MoleculeContainer molecule, Structure structure, smw_scrat
         # here (`smw_canonical_positions` takes CANON_GROUPS_NONE), so suppressing one moves no atom
         # and the two strings are equal character for character.
         groups = {}
-    elif o.canonical and structure.header.segments[SEG_STEREO_GROUPS].length:
-        # {(kind, canonical_id): [member, ...]} inverted to {n: (kind, id)}: the writer asks per atom,
-        # the view answers per group, and a member spelled as an owner pair is an axis that one of its
-        # two atoms has to speak for -- which owner, and why not the anchor, is `smw_group_atoms`'.
-        groups = smw_group_atoms(molecule, structure, s, log)
     for i in range(n):
         s.bypos[s.pos[i]] = i
     smw_sort_adjacency(structure, s)
@@ -3011,11 +3176,44 @@ cdef dict smw_prepare(MoleculeContainer molecule, Structure structure, smw_scrat
         smw_sticky_frames(structure, s, sticky)
     else:
         smw_traverse(structure, s)
+    if (o.canonical and not o.random_order and o.stereo and o.enhanced_stereo and o.cxsmiles
+            and structure is not molecule._structure):
+        # the private arena `smw_structure` handed over: canonical ids, and the canonical AND phase
+        # unless the caller keeps the stored signs, both read in the WRITTEN order, which is the slot
+        # order of the string read back.  The traversal reads `pos` and no sign, so it does not move.
+        smw_group_labels_written(structure, s, o.group_phase)
+    if groups is None and o.canonical and structure.header.segments[SEG_STEREO_GROUPS].length:
+        # {(kind, id): [member, ...]} inverted to {n: (kind, id)}: the writer asks per atom, the arena
+        # answers per group, and a member spelled as an owner pair is an axis that one of its two
+        # atoms has to speak for -- which owner, and why not the anchor, is `smw_group_atoms`'.
+        groups = smw_group_atoms(molecule, structure, s, log, molecule._groups_in(structure, NULL))
     smw_closures(structure, s, cuts)
     smw_directions(structure, s, o)
     if sticky is not NULL:
         smw_sticky_ends(structure, s, sticky)
     return groups
+
+
+cdef int smw_group_labels_written(Structure structure, smw_scratch_t *s, bint phase) except -1:
+    """`structure_canonical_group_labels` in the written order, `seq`, with an atom a cut dropped
+    placed after every written one by `pos`."""
+    cdef uint32_t n = s.n, i, k = s.nseq
+    cdef uint32_t *frame = <uint32_t *> PyMem_Malloc(<size_t> (n if n else 1) * sizeof(uint32_t))
+    if frame is NULL:
+        raise MemoryError()
+    try:
+        for i in range(n):
+            frame[i] = SMW_NONE
+        for i in range(s.nseq):
+            frame[s.seq[i]] = i
+        for i in range(n):
+            if frame[s.bypos[i]] == SMW_NONE:
+                frame[s.bypos[i]] = k
+                k += 1
+        structure_canonical_group_labels(structure, frame, phase)
+    finally:
+        PyMem_Free(frame)
+    return 0
 
 
 cdef int smw_build_cuts(MoleculeContainer molecule, object cuts, object reserve,
@@ -3247,6 +3445,7 @@ def write_smiles(MoleculeContainer molecule not None, str spec='', bint return_o
     cdef uint32_t n = structure.header.atom_count
     cdef smw_opts_t o
     smw_parse_spec(spec, &o)
+    o.wedges = o.cxsmiles
     if n == 0:
         return ('', ()) if return_order else ''
     structure = smw_structure(molecule, &o, log)
@@ -3267,8 +3466,11 @@ def write_smiles(MoleculeContainer molecule not None, str spec='', bint return_o
     try:
         groups = smw_prepare(molecule, structure, &s, &o, NULL, NULL, log)
         smw_emit(structure, &s, &b, &o, NULL)
+        if o.stereo:
+            smw_report_axes(structure, &s, log)
         if o.cxsmiles:
-            smw_cxsmiles(structure, &s, &b, groups, molecule.aliases)
+            smw_cxsmiles(structure, &s, &b, groups, molecule.aliases,
+                         smw_axis_wedges(structure, &s) if o.stereo else None)
         if b.oom:
             raise MemoryError()
         out = b.data[:b.length].decode('ascii')
@@ -3297,8 +3499,8 @@ def write_smiles(MoleculeContainer molecule not None, str spec='', bint return_o
 # method performs, for the same reason and with the same renumbering.
 
 cdef tuple smw_reaction_part(MoleculeContainer molecule, smw_opts_t *o, list log=None):
-    """One molecule of a reaction: `(text, ids, tail parts, components, map numbers)`, ids and map
-    numbers both in WRITTEN order.
+    """One molecule of a reaction: `(text, ids, tail parts, components, map numbers, wedges, bond
+    count)`, ids and map numbers both in WRITTEN order and the wedges in the molecule's own indices.
 
     A REACTION-SHAPED `write_smiles`.  The text carries no tail of its own and the tail comes back
     unformatted, which is the one thing `write_smiles` cannot answer: by the time it returns, its tail
@@ -3311,7 +3513,7 @@ cdef tuple smw_reaction_part(MoleculeContainer molecule, smw_opts_t *o, list log
     cdef uint32_t n = structure.header.atom_count
     cdef uint32_t components = molecule.connected_components_count if n else 1
     if n == 0:
-        return ('', (), ([], [], {}, {}, []), 1, ())
+        return ('', (), ([], [], {}, {}, []), 1, (), [], 0)
 
     cdef smw_scratch_t s
     cdef smw_buf_t b
@@ -3319,8 +3521,10 @@ cdef tuple smw_reaction_part(MoleculeContainer molecule, smw_opts_t *o, list log
     cdef str out
     cdef list order, maps
     cdef tuple parts
+    cdef list wedges = []
     cdef atom_t *atoms
     cdef uint32_t i
+    cdef uint32_t bonds = csr_ptr(structure)[n] // 2
 
     smw_scratch_alloc(&s, n, csr_ptr(structure)[n])
     b.data = NULL
@@ -3333,8 +3537,12 @@ cdef tuple smw_reaction_part(MoleculeContainer molecule, smw_opts_t *o, list log
         if b.oom:
             raise MemoryError()
         out = b.data[:b.length].decode('ascii')
+        if o.stereo:
+            smw_report_axes(structure, &s, log)
         parts = smw_tail_parts(structure, &s, groups, molecule.aliases) if o.cxsmiles \
             else ([], [], {}, {}, [])
+        if o.cxsmiles and o.stereo:
+            wedges = smw_axis_wedges(structure, &s)
         # re-borrowed after `smw_prepare`, which can append the stereo-unit segment and move the
         # buffer -- the same ruling `write_smiles` cites
         atoms = structure.atoms()
@@ -3346,7 +3554,7 @@ cdef tuple smw_reaction_part(MoleculeContainer molecule, smw_opts_t *o, list log
     finally:
         PyMem_Free(b.data)
         smw_scratch_free(&s)
-    return (out, tuple(order), parts, components, tuple(maps))
+    return (out, tuple(order), parts, components, tuple(maps), wedges, bonds)
 
 
 cdef set smw_linked_molecules(list molecules):
@@ -3458,11 +3666,12 @@ def write_reaction_smiles(rxn not None, str spec='', list log=None):
     cdef smw_opts_t o
     cdef bint keep = '!c' in spec
     smw_parse_spec(spec.replace('!c', ''), &o)
+    o.wedges = o.cxsmiles
 
     cdef list side_texts = []
-    cdef list radicals = [], abs_atoms = [], fgroups = [], labels = []
+    cdef list radicals = [], abs_atoms = [], fgroups = [], labels = [], wedges = []
     cdef list and_pending = [], or_pending = []
-    cdef uint32_t atom_base = 0, component_base = 0, components, i, j
+    cdef uint32_t atom_base = 0, bond_base = 0, component_base = 0, components, i, j
     cdef list rows, keys, texts, group, order
     cdef tuple row, tail, maps
     cdef object side, mol, key, other
@@ -3524,8 +3733,11 @@ def write_reaction_smiles(rxn not None, str spec='', list log=None):
                 # sides, a reactant\'s partner being written later.
                 smw_collect_groups(<dict> tail[2], maps, <int> atom_base, and_pending)
                 smw_collect_groups(<dict> tail[3], maps, <int> atom_base, or_pending)
+                for key in <list> row[5]:
+                    wedges.append((<int> key[0] + <int> atom_base, <int> key[1] + <int> bond_base, key[2]))
             component_base += components
             atom_base += <uint32_t> len(order)
+            bond_base += <uint32_t> row[6]
         side_texts.append('.'.join(texts))
 
     cdef str body = '>'.join(side_texts)
@@ -3533,7 +3745,7 @@ def write_reaction_smiles(rxn not None, str spec='', list log=None):
     if o.cxsmiles:
         and_groups = smw_merge_groups(and_pending)
         or_groups = smw_merge_groups(or_pending)
-        return body + smw_tail_text((radicals, abs_atoms, and_groups, or_groups, labels), fgroups)
+        return body + smw_tail_text((radicals, abs_atoms, and_groups, or_groups, labels), fgroups, wedges)
     return body
 
 

@@ -21,13 +21,14 @@ V2's own ``_translate_tetrahedron_sign(n, env)`` -- runs first: a round trip and
 check both pass with every parity flipped, so only a second stack catches a global sign inversion.
 """
 
-from pytest import fixture
+from pytest import fixture, mark
 
 from ....core import WEDGE_NONE, MoleculeContainer, read_smiles
 from .._sdf import sniff_version, split_records
 from .._v2000 import emit_v2000, parse_v2000
 from .._v3000 import V3000_STAMP, emit_v3000, parse_v3000
-from ....core.wedge import (SU_ALLENE, SU_ATROPISOMER, SU_CIS_TRANS, SU_TETRA, _near_collinear,
+from ....core.wedge import (SU_ALLENE, SU_ATROPISOMER, SU_CIS_TRANS, SU_HELICAL, SU_PLANAR, SU_TETRA,
+                            _feasible_wedges, _near_collinear,
                             allene_parity, assign_parities, cis_trans_for_write, cis_trans_letter,
                             cis_trans_parity, signed_volume, stated_cis_trans, stated_parity,
                             tetrahedral_parity, wedges_for_write)
@@ -91,7 +92,7 @@ def test_every_configuration_agrees_with_chython2_or_the_record_contradicts_itse
 
 def test_no_centre_that_chython2_configures_is_left_unset(corpus, v2_molecules):
     """The half of the oracle that catches dropped stereo rather than inverted stereo.  One gap is
-    admitted: 6 ring-constrained centres the core calls non-stereogenic -- a configuration stored there is
+    admitted: 4 ring-constrained centres the core calls non-stereogenic -- a configuration stored there is
     one the core will not translate.
     """
     missing = []
@@ -119,7 +120,7 @@ def test_no_centre_that_chython2_configures_is_left_unset(corpus, v2_molecules):
                 else:
                     missing.append(f'{name} record {n} atom {num}')
     assert not missing, f'{len(missing)} centres configured by chython 2 and unset here: {missing[:5]}'
-    assert not_stereogenic == 6, (f'{not_stereogenic} centres the core calls non-stereogenic and '
+    assert not_stereogenic == 4, (f'{not_stereogenic} centres the core calls non-stereogenic and '
                                   f'chython 2 configures; the perception gap moved')
 
 
@@ -1007,6 +1008,44 @@ def test_an_atropisomer_survives_a_molfile_round_trip():
         assert back.parity_of(other['anchor']) == parity
 
 
+def test_a_helix_and_its_collection_survive_both_molfile_versions():
+    """[6]helicene (PubChem CID 98863): the wedge on a fjord atom's inner-rim bond states the helix, and
+    V3000 names its collection by the anchor atom."""
+    for parity in (1, 2):
+        mol = read_smiles('c1ccc2c(c1)ccc1ccc3ccc4ccc5ccccc5c4c3c12')
+        unit, = [u for u in mol.stereo_units() if u['kind'] == SU_HELICAL]
+        mol.set_parity(unit['anchor'], parity)
+        mol.clean2d()
+        with mol.edit() as e:
+            e.set_stereo_group(unit['owners'], 3, 1)
+        for emit in (emit_v2000, emit_v3000):
+            lines, log = emit(mol, log=[])
+            back, _, _ = _build(lines)
+            other, = [u for u in back.stereo_units() if u['kind'] == SU_HELICAL]
+            assert back.parity_of(other['anchor']) == parity, emit.__name__
+        assert back == mol
+        assert back.stereo_groups() == mol.stereo_groups() == {(3, 1): [unit['owners']]}
+
+
+def test_a_planar_unit_and_its_collection_survive_both_molfile_versions():
+    """4-carboxy[2.2]paracyclophane (PubChem CID 4614666): the wedge on a bridgehead's bond to its bridge
+    states the face, and both versions name the collection by the anchor atom."""
+    for parity in (1, 2):
+        mol = read_smiles('OC(=O)c1cc2ccc1CCc1ccc(cc1)CC2')
+        unit, = [u for u in mol.stereo_units() if u['kind'] == SU_PLANAR]
+        mol.set_parity(unit['anchor'], parity)
+        mol.clean2d()
+        with mol.edit() as e:
+            e.set_stereo_group(unit['anchor'], 3, 1)
+        for emit in (emit_v2000, emit_v3000):
+            lines, log = emit(mol, log=[])
+            back, _, _ = _build(lines)
+            other, = [u for u in back.stereo_units() if u['kind'] == SU_PLANAR]
+            assert back.parity_of(other['anchor']) == parity, emit.__name__
+        assert back == mol
+        assert back.stereo_groups() == mol.stereo_groups() == {(3, 1): [unit['anchor']]}
+
+
 # --- choosing a wedge
 
 def test_the_wedges_a_file_was_drawn_with_are_returned_untouched(corpus):
@@ -1432,16 +1471,34 @@ def _undrawn_molecule(record):
 
 
 def _configured(mol):
+    """The tetrahedral units the chooser wedges: signed ones, and bridgeheads whose sign a partner implies."""
+    implied = mol.implied_parities()
     return [u for u in mol.stereo_units()
-            if u['kind'] == SU_TETRA and mol.parity_of(u['anchor'])]
+            if u['kind'] == SU_TETRA and (mol.parity_of(u['anchor']) or u['anchor'] in implied)]
 
 
-def _adjacent_pairs(wedges):
+def _targets(mol, configured):
+    """Anchor to the parity its wedge states: the stored one, or the one the cage implies."""
+    implied = mol.implied_parities()
+    return {u['anchor']: mol.parity_of(u['anchor']) or implied[u['anchor']] for u in configured}
+
+
+def _bridge_pair(mol, a, b):
+    """Two wedges from coupled bridgeheads of one set to the bridge atom they share: the bicycle
+    convention, one statement about the cage, and not a crowded pair."""
+    if mol is None or a[1] != b[1]:
+        return False
+    coupled = {u['anchor']: set(u['coupled']) for u in mol.stereo_units() if u['coupled']}
+    return a[0] in coupled and b[0] in coupled[a[0]]
+
+
+def _adjacent_pairs(wedges, mol=None):
     """Unordered pairs of chosen wedges that share an atom.  Counted over atoms and not over bonds: a
-    wedge whose wide end is another's narrow end, and two wedges pointing at one atom, read alike.
+    wedge whose wide end is another's narrow end, and two wedges pointing at one atom, read alike.  With
+    `mol`, a bicycle's two bridgeheads wedged to their shared bridge are left out (`_bridge_pair`).
     """
     return [(i, j) for i in range(len(wedges)) for j in range(i + 1, len(wedges))
-            if set(wedges[i][:2]) & set(wedges[j][:2])]
+            if set(wedges[i][:2]) & set(wedges[j][:2]) and not _bridge_pair(mol, wedges[i], wedges[j])]
 
 
 def _near_collinear_wedges(mol, wedges):
@@ -1456,21 +1513,23 @@ def _quality(records):
     """The objective metric over a corpus.  ``round_trip_failures`` is the gate and the rest are the
     goal, in that order: a prettier wedge set encoding the wrong configuration is a regression.
     """
-    m = dict(molecules=0, centres=0, wedges=0, ring_wedges=0, adjacent_pairs=0,
+    m = dict(molecules=0, centres=0, wedges=0, ring_wedges=0, adjacent_pairs=0, bridge_pairs=0,
              near_collinear=0, unencoded=0, round_trip_failures=0)
     for record in records:
         mol = _undrawn_molecule(record)
         configured = _configured(mol)
         if not configured:
             continue
-        target = {u['anchor']: mol.parity_of(u['anchor']) for u in configured}
+        target = _targets(mol, configured)
         m['molecules'] += 1
         m['centres'] += len(configured)
 
         wedges, _ = wedges_for_write(mol)
         m['wedges'] += len(wedges)
         m['ring_wedges'] += sum(1 for a, b, _ in wedges if mol.bond_in_ring(a, b))
-        m['adjacent_pairs'] += len(_adjacent_pairs(wedges))
+        adjacent = _adjacent_pairs(wedges, mol)
+        m['adjacent_pairs'] += len(adjacent)
+        m['bridge_pairs'] += len(_adjacent_pairs(wedges)) - len(adjacent)
         m['near_collinear'] += len(_near_collinear_wedges(mol, wedges))
         m['unencoded'] += len(target) - len({a for a, _, _ in wedges})
 
@@ -1523,7 +1582,9 @@ def test_no_centre_takes_a_ring_bond_while_an_acyclic_one_is_free(drawings):
             anchor = unit['anchor']
             if anchor not in chosen or not mol.bond_in_ring(anchor, chosen[anchor]):
                 continue
-            if any(r is not None and not mol.bond_in_ring(anchor, r) for r in unit['refs']):
+            # an acyclic bond the reader would not read robustly -- the stem of a near-T -- is not free
+            feasible = _feasible_wedges(mol, unit, mol.parity_of(anchor))
+            if any(not mol.bond_in_ring(anchor, r) for r, _ in feasible):
                 offenders.append((title, anchor))
     assert not offenders, f'{len(offenders)} avoidable ring wedges: {offenders[:10]}'
 
@@ -1623,6 +1684,22 @@ def test_the_double_bond_guard_holds_when_the_S_O_is_the_LONGEST_bond():
     for narrow, wide, _ in wedges:
         assert mol.order_of(narrow, wide) == 1, \
             f'wedge placed on bond {narrow}-{wide} which has order {mol.order_of(narrow, wide)}'
+
+
+def test_a_phosphine_configuration_survives_a_molfile_round_trip():
+    """Ethylmethylpropylphosphine: three drawn bonds and a lone pair, the pair opposite their sum.
+    Stable ids: 1-2 ethyl, 3=P, 4=methyl, 5-7 propyl."""
+    for text in ('CC[P@](C)CCC', 'CC[P@@](C)CCC'):
+        mol = read_smiles(text)
+        for n, (x, y) in zip(range(1, 8), [(-1.7, 1.), (-.85, .5), (0., 0.), (.85, .5), (0., -1.),
+                                              (.85, -1.5), (.85, -2.5)]):
+            mol.set_xy(n, x, y)
+        wedges, log = wedges_for_write(mol)
+        assert [n for n, _, _ in wedges] == [3], log
+        lines, _ = emit_v2000(mol)
+        back, _, _ = _build(lines)
+        assert back == mol, text
+        assert back.parity_of(3) == mol.parity_of(3) != 0
 
 
 def test_a_bond_drawn_on_top_of_a_sibling_is_not_chosen_to_carry_the_wedge():
@@ -1756,15 +1833,21 @@ def test_the_choice_is_deterministic_across_repeated_calls(drawings):
 
 #: The measured quality of the write path over `drawings`, as a ratchet.  `ring_wedges` cannot go below
 #: `_RING_WEDGE_FLOOR`: that many centres have no drawable bond that is not a ring bond, so the number is
-#: a property of the molecules and not of the algorithm.  One of the 9 `adjacent_pairs` is bought
-#: deliberately -- morphine's centre 20 can offer only a collinear bond or a shared atom, and ambiguity is
-#: the worse failure -- which is what takes `near_collinear` to 0.
-_EXPECTED_QUALITY = dict(molecules=92, centres=282, wedges=282, ring_wedges=83,
-                         adjacent_pairs=9, near_collinear=0, unencoded=0, round_trip_failures=0)
+#: a property of the molecules and not of the algorithm; `_T_STEM_RING_WEDGES` more are forced by the
+#: reader's robustness check, their acyclic bond being the stem of a T whose sign a 5 degree turn
+#: inverts.  One of the 7 `adjacent_pairs` is bought deliberately -- morphine's centre 20 can offer only
+#: a collinear bond or a shared atom, and ambiguity is the worse failure -- which is what takes
+#: `near_collinear` to 0.
+_EXPECTED_QUALITY = dict(molecules=92, centres=284, wedges=284, ring_wedges=87,
+                         adjacent_pairs=7, near_collinear=0, unencoded=0, round_trip_failures=0)
+
+#: Centres whose one acyclic bond is the stem of a near-T, so the wedge goes on a ring bond instead.
+_T_STEM_RING_WEDGES = 2
 
 #: Centres whose every heavy neighbour is a ring neighbour -- bridgeheads and ring-fusion carbons --
-#: counted from the corpus rather than asserted, below.
-_RING_WEDGE_FLOOR = 83
+#: counted from the corpus rather than asserted, below.  Two of them are bridgeheads whose sign only the
+#: partner states, wedged from the sign the cage implies (`implied_parities`).
+_RING_WEDGE_FLOOR = 85
 
 
 def test_the_corpus_quality_does_not_regress(drawings):
@@ -1784,7 +1867,7 @@ def test_the_corpus_quality_does_not_regress(drawings):
 def test_the_ring_wedge_floor_is_a_property_of_the_molecules(drawings):
     """A centre whose every heavy neighbour is joined by a ring bond has nothing else to offer, its
     remaining direction being an implicit hydrogen with no atom to draw.  Counting those gives the floor
-    the metric is measured against, so "83 ring wedges" does not read as a failure.
+    the metric is measured against, so "85 ring wedges" does not read as a failure.
     """
     floor = 0
     for record in drawings.values():
@@ -1793,7 +1876,7 @@ def test_the_ring_wedge_floor_is_a_property_of_the_molecules(drawings):
             if all(r is None or mol.bond_in_ring(unit['anchor'], r) for r in unit['refs']):
                 floor += 1
     assert floor == _RING_WEDGE_FLOOR, floor
-    assert _quality(list(drawings.values()))['ring_wedges'] == floor, \
+    assert _quality(list(drawings.values()))['ring_wedges'] == floor + _T_STEM_RING_WEDGES, \
         'every ring wedge should be a forced one'
 
 
@@ -1807,7 +1890,7 @@ def test_every_configured_centre_on_the_corpus_survives_a_written_round_trip(dra
         configured = _configured(mol)
         if not configured:
             continue
-        target = {u['anchor']: mol.parity_of(u['anchor']) for u in configured}
+        target = _targets(mol, configured)
 
         lines, _ = emit_v2000(mol)
         back, _, _ = _build(lines)
@@ -2214,7 +2297,7 @@ def test_the_atropisomer_fixtures_are_what_the_tests_above_assume():
     index: a shifted line would wedge a different bond and still read a parity."""
     for lines in (_ATROPO_WEDGE, _ATROPO_MIRROR, _ATROPO_RING_B_FLIPPED, _ATROPO_FLAT):
         mol, _, _ = _build(lines)
-        assert format(mol) == 'C1=C(C(C2=CC=CC=C2Cl)=CC=C1)F'
+        assert format(mol).split(' ')[0] == 'C1=C(C(C2=CC=CC=C2Cl)=CC=C1)F', 'the tail holds the axis wedge'
         assert len(_atropo(mol)) == 1, 'the fixture must keep a stereogenic axis'
     assert _ATROPO_WEDGE[18] == '  1  2  1  1  0  0  0'      # pivot 1 to its ortho, the drawn wedge
     assert _ATROPO_WEDGE[23] == '  6  1  2  0  0  0  0'      # pivot 1's other ring bond, and a double one
@@ -2272,3 +2355,27 @@ def test_wedge_in_file_order_puts_the_narrow_end_first():
     assert wedge_in_file_order(wedge_of, 7, 3) == (7, 3, 1)
     assert wedge_in_file_order(wedge_of, 3, 7) == (7, 3, 1), 'the bond is written narrow end first'
     assert wedge_in_file_order(wedge_of, 4, 5) == (4, 5, None), 'no wedge: the pair is left alone'
+
+
+@mark.parametrize('text, expected', [
+    ('CN1[C@@H]2CC[C@H]1C[C@@H](C2)O', {3: 2, 6: 2}),          # tropine, CID 449293: the N-methyl bridge
+    ('C1C[C@@H]2C[C@H]1C[C@@H]2C(=O)O', {3: 4, 5: 4}),         # norbornane-2-carboxylic acid, CID 736412: C7
+    ('C[C@@]12CC[C@@H](C1(C)C)CC2=O', {2: 1, 5: 6}),           # camphor, CID 159055: C1 keeps its methyl
+])
+def test_coupled_bridgeheads_are_wedged_to_their_shared_bridge(text, expected):
+    """A bridgehead holding ring bonds only is wedged to the one-atom bridge its set shares, lifting it out of
+    the plane; one with an acyclic bond keeps that, the better wedge, and its partner still goes to the bridge."""
+    m = read_smiles(text)
+    m.clean2d()
+    wedges, _ = wedges_for_write(m)
+    assert {n: w for n, w, _ in wedges if n in expected} == expected
+
+
+def test_an_implied_bridgehead_is_wedged_too():
+    """Tropine signed at one bridgehead: the partner's sign is implied by the cage and drawn, so both ends of
+    the bicycle carry a wedge, and the drawing reads back to the same molecule."""
+    m = read_smiles('CN1[C@@H]2CCC1CC(C2)O')
+    assert m.implied_parities() == {6: 1}
+    m.clean2d()
+    wedges, _ = wedges_for_write(m)
+    assert {3, 6} <= {n for n, _, _ in wedges}

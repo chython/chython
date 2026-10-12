@@ -346,9 +346,11 @@ kind    name                slot 0      slot 1    slot 2      slot 3    implied 
 1       ``SU_CIS_TRANS``    end A       a0        end B       b0        each end's other direction
 2       ``SU_ALLENE``       end A       a0        end B       b0        each end's other direction
 3       ``SU_ATROPISOMER``  pivot A     oA0       pivot B     oB0       each pivot's other neighbour
+4       ``SU_HELICAL``      fjord A     iA0       fjord B     iB0       each fjord atom's other neighbour
+5       ``SU_PLANAR``       anchor      r0        anchor      r2        ``r1`` and ``r3``, by the unit
 ======  ==================  ==========  ========  ==========  ========  ================================
 
-``kind`` uses four of eight codes.  ``sign`` is the parity, and every slot holds a real atom index:
+``kind`` uses six of eight codes.  ``sign`` is the parity, and every slot holds a real atom index:
 there is no sentinel and no mask.
 
 **A record states the owner of each direction list and all but one of its directions.**  The last is
@@ -360,9 +362,10 @@ directions, and each end of a cumulene or a biaryl axis has two directions of wh
 named.  So a record expresses a configuration exactly when that configuration means something.
 
 Neither the allene chain's middle atoms nor an atropisomer's anchor is stored.  A reader finds the
-unit from the slots: by the atom at slot 0 for a tetrahedral centre, by either pivot for an
-atropisomer, and by the unique unit of matching kind holding both slot 1 and slot 3 among its
-directions for the two bond kinds — slot 0 and slot 2 are then an adjacency cross-check.
+unit from the slots: by the atom at slot 0 for a tetrahedral centre or a planar unit, whose slot 2
+repeats it, by either pivot for an atropisomer, and by the unique unit of matching kind holding both
+slot 1 and slot 3 among its directions for the two bond kinds — slot 0 and slot 2 are then an
+adjacency cross-check.
 
 .. testcode::
 
@@ -396,7 +399,9 @@ Enhanced stereo block, 3 bytes
      byte 2     kind 2 | group 6
 
 ``kind`` is 0 unspecified, 1 abs, 2 or, 3 and; ``group`` is 1..63 for OR and AND and 0 otherwise.
-The block is sparse and counted, so it costs nothing when unused.
+The block is sparse and counted, so it costs nothing when unused.  The stored ids and signs are
+written verbatim: a record carries the canonical labelling after ``canonicalize_stereo_groups()`` and
+the drawn one otherwise.
 
 It is its own block rather than a field in a configuration record because a group is a fact about an
 *atom*: it can be set on an atom that owns no configuration.

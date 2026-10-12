@@ -30,15 +30,29 @@ different algorithm.
 """
 from ._implicit import environment_of
 from ._tables import AcidRow, acids_rules_by_role
-from ..core import INFO, REFUSED, LogRecord, MoleculeContainer, recording
+from ..core import INFO, REFUSED, AutomorphismBudgetExceeded, LogRecord, MoleculeContainer, recording
 from ..core._core import valence_check
 
 
 __all__ = ['neutralize']
 
 
-def _candidates(molecule: MoleculeContainer, role: str) -> dict[int, AcidRow]:
-    """Site atom -> the first row that claimed it, in file order and ascending atom order.
+def _positions(molecule: MoleculeContainer) -> dict[int, int]:
+    """`canonical_order`, or `atoms_order` past the search budget -- the tie-break between sites.
+
+    A symmetry class cannot pick k of its members: EDTA's four carboxyls share one `atoms_order` rank,
+    and two of them chosen by atom number put both charges on one nitrogen in one atom order and one on
+    each in another.  Canonical positions are unique up to automorphism, so the first k are the same
+    sites in every order.
+    """
+    try:
+        return molecule.canonical_order()
+    except AutomorphismBudgetExceeded:
+        return molecule.atoms_order
+
+
+def _candidates(molecule: MoleculeContainer, role: str, positions: dict[int, int]) -> dict[int, AcidRow]:
+    """Site atom -> the first row that claimed it, in file order, keyed in canonical position order.
 
     Every row of a role demands the same charge, so the first claim is as good as any and the id in
     the log is the most specific pattern the table had.
@@ -47,7 +61,7 @@ def _candidates(molecule: MoleculeContainer, role: str) -> dict[int, AcidRow]:
     for row in acids_rules_by_role()[role]:
         for mapping in row.query.get_mapping(molecule):
             out.setdefault(mapping[row.anchor], row)
-    return dict(sorted(out.items()))
+    return {n: out[n] for n in sorted(out, key=positions.__getitem__)}
 
 
 def _admitted(molecule: MoleculeContainer, candidates: dict[int, AcidRow], delta: int,
@@ -112,8 +126,9 @@ def neutralize(molecule: MoleculeContainer, *, keep_charge: bool = True) -> bool
     is not derivable, and one whose neutral form no valence row accepts, is refused and logged.
     """
     lines: list[LogRecord] = []
-    acids = _candidates(molecule, 'acid')
-    bases = _candidates(molecule, 'base')
+    positions = _positions(molecule)
+    acids = _candidates(molecule, 'acid', positions)
+    bases = _candidates(molecule, 'base', positions)
     if not acids and not bases:
         return False
     if keep_charge and not (acids and bases):
@@ -142,6 +157,8 @@ def neutralize(molecule: MoleculeContainer, *, keep_charge: bool = True) -> bool
         moves.extend(zip(inside[:paired], outside[:paired]))
         spare_donors.extend(inside[paired:])
         spare_acceptors.extend(outside[paired:])
+    spare_donors.sort(key=positions.__getitem__)
+    spare_acceptors.sort(key=positions.__getitem__)
 
     # what is left crosses a component boundary, and both ends must move toward zero.  One side of
     # every component is exhausted by now, so a spare donor and a spare acceptor are never the same

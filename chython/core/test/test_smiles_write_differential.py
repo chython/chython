@@ -460,8 +460,38 @@ def cis_trans(oracle):
     return out
 
 
-def _stereo_agreement(records, flip=False):
+def _without_labile(text):
+    """RDKit's canonical form of `text` with the E/Z of every bond chython calls labile removed: a C=N or N=N
+    whose nitrogen holds no oxygen, and a C=C carrying an O-H or N-H (`_labile_double_bond`)."""
+    from rdkit import Chem
+    mol = Chem.MolFromSmiles(text)
+    if mol is None:
+        return None
+    for bond in mol.GetBonds():
+        if bond.GetBondType() != Chem.BondType.DOUBLE or bond.GetStereo() == Chem.BondStereo.STEREONONE:
+            continue
+        ends = (bond.GetBeginAtom(), bond.GetEndAtom())
+        if any(a.GetSymbol() == 'N' for a in ends):
+            labile = not any(a.GetSymbol() == 'N' and any(x.GetSymbol() == 'O' for x in a.GetNeighbors())
+                             for a in ends)
+        else:
+            labile = all(a.GetSymbol() == 'C' for a in ends) and any(
+                x.GetIdx() not in (ends[0].GetIdx(), ends[1].GetIdx()) and x.GetSymbol() in ('N', 'O')
+                and x.GetTotalNumHs() and mol.GetBondBetweenAtoms(a.GetIdx(), x.GetIdx()).GetBondType()
+                == Chem.BondType.SINGLE for a in ends for x in a.GetNeighbors())
+        if labile:
+            bond.SetStereo(Chem.BondStereo.STEREONONE)
+            for other in (b for a in ends for b in a.GetBonds()):
+                if other.GetBondDir() in (Chem.BondDir.ENDUPRIGHT, Chem.BondDir.ENDDOWNRIGHT):
+                    other.SetBondDir(Chem.BondDir.NONE)
+    return Chem.MolToSmiles(Chem.MolFromSmiles(Chem.MolToSmiles(mol)))
+
+
+def _stereo_agreement(records, flip=False, labile=False):
     """`(agreed, disagreed, skipped)` against RDKit's canonical form of chython 2's OWN string.
+
+    With `labile`, both sides lose the geometry chython does not keep (`_without_labile`) before they are
+    compared: RDKit keeps an E/Z on an imine, a hydrazone, an azo bond and an enol, and chython states none.
 
     The reference is V2's output and not the input text, which matters here and did not above: the
     bridge can only carry what V2 perceived, so an input stating a configuration V2 drops would make
@@ -487,7 +517,11 @@ def _stereo_agreement(records, flip=False):
         if not carried:
             continue
         out = write_smiles(mol)
-        (agreed if canonical(out) == reference else disagreed).append((source.canonical, out))
+        if labile:
+            reference, written = _without_labile(source.canonical), _without_labile(out)
+        else:
+            written = canonical(out)
+        (agreed if written == reference else disagreed).append((source.canonical, out))
     return agreed, disagreed, skipped
 
 
@@ -521,31 +555,42 @@ def test_rdkit_agrees_on_the_CONFIGURATION_and_not_only_the_constitution(stereo_
 #
 # | record                                       | stereogenic          | not stereogenic               |
 # | -------------------------------------------- | -------------------- | ----------------------------- |
+# | norbornene                                   | none                 | both bridgeheads, as a pair   |
 # | trispiro, cyclopentane-capped at both ends   | the C2 middle spiro  | both terminal spiro atoms     |
-NOT_STEREOGENIC_IN_SOURCE = ('C1CC[C@]2(C1)C[C@]1(C[C@]3(CCCC3)CC1)CC2',)
+NOT_STEREOGENIC_IN_SOURCE = ('C1=C[C@@]2([H])CC[C@@]1(C2)[H]', 'C1CC[C@]2(C1)C[C@]1(C[C@]3(CCCC3)CC1)CC2')
+TRISPIRO = NOT_STEREOGENIC_IN_SOURCE[1]
+
+# Records whose bridgehead pair no bicycle realises: the writer drops both signs and RDKit's string keeps
+# them.  The tropinone's bridgeheads are drawn in,out; RDKit's ETKDG embeds no conformer of it.
+BRIDGEHEADS_UNREALISABLE = (
+    'C=1C=CC=C(/C=C/2\\C(/C(=C/C=3C=CC=C(C)C=3)/[C@@H]3N([C@@H]\\2CC3)C)=O)C=1C',
+)
 
 
 def test_a_parity_on_a_symmetric_spiro_end_is_not_written():
     """The terminal spiro atom of the trispiro record carries a cyclopentane whose two arms are
     exchanged by an automorphism, so only the middle atom's parity is written."""
-    m = read_smiles(NOT_STEREOGENIC_IN_SOURCE[0])
+    m = read_smiles(TRISPIRO)
     out = write_smiles(m)
     assert out.count('@') == 1, out
     assert read_smiles(out) == m
 
 
 def test_rdkit_agrees_on_every_cis_trans_double_bond(cis_trans):
-    """340 of 346, and the six skipped are the atropisomers.  The `/` and `\\` half of the writer.
+    """339 of 346: six skipped are atropisomers, one is `BRIDGEHEADS_UNREALISABLE`.  The `/` and `\\` half
+    of the writer.
 
     `test/` has no double-bond geometry in any file, so without this corpus the direction tokens
     would be tested only by hand-built fixtures -- and direction tokens are the one part of SMILES
     stereo where the token is not attached to the atom it describes: a `/` belongs to a bond, its
     meaning depends on which end was written first, and a chain of them has to stay consistent
-    across ring closures and branches.  That is exactly the kind of thing a corpus finds.
+    across ring closures and branches.  That is exactly the kind of thing a corpus finds.  Compared with the
+    labile geometry removed on both sides: RDKit keeps an E/Z on an imine, a hydrazone, an azo bond and an
+    enol, and chython states none.
     """
-    agreed, disagreed, skipped = _stereo_agreement(cis_trans)
-    assert disagreed == []
-    assert len(agreed) >= 340
+    agreed, disagreed, skipped = _stereo_agreement(cis_trans, labile=True)
+    assert [source for source, _ in disagreed] == list(BRIDGEHEADS_UNREALISABLE), disagreed
+    assert len(agreed) >= 339
     assert skipped <= 6
 
 
@@ -741,16 +786,14 @@ def test_the_minimal_witness_is_cis_1_4_dimethylcyclohexane_and_chython_2_still_
 
 
 # ------------------------------------------------------------------------------------------------
-# ALLENES.  Eleven signs, no external oracle, and the one place the writer REFUSES.
+# ALLENES.  Ten signs, no external oracle.
 def test_the_allene_configuration_is_written_or_REPORTED_and_never_dropped(stereo_sdf):
-    """Ten records carry an allene sign: eight get a token, two are refused and named in `lost`.
+    """Ten records carry an axial sign, and all ten get a token -- two of them on `C=C=C=C=C`, an axis
+    of four double bonds written as OpenSMILES extended tetrahedral on its middle atom.
 
-    The two refusals are cumulated -- `C=C=C=C=C`, an axis of four double bonds -- and SMILES has no
-    agreed notation for an axis longer than an allene's, so the writer declines to invent one.  What
-    makes that acceptable is the second half of the assertion: the declined unit arrives in
-    `smw_traversal(...)['lost']`, so a caller who needs the configuration can see that the string
-    does not carry it.  A silent drop here would be indistinguishable from a molecule that never had
-    a configuration, and that is the failure mode this test exists to prevent.
+    A refused unit would arrive in `smw_traversal(...)['lost']`; a silent drop would be
+    indistinguishable from a molecule that never had a configuration, and that is the failure mode
+    this test exists to prevent.
     """
     spelled = 0
     refused = 0
@@ -772,8 +815,8 @@ def test_the_allene_configuration_is_written_or_REPORTED_and_never_dropped(stere
         else:
             spelled += 1
             assert '@' in out
-    assert spelled == 8
-    assert refused == 2
+    assert spelled == 10
+    assert refused == 0
 
 
 def test_chython_2_has_TWO_ATTRACTORS_for_an_allene_so_it_cannot_arbitrate(stereo_sdf, oracle):
@@ -812,7 +855,7 @@ def test_chython_2_has_TWO_ATTRACTORS_for_an_allene_so_it_cannot_arbitrate(stere
         # its own loop, which is strictly stronger than "at least one of the two strings oscillates"
         assert row['there_fixpoint'], 'not a fixpoint, so V2 could still arbitrate'
         assert row['here_fixpoint']
-    assert differing == 4       # two of them the refusals above, two the two-attractor pair
+    assert differing == 3       # the two two-attractor records and one pentatetraene
 
 
 def test_the_bridge_reports_the_atropisomers_it_cannot_carry(cis_trans):

@@ -950,6 +950,30 @@ def test_a_hydrogen_at_an_allene_end_counts_where_the_position_rule_puts_it():
     assert frame(read_smiles('C(F)=[C@]=C(F)C'))[-1] == (3, (2, None, 5, 6), 1)
 
 
+@mark.parametrize('size', range(5, 11))
+def test_a_cyclic_allene_round_trips_in_every_atom_order(size):
+    """An end's hydrogen pairs with the end that owns it, whichever arm the centre names first.
+
+    A ring closure on the centre makes the closing end its first arm, so the string's pairs arrive in
+    the opposite order to `refs`.  1,2-cyclohexadiene and 1,2-cycloheptadiene are chirally distinct.
+    """
+    text = 'C1' + 'C' * (size - 4) + '[CH]=[C@]=[CH]1'
+    for sign in ('@', '@@'):
+        mol = read_smiles(text.replace('@', sign))
+        mirror = read_smiles(text.replace('@', '@@' if sign == '@' else '@'))
+        assert mol != mirror, text
+        assert read_smiles(str(mol)) == mol, str(mol)
+        for _ in range(40):
+            spelling = format(mol, 'r')
+            assert read_smiles(spelling) == mol, (text, spelling)
+
+
+def test_a_ring_closure_on_the_allene_centre_reads_the_frame_the_string_wrote():
+    # each string lists the ends' substituents in the reference's order; only the centre's arm order moves
+    assert read_smiles('[C@]=1=CCCCCC=1') == read_smiles('C1CC[CH]=[C@]=[CH]C1')
+    assert read_smiles('C=1CCCCC=[C@]=1') == read_smiles('C1CC[CH]=[C@]=[CH]C1')
+
+
 def test_a_configuration_this_reader_cannot_place_is_named_and_not_guessed():
     cases = (
         # `@?` is "there is a centre here and I do not know which way": a third state this arena
@@ -998,11 +1022,9 @@ def test_the_tail_puts_an_atom_in_an_enhanced_stereo_group():
 
 def test_a_group_the_tail_names_wrongly_is_reported_and_never_raises():
     cases = (
-        # the range belongs to `set_stereo_group`, which is the method that validates it, so the
-        # reader parses the number unbounded and reports that class's own refusal.  A number ABOVE the
-        # range is renumbered instead -- the test below -- because it names a group; a stated 0 names
-        # none, `o<n>` requiring the number, so it stays a refusal.
-        ('F[C@H](Cl)Br |&0:1|', 'must have a group id in 1..63'),
+        # an id outside 1..63, 0 included, is a label the arena cannot hold and is renumbered -- the
+        # test below; `o` with no number at all names no group and is not applied
+        ('F[C@H](Cl)Br |&0:1|', 'names group 0, outside 1..63, renumbered to 1'),
         ('F[C@H](Cl)Br |a:9|', 'names atom 9, but the string has 4 atom(s)'),
         ('F[C@H](Cl)Br |a:|', 'names no atom'),
         ('F[C@H](Cl)Br |o:1|', '`o:1` is not applied'),           # `o` with no group number
@@ -1233,7 +1255,7 @@ def test_a_brace_block_field_the_reader_cannot_use_is_reported_and_never_raises(
         ('C[C@H](N)C {A9=r}', 'names atom 9, but the string has 4 atom(s)'),
         ('C[C@H](N)C {A1=R;A1=S}', 'two CIP descriptors'),
         # and the group fields report through the same path as the pipe dialect, in its words
-        ('F[C@H](Cl)Br {&0:1}', 'must have a group id in 1..63'),
+        ('F[C@H](Cl)Br {&0:1}', 'names group 0, outside 1..63, renumbered to 1'),
         ('F[C@H](Cl)Br {a:9}', 'names atom 9, but the string has 4 atom(s)'),
         ('F[C@H](Cl)Br {o:1}', '`o:1` is not applied'),
         # an unknown key is named rather than guessed at

@@ -828,6 +828,31 @@ def filter_examples():
     return out
 
 
+def healed_bridgeheads_only(rd0, v3, i0, i1):
+    """Does a `/t` disagreement lie on coupled bridgeheads alone, which the core heals by design?
+
+    The core fills an implied bridgehead sign from its partner and clears an impossible or restating
+    pair (`docs/stereo.rst`, "Coupled bridgeheads"); the InChI library states each drawn parity as
+    given.  Accepted when an independent engine reads the core's own SMILES to the core's `/t/m/s`,
+    and the two `/t` layers agree on every other centre, up to the inversion `/m` renormalises.  A
+    stated sign the core drops or marks `?` off a bridgehead is still a failure.
+    """
+    coupled = {u['anchor'] for u in v3.stereo_units() if u['coupled']}
+    if not coupled or layers(inchi_of(chem().MolFromSmiles(str(v3))), 'tms') != layers(i1, 'tms'):
+        return False
+    aux = chem().MolToInchiAndAuxInfo(strip(rd0))[1]
+    order = [int(x) for x in aux.split('/N:')[1].split('/')[0].split(',')]
+    skip = {str(k) for k, n in enumerate(order, 1) if n in coupled}
+
+    def signs(text):
+        t = layers(text, 't').get('t', 't')[1:]
+        return {c[:-1]: c[-1] for c in t.split(',') if c and c[:-1] not in skip}
+
+    a, b = signs(i0), signs(i1)
+    a = {k: v for k, v in a.items() if v != '?' or k in b}  # an unsigned centre the core omits loses nothing
+    return a == b or a == {k: {'+': '-', '-': '+'}.get(v, v) for k, v in b.items()}
+
+
 @mark.parametrize('corpus', ['stereo_sdf', 'nci', 'filter_examples'])
 def test_corpus_round_trips(corpus, request):
     """`rd0 -> chython 3 -> rd1` loses nothing, over 7117 records from three public corpora.
@@ -852,8 +877,9 @@ def test_corpus_configurations_match_the_core(corpus, request):
     """
     bad = []
     for rd0 in request.getfixturevalue(corpus):
-        i0, i1 = inchi_of(rd0), molecule_to_inchi(from_rdkit(rd0))
-        if layers(i0, 'tms') != layers(i1, 'tms'):
+        v3 = from_rdkit(rd0)
+        i0, i1 = inchi_of(rd0), molecule_to_inchi(v3)
+        if layers(i0, 'tms') != layers(i1, 'tms') and not healed_bridgeheads_only(rd0, v3, i0, i1):
             bad.append(('tms', i0, i1))
         elif layers(i0, 'b') != layers(i1, 'b') and '?' not in layers(i1, 'b').get('b', ''):
             bad.append(('b', i0, i1))

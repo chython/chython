@@ -715,20 +715,18 @@ def test_an_atropisomer_group_is_a_fixed_point_of_three_write_read_cycles():
 
     The axis is unnameable without loss here -- both biaryl pivots also own a ring double bond, so
     neither index says which of that atom's two elements AND 1 is on -- and the writer reports that on
-    every cycle while still writing the tail (note 4 at the top of `_smiles_write.pxi`).
-
-    SMILES carries no atropisomer configuration, so each cycle configures the read-back axis again: a
-    group on an unconfigured axis is not written.
+    every cycle while still writing the tail (note 4 at the top of `_smiles_write.pxi`).  The axis
+    configuration itself travels as the tail's wedge.
     """
     mol = read_smiles('C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12')
     with mol.edit() as e:
         e.set_stereo_group(next(iter(mol.chiral_bonds())), 3, 1)
+    mol.set_parity(mol.stereo_group_anchor_of(next(iter(mol.chiral_bonds()))), 1)
     previous = None
     for cycle in range(3):
-        mol.set_parity(mol.stereo_group_anchor_of(next(iter(mol.chiral_bonds()))), 1)
         log = []
         text = write_smiles(mol, 'x', log=log)
-        assert text.endswith(' |&1:3|'), (cycle, text)
+        assert text.endswith(' |&1:3,wD:3.3|'), (cycle, text)
         assert previous is None or text == previous, (cycle, previous, text)
         assert [r.rule for r in log] == ['smiles:stereo-group-axis-ambiguous'], (cycle, log)
         previous = text

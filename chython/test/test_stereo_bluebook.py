@@ -102,7 +102,7 @@ def _repo_root():
 
 SDF = _repo_root() / 'test' / 'stereo.sdf'
 
-# `stereo_unit_t.kind`, as `stereo_units()` reports it.  4 (helical) is RESERVED and never produced.
+# `stereo_unit_t.kind`, as `stereo_units()` reports it.
 SU_TETRA, SU_CIS_TRANS, SU_ALLENE, SU_ATROPISOMER, SU_HELICAL = 0, 1, 2, 3, 4
 
 # The largest record in the file, measured.  The node budget that sets `stereo_truncated` is two
@@ -449,9 +449,8 @@ def test_gate3_annotated_codes_produce_their_unit_kind(records, code):
 
     RULING F83: `missing` is empty both when every annotated record passes and when NO record
     carries the code, so the subject is counted here rather than a census test two screens away
-    doing it at a distance.  `TH` is deliberately absent from the parametrisation -- VS138 is
-    annotated `TH` on a phosphine the core refuses by scope decision, which
-    `test_gate4_phosphine_lone_pair_stays_excluded` is about.
+    doing it at a distance.  `TH` is absent from the parametrisation: its one record, VS138, is a
+    phosphine, which `test_gate4_phosphine_lone_pair_is_a_centre` asserts.
     """
     want = CODE_KIND[code]
     carrying = [sid for sid, (_, meta) in records.items() if code in _codes(meta)]
@@ -533,19 +532,13 @@ def test_gate4_the_isotope_decided_centres_are_genuinely_stereogenic(records, st
         'and they differ in isotope, which is the property under test'
 
 
-def test_gate4_phosphine_lone_pair_stays_excluded(records):
-    """VS138 is a phosphine, and the core deliberately does NOT find the unit the oracle annotates.
+def test_gate4_phosphine_lone_pair_is_a_centre(records):
+    """VS138 is a phosphine, and its phosphorus is the tetrahedral unit the oracle annotates `TH`.
 
-    The file annotates VS138 `TH`.  Refusing it is the user's scope decision -- "forget about amines
-    and phosphines, it only introduces noise" -- and not a bug: a P(III) lone-pair centre inverts at
-    room temperature, so a toolkit that reported it would flood every phosphine ligand with
-    stereocentres nobody can isolate.  This gate certifies the decision rather than the annotation.
-
-    RULING F83, twice over.  The subject is checked first, because a negative assertion over units
-    that do not exist proves nothing; and the assertion is that NO kind-0 unit is anchored on that
-    phosphorus AT ALL, rather than the narrow conjunction `kind == 0 and element == 15 and
-    n_refs == 4 and degree == 3` the brief proposed -- that one lets a three-ref tetrahedral unit on
-    the same atom through, and tests an implementation detail where the scope decision is the point.
+    A P(III) centre inverts slowly, with a barrier near 30-35 kcal/mol, so P-stereogenic phosphines such as
+    DIPAMP are resolved and isolated.  The lone pair is the fourth direction (`_lone_pair_valence` in
+    `chython/core/_stereo.pxi`).  The subject is checked first, so the positive answer is about a neutral
+    three-coordinate phosphorus and not a phosphonium.
     """
     m = records['VS138'][0]
     phosphorus = [a for a in m.atom_numbers if m.element_of(a) == 15]
@@ -553,38 +546,40 @@ def test_gate4_phosphine_lone_pair_stays_excluded(records):
     p = phosphorus[0]
     assert (m.charge_of(p), m.degree_of(p), m.total_h_of(p)) == (0, 3, 0), \
         'neutral, three-coordinate, no hydrogen: a P(III) lone-pair centre and not a phosphonium'
-    assert 'TH' in _codes(records['VS138'][1]), 'the oracle does annotate it, which is the point'
+    assert 'TH' in _codes(records['VS138'][1]), 'the oracle annotates it'
 
-    units = m.stereo_units()
-    assert units, 'the record does produce candidates, so the negative below is not vacuous'
-    assert not [u for u in units if u['anchor'] == p], \
-        'no unit of any kind is anchored on the phosphine phosphorus'
+    units = [u for u in m.stereo_units() if u['anchor'] == p]
+    assert [(u['kind'], u['stereogenic']) for u in units] == [(0, True)], \
+        'one stereogenic tetrahedral unit on the phosphine phosphorus'
 
 
-def test_gate4_helicity_is_still_not_perceived(records):
-    """VS010 and VS011 are [6]helicene of opposite helicity. Kind 4 is RESERVED and never produced.
-
-    RULING F83: `all(u['kind'] != 4 for u in [])` is true of an empty list, and this is exactly that
-    case -- both records return `[]`, measured.  A 26-carbon [6]helicene has no tetrahedral centre,
-    no isolable cis/trans bond, and no atropisomer axis either, since every one of its pivot bonds
-    is a ring-fusion bond and `_is_atropisomer_axis` refuses a ring bond.  Emptiness is the CORRECT
-    answer today; helicity is deferred by choice.
-
-    So the measured shape is asserted -- `== []`, not a `!= 4` that empties trivially -- next to a
-    skeleton pin, so a bridge that produced an empty MOLECULE could not pass this by accident.  The
-    corpus-wide statement that kind 4 never appears is asserted here too, where it is not vacuous.
-    """
+def test_gate4_a_helicene_is_one_helix(records):
+    """VS010 and VS011 are [6]helicene of opposite helicity: one stereogenic SU_HELICAL unit each,
+    owned by the two fjord atoms, and no other candidate -- every pivot bond is a ring-fusion bond.
+    Kind 4 appears nowhere else in the corpus."""
     for sid in ('VS010', 'VS011'):
         m, meta = records[sid]
         assert _codes(meta) == {'HE'}, f'{sid} is the helicity annotation'
-        assert (m.atom_count, m.bond_count, m.rings_count) == (26, 31, 6), \
-            f'{sid} is C26 with six fused rings, so the empty answer below is about a real molecule'
+        assert (m.atom_count, m.bond_count, m.rings_count) == (26, 31, 6)
         assert {m.element_of(a) for a in m.atom_numbers} == {6}
-        assert m.stereo_units() == [], f'{sid} produces no candidate at all, which is correct today'
+        (unit,) = m.stereo_units()
+        assert unit['kind'] == SU_HELICAL and unit['stereogenic'], sid
+        assert unit['owners'][1] not in m.neighbors_of(unit['owners'][0]), 'the fjord atoms are not bonded'
 
-    assert not [(sid, u) for sid, (m, _) in records.items()
-                for u in m.stereo_units() if u['kind'] == SU_HELICAL], \
-        'kind 4 is reserved across the whole corpus, where the statement has 300 subjects'
+    assert sorted(sid for sid, (m, _) in records.items()
+                  for u in m.stereo_units() if u['kind'] == SU_HELICAL) == ['VS010', 'VS011']
+
+
+def test_gate4_the_drawn_helicity_is_read():
+    """The drawings' wedges: VS010 is P (parity 2), VS011 is M (parity 1)."""
+    from chython.formats import SDFRead
+    with SDFRead(str(SDF)) as f:
+        read = {f.meta['STRUCTURE_ID']: mol for mol in f}
+    for sid, parity in (('VS010', 2), ('VS011', 1)):
+        m = read[sid]
+        (unit,) = [u for u in m.stereo_units() if u['kind'] == SU_HELICAL]
+        assert m.parity_of(unit['anchor']) == parity, sid
+    assert read['VS010'] != read['VS011']
 
 
 def test_the_two_unannotated_records_have_nothing_to_annotate(records):

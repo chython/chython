@@ -951,6 +951,29 @@ configured" is a filter on this list and not a second accessor:
     [u for u in mol.stereogenic_units() if u['parity']]        # configured
     [u for u in mol.stereogenic_units() if not u['parity']]    # stereogenic but unsigned
 
+A lone pair is a direction with no atom of its own, so a pyramidal atom with three substituents and a
+pair is a tetrahedral unit. An N-H or P-H inverts through its hydrogen and is never a centre; at a double
+bond the same N-H is an ordinary cis/trans direction.
+
+=================  ===================================================================================
+Pyramidal atom     A centre when
+=================  ===================================================================================
+S, Se, Te          a pair is left: sulfoxide, selenoxide, sulfonium, sulfilimine -- not a sulfone
+P, As, Sb          a pair is left: phosphine, arsine -- a phosphine oxide is a centre by its four bonds
+N                  in a three-membered ring only: N-chloroaziridine, oxaziridine -- never an amine
+=================  ===================================================================================
+
+.. testcode::
+
+    pamp = smiles('COc1ccccc1[P@](C)c1ccccc1')
+    print(pamp.is_chiral(9), pamp == smiles('COc1ccccc1[P@@](C)c1ccccc1'))
+    print(smiles('ClN1CC1C').is_chiral(2), smiles('CCN(C)CCC').is_chiral(3))
+
+.. testoutput::
+
+    True False
+    True False
+
 A candidate on a double bond an **alternating cycle** can move is never stereogenic: another Kekule form
 of the same compound writes that bond single, so a configuration there would be the drawing's and not the
 compound's. Cyclooctatetraene's four ring bonds are all candidates and none of them holds a geometry;
@@ -983,6 +1006,8 @@ One per-atom question, three whole-molecule ones, and the CIP descriptors:
     chiral.stereo_groups()      # {(kind, group): [member, ...]} -- a centre is an id, an axis a pair
     chiral.stereo_truncated     # True when the symmetry search ran out of budget, so the
                                 # stereogenic sets above are an over-approximation
+    chiral.identity_approximate # True when a block of enhanced-stereo labels exceeds the labelling
+                                # search, so one meaning can have two identities
 
     # the axis-only view of the same collections (double bonds, allenes, atropisomer axes):
     chiral.has_bond_stereo_groups            # True when any collection has an axis member

@@ -286,7 +286,9 @@ def test_every_string_is_a_FIXED_POINT_except_the_one_SMILES_cannot_state(stereo
 
 
 def test_every_cis_trans_record_is_a_fixed_point_with_nothing_to_arbitrate(cis_trans):
-    """340 of 340, and 1611 direction tokens, so the `/` and `\\` half needs no InChI at all.
+    """340 of 340, and 1214 direction tokens, so the `/` and `\\` half needs no InChI at all.  The tokens
+    the corpus's imines, hydrazones, azo bonds and enols carried in the source are not written: those
+    geometries are labile.
 
     Worth stating as its own test rather than folding into the tetrahedral one: a mirror automorphism
     is a TETRAHEDRAL story -- a reflection maps a stereocentre to its opposite and a double bond to
@@ -296,7 +298,7 @@ def test_every_cis_trans_record_is_a_fixed_point_with_nothing_to_arbitrate(cis_t
     mols = stereo_mols(cis_trans)
     assert len(mols) > 300, 'the bridge lost too many records: %d' % len(mols)
     tokens = sum(write_smiles(m).count('/') + write_smiles(m).count('\\') for m in mols)
-    assert tokens > 1500, 'the corpus lost its direction tokens: %d' % tokens
+    assert tokens > 1150, 'the corpus lost its direction tokens: %d' % tokens
 
     moved = [(out, again) for out, again in (loop(m) for m in mols) if out != again]
     assert not moved, '%d of %d cis/trans records moved: %r' % (len(moved), len(mols), moved[:3])

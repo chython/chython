@@ -197,6 +197,7 @@ def parse_v2000(lines, log=None):
         raise MalformedCtfile(f'V2000 record has {len(lines)} lines; the header alone needs 4')
 
     ctab = Ctab()
+    ctab.version = 'v2000'
     ctab.log = out
     ctab.title = lines[0].rstrip()
     ctab.program = lines[1].rstrip()
@@ -715,6 +716,11 @@ def emit_v2000(mol, sgroups=None, *, title=None, program='', comment='', log=Non
     relative = any(kind != 1 for kind, _ in groups)
     configured = any(mol.parity_of(sid) for sid in sids)
     chiral = 1 if configured and not relative else 0
+    if chiral and any(mol.parity_of(sid) and mol.stereo_group_of(sid) == (0, 0) and mol.stereo_is_live(sid)
+                      for sid in sids):
+        out.append(LogRecord('v2000:unlabelled-sign-flag', (),
+                             'chiral flag 1 written for configurations in no collection; readers take '
+                             'them as absolute (ABS), which chython does not assume'))
     if relative:
         # V2000's chiral flag is one bit for the whole record, so an AND or OR collection cannot be
         # written -- and writing the atoms without it would state a single known enantiomer.  The loss

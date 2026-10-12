@@ -58,7 +58,7 @@ contract to satisfy rather than four guesses:
     standardize(*, fix_hydrogens=True, fix_tautomers=True) -> bool               landed
     kekule() -> KekuleResult(changed, log, unresolved)                           landed
     thiele() -> ThieleResult(changed, log, refused)                              landed
-    canonicalize(*, fix_tautomers=True, keep_kekule=False) -> bool               landed
+    canonicalize(*, fix_tautomers=True, keep_kekule=False, stereo_groups=True) -> bool   landed
     implicify_hydrogens() -> int   (hydrogen ATOMS removed)                      landed
     explicify_hydrogens() -> int   (hydrogen ATOMS added)                        landed
     neutralize(*, keep_charge=True) -> bool                                      landed
@@ -140,11 +140,18 @@ def reaction_standardize(rxn, *, fix_hydrogens: bool = True, fix_tautomers: bool
 
 
 def reaction_canonicalize(rxn, *, fix_tautomers: bool = True, keep_kekule: bool = False) -> bool:
-    """`ReactionContainer.canonicalize`."""
+    """`ReactionContainer.canonicalize`.
+
+    Without `canonicalize_stereo_groups()`: a racemic input's drawn sign against the product's is what
+    tells retention from inversion before a mapping exists, so no molecule's AND phase is moved.
+    On `C[C@H](O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O |&1:1|`, `reconstruct_mapping(heal_stereo='product')`
+    answers `react:mitsunobu` on the drawn signs and `protect:hydroxyl_acyl` on the phased ones.
+    """
     changed = False
     for where, molecule in _located(rxn):
         with _mirror(rxn, molecule, where):
-            if molecule.canonicalize(fix_tautomers=fix_tautomers, keep_kekule=keep_kekule):
+            if molecule.canonicalize(fix_tautomers=fix_tautomers, keep_kekule=keep_kekule,
+                                     stereo_groups=False):
                 changed = True
     return changed
 

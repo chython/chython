@@ -246,7 +246,7 @@ class Ctab:
     """A parsed connection table, version- and surface-independent."""
     __slots__ = ('title', 'program', 'comment', 'dimensionality', 'chiral', 'atoms', 'bonds',
                  'sgroups', 'groups', 'bond_groups', 'aliases', 'log', 'meta', 'unknown_hydrogens',
-                 'channels')
+                 'channels', 'version')
 
     def __init__(self):
         self.title = ''
@@ -254,6 +254,9 @@ class Ctab:
         self.comment = ''
         self.dimensionality = ''
         self.chiral = False
+        # 'v2000' or 'v3000' for a CTfile, the prefix of the rules about its header fields; '' for an
+        # XML dialect, which has no chiral flag and no dimensionality stamp.
+        self.version = ''
         self.atoms = []
         self.bonds = []
         self.sgroups = []
@@ -408,6 +411,11 @@ class Ctab:
                     except ValueError as e:
                         log.append(LogRecord('ctab:coordinates-dropped', (),
                                              f'atom {pos + 1} coordinates dropped: {e}', LOST))
+                if self.version and (self.dimensionality == '3D' and not solid or
+                                     self.dimensionality == '2D' and solid):
+                    log.append(LogRecord('ctab:dimensionality-mismatch', (),
+                                         f'header stamps {self.dimensionality} and the z coordinates are '
+                                         f'{"not " if solid else ""}all zero; the coordinates decide'))
                 if solid:
                     # Parity assignment runs inside this edit session, where `xyz_of` refuses to answer
                     # (every geometry accessor requires a clean arena), so the reader keeps its own
@@ -501,6 +509,7 @@ class Ctab:
                                     if a.parity in (1, 2)},
                             positions={sid: i for i, sid in enumerate(sids)},
                             configurations=configurations)
+            self._report_flag_and_collections(mol, log)
 
         # S-groups, translated from Ctab positions into the molecule's stable ids.  Bond references
         # arrive as endpoint pairs already (the parsers translate the file's 1-based indices), so
@@ -532,6 +541,14 @@ class Ctab:
         # label to belong to, so there is nothing to promote and the label stays the data record it is.
         if not ignore_stereo:
             promote_stereo_labels(mol, log)
+            # Chiral flag 1 reads as ABS elsewhere; here an element outside every collection keeps
+            # unstated reliability, so the flag is named where it would have labelled one.
+            if self.version and self.chiral and any(
+                    mol.parity_of(u['anchor']) and mol.stereo_group_of(u['anchor']) == (0, 0)
+                    for u in mol.stereo_units()):
+                log.append(LogRecord('ctab:chiral-flag-ignored', (),
+                                     'chiral flag 1 not read as ABS: a configuration in no collection is '
+                                     'stored as drawn, and only a collection states ABS, AND or OR'))
 
         # The log goes onto the molecule for the same reason, and is still RETURNED, because a caller
         # collecting into its own `log=` list may still do so.  `absorb` and not `extend`: it stamps
@@ -543,6 +560,24 @@ class Ctab:
             mol.log.absorb('read', log)
 
         return mol, store, log
+
+    def _report_flag_and_collections(self, mol, log):
+        """Log what the chiral flag and the collections leave unstated, against the read parities."""
+        groups = mol.stereo_groups()
+        if self.chiral and any(kind in (STEREO_AND, STEREO_OR) for kind, _ in groups):
+            log.append(LogRecord(f'{self.version or "ctab"}:chiral-flag-contradicts-collection', (),
+                                 'chiral flag 1 states absolute configuration and a STERAC or STEREL '
+                                 'collection states otherwise; the collections are kept'))
+        if self.version != 'v3000':
+            return
+        for (kind, group), members in groups.items():
+            for member in members:
+                anchor = mol.stereo_group_anchor_of(member)
+                if anchor is None or not mol.parity_of(anchor):
+                    atoms = member if isinstance(member, tuple) else (member,)
+                    log.append(LogRecord('v3000:collection-member-unconfigured', atoms,
+                                         f'stereo collection {kind}:{group} names {member}, which the drawing '
+                                         f'leaves unconfigured; the membership is kept'))
 
     def __repr__(self):
         return (f'Ctab({len(self.atoms)} atoms, {len(self.bonds)} bonds, '

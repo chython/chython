@@ -24,16 +24,18 @@ indices from scratch.  ``test/implicit.sdf`` has exactly one V3000 record, so th
 is thin and everything else is written out inline.
 """
 
-from pytest import raises
+from pytest import mark, raises
 
 from .._ctab import STEREO_AND, STEREO_OR, axis_spelling
 from .._errors import MalformedCtfile, UnsupportedCtfile
+from .._facade import mol as mol_io
 from .._v2000 import emit_v2000, parse_v2000
 from .._hydrogens import MRV_IMPLICIT_H
 from .._sdf import sniff_version, split_records
 from .._sgroup import NO_INDEX
 from .._v3000 import V3000_STAMP, emit_v3000, parse_v3000
-from ....core import read_smiles
+from ....core import SU_TETRA, read_smiles
+from ....core.wedge import tetrahedral_parity
 
 
 def _record(*body, title='t'):
@@ -998,3 +1000,99 @@ def test_a_bond_collection_on_a_bond_no_unit_owns_keeps_the_collection():
                               'BEGIN COLLECTION', 'MDLV30/STEBRAC1 BONDS=(1 2)', 'END COLLECTION'))
     assert list(mol.stereo_groups()) == [(3, 1)], mol.stereo_groups()
     assert mol.bond_stereo_groups() == {}, 'nothing owns that bond, so it is not an axis'
+
+
+def _drawn(text):
+    """`text` laid out and read back from V3000, so its wedges are stored ones."""
+    m = read_smiles(text)
+    m.clean2d()
+    return mol_io(mol_io(m))
+
+
+def _drawing_agrees(m):
+    for unit in m.stereo_units():
+        if unit['kind'] == SU_TETRA and any(m.wedge_of(unit['anchor'], r) for r in unit['refs'] if r is not None):
+            assert tetrahedral_parity(m, unit) == m.parity_of(unit['anchor']), unit
+
+
+@mark.parametrize('text', ['C[C@H](O)CC |&1:1|', 'C[C@@H](O)CC |&1:1|',
+                           'C[C@@H](O)[C@H](O)[C@@H](O)C |&1:1,&2:5,o1:3|',
+                           'C[C@H](NC)[C@@H](O)c1ccccc1 |&1:1,4|', 'C[C@@H](NC)[C@H](O)c1ccccc1 |&1:1,4|'])
+def test_an_inverted_collection_carries_its_wedges_and_descriptors(text):
+    """canonicalize_stereo_groups() inverts an AND collection's wedges and R/S with its signs."""
+    m = _drawn(text)
+    m.assign_cip()
+    signs = {n: m.parity_of(n) for n in m.atom_numbers}
+    wedges = {(a, b): c for a, b, c in m.wedges()}
+    cips = m.atom_cips()
+    m.canonicalize_stereo_groups()
+    inverted = {n for n, p in signs.items() if p and m.parity_of(n) and m.parity_of(n) != p}
+    for (a, b), c in wedges.items():
+        if a in inverted:
+            assert m.wedge_of(a, b) == 3 - c
+    assert m.atom_cips() == {n: {'R': 'S', 'S': 'R'}[d] if n in inverted else d for n, d in cips.items()
+                             if m.parity_of(n)}
+    _drawing_agrees(m)
+    fresh = m.copy()
+    fresh.assign_cip()
+    assert fresh.atom_cips() == m.atom_cips()
+    back = mol_io(mol_io(m))
+    assert back == m and format(back, 'i') == format(m, 'i')
+    assert not back.canonicalize_stereo_groups()
+
+
+def test_both_phases_of_butanol_store_one_drawing():
+    one, other = _drawn('C[C@H](O)CC |&1:1|'), _drawn('C[C@@H](O)CC |&1:1|')
+    assert {one.canonicalize_stereo_groups(), other.canonicalize_stereo_groups()} == {True, False}
+    assert one.wedges() == other.wedges() and one.parity_of(2) == other.parity_of(2)
+
+
+def test_a_descriptor_no_rule_ranks_is_dropped_on_inversion():
+    for text in ('C[C@H](O)CC |&1:1|', 'C[C@@H](O)CC |&1:1|'):
+        m = _drawn(text)
+        with m.edit() as e:
+            e.set_atom_cip(2, 'r')          # stated, and not a descriptor rules 1a/1b/2 rank
+        if m.canonicalize_stereo_groups():
+            assert m.atom_cip_of(2) is None
+            assert [r.atoms for r in m.log.by_stage('stereo-groups')
+                    if r.rule == 'stereo-groups:cip-dropped'] == [(2,)]
+        else:
+            assert m.atom_cip_of(2) == 'r'
+
+
+@mark.parametrize('text', ['C[C@H](O)[C@H](O)[C@@H](O)C |&1:3,5|', 'C[C@H](O)[C@H](O)[C@@H](O)C |a:3,&1:5|',
+                           'C[C@H](O)[C@@H](O)[C@@H](O)C |&1:3,5|', 'C[CH](O)[C@H](O)[C@H](O)C'])
+def test_a_wedge_on_a_centre_stereogenic_in_another_phase_is_read(text):
+    # C3 of pentane-2,3,4-triol is pseudo-asymmetric in one phase of the drawing's choices and not
+    # stereogenic in the other; its wedge states a configuration, as its SMILES sign does
+    m = _drawn(text)
+    assert m == read_smiles(text) and m.wedge_of(4, 5) and m.parity_of(4)
+    assert not [r for r in m.log if r.rule == 'wedge:non-stereogenic']
+    _drawing_agrees(m)
+    m.canonicalize_stereo_groups()
+    _drawing_agrees(m)
+    back = mol_io(mol_io(m))
+    assert back == m and format(back, 'i') == format(m, 'i')
+
+
+def test_a_wedge_on_a_centre_no_phase_makes_stereogenic_is_ignored():
+    m = _drawn('CC(C)[C@H](O)C |a:3|')
+    with m.edit():
+        m.set_wedge(2, 1, 1)
+    back = mol_io(mol_io(m))
+    assert back == m and not back.parity_of(2) and back.wedge_of(2, 1)
+    assert [r.atoms for r in back.log if r.rule == 'wedge:non-stereogenic'] == [(2,)]
+
+
+def test_a_wedge_on_an_unconfigured_unit_is_dropped_on_inversion():
+    # the reader configures the C3 wedge; cleared here, the unit is unconfigured and its wedge would
+    # be read as a configuration in the canonical phase
+    m = _drawn('C[C@H](O)[C@H](O)[C@@H](O)C |&1:3,5|')
+    with m.edit():
+        m.set_parity(4, 0)
+    assert m.wedge_of(4, 5) and not m.parity_of(4)
+    assert m.canonicalize_stereo_groups()
+    assert not m.wedge_of(4, 5)
+    assert ('stereo-groups:wedge-dropped', (4,)) in [(r.rule, r.atoms) for r in m.log.by_stage('stereo-groups')]
+    back = mol_io(mol_io(m))
+    assert back == m and format(back, 'i') == format(m, 'i')

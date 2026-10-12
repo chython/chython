@@ -52,7 +52,7 @@ never `REPAIRED`.
 from collections.abc import Iterable, Sequence
 from itertools import combinations, product
 from math import comb
-from ..core import INFO, LOST, LogRecord, MoleculeContainer, recording
+from ..core import INFO, LOST, AutomorphismBudgetExceeded, LogRecord, MoleculeContainer, recording
 
 
 __all__ = ['standardize_isomers']
@@ -64,6 +64,7 @@ __all__ = ['standardize_isomers']
 _RULE = 'isomers:placement'
 _RULE_KEKULE = 'isomers:kekule-placement'
 _RULE_AMIDINE = 'isomers:amidine'
+_RULE_IMINE = 'isomers:exocyclic-imine'
 _RULE_BUDGET = 'isomers:placement-budget'
 _RULE_REFUSED = 'isomers:placement-refused'
 
@@ -326,10 +327,15 @@ def _choose(molecule: MoleculeContainer, group: list[int], ranks: dict[int, int]
                 tied.append(placement)
     if best is None:
         return None
-    chosen = tied[0] if len(tied) == 1 else min(tied, key=lambda p: _placed(molecule, p))
-    if chosen == current or len(tied) > 1 and _placed(molecule, chosen) == _placed(molecule, current):
+    if len(tied) == 1:
+        return None if tied[0] == current else tied[0]
+    keys = [_placed(molecule, p) for p in tied]      # one identity per placement: each is a whole molecule
+    least = min(keys)
+    chosen = tied[keys.index(least)]
+    if chosen == current:
         return None
-    return chosen
+    here = keys[tied.index(current)] if current in tied else _placed(molecule, current)
+    return None if here == least else chosen
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -456,13 +462,15 @@ def _aromatized(molecule: MoleculeContainer):
 # closed-form question about its valence.  Units sharing a nitrogen are decided together.
 # ---------------------------------------------------------------------------------------------------
 
-def _amidine_carbon(molecule: MoleculeContainer, n: int) -> bool:
-    """An acyclic, neutral, non-radical sp2 carbon holding exactly one double bond.
+def _amidine_carbon(molecule: MoleculeContainer, n: int, ring_path: frozenset[int]) -> bool:
+    """A neutral, non-radical sp2 carbon holding exactly one double bond, or a sulfonimidamide sulfur, outside
+    every ring system the ring path decides.
 
     Carbon-local, so it can be answered before any nitrogen is classified: `_amidine_site` needs the
-    carbon set and `_amidines` closes the loop between the two.
+    carbon set and `_amidines` closes the loop between the two.  A ring carbon is one too -- a cyclic
+    guanidine of a triazinane is an amidine whose ring no aromatic placement reaches.
     """
-    if molecule.element_of(n) != 6 or molecule.in_ring_of(n):
+    if molecule.element_of(n) not in (6, 16) or n in ring_path:
         return False
     if molecule.charge_of(n) or molecule.radical_of(n):
         return False
@@ -471,12 +479,20 @@ def _amidine_carbon(molecule: MoleculeContainer, n: int) -> bool:
         return False
     neighbors = tuple(molecule.neighbors_of(n))
     orders = [molecule.order_of(n, m) for m in neighbors]
-    if any(o not in (1, 2) for o in orders) or orders.count(2) != 1:
+    if any(o not in (1, 2) for o in orders):
+        return False
+    if molecule.element_of(n) == 16:
+        # a sulfonimidamide, RS(=O)(=NR')NR'': its S=O stays, and the one S=N moves as an amidine C=N does
+        doubles = [m for m, o in zip(neighbors, orders) if o == 2]
+        return (not h and len(neighbors) == 4 and len(doubles) == 2
+                and sorted(molecule.element_of(m) for m in doubles) == [7, 8])
+    if orders.count(2) != 1:
         return False
     return len(neighbors) + h == 3
 
 
-def _amidine_site(molecule: MoleculeContainer, n: int, carbon: int, carbons: set[int]) -> bool:
+def _amidine_site(molecule: MoleculeContainer, n: int, carbon: int, carbons: set[int],
+                  ring_path: frozenset[int]) -> bool:
     """A nitrogen whose hydrogen count is decided by whether it takes this carbon's double bond.
 
     Non-radical, carrying at most one unit of charge, at most three heavy neighbours, and no multiple bond
@@ -492,7 +508,7 @@ def _amidine_site(molecule: MoleculeContainer, n: int, carbon: int, carbons: set
     would make metformin's site set depend on where its `+` was drawn.  Four heavy neighbours is the count
     that decides, holding neither hydrogen nor double bond under any charge in range.
     """
-    if molecule.element_of(n) != 7 or molecule.in_ring_of(n):
+    if molecule.element_of(n) != 7 or n in ring_path:
         return False
     if molecule.charge_of(n) not in (-1, 0, 1) or molecule.radical_of(n):
         return False
@@ -505,26 +521,92 @@ def _amidine_site(molecule: MoleculeContainer, n: int, carbon: int, carbons: set
                for m in neighbors if m != carbon)
 
 
-def _amidines(molecule: MoleculeContainer) -> list[tuple[int, list[int]]]:
-    """`(carbon, its mobile nitrogens)` per acyclic amidine or guanidine unit.
+def _amidines(molecule: MoleculeContainer, ring_path: frozenset[int] = frozenset()) -> list[tuple[int, list[int]]]:
+    """`(carbon, its mobile nitrogens)` per amidine or guanidine unit, acyclic or in a ring.
 
-    Acyclic on both counts, the carbon and every nitrogen, so an amidine unit can never overlap a ring
-    system `_aromatized` handed upward and the two answers cannot contradict each other.  A cyclic
-    amidine is left for the ring path to reach through its ring.
+    No atom of `ring_path`, the ring systems `_aromatized` hands the ring path, on either count, so an
+    amidine unit never overlaps one and the two answers cannot contradict each other.
 
     A unit is kept only when its one double bond lands on a site -- which is what an amide's C=O fails --
     and dropping a carbon can take a site away from its neighbour, so the two halves are iterated to a
     fixed point rather than computed once.  One site is a unit: the acceptor is forced, but a forced
     acceptor still denies a shared nitrogen to the unit next to it.
     """
-    carbons = {n for n in molecule.atom_numbers if _amidine_carbon(molecule, n)}
+    carbons = {n for n in molecule.atom_numbers if _amidine_carbon(molecule, n, ring_path)}
     while True:
-        sites = {c: sorted(m for m in molecule.neighbors_of(c) if _amidine_site(molecule, m, c, carbons))
+        sites = {c: sorted(m for m in molecule.neighbors_of(c) if _amidine_site(molecule, m, c, carbons, ring_path))
                  for c in carbons}
         dropped = {c for c in carbons if not any(molecule.order_of(c, m) == 2 for m in sites[c])}
         if not dropped:
             return [(c, sites[c]) for c in sorted(carbons)]
         carbons -= dropped
+
+
+def _conjugated_carbon(molecule: MoleculeContainer, atoms) -> bool:
+    """Does the ring system hold a C=C or an aromatic bond?  Then it is a conjugated system -- a pyrimidinone,
+    cytosine -- whose double bonds the ring path moves together, and an amidine path moving only its C=N
+    would leave the rest stranded; a cyclic guanidine or amidine of a triazinane holds none."""
+    atoms = set(atoms)
+    for n in atoms:
+        for m in molecule.neighbors_of(n):
+            if m in atoms and m > n:
+                order = molecule.order_of(n, m)
+                if order == 4 or (order == 2 and molecule.element_of(n) == 6 and molecule.element_of(m) == 6):
+                    return True
+    return False
+
+
+def _imine_handover(molecule: MoleculeContainer, lines: list) -> bool:
+    """Move each exocyclic C=N of a conjugated ring system into the ring, taking an N-H's hydrogen.  Moved?
+
+    2-iminopyridine `N=C1C=CC=CN1` is 2-aminopyridine, imino-cytosine `N=C1NC(=O)NC=C1` is cytosine: the
+    ring path keeps a ring's hydrogen count and the amidine path stays out of a ring holding a C=C, so the
+    hydrogen an exocyclic imine took from the ring is handed back here, and both paths then place the rest.
+    The imine nitrogen bears carbon or hydrogen only -- an amidoxime keeps its oxime -- and the ring nitrogen
+    is an `-NH-` of single bonds.  Of two such nitrogens the canonical order picks one, the ring path
+    deciding between them again when the system is one it places.  A ring system with no C=C, a cyclic
+    guanidine of a triazinane or creatinine, is the amidine path's and is not touched.
+    """
+    moves = []
+    positions = None
+    for atoms, _ in _ring_systems(molecule):
+        if not _conjugated_carbon(molecule, atoms):
+            continue
+        for c in sorted(atoms):
+            if molecule.element_of(c) != 6 or molecule.charge_of(c) or molecule.radical_of(c):
+                continue
+            imines = [x for x in molecule.neighbors_of(c) if x not in atoms and molecule.order_of(c, x) == 2
+                      and molecule.element_of(x) == 7 and not molecule.charge_of(x) and not molecule.radical_of(x)
+                      and molecule.implicit_h_of(x) is not None
+                      and all(molecule.element_of(y) in (1, 6) for y in molecule.neighbors_of(x) if y != c)]
+            if not imines:
+                continue
+            donors = [y for y in molecule.neighbors_of(c) if y in atoms and molecule.element_of(y) == 7
+                      and not molecule.charge_of(y) and not molecule.radical_of(y) and molecule.implicit_h_of(y)
+                      and all(molecule.order_of(y, z) == 1 for z in molecule.neighbors_of(y))]
+            if not donors:
+                continue
+            if len(donors) > 1:
+                if positions is None:
+                    try:
+                        positions = molecule.canonical_order()
+                    except AutomorphismBudgetExceeded:
+                        positions = molecule.atoms_order
+                donors.sort(key=positions.__getitem__)
+            moves.append((c, imines[0], donors[0]))
+    if not moves:
+        return False
+    counts = {n: molecule.implicit_h_of(n) for _, x, y in moves for n in (x, y)}
+    with molecule.edit():
+        for c, x, y in moves:
+            molecule.set_order(c, x, 1)
+            molecule.set_order(c, y, 2)
+            molecule.set_hydrogens(x, counts[x] + 1)
+            molecule.set_hydrogens(y, counts[y] - 1)
+    for c, x, y in moves:
+        lines.append((_RULE_IMINE, (x, c, y), f'imine nitrogen {x} off ring carbon {c} took the hydrogen of '
+                      f'ring nitrogen {y}: the amino form of a conjugated ring'))
+    return True
 
 
 def _amidine_systems(groups: list[tuple[int, list[int]]]) -> list[list[tuple[int, list[int]]]]:
@@ -569,10 +651,11 @@ def _choose_amidines(molecule: MoleculeContainer, unit: list[tuple[int, list[int
     reject.  What has to be enforced is that each nitrogen accepts at most once, which makes an assignment
     a perfect matching of the carbons onto their sites.
 
-    The candidate graph is a forest -- a cycle through it is a ring, and every atom here is acyclic -- so
-    no two assignments share an acceptor set.  The key is the sorted ranks of the nitrogens that KEEP
-    their hydrogen, then the sorted ranks holding each charge, then the canonical bytes of the assigned
-    molecule (`_placed`) -- the same shape of key the ring path uses, and for the same reason.
+    A ring makes the candidate graph cyclic, so two assignments can share an acceptor set; the canonical
+    bytes that close the key tell them apart.  The key is the count of nitrogens beside a C=O or C=S
+    carbon that keep their hydrogen, most first -- a lactam N-H stays by its carbonyl, the one chemical
+    preference -- then the sorted ranks of the nitrogens that KEEP their hydrogen, then the sorted ranks
+    holding each charge, then the canonical bytes of the assigned molecule (`_placed`).
     """
     carbons = [c for c, _ in unit]
     all_sites = sorted({n for _, sites in unit for n in sites})
@@ -596,6 +679,10 @@ def _choose_amidines(molecule: MoleculeContainer, unit: list[tuple[int, list[int
     if trials > _TRIALS_MAX:
         return 'budget'
 
+    lactam = {n for n in all_sites if any(
+        c not in carbons and any(molecule.order_of(c, x) == 2 and molecule.element_of(x) in (8, 16)
+                                 for x in molecule.neighbors_of(c))
+        for c in molecule.neighbors_of(n))}
     best = None
     tied: list[tuple[dict[int, int], dict[int, int]]] = []
     for charges in _deal(tuple(all_sites), order):
@@ -606,7 +693,8 @@ def _choose_amidines(molecule: MoleculeContainer, unit: list[tuple[int, list[int
                 continue                  # two carbons cannot share one acceptor
             if any(free[n] < (1 if n in taken else 0) for n in all_sites):
                 continue                  # a nitrogen asked for a hydrogen it cannot carry
-            key = [sorted(ranks[n] for n in all_sites if n not in taken)]
+            key = [[-sum(n in lactam for n in all_sites if n not in taken)],
+                   sorted(ranks[n] for n in all_sites if n not in taken)]
             key.extend(sorted(ranks[n] for n in all_sites if charges[n] == charge)
                        for charge, _ in order)
             if best is None or key < best:
@@ -618,9 +706,13 @@ def _choose_amidines(molecule: MoleculeContainer, unit: list[tuple[int, list[int
     if len(tied) == 1:
         chosen = tied[0]
     else:
-        chosen = min(tied, key=lambda t: _placed(molecule, *_amidine_edits(molecule, unit, *t)))
-        if _placed(molecule, *_amidine_edits(molecule, unit, *chosen)) == \
-                _placed(molecule, *_amidine_edits(molecule, unit, current, charged)):
+        keys = [_placed(molecule, *_amidine_edits(molecule, unit, *t)) for t in tied]
+        least = min(keys)
+        chosen = tied[keys.index(least)]
+        drawn = (current, charged)
+        here = keys[tied.index(drawn)] if drawn in tied else _placed(
+            molecule, *_amidine_edits(molecule, unit, current, charged))
+        if here == least:
             return None
     if chosen == (current, charged):
         return None
@@ -732,15 +824,18 @@ def _place_rings(molecule: MoleculeContainer, work, systems, sites: list[int],
 def _place_amidines(molecule: MoleculeContainer, groups: list[tuple[int, list[int]]],
                     ranks: dict[int, int],
                     lines: list[tuple[str, tuple[int, ...], str]]) -> bool:
-    """Decide every acyclic amidine and guanidine.  Did anything move?"""
+    """Decide every acyclic amidine and guanidine.  Did anything move?
+
+    A C=N carries no configuration (`stereo.rst`, labile double bonds), so the placement moves no sign.
+    """
     if not groups:
         return False
     plan: list[tuple[list[tuple[int, list[int]]], dict[int, int], dict[int, int], dict[int, int]]] = []
     for unit in _amidine_systems(groups):
+        sites = sorted({n for _, s in unit for n in s})
         answer = _choose_amidines(molecule, unit, ranks)
         if answer is None:
             continue
-        sites = sorted({n for _, s in unit for n in s})
         if answer == 'budget':
             lines.append((_RULE_BUDGET, tuple(sites),
                           f'amidine system {tuple(sites)!r} has more placements than the '
@@ -791,9 +886,23 @@ def standardize_isomers(molecule: MoleculeContainer) -> bool:
     Never raises.
     """
     lines: list[tuple[str, tuple[int, ...], str]] = []
-    groups = _amidines(molecule)
+    handed = _imine_handover(molecule, lines)
     work, systems = _aromatized(molecule)
     target = work if work is not None else molecule
+    # A ring system holding an amidine carbon and no C=C -- a cyclic guanidine of a triazinane, a
+    # 2-iminoimidazolidine -- is the amidine path's: its exocyclic C=N moves with the ring hydrogens, which
+    # the ring path does not move.  Asked on the `thiele()` form, where a ring is aromatic only when it
+    # is, so a pyridine drawn Kekule keeps its own path; `_aromatized` reads lactam rings aromatic.
+    aromatic = molecule.copy()
+    aromatic.thiele()
+    ringed = {c for c, _ in _amidines(aromatic)}
+    systems = tuple(system for system in systems
+                    if not ringed.intersection(system[0]) or _conjugated_carbon(molecule, system[0]))
+    # a conjugated ring is never the amidine path's, placed by the ring path or by nothing: 2-aminopyridine
+    # has one ring nitrogen and no annular choice, and its C=N stays where the handover put it
+    conjugated = frozenset(n for atoms, _ in _ring_systems(molecule) if _conjugated_carbon(molecule, atoms)
+                           for n in atoms)
+    groups = _amidines(molecule, conjugated.union(n for atoms, _ in systems for n in atoms))
     sites = _sites(target)
 
     # ONE frame for both paths, and that is what makes them independent -- their gates do not overlap,
@@ -805,7 +914,7 @@ def standardize_isomers(molecule: MoleculeContainer) -> bool:
     ranks = _ranks(target, sites + [n for _, s in groups for n in s],
                    [(carbon, n) for carbon, s in groups for n in s])
 
-    changed = _place_rings(molecule, work, systems, sites, ranks, lines)
+    changed = _place_rings(molecule, work, systems, sites, ranks, lines) or handed
     changed = _place_amidines(molecule, groups, ranks, lines) or changed
 
     with recording(molecule, stage='isomers') as log:

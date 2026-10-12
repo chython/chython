@@ -369,6 +369,95 @@ cdef tuple mc_group_ambiguities_in(Structure structure):
     return tuple(out)
 
 
+cdef Structure _mc_canonical_group_arena(Structure stored):
+    """A sealed clone of `stored` holding the canonical collections, or None when `stored` has none.
+
+    The frame is slot order: `str()` numbers and phases the same labelling in written order, and a
+    string read back has its atoms in written order."""
+    cdef Structure view
+    cdef list dead = []
+    cdef uint32_t n = stored.header.atom_count, i
+    cdef uint32_t *pos
+    cdef uint8_t *sg
+    cdef bint grouped = False
+    view = structure_live_groups_view(stored, dead)
+    if view is stored:
+        sg = structure_stereo_groups(view)
+        for i in range(n):
+            if sg[i] and sg_kind(sg[i]) > SG_KIND_ABS:
+                grouped = True
+                break
+        if not grouped:
+            return None
+        view = structure_clone(stored)
+    ensure_stereo_units_unmarked(view)
+    pos = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
+    if pos is NULL:
+        raise MemoryError()
+    try:
+        for i in range(n):
+            pos[i] = i
+        structure_canonical_group_labels(view, pos, True)
+    finally:
+        PyMem_Free(pos)
+    # the unit marks were decided against the parities just moved: the next reader derives them again
+    structure_invalidate_stereo_units(view)
+    refresh_parity_features(view)
+    return view
+
+
+cdef uint32_t _mc_unit_wedges(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, stereo_unit_t *u,
+                              bint clear) noexcept nogil:
+    """Swap (or, with `clear`, drop) each up/down wedge stating `u`; the count touched.
+
+    A wedge lives on the half-edge leaving its narrow end, an owner of the unit, towards a ref; a
+    helix's leaves an inner-rim ref towards its owner, a cyclophane's the bridgehead `refs[2]` towards its
+    bridge atom `refs[1]`.  A cis/trans unit is drawn without wedges."""
+    cdef uint32_t nown, j, k, o, touched = 0
+    cdef uint32_t owner[2]
+    cdef halfedge_t *e
+    if u.kind == SU_CIS_TRANS:
+        return 0
+    nown = <uint32_t> stereo_unit_owners(atoms, ptr, edges, u, &owner[0], &owner[1])
+    if u.kind == SU_HELICAL:
+        for j in range(0, 4, 2):
+            for k in range(ptr[u.refs[j]], ptr[u.refs[j] + 1]):
+                e = &edges[k]
+                if (e.wedge == 1 or e.wedge == 2) and nown == 2 and (e.to == owner[0] or e.to == owner[1]):
+                    e.wedge = 0 if clear else 3 - e.wedge
+                    touched += 1
+        return touched
+    if (u.kind == SU_PLANAR and not (u.spare & SU_TWISTED)
+            and csr_find_at(ptr, edges, u.anchor, u.refs[1]) is NULL):
+        for k in range(ptr[u.refs[2]], ptr[u.refs[2] + 1]):
+            e = &edges[k]
+            if (e.wedge == 1 or e.wedge == 2) and e.to == u.refs[1]:
+                e.wedge = 0 if clear else 3 - e.wedge
+                touched += 1
+        return touched
+    for j in range(nown):
+        o = owner[j]
+        for k in range(ptr[o], ptr[o + 1]):
+            e = &edges[k]
+            if (e.wedge == 1 or e.wedge == 2) and (e.to == u.refs[0] or e.to == u.refs[1]
+                                                   or e.to == u.refs[2] or e.to == u.refs[3]):
+                e.wedge = 0 if clear else 3 - e.wedge
+                touched += 1
+    return touched
+
+
+cdef str _sg_label(uint8_t b):
+    """A stored group byte in CXSMILES spelling, for a log message: `abs`, `o1`, `&2`."""
+    cdef uint8_t kind = sg_kind(b)
+    if kind == SG_KIND_ABS:
+        return 'abs'
+    if kind == SG_KIND_AND:
+        return '&%d' % sg_group(b)
+    if kind == SG_KIND_ABS + 1:
+        return 'o%d' % sg_group(b)
+    return 'none'
+
+
 cdef dict _sgroup_normalise(object src, bint alias):
     """Normalise one caller-supplied S-group dict: fill defaults, reject unknown keys, check ranges.
 
@@ -1159,6 +1248,7 @@ cdef class MoleculeContainer:
     cdef uint32_t _identity_gen
     cdef str _smiles_cache        # str(self), the EMPTY spec only, valid while _smiles_gen == _gen
     cdef uint32_t _smiles_gen
+    cdef tuple _view_cache        # (gen, {phases: (view, dead, approximate)}); see `_live_view`
     cdef object _log              # this handle's Log, created on first use; see the `log` property
     cdef dict _meta               # record metadata, created on first access; see the `meta` property
     cdef bint _representation_change   # set ONLY by kekule/thiele around their own edit scope
@@ -1185,6 +1275,7 @@ cdef class MoleculeContainer:
         self._identity_gen = 0
         self._smiles_cache = None
         self._smiles_gen = 0
+        self._view_cache = None
         self._log = None
         self._meta = None
         self._representation_change = False
@@ -4951,30 +5042,7 @@ cdef class MoleculeContainer:
         collection here, because a collection is a set of stereocentres and both are stereocentres.
         """
         self._require_clean()
-        if not structure_has(self._structure, SEG_STEREO_GROUPS):
-            return {}
-        cdef Structure structure = self._structure
-        # REALLOCATES THE ARENA: every pointer below is taken after it.
-        ensure_stereo_units_unmarked(structure)
-        cdef uint8_t *sg = structure_stereo_groups(structure)
-        cdef atom_t *atoms = structure.atoms()
-        cdef uint32_t *ptr = csr_ptr(structure)
-        cdef halfedge_t *edges = csr_edges(structure)
-        cdef list numbers = self._numbers
-        cdef stereo_unit_t *u
-        cdef uint32_t i, a = 0, b = 0
-        cdef dict out = {}
-        cdef object member
-        for i in range(structure.header.atom_count):
-            if not sg[i]:
-                continue
-            u = stereo_unit_of(structure, i)
-            if u is not NULL and stereo_unit_owners(atoms, ptr, edges, u, &a, &b) == 2:
-                member = tuple(sorted((numbers[a], numbers[b])))
-            else:
-                member = numbers[i]
-            out.setdefault((sg_kind(sg[i]), sg_group(sg[i])), []).append(member)
-        return out
+        return self._groups_in(self._structure, NULL)
 
     @property
     def has_bond_stereo_groups(self):
@@ -5068,9 +5136,17 @@ cdef class MoleculeContainer:
         phases, which is exactly what identity ignores; a group with no live member is absent.  The
         ids are canonical over the live members, so two molecules equal only up to dead labels get
         one dict: `CC(O)CC |o1:1|` gives `{}`.  A read: the stored bytes are kept.
+
+        The labels pair with the STORED signs, which is what a CTfile or MRV writer emits beside them.
+        `str()` may state fewer by holding an AND collection in its other phase: on
+        `C[C@H](O)[C@H](O)[C@@H](O)C |&1:3,5|` this gives `&1` over both centres and `str()` writes
+        C3 as ABS.  `canonicalize_stereo_groups()` stores `str()`'s signs, after which the two agree.
+
+        A coupled bridgehead set is one element: a label on any member labels the set, and every member
+        is listed -- camphor's `|&1:4|` gives `[2, 5]`.
         """
         self._require_clean()
-        return self._canonical_groups_in(structure_live_groups_view(self._structure))
+        return self._canonical_groups_in(self._live_view(False))
 
     def dead_stereo_groups(self):
         """`stereo_groups()` over the DEAD members only, under the stored ids: what a writer drops.
@@ -5080,7 +5156,7 @@ cdef class MoleculeContainer:
         """
         self._require_clean()
         cdef list dead = []
-        structure_live_groups_view(self._structure, dead)
+        self._live_view(False, dead)
         if not dead:
             return {}
         cdef Structure structure = self._structure
@@ -5110,7 +5186,13 @@ cdef class MoleculeContainer:
             return {}
         cdef uint8_t ids[256]
         canonical_stereo_group_ids(structure, ids, NULL)
-        # REALLOCATES THE ARENA (the call above already did): every pointer below is taken after it.
+        return self._groups_in(structure, ids)
+
+    cdef dict _groups_in(self, Structure structure, uint8_t *ids):
+        """`{(kind, id): [member, ...]}` read from `structure`, under `ids[byte]` or, NULL, the stored ids."""
+        if not structure_has(structure, SEG_STEREO_GROUPS):
+            return {}
+        # REALLOCATES THE ARENA: every pointer below is taken after it.
         ensure_stereo_units_unmarked(structure)
         cdef uint8_t *sg = structure_stereo_groups(structure)
         cdef atom_t *atoms = structure.atoms()
@@ -5129,7 +5211,8 @@ cdef class MoleculeContainer:
                 member = tuple(sorted((numbers[a], numbers[b])))
             else:
                 member = numbers[i]
-            out.setdefault((sg_kind(sg[i]), ids[sg[i]]), []).append(member)
+            out.setdefault((sg_kind(sg[i]), ids[sg[i]] if ids is not NULL else sg_group(sg[i])),
+                           []).append(member)
         return out
 
     def canonical_stereo_group_ambiguities(self):
@@ -5184,7 +5267,7 @@ cdef class MoleculeContainer:
     def live_stereo_group_ambiguities(self):
         """`canonical_stereo_group_ambiguities()` for the keys of `live_stereo_groups()`."""
         self._require_clean()
-        return mc_group_ambiguities_in(structure_live_groups_view(self._structure))
+        return mc_group_ambiguities_in(self._live_view(False))
 
 
     def canonical_bond_stereo_groups(self):
@@ -5237,7 +5320,45 @@ cdef class MoleculeContainer:
                 out.append(cls)
         return tuple(out)
 
-    cdef dict _unit_dict(self, stereo_unit_t *u):
+    def implied_parities(self):
+        """`{n: parity}` for each coupled bridgehead left unsigned whose sign its signed partner implies.
+
+        The sign a reader of the cage fills in -- what `stereo_units()` marks `coupled_implied` -- so a
+        drawing can wedge both bridgeheads of a bicycle from one stated sign.  A set whose stated signs no
+        bicycle realises implies nothing.  A read: nothing is stored.
+        """
+        self._require_clean()
+        cdef dict out = {}, signs = {}, groups = {}
+        cdef list pairs, bad = []
+        cdef object i
+        if not _has_parity(self._structure):
+            return out
+        pairs = _coupled_bridgeheads(self._structure)
+        if not pairs:
+            return out
+        _bridgehead_signs(self._structure, pairs, signs, groups, bad)
+        for i in signs:
+            if signs[i] and not structure_parity_at(self._structure, <uint32_t> i):
+                out[self._numbers[<uint32_t> i]] = signs[i]
+        return out
+
+    cdef dict _coupled_partners(self):
+        """Each coupled bridgehead's slot to the ascending atom numbers of the rest of its set
+        (`_coupled_sets`).  Builds the stereo unit table, so it runs before a unit pointer is taken."""
+        cdef list numbers = self._numbers
+        cdef dict out = {}
+        cdef list rest
+        cdef object i, j, members
+        for i, members in _coupled_sets(_coupled_bridgeheads(self._structure)).items():
+            rest = []
+            for j in members:
+                if j != i:
+                    rest.append(numbers[<uint32_t> j])
+            rest.sort()
+            out[i] = tuple(rest)
+        return out
+
+    cdef dict _unit_dict(self, stereo_unit_t *u, dict coupled):
         cdef list numbers = self._numbers
         cdef uint32_t k, r
         cdef list refs = []
@@ -5246,9 +5367,18 @@ cdef class MoleculeContainer:
             refs.append(None if r == SU_NO_REF else numbers[r])
         cdef int live_parity
         cdef uint32_t a = 0, b = 0
-        cdef object owners
+        cdef object owners, n
+        cdef tuple partners
+        cdef bint implied = False
         # Parity is read from SEG_PARITY at the anchor's slot.
         live_parity = structure_parity_at(self._structure, u.anchor)
+        partners = coupled.get(u.anchor, ())
+        # a coupled member left unsigned whose sign the view fills from a signed partner
+        if not live_parity:
+            for n in partners:
+                if structure_parity_at(self._structure, <uint32_t> self._index_of[n]):
+                    implied = True
+                    break
         if stereo_unit_owners(self._structure.atoms(), csr_ptr(self._structure),
                               csr_edges(self._structure), u, &a, &b) == 1:
             owners = numbers[a]
@@ -5273,20 +5403,22 @@ cdef class MoleculeContainer:
                 # stale.  False here means no molecule information is lost by leaving the unit
                 # unconfigured.
                 'stereogenic': (u.spare & SU_STEREOGENIC) != 0,
+                # the other bridgeheads of a short-bridged bicycle: one sign states the whole set
+                'coupled': partners,
+                'coupled_implied': implied,
                 }
 
     def stereo_units(self):
         """Every place in this molecule that COULD carry a configuration, as a list of dicts.
 
-        A unit is `{kind, parity, n_refs, anchor, owners, refs, unnamed_mask, stereogenic}`.  `anchor` is the stable id
-        the parity is stored against.  `refs` is always a 4-tuple naming the anchor's directions,
-        laid out per kind: an ATOM kind (tetrahedral) packs four directions in one order -- heavy
-        neighbours in CSR ascending order, then explicit hydrogens ascending, then `None` for each
-        direction with no atom of its own -- while a BOND kind (cis/trans, allene, atropisomer) packs
-        two such pairs, the anchor's end first, so a `None` can appear in the middle and the entries
-        need not ascend across the pair boundary.  Within every list a hydrogen direction sits after
-        every heavy one, so the tuple's shape does not change when a hydrogen starts or stops being
-        drawn and a stored parity is never re-based.
+        A unit is `{kind, parity, n_refs, anchor, owners, refs, unnamed_mask, stereogenic, coupled, coupled_implied}`.
+        `anchor` is the stable id the parity is stored against.  `refs` is always a 4-tuple naming the anchor's
+        directions, laid out per kind: an ATOM kind (tetrahedral) packs four directions in one order -- heavy
+        neighbours in CSR ascending order, then explicit hydrogens ascending, then `None` for each direction
+        with no atom of its own -- while a BOND kind (cis/trans, allene, atropisomer) packs two such pairs, the
+        anchor's end first, so a `None` can appear in the middle and the entries need not ascend across the pair
+        boundary.  Within every list a hydrogen direction sits after every heavy one, so the tuple's shape does
+        not change when a hydrogen starts or stops being drawn and a stored parity is never re-based.
 
         `unnamed_mask` says WHICH slots those `None`s are directions rather than absences: bit i set
         means `refs[i]` is a direction with no atom of its own (an implicit hydrogen, or a sulfur
@@ -5309,13 +5441,14 @@ cdef class MoleculeContainer:
         """
         self._require_clean()
         ensure_stereo_units(self._structure)
+        cdef dict coupled = self._coupled_partners()
         # both taken after ensure_stereo_units, which reallocates the arena
         cdef uint32_t count = structure_stereo_unit_count(self._structure)
         cdef stereo_unit_t *units = structure_stereo_units(self._structure)
         cdef uint32_t k
         cdef list out = []
         for k in range(count):
-            out.append(self._unit_dict(&units[k]))
+            out.append(self._unit_dict(&units[k], coupled))
         return out
 
     def stereogenic_units(self):
@@ -5338,9 +5471,10 @@ cdef class MoleculeContainer:
         """`{n: unit}` for every stereogenic ATOM-kind unit.
 
         Tetrahedral centres and allene/cumulene axes, which are named on their central atom (spec
-        3.2) and so belong with the atoms rather than with the bonds.  The value is the same dict
-        `stereo_units()` yields, so `mol.chiral_atoms()[n]['parity']` is a one-liner and the keys
-        alone are the set of centres.
+        3.2) and so belong with the atoms rather than with the bonds, and helices and planar units,
+        which no bond names; a helix is keyed on its anchoring fjord atom, a planar unit on its anchor.
+        The value is the same dict `stereo_units()` yields, so `mol.chiral_atoms()[n]['parity']` is a
+        one-liner and the keys alone are the set of centres.
 
         WHICH QUESTION THIS ANSWERS, in the terms other toolkits use.  It is RDKit's
         `FindPotentialStereo`: every site whose configuration this record's identity depends on,
@@ -5363,6 +5497,7 @@ cdef class MoleculeContainer:
         """
         self._require_clean()
         ensure_stereo_units(self._structure)
+        cdef dict coupled = self._coupled_partners()
         cdef uint32_t count = structure_stereo_unit_count(self._structure)
         cdef stereo_unit_t *units = structure_stereo_units(self._structure)
         cdef list numbers = self._numbers
@@ -5371,8 +5506,9 @@ cdef class MoleculeContainer:
         for k in range(count):
             if not (units[k].spare & SU_STEREOGENIC):
                 continue
-            if units[k].kind == SU_TETRA or units[k].kind == SU_ALLENE:
-                out[numbers[units[k].anchor]] = self._unit_dict(&units[k])
+            if (units[k].kind == SU_TETRA or units[k].kind == SU_ALLENE or units[k].kind == SU_HELICAL
+                    or units[k].kind == SU_PLANAR):
+                out[numbers[units[k].anchor]] = self._unit_dict(&units[k], coupled)
         return out
 
     def chiral_bonds(self):
@@ -5392,18 +5528,21 @@ cdef class MoleculeContainer:
         """
         self._require_clean()
         ensure_stereo_units(self._structure)
+        cdef dict coupled = self._coupled_partners()
         cdef uint32_t count = structure_stereo_unit_count(self._structure)
         cdef stereo_unit_t *units = structure_stereo_units(self._structure)
         cdef list numbers = self._numbers
         cdef uint32_t k, partner
+        cdef tuple key
         cdef dict out = {}
         for k in range(count):
             if not (units[k].spare & SU_STEREOGENIC):
                 continue
             partner = stereo_unit_partner(self._structure, &units[k])
-            if partner == SU_NO_REF:
+            if partner == SU_NO_REF or units[k].kind == SU_HELICAL:
                 continue
-            out[tuple(sorted((numbers[units[k].anchor], numbers[partner])))] = self._unit_dict(&units[k])
+            key = tuple(sorted((numbers[units[k].anchor], numbers[partner])))
+            out[key] = self._unit_dict(&units[k], coupled)
         return out
 
     def is_chiral(self, uint32_t n):
@@ -5465,12 +5604,27 @@ cdef class MoleculeContainer:
         if n not in self._index_of:
             raise KeyError(n)
         ensure_stereo_units(self._structure)
+        cdef dict coupled = self._coupled_partners()
         cdef stereo_unit_t *u = stereo_unit_of(self._structure,
                                                <uint32_t> self._index_of[n])
-        return None if u is NULL else self._unit_dict(u)
+        return None if u is NULL else self._unit_dict(u, coupled)
 
-    def validate_stereo(self):
+    def validate_stereo(self, *, recover_racemate=False):
         """The stated parities this molecule cannot justify, ASCENDING BY STABLE ID -- and clear them.
+
+        AN UNSIGNED UNIT ALONE IN AN AND GROUP -- a wavy bond labelled `&1` -- is a racemate whatever its
+        sign: it takes sign 1 and keeps the group, logged REPAIRED `stereo:racemate-unsigned`, and stays out
+        of the report.  A member sharing its group is left: its relation to the others is unknown.
+
+        A COUPLED BRIDGEHEAD SET SIGNED AS NO BICYCLE CAN BE BUILT -- camphor drawn in,out -- is the
+        third shape.  When its signed members are all in AND groups that hold nothing but the set, the
+        drawing states it racemic and states no relation to the rest, so either realisable signing says
+        the same: it takes one in the lowest of those groups, logged REPAIRED `stereo:bridgehead-racemate`.
+        Otherwise, by default, both signs go into the report and are cleared, logged LOST
+        `stereo:bridgehead-unrealisable` -- an AND group shared with a ring-fusion centre would have the
+        choice decide exo or endo.  With `recover_racemate` such a set is read as the racemate its drawer
+        most likely meant: it takes its realisable signing in a new AND group, logged REPAIRED, and stays
+        out of the report.  Without a free AND id it is cleared.
 
         A parity is accepted into the arena unconditionally when it is stated (`set_parity` checks the
         range 0..2 and nothing else), because the centre that justifies it need not exist yet.  This is
@@ -5482,7 +5636,8 @@ cdef class MoleculeContainer:
         non-empty result.
 
         Two shapes reach the list: an atom that anchors no unit at all, and one that anchors a unit
-        `mark_stereogenic` did not mark.  Both are readable -- the bits mean what they always meant --
+        `mark_stereogenic` did not mark whose parity identity's view also drops -- one stereogenic in no
+        phase of the drawing's groups and open units.  Both are readable -- the bits mean what they always meant --
         which is why nothing before this point clears them (ruling F66).  The apply drops a sign
         whose FRAME was destroyed, because that one is no longer readable at all; this one preserves a
         sign whose frame has not yet existed, and only a caller asking gets it removed.
@@ -5525,15 +5680,27 @@ cdef class MoleculeContainer:
         cdef Structure fresh
         cdef uint8_t *fpar
         cdef object n
+        cdef list cleared = []
+        cdef Structure view
         self._require_clean()
+        self._validate_bridgeheads(recover_racemate, cleared)
+        self._heal_lone_racemates()
         collect_stereo_rejections(self._structure, &slots, &count)
         try:
-            for k in range(count):
-                report.append(self._numbers[slots[k]])
+            if count:
+                # a unit perception does not mark can still state something in some phase -- C3 of
+                # 3-phenoxytropane in an AND group with its bridgeheads open is the exo and endo mixture --
+                # so a parity is cleared here only where identity's own view clears it, or where it
+                # anchors no unit at all
+                view = structure_stereogenic_view(self._structure)
+                for k in range(count):
+                    if stereo_unit_of(self._structure, slots[k]) is NULL or not structure_parity_at(view, slots[k]):
+                        report.append(self._numbers[slots[k]])
         finally:
             PyMem_Free(slots)
         # SLOT order out of the collector, STABLE ID order out of here: the two agree until somebody
         # remaps, and a caller comparing this list against ids of its own is entitled to one order.
+        report.extend(cleared)
         report.sort()
         if not report:
             return report
@@ -5557,6 +5724,92 @@ cdef class MoleculeContainer:
         self._structure = fresh
         self._gen += 1
         return report
+
+    cdef int _heal_lone_racemates(self) except -1:
+        """`validate_stereo`'s unsigned AND singletons: a stereogenic unit with no sign alone in an AND group
+        -- drawn with a wavy bond, its parity unknown -- is a racemate whatever its sign, so it takes sign 1
+        and keeps the group, logged REPAIRED `stereo:racemate-unsigned`.  A unit sharing its group with
+        another member is not healed: its configuration relative to them is what is unknown."""
+        cdef dict groups = self.stereo_groups()
+        cdef dict anchor = {}
+        cdef list todo = []
+        cdef object key, members, x, u
+        if not groups:
+            return 0
+        for u in self.stereo_units():
+            anchor[u['owners']] = (u['anchor'], u['parity'], u['stereogenic'])
+        for key, members in groups.items():
+            if key[0] != STEREO_AND or len(members) != 1:
+                continue
+            x = members[0]
+            if x in anchor and not anchor[x][1] and anchor[x][2]:
+                todo.append((x, anchor[x][0]))
+        if not todo:
+            return 0
+        with self.edit():
+            for x, a in todo:
+                self.set_parity(a, 1)
+        for x, a in todo:
+            self._log_event('stereo:racemate-unsigned', 'stereo',
+                            'unit %s is unsigned alone in an AND group: a racemate whatever its sign, given sign 1'
+                            % (x if isinstance(x, int) else '-'.join(map(str, x))), mc_repaired())
+        return 0
+
+    cdef int _validate_bridgeheads(self, bint recover, list cleared) except -1:
+        """`validate_stereo`'s unrealisable coupled sets: cleared into `cleared`, or with `recover` read as
+        the racemate.  One edit session for every set, one log record per set."""
+        cdef list conflicts = structure_bridgehead_conflicts(self._structure)
+        cdef list pairs, todo = []
+        cdef dict sets, signing
+        cdef set used
+        cdef tuple members
+        cdef object a, b, x, gid
+        if not conflicts:
+            return 0
+        pairs = _coupled_bridgeheads(self._structure)
+        sets = _coupled_sets(pairs)
+        for a, b in conflicts:
+            if sets[a] not in todo:
+                todo.append(sets[a])
+        groups = self.stereo_groups()
+        used = {g for k, g in groups if k == STEREO_AND}
+        plan = []
+        for members in todo:
+            numbers = sorted(self._numbers[<uint32_t> x] for x in members)
+            # a set whose signed members are all in AND groups holding nothing else is stated racemic, and
+            # its relation to the rest is stated by nothing: either realisable signing in one AND group says
+            # the same, so it heals without `recover`
+            own = {g for (k, g), ms in groups.items() if k == STEREO_AND and set(ms) & set(numbers)}
+            if (own and all(set(groups[(STEREO_AND, g)]) <= set(numbers) for g in own)
+                    and all(not self.parity_of(x) or any(x in groups[(STEREO_AND, g)] for g in own)
+                            for x in numbers)):
+                gid = min(own)
+            elif recover:
+                gid = next((g for g in range(1, STEREO_GROUP_MAX + 1) if g not in used), None)
+            else:
+                gid = None
+            if gid is not None:
+                used.add(gid)
+            plan.append((members, numbers, gid))
+        with self.edit():
+            for members, numbers, gid in plan:
+                if gid is not None:
+                    signing = _set_signing(pairs, members)
+                    for x in members:
+                        self.set_parity(self._numbers[<uint32_t> x], signing[x])
+                        self.set_stereo_group(self._numbers[<uint32_t> x], STEREO_AND, gid)
+                    self._log_event('stereo:bridgehead-racemate', 'stereo',
+                                    'bridgeheads %s: the bicycle realises no such pair of signs; read as the '
+                                    'racemate, AND group %d' % ('-'.join(map(str, numbers)), gid), mc_repaired())
+                else:
+                    for x in members:
+                        self.set_parity(self._numbers[<uint32_t> x], 0)
+                        self.set_stereo_group(self._numbers[<uint32_t> x], 0)
+                    cleared.extend(numbers)
+                    self._log_event('stereo:bridgehead-unrealisable', 'stereo',
+                                    'bridgeheads %s: the bicycle realises no such pair of signs; both cleared'
+                                    % '-'.join(map(str, numbers)), mc_lost())
+        return 0
 
     def clean_stereo(self):
         """Wipe EVERY kind of stereo state, unconditionally.  Returns what was wiped.
@@ -5717,6 +5970,172 @@ cdef class MoleculeContainer:
         self._structure = fresh
         self._gen += 1
         return report
+
+    def canonicalize_stereo_groups(self):
+        """Store exactly the collections the canonical SMILES states.  Changed anything?
+
+        The stored labelling becomes the one `str()` writes, so `stereo_groups()`, `to_bytes()`, `pack()`
+        and every writer then carry it; `==`, `hash`, `canonical_bytes` and `str()` do not move.
+
+        | step            | the rewrite                                                        | rule               |
+        | --------------- | ------------------------------------------------------------------ | ------------------ |
+        | dead labels     | a member on an unconfigured or non-stereogenic unit is dropped     | `:dead`            |
+        | stereogenicity  | a parity on a unit no AND phase makes stereogenic is dropped       | `:not-stereogenic` |
+        | relabelling     | the least labelling of the same meaning (`live_stereo_groups()`)   | `:relabelled`      |
+        | phase           | each AND collection inverted into its canonical phase              | `:phase`           |
+        | ids             | OR and AND ids numbered canonically per kind                       | `:relabelled`      |
+
+        One INFO record per changed atom on `log`, stage `stereo-groups`, rule `stereo-groups:<step>`.
+        `C[C@@H](O)CC |&2:1|` stores `C[C@H](O)CC |&1:1|`.  Ids and phases are read in slot order, which
+        is the written order for a molecule read from `str()`, so that read-back is already canonical.
+
+        An inverted unit's wedges and its `R`/`S` are inverted with it, so a writer, `depict()` and
+        `atom_cips()` state the phase stored; a descriptor that cannot be inverted without a ranking of
+        its configurations is dropped as `stereo-groups:cip-dropped`.  Idempotent.
+
+        `ReactionContainer.canonicalize()` does not run this: a racemic input's drawn sign against the
+        product's can be what tells retention from inversion.
+        """
+        cdef Structure stored, view
+        cdef list records
+        self._require_clean()
+        stored = self._structure
+        if stored.header.atom_count == 0 or not structure_has(stored, SEG_STEREO_GROUPS):
+            return False
+        view = _mc_canonical_group_arena(stored)
+        if view is None:
+            return False
+        records = self._group_records(stored, view)
+        if not records:
+            return False
+        records.extend(self._carry_inversion(stored, view))
+        self._structure = view
+        self._gen += 1
+        self.log.extend(records)
+        return True
+
+    cdef list _group_records(self, Structure stored, Structure view):
+        """One `stereo-groups:<step>` INFO record per atom whose collection or parity differs."""
+        cdef list records = []
+        cdef list numbers = self._numbers
+        cdef uint32_t n = stored.header.atom_count, i
+        cdef uint8_t *sg0 = structure_stereo_groups(stored)
+        cdef uint8_t *sg1 = structure_stereo_groups(view)
+        cdef uint8_t p0, p1
+        mc_lazy_log_imports()
+        for i in range(n):
+            p0 = structure_parity_at(stored, i)
+            p1 = structure_parity_at(view, i)
+            if sg0[i] and not sg1[i]:
+                records.append(_MC_RECORD('stereo-groups:dead', (numbers[i],),
+                                          'atom %s: %s states no configuration and is dropped'
+                                          % (numbers[i], _sg_label(sg0[i])), _MC_INFO, 'stereo-groups', ''))
+            elif sg0[i] != sg1[i]:
+                records.append(_MC_RECORD('stereo-groups:relabelled', (numbers[i],),
+                                          'atom %s: %s is stored as %s'
+                                          % (numbers[i], _sg_label(sg0[i]), _sg_label(sg1[i])),
+                                          _MC_INFO, 'stereo-groups', ''))
+            if p0 and not p1:
+                records.append(_MC_RECORD('stereo-groups:not-stereogenic', (numbers[i],),
+                                          'atom %s: the parity is on a unit that is not stereogenic and '
+                                          'is dropped' % numbers[i], _MC_INFO, 'stereo-groups', ''))
+            elif p0 != p1:
+                records.append(_MC_RECORD('stereo-groups:phase', (numbers[i],),
+                                          'atom %s: %s is inverted into its canonical phase'
+                                          % (numbers[i], _sg_label(sg0[i] or sg1[i])), _MC_INFO, 'stereo-groups',
+                                          ''))
+        return records
+
+    cdef list _carry_inversion(self, Structure stored, Structure view):
+        """Carry, on `view`, the drawn statements of the units whose parity `view` inverted.
+
+        | statement                                  | the rewrite                                   |
+        | ------------------------------------------ | --------------------------------------------- |
+        | wedge up/down on an inverted unit          | swapped                                       |
+        | `R`/`S` ranked by rules 1a/1b/2            | swapped: that ranking reads no configuration  |
+        | any other descriptor on an inverted unit   | dropped, `stereo-groups:cip-dropped`          |
+        | wedge on an unconfigured unit              | dropped, `stereo-groups:wedge-dropped`        |
+
+        The last row holds only when something was inverted: a wedge a reader ignored on a unit that is
+        not stereogenic in the drawn phase can be read as a configuration in the other one.  Coordinates
+        are not moved, so a cis/trans unit's drawing is not inverted with its parity.
+        """
+        cdef list records = []
+        cdef stereo_unit_t *units
+        cdef stereo_unit_t *u
+        cdef atom_t *atoms
+        cdef uint32_t *ptr
+        cdef halfedge_t *edges
+        cdef halfedge_t *e
+        cdef uint32_t count, i, partner
+        cdef uint32_t order[4]
+        cdef uint8_t p0, p1, code
+        cdef int decided
+        cdef cip_ctx_t ctx
+        cdef bint ranked = False, inverted = False
+        # BEFORE ANY POINTER INTO EITHER ARENA: this may append SEG_STEREO_UNIT to `stored`
+        ensure_stereo_units(stored)
+        units = structure_stereo_units(stored)
+        count = structure_stereo_unit_count(stored)
+        for i in range(count):
+            p0 = structure_parity_at(stored, units[i].anchor)
+            p1 = structure_parity_at(view, units[i].anchor)
+            if p0 and p1 and p0 != p1:
+                inverted = True
+                break
+        if not inverted:
+            return records
+        atoms = view.atoms()
+        ptr = csr_ptr(view)
+        edges = csr_edges(view)
+        try:
+            for i in range(count):
+                u = &units[i]
+                p0 = structure_parity_at(stored, u.anchor)
+                p1 = structure_parity_at(view, u.anchor)
+                if not p1:
+                    if _mc_unit_wedges(atoms, ptr, edges, u, True):
+                        records.append(_MC_RECORD(
+                            'stereo-groups:wedge-dropped', (self._numbers[u.anchor],),
+                            'atom %s: a wedge on an unconfigured unit is dropped'
+                            % self._numbers[u.anchor], _MC_INFO, 'stereo-groups', ''))
+                    continue
+                if not p0 or p0 == p1:
+                    continue
+                _mc_unit_wedges(atoms, ptr, edges, u, False)
+                code = at_cip(&atoms[u.anchor])
+                if code:
+                    decided = 1
+                    if u.kind == SU_TETRA and (code == CIP_CODE_R or code == CIP_CODE_S):
+                        if not ranked:
+                            cip_ctx_init(&ctx, stored)
+                            ranked = True
+                        try:
+                            decided = cip_rank_directions(&ctx, u, order)
+                        except OverflowError:
+                            decided = 1
+                    if decided:
+                        at_set_cip(&atoms[u.anchor], 0)
+                        records.append(self._cip_dropped(u.anchor, ATOM_CIP_CODES[code]))
+                    else:
+                        at_set_cip(&atoms[u.anchor], 3 - code)
+                partner = stereo_unit_partner(view, u)
+                if partner != SU_NO_REF:
+                    e = csr_find_at(ptr, edges, u.anchor, partner)
+                    if e is not NULL and he_cip(e):
+                        records.append(self._cip_dropped(u.anchor, BOND_CIP_CODES[he_cip(e)]))
+                        he_set_cip(e, 0)
+                        he_set_cip(csr_find_at(ptr, edges, partner, u.anchor), 0)
+        finally:
+            if ranked:
+                cip_ctx_free(&ctx)
+        return records
+
+    cdef object _cip_dropped(self, uint32_t slot, str descriptor):
+        cdef object number = self._numbers[slot]
+        return _MC_RECORD('stereo-groups:cip-dropped', (number,),
+                          'atom %s: the stated %s is of the other phase and is dropped; assign_cip() '
+                          'recomputes it' % (number, descriptor), _MC_INFO, 'stereo-groups', '')
 
     def enrich_from(self, *others, str stereo='keep', str layout='keep'):
         """Take from `others` what they state about this compound and this record does not.  Took anything?
@@ -7058,7 +7477,7 @@ cdef class MoleculeContainer:
         try:
             # Raises on a truncated search, and leaves `order` untouched when it does -- the flag
             # is read by no one here because the exception is the answer.
-            structure = structure_live_groups_view(self._structure) if stereo else self._structure
+            structure = self._live_view(True) if stereo else self._structure
             if node_budget:
                 _canon_order(structure, labels, order, &flags, node_budget, stereo,
                              CANON_GROUPS_IDENTITY if stereo else CANON_GROUPS_NONE)
@@ -7246,7 +7665,7 @@ cdef class MoleculeContainer:
         """
         return thiele(self)
 
-    def canonicalize(self, *, fix_tautomers=True, keep_kekule=False):
+    def canonicalize(self, *, fix_tautomers=True, keep_kekule=False, stereo_groups=True, recover_racemate=False):
         """Bring this molecule to the representation two drawings of one compound share.  Changed?
 
         THE PASS TO RUN BEFORE DEDUPLICATING.  `canonical_bytes`, `__hash__` and `__eq__` are computed
@@ -7265,9 +7684,12 @@ cdef class MoleculeContainer:
         Like `standardize()`, the body lives in `chython.chemistry` and arrives by registration
         rather than import, the return is a bool, and nothing in the library calls this for you.  Every
         record it wrote is on `self.log`, tagged with the stage that wrote it -- `log.by_stage('kekule')`
-        through `log.by_stage('isomers')`.
+        through `log.by_stage('isomers')`.  `stereo_groups=False` skips the last stage,
+        `canonicalize_stereo_groups()`, and keeps the stored collection labels and AND phases.
+        `recover_racemate` reads a bridgehead pair no bicycle realises as the racemate (`validate_stereo`).
         """
-        return _canonicalize_fn()(self, fix_tautomers=fix_tautomers, keep_kekule=keep_kekule)
+        return _canonicalize_fn()(self, fix_tautomers=fix_tautomers, keep_kekule=keep_kekule,
+                                  stereo_groups=stereo_groups, recover_racemate=recover_racemate)
 
     def standardize_isomers(self):
         """Put every mobile hydrogen and charge where the canonical order says it goes.  Moved?
@@ -7882,6 +8304,56 @@ cdef class MoleculeContainer:
                 self.delete_bond(i, k)
         return len(doomed)
 
+    cdef int _log_bridgehead_conflicts(self) except -1:
+        """Log LOST, once per molecule, the coupled pairs whose signs no out,out bicycle realises.
+
+        Identity, SMILES and InChI all read such a pair as unknown, so each of them calls this.
+        """
+        cdef list pairs = []
+        cdef tuple pair
+        cdef str msg
+        for pair in structure_bridgehead_conflicts(self._structure):
+            pairs.append('%d-%d' % (self._numbers[<uint32_t> pair[0]], self._numbers[<uint32_t> pair[1]]))
+        if not pairs:
+            return 0
+        msg = 'bridgeheads %s: the bicycle realises no such pair of signs, so both read as unknown' % ', '.join(pairs)
+        if self._log is None or not [r for r in self._log if r.rule == 'stereo:bridgehead-unrealisable'
+                                     and r.message == msg]:
+            self._log_event('stereo:bridgehead-unrealisable', 'stereo', msg, mc_lost())
+        return 0
+
+    cdef Structure _live_view(self, bint phases, list dead=None, list approximate=None):
+        """`structure_live_groups_view` of the stored arena, CACHED per generation and `phases`.
+
+        What identity, `str()`, InChI and the collection accessors all read, and the costly part of
+        each of them: the meaning search over enhanced-stereo labels and coupled bridgeheads.  The
+        same `_gen` that keys `_identity_cache` keys this, so an edit invalidates both.  `dead` and
+        `approximate`, when given, receive the slots the computation reports.  The view is SHARED: a
+        caller that writes into it -- the canonical writer relabelling collections -- clones first.
+        """
+        cdef tuple cache = self._view_cache
+        cdef dict entries
+        cdef tuple entry
+        cdef list d, a
+        cdef Structure view
+        if cache is not None and cache[0] == self._gen:
+            entries = cache[1]
+        else:
+            entries = {}
+            self._view_cache = (self._gen, entries)
+        entry = entries.get(phases)
+        if entry is None:
+            d = []
+            a = []
+            view = structure_live_groups_view(self._structure, d, phases, a)
+            entry = (view, tuple(d), tuple(a))
+            entries[phases] = entry
+        if dead is not None:
+            dead.extend(entry[1])
+        if approximate is not None:
+            approximate.extend(entry[2])
+        return entry[0]
+
     cdef bytes _identity(self):
         """`canonical_bytes`, CACHED, keyed on the same generation counter `atoms_order` uses.
 
@@ -7909,7 +8381,14 @@ cdef class MoleculeContainer:
             return self._identity_cache
         # `structure_live_groups_view`: a parity on a unit `mark_stereogenic` refused is not identity,
         # and neither is a dead group member
-        cdef bytes out = mol_identity_bytes(structure_live_groups_view(self._structure))
+        cdef list approximate = []
+        cdef bytes out = mol_identity_bytes(self._live_view(True, None, approximate))
+        if approximate:
+            self._log_event('stereo:identity-approximate', 'stereo',
+                            'atoms %s: over the labelling search limit, so two spellings of one enhanced-stereo '
+                            'meaning can be two identities'
+                            % ', '.join([str(self._numbers[<uint32_t> i]) for i in approximate]), mc_info())
+        self._log_bridgehead_conflicts()
         self._identity_cache = out
         self._identity_gen = self._gen
         return out
@@ -7930,6 +8409,22 @@ cdef class MoleculeContainer:
         Raises `AutomorphismBudgetExceeded` on a truncated canonical search, like `canonical_order`.
         """
         return self._identity()
+
+    @property
+    def identity_approximate(self):
+        """Can one enhanced-stereo meaning of this molecule have two identities?
+
+        True when a block of components joined by AND or OR groups holds more than five units, or more
+        candidate labellings than the search weighs, or sits in a molecule of more than 1000 atoms: its
+        labels are then relabelled rather than searched,
+        and `==`, `hash` and `str` can tell two spellings of one meaning apart.  An identity computed
+        so logs one `stereo:identity-approximate` record.  Nonane-2,3,4,5,6,7,8-heptol with its seven
+        centres in groups is one such block.
+        """
+        cdef list approximate = []
+        self._require_clean()
+        self._live_view(True, None, approximate)
+        return bool(approximate)
 
     @property
     def _union_feature_words(self):
@@ -8642,8 +9137,8 @@ def _rebase_parity_probe(MoleculeContainer mol not None, uint32_t n, int kind, i
         raise KeyError(n)
     # Range-checked here rather than trusted: the probe is the only Python-visible door to this
     # arithmetic, and unchecked an out-of-range `parity` comes back out as itself.
-    if kind < 0 or kind > SU_HELICAL:
-        raise ValueError(f'kind must be a stereo unit kind in 0..{<int> SU_HELICAL}, got {kind}')
+    if kind < 0 or kind > SU_PLANAR:
+        raise ValueError(f'kind must be a stereo unit kind in 0..{<int> SU_PLANAR}, got {kind}')
     if parity < 0 or parity > 2:
         raise ValueError(f'parity must be 0 (none), 1 (even) or 2 (odd), got {parity}')
     if old_unnamed_mask < 0 or old_unnamed_mask > SU_UNNAMED_MASK:

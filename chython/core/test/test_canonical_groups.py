@@ -190,19 +190,19 @@ def test_the_phase_is_one_string_in_every_atom_order(text):
     assert back == m and str(back) == str(m)
 
 
-@mark.parametrize('tail,equal', [
-    ('&1:1,&2:5', True),        # C2 and C4 free: like or unlike, and C3 either way
-    ('&1:1,5', True),           # unlike, stated relatively: inverting the group turns 3r into 3s
-    ('&1:1,3,5', False),        # all three relative to each other: the two meso forms
-    ('a:1,5', False),           # C2 and C4 absolute, so C3 is fixed against them
-    ('o1:1,5', False),          # one isolated isomer: OR has no phase, so C3 is fixed as under ABS
+@mark.parametrize('tail,signs,equal', [
+    ('&1:1,&2:5', 2, True),     # C2 and C4 free: all four diastereomers, so C3's sign states nothing
+    ('&1:1,5', 2, True),        # unlike, relative: the group's other phase is 3s, so C3's sign states nothing
+    ('&1:1,3,5', 3, False),     # all three relative to each other: the two meso forms
+    ('a:1,5', 3, False),        # C2 and C4 absolute, so C3 is fixed against them
+    ('o1:1,5', 3, False),       # one isolated isomer: OR has no phase, so C3 is fixed as under ABS
 ])
-def test_a_pseudo_asymmetric_centre_is_read_against_its_neighbours_phases(tail, equal):
-    # C3 of pentane-2,3,4-triol is stereogenic only when C2 and C4 differ, and a group's phase can
-    # decide whether they do: its parity is kept wherever some phase makes it stereogenic
+def test_a_pseudo_asymmetric_centre_is_read_against_its_neighbours_phases(tail, signs, equal):
+    # C3 of pentane-2,3,4-triol is stereogenic only when C2 and C4 differ; its sign is kept when inverting
+    # it changes what the drawing states in some phase of the groups
     a = read_smiles('C[C@@H](O)[C@H](O)[C@@H](O)C |%s|' % tail)
     b = read_smiles('C[C@@H](O)[C@@H](O)[C@@H](O)C |%s|' % tail)
-    assert len(findall(r'\[C@@?H\]', str(a).split(' ')[0])) == 3, 'C3 carries a sign'
+    assert len(findall(r'\[C@@?H\]', str(a).split(' ')[0])) == signs, str(a)
     assert (a == b) is equal
     assert (str(a) == str(b)) is equal
 

@@ -27,7 +27,7 @@ installs it to record coordination that must be preserved.
 from collections.abc import Iterable, MutableSequence
 from typing import NamedTuple
 from ._hydrogens import implicify_hydrogens
-from ._protomers import neutralize as _neutralize
+from ._protomers import _positions, neutralize as _neutralize
 from ._tables import SALT_CLASSES, SaltRow, salts_rows_by_klass, salts_species_keys
 from ..core import REFUSED, REPAIRED, LogRecord, MoleculeContainer, recording
 
@@ -643,7 +643,7 @@ def fix_salt_charges(molecule: MoleculeContainer, log: MutableSequence) -> set[i
         if all(molecule.atom(n).valence_electrons in _REDUCING_ELECTRONS and
                molecule.element_of(n) != _BERYLLIUM for n in metals):
             rows += by_klass['metal_protic']
-        ranks = molecule.atoms_order
+        ranks = _positions(molecule)
         best: dict[int, tuple[int, str]] = {}
         for row in rows:
             for mapping in row.query.get_mapping(molecule):

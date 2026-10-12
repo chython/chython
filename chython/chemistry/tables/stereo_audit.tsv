@@ -1,0 +1,20 @@
+# stereo_audit.tsv -- the codes audit_stereo reports, qualified as stereo-audit:<code>.
+# severity: error = impossible, warning = a label says nothing or is ambiguous, info = completeness or a limit.
+code	severity	template	explain
+unknown-unit	info	unit at {atoms} has no sign	the molecule has two configurations here and the drawing states neither
+unlabelled-sign	warning	sign at {atoms} carries no group while others do	an unlabelled sign beside AND/OR groups is read as absolute
+dead-unconfigured	warning	label {group} on {atoms} has no sign to qualify	a group member without a sign states nothing
+dead-not-stereogenic	warning	label {group} on {atoms} is on a unit with one configuration	no AND phase makes this unit stereogenic
+dead-waits-for	warning	sign at {atoms} counts only once {because} is signed	the unit is stereogenic only relative to an unsigned unit
+dead-restating-group	warning	group {group} restates the molecule when inverted	inverting every member gives the same molecule, so the group states nothing
+and-single-member-racemate	info	{group} on {atoms} states a racemate	a one-member AND on a component's only live unit is both enantiomers
+and-split	warning	component has AND groups {group}	separate AND groups state every relative configuration; keeping that needs no fix, merge-groups states one
+and-absorbed	info	{group} on {atoms} reads as absolute	another group already fixes this group's phase
+meso-absolute	info	{group} on {atoms} reads as absolute	the drawn configuration is its own mirror image, so the group states the diastereomer as ABS does; unlabelled would leave it unknown
+bridgehead-unrealisable	error	bridgeheads {atoms} are signed impossibly	no out,out bicycle realises this pair of signs
+bridgehead-implied	info	bridgehead {atoms} takes its sign from {because}	the bicycle allows one sign here once the partner is signed
+bridgehead-redundant-label	warning	label {group} on bridgehead {atoms} differs from {because}	a coupled set takes the strongest label of its signed members: AND, OR, ABS, none
+bridgehead-half-labelled	warning	bridgehead {atoms} carries no label beside {because}	a coupled set is one element and is labelled on every member
+bridgehead-merged-groups	warning	group {group} on bridgehead {atoms} joins the group of {because}	a coupled set inverts with each of its groups, so they are one group
+identity-approximate	info	identity is approximate	a block of groups exceeds the labelling search limit
+truncated	info	stereogenicity is over-approximated	a symmetry search hit its budget

@@ -92,13 +92,31 @@ def _plan(molecule: MoleculeContainer, log):
         doomed.append(n)
         counts[other] = current + 1
 
-    # Read every affected anchor's parity now.  `delete_atom` clears it, and it cannot be read back
-    # from inside the session.
-    parities: dict[int, int] = {}
-    for n in counts:
-        p = molecule.parity_of(n)
-        if p:
-            parities[n] = p
+    # Read every affected anchor's configuration now, in a direction order that already puts each doomed
+    # hydrogen where the implicit direction will be: last in its group, the whole frame for a centre and
+    # its own pair for a bond unit.  `delete_atom` clears the parity, and the unit's refs after the fold
+    # are not the refs before it, so a verbatim copy of the byte inverts the centre whenever the move is
+    # an odd permutation -- `[2H][C@@]([H])(Cl)Br` folded to the enantiomer of `[H][C@]([2H])(Cl)Br`.
+    gone = frozenset(doomed)
+    parities: dict[int, tuple[int, tuple]] = {}
+    for u in molecule.stereo_units():
+        n = u['anchor']
+        if n not in counts or not molecule.parity_of(n):
+            continue
+        refs = u['refs']
+        groups = [refs] if u['kind'] == 0 else [refs[:2], refs[2:]]
+        before, after = [], []
+        for group in groups:
+            kept = [r for r in group if r not in gone]
+            dropped = [r for r in group if r in gone]
+            before.extend(kept + dropped)
+            after.extend(kept + [None] * len(dropped))
+        if sum(r is None for r in after) > 1:
+            continue                    # two unnamed directions: no configuration survives the fold
+        try:
+            parities[n] = (molecule.translate_stereo(n, tuple(before)), tuple(after))
+        except ValueError:              # a kind whose refs are not read in these groups: as stored
+            parities[n] = (molecule.parity_of(n), None)
     return doomed, counts, parities
 
 
@@ -129,10 +147,12 @@ def _implicify_apply(molecule, doomed, counts, parities):
             molecule.delete_atom(n)
         for n, total in counts.items():
             molecule.set_hydrogens(n, total)
-        for n, p in parities.items():
-            # restore what `delete_atom` cleared, verbatim: without this, deleting the explicit
-            # hydrogen of `F[C@]([H])(Cl)Br` racemises the centre.
-            molecule.set_parity(n, p)
+    if parities:
+        # restore what `delete_atom` cleared, in the order `_plan` read it: a second session, since
+        # `order=` reads the frame and the first one changed the graph
+        with molecule.edit():
+            for n, (p, order) in parities.items():
+                molecule.set_parity(n, p, order=order)
 
 
 def explicify_hydrogens(molecule: MoleculeContainer) -> int:

@@ -651,6 +651,10 @@ class ReactionContainer:
         mis-drawn atom-to-atom mapping.  Mapping repair is the mapping epic's, it is not a chemistry
         pass, and a caller asking for a canonical representation has not asked for their mapping to be
         rewritten.  The two are one call apart when both are wanted.
+
+        The stored collection labels and AND phases are kept (`canonicalize(stereo_groups=False)` per
+        molecule): a racemic input's drawn sign against the product's can be what tells retention from
+        inversion.
         """
         return reaction_canonicalize(self, fix_tautomers=fix_tautomers, keep_kekule=keep_kekule)
 

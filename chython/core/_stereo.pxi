@@ -72,7 +72,8 @@
 #     not somewhere a substituent can sit
 #   * an explicit hydrogen is one direction, NAMED by its atom slot like any other neighbour
 #   * each implicit hydrogen is one direction with no atom of its own
-#   * a lone pair is one direction with no atom of its own, on sulfur only (spec 4.2, D4)
+#   * a lone pair is one direction with no atom of its own, on S/Se/Te, P/As/Sb, and N in a
+#     three-membered ring (`_lone_pair_valence`)
 #   * a triple or an order-8 bond refuses the atom outright: see `_perceive_stereo_units`
 #
 # WHERE A HYDROGEN DIRECTION SORTS, AND WHY THAT IS THE WHOLE OF THE RULE (ruling F26). A `refs`
@@ -106,14 +107,14 @@
 # one and nothing moves, and heavy directions are already ordered by slot, so this adds no
 # dependence the design did not already have.  There is deliberately no machinery for it.
 #
-# WHY THE LONE PAIR IS COUNTED FROM AN ELECTRON BUDGET. Sulfur is the only element whose lone pair
-# counts, but "sulfur" is not enough to know whether there IS one: a sulfoxide has a pair and
-# reaches four directions with two sigma and one pi, while a sulfone has spent it and reaches four
-# with two sigma and two pi.  `_sulfur_lone_pair` therefore counts electrons -- six, less the
-# charge, less one per bonding electron spent -- which decides both cases with no element table and
-# no bond pattern.  Two consequences worth naming: the ylide drawing `[O-][S+](C)C` and the
-# double-bond drawing `O=S(C)C` get the SAME verdict, because both spend the same electrons; and a
-# sulfonium `[S+](C)(C)C` gets its pair, which is what makes it a centre.
+# WHY THE LONE PAIR IS COUNTED FROM AN ELECTRON BUDGET. The element says whose lone pair counts, but
+# not whether there IS one: a sulfoxide has a pair and reaches four directions with two sigma and one
+# pi, while a sulfone has spent it and reaches four with two sigma and two pi; a phosphine has one and
+# a phosphine oxide has not.  `_lone_pair` therefore counts electrons -- the valence, less the
+# charge, less one per bonding electron spent -- which decides both cases with no bond pattern.  Two
+# consequences worth naming: the ylide drawing `[O-][S+](C)C` and the double-bond drawing `O=S(C)C`
+# get the SAME verdict, because both spend the same electrons; and a sulfonium `[S+](C)(C)C` gets its
+# pair, which is what makes it a centre.
 #
 # At most ONE lone-pair direction, even where the budget allows two.  Two lone pairs on one atom
 # are the same direction twice: nothing can ever tell them apart, so a record that needs both of
@@ -139,18 +140,15 @@ cdef enum:
     SU_CIS_TRANS = 1
     SU_ALLENE = 2
     SU_ATROPISOMER = 3
-    SU_HELICAL = 4          # RESERVED: never produced; see the spec's non-goals
+    SU_HELICAL = 4
+    SU_PLANAR = 5
 
-# The same four kinds on the PYTHON surface, because `stereo_units()` hands out `{'kind': <int>}`
+# The same six kinds on the PYTHON surface, because `stereo_units()` hands out `{'kind': <int>}`
 # and until now there was no name for the integer it hands out.  Both toolkit converters in
 # `chython/interop/` independently grew their own by-value copy of this enum -- each commented as
 # avoiding an import of the extension that `interop/_iupac.py` makes routinely -- and a by-value
 # copy of a domain is a domain that drifts silently, since nothing compares the two.  Published
 # from the enum itself so there is one statement of it, beside the field it names (RULES.md 6).
-#
-# SU_HELICAL is published with the rest even though nothing produces it: a consumer switching on
-# `kind` needs to be able to SAY "not this one", and leaving the reserved value nameless is how it
-# ends up written as a bare 4 in somebody's else-branch.
 #
 # THROUGH `globals()` for the same reason `H_UNKNOWN` is: these are C constants, and the obvious
 # `SU_TETRA = SU_TETRA` at module scope is a Python name shadowing the C name it means to publish.
@@ -160,12 +158,13 @@ globals()['SU_CIS_TRANS'] = SU_CIS_TRANS
 globals()['SU_ALLENE'] = SU_ALLENE
 globals()['SU_ATROPISOMER'] = SU_ATROPISOMER
 globals()['SU_HELICAL'] = SU_HELICAL
+globals()['SU_PLANAR'] = SU_PLANAR
 
 
 # `stereo_unit_t.spare` is one byte shared between two owners, and the split is the reason nothing
 # may ever assign it wholesale:
-#   * the LOW nibble is flag bits -- SU_STEREOGENIC = 1 and SU_SHIFTABLE = 4.  Values 2 and 8 are
-#     free for a future task that needs them; a writer past `_stereo_emit` must set them with `|=` so
+#   * the LOW nibble is flag bits -- SU_STEREOGENIC = 1, SU_SHIFTABLE = 4 and SU_TWISTED = 8.  Value 2
+#     is free for a future task that needs it; a writer past `_stereo_emit` must set them with `|=` so
 #     that a plain `=` cannot erase the mask above.  See the comment on SU_STEREOGENIC about the
 #     future value that §4.6 once reserved here.
 #   * the HIGH nibble is a 4-BIT MASK OF WHICH `refs` SLOTS HOLD AN UNNAMED DIRECTION, written here,
@@ -209,7 +208,9 @@ cdef enum:
                             # bond it is written on is a Kekule choice: set by perception's pass 2 from
                             # the CONSTITUTION, read by `mark_stereogenic`'s decision 0.  See
                             # `_double_bond_shifts`.
-    # Values 2 and 8 are free.  §4.6 once allocated value 2 for a geometric-realizability mark
+    SU_TWISTED = 8          # an SU_PLANAR unit on a medium-ring double bond rather than a ring face:
+                            # see PLANAR UNITS
+    # Value 2 is free.  §4.6 once allocated value 2 for a geometric-realizability mark
     # (SU_UNREALIZABLE) on small-ring cis/trans units.  That stage proved provably empty on a
     # Kekulé-only arena: `mark_unrealizable` would call `_terminals_share_small_ring` on exactly
     # the units that already survived `_terminals_share_small_ring` in perception's pass 2, so the
@@ -373,14 +374,14 @@ cdef uint8_t translate_parity(uint8_t parity, uint32_t *perm) noexcept nogil:
 # `refs` is always four entries whatever `n_refs` says; the unused tail is SU_NO_REF, so a reader
 # that ignores `n_refs` sees directions with no atom rather than stale slots.
 cdef packed struct stereo_unit_t:
-    uint8_t kind            # SU_TETRA .. SU_ATROPISOMER
+    uint8_t kind            # SU_TETRA .. SU_PLANAR
     uint8_t parity          # RESERVED, always 0.  The parity is a byte per atom in SEG_PARITY;
                             # this field cannot be dropped: the struct is packed to 24 bytes
                             # (1+1+1+1+4+16) and deleting one puts `anchor`, a `uint32_t`, at an
                             # odd offset in every record -- SU_COUNT_HEADER is four words precisely
                             # to keep every record 8-aligned.
     uint8_t n_refs
-    uint8_t spare           # low nibble: SU_STEREOGENIC and three free bits, set with |= only.
+    uint8_t spare           # low nibble: SU_STEREOGENIC and the flags, set with |= only.
                             # high nibble: mask of which `refs` slots hold an unnamed direction.
                             # See SU_UNNAMED_SHIFT and ruling F41.
     uint32_t anchor         # atom slot
@@ -393,6 +394,8 @@ cdef packed struct stereo_unit_t:
                             #     in the MIDDLE -- an implicit-hydrogen but-2-ene is (C, None, C,
                             #     None) -- and the four entries need not ascend across the pair
                             #     boundary, since the anchor's pair leads whatever its slots are.
+                            #   SU_HELICAL packs two pairs ordered by ROLE, not F26: see HELICENES.
+                            #   SU_PLANAR packs two pairs by role too: see PLANAR UNITS.
 
 
 # The segment is [count][truncated][marked][reserved][records...]: the count lives in the segment's
@@ -542,7 +545,7 @@ cdef inline bint _anchor_taken(uint8_t *anchored, uint32_t slot) noexcept nogil:
 
 
 cdef inline int _bond_electrons(halfedge_t *e) noexcept nogil:
-    """How many of THIS atom's electrons the bond spends, for `_sulfur_lone_pair`'s budget.
+    """How many of THIS atom's electrons the bond spends, for `_lone_pair`'s budget.
 
     The order, except for an aromatic bond, which spends ONE -- its sigma -- and leaves the pi to
     the per-atom term the two callers add once (`+ 1` when the atom has any aromatic bond).  Both
@@ -558,21 +561,40 @@ cdef inline int _bond_electrons(halfedge_t *e) noexcept nogil:
     The delocalised pi is ONE electron per atom however many aromatic bonds it has, because that is
     what an atom contributes to a ring's pi system, and adding it per bond would charge a fusion
     carbon three.  Without the correction an aromatic ring atom's `spent` comes out five too high --
-    a bare `spent += e.order` charges 4 per aromatic bond -- and `_sulfur_lone_pair` denies a pair to
-    sulfurs that have one.  This is the only raw order read in the file: every other test here is on
+    a bare `spent += e.order` charges 4 per aromatic bond -- and `_lone_pair` denies a pair to
+    atoms that have one.  This is the only raw order read in the file: every other test here is on
     degree, hydrogen count, ring membership or `_is_chain_bond`.
     """
     return 1 if e.flags & HE_AROMATIC else <int> e.order
 
 
-cdef inline bint _sulfur_lone_pair(atom_t *a, int spent) noexcept nogil:
-    """Does this sulfur still have a lone pair, given the bonding electrons it has `spent`?
+cdef inline int _lone_pair_valence(uint8_t element) noexcept nogil:
+    """Valence electrons of an element whose lone pair can be a stereo direction; 0 for any other.
 
-    Six valence electrons, less the formal charge, less one for each electron in a bond to a
-    neighbour or to a hydrogen -- so a sigma bond and a hydrogen cost one each and a double bond
-    costs two.  Two electrons left is a pair.  Counting electrons rather than matching a bond
-    pattern is what makes the sulfoxide / sulfone split fall out of the rule, and what makes the
-    S=O and [S+]-[O-] drawings of one sulfoxide agree.
+    | element        | valence | pair is a direction                               |
+    | -------------- | ------- | ------------------------------------------------- |
+    | S, Se, Te      | 6       | always                                            |
+    | P, As, Sb      | 5       | always                                            |
+    | N              | 5       | in a three-membered ring only (`_perceive_stereo_units`) |
+
+    Oxygen, bismuth and polonium are absent: an oxonium inverts fast, and the heavier two have no
+    resolved pyramidal centre to name.
+    """
+    if element == 16 or element == 34 or element == 52:
+        return 6
+    if element == 7 or element == 15 or element == 33 or element == 51:
+        return 5
+    return 0
+
+
+cdef inline bint _lone_pair(atom_t *a, int spent) noexcept nogil:
+    """Does this atom still have a lone pair, given the bonding electrons it has `spent`?
+
+    The valence electrons (`_lone_pair_valence`), less the formal charge, less one for each electron
+    in a bond to a neighbour or to a hydrogen -- so a sigma bond and a hydrogen cost one each and a
+    double bond costs two.  Two electrons left is a pair.  Counting electrons rather than matching a
+    bond pattern is what makes the sulfoxide / sulfone and phosphine / phosphine oxide splits fall out
+    of the rule, and what makes the S=O and [S+]-[O-] drawings of one sulfoxide agree.
 
     Radicals are DELIBERATELY outside the budget: `at_radical` is not consulted, so an odd
     electron count reports a full pair for what is really a pair plus an unpaired electron, or an
@@ -581,7 +603,8 @@ cdef inline bint _sulfur_lone_pair(atom_t *a, int spent) noexcept nogil:
     reason and a later task that wants radicals treated exactly must change this line, not add a
     case around it.
     """
-    return (6 - <int> a.charge - spent) >= 2
+    cdef int valence = _lone_pair_valence(a.element)
+    return valence != 0 and (valence - <int> a.charge - spent) >= 2
 
 
 cdef inline bint _pi_directions_indistinguishable(atom_t *p, atom_t *q) noexcept nogil:
@@ -934,10 +957,11 @@ cdef inline bint _terminal_pair(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
     already perceived as SU_TETRA -- and a putative E/Z across the `S=N` names no information that
     pyramidal unit does not already carry.  So the cis/trans unit is not relocated; it does not exist.
 
-    Refusing on `element == 16` is airtight rather than a hack, and the arithmetic is why: a terminal
+    Refusing on the lone pair is airtight rather than a hack, and the arithmetic is why: a terminal
     allows `n_sigma + n_h + n_imp <= 2` while an ATOM needs four directions, so the fourth is
-    reachable only through a lone pair, and only sulfur's counts (spec 4.2, D4).  The electron budget
-    is passed the same `spent` the tetrahedral walk passes, so the two agree by construction.
+    reachable only through a lone pair (`_lone_pair_valence`).  The electron budget is passed the same
+    `spent` the tetrahedral walk passes, so the two agree by construction.  The check here omits the
+    tetrahedral walk's ring condition on nitrogen, so it refuses a superset of the colliding shapes.
     """
     cdef uint32_t k
     cdef halfedge_t *e
@@ -998,12 +1022,15 @@ cdef inline bint _terminal_pair(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
     spent += n_imp
     if any_aromatic:
         spent += 1                        # the one delocalised pi electron; see `_bond_electrons`
-    if atoms[t].element == 16 and _sulfur_lone_pair(&atoms[t], spent):
-        # Ruling F43, argued in full above: a pyramidal sulfur has no in-plane pair of positions.
-        # This is also the one shape where the anchor no-collision invariant would otherwise be
-        # false -- such a sulfur reaches four directions as two sigma, one pi and the pair, so
-        # SU_TETRA is already anchored on it, and `PhS(CH3)=NCH3` raised out of
-        # `stereo_units()` whenever the sulfur happened to hold the lower of the two terminal slots.
+    if _lone_pair(&atoms[t], spent) and (_lone_pair_valence(atoms[t].element) == 6
+                                         or n_heavy + n_h + n_imp >= 2):
+        # Ruling F43, argued in full above: a pyramidal chalcogen has no in-plane pair of positions.
+        # A pnictogen with a pair is refused only at two named directions, the one shape where it is
+        # pyramidal: `RP=CR2` is a planar phosphaalkene terminal.  This is also the shape where the
+        # anchor no-collision invariant would otherwise be false -- the atom reaches four directions
+        # as two sigma, one pi and the pair, so SU_TETRA is already anchored on it, and
+        # `PhS(CH3)=NCH3` raised out of `stereo_units()` whenever the sulfur held the lower of the two
+        # terminal slots.
         return False
     if n_heavy + n_h + n_imp > 2:
         return False                      # more than two in-plane directions is not a terminal
@@ -1062,6 +1089,205 @@ cdef inline bint _terminal_pair(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
 # explicitness is a drawing choice -- counting a drawn one would make a molecule an atropisomer and
 # its implicit-hydrogen twin not one, which is the representation dependence ruling F26 exists to
 # keep out of the record.
+
+
+# --- short-bridged bridgeheads ------------------------------------------------------------------
+#
+# Two ring atoms joined by three internally disjoint ring paths are the bridgeheads of a bicycle.  Where
+# every bridge is short, both bridgeheads point out and one sign implies the other:
+#
+# | bicycle | bridges, interior atoms                  | instance                               |
+# | ------- | ---------------------------------------- | -------------------------------------- |
+# | bridged | each 1-3                                 | camphor, tropane, adamantane           |
+# | fused   | one 0, the other two at most 2 each      | bicyclo[1.1.0]butane, ladderanes       |
+#
+# In (exo, bridge 1, bridge 2, bridge 3) order, bridges matched between the two ends, the out,out
+# parities differ: OUT_OUT_XOR, measured on PubChem isomeric SMILES of camphor, cocaine, pinenes, tropine,
+# ladderanes and bicyclo[2.1.0]pentanes (`test_bridgehead_realisability.py`).  A pair whose in-scope bridge
+# triples disagree on the bridges at either end is not coupled: tricyclo[2.2.0.0(1,3)]hexane's C1 is a
+# bridgehead of a [2.1.0] and of a [2.2.0] bicycle with different exo directions.
+DEF OUT_OUT_XOR = 1
+DEF BH_MAX_INTERIOR = 3             # a bridge's interior atoms; past it in/out isomers exist
+DEF BH_MAX_PATHS = 64               # a-b paths weighed; past it the pair is not coupled
+
+
+cdef struct bh_path_t:
+    uint32_t first          # the path's atom next to `a`; `b` for the zero bridge
+    uint32_t last           # the path's atom next to `b`; `a` for the zero bridge
+    uint32_t inner[3]       # interior atoms from `a`
+    uint32_t length         # interior atom count
+
+
+cdef inline uint32_t _ring_degree(uint32_t *ptr, halfedge_t *edges, uint32_t n) noexcept nogil:
+    cdef uint32_t k, count = 0
+    for k in range(ptr[n], ptr[n + 1]):
+        if edges[k].flags & HE_IN_RING:
+            count += 1
+    return count
+
+
+cdef int _bh_walk(uint32_t *ptr, halfedge_t *edges, uint32_t b, uint32_t *path, uint32_t depth,
+                  bh_path_t *out, int count) noexcept nogil:
+    """Append to `out` every ring path from `path[0]` to `b` extending `path[0:depth + 1]` with at most
+    BH_MAX_INTERIOR interior atoms; the new count, or -1 past BH_MAX_PATHS."""
+    cdef uint32_t n = path[depth], m, k, j
+    cdef bint seen
+    for k in range(ptr[n], ptr[n + 1]):
+        if not (edges[k].flags & HE_IN_RING):
+            continue
+        m = edges[k].to
+        if m == b:
+            if count == BH_MAX_PATHS:
+                return -1
+            out[count].length = depth
+            for j in range(depth):
+                out[count].inner[j] = path[j + 1]
+            out[count].first = path[1] if depth else b
+            out[count].last = n if depth else path[0]
+            count += 1
+            continue
+        if depth == BH_MAX_INTERIOR:
+            continue
+        seen = False
+        for j in range(depth + 1):
+            if path[j] == m:
+                seen = True
+                break
+        if seen:
+            continue
+        path[depth + 1] = m
+        count = _bh_walk(ptr, edges, b, path, depth + 1, out, count)
+        if count < 0:
+            return -1
+    return count
+
+
+cdef inline bint _bh_disjoint(bh_path_t *p, bh_path_t *q) noexcept nogil:
+    cdef uint32_t i, j
+    for i in range(p.length):
+        for j in range(q.length):
+            if p.inner[i] == q.inner[j]:
+                return False
+    return True
+
+
+cdef inline void _bh_sort3(uint32_t *f, uint32_t *g) noexcept nogil:
+    """`f[0:3]` ascending, `g` permuted alongside."""
+    cdef uint32_t i, j, s
+    for i in range(1, 3):
+        j = i
+        while j and f[j - 1] > f[j]:
+            s = f[j]
+            f[j] = f[j - 1]
+            f[j - 1] = s
+            s = g[j]
+            g[j] = g[j - 1]
+            g[j - 1] = s
+            j -= 1
+
+
+cdef bint _bh_pair(uint32_t *ptr, halfedge_t *edges, uint32_t a, uint32_t b, bint bridged_only,
+                   uint32_t *first, uint32_t *last) noexcept nogil:
+    """Are `a` and `b` coupled bridgeheads?  On True `first[0:3]` are `a`'s bridge directions ascending and
+    `last[0:3]` the matching directions at `b`."""
+    cdef bh_path_t paths[BH_MAX_PATHS]
+    cdef uint32_t path[BH_MAX_INTERIOR + 1]
+    cdef uint32_t f[3]
+    cdef uint32_t g[3]
+    cdef uint32_t x, y, z, t, zeros, longest
+    cdef int count
+    cdef bint found = False
+    cdef bh_path_t *tri[3]
+    path[0] = a
+    count = _bh_walk(ptr, edges, b, path, 0, paths, 0)
+    if count < 3:
+        return False
+    for x in range(<uint32_t> count):
+        for y in range(x + 1, <uint32_t> count):
+            if not _bh_disjoint(&paths[x], &paths[y]):
+                continue
+            for z in range(y + 1, <uint32_t> count):
+                if not _bh_disjoint(&paths[x], &paths[z]) or not _bh_disjoint(&paths[y], &paths[z]):
+                    continue
+                tri[0] = &paths[x]
+                tri[1] = &paths[y]
+                tri[2] = &paths[z]
+                zeros = 0
+                longest = 0
+                for t in range(3):
+                    if tri[t].length == 0:
+                        zeros += 1
+                    elif tri[t].length > longest:
+                        longest = tri[t].length
+                if zeros and (bridged_only or longest > 2):
+                    continue
+                # three bridges sorted by their direction at `a`
+                for t in range(3):
+                    f[t] = tri[t].first
+                    g[t] = tri[t].last
+                _bh_sort3(f, g)
+                if not found:
+                    for t in range(3):
+                        first[t] = f[t]
+                        last[t] = g[t]
+                    found = True
+                else:
+                    for t in range(3):
+                        if first[t] != f[t] or last[t] != g[t]:
+                            return False
+    return found
+
+
+cdef int _bh_reach(uint32_t *ptr, halfedge_t *edges, uint32_t a, uint32_t *out) noexcept nogil:
+    """The ring atoms within BH_MAX_INTERIOR + 1 ring bonds of `a`, `a` excluded, breadth first and at most
+    BH_MAX_PATHS of them; their count."""
+    cdef uint32_t level[BH_MAX_PATHS + 1]
+    cdef uint32_t k, n, m, i, head = 0, tail = 1, depth_end, depth = 0
+    cdef bint seen
+    level[0] = a
+    while head < tail and depth <= BH_MAX_INTERIOR:
+        depth_end = tail
+        while head < depth_end:
+            n = level[head]
+            head += 1
+            for k in range(ptr[n], ptr[n + 1]):
+                if not (edges[k].flags & HE_IN_RING):
+                    continue
+                m = edges[k].to
+                seen = False
+                for i in range(tail):
+                    if level[i] == m:
+                        seen = True
+                        break
+                if seen:
+                    continue
+                if tail == BH_MAX_PATHS + 1:
+                    break
+                level[tail] = m
+                out[tail - 1] = m
+                tail += 1
+        depth += 1
+    return <int> tail - 1
+
+
+cdef bint _bh_nitrogen_constrained(uint32_t *ptr, halfedge_t *edges, uint32_t a) noexcept nogil:
+    """Is the three-ring-bond `a` a bridgehead of a bridged bicycle whose bridges are 1-3 atoms?
+
+    Such a nitrogen cannot invert: Tröger's base, quinuclidine.  A fused one, as in indolizidine, can.
+    """
+    cdef uint32_t reach[BH_MAX_PATHS]
+    cdef uint32_t first[3]
+    cdef uint32_t last[3]
+    cdef uint32_t i, m
+    cdef int count
+    if _ring_degree(ptr, edges, a) != 3:
+        return False
+    count = _bh_reach(ptr, edges, a, reach)
+    for i in range(<uint32_t> count):
+        m = reach[i]
+        if _ring_degree(ptr, edges, m) >= 3 and _bh_pair(ptr, edges, a, m, True, first, last):
+            return True
+    return False
 
 
 cdef inline bint _is_ring_fusion_atom(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
@@ -1178,12 +1404,566 @@ cdef bint _is_atropisomer_axis(Structure structure, halfedge_t *e, uint32_t a,
     cdef halfedge_t *edges = csr_edges(structure)
     cdef uint32_t refs_a[2]
     cdef uint32_t refs_b[2]
-    if e.order != 1 or (e.flags & HE_IN_RING):
+    # an aromatic bond outside every ring is a single bond: OpenSMILES reads `c1c2` between two aromatic
+    # rings as aromatic, and the biaryl axis is the same axis however the bond was spelled
+    if (e.order != 1 and e.order != 4) or (e.flags & HE_IN_RING):
         return False
     if not at_in_ring(&atoms[a]) or not at_in_ring(&atoms[b]):
         return False
     return (_atropisomer_end(atoms, ptr, edges, a, b, refs_a)
             and _atropisomer_end(atoms, ptr, edges, b, a, refs_b))
+
+
+# ---------------------------------------------------------------------------------------------
+# HELICENES.  An [n]helicene, n >= 5, is a chain of ortho-fused six-rings whose two terminal rings
+# overlap across the fjord, so the chain is a helix of one of two senses.  The unit:
+#
+# | Field | Holds |
+# | --- | --- |
+# | owners | the two fjord atoms: each terminal ring's atom on the inner rim that is not a fusion atom |
+# | anchor | the lower-slot owner, or the other one when that is taken (ruling F45) |
+# | refs | per owner, its inner-rim ring neighbour, then its other ring neighbour; the anchor's pair first |
+# | parity | 1 the M helix, 2 the P helix |
+#
+# The refs are ordered by ROLE, not by slot, so the parity is the helix sense itself; exchanging the
+# two ends is (0 2)(1 3), even, which is why it needs no rewrite.
+#
+# The chain, over the minimum cycle basis' six-rings, fused where two share exactly one bond:
+#
+# | Ring | Condition |
+# | --- | --- |
+# | terminal | one fused neighbour |
+# | interior | two fused neighbours, at bonds two apart on the ring (angular); three apart is linear |
+# | consecutive interiors | the second's incoming inner atom is the first's outgoing one; a zigzag (picene) breaks it |
+#
+# At least three interior rings.  Every ring atom carries a pi bond, so a perhydro skeleton is not a
+# helix.  A branched chain and an atom in three six-rings are refused.
+
+cdef enum:
+    HX_OVERFLOW = 0xFFFFFFFE        # an atom in three or more six-rings; the membership map lost it
+
+
+cdef inline bint _hx_ring_has(uint32_t *ring, uint32_t v) noexcept nogil:
+    cdef uint32_t p
+    for p in range(6):
+        if ring[p] == v:
+            return True
+    return False
+
+
+cdef inline uint32_t _hx_across(uint32_t *rings, uint32_t base, uint32_t *m1, uint32_t *m2,
+                                uint32_t r, uint32_t p) noexcept nogil:
+    """The six-ring fused to ring `r` at its bond `p` (atoms `p` and `p + 1`); SU_NO_REF for none,
+    HX_OVERFLOW when both atoms are in three six-rings and the map cannot say."""
+    cdef uint32_t *ring = rings + base + rings[1 + r]
+    cdef uint32_t u = ring[p]
+    cdef uint32_t v = ring[(p + 1) % 6]
+    cdef uint32_t s, t
+    if m2[u] == HX_OVERFLOW:
+        u, v = v, u
+        if m2[u] == HX_OVERFLOW:
+            return HX_OVERFLOW
+    for t in range(2):
+        s = m1[u] if t == 0 else m2[u]
+        if s == 0 or s - 1 == r:
+            continue
+        if _hx_ring_has(rings + base + rings[1 + s - 1], v):
+            return s - 1
+    return SU_NO_REF
+
+
+cdef inline int _hx_fused(uint32_t *rings, uint32_t base, uint32_t *m1, uint32_t *m2, uint32_t r,
+                          uint32_t *pos, uint32_t *nbr) noexcept nogil:
+    """Ring `r`'s fused neighbours, at most two, into `pos`/`nbr`; the count, or -1 for more than two
+    or an unknown."""
+    cdef uint32_t p, s
+    cdef int count = 0
+    for p in range(6):
+        s = _hx_across(rings, base, m1, m2, r, p)
+        if s == SU_NO_REF:
+            continue
+        if s == HX_OVERFLOW or count == 2:
+            return -1
+        pos[count] = p
+        nbr[count] = s
+        count += 1
+    return count
+
+
+cdef inline bint _hx_ring_pi(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
+                             uint32_t *ring) noexcept nogil:
+    """Does every atom of the ring carry a double or aromatic bond?"""
+    cdef uint32_t p, k
+    cdef bint pi
+    for p in range(6):
+        pi = False
+        for k in range(ptr[ring[p]], ptr[ring[p] + 1]):
+            if edges[k].order == 2 or edges[k].order == 4:
+                pi = True
+                break
+        if not pi:
+            return False
+    return True
+
+
+cdef inline void _hx_fjord(uint32_t *ring, uint32_t inner, uint32_t other, uint32_t *fjord,
+                           uint32_t *outer) noexcept nogil:
+    """In terminal ring `ring`, fused at bond `inner`-`other`: the fjord atom beside `inner` and its
+    other ring neighbour."""
+    cdef uint32_t q = 0, p
+    for p in range(6):
+        if ring[p] == inner:
+            q = p
+            break
+    if ring[(q + 1) % 6] == other:
+        fjord[0] = ring[(q + 5) % 6]
+        outer[0] = ring[(q + 4) % 6]
+    else:
+        fjord[0] = ring[(q + 1) % 6]
+        outer[0] = ring[(q + 2) % 6]
+
+
+cdef bint _helix_ends(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t *rings,
+                      uint32_t *m1, uint32_t *m2, uint32_t start, uint32_t *refs) noexcept nogil:
+    """The helix whose chain starts at terminal ring `start`: `refs` as (A inner, A outer, B inner,
+    B outer) around fjord atoms `refs[4]` and `refs[5]`.  False when the chain is not a helix or
+    ends at a ring of lower index, which walks it from there instead.
+
+    `refs` holds six words.  Every step leaves a ring by its one other fused bond, so the walk is
+    linear in the chain and bounded by the ring count.
+    """
+    cdef uint32_t count = rings[0]
+    cdef uint32_t base = 2 + count
+    cdef uint32_t pos[2]
+    cdef uint32_t nbr[2]
+    cdef uint32_t *ring = rings + base + rings[1 + start]
+    cdef uint32_t prev = start, cur, pin, pout, d, inn, out, last_out = 0, f1a = 0, other_a = 0
+    cdef uint32_t steps = 0, interior = 0
+    cdef int nf
+    if rings[2 + start] - rings[1 + start] != 6 or not _hx_ring_pi(atoms, ptr, edges, ring):
+        return False
+    if _hx_fused(rings, base, m1, m2, start, pos, nbr) != 1:
+        return False
+    cur = nbr[0]
+    while True:
+        steps += 1
+        if steps > count:
+            return False
+        ring = rings + base + rings[1 + cur]
+        if not _hx_ring_pi(atoms, ptr, edges, ring):
+            return False
+        nf = _hx_fused(rings, base, m1, m2, cur, pos, nbr)
+        if nf == 1:
+            break
+        if nf != 2:
+            return False
+        if nbr[0] == prev:
+            pin = pos[0]
+            pout = pos[1]
+        elif nbr[1] == prev:
+            pin = pos[1]
+            pout = pos[0]
+        else:
+            return False
+        d = (pout + 6 - pin) % 6
+        if d == 2:
+            inn = ring[(pin + 1) % 6]
+            out = ring[(pin + 2) % 6]
+        elif d == 4:
+            inn = ring[pin]
+            out = ring[(pin + 5) % 6]
+        else:
+            return False        # linear fusion
+        if interior == 0:
+            f1a = inn
+            other_a = ring[pin] if inn != ring[pin] else ring[(pin + 1) % 6]
+        elif inn != last_out:
+            return False        # zigzag
+        last_out = out
+        interior += 1
+        prev = cur
+        cur = nbr[1] if pout == pos[1] else nbr[0]
+    if interior < 3 or cur < start:
+        return False
+    # the terminal ring B, entered through the bond that holds `last_out`
+    _hx_fjord(rings + base + rings[1 + start], f1a, other_a, &refs[4], &refs[1])
+    refs[0] = f1a
+    ring = rings + base + rings[1 + cur]
+    pin = pos[0]
+    inn = ring[pin]
+    out = ring[(pin + 1) % 6]
+    if out == last_out:
+        inn, out = out, inn
+    elif inn != last_out:
+        return False
+    _hx_fjord(ring, inn, out, &refs[5], &refs[3])
+    refs[2] = inn
+    return True
+
+
+# ---------------------------------------------------------------------------------------------
+# PLANAR UNITS.  A face of a rigid plane that one substituent tells apart from the other.  One kind,
+# three shapes:
+#
+# | Shape | anchor | refs, two pairs | wedge, narrow -> wide |
+# | --- | --- | --- | --- |
+# | metallocene | substituted eta5 ring carbon, metal M | (X, M, ring lo, ring hi) | anchor -> M |
+# | cyclophane | substituted deck carbon beside bridgehead B | (X, B's bridge atom, B, other ring) | B -> bridge |
+# | twisted | far terminal t of a C=C, near terminal c | (t ring, t other, c ring, c other) | t -> t ring |
+#
+# Parity is the module's one rule over the four refs' positions: a negative signed volume is 2.  The
+# ring reflection is a within-pair swap and odd, so the automorphism search removes a mirror-symmetric
+# ring (monosubstituted ferrocene, the Ugi amine's ring) with no rule of its own.
+#
+# | Shape | condition |
+# | --- | --- |
+# | metallocene | five ring atoms all bonded to M; the anchor has exactly its two ring neighbours, M and one heavy
+#   non-metal X, and no hydrogen |
+# | cyclophane | a pi six-ring whose para atoms each start a bridge of 1-4 two-connected atoms, both bridges ending
+#   on para atoms of one other pi six-ring; the anchor has one heavy exocyclic X and no hydrogen |
+# | twisted | a cis/trans unit, not SU_SHIFTABLE, whose terminals share a ring of 8 or 9 and each have one ring
+#   neighbour besides the other; flagged SU_TWISTED |
+#
+# A twisted unit has one owner, t: its double bond already names the cis/trans unit anchored at c.
+# It is stereogenic only while that unit is configured trans (`_twisted_dead`), so (Z)-cyclooctene
+# carries the candidate and no configuration.  Every substituted atom of one ring gets its own unit,
+# so 1-X-2-Y-ferrocene states one face twice and a drawing may state it inconsistently; nothing heals
+# that.  A ring bonded to a metal in another component names no unit (the units never straddle two
+# components), so a metallocene spelled as ions reads no planar configuration.
+
+cdef inline uint32_t _pl_ring_neighbour(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t t,
+                                        uint32_t c) noexcept nogil:
+    """`t`'s one ring neighbour besides `c`; SU_NO_REF for none or several."""
+    cdef uint32_t k, out = SU_NO_REF
+    for k in range(ptr[t], ptr[t + 1]):
+        if edges[k].to == c or not (edges[k].flags & HE_IN_RING):
+            continue
+        if out != SU_NO_REF:
+            return SU_NO_REF
+        out = edges[k].to
+    return out
+
+
+cdef inline uint32_t _smallest_shared_ring(Structure structure, uint32_t a, uint32_t b) noexcept nogil:
+    """The smallest ring family `a` and `b` share; 0 for none."""
+    cdef uint32_t words, k, bit, best = 0
+    cdef uint64_t *bits
+    cdef uint32_t *sizes
+    cdef uint64_t shared
+    if not structure_shares_ring(structure, a, b):
+        return 0
+    words = structure_ring_words(structure)
+    bits = structure_ring_bits(structure)
+    sizes = structure_ring_family_sizes(structure, words)
+    for k in range(words):
+        shared = bits[<size_t> a * words + k] & bits[<size_t> b * words + k]
+        while shared:
+            bit = <uint32_t> _lo_bit64(shared)
+            if best == 0 or sizes[k * 64 + bit] < best:
+                best = sizes[k * 64 + bit]
+            shared &= shared - 1
+    return best
+
+
+cdef inline bint _pl_bare_substituted(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t a,
+                                      uint32_t degree) noexcept nogil:
+    """`a` has exactly `degree` neighbours, all heavy, and no implicit hydrogen."""
+    cdef uint32_t k
+    if ptr[a + 1] - ptr[a] != degree or at_implicit_h_unknown(&atoms[a]) or at_implicit_h(&atoms[a]):
+        return False
+    for k in range(ptr[a], ptr[a + 1]):
+        if atoms[edges[k].to].element == 1:
+            return False
+    return True
+
+
+cdef Py_ssize_t _metallocene_units(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t n,
+                                   uint32_t *stamp, stereo_unit_t *out, Py_ssize_t count,
+                                   uint8_t *anchored) noexcept nogil:
+    """Emit a planar unit on every substituted atom of every eta5 ring (see PLANAR UNITS); the new
+    count.  `stamp` is one word per atom, overwritten."""
+    cdef uint32_t m, k, j, a0, cur, prev, nxt, step, length, p, q, x, lo, hi
+    cdef uint32_t ring[6]
+    cdef uint32_t refs[4]
+    cdef int marked
+    memset(stamp, 0, <size_t> n * sizeof(uint32_t))
+    for m in range(n):
+        if not el_is_metal(atoms[m].element):
+            continue
+        for k in range(ptr[m], ptr[m + 1]):
+            stamp[edges[k].to] = m + 1
+        for k in range(ptr[m], ptr[m + 1]):
+            a0 = edges[k].to
+            cur = a0
+            prev = SU_NO_REF
+            length = 0
+            for step in range(6):
+                ring[step] = cur
+                nxt = SU_NO_REF
+                marked = 0
+                for j in range(ptr[cur], ptr[cur + 1]):
+                    q = edges[j].to
+                    if q == m or stamp[q] != m + 1:
+                        continue
+                    marked += 1
+                    if q != prev and nxt == SU_NO_REF:
+                        nxt = q
+                if marked != 2 or nxt == SU_NO_REF:
+                    break
+                prev = cur
+                cur = nxt
+                if cur == a0:
+                    length = step + 1
+                    break
+            if length != 5:
+                continue
+            for p in range(5):
+                if ring[p] < a0:
+                    break
+            else:
+                for p in range(5):
+                    cur = ring[p]
+                    lo = ring[(p + 4) % 5]
+                    hi = ring[(p + 1) % 5]
+                    if lo > hi:
+                        lo, hi = hi, lo
+                    if _anchor_taken(anchored, cur) or not _pl_bare_substituted(atoms, ptr, edges, cur, 4):
+                        continue
+                    x = SU_NO_REF
+                    for j in range(ptr[cur], ptr[cur + 1]):
+                        q = edges[j].to
+                        if q != m and q != lo and q != hi:
+                            x = q
+                    if x == SU_NO_REF or stamp[x] == m + 1 or el_is_metal(atoms[x].element):
+                        continue
+                    refs[0] = x
+                    refs[1] = m
+                    refs[2] = lo
+                    refs[3] = hi
+                    _stereo_emit(out, &count, anchored, SU_PLANAR, cur, refs, 4, 0, 0)
+    return count
+
+
+cdef inline uint32_t _pl_bridge_end(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t *m1,
+                                    uint32_t *m2, uint32_t deck, uint32_t head, uint32_t *first) noexcept nogil:
+    """From bridgehead `head` of six-ring `deck`, the six-ring atom its bridge lands on after one to
+    four two-connected atoms; SU_NO_REF for none.  `first` gets the bridge atom next to `head`."""
+    cdef uint32_t k, q, prev = head, cur = SU_NO_REF, nxt, steps, deg
+    for k in range(ptr[head], ptr[head + 1]):
+        q = edges[k].to
+        if m1[q] == deck + 1 or m2[q] == deck + 1 or atoms[q].element == 1:
+            continue
+        if cur != SU_NO_REF:
+            return SU_NO_REF
+        cur = q
+    if cur == SU_NO_REF:
+        return SU_NO_REF
+    first[0] = cur
+    for steps in range(5):
+        if m1[cur] != 0:
+            return cur if steps else SU_NO_REF
+        if steps == 4:
+            return SU_NO_REF
+        nxt = SU_NO_REF
+        deg = 0
+        for k in range(ptr[cur], ptr[cur + 1]):
+            q = edges[k].to
+            if atoms[q].element == 1:
+                continue
+            deg += 1
+            if q != prev:
+                nxt = q
+        if deg != 2 or nxt == SU_NO_REF:
+            return SU_NO_REF
+        prev = cur
+        cur = nxt
+    return SU_NO_REF
+
+
+cdef Py_ssize_t _cyclophane_units(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t *rings,
+                                  uint32_t *m1, uint32_t *m2, stereo_unit_t *out, Py_ssize_t count,
+                                  uint8_t *anchored) noexcept nogil:
+    """Emit a planar unit on every substituted deck atom of every para-bridged pair of pi six-rings
+    (see PLANAR UNITS); the new count.  `m1`/`m2` are pass 4's atom -> six-ring map."""
+    cdef uint32_t n_rings = rings[0]
+    cdef uint32_t base = 2 + n_rings
+    cdef uint32_t r, q, p, i, e1, e2, f1 = 0, f2 = 0, d2, pos1, pos2, head, bridge, other, x, k
+    cdef uint32_t *ring
+    cdef uint32_t *ring2
+    cdef uint32_t refs[4]
+    for r in range(n_rings):
+        if rings[2 + r] - rings[1 + r] != 6:
+            continue
+        ring = rings + base + rings[1 + r]
+        if not _hx_ring_pi(atoms, ptr, edges, ring):
+            continue
+        for q in range(3):
+            if m2[ring[q]] != 0 or m2[ring[q + 3]] != 0:
+                continue                    # a fusion atom is no bridgehead
+            e1 = _pl_bridge_end(atoms, ptr, edges, m1, m2, r, ring[q], &f1)
+            if e1 == SU_NO_REF or m2[e1] != 0:
+                continue
+            e2 = _pl_bridge_end(atoms, ptr, edges, m1, m2, r, ring[q + 3], &f2)
+            if e2 == SU_NO_REF or m1[e2] != m1[e1] or f1 == f2:
+                continue
+            d2 = m1[e1] - 1
+            if d2 == r:
+                continue                    # a single-bridge [n]paracyclophane: no second deck
+            ring2 = rings + base + rings[1 + d2]
+            if not _hx_ring_pi(atoms, ptr, edges, ring2):
+                continue
+            pos1 = 6
+            pos2 = 6
+            for i in range(6):
+                if ring2[i] == e1:
+                    pos1 = i
+                elif ring2[i] == e2:
+                    pos2 = i
+            if pos1 == 6 or pos2 == 6 or (pos1 + 3) % 6 != pos2:
+                continue
+            for i in range(1, 6):
+                if i == 3:
+                    continue
+                p = (q + i) % 6
+                if i == 1 or i == 5:
+                    head = ring[q]
+                    bridge = f1
+                else:
+                    head = ring[q + 3]
+                    bridge = f2
+                other = ring[(p + 1) % 6] if ring[(p + 5) % 6] == head else ring[(p + 5) % 6]
+                if _anchor_taken(anchored, ring[p]) or not _pl_bare_substituted(atoms, ptr, edges, ring[p], 3):
+                    continue
+                x = SU_NO_REF
+                for k in range(ptr[ring[p]], ptr[ring[p] + 1]):
+                    if edges[k].to != head and edges[k].to != other:
+                        x = edges[k].to
+                refs[0] = x
+                refs[1] = bridge
+                refs[2] = head
+                refs[3] = other
+                _stereo_emit(out, &count, anchored, SU_PLANAR, ring[p], refs, 4, 0, 0)
+            break                           # one bridged pair per deck
+    return count
+
+
+cdef Py_ssize_t _twisted_units(Structure structure, atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
+                               stereo_unit_t *out, Py_ssize_t count, uint8_t *anchored) noexcept nogil:
+    """Emit a twisted planar unit beside every medium-ring cis/trans unit (see PLANAR UNITS); the new
+    count."""
+    cdef Py_ssize_t k, end = count
+    cdef stereo_unit_t *u
+    cdef uint32_t c, t, tr, cr, size, j
+    cdef uint32_t refs[4]
+    cdef uint32_t mask, umask
+    for k in range(end):
+        u = &out[k]
+        if u.kind != SU_CIS_TRANS or (u.spare & SU_SHIFTABLE):
+            continue
+        c = u.anchor
+        t = _shift_partner(ptr, edges, c)
+        if t == SU_NO_REF or _shift_partner(ptr, edges, t) != c or _anchor_taken(anchored, t):
+            continue
+        size = _smallest_shared_ring(structure, c, t)
+        if size != 8 and size != 9:
+            continue
+        tr = _pl_ring_neighbour(atoms, ptr, edges, t, c)
+        cr = _pl_ring_neighbour(atoms, ptr, edges, c, t)
+        if tr == SU_NO_REF or cr == SU_NO_REF:
+            continue
+        umask = (u.spare >> SU_UNNAMED_SHIFT) & SU_UNNAMED_MASK
+        mask = 0
+        if u.refs[2] == tr:
+            j = 3
+        elif u.refs[3] == tr:
+            j = 2
+        else:
+            continue
+        refs[0] = tr
+        refs[1] = u.refs[j]
+        mask |= ((umask >> j) & 1) << 1
+        if u.refs[0] == cr:
+            j = 1
+        elif u.refs[1] == cr:
+            j = 0
+        else:
+            continue
+        refs[2] = cr
+        refs[3] = u.refs[j]
+        mask |= ((umask >> j) & 1) << 3
+        _stereo_emit(out, &count, anchored, SU_PLANAR, t, refs, 4, <uint8_t> mask, SU_TWISTED)
+    return count
+
+
+cdef inline bint _protic_neighbour(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t end,
+                                   uint32_t other) noexcept nogil:
+    """Does `end` carry, beside `other`, a single-bonded O or N that holds a hydrogen?  An unknown count is
+    no hydrogen, so a drawing that never said keeps its geometry."""
+    cdef uint32_t k, x
+    for k in range(ptr[end], ptr[end + 1]):
+        x = edges[k].to
+        if x == other or edges[k].order != 1 or (atoms[x].element != 7 and atoms[x].element != 8):
+            continue
+        if at_explicit_h(&atoms[x]) or (not at_implicit_h_unknown(&atoms[x]) and at_implicit_h(&atoms[x])):
+            return True
+    return False
+
+
+cdef inline bint _oxygen_on(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t end) noexcept nogil:
+    """Is a nitrogen double-bond end bonded to an oxygen: an oxime, its ether, a nitrone, an azoxy?"""
+    cdef uint32_t k
+    if atoms[end].element != 7:
+        return False
+    for k in range(ptr[end], ptr[end + 1]):
+        if atoms[edges[k].to].element == 8:
+            return True
+    return False
+
+
+cdef inline bint _labile_double_bond(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
+                                     stereo_unit_t *u) noexcept nogil:
+    """A cis/trans unit whose geometry the compound does not keep, so a sign on it names the drawing.
+
+    | double bond                         | labile because                                          |
+    | ----------------------------------- | ------------------------------------------------------- |
+    | C=N, N=N                            | nitrogen inversion and tautomerism interconvert E and Z |
+    | C=C with an O-H or N-H on a terminal | an enol or enamine: the geometry is the tautomer drawn  |
+
+    An oxime, an oxime ether, a nitrone and an azoxy keep theirs: an oxygen on the nitrogen end makes the
+    E and Z isomers isolable.  A tertiary enamine has no hydrogen to move and keeps its geometry too.
+    """
+    cdef uint32_t a, b
+    if u.kind != SU_CIS_TRANS:
+        return False
+    a = u.anchor
+    b = _stereo_partner_raw(atoms, ptr, edges, u)
+    if b == SU_NO_REF:
+        return False
+    if atoms[a].element == 7 or atoms[b].element == 7:
+        return not (_oxygen_on(atoms, ptr, edges, a) or _oxygen_on(atoms, ptr, edges, b))
+    if atoms[a].element == 6 and atoms[b].element == 6:
+        return _protic_neighbour(atoms, ptr, edges, a, b) or _protic_neighbour(atoms, ptr, edges, b, a)
+    return False
+
+
+cdef inline bint _twisted_dead(Structure structure, stereo_unit_t *u) noexcept nogil:
+    """A twisted unit whose cis/trans unit is not configured trans: no configuration of its own."""
+    cdef uint32_t c
+    cdef stereo_unit_t *ct
+    cdef uint8_t p
+    if not (u.spare & SU_TWISTED):
+        return False
+    c = _shift_partner(csr_ptr(structure), csr_edges(structure), u.anchor)
+    if c == SU_NO_REF:
+        return True
+    ct = stereo_unit_of(structure, c)
+    if ct is NULL or ct.kind != SU_CIS_TRANS:
+        return True
+    p = structure_parity_at(structure, c)
+    if p == 0:
+        return True
+    # parity 1 is refs[0] trans to refs[2]; each ring neighbour sitting in the other slot flips it
+    return not ((p == 1) ^ (ct.refs[0] != u.refs[2]) ^ (ct.refs[2] != u.refs[0]))
 
 
 cdef struct su_scratch_t:
@@ -1200,8 +1980,8 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, su_scratch_t *scratc
     """Fill `scratch.units` with the molecule's stereo units and return how many there are; -1 on a
     collision (see `_stereo_emit`).
 
-    Three passes, one per kind that has its own walk: tetrahedral over atoms, cumulene over
-    double-bond chains, atropisomer over bonds.  THE RESULTING UNIT ORDER IS NOT PROMISED and
+    Four passes: tetrahedral over atoms, cumulene over double-bond chains, atropisomer over bonds,
+    then planar and helical units over rings.  THE RESULTING UNIT ORDER IS NOT PROMISED and
     nothing may come to depend on it -- the tetrahedral records happen to be in ascending anchor
     order because that pass is a single ascending sweep, and `stereo_unit_of` is a linear scan
     precisely so that the cumulene and atropisomer passes need not preserve it.
@@ -1229,6 +2009,11 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, su_scratch_t *scratc
     cdef bint refused, any_aromatic
     cdef uint8_t su_flags
     cdef Py_ssize_t count = 0
+    cdef uint32_t *rings
+    cdef uint32_t n_rings, r_base, r, p, v, lead, six = 0
+    cdef uint32_t h_ends[6]
+    cdef uint32_t metal
+    cdef bint has_metal = False
 
     for i in range(n):
         a = &atoms[i]
@@ -1241,8 +2026,13 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, su_scratch_t *scratc
         pi_b = 0
         refused = False
         any_aromatic = False
+        metal = SU_NO_REF
+        if el_is_metal(a.element):
+            has_metal = True
         for k in range(ptr[i], ptr[i + 1]):
             e = &edges[k]
+            if el_is_metal(atoms[e.to].element):
+                metal = e.to
             # A triple bond, and chython's order 8 for everything else, refuse the atom outright.
             # For a triple bond the valence is already spent, so no legal record reaches four
             # directions past one -- the early-out only ever fires on a forged one, and refusing
@@ -1283,6 +2073,15 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, su_scratch_t *scratc
                 n_ref += 1
         if refused:
             continue
+        if metal != SU_NO_REF:
+            # A HAPTO ATOM IS NO CENTRE: an atom bonded to a metal that one of its own neighbours is
+            # also bonded to sits in an eta-n ring, and its four bonds are no tetrahedron.
+            for k in range(ptr[i], ptr[i + 1]):
+                if edges[k].to != metal and csr_find_at(ptr, edges, edges[k].to, metal) != NULL:
+                    refused = True
+                    break
+            if refused:
+                continue
 
         if at_implicit_h_unknown(a):
             # AN UNRECORDED HYDROGEN COUNT REFUSES THE UNIT ONLY WHERE IT COULD HAVE CHANGED THE
@@ -1314,8 +2113,15 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, su_scratch_t *scratc
             n_unnamed += at_implicit_h(a)
         if any_aromatic:
             spent += 1                    # the one delocalised pi electron; see `_bond_electrons`
-        if a.element == 16 and _sulfur_lone_pair(a, spent):
-            n_unnamed += 1        # at most one; two pairs are the same direction twice
+        # At most one pair; two are the same direction twice.  A pair beside four named directions
+        # makes five and refuses the atom, as for SF4.  Nitrogen inverts through its pair except in a
+        # three-membered ring, where the invertomers of an N-haloaziridine or an oxaziridine are
+        # isolable, and at the bridgehead of a short-bridged bicycle (Tröger's base, quinuclidine);
+        # an aromatic nitrogen has spent its pair on the ring.
+        if _lone_pair(a, spent) and (a.element != 7
+                                     or (not any_aromatic and ((a.ring_sizes & (1u << 3)) != 0
+                                                               or _bh_nitrogen_constrained(ptr, edges, i)))):
+            n_unnamed += 1
 
         if n_ref + n_h + n_unnamed != 4:
             continue
@@ -1462,6 +2268,53 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, su_scratch_t *scratc
             _atropisomer_end(atoms, ptr, edges, other_pivot, pivot, &refs[2])
             if _stereo_emit(out, &count, anchored, SU_ATROPISOMER, pivot, refs, 4, 0, 0):
                 return -1
+
+    # Pass 4: planar units (see PLANAR UNITS), then helicenes from each terminal six-ring (see
+    # HELICENES).  Pass 2's scratch is free here; the six-ring shapes share it as the atom -> six-ring
+    # map, two slots per atom, ring index + 1.
+    count = _twisted_units(structure, atoms, ptr, edges, out, count, anchored)
+    if has_metal:
+        count = _metallocene_units(atoms, ptr, edges, n, stamp, out, count, anchored)
+    if not structure_has(structure, SEG_RELEVANT_RINGS):
+        return count
+    rings = structure_rings(structure)
+    n_rings = rings[0]
+    r_base = 2 + n_rings
+    for r in range(n_rings):
+        if rings[2 + r] - rings[1 + r] == 6:
+            six += 1
+    if six < 2:
+        return count
+    memset(stamp, 0, <size_t> n * sizeof(uint32_t))
+    memset(queue, 0, <size_t> n * sizeof(uint32_t))
+    for r in range(n_rings):
+        if rings[2 + r] - rings[1 + r] != 6:
+            continue
+        for p in range(6):
+            v = rings[r_base + rings[1 + r] + p]
+            if stamp[v] == 0:
+                stamp[v] = r + 1
+            elif queue[v] == 0:
+                queue[v] = r + 1
+            else:
+                queue[v] = HX_OVERFLOW
+    count = _cyclophane_units(atoms, ptr, edges, rings, stamp, queue, out, count, anchored)
+    if six < 5:
+        return count
+    for r in range(n_rings):
+        if not _helix_ends(atoms, ptr, edges, rings, stamp, queue, r, h_ends):
+            continue
+        # the lower-slot fjord atom anchors, the other one when that is taken (ruling F45)
+        lead = 0 if h_ends[4] < h_ends[5] else 1
+        if _anchor_taken(anchored, h_ends[4 + lead]):
+            lead = 1 - lead
+            if _anchor_taken(anchored, h_ends[4 + lead]):
+                continue            # both fjord atoms anchor another unit; the helix is lost
+        pivot = h_ends[4 + lead]
+        for p in range(4):
+            refs[p] = h_ends[(p + 2 * lead) % 4]
+        if _stereo_emit(out, &count, anchored, SU_HELICAL, pivot, refs, 4, 0, 0):
+            return -1
     return count
 
 
@@ -1522,13 +2375,15 @@ cdef inline bint _is_group_15_or_16(uint8_t element) noexcept nogil:
 
 
 cdef inline bint _anchor_is_protic(atom_t *atoms, stereo_unit_t *u) noexcept nogil:
-    """Does the anchor carry a hydrogen it can invert through?
+    """Does a tetrahedral anchor carry a hydrogen it can invert through?
+
+    A TETRAHEDRAL question only.  At a double-bond terminal an N-H is one of two in-plane directions,
+    not an inversion path, and a bond kind anchors on whichever terminal the atom order puts first --
+    so asking it there would make (E)-ethanimine stereogenic as `C/C=N/[H]` and not as `[H]/N=C/C`.
 
     Both hydrogen counts, because a drawn hydrogen and an implied one are the same chemistry:
     `at_explicit_h` is derived from the CSR by `derive_scalars`, so this is the same answer as
-    walking the adjacency for `element == 1` and it is O(1).  A question about the ANCHOR only --
-    a bond kind's far terminal has its own atom record and its hydrogens are not this unit's
-    inversion path.
+    walking the adjacency for `element == 1` and it is O(1).
 
     H_UNKNOWN IS A LIVE INPUT HERE and the unit decides how it reads, which is why this takes the
     unit rather than the anchor id.  A fully substituted anchor is perceived with the sentinel on it
@@ -1545,7 +2400,7 @@ cdef inline bint _anchor_is_protic(atom_t *atoms, stereo_unit_t *u) noexcept nog
     perception admits the sentinel only at a full frame -- and it is spelled out anyway, because the
     safe reading must not depend on the other cut staying exactly as narrow as it is now.
     """
-    if not _is_group_15_or_16(atoms[u.anchor].element):
+    if u.kind != SU_TETRA or not _is_group_15_or_16(atoms[u.anchor].element):
         return False
     if at_explicit_h(&atoms[u.anchor]) != 0:
         return True
@@ -1778,7 +2633,9 @@ cdef inline uint32_t _stereo_partner_raw(atom_t *atoms, uint32_t *ptr, halfedge_
                                           stereo_unit_t *u) noexcept nogil:
     """The other atom a BOND kind is named on, from raw CSR pointers.
 
-    Returns SU_NO_REF for the kinds no bond names (SU_TETRA, SU_ALLENE, SU_HELICAL).  This is the single
+    Returns SU_NO_REF for SU_TETRA, SU_ALLENE and SU_PLANAR.  SU_HELICAL answers its other fjord atom, which no
+    bond joins to the anchor but which an automorphism exchanging the helix ends maps it onto, so it
+    is looked up here like a pivot.  This is the single
     implementation that both `stereo_unit_partner` (Structure wrapper) and the matcher's cached-CSR
     path call -- one derivation, two thin entry points.
     """
@@ -1800,12 +2657,19 @@ cdef inline uint32_t _stereo_partner_raw(atom_t *atoms, uint32_t *ptr, halfedge_
                     and csr_find_at(ptr, edges, j, u.refs[3]) is not NULL):
                 return j
         return SU_NO_REF
+    if u.kind == SU_HELICAL:
+        # the far fjord atom, the one atom of a six-ring adjacent to both of the far pair
+        for k in range(ptr[u.refs[3]], ptr[u.refs[3] + 1]):
+            j = edges[k].to
+            if j != u.refs[2] and csr_find_at(ptr, edges, j, u.refs[2]) is not NULL:
+                return j
+        return SU_NO_REF
     return SU_NO_REF
 
 
 cdef uint32_t stereo_unit_partner(Structure structure, stereo_unit_t *u) noexcept nogil:
-    """The other atom a BOND kind is named on -- the far cis/trans terminal, the other biaryl pivot
-    -- or SU_NO_REF for a kind that is named on one atom.
+    """The other atom a BOND kind is named on -- the far cis/trans terminal, the other biaryl pivot,
+    the other fjord atom of a helix -- or SU_NO_REF for a kind that is named on one atom.
 
     A one-owner kind has no partner and neither has SU_ALLENE: its two owners are the chain terminals,
     which are not bonded, so no bond names it and `stereo_unit_owners` is what gives the pair.
@@ -1867,10 +2731,12 @@ cdef inline int stereo_unit_owners(atom_t *atoms, uint32_t *ptr, halfedge_t *edg
 
     | Kind | Owners | Anchor |
     | --- | --- | --- |
-    | SU_TETRA, SU_HELICAL | the centre | the centre |
+    | SU_TETRA | the centre | the centre |
     | SU_CIS_TRANS | the two chain terminals | the lower of them |
     | SU_ALLENE | the two chain terminals | the chain's MIDPOINT, which is neither owner |
     | SU_ATROPISOMER | the two pivots | one pivot, and not always the lower (ruling F45) |
+    | SU_HELICAL | the two fjord atoms, not bonded | one of them, and not always the lower |
+    | SU_PLANAR | the anchor | the substituted ring atom; a twisted unit's far terminal |
 
     The last two rows are why `structure_owner_pair_anchor` inverts this through the table instead of
     arithmetically: no function of the pair reaches an allene's midpoint, and a relocated axis breaks
@@ -2288,8 +3154,21 @@ cdef int mark_stereogenic(Structure structure) except -1:
                 # `validate_stereo` clears it, and a witness that contradicted it would be one found
                 # against input the molecule still carries.
                 verdict[k] = SG_NO
+            elif _twisted_dead(structure, u):
+                verdict[k] = SG_NO  # a medium ring held cis has no twist to name (see PLANAR UNITS)
+            elif _labile_double_bond(atoms, ptr, edges, u):
+                verdict[k] = SG_NO  # an imine, azo, enol or enamine: E and Z interconvert; it keeps
+                                    # constraining, as the protic case does, until `validate_stereo`
             else:
                 undecided += 1
+        # A twisted planar unit is named on t alone, and an automorphism exchanging its double bond's
+        # terminals carries it onto itself through c: `_stereo_consistent` finds it there, swapped.
+        for k in range(count):
+            u = &units[k]
+            if u.spare & SU_TWISTED:
+                j = _shift_partner(csr_ptr(structure), csr_edges(structure), u.anchor)
+                if j != SU_NO_REF and partner_of[j] == SU_NO_REF:
+                    partner_of[j] = k
 
         # --- 1./2. the refinement, then the group ---
         if undecided:
@@ -2347,8 +3226,9 @@ cdef int mark_stereogenic(Structure structure) except -1:
         # NO UNIT STRADDLES TWO COMPONENTS, which is what makes "U's component" well defined.  A
         # direction is a CSR neighbour of one of the atoms the unit is named on -- of the anchor for
         # SU_TETRA, of the two chain terminals for SU_ALLENE/SU_CIS_TRANS, of the two pivots for
-        # SU_ATROPISOMER (`_perceive_stereo_units`, all three passes) -- and the two named atoms of a
-        # bond kind are joined by the chain or by the axis bond, so they share a component too.  Every
+        # SU_ATROPISOMER, of the two fjord atoms for SU_HELICAL (`_perceive_stereo_units`) -- and the
+        # two named atoms of a bond kind are joined by the chain, the axis bond or the helix, so they
+        # share a component too.  Every
         # atom this loop pins to itself for U is therefore in C, and every atom it pins as complement
         # is outside it; the two sets do not meet, which is why the reset below can be two loops.
         #
@@ -3087,43 +3967,57 @@ cdef int collect_stereo_rejections(Structure structure,
     return 0
 
 
-cdef Structure structure_stereogenic_view(Structure structure):
-    """`structure` with no parity on a unit `mark_stereogenic` refused -- `structure` itself when none.
+cdef Structure structure_stereogenic_view(Structure structure, dict cache=None):
+    """`structure` with no parity that states nothing -- `structure` itself when none.
 
     What identity, the canonical order and the writer read, so a sign that flipping gives the same
     molecule back is not a fact about it: `C[C@H](C)C` is isobutane.  NARROWER THAN
     `collect_stereo_rejections`: a parity on an atom that anchors NO unit is kept, since perception
     also declines a real centre whose frame it cannot read (CHFClBr with an unknown hydrogen count).
 
-    | verdict                                   | the parity                          |
-    | ----------------------------------------- | ----------------------------------- |
-    | SU_STEREOGENIC, truncated search included | kept                                |
-    | a perceived unit, not marked              | cleared                             |
-    | no unit                                   | kept                                |
+    | verdict                                   | the parity                                       |
+    | ----------------------------------------- | ------------------------------------------------ |
+    | SU_STEREOGENIC, truncated search included | kept, unless an ABS or unlabelled one is inert   |
+    |                                           | under `_stereogenic_in_some_phase`'s inversion   |
+    | a perceived unit, not marked              | `_stereogenic_in_some_phase` decides             |
+    | no unit                                   | kept                                             |
 
-    An AND collection states both phases of its members, so a unit counts as stereogenic when it is
-    in ANY combination of AND collection phases: in `C[C@H](O)[C@H](O)[C@H](C)O |&1:1|` the centre at
-    3 is pseudo-asymmetric in one phase and not stereogenic in the other, and its parity is kept in
-    both drawings (`_stereogenic_in_some_phase`).
+    A drawing leaves choices open -- AND and OR group phases and unconfigured units -- and a unit
+    counts as stereogenic when it is in ANY combination of them: in `C[C@H](O)[C@H](O)[C@H](C)O
+    |&1:1|` the centre at 3 is pseudo-asymmetric in one phase and not stereogenic in the other, and
+    its parity is kept in both drawings.  The pass runs when a parity is refused or an AND group has
+    a configured member, since an AND group's two drawings must give one view.
 
     A clear loosens `_stereo_consistent`'s pins and can in principle unmark another unit, so the
     clear repeats on a fresh table until nothing is left to clear; each round clears at least one
-    parity, which bounds the loop.  The clear goes into a CLONE (ruling F65) and the input arena is
-    not written.
+    parity, which bounds the loop.  An ABS or unlabelled parity clears only jointly with the ones
+    cleared before it, by `_clear_jointly`.  The clear goes into a CLONE (ruling F65) and the input arena is
+    not written.  `cache` is `_phase_meaning`'s, shared among structures of one constitution.
     """
-    cdef Structure view = structure
+    cdef Structure view = _bridgeheads_filled(structure, cache)
+    cdef Structure base = None
+    cdef list cleared = []
+    cdef list coupled = list(_coupled_sets(_coupled_bridgeheads(structure, cache))) if _has_parity(structure) else []
     cdef stereo_unit_t *u
     cdef uint8_t *par
+    cdef uint8_t *sg
     cdef uint8_t *keep = NULL
     cdef uint32_t n, i
     cdef bint found
+    cdef object a
+    if not _has_parity(view):
+        return view                         # nothing to clear, and no perception to pay for
     try:
         while True:
             ensure_stereo_units(view)      # can move the buffer: before any pointer is taken
             n = view.header.atom_count
             found = False
+            sg = structure_stereo_groups(view) if structure_has(view, SEG_STEREO_GROUPS) else NULL
             for i in range(n):
                 if structure_parity_at(view, i):
+                    if sg is not NULL and sg[i] and sg_kind(sg[i]) == SG_KIND_AND:
+                        found = True
+                        break
                     u = stereo_unit_of(view, i)
                     if u is not NULL and not (u.spare & SU_STEREOGENIC):
                         found = True
@@ -3134,20 +4028,28 @@ cdef Structure structure_stereogenic_view(Structure structure):
                 keep = <uint8_t *> PyMem_Malloc(<size_t> n + 1)
                 if keep is NULL:
                     raise MemoryError()
-            if view is structure:
-                view = structure_clone(structure)       # carries the marked table verbatim
-            _stereogenic_in_some_phase(view, keep)
+            _stereogenic_in_some_phase(view, keep, cache)
+            for a in coupled:               # a coupled set states itself or nothing: `_bridgeheads_filled`
+                if structure_parity_at(view, <uint32_t> a):
+                    keep[<uint32_t> a] = 1
+            if base is None:
+                base = _joint_base(view)
+            _clear_jointly(view, base, keep, cleared)
             ensure_stereo_units(view)
             found = False
             par = structure_parities(view)
             for i in range(n):
-                if par[i] and not keep[i]:
-                    u = stereo_unit_of(view, i)
-                    if u is not NULL and not (u.spare & SU_STEREOGENIC):
-                        par[i] = 0
-                        found = True
+                if par[i] and not keep[i] and stereo_unit_of(view, i) is not NULL:
+                    found = True
+                    break
             if not found:
                 break
+            if view is structure:
+                view = structure_clone(structure)       # carries the marked table verbatim
+            par = structure_parities(view)
+            for i in range(n):
+                if par[i] and not keep[i] and stereo_unit_of(view, i) is not NULL:
+                    par[i] = 0
             structure_invalidate_stereo_units(view)
             refresh_parity_features(view)
     finally:
@@ -3155,19 +4057,870 @@ cdef Structure structure_stereogenic_view(Structure structure):
     return view
 
 
-DEF PHASE_GROUP_LIMIT = 8           # 2**8 - 1 phase combinations; above it every parity is kept
+DEF JOINT_CLEAR_LIMIT = 10          # parities cleared jointly; past it a refused parity is kept
+
+
+cdef inline bint _refused_by_chemistry(Structure structure, atom_t *atoms, stereo_unit_t *u) noexcept nogil:
+    """`mark_stereogenic`'s phase 0: a unit that is no configuration whatever the symmetry."""
+    return (_list_has_two_unnamed(u) or _anchor_is_protic(atoms, u) or (u.spare & SU_SHIFTABLE) != 0
+            or _twisted_dead(structure, u)
+            or _labile_double_bond(atoms, csr_ptr(structure), csr_edges(structure), u))
+
+
+cdef inline int _bh_frame_parity(stereo_unit_t *u, uint32_t *bridges) noexcept nogil:
+    """Parity of the permutation taking (exo, `bridges[0:3]`) onto `u`'s ref order; -1 when a bridge is
+    not among the refs.  The exo direction is the one ref left, an unnamed one included."""
+    cdef uint32_t refs[4]
+    cdef uint32_t perm[4]
+    cdef uint32_t k, t, used = 0
+    cdef bint found
+    for k in range(4):
+        refs[k] = u.refs[k]
+        perm[k] = 0
+    for t in range(3):
+        found = False
+        for k in range(4):
+            if refs[k] == bridges[t] and not (used >> k) & 1:
+                perm[t + 1] = k
+                used |= 1u << k
+                found = True
+                break
+        if not found:
+            return -1
+    for k in range(4):
+        if not (used >> k) & 1:
+            perm[0] = k
+    return permutation_parity_of(perm)
+
+
+cdef list _coupled_bridgeheads(Structure structure, dict cache=None):
+    """The coupled bridgehead pairs, `(a, b, implied_xor)` with `a < b` SU_TETRA anchors.
+
+    `(parity_a - 1) ^ (parity_b - 1) == implied_xor` in the units' own ref orders is the out,out
+    configuration, the only one the bicycle realises (`_bh_pair`).  A unit refused by chemistry couples
+    nothing.  A function of the constitution, so `cache` keeps it under b'B'.
+    """
+    cdef list pairs = cache.get(b'B') if cache is not None else None
+    cdef list cand = []
+    cdef atom_t *atoms
+    cdef uint32_t *ptr
+    cdef halfedge_t *edges
+    cdef stereo_unit_t *units
+    cdef stereo_unit_t *ua
+    cdef stereo_unit_t *ub
+    cdef uint32_t count, k, a, b
+    cdef uint32_t first[3]
+    cdef uint32_t last[3]
+    cdef int pa, pb
+    cdef Py_ssize_t x, y
+    if pairs is not None:
+        return pairs
+    pairs = []
+    ensure_stereo_units(structure)
+    atoms = structure.atoms()
+    ptr = csr_ptr(structure)
+    edges = csr_edges(structure)
+    units = structure_stereo_units(structure)
+    count = structure_stereo_unit_count(structure)
+    for k in range(count):
+        ua = &units[k]
+        if (ua.kind == SU_TETRA and _ring_degree(ptr, edges, ua.anchor) >= 3
+                and not _refused_by_chemistry(structure, atoms, ua)):
+            cand.append(k)
+    for x in range(len(cand)):
+        for y in range(x + 1, len(cand)):
+            ua = &units[<uint32_t> cand[x]]
+            ub = &units[<uint32_t> cand[y]]
+            if ua.anchor > ub.anchor:
+                ua, ub = ub, ua
+            a = ua.anchor
+            b = ub.anchor
+            if not _bh_pair(ptr, edges, a, b, atoms[a].element == 7 or atoms[b].element == 7, first, last):
+                continue
+            pa = _bh_frame_parity(ua, first)
+            pb = _bh_frame_parity(ub, last)
+            if pa >= 0 and pb >= 0:
+                pairs.append((a, b, OUT_OUT_XOR ^ pa ^ pb))
+    if cache is not None:
+        cache[b'B'] = pairs
+    return pairs
+
+
+cdef dict _coupled_sets(list pairs):
+    """Each slot of `pairs` to the ascending tuple of its connected set."""
+    cdef dict parent = {}
+    cdef dict sets = {}
+    cdef dict out
+    cdef tuple members
+    cdef object a, b, r
+    cdef tuple t
+    for t in pairs:
+        a = t[0]
+        b = t[1]
+        parent.setdefault(a, a)
+        parent.setdefault(b, b)
+        while parent[a] != a:
+            a = parent[a]
+        while parent[b] != b:
+            b = parent[b]
+        if a != b:
+            parent[max(a, b)] = min(a, b)
+    for a in parent:
+        r = a
+        while parent[r] != r:
+            r = parent[r]
+        sets.setdefault(r, []).append(a)
+    out = {}
+    for r in sets:
+        members = tuple(sorted(sets[r]))
+        for a in members:
+            out[a] = members
+    return out
+
+
+cdef inline int _bh_label_rank(uint8_t b) noexcept:
+    """How strongly a signed member's group byte states the set: AND, OR, ABS, none."""
+    if not b:
+        return 3
+    if sg_kind(b) == SG_KIND_AND:
+        return 0
+    return 2 if sg_kind(b) == SG_KIND_ABS else 1
+
+
+cdef int _bridgehead_signs(Structure structure, list pairs, dict signs, dict groups, list unrealisable,
+                           dict merges=None) except -1:
+    """Fill `signs` with the parity the view holds at each member of a coupled set with a signed member, 0
+    where the drawn signs are no out,out configuration, and `groups` with the group byte the set takes.
+
+    A COUPLED SET IS ONE STEREO ELEMENT, so a label on any signed member labels the set, whichever member
+    carries it.  The set takes its group from the strongest label among its signed members -- AND, then
+    OR, then ABS, then none -- and its sign from that member: camphor's `|&1:1|` and `|&1:4|` both state
+    the set AND, and so does `|a:1,&1:4|`.  Two AND groups (or two OR groups) on one set are one phase,
+    since the set inverts with each: `merges`, when given, maps every other such byte to the one taken.
+    The rest follow in BFS order.  Each drawn pair against its relation appends `(a, b)` to
+    `unrealisable`, and its whole set reads unknown, since neither sign is trusted.
+    """
+    cdef dict sets = _coupled_sets(pairs)
+    cdef dict nbr = {}
+    cdef dict val
+    cdef list queue, bad
+    cdef set done = set()
+    cdef tuple members
+    cdef uint8_t *sg = structure_stereo_groups(structure) if structure_has(structure, SEG_STEREO_GROUPS) else NULL
+    cdef object a, b, x, i, source
+    cdef int pa, pb, r, rank
+    cdef bint cyclic
+    for a, b, x in pairs:
+        nbr.setdefault(a, []).append((b, x))
+        nbr.setdefault(b, []).append((a, x))
+    for members in sets.values():
+        if members[0] in done:
+            continue
+        done.add(members[0])
+        source = None
+        rank = 4
+        for i in members:
+            if structure_parity_at(structure, <uint32_t> i):
+                r = _bh_label_rank(sg[<uint32_t> i] if sg is not NULL else 0)
+                if r < rank:
+                    source = i
+                    rank = r
+        if source is None:
+            continue
+        if merges is not None and rank < 2:
+            for i in members:
+                if (structure_parity_at(structure, <uint32_t> i) and sg[<uint32_t> i] != sg[<uint32_t> source]
+                        and _bh_label_rank(sg[<uint32_t> i]) == rank):
+                    merges[sg[<uint32_t> i]] = sg[<uint32_t> source]
+        val = {source: structure_parity_at(structure, <uint32_t> source)}
+        queue = [source]
+        for a in queue:
+            for b, x in nbr[a]:
+                if b not in val:
+                    val[b] = 1 + ((val[a] - 1) ^ x)
+                    queue.append(b)
+        cyclic = False
+        for a, b, x in pairs:
+            if a in val and (val[a] - 1) ^ (val[b] - 1) != x:
+                cyclic = True               # relations that close no cycle: the set is not coupled
+        if cyclic:
+            continue
+        bad = []
+        for a, b, x in pairs:
+            pa = structure_parity_at(structure, <uint32_t> a) if a in val else 0
+            pb = structure_parity_at(structure, <uint32_t> b) if a in val else 0
+            if pa and pb and (pa - 1) ^ (pb - 1) != x:
+                bad.append((a, b))
+        if not bad:
+            for i in members:
+                pa = structure_parity_at(structure, <uint32_t> i)
+                if pa and pa != val[i]:
+                    bad.append((min(source, i), max(source, i)))
+        if bad:
+            unrealisable.extend(bad)
+        for i in members:
+            signs[i] = 0 if bad else val[i]
+            groups[i] = sg[<uint32_t> source] if sg is not NULL else 0
+    return 0
+
+
+cdef list structure_bridgehead_conflicts(Structure structure):
+    """The `(a, b)` slot pairs whose drawn signs no out,out bicycle realises (`_bridgehead_signs`)."""
+    cdef list pairs
+    cdef list out = []
+    if not _has_parity(structure):
+        return out
+    pairs = _coupled_bridgeheads(structure)
+    if pairs:
+        _bridgehead_signs(structure, pairs, {}, {}, out)
+    return out
+
+
+cdef inline bint _has_parity(Structure structure):
+    cdef uint32_t i
+    if not structure_has(structure, SEG_PARITY):
+        return False
+    for i in range(structure.header.atom_count):
+        if structure_parity_at(structure, i):
+            return True
+    return False
+
+
+cdef Structure _with_parities(Structure structure, dict parities):
+    """A clone of `structure` with `parities`, slot to parity, written in."""
+    cdef Structure v = structure_clone(structure)
+    cdef uint8_t *par = structure_parities(v)
+    cdef object i
+    for i in parities:
+        par[<uint32_t> i] = parities[i]
+    structure_invalidate_stereo_units(v)
+    refresh_parity_features(v)
+    return v
+
+
+cdef bytes _signed_identity(Structure base, dict cache):
+    """`mol_identity_bytes(base)` of an ABS-read `_joint_base`, None over the budget.  Kept in `cache` under
+    b'I' and the parities, which is all that differs among such structures of one constitution: a set's
+    inversion is often another reading's base."""
+    cdef bytes key = b'I' + (<char *> structure_parities(base))[:base.header.atom_count]
+    cdef object out = cache.get(key) if cache is not None else None
+    if out is None:
+        try:
+            out = mol_identity_bytes(base)
+        except AutomorphismBudgetExceeded:
+            out = b''
+        if cache is not None:
+            cache[key] = out
+    return out if out else None
+
+
+cdef dict _set_signing(list pairs, tuple members):
+    """An out,out signing of the unsigned set `members`, its lowest member at parity 1."""
+    cdef dict val = {members[0]: 1}
+    cdef list queue = [members[0]]
+    cdef tuple t
+    cdef object a
+    for a in queue:
+        for t in pairs:
+            if t[0] == a and t[1] not in val:
+                val[t[1]] = 1 + ((val[a] - 1) ^ t[2])
+                queue.append(t[1])
+            elif t[1] == a and t[0] not in val:
+                val[t[0]] = 1 + ((val[a] - 1) ^ t[2])
+                queue.append(t[0])
+    return val
+
+
+cdef list _flip_candidates(Structure view, list pairs):
+    """`(members, signing)` for each coupled set of `view` whose inversion an automorphism may undo.
+
+    `signing` is None for a signed set, and `_set_signing` for an unsigned one with a unit marked
+    stereogenic, which the labelling search would otherwise read as a choice.  An automorphism undoing
+    the inversion would fix the configuration at a member in a class of its own whose directions the
+    refinement separates, so such a member rules its set out: camphor's C1.
+    """
+    cdef uint32_t n = view.header.atom_count, k
+    cdef uint32_t *cls = NULL
+    cdef uint32_t *size = NULL
+    cdef list out = []
+    cdef set done = set()
+    cdef tuple members
+    cdef object i
+    cdef bint pinned, marked
+    cdef int signed
+    cdef stereo_unit_t *u
+    ensure_stereo_units(view)
+    try:
+        for members in _coupled_sets(pairs).values():
+            if members[0] in done:
+                continue
+            done.add(members[0])
+            signed = 0
+            marked = False
+            for i in members:
+                if structure_parity_at(view, <uint32_t> i):
+                    signed += 1
+                u = stereo_unit_of(view, <uint32_t> i)
+                if u is not NULL and u.spare & SU_STEREOGENIC:
+                    marked = True
+            if signed != len(members) and (signed or not marked):
+                continue
+            if cls is NULL:
+                cls = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
+                size = <uint32_t *> PyMem_Malloc((<size_t> n + 1) * sizeof(uint32_t))
+                if cls is NULL or size is NULL:
+                    raise MemoryError()
+                memset(size, 0, (<size_t> n + 1) * sizeof(uint32_t))
+                if compute_atoms_order(view, cls, NULL) < 0:
+                    raise MemoryError()
+                for k in range(n):
+                    size[cls[k]] += 1
+            pinned = False
+            for i in members:
+                u = stereo_unit_of(view, <uint32_t> i)
+                if u is not NULL and size[cls[<uint32_t> i]] == 1 and _directions_separated(u, cls):
+                    pinned = True
+                    break
+            if not pinned:
+                out.append((members, _set_signing(pairs, members) if not signed else None))
+    finally:
+        PyMem_Free(cls)
+        PyMem_Free(size)
+    return out
+
+
+cdef Structure _bridgeheads_filled(Structure structure, dict cache, list inert=None):
+    """`structure` with each coupled set signed from one member, or cleared where its signs are impossible
+    (`_bridgehead_signs`), and cleared where the drawing states the same with the set open
+    (`_set_states_nothing`): an achiral cage, the bridgeheads of bicyclo[2.2.2]octane-2-carboxylic acid beside
+    its signed C2, tropine's bridgeheads read ABS with C3 open -- but not in AND, which states a mixture.  `structure`
+    itself when nothing changes; otherwise a clone.  The members of such sets, and of unsigned sets whose
+    inversion restates the molecule (1,3,5-trimethylquinuclidine), are appended to `inert`: no choice
+    for the labelling search."""
+    cdef list pairs
+    cdef dict signs = {}
+    cdef dict groups = {}
+    cdef dict merges = {}
+    cdef uint32_t k
+    cdef bint changed
+    cdef object lo
+    cdef tuple members
+    cdef list flips, quiet, todo
+    cdef Structure view = structure
+    cdef Structure base = None, v
+    cdef uint8_t *par
+    cdef uint8_t *sg
+    cdef uint8_t *vpar
+    cdef bytes ref, state
+    cdef object i, j, got, signing
+    if not _has_parity(structure):
+        return structure
+    pairs = _coupled_bridgeheads(structure, cache)
+    if not pairs:
+        return structure
+    _bridgehead_signs(structure, pairs, signs, groups, [], merges)
+    if merges:
+        # the merged bytes are classes: each takes its least, so a chain or a cycle of sets lands on one
+        changed = True
+        while changed:
+            changed = False
+            for i in list(merges):
+                j = merges[i]
+                lo = min(i, j, merges.get(j, j))
+                if merges[i] != lo or merges.get(j, j) != lo:
+                    merges[i] = lo
+                    merges[j] = lo
+                    changed = True
+        for i in groups:
+            groups[i] = merges.get(groups[i], groups[i])
+        view = structure_clone(structure)
+        sg = structure_stereo_groups(view)
+        for k in range(view.header.atom_count):
+            if sg[k] in merges:
+                sg[k] = merges[sg[k]]
+    for i in signs:
+        if view is not structure:
+            break
+        if (structure_parity_at(structure, <uint32_t> i) != signs[i]
+                or (structure_has(structure, SEG_STEREO_GROUPS)
+                    and structure_stereo_groups(structure)[<uint32_t> i] != groups[i])):
+            view = structure_clone(structure)
+            break
+    if view is not structure:
+        par = structure_parities(view)
+        sg = structure_stereo_groups(view) if structure_has(view, SEG_STEREO_GROUPS) else NULL
+        for i in signs:
+            par[<uint32_t> i] = signs[i]
+            if sg is not NULL:
+                sg[<uint32_t> i] = groups[i] if signs[i] else 0
+        structure_invalidate_stereo_units(view)
+        refresh_parity_features(view)
+    # a set the drawing states the same without states nothing
+    par = structure_parities(view)
+    state = b'F' + (<char *> par)[:view.header.atom_count]
+    got = cache.get(state) if cache is not None else None
+    if got is None:
+        flips = []
+        quiet = []
+        todo = _flip_candidates(view, pairs)
+        # One test for a signed set and for an unsigned one, so a set cleared here is no choice when the
+        # cleared drawing is read again: an unsigned set is no choice when signing it states nothing.
+        # Under b'P' a set is being asked about further up, and each species reads its signs as stated.
+        nested = cache is not None and b'P' in cache
+        for members, signing in todo:
+            if nested:
+                continue
+            if signing is None:
+                if _set_states_nothing(view, members, cache):
+                    flips.extend(members)
+            elif _set_states_nothing(_with_parities(view, signing), members, cache):
+                quiet.extend(members)
+        got = (tuple(flips), tuple(quiet))
+        if cache is not None:
+            cache[state] = got
+    if inert is not None:
+        inert.extend(got[0])
+        inert.extend(got[1])
+    if got[0]:
+        if view is structure:
+            view = structure_clone(structure)
+        par = structure_parities(view)
+        sg = structure_stereo_groups(view) if structure_has(view, SEG_STEREO_GROUPS) else NULL
+        for j in got[0]:
+            par[<uint32_t> j] = 0
+            if sg is not NULL:
+                sg[<uint32_t> j] = 0
+        structure_invalidate_stereo_units(view)
+        refresh_parity_features(view)
+    return view
+
+
+cdef Structure structure_inchi_bridgeheads(Structure structure):
+    """`structure` with its coupled bridgeheads as identity reads them (`_bridgeheads_filled`), for the
+    InChI writer, which reads each member as a free centre: an implied sign filled, an impossible pair
+    and a set whose inversion restates the molecule unknown.  Equal molecules write one InChI, and a
+    restating set writes `?` as PubChem's (2R)-bicyclo[2.2.2]octane-2-carboxylic acid does."""
+    return _bridgeheads_filled(structure, {})
+
+
+cdef Structure _joint_base(Structure structure):
+    """`_abs_read_clone(structure)` without the parities refused by chemistry: the fully signed
+    molecule whose identity `_clear_jointly` holds."""
+    cdef Structure base = _abs_read_clone(structure)
+    cdef uint8_t *par
+    cdef atom_t *atoms
+    cdef stereo_unit_t *u
+    cdef uint32_t i
+    cdef bint found = False
+    ensure_stereo_units(base)
+    atoms = base.atoms()
+    par = structure_parities(base)
+    for i in range(base.header.atom_count):
+        u = stereo_unit_of(base, i)
+        if par[i] and u is not NULL and _refused_by_chemistry(base, atoms, u):
+            par[i] = 0
+            found = True
+    if found:
+        structure_invalidate_stereo_units(base)
+        refresh_parity_features(base)
+    return base
+
+
+cdef int _clear_jointly(Structure view, Structure base, uint8_t *keep, list cleared) except -1:
+    """Set `keep` back at each refused ABS or unlabelled parity of `view` whose clear, with the ones
+    in `cleared`, would state another compound; append the others to `cleared`.
+
+    Refusal is per unit, and two refused units need not clear together: in pentamethylcyclopentane
+    with C1 and C2 down, inverting C3 or C5 alone gives the mirror image, inverting both the one-down
+    isomer.  The candidates are taken in canonical order, and one clears when every sign of it and of
+    `cleared` gives `base`'s identity; a symmetry tying two candidates maps one choice onto the other.
+    `base` is `_joint_base` of the structure the view was taken from.  A parity refused by chemistry
+    is no candidate and clears as it stands.  A lone first candidate
+    clears unchecked, since its refusal is the witness.  A budget exceeded keeps the parity.
+    """
+    cdef uint32_t n = view.header.atom_count, i, mask, flags = 0
+    cdef uint32_t *pos = NULL
+    cdef uint8_t *par = structure_parities(view)
+    cdef uint8_t *sg = structure_stereo_groups(view) if structure_has(view, SEG_STEREO_GROUPS) else NULL
+    cdef uint8_t *vpar
+    cdef list todo = []
+    cdef list trial
+    cdef bytes ref
+    cdef Structure v
+    cdef bint same
+    cdef object x
+    cdef Py_ssize_t j
+    cdef stereo_unit_t *u
+    cdef atom_t *atoms = view.atoms()
+    for i in range(n):
+        u = stereo_unit_of(view, i)
+        if (par[i] and not keep[i] and u is not NULL and not _refused_by_chemistry(view, atoms, u) and
+                (sg is NULL or not sg[i] or sg_kind(sg[i]) == SG_KIND_ABS)):
+            todo.append(i)
+    if not todo or not cleared and len(todo) == 1:
+        cleared.extend(todo)
+        return 0
+    pos = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
+    if pos is NULL:
+        raise MemoryError()
+    try:
+        try:
+            mol_canonical_order(base, NULL, pos, &flags, True, CANON_GROUPS_NONE)
+            ref = mol_identity_bytes(base)
+        except AutomorphismBudgetExceeded:
+            for i in todo:
+                keep[i] = 1
+            return 0
+        trial = []
+        for x in todo:
+            trial.append((pos[<uint32_t> x], x))
+        trial.sort()
+        todo = []
+        for x in trial:
+            todo.append(x[1])
+        for i in todo:
+            same = len(cleared) < JOINT_CLEAR_LIMIT
+            trial = cleared + [i]
+            mask = 0
+            while same and mask < 1u << len(cleared):
+                v = structure_clone(base)
+                vpar = structure_parities(v)
+                for j, x in enumerate(trial):
+                    if j == len(cleared) or (mask >> j) & 1:
+                        vpar[<uint32_t> x] = 3 - vpar[<uint32_t> x]
+                structure_invalidate_stereo_units(v)
+                refresh_parity_features(v)
+                try:
+                    same = mol_identity_bytes(v) == ref
+                except AutomorphismBudgetExceeded:
+                    same = False
+                mask += 1
+            if same:
+                cleared.append(i)
+            else:
+                keep[i] = 1
+    finally:
+        PyMem_Free(pos)
+    return 0
+
+
+DEF PHASE_GROUP_LIMIT = 8           # context choices, groups and unknown units; above it every parity is kept
+DEF RELABEL_CHOICE_LIMIT = 4        # context choices; above it the labelling is written as drawn
+DEF MEANING_ATOM_LIMIT = 1000       # atoms; above it a context with choices is over the limit: each
+                                    # combination costs a whole-molecule identity
+
+
+cdef struct phase_context_t:
+    uint8_t index[256]                      # group byte -> context bit; 0xFF outside the context
+    uint32_t unknown[PHASE_GROUP_LIMIT]     # anchor slot of unknown unit j, which is bit n_groups + j
+    uint32_t n_groups
+    uint32_t n_unknown
+    uint32_t world_bits                     # OR groups and unknown units: the choices a world fixes
+
+
+cdef int phase_apply(Structure v, uint8_t *sg, phase_context_t *ctx, uint32_t mask) except -1:
+    """Put `v` in context combination `mask`: invert each configured member of every group whose bit
+    is set, and give unknown unit j parity 1 + its bit.  Membership is read from `sg`, which may be
+    NULL, so a base whose groups were read as ABS still flips the drawn groups.
+    """
+    cdef uint32_t n = v.header.atom_count, i, j
+    cdef uint8_t *par = structure_parities(v)
+    if sg is not NULL:
+        for i in range(n):
+            if sg[i] and par[i] and ctx.index[sg[i]] != 0xFF and (mask >> ctx.index[sg[i]]) & 1:
+                par[i] = 3 - par[i]
+    for j in range(ctx.n_unknown):
+        par[ctx.unknown[j]] = <uint8_t> (1 + ((mask >> (ctx.n_groups + j)) & 1))
+    structure_invalidate_stereo_units(v)
+    refresh_parity_features(v)
+    return 0
+
+
+cdef bint _stereogenic_unsigned(Structure s, const uint8_t *slots, dict cache=None) except -1:
+    """Is every unit anchored at a slot flagged in `slots` stereogenic with every parity cleared, the
+    search untruncated?  Then it is stereogenic in every combination: a parity only removes witnesses
+    of symmetry.  A centre with two unnamed directions, as the CH2 of `CC(O)CC`, is not stereogenic
+    in any combination and is passed over.  One perception, kept in `cache` under `b'U'`, since it
+    depends on the constitution alone; `s` is not written."""
+    cdef uint32_t n = s.header.atom_count, i, k, count
+    cdef uint8_t unnamed
+    cdef stereo_unit_t *units
+    cdef Structure v
+    cdef bytes weak = cache.get(b'U') if cache is not None else None
+    cdef const unsigned char *w
+    cdef unsigned char *fill
+    if weak is None:
+        v = structure_clone(s)
+        memset(structure_parities(v), 0, <size_t> n)
+        structure_invalidate_stereo_units(v)
+        refresh_parity_features(v)
+        ensure_stereo_units(v)
+        fill = <unsigned char *> PyMem_Malloc(<size_t> n + 1)
+        if fill is NULL:
+            raise MemoryError()
+        try:
+            # 1 at an anchor that some combination may mark either way
+            memset(fill, 1 if structure_stereo_truncated(v) else 0, <size_t> n)
+            count = structure_stereo_unit_count(v)
+            units = structure_stereo_units(v)
+            for k in range(count):
+                if units[k].spare & SU_STEREOGENIC:
+                    continue
+                unnamed = units[k].spare >> SU_UNNAMED_SHIFT
+                if units[k].kind != SU_TETRA or not unnamed & (unnamed - 1):
+                    fill[units[k].anchor] = 1
+            weak = (<char *> fill)[:n]
+        finally:
+            PyMem_Free(fill)
+        if cache is not None:
+            cache[b'U'] = weak
+    w = <const unsigned char *> weak
+    for i in range(n):
+        if slots[i] and w[i]:
+            return False
+    return True
+
+
+cdef bint phase_context(Structure s, phase_context_t *ctx, uint8_t *keep, uint8_t *refused,
+                        dict cache=None) except -1:
+    """Fill `ctx` with the unknown choices a drawing of `s` leaves; True when they exceed
+    PHASE_GROUP_LIMIT, or when there is a choice and `s` has more than MEANING_ATOM_LIMIT atoms, and
+    then `ctx` is incomplete and every parity is to be kept.
+
+    | choice       | what it is                                                                  |
+    | ------------ | --------------------------------------------------------------------------- |
+    | AND group    | a group with a configured member; both phases are present                   |
+    | OR group     | a group with a configured member; one phase is present, which is not known  |
+    | unknown unit | an unconfigured unit stereogenic in some combination, in a component that  |
+    |              | holds a configured group member or a refused parity; one unsigned choice    |
+
+    Unknown units are a fixed point: setting one can make another stereogenic, as C4 of
+    `C[C@H](O)C(O)C(O)C` makes C3 pseudo-asymmetric.  When not NULL, `keep` receives 1 at each
+    configured slot on a unit stereogenic in some combination, and `refused` at each configured or
+    unknown slot on a unit not stereogenic in some combination.  Both are phase-invariant: every
+    combination is enumerated, the drawn one included when there is no unknown unit, so an AND
+    group's two drawings give one answer.  `s` is not written.  Cost: one perception when every
+    unit in those components is `_stereogenic_unsigned`; otherwise one per combination, and one
+    more round per unknown unit found.  `cache`, when given, maps a
+    combination's parity bytes to its perception, since perception reads no group byte; it is
+    shared only among structures of one constitution.
+    """
+    cdef uint32_t n = s.header.atom_count, i, j, k, count, mask, top
+    cdef uint8_t *sg = NULL
+    cdef uint8_t *vsg
+    cdef uint8_t *par
+    cdef uint8_t *vpar
+    cdef uint8_t *want
+    cdef uint32_t *comp
+    cdef stereo_unit_t *units
+    cdef stereo_unit_t *u
+    cdef Structure v
+    cdef bint added, seen
+    cdef bytes state, marks
+    cdef const unsigned char *mark
+    cdef unsigned char *fill = NULL
+    cdef list inert = []
+    cdef set no_choice
+    memset(ctx.index, 0xFF, 256)
+    ctx.n_groups = ctx.n_unknown = ctx.world_bits = 0
+    if keep is not NULL:
+        memset(keep, 0, <size_t> n)
+    if refused is not NULL:
+        memset(refused, 0, <size_t> n)
+    if n == 0 or not structure_has(s, SEG_PARITY):
+        return False
+    # a coupled set whose inversion restates the molecule is no choice: the view clears it in every
+    # combination, so enumerating it would re-enter this context unchanged
+    _bridgeheads_filled(s, cache, inert)
+    no_choice = set(inert)
+    ensure_stereo_units(s)          # fills the component labels too; moves the buffer, so first
+    want = <uint8_t *> PyMem_Malloc(<size_t> n)
+    fill = <unsigned char *> PyMem_Malloc(<size_t> n)
+    if want is NULL or fill is NULL:
+        PyMem_Free(want)
+        PyMem_Free(fill)
+        raise MemoryError()
+    try:
+        memset(want, 0, <size_t> n)
+        comp = structure_component_labels(s)
+        par = structure_parities(s)
+        if structure_has(s, SEG_STEREO_GROUPS):
+            sg = structure_stereo_groups(s)
+        for i in range(n):
+            if not par[i]:
+                continue
+            if sg is not NULL and sg[i] and sg_kind(sg[i]) != SG_KIND_ABS:
+                want[comp[i]] = 1
+                if ctx.index[sg[i]] == 0xFF:
+                    if ctx.n_groups == PHASE_GROUP_LIMIT:
+                        return True
+                    if sg_kind(sg[i]) != SG_KIND_AND:
+                        ctx.world_bits |= 1u << ctx.n_groups
+                    ctx.index[sg[i]] = <uint8_t> ctx.n_groups
+                    ctx.n_groups += 1
+            else:
+                u = stereo_unit_of(s, i)
+                if u is not NULL and not (u.spare & SU_STEREOGENIC):
+                    want[comp[i]] = 1
+        count = structure_stereo_unit_count(s)
+        units = structure_stereo_units(s)
+        for k in range(count):
+            i = units[k].anchor
+            if units[k].spare & SU_STEREOGENIC and not par[i] and want[comp[i]] and i not in no_choice:
+                if ctx.n_groups + ctx.n_unknown == PHASE_GROUP_LIMIT:
+                    return True
+                ctx.world_bits |= 1u << (ctx.n_groups + ctx.n_unknown)
+                ctx.unknown[ctx.n_unknown] = i
+                ctx.n_unknown += 1
+        if ctx.n_groups + ctx.n_unknown and n > MEANING_ATOM_LIMIT:
+            return True
+        for i in range(n):
+            fill[i] = want[comp[i]]
+        # the one combination is `s`, or every combination marks what `s` marks
+        if ctx.n_groups + ctx.n_unknown == 0 or _stereogenic_unsigned(s, fill, cache):
+            par = structure_parities(s)
+            units = structure_stereo_units(s)
+            for k in range(count):
+                i = units[k].anchor
+                if not par[i]:
+                    continue
+                if units[k].spare & SU_STEREOGENIC:
+                    if keep is not NULL:
+                        keep[i] = 1
+                elif refused is not NULL:
+                    refused[i] = 1
+            return False
+        while True:
+            added = False
+            if keep is not NULL:
+                memset(keep, 0, <size_t> n)
+            if refused is not NULL:
+                memset(refused, 0, <size_t> n)
+            top = 1u << (ctx.n_groups + ctx.n_unknown)
+            for mask in range(top):
+                v = structure_clone(s)
+                vsg = structure_stereo_groups(v) if sg is not NULL else NULL
+                phase_apply(v, vsg, ctx, mask)
+                vpar = structure_parities(v)
+                state = b'P' + (<char *> vpar)[:n]
+                marks = cache.get(state) if cache is not None else None
+                if marks is None:
+                    ensure_stereo_units(v)
+                    vpar = structure_parities(v)
+                    memset(fill, 0, <size_t> n)    # bit 0: a unit not stereogenic; bit 1: a stereogenic one
+                    count = structure_stereo_unit_count(v)
+                    units = structure_stereo_units(v)
+                    for k in range(count):
+                        fill[units[k].anchor] |= 2 if units[k].spare & SU_STEREOGENIC else 1
+                    marks = (<char *> fill)[:n]
+                    if cache is not None:
+                        cache[state] = marks
+                mark = <const unsigned char *> marks
+                for i in range(n):
+                    if mark[i] & 1 and vpar[i] and refused is not NULL:
+                        refused[i] = 1
+                    if not mark[i] & 2:
+                        continue
+                    if par[i]:
+                        if keep is not NULL:
+                            keep[i] = 1
+                    elif want[comp[i]]:
+                        seen = False
+                        for j in range(ctx.n_unknown):
+                            if ctx.unknown[j] == i:
+                                seen = True
+                                break
+                        if not seen:
+                            if ctx.n_groups + ctx.n_unknown == PHASE_GROUP_LIMIT:
+                                return True
+                            ctx.world_bits |= 1u << (ctx.n_groups + ctx.n_unknown)
+                            ctx.unknown[ctx.n_unknown] = i
+                            ctx.n_unknown += 1
+                            added = True
+            if not added:
+                return False
+    finally:
+        PyMem_Free(want)
+        PyMem_Free(fill)
+
+
+cdef Structure _abs_read_clone(Structure view):
+    """A clone of `view` with every configured member's group byte read as ABS and every other byte
+    cleared, so that each context combination of it is one fully signed molecule."""
+    cdef Structure base = structure_clone(view)
+    cdef uint8_t *sg
+    cdef uint32_t i
+    if structure_has(base, SEG_STEREO_GROUPS):
+        sg = structure_stereo_groups(base)
+        for i in range(base.header.atom_count):
+            if sg[i]:
+                sg[i] = sg_pack(SG_KIND_ABS, 0) if structure_parity_at(base, i) else 0
+    return base
+
+
+cdef tuple _phase_meaning(Structure base, uint8_t *sg, phase_context_t *ctx, uint32_t flip, dict cache):
+    """`(drawn worlds, all worlds)`: what a drawing states, with the parity at slot `flip` inverted
+    first; `flip` past the last atom inverts nothing.
+
+    A world is one choice of every OR group and unknown unit, as the frozenset of identities over
+    the AND phases; the drawn worlds are those with every OR group at its drawn phase, since an OR
+    group keeps its sign.  `base` is `_abs_read_clone`'s and `sg` the drawn membership.  `cache` maps
+    the parity bytes of a combination to its identity; it is shared only among bases with one
+    constitution and one ABS reading, which holds for every labelling of one drawing.  Two identities
+    per uncached combination; raises AutomorphismBudgetExceeded from an identity.
+
+    A combination whose coupled bridgeheads no bicycle realises is no world and is skipped
+    (`_bridgehead_signs`): its view reads the set unknown, which is the drawing being asked about.
+    """
+    cdef dict worlds = {}
+    cdef list drawn = [], every = []
+    cdef list pairs = _coupled_bridgeheads(base, cache)
+    cdef list bad = []
+    cdef object world
+    cdef uint32_t mask, key, or_bits = ctx.world_bits & ((1u << ctx.n_groups) - 1)
+    cdef Structure v
+    cdef uint8_t *par
+    cdef bytes state, identity
+    for mask in range(1u << (ctx.n_groups + ctx.n_unknown)):
+        v = structure_clone(base)
+        if flip < v.header.atom_count:
+            par = structure_parities(v)
+            par[flip] = 3 - par[flip]
+        phase_apply(v, sg, ctx, mask)
+        if pairs:
+            _bridgehead_signs(v, pairs, {}, {}, bad)
+            if bad:
+                bad.clear()
+                continue
+        par = structure_parities(v)
+        state = (<char *> par)[:v.header.atom_count]
+        identity = cache.get(state)
+        if identity is None:
+            identity = mol_identity_bytes(structure_stereogenic_view(v, cache))
+            cache[state] = identity
+        key = mask & ctx.world_bits
+        if key not in worlds:
+            worlds[key] = set()
+        worlds[key].add(identity)
+    for key, world in worlds.items():
+        every.append(frozenset(world))
+        if not key & or_bits:
+            drawn.append(frozenset(world))
+    return frozenset(drawn), frozenset(every)
 
 
 cdef inline bint sg_member_live(Structure view, uint8_t *sg, uint32_t i) noexcept nogil:
     """Is the group byte at slot `i` on a configured unit?  `view` is `structure_stereogenic_view`'s.
 
     The member half of liveness: a member on an unconfigured unit, or on one the view cleared, is
-    DEAD.  `structure_live_groups_view` adds the group half, `_groups_stating_nothing`.
+    DEAD.  A member the view kept is on a unit stereogenic in some combination of the AND groups,
+    OR groups and unknown units (`phase_context`).  `structure_live_groups_view` adds the group
+    half, `_groups_stating_nothing`.
     """
     return sg[i] != 0 and structure_parity_at(view, i) != 0
 
 
-cdef int _groups_stating_nothing(Structure view, uint8_t *mute) except -1:
+cdef int _groups_stating_nothing(Structure view, uint8_t *mute, dict cache) except -1:
     """`mute[b]` = 1 for each group byte `b` whose live members, inverted, restate the molecule.
 
     One group at a time: every group is read as ABS with its drawn signs, the group's own members are
@@ -3175,28 +4928,30 @@ cdef int _groups_stating_nothing(Structure view, uint8_t *mute) except -1:
     AND phase rule out of the comparison.  `C[C@H](O)C[C@H](O)C |&1:1,4|` is meso whichever kind the
     pair is in; `|&1:1,&2:4|` is two groups, and inverting either alone is the dl diastereomer.
 
-    Every other sign is kept as drawn, in every phase combination of the OTHER AND groups, and the
-    group states nothing only when it restates the molecule in all of them.  A drawn phase is not
-    identity: in `C[C@@H](O)[C@H](O)[C@@H](O)C |&1:1,&2:5,o1:3|` the OR member at C3 restates the
-    molecule when C2 and C4 are like and not when they are unlike.  Over PHASE_GROUP_LIMIT other AND
-    groups, or on a truncated search, the group is live.
+    The comparison runs in every combination of the rest of the context -- the OTHER AND and OR
+    groups and every unknown unit (`phase_context`) -- and the group states nothing only when it
+    restates the molecule in all of them.  A drawn phase is not identity: in
+    `C[C@@H](O)[C@H](O)[C@@H](O)C |&1:1,&2:5,o1:3|` the OR member at C3 restates the molecule when
+    C2 and C4 are like and not when they are unlike.  Over PHASE_GROUP_LIMIT choices, or on a
+    truncated search, the group is live.  `cache` is `_phase_meaning`'s.
 
-    A single member on a unit marked stereogenic in the drawn configuration never restates the
-    molecule and is not compared.  Cost: two identities per candidate group and phase combination,
-    none for a molecule with no candidate.  `view` is not written.
+    An ABS group is never muted: on a configuration that is its own mirror image it still states that
+    the drawn diastereomer is the one -- cis-2,6-dimethylmorpholine `|a:...|` against an unlabelled
+    drawing, which may be either.  A single member on a unit marked stereogenic in the drawn
+    configuration never restates the molecule and is not compared.  Cost: two identities per
+    candidate group and combination, none
+    for a molecule with no candidate.  `view` is not written.
     """
     cdef uint32_t n = view.header.atom_count
-    cdef uint8_t *sg
     cdef uint8_t *vsg
     cdef uint8_t *par
     cdef uint32_t count[256]
     cdef uint8_t lone[256]
-    cdef uint8_t index[256]
-    cdef uint8_t ands[256]
-    cdef uint32_t i, b, g = 0, k, mask
+    cdef uint32_t i, b, bit, mask
     cdef stereo_unit_t *u
+    cdef phase_context_t ctx
     cdef Structure base, v
-    cdef bytes before
+    cdef bytes before, state, after
     cdef bint any_candidate = False, same
     memset(mute, 0, 256)
     if not structure_has(view, SEG_STEREO_GROUPS) or not structure_has(view, SEG_PARITY):
@@ -3207,9 +4962,6 @@ cdef int _groups_stating_nothing(Structure view, uint8_t *mute) except -1:
     vsg = structure_stereo_groups(view)
     for i in range(n):
         if sg_member_live(view, vsg, i):
-            if not count[vsg[i]] and sg_kind(vsg[i]) == SG_KIND_AND:
-                ands[g] = vsg[i]
-                g += 1
             count[vsg[i]] += 1
             u = stereo_unit_of(view, i)
             lone[vsg[i]] = u is not NULL and (u.spare & SU_STEREOGENIC) != 0
@@ -3219,34 +4971,25 @@ cdef int _groups_stating_nothing(Structure view, uint8_t *mute) except -1:
             break
     if not any_candidate:
         return 0
-    base = structure_clone(view)
-    sg = structure_stereo_groups(base)
-    for i in range(n):
-        if sg[i]:
-            sg[i] = sg_pack(SG_KIND_ABS, 0) if structure_parity_at(base, i) else 0
+    if phase_context(view, &ctx, NULL, NULL, cache):
+        return 0
+    base = _abs_read_clone(view)
     vsg = structure_stereo_groups(view)
     for b in range(1, 256):
-        if not count[b] or (count[b] == 1 and lone[b]):
+        if not count[b] or (count[b] == 1 and lone[b]) or sg_kind(<uint8_t> b) == SG_KIND_ABS:
             continue
-        memset(index, 0xFF, 256)
-        k = 0
-        for i in range(g):
-            if ands[i] != b:
-                index[ands[i]] = <uint8_t> k
-                k += 1
-        if k > PHASE_GROUP_LIMIT:
-            continue
+        bit = (1u << ctx.index[b]) if ctx.index[b] != 0xFF else 0
         same = True
-        for mask in range(1u << k):
+        for mask in range(1u << (ctx.n_groups + ctx.n_unknown)):
+            if mask & bit:
+                continue
             v = structure_clone(base)
-            par = structure_parities(v)
-            for i in range(n):
-                if sg_member_live(view, vsg, i) and index[vsg[i]] != 0xFF and (mask >> index[vsg[i]]) & 1:
-                    par[i] = 3 - par[i]
-            structure_invalidate_stereo_units(v)
-            refresh_parity_features(v)
+            phase_apply(v, vsg, &ctx, mask)
             try:
-                before = mol_identity_bytes(structure_stereogenic_view(v))
+                state = (<char *> structure_parities(v))[:n]
+                before = cache.get(state)
+                if before is None:
+                    before = cache[state] = mol_identity_bytes(structure_stereogenic_view(v, cache))
                 v = structure_clone(v)
                 par = structure_parities(v)
                 for i in range(n):
@@ -3254,7 +4997,11 @@ cdef int _groups_stating_nothing(Structure view, uint8_t *mute) except -1:
                         par[i] = 3 - par[i]
                 structure_invalidate_stereo_units(v)
                 refresh_parity_features(v)
-                same = mol_identity_bytes(structure_stereogenic_view(v)) == before
+                state = (<char *> par)[:n]
+                after = cache.get(state)
+                if after is None:
+                    after = cache[state] = mol_identity_bytes(structure_stereogenic_view(v, cache))
+                same = after == before
             except AutomorphismBudgetExceeded:
                 same = False
             if not same:
@@ -3264,8 +5011,370 @@ cdef int _groups_stating_nothing(Structure view, uint8_t *mute) except -1:
     return 0
 
 
-cdef Structure structure_live_groups_view(Structure structure, list dead=None):
-    """`structure_stereogenic_view(structure)` with every dead group byte cleared.
+cdef tuple _labelling_key(Structure s, dict cache):
+    """`_phase_meaning` of `s` as drawn: what its labels state.  None over PHASE_GROUP_LIMIT."""
+    cdef phase_context_t ctx
+    cdef uint8_t *sg = NULL
+    if phase_context(s, &ctx, NULL, NULL, cache):
+        return None
+    if structure_has(s, SEG_STEREO_GROUPS):
+        sg = structure_stereo_groups(s)
+    return _phase_meaning(_abs_read_clone(s), sg, &ctx, s.header.atom_count, cache)
+
+
+cdef bint _open_besides(Structure view, tuple members) except -1:
+    """Is a unit of `view` stereogenic and unconfigured outside `members`?"""
+    cdef uint32_t k, count
+    cdef stereo_unit_t *units
+    ensure_stereo_units(view)
+    count = structure_stereo_unit_count(view)
+    units = structure_stereo_units(view)
+    for k in range(count):
+        if (units[k].spare & SU_STEREOGENIC and not structure_parity_at(view, units[k].anchor)
+                and units[k].anchor not in members):
+            return True
+    return False
+
+
+cdef bint _set_states_nothing(Structure view, tuple members, dict cache) except -1:
+    """Does the signed coupled set `members` state nothing: is what the drawing states, `_phase_meaning` over
+    every AND phase, OR choice and open unit, the same with the set cleared to open choices?
+
+    One reading for every label: tropine's bridgeheads read ABS with C3 open state nothing, in AND they state
+    the tropine and pseudotropine mixture, and an achiral cage's signs state nothing under any label.  The
+    cleared reading opens every member as a choice, keeps its ABS byte and drops its parity, so a combination
+    signs it exactly as the signed reading does.  Nested reads go to a cache of
+    their own, flagged b'P', under which no coupled set is cleared: each species reads its signs as stated,
+    so a set an automorphism inverts gives one species either way.  Over a limit, or on a truncated
+    identity, the set is kept.
+    """
+    cdef dict inner = {b'P': True}
+    cdef phase_context_t ctx, sctx
+    cdef list extra
+    cdef Structure cleared, base
+    cdef uint8_t *par
+    cdef uint8_t *sg = NULL
+    cdef tuple signed, open_
+    cdef uint32_t j
+    cdef object i, key
+    for key in (b'B', b'U', b'M'):          # constitution alone decides these
+        if cache is not None and key in cache:
+            inner[key] = cache[key]
+    try:
+        if phase_context(view, &sctx, NULL, NULL, inner):
+            return False
+        if sctx.n_groups + sctx.n_unknown == 0 and not _open_besides(view, members):
+            # nothing else is a choice, so the cleared reading's worlds are the set's own two signings:
+            # it states nothing exactly when its inversion is the same species
+            base = _abs_read_clone(view)
+            open_ = (mol_identity_bytes(structure_stereogenic_view(base, inner)),)
+            base = structure_clone(base)
+            par = structure_parities(base)
+            for i in members:
+                par[<uint32_t> i] = 3 - par[<uint32_t> i]
+            structure_invalidate_stereo_units(base)
+            refresh_parity_features(base)
+            return open_[0] == mol_identity_bytes(structure_stereogenic_view(base, inner))
+        if structure_has(view, SEG_STEREO_GROUPS):
+            sg = structure_stereo_groups(view)
+        signed = _phase_meaning(_abs_read_clone(view), sg, &sctx, view.header.atom_count, inner)
+        sg = NULL
+        cleared = structure_clone(view)
+        par = structure_parities(cleared)
+        for i in members:
+            par[<uint32_t> i] = 0
+        structure_invalidate_stereo_units(cleared)
+        refresh_parity_features(cleared)
+        if phase_context(cleared, &ctx, NULL, NULL, inner):
+            return False
+        # every member is a choice, stereogenic or not: when an automorphism undoes the set's inversion
+        # the two choices are one species, which is what makes an achiral cage's signs state nothing.  And
+        # every unit open in the signed reading stays open: clearing the set's own group must not close
+        # tropine's C3, which the OR pair left a choice
+        extra = list(members) + [sctx.unknown[j] for j in range(sctx.n_unknown)]
+        for i in extra:
+            for j in range(ctx.n_unknown):
+                if ctx.unknown[j] == <uint32_t> i:
+                    break
+            else:
+                if ctx.n_groups + ctx.n_unknown == PHASE_GROUP_LIMIT:
+                    return False
+                ctx.world_bits |= 1u << (ctx.n_groups + ctx.n_unknown)
+                ctx.unknown[ctx.n_unknown] = <uint32_t> i
+                ctx.n_unknown += 1
+        base = _abs_read_clone(view)
+        par = structure_parities(base)
+        for i in members:
+            par[<uint32_t> i] = 0
+        structure_invalidate_stereo_units(base)
+        refresh_parity_features(base)
+        if structure_has(cleared, SEG_STEREO_GROUPS):
+            sg = structure_stereo_groups(cleared)
+        open_ = _phase_meaning(base, sg, &ctx, view.header.atom_count, inner)
+    except AutomorphismBudgetExceeded:
+        return False
+    return signed == open_
+
+
+cdef tuple _labelling_measure(Structure s):
+    """`(members in an AND or OR group, groups)`: what relabelling lowers."""
+    cdef uint8_t *sg = structure_stereo_groups(s)
+    cdef uint8_t seen[256]
+    cdef uint32_t i, members = 0, groups = 0
+    memset(seen, 0, 256)
+    for i in range(s.header.atom_count):
+        if sg[i] and sg_kind(sg[i]) != SG_KIND_ABS and structure_parity_at(s, i):
+            members += 1
+            if not seen[sg[i]]:
+                seen[sg[i]] = 1
+                groups += 1
+    return members, groups
+
+
+cdef Structure _relabel_candidate(Structure s, uint8_t b, uint32_t slot, bint complement, bint invert):
+    """A clone of `s` with one move applied, or None when the move does not apply.
+
+    | move                        | arguments              | the clone                                  |
+    | --------------------------- | ---------------------- | ------------------------------------------ |
+    | group to ABS                | `slot` past the atoms  | every member of `b` in ABS                 |
+    | member to ABS               | `slot` a member of `b` | that member in ABS                         |
+    | complement                  | `complement`           | `b`'s members in ABS, and the explicit ABS |
+    |                             |                        | members of its components in `b`           |
+
+    `invert` puts the AND group `b` in its other phase first: the phase is not drawn information, so
+    each move is offered from both.  A complement needs every configured parity of those components
+    to be explicitly labelled, so that no unlabelled sign changes meaning.
+    """
+    cdef uint32_t n = s.header.atom_count, i
+    cdef uint8_t absb = sg_pack(SG_KIND_ABS, 0)
+    cdef uint8_t *sg
+    cdef uint8_t *par
+    cdef uint8_t *want
+    cdef uint32_t *comp
+    cdef Structure c = structure_clone(s)
+    if invert:
+        sg = structure_stereo_groups(c)
+        par = structure_parities(c)
+        for i in range(n):
+            if sg[i] == b and par[i]:
+                par[i] = 3 - par[i]
+        structure_invalidate_stereo_units(c)
+        refresh_parity_features(c)
+    ensure_stereo_units(c)          # fills the component labels; moves the buffer, so first
+    sg = structure_stereo_groups(c)
+    if not complement:
+        if slot < n:
+            sg[slot] = absb
+        else:
+            for i in range(n):
+                if sg[i] == b and structure_parity_at(c, i):
+                    sg[i] = absb
+        return c
+    comp = structure_component_labels(c)
+    want = <uint8_t *> PyMem_Malloc(<size_t> n)
+    if want is NULL:
+        raise MemoryError()
+    try:
+        memset(want, 0, <size_t> n)
+        for i in range(n):
+            if sg[i] == b and structure_parity_at(c, i):
+                want[comp[i]] = 1
+        for i in range(n):
+            if want[comp[i]] and structure_parity_at(c, i) and not sg[i]:
+                return None
+        for i in range(n):
+            if not want[comp[i]] or not structure_parity_at(c, i):
+                continue
+            if sg[i] == b:
+                sg[i] = absb
+            elif sg_kind(sg[i]) == SG_KIND_ABS:
+                sg[i] = b
+    finally:
+        PyMem_Free(want)
+    return c
+
+
+cdef Structure _relabelled(Structure view, dict cache, bint phases):
+    """`view` rewritten to the least labelling stating the same thing -- `view` itself when none.
+
+    The fallback for what `_meaning_canonical` does not search: without `phases`, and for a component
+    over its unit limit.  Its moves read an unlabelled sign as ABS.
+
+    Two moves, each accepted only when `_labelling_key` is unchanged, the first before the second:
+
+    | move          | what it does                                   | accepted when                       |
+    | ------------- | ---------------------------------------------- | ----------------------------------- |
+    | to ABS        | a whole group, or one member of a larger group | `_labelling_measure` drops          |
+    | complement    | a group and the ABS members of its components  | (measure, identity) drops           |
+    |               | exchange their labels                          |                                     |
+
+    Among accepted moves the least (measure, identity) is taken, which makes the choice independent
+    of atom order.  On ribo-pentane-2,3,4-triol `|&1:1,5,&2:3|`, `|&1:1,5,o1:3|` and `|a:3,&1:1,5|`
+    are one mixture and all three reach `|a:3,&1:1,5|`; `|a:1,5,&1:3|` states it too and is the
+    complement of `|a:3,&1:1,5|`.  Only what `_relabel_worth_searching` admits is searched.  Cost:
+    per round, one `_labelling_key` per candidate the measure does not rule out, and an identity per
+    tie in it; every candidate has the drawing's constitution, so `cache` -- perceptions and
+    identities keyed by parity bytes -- serves the whole search.
+
+    With `phases` each move on an AND group is also offered from the group's other phase, so the
+    result does not depend on the drawn phase: `C[C@H](O)[C@H](O)[C@@H](O)C |&1:3,5|` reaches
+    `|a:3,&1:5|` with C3 in the phase where it is stereogenic.  A one-member group skips it for the
+    moves to ABS, whose two results are one molecule.  Without `phases` the parities are the stored
+    ones and only labels move.
+    """
+    cdef uint32_t n = view.header.atom_count, i
+    cdef uint8_t *sg
+    cdef uint32_t count[256]
+    cdef tuple key, best, cur
+    cdef Structure c, chosen, now = view
+    cdef uint32_t b, invert
+    if n == 0 or not structure_has(view, SEG_STEREO_GROUPS) or not structure_has(view, SEG_PARITY):
+        return view
+    if not _relabel_worth_searching(view, cache):
+        return view
+    try:
+        key = _labelling_key(view, cache)
+    except AutomorphismBudgetExceeded:
+        return view
+    if key is None:
+        return view
+    cur = None
+    while True:
+        sg = structure_stereo_groups(now)
+        memset(count, 0, sizeof(count))
+        for i in range(n):
+            if sg[i] and sg_kind(sg[i]) != SG_KIND_ABS and structure_parity_at(now, i):
+                count[sg[i]] += 1
+        best = None
+        chosen = None
+        for b in range(1, 256):
+            if not count[b]:
+                continue
+            for invert in range(2 if phases and sg_kind(<uint8_t> b) == SG_KIND_AND and count[b] > 1 else 1):
+                c = _relabel_candidate(now, <uint8_t> b, n, False, invert)
+                best, chosen = _relabel_consider(c, key, best, chosen, None, cache)
+                if count[b] == 1:
+                    continue
+                for i in range(n):
+                    if structure_stereo_groups(now)[i] == b and structure_parity_at(now, i):
+                        c = _relabel_candidate(now, <uint8_t> b, i, False, invert)
+                        best, chosen = _relabel_consider(c, key, best, chosen, None, cache)
+        if chosen is None:
+            if cur is None or cur[1] is None:
+                cur = (_labelling_measure(now), mol_identity_bytes(now))
+            for b in range(1, 256):
+                if not count[b]:
+                    continue
+                for invert in range(2 if phases and sg_kind(<uint8_t> b) == SG_KIND_AND else 1):
+                    c = _relabel_candidate(now, <uint8_t> b, n, True, invert)
+                    best, chosen = _relabel_consider(c, key, best, chosen, cur, cache)
+        if chosen is None:
+            return now
+        now = chosen
+        cur = best
+
+
+cdef tuple _relabel_consider(Structure c, tuple key, tuple best, Structure chosen, tuple bound, dict cache):
+    """`(best, chosen)` after weighing candidate `c`: kept when it states `key` and its
+    (measure, identity) is below both `best` and `bound`.  The measure is compared first, and an
+    identity is computed only to break a tie in it, so `best` may hold None for its identity."""
+    cdef tuple measure
+    cdef bytes identity = None
+    if c is None:
+        return best, chosen
+    measure = _labelling_measure(c)
+    if (bound is not None and measure > bound[0]) or (best is not None and measure > best[0]):
+        return best, chosen
+    try:
+        if _labelling_key(c, cache) != key:
+            return best, chosen
+        if bound is not None and measure == bound[0]:
+            identity = mol_identity_bytes(c)
+            if not identity < bound[1]:
+                return best, chosen
+        if best is not None and measure == best[0]:
+            if best[1] is None:
+                best = (best[0], mol_identity_bytes(chosen))
+            if identity is None:
+                identity = mol_identity_bytes(c)
+            if not identity < best[1]:
+                return best, chosen
+    except AutomorphismBudgetExceeded:
+        return best, chosen
+    return (measure, identity), c
+
+
+cdef bint _relabel_worth_searching(Structure view, dict cache) except -1:
+    """Can two labellings of `view` state one thing?  Only when its context holds a unit that some
+    combination refuses, a configured or unknown unit that is not `_stereogenic_unsigned`, or two
+    configured or unknown anchors in one constitutional orbit; otherwise every combination is a
+    distinct molecule and the labels are read off the meaning.  Over RELABEL_CHOICE_LIMIT choices,
+    or on a truncated orbit search, the answer is no: a labelling kept as drawn may leave one mixture
+    two strings, never one string two mixtures."""
+    cdef uint32_t n = view.header.atom_count, i, j, flags = 0
+    cdef phase_context_t ctx
+    cdef uint8_t *keep = NULL
+    cdef uint8_t *refused = NULL
+    cdef uint8_t *inctx = NULL
+    cdef uint8_t *sg
+    cdef uint32_t *comp
+    cdef uint32_t *orbits = NULL
+    cdef uint32_t *owner = NULL
+    try:
+        keep = <uint8_t *> PyMem_Malloc(<size_t> n)
+        refused = <uint8_t *> PyMem_Malloc(<size_t> n)
+        inctx = <uint8_t *> PyMem_Malloc(<size_t> n)
+        orbits = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
+        owner = <uint32_t *> PyMem_Malloc(<size_t> (n + 1) * sizeof(uint32_t))
+        if keep is NULL or refused is NULL or inctx is NULL or orbits is NULL or owner is NULL:
+            raise MemoryError()
+        if phase_context(view, &ctx, keep, refused, cache):
+            return False
+        if ctx.n_groups + ctx.n_unknown == 0 or ctx.n_groups + ctx.n_unknown > RELABEL_CHOICE_LIMIT:
+            return False
+        # the context's components: those holding a group member or an unknown unit
+        comp = structure_component_labels(view)
+        sg = structure_stereo_groups(view)
+        memset(inctx, 0, <size_t> n)
+        for i in range(n):
+            if sg[i] and ctx.index[sg[i]] != 0xFF and structure_parity_at(view, i):
+                inctx[comp[i]] = 1
+        for j in range(ctx.n_unknown):
+            inctx[comp[ctx.unknown[j]]] = 1
+        for i in range(n):
+            if not inctx[comp[i]]:
+                keep[i] = 0
+                continue
+            if refused[i]:
+                return True
+            if not structure_parity_at(view, i):
+                keep[i] = 0
+        for j in range(ctx.n_unknown):
+            keep[ctx.unknown[j]] = 1
+        if not _stereogenic_unsigned(view, keep, cache):
+            return True
+        mol_automorphisms(view, NULL, orbits, &flags)
+        if flags & CANON_BUDGET_EXCEEDED:
+            return False
+        memset(owner, 0, <size_t> (n + 1) * sizeof(uint32_t))
+        for i in range(n):
+            if keep[i]:
+                if owner[orbits[i]]:
+                    return True
+                owner[orbits[i]] = 1
+        return False
+    finally:
+        PyMem_Free(keep)
+        PyMem_Free(refused)
+        PyMem_Free(inctx)
+        PyMem_Free(orbits)
+        PyMem_Free(owner)
+
+
+cdef Structure structure_live_groups_view(Structure structure, list dead=None, bint phases=True,
+                                          list approximate=None):
+    """`structure_stereogenic_view(structure)` with every dead group byte cleared and the labels
+    rewritten to the least labelling stating the same thing (`_relabelled`).
 
     A member is dead off a configured unit (`sg_member_live`), and every member of a group is dead
     when inverting the group restates the molecule (`_groups_stating_nothing`): a meso pair's label.
@@ -3273,15 +5382,99 @@ cdef Structure structure_live_groups_view(Structure structure, list dead=None):
     label writes: `CC(O)CC |o1:1|` writes `C(C)C(O)C`.  `dead`, when given, receives each cleared
     slot.  The clear goes into a clone and the input arena is not written; pach and `copy()` keep the
     stored byte.
+
+    With `phases` a component where two labellings may state one thing is answered by
+    `_meaning_canonical`, reading an unlabelled sign as ABS, OR or AND, and signs may move; the rest
+    by `_relabelled`.  Identity, `str()` and the canonical order take `phases`; a caller pairing the
+    labels with the STORED parities -- the CTfile and MRV writers, through `live_stereo_groups()` --
+    passes False.  `approximate`, when given, receives the anchors of each block `_meaning_canonical`
+    left to `_relabelled` over a limit.
     """
-    cdef Structure view = structure_stereogenic_view(structure)
+    cdef dict cache = {}            # every structure below has `structure`'s constitution
+    cdef Structure drawn = structure
+    cdef Structure view, relabelled
+    cdef list inert = []            # coupled sets whose inversion restates the molecule: no choice
+    cdef object found
+    cdef list more
+    cdef object slot
+    cdef uint8_t *sg0
+    cdef uint8_t *sg1
+    cdef uint32_t i
+    structure = _bridgeheads_filled(drawn, cache, inert)   # the implied signs, before any phase is read
+    view = structure_stereogenic_view(structure, cache)
+    respelled = _restating_as_abs(structure, view, cache)
+    if respelled is not structure:
+        structure = respelled
+        view = structure_stereogenic_view(structure, cache)
+    found = _meaning_canonical(structure, view, cache, approximate, inert) if phases else None
+    if found is not None and found is not False:
+        # the least labelling states no group that restates the molecule and no sign that states
+        # nothing: only the members a component not searched holds on an unconfigured unit are left
+        view = found
+        if structure_has(view, SEG_STEREO_GROUPS):
+            sg1 = structure_stereo_groups(view)
+            for i in range(view.header.atom_count):
+                if sg1[i] and not structure_parity_at(view, i):
+                    if view is structure:
+                        view = structure_clone(structure)
+                        sg1 = structure_stereo_groups(view)
+                    sg1[i] = 0
+        if dead is not None and structure_has(drawn, SEG_STEREO_GROUPS):
+            sg0 = structure_stereo_groups(drawn)
+            sg1 = structure_stereo_groups(view) if structure_has(view, SEG_STEREO_GROUPS) else NULL
+            for i in range(drawn.header.atom_count):
+                if sg0[i] and (sg1 is NULL or not sg1[i]):
+                    dead.append(i)
+        return view
+    view = _without_dead_groups(structure, view, dead, cache)
+    relabelled = _relabelled(view, cache, phases)
+    if relabelled is view:
+        return view
+    more = [] if dead is not None else None
+    view = _without_dead_groups(relabelled, structure_stereogenic_view(relabelled, cache), more, cache)
+    if dead is not None:
+        for slot in more:
+            if slot not in dead:
+                dead.append(slot)
+    return view
+
+
+cdef Structure _restating_as_abs(Structure structure, Structure view, dict cache):
+    """`structure` with each AND or OR group whose inversion restates the molecule read as ABS on its live
+    members; `structure` itself when there is none, else a clone.
+
+    On a configuration that is its own mirror image -- cis-2,6-dimethylmorpholine, either
+    1,4-dimethylcyclohexane -- a group states the drawn diastereomer and no enantiomer, which is what ABS
+    states, while an unlabelled drawing may be either diastereomer: `|&1:1,5|`, `|o1:1,5|` and `|a:1,5|`
+    are one compound, written `|a:...|`, and not the unlabelled one.
+    """
+    cdef uint8_t mute[256]
+    cdef uint8_t *sg
+    cdef uint8_t *vsg
+    cdef uint32_t i, n = view.header.atom_count
+    cdef Structure out = structure
+    if n == 0 or not structure_has(view, SEG_STEREO_GROUPS) or not structure_has(structure, SEG_STEREO_GROUPS):
+        return structure
+    _groups_stating_nothing(view, mute, cache)
+    vsg = structure_stereo_groups(view)
+    for i in range(n):
+        if vsg[i] and mute[vsg[i]] and sg_kind(vsg[i]) != SG_KIND_ABS and sg_member_live(view, vsg, i):
+            if out is structure:
+                out = structure_clone(structure)
+            structure_stereo_groups(out)[i] = sg_pack(SG_KIND_ABS, 0)
+    return out
+
+
+cdef Structure _without_dead_groups(Structure structure, Structure view, list dead, dict cache):
+    """`view`, `structure`'s stereogenic view, with every dead group byte cleared; see
+    `structure_live_groups_view`."""
     cdef uint8_t *sg
     cdef uint8_t mute[256]
     cdef uint32_t i, n = view.header.atom_count
     cdef bint found = False
     if n == 0 or not structure_has(view, SEG_STEREO_GROUPS):
         return view
-    _groups_stating_nothing(view, mute)
+    _groups_stating_nothing(view, mute, cache)
     sg = structure_stereo_groups(view)
     for i in range(n):
         if sg[i] and (mute[sg[i]] or not sg_member_live(view, sg, i)):
@@ -3300,49 +5493,203 @@ cdef Structure structure_live_groups_view(Structure structure, list dead=None):
     return view
 
 
-cdef int _stereogenic_in_some_phase(Structure structure, uint8_t *keep) except -1:
-    """`keep[slot]` = 1 where the parity at `slot` is on a unit stereogenic under some non-identity
-    combination of AND collection phases, 0 elsewhere.  `structure` is not written.
+cdef bint structure_canonical_group_labels(Structure view, uint32_t *pos, bint phase) except -1:
+    """Rewrite `view`'s collections in place to the labelling the canonical write states.  Moved?
 
-    Each combination inverts every configured member of the chosen collections in a clone and marks it
-    afresh.  Over PHASE_GROUP_LIMIT collections every parity is kept: an unneeded parity makes two
-    spellings of one compound compare unequal, never two compounds equal.
+    `view` is a private live view (`structure_live_groups_view`, cloned where it is the stored arena)
+    and `pos` the frame the labelling is read in: the written order for the SMILES writer, slot order
+    for `MoleculeContainer.canonicalize_stereo_groups`.  A string read back has its slots in written
+    order, so both calls give it one labelling.  The one implementation: those two are its callers.
+
+    | step  | the rewrite                                                                        |
+    | ----- | ---------------------------------------------------------------------------------- |
+    | phase | each AND collection inverted where its phase under `pos` is not canonical          |
+    |       | (`_canon_group_phase`, in the frame the positions name); skipped when `phase` is off |
+    | ids   | OR and AND ids become `canonical_stereo_group_ids`'; inside one ambiguity class the |
+    |       | group whose least member position pair is lowest takes the lowest id of the class   |
+
+    The ids are read before the phase moves.  ABS and unspecified bytes are kept.  Neither step reads a
+    stored id or an AND phase, and `pos` does not move under either (the order is searched phase-free
+    and id-free), so a second call changes nothing: `C[C@@H](O)CC |&1:1|` and `C[C@H](O)CC |&2:1|` end
+    as one arena.  Rebuilds the unit table unmarked where it is missing.
     """
-    cdef uint32_t n = structure.header.atom_count
+    cdef uint32_t n = view.header.atom_count
+    cdef uint8_t ids[256]
+    cdef uint8_t amb[256]
+    cdef uint8_t remap[256]
+    cdef uint8_t flip[256]
+    cdef uint64_t least[256]
     cdef uint8_t *sg
     cdef uint8_t *par
-    cdef uint8_t index[256]
-    cdef uint32_t i, g = 0, mask
+    cdef atom_t *atoms
+    cdef uint32_t *ptr
+    cdef halfedge_t *edges
+    cdef stereo_unit_t *units
     cdef stereo_unit_t *u
-    cdef Structure v
-    memset(keep, 0, <size_t> n)
-    if not structure_has(structure, SEG_STEREO_GROUPS) or not structure_has(structure, SEG_PARITY):
-        return 0
-    memset(index, 0xFF, 256)
-    sg = structure_stereo_groups(structure)
-    par = structure_parities(structure)
+    cdef uint32_t i, b, oa = 0, ob = 0, lo, hi, nunits
+    cdef uint64_t key
+    cdef bint moved = False
+    cdef dict classes = {}
+    cdef list members, order, taken
+    cdef object c, x
+    cdef uint8_t seen = 0
+    if n == 0 or not structure_has(view, SEG_STEREO_GROUPS):
+        return False
+    sg = structure_stereo_groups(view)
     for i in range(n):
-        if sg[i] and sg_kind(sg[i]) == SG_KIND_AND and par[i] and index[sg[i]] == 0xFF:
-            if g == PHASE_GROUP_LIMIT:
-                memset(keep, 1, <size_t> n)
-                return 0
-            index[sg[i]] = <uint8_t> g
-            g += 1
-    for mask in range(1, 1u << g):
-        v = structure_clone(structure)
-        sg = structure_stereo_groups(v)
-        par = structure_parities(v)
+        if sg[i] and sg_kind(sg[i]) > SG_KIND_ABS:
+            if not seen:
+                seen = sg[i]
+            elif sg[i] != seen:
+                break
+    else:
+        seen = 0                            # one numbered group or none: no class to break a tie in
+    memset(amb, 0, sizeof(amb))
+    # the ambiguity pass is a second search, run only where two numbered groups could tie
+    canonical_stereo_group_ids(view, ids, amb if seen else NULL)
+    ensure_stereo_units_unmarked(view)      # can move the buffer: before any pointer is taken
+    sg = structure_stereo_groups(view)
+    atoms = view.atoms()
+    ptr = csr_ptr(view)
+    edges = csr_edges(view)
+    for b in range(256):
+        remap[b] = <uint8_t> b
+        least[b] = ~(<uint64_t> 0)
+    for i in range(n):
+        b = sg[i]
+        if not b or sg_kind(<uint8_t> b) <= SG_KIND_ABS:
+            continue
+        u = stereo_unit_of(view, i)
+        if u is NULL or stereo_unit_owners(atoms, ptr, edges, u, &oa, &ob) != 2:
+            oa = i
+            ob = i
+        lo = pos[oa]
+        hi = pos[ob]
+        if lo > hi:
+            lo, hi = hi, lo
+        key = (<uint64_t> lo << 32) | hi
+        if key < least[b]:
+            if least[b] == ~(<uint64_t> 0):
+                if amb[b]:
+                    c = (sg_kind(<uint8_t> b), amb[b])
+                else:
+                    c = b
+                classes.setdefault(c, []).append(b)
+            least[b] = key
+    for members in classes.values():
+        if len(members) == 1:
+            b = <uint32_t> members[0]
+            remap[b] = sg_pack(sg_kind(<uint8_t> b), ids[b])
+            continue
+        # an ambiguity class keeps its block of ids, handed out by least member position
+        order = []
+        taken = []
+        for x in members:
+            order.append((least[<uint32_t> x], x))
+            taken.append(ids[<uint32_t> x])
+        order.sort()
+        taken.sort()
+        for i in range(<uint32_t> len(order)):
+            b = <uint32_t> (<tuple> order[i])[1]
+            remap[b] = sg_pack(sg_kind(<uint8_t> b), <uint8_t> taken[i])
+    if phase and structure_has(view, SEG_PARITY):
+        units = structure_stereo_units(view)
+        nunits = structure_stereo_unit_count(view)
+        _group_phase_flips(view, units, nunits, pos, flip)
+        par = structure_parities(view)
         for i in range(n):
-            if sg[i] and par[i] and index[sg[i]] != 0xFF and (mask >> index[sg[i]]) & 1:
+            if sg[i] and flip[sg[i]] and par[i]:
                 par[i] = 3 - par[i]
-        structure_invalidate_stereo_units(v)
-        refresh_parity_features(v)
-        ensure_stereo_units(v)
+                moved = True
+        if moved:
+            refresh_parity_features(view)
+    for i in range(n):
+        if sg[i] and remap[sg[i]] != sg[i]:
+            sg[i] = remap[sg[i]]
+            moved = True
+    return moved
+
+
+cdef int _group_phase_flips(Structure view, stereo_unit_t *units, uint32_t nunits, uint32_t *pos,
+                            uint8_t *flip) except -1:
+    """`flip[b]` = 1 for each stored byte `b` whose AND collection is not in its canonical phase under
+    `pos`: `_canon_group_phase` over `_frame_free_parity_seed`'s digits, read in the frame the
+    positions name."""
+    cdef uint32_t n = view.header.atom_count, i
+    cdef uint32_t *block = <uint32_t *> PyMem_Malloc(<size_t> 3 * <size_t> n * sizeof(uint32_t))
+    if block is NULL:
+        raise MemoryError()
+    cdef uint32_t *cls = block
+    cdef uint32_t *digits = cls + n
+    cdef uint32_t *partner = digits + n     # per UNIT, and nunits <= n by the anchor invariant
+    try:
+        for i in range(nunits):
+            partner[i] = stereo_unit_partner(view, &units[i])
         for i in range(n):
-            if structure_parity_at(v, i):
-                u = stereo_unit_of(v, i)
+            cls[i] = pos[i] + 1
+        _frame_free_parity_seed(view, units, nunits, partner, cls, digits, n)
+        _canon_group_phase(view, CANON_GROUPS_WRITTEN, cls, digits, flip)
+    finally:
+        PyMem_Free(block)
+    return 0
+
+
+cdef int _stereogenic_in_some_phase(Structure structure, uint8_t *keep, dict cache=None) except -1:
+    """`keep[slot]` = 1 where the configured parity at `slot` states something, 0 elsewhere.
+    `structure` is not written.
+
+    | parity                    | kept when                                                        |
+    | ------------------------- | ---------------------------------------------------------------- |
+    | an AND or OR group member | its unit is stereogenic in the drawing or in some combination    |
+    | ABS or unlabelled         | that, and when refused in some combination, inverting it changes |
+    |                           | what the drawing states                                          |
+
+    Combinations are `phase_context`'s.  The inversion test compares `_phase_meaning` with and
+    without the parity inverted: `CC(O)[C@H](O)C(O)C` states nothing at C3, since the completions of
+    C2 and C4 are the four diastereomers either way, while `C[C@H](O)[C@H](O)C(O)C` states ribo or
+    L-arabino and its C3 inverse xylo or D-arabino.  Over PHASE_GROUP_LIMIT choices every parity is
+    kept: an unneeded parity makes two spellings of one compound compare unequal, never two
+    compounds equal.
+    """
+    cdef uint32_t n = structure.header.atom_count, i
+    cdef phase_context_t ctx
+    cdef uint8_t *sg = NULL
+    cdef uint8_t *refused = NULL
+    cdef stereo_unit_t *u
+    cdef Structure base = None
+    cdef tuple drawn = None
+    if cache is None:
+        cache = {}
+    refused = <uint8_t *> PyMem_Malloc(<size_t> n + 1)
+    if refused is NULL:
+        raise MemoryError()
+    try:
+        if phase_context(structure, &ctx, keep, refused, cache):
+            memset(keep, 1, <size_t> n)
+            return 0
+        for i in range(n):
+            if structure_parity_at(structure, i):
+                u = stereo_unit_of(structure, i)
                 if u is not NULL and u.spare & SU_STEREOGENIC:
                     keep[i] = 1
+        if ctx.n_groups + ctx.n_unknown == 0:
+            return 0
+        if structure_has(structure, SEG_STEREO_GROUPS):
+            sg = structure_stereo_groups(structure)
+        for i in range(n):
+            if not keep[i] or not refused[i] or (sg is not NULL and sg[i] and sg_kind(sg[i]) != SG_KIND_ABS):
+                continue
+            if base is None:
+                base = _abs_read_clone(structure)
+            try:
+                if drawn is None:
+                    drawn = _phase_meaning(base, sg, &ctx, n, cache)
+                if _phase_meaning(base, sg, &ctx, i, cache) == drawn:
+                    keep[i] = 0
+            except AutomorphismBudgetExceeded:
+                pass
+    finally:
+        PyMem_Free(refused)
     return 0
 
 
@@ -3518,6 +5865,34 @@ cdef inline uint32_t _frame_free_parity_code(stereo_unit_t *u, uint8_t parity,
     return (((parity - 1) ^ pp) + 1) + 1
 
 
+cdef inline void _digit_atoms(Structure structure, stereo_unit_t *u, uint32_t partner, uint32_t *a,
+                              uint32_t *p) noexcept nogil:
+    """The two atoms a unit's frame-free digit lands on: the anchor and `partner`, except these:
+
+    | Unit | Lands on | Because |
+    | --- | --- | --- |
+    | SU_HELICAL | inner fusion atoms `refs[0]`, `refs[2]` | a fjord atom can be an axis pivot (1,1'-bihelicenyl) |
+    | twisted SU_PLANAR | ring neighbours `refs[0]`, `refs[2]` | its anchor is its cis/trans unit's partner |
+
+    `max` would let one digit hide the other where two units share an atom.  A twisted unit skips a
+    ring neighbour that carries a parity of its own, and lands on both when both do.
+    """
+    if u.kind == SU_HELICAL:
+        a[0] = u.refs[0]
+        p[0] = u.refs[2]
+    elif u.kind == SU_PLANAR and (u.spare & SU_TWISTED):
+        a[0] = u.refs[0]
+        p[0] = u.refs[2]
+        if structure_parity_at(structure, a[0]) and not structure_parity_at(structure, p[0]):
+            a[0] = p[0]
+            p[0] = SU_NO_REF
+        elif structure_parity_at(structure, p[0]) and not structure_parity_at(structure, a[0]):
+            p[0] = SU_NO_REF
+    else:
+        a[0] = u.anchor
+        p[0] = partner
+
+
 cdef void _frame_free_parity_seed(Structure structure, stereo_unit_t *units, uint32_t nunits,
                                   uint32_t *partner, uint32_t *colour, uint32_t *par,
                                   uint32_t n) noexcept nogil:
@@ -3528,8 +5903,9 @@ cdef void _frame_free_parity_seed(Structure structure, stereo_unit_t *units, uin
     order -- "there is deliberately no attempt to canonicalise it" -- so which terminal is keyed in
     SEG_PARITY is itself frame-relative, and a digit written to the anchor alone would smuggle the
     encoding back in through the atom it landed on.  Writing it to both ends is symmetric and so
-    invariant.  SU_ALLENE needs nothing extra: its anchor is the chain's centre, which is the same
-    atom in every encoding, and `stereo_unit_partner` answers SU_NO_REF for it.
+    invariant; a helix's two ends are its fusion atoms (`_digit_atoms`).  SU_ALLENE needs nothing
+    extra: its anchor is the chain's centre, which is the same atom in every encoding, and
+    `stereo_unit_partner` answers SU_NO_REF for it.
 
     Combined with `max` rather than assignment, so that an atom reached twice does not depend on
     which unit the table lists first (a list order that is slot order, hence frame-relative).  Two
@@ -3540,7 +5916,7 @@ cdef void _frame_free_parity_seed(Structure structure, stereo_unit_t *units, uin
     A configured parity on an atom that anchors NO unit is ignored: a parity is a statement about a
     frame, and an atom with no unit has no frame for it to be a statement about.
     """
-    cdef uint32_t i, code, a
+    cdef uint32_t i, code, a, b = 0
     for i in range(n):
         par[i] = 0
     for i in range(nunits):
@@ -3548,10 +5924,11 @@ cdef void _frame_free_parity_seed(Structure structure, stereo_unit_t *units, uin
         if a >= n or not structure_parity_at(structure, a):
             continue
         code = _frame_free_parity_code(&units[i], structure_parity_at(structure, a), colour)
+        _digit_atoms(structure, &units[i], partner[i], &a, &b)
         if code > par[a]:
             par[a] = code
-        if partner[i] != SU_NO_REF and code > par[partner[i]]:
-            par[partner[i]] = code
+        if b != SU_NO_REF and code > par[b]:
+            par[b] = code
 
 
 # --- the canonical search's stereo seam (`_canonical.pxi`'s two hooks) --------------------------
@@ -3619,7 +5996,7 @@ cdef bint _canon_stereo_digits(Structure structure, uint32_t *colour, uint32_t *
     cdef stereo_unit_t *units
     cdef uint32_t *partner = scratch
     cdef uint32_t *reached = scratch + n
-    cdef uint32_t i, j, a, p, r
+    cdef uint32_t i, j, r, a = 0, p = 0
     cdef bint named = True
     for i in range(n):
         digits_out[i] = 0
@@ -3639,8 +6016,8 @@ cdef bint _canon_stereo_digits(Structure structure, uint32_t *colour, uint32_t *
         a = units[i].anchor
         if a >= n or not structure_parity_at(structure, a):
             continue
+        _digit_atoms(structure, &units[i], partner[i], &a, &p)
         reached[a] += 1
-        p = partner[i]
         if p != SU_NO_REF and p < n:
             reached[p] += 1
     _frame_free_parity_seed(structure, units, nunits, partner, colour, digits_out, n)
@@ -3653,10 +6030,9 @@ cdef bint _canon_stereo_digits(Structure structure, uint32_t *colour, uint32_t *
     if named or unnamed_out is NULL:
         return named
     for i in range(nunits):
-        a = units[i].anchor
-        p = partner[i]
-        if a >= n:
+        if units[i].anchor >= n:
             continue
+        _digit_atoms(structure, &units[i], partner[i], &a, &p)
         if unnamed_out[a] != 1 and not (p != SU_NO_REF and p < n and unnamed_out[p] == 1):
             continue
         if not unnamed_out[a]:
@@ -3690,7 +6066,7 @@ cdef inline bint _canon_group_member(Structure structure, atom_t *atoms, uint32_
 
 
 cdef size_t _canon_group_tail(Structure structure, uint32_t mode, uint32_t *pos, uint64_t *out,
-                              uint8_t *pin) noexcept nogil:
+                              uint32_t *colour) noexcept nogil:
     """`_canon_group_hook`: the stereo-group tail of the leaf certificate.  The word layout and the
     three calling shapes are stated above `canon_group_fn` in `_canonical.pxi`.
 
@@ -3708,6 +6084,7 @@ cdef size_t _canon_group_tail(Structure structure, uint32_t mode, uint32_t *pos,
     cdef halfedge_t *edges
     cdef uint32_t i, j, oa = 0, ob = 0, lo, hi
     cdef uint64_t key, w0, w1
+    cdef uint32_t ckey
     cdef uint64_t rep[256]
     cdef size_t count = 0
     if mode == CANON_GROUPS_NONE or n == 0 or not structure_has(structure, SEG_STEREO_GROUPS):
@@ -3723,11 +6100,10 @@ cdef size_t _canon_group_tail(Structure structure, uint32_t mode, uint32_t *pos,
         if not sg[i] or not _canon_group_member(structure, atoms, ptr, edges, sg, mode, i, &oa, &ob):
             continue
         count += 1
-        if pin is not NULL:
-            if not pin[oa]:
-                pin[oa] = 2
-            if not pin[ob]:
-                pin[ob] = 2
+        if colour is not NULL:
+            ckey = 2 * <uint32_t> sg[i] + (oa == ob) + 1
+            colour[oa] = ckey if not colour[oa] or colour[oa] == ckey else CANON_GROUP_CLASH
+            colour[ob] = ckey if not colour[ob] or colour[ob] == ckey else CANON_GROUP_CLASH
         if pos is not NULL:
             lo = pos[oa] - 1
             hi = pos[ob] - 1
@@ -3799,8 +6175,8 @@ cdef void _canon_group_phase(Structure structure, uint32_t mode, uint32_t *pos, 
     and the record with every member of one AND collection inverted are one compound: `C[C@H](O)CC |&1:1|`
     is `C[C@@H](O)CC |&1:1|`.  An OR collection is one isomer of the two, unknown which, and its signs
     tell isolated isomers apart: `C[C@H](O)CC |o1:1|` is not `C[C@@H](O)CC |o1:1|`, so OR, like ABS,
-    has no phase.  A member's digit sits on its unit's anchor and partner, the atoms
-    `_frame_free_parity_seed` writes; readable digits are 2 and 3.
+    has no phase.  A member's digit sits on the atoms `_frame_free_parity_seed` writes
+    (`_digit_atoms`); readable digits are 2 and 3.
 
     | `pos`    | a member's digit 2 or 3 becomes                                                     |
     | -------- | ----------------------------------------------------------------------------------- |
@@ -3839,15 +6215,17 @@ cdef void _canon_group_phase(Structure structure, uint32_t mode, uint32_t *pos, 
         for i in range(n):
             if sg[i] and sg_kind(sg[i]) == SG_KIND_AND and structure_parity_at(structure, i):
                 u = stereo_unit_of(structure, i)
-                if u is not NULL and u.anchor < n and (digits[u.anchor] == 2 or digits[u.anchor] == 3):
-                    count[sg[i]][digits[u.anchor] - 2] += 1
+                if u is NULL or u.anchor >= n:
+                    continue
+                _digit_atoms(structure, u, stereo_unit_partner(structure, u), &at[0], &at[1])
+                if at[0] < n and (digits[at[0]] == 2 or digits[at[0]] == 3):
+                    count[sg[i]][digits[at[0]] - 2] += 1
         for i in range(n):
             if sg[i] and sg_kind(sg[i]) == SG_KIND_AND and structure_parity_at(structure, i):
                 u = stereo_unit_of(structure, i)
                 if u is NULL:
                     continue
-                at[0] = u.anchor
-                at[1] = stereo_unit_partner(structure, u)
+                _digit_atoms(structure, u, stereo_unit_partner(structure, u), &at[0], &at[1])
                 for j in range(2):
                     a = at[j]
                     if a < n and (digits[a] == 2 or digits[a] == 3):
@@ -3865,7 +6243,10 @@ cdef void _canon_group_phase(Structure structure, uint32_t mode, uint32_t *pos, 
         if not sg[i] or sg_kind(sg[i]) != SG_KIND_AND or not structure_parity_at(structure, i):
             continue
         u = stereo_unit_of(structure, i)
-        if u is NULL or u.anchor >= n or (digits[u.anchor] != 2 and digits[u.anchor] != 3):
+        if u is NULL or u.anchor >= n:
+            continue
+        _digit_atoms(structure, u, stereo_unit_partner(structure, u), &at[0], &at[1])
+        if at[0] >= n or (digits[at[0]] != 2 and digits[at[0]] != 3):
             continue
         if not _canon_group_member(structure, atoms, ptr, edges, sg, mode, i, &oa, &ob):
             continue
@@ -3876,15 +6257,14 @@ cdef void _canon_group_phase(Structure structure, uint32_t mode, uint32_t *pos, 
         key = (<uint64_t> lo << 32) | hi
         if key < rep[sg[i]]:
             rep[sg[i]] = key
-            odd[sg[i]] = digits[u.anchor] == 3
+            odd[sg[i]] = digits[at[0]] == 3
     for i in range(n):
         if not sg[i] or not odd[sg[i]] or not structure_parity_at(structure, i):
             continue
         u = stereo_unit_of(structure, i)
         if u is NULL:
             continue
-        at[0] = u.anchor
-        at[1] = stereo_unit_partner(structure, u)
+        _digit_atoms(structure, u, stereo_unit_partner(structure, u), &at[0], &at[1])
         for j in range(2):
             a = at[j]
             if a < n and (digits[a] == 2 or digits[a] == 3):

@@ -23,6 +23,8 @@
 | a stereogenic unit                          | read                                     |
 | a perceived unit `mark_stereogenic` refused | ignored; the stored parity is untouched  |
 """
+from itertools import product
+
 from pytest import mark
 
 from chython.core._core import read_smiles, write_smiles
@@ -63,3 +65,29 @@ def test_a_canonical_string_reads_back_equal():
 def test_a_real_centre_still_separates_enantiomers():
     a, b = read_smiles('C[C@H](O)CC'), read_smiles('C[C@@H](O)CC')
     assert a != b and write_smiles(a) != write_smiles(b)
+
+
+def _classes(template, n):
+    """Canonical strings over every sign of a template, each checked to read back to itself."""
+    out = set()
+    for signs in product(('@', '@@'), repeat=n):
+        m = read_smiles(template % signs)
+        text = str(m)
+        back = read_smiles(text)
+        assert back == m and str(back) == text, (template % signs, text)
+        out.add(text)
+    return out
+
+
+@mark.parametrize('name, template, n, isomers', [
+    ('1,2,3,4,5-pentamethylcyclopentane', 'C[C%sH]1[C%sH](C)[C%sH](C)[C%sH](C)[C%sH]1C', 5, 4),
+    ('1,3,5-trimethylcyclohexane', 'C[C%sH]1C[C%sH](C)C[C%sH](C)C1', 3, 2),
+    ('1,2,3-trimethylcyclopropane', 'C[C%sH]1[C%sH](C)[C%sH]1C', 3, 2),
+    ('inositol', 'O[C%sH]1[C%sH](O)[C%sH](O)[C%sH](O)[C%sH](O)[C%sH]1O', 6, 9),
+])
+def test_refused_parities_clear_only_jointly(name, template, n, isomers):
+    """Each refused centre inverts alone to the same compound; two of them need not: with C1 and C2 of
+    pentamethylcyclopentane down, inverting C3 or C5 gives the mirror image, inverting both the
+    one-down isomer."""
+    assert len(_classes(template, n)) == isomers
+    assert read_smiles(template % (('@',) * (n - 1) + ('@@',))) != read_smiles(template.replace('%s', ''))

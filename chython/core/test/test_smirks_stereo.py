@@ -252,13 +252,13 @@ def test_a_double_bond_at_the_reaction_centre_is_dropped_kept_or_turned_over():
     the template speaks.  `@=` holds it and `@~` gives the other geometry -- the same two tokens as at a
     tetrahedral centre, because a cis/trans unit is two-state in exactly the same sense.
     """
-    dropped = product_of(SUBSTITUTION + '>>[C:1][O;D1;H1:2]', 'C/C=C/Br')
-    kept = product_of(SUBSTITUTION + '>>[C@=:1][O;D1;H1:2]', 'C/C=C/Br')
-    turned = product_of(SUBSTITUTION + '>>[C@~:1][O;D1;H1:2]', 'C/C=C/Br')
+    dropped = product_of(SUBSTITUTION + '>>[C:1][Cl;D1:2]', 'C/C=C/Br')
+    kept = product_of(SUBSTITUTION + '>>[C@=:1][Cl;D1:2]', 'C/C=C/Br')
+    turned = product_of(SUBSTITUTION + '>>[C@~:1][Cl;D1:2]', 'C/C=C/Br')
 
-    assert dropped.canonical_bytes == smiles('CC=CO').canonical_bytes
-    assert kept.canonical_bytes == smiles('C/C=C/O').canonical_bytes
-    assert turned.canonical_bytes == smiles('C/C=C\\O').canonical_bytes
+    assert dropped.canonical_bytes == smiles('CC=CCl').canonical_bytes
+    assert kept.canonical_bytes == smiles('C/C=C/Cl').canonical_bytes
+    assert turned.canonical_bytes == smiles('C/C=C\\Cl').canonical_bytes
 
 
 def test_either_terminal_addresses_the_bond_kind():
@@ -267,12 +267,12 @@ def test_either_terminal_addresses_the_bond_kind():
     A template addresses the atom it means and the unit is found either way -- for `@=`, which spares it
     from the drop, and for `@~`, which has to locate the anchor to flip the parity stored there.
     """
-    near_keep = product_of(SUBSTITUTION + '>>[C@=:1][O;D1;H1:2]', 'C/C=C/Br')
-    far_keep = product_of('[C:3]=[C:1][Br;D1]>>[C@=:3]=[C:1][O;D1;H1:2]', 'C/C=C/Br')
+    near_keep = product_of(SUBSTITUTION + '>>[C@=:1][Cl;D1:2]', 'C/C=C/Br')
+    far_keep = product_of('[C:3]=[C:1][Br;D1]>>[C@=:3]=[C:1][Cl;D1:2]', 'C/C=C/Br')
     assert far_keep.canonical_bytes == near_keep.canonical_bytes
 
-    near_turn = product_of(SUBSTITUTION + '>>[C@~:1][O;D1;H1:2]', 'C/C=C/Br')
-    far_turn = product_of('[C:3]=[C:1][Br;D1]>>[C@~:3]=[C:1][O;D1;H1:2]', 'C/C=C/Br')
+    near_turn = product_of(SUBSTITUTION + '>>[C@~:1][Cl;D1:2]', 'C/C=C/Br')
+    far_turn = product_of('[C:3]=[C:1][Br;D1]>>[C@~:3]=[C:1][Cl;D1:2]', 'C/C=C/Br')
     assert far_turn.canonical_bytes == near_turn.canonical_bytes
     assert far_turn.canonical_bytes != far_keep.canonical_bytes
 
@@ -342,8 +342,8 @@ def test_a_group_needs_a_stereogenic_unit_and_says_so_when_there_is_none():
 
 
 @mark.parametrize('smirks', [
-    '[C:1]=[C:2][Br;D1]>>[C:1]=[C;&1:2][O;D1;h1:3]',      # the anchor
-    '[C:1]=[C:2][Br;D1]>>[C;&1:1]=[C:2][O;D1;h1:3]',      # and the far terminal, which anchors nothing
+    '[C:1]=[C:2][Br;D1]>>[C:1]=[C;&1:2][Cl;D1:3]',      # the anchor
+    '[C:1]=[C:2][Br;D1]>>[C;&1:1]=[C:2][Cl;D1:3]',      # and the far terminal, which anchors nothing
 ])
 def test_a_group_on_a_double_bond_is_an_e_z_mixture(smirks):
     """A GROUP MEANS "both of this unit's two states", and a cis/trans unit has two of them.
@@ -357,7 +357,7 @@ def test_a_group_on_a_double_bond_is_an_e_z_mixture(smirks):
     """
     product = product_of(smirks, 'C/C=C/Br')
 
-    assert format(product, 'x') == 'C/C=C/O |&1:2|'
+    assert format(product, 'x') == 'C/C=C/Cl |&1:2|'
     assert product.stereo_groups() == {(3, 1): [(2, 3)]}
 
 
@@ -368,7 +368,7 @@ def test_a_group_fabricates_the_geometry_the_substrate_never_drew():
     written beside no geometry would say "not known, and a mixture", which are two different claims.
     So the patcher writes one of the two states and groups it, exactly as it does for a created centre.
     """
-    product = product_of('[C:1]=[C:2][Br;D1]>>[C:1]=[C;&1:2][O;D1;h1:3]', 'CC=CBr')
+    product = product_of('[C:1]=[C:2][Br;D1]>>[C:1]=[C;&1:2][Cl;D1:3]', 'CC=CBr')
 
     assert product.parity_of(2) != 0
     assert product.stereo_groups() == {(3, 1): [(2, 3)]}
@@ -402,7 +402,7 @@ def test_one_unit_takes_one_group():
     that meant two mixtures learns it got one.
     """
     log = []
-    product = product_of('[C:1]=[C:2][Br;D1]>>[C;&1:1]=[C;&2:2][O;D1;h1:3]', 'CC=CBr', log=log)
+    product = product_of('[C:1]=[C:2][Br;D1]>>[C;&1:1]=[C;&2:2][Cl;D1:3]', 'CC=CBr', log=log)
 
     assert len(product.stereo_groups()) == 1
     assert len(log) == 1 and 'one unit takes one group' in log[0].message

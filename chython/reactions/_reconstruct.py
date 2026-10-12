@@ -199,7 +199,8 @@ def _settle(products: Sequence[MoleculeContainer], targets: list[dict[int, int]]
     for product in products:
         if any(_heavy(part) in targets for part in product.split()):
             product = product.copy()
-            product.canonicalize()
+            # the stored AND phase kept: a racemate's sign against the recorded one is the stereo walk's
+            product.canonicalize(stereo_groups=False)
         out.append(product)
     return out
 
@@ -288,7 +289,7 @@ def _strip(inputs) -> tuple[list[MoleculeContainer], dict[int, tuple[int, tuple[
             pool.append(molecule)
         else:
             for product in _translate(outcome.reaction, [molecule]):
-                product.canonicalize()
+                product.canonicalize(stereo_groups=False)      # as `_settle`, the AND phase kept
                 stripped[len(pool)] = (source, outcome.labels)
                 pool.append(product)
     return pool, stripped

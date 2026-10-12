@@ -27,8 +27,12 @@ ABS    the enantiomer: signs kept as drawn, and an explicit label is not the sam
 =====  ====================================================================================
 
 Only a mirror symmetry makes the inverted signs the same compound: a meso form under any kind, where the
-label states nothing and the molecule is the unlabelled one.
+label states nothing and the molecule is the unlabelled one. Two labellings stating one mixture are one
+compound and write one string.
 """
+import re
+from itertools import product
+
 from pytest import mark
 
 from chython.core._core import read_smiles as smiles
@@ -50,7 +54,7 @@ def one_inverted(text):
 #: (name, SMILES, members, meso).  Each has two centres except butan-2-ol.
 COMPOUNDS = [
     ('butan-2-ol', 'C[C@H](O)CC', '1', False),
-    ('ephedrine', 'C[C@H](NC)[C@@H](O)c1ccccc1', '1,4', False),
+    ('pseudoephedrine', 'C[C@H](NC)[C@@H](O)c1ccccc1', '1,4', False),
     ('trans-cyclohexane-1,2-diol', 'O[C@@H]1CCCC[C@H]1O', '1,6', False),
     ('cis-cyclohexane-1,2-diol', 'O[C@@H]1CCCC[C@@H]1O', '1,6', True),
     ('(2R*,4R*)-pentane-2,4-diol', 'C[C@H](O)C[C@@H](O)C', '1,4', False),
@@ -73,19 +77,21 @@ def test_inverting_every_member(kind, name, text, members, meso):
 @mark.parametrize('name, text, members, meso', TWO_CENTRES, ids=[c[0] for c in TWO_CENTRES])
 @mark.parametrize('kind', ['&1', 'o1', 'a'])
 def test_inverting_one_member_is_the_other_diastereomer(kind, name, text, members, meso):
-    """Ephedrine becomes pseudoephedrine, trans the cis diol, meso the racemic one: under every kind."""
+    """Pseudoephedrine becomes ephedrine, trans the cis diol, meso the racemic one: under every kind."""
     drawn = smiles(f'{text} |{kind}:{members}|')
     assert drawn != smiles(f'{one_inverted(text)} |{kind}:{members}|'), name
 
 
 @mark.parametrize('name, text, members, meso', COMPOUNDS, ids=[c[0] for c in COMPOUNDS])
 def test_the_three_kinds_and_no_label_are_four_identities(name, text, members, meso):
-    """A meso form's label states nothing: all four forms are the unlabelled molecule."""
+    """On a meso form the three kinds state one thing, the drawn diastereomer, as ABS does; unlabelled is
+    unknown, so it is a fourth identity.  On a chiral form all four differ."""
     forms = [smiles(text)] + [smiles(f'{text} |{kind}:{members}|') for kind in ('&1', 'o1', 'a')]
     for i, a in enumerate(forms):
         for b in forms[i + 1:]:
-            assert (a == b) is meso, (name, str(a), str(b))
-            assert (str(a) == str(b)) is meso, (name, str(a), str(b))
+            same = meso and i > 0
+            assert (a == b) is same, (name, str(a), str(b))
+            assert (str(a) == str(b)) is same, (name, str(a), str(b))
 
 
 def test_an_and_pair_and_an_or_pair_in_one_molecule():
@@ -101,7 +107,7 @@ def test_an_and_pair_and_an_or_pair_in_one_molecule():
 
 
 def test_one_group_per_kind_in_every_atom_order():
-    """Racemic ephedrine drawn from either end and from either enantiomer writes one string."""
+    """Racemic pseudoephedrine drawn from either end and from either enantiomer writes one string."""
     forward = smiles('C[C@H](NC)[C@@H](O)c1ccccc1 |&1:1,4|')
     backward = smiles('O[C@@H](c1ccccc1)[C@H](C)NC |&1:1,8|')
     enantiomer = smiles('O[C@H](c1ccccc1)[C@@H](C)NC |&1:1,8|')
@@ -118,3 +124,109 @@ def test_a_label_that_states_nothing_is_not_written(text, written):
     molecule = smiles(text)
     assert str(molecule) == written
     assert molecule == smiles(written)
+
+
+#: pentane-2,3,4-triol, centres at 1, 3 and 5
+TRIOL = 'C[C%sH](O)[C%sH](O)[C%sH](O)C'
+FLIP = {'@': '@@', '@@': '@'}
+
+
+def triol_orders(signs, tail):
+    """The triol with `signs` at C2, C3, C4 written forward and from the other end."""
+    swap = {'1': '5', '3': '3', '5': '1'}
+    backward = re.sub(r'(?<=[:,])\d+', lambda x: swap[x.group()], tail)
+    return f'{TRIOL % signs} {tail}', f'{TRIOL % tuple(FLIP[x] for x in reversed(signs))} {backward}'
+
+
+@mark.parametrize('signs', [('@', '@', '@'), ('@', '@@', '@')], ids=['meso-1', 'meso-2'])
+def test_four_labellings_of_one_meso_triol_mixture_write_one_string(signs):
+    """C2 and C4 as one AND pair give both meso forms: C3 in AND, in OR or in ABS, or the pair in ABS and C3
+    in AND, all state that mixture and write its least labelling, the pair alone -- its other phase turns
+    3r into 3s, so C3's sign states nothing."""
+    tails = ['|&1:1,5,&2:3|', '|&1:1,5,o1:3|', '|a:3,&1:1,5|', '|a:1,5,&1:3|']
+    forms = [smiles(t) for tail in tails for t in triol_orders(signs, tail)]
+    for m in forms:
+        assert m == forms[0] and hash(m) == hash(forms[0]) and str(m) == str(forms[0]), str(m)
+    assert str(forms[0]).endswith(' |&1:0,5|')
+
+
+def test_an_or_pair_is_not_two_or_centres():
+    """arabino-Pentane-2,3,4-triol, C2 absolute: C3 and C4 as one OR pair keep their relative
+    configuration, as two OR groups they do not."""
+    pair = [smiles(t) for t in triol_orders(('@@', '@', '@'), '|a:1,o1:3,5|')]
+    apart = [smiles(t) for t in triol_orders(('@@', '@', '@'), '|a:1,o1:3,o2:5|')]
+    assert pair[0] == pair[1] and str(pair[0]) == str(pair[1])
+    assert apart[0] == apart[1] and str(apart[0]) == str(apart[1])
+    assert pair[0] != apart[0] and str(pair[0]) != str(apart[0])
+
+
+# --- exhaustive: every labelling of every stereoisomer ------------------------------------------------------
+
+#: name: (template with one %s per centre, the centres' slots, meanings allowed more than one string)
+EXHAUSTIVE = {
+    'pentane-2,4-diol': ('C[C%sH](O)C[C%sH](O)C', (1, 4), 0),
+    'ephedrine and pseudoephedrine': ('C[C%sH](NC)[C%sH](O)c1ccccc1', (1, 4), 0),
+    'pentane-2,3,4-triol': ('C[C%sH](O)[C%sH](O)[C%sH](O)C', (1, 3, 5), 6),
+    'hexane-2,3,4,5-tetrol': ('C[C%sH](O)[C%sH](O)[C%sH](O)[C%sH](O)C', (1, 3, 5, 7), 63),
+}
+
+
+def labellings(n):
+    """Each centre in ABS, an AND group or an OR group; group ids numbered by first appearance per kind."""
+    out = set()
+    for raw in product(['a', '&1', '&2', '&3', '&4', 'o1', 'o2', 'o3', 'o4'], repeat=n):
+        names, lab = {}, []
+        for x in raw:
+            if x != 'a' and x not in names:
+                names[x] = x[0] + str(1 + sum(1 for y in names if y[0] == x[0]))
+            lab.append(names.get(x, x))
+        out.add(tuple(lab))
+    return sorted(out)
+
+
+def meaning(species, signs, lab):
+    """(the drawn world, every world).  A world fixes each OR group's phase and is the set of species over
+    the AND phases; the drawn world has every OR group as drawn, since an OR group keeps its sign."""
+    ands = sorted({x for x in lab if x[0] == '&'})
+    ors = sorted({x for x in lab if x[0] == 'o'})
+    worlds, drawn = set(), None
+    for op in product([0, 1], repeat=len(ors)):
+        world = set()
+        for ap in product([0, 1], repeat=len(ands)):
+            flip = {g for g, p in zip(ors, op) if p} | {g for g, p in zip(ands, ap) if p}
+            world.add(species(tuple(FLIP[x] if g in flip else x for x, g in zip(signs, lab))))
+        worlds.add(frozenset(world))
+        if not any(op):
+            drawn = frozenset(world)
+    return drawn, frozenset(worlds)
+
+
+@mark.parametrize('name', list(EXHAUSTIVE))
+def test_no_string_states_two_meanings(name):
+    """One string never names two mixtures and reads back to itself; at most `split` mixtures keep more than
+    one string, the labellings no relabelling move reaches."""
+    template, slots, split = EXHAUSTIVE[name]
+    cache = {}
+
+    def species(signs):
+        if signs not in cache:
+            cache[signs] = str(smiles(template % signs))
+        return cache[signs]
+
+    drawings = {}
+    for signs in product(['@', '@@'], repeat=len(slots)):
+        drawings.setdefault(species(signs), signs)
+    by_string, by_meaning = {}, {}
+    for signs in drawings.values():
+        for lab in labellings(len(slots)):
+            groups = {}
+            for slot, g in zip(slots, lab):
+                groups.setdefault(g, []).append(str(slot))
+            text = f"{template % signs} |{','.join(f'{g}:' + ','.join(v) for g, v in groups.items())}|"
+            written = str(smiles(text))
+            assert str(smiles(written)) == written, text
+            key = meaning(species, signs, lab)
+            by_string.setdefault(written, set()).add(key)
+            by_meaning.setdefault(key, set()).add(written)
+    assert [w for w, v in by_string.items() if len(v) > 1] == []
+    assert sum(1 for v in by_meaning.values() if len(v) > 1) <= split

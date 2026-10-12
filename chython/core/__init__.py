@@ -22,9 +22,8 @@ from ._core import (Atom, AutomorphismBudgetExceeded, Bond, MoleculeContainer, Q
                     STEREO_ABS, STEREO_AND, STEREO_OR, STEREO_UNSPECIFIED,
                     # the stereo-unit kinds, because `stereo_units()` reports `kind` as an
                     # integer and a consumer switching on it should not have to spell the
-                    # integer.  SU_HELICAL is reserved and never produced; it is here so that
-                    # "not this one" can be written as a name too.
-                    SU_TETRA, SU_CIS_TRANS, SU_ALLENE, SU_ATROPISOMER, SU_HELICAL,
+                    # integer.
+                    SU_TETRA, SU_CIS_TRANS, SU_ALLENE, SU_ATROPISOMER, SU_HELICAL, SU_PLANAR,
                     H_IMPLICIT_MAX, H_UNKNOWN, R_INDEX_MAX,
                     ich_load_library, inchi_library_loaded, inchi, inchikey,
                     molecule_to_inchi, molecule_to_inchikey, inchi_to_molecule,
@@ -102,7 +101,7 @@ __all__ = ['Atom', 'AutomorphismBudgetExceeded', 'Bond', 'Log', 'LogRecord', 're
            'MappingResult', 'ReactionContainer', 'ReactionModelingView',
            'WEDGE_DOWN', 'WEDGE_EITHER', 'WEDGE_NONE', 'WEDGE_UP',
            'STEREO_ABS', 'STEREO_AND', 'STEREO_OR', 'STEREO_UNSPECIFIED',
-           'SU_TETRA', 'SU_CIS_TRANS', 'SU_ALLENE', 'SU_ATROPISOMER', 'SU_HELICAL',
+           'SU_TETRA', 'SU_CIS_TRANS', 'SU_ALLENE', 'SU_ATROPISOMER', 'SU_HELICAL', 'SU_PLANAR',
            'H_IMPLICIT_MAX', 'H_UNKNOWN', 'R_INDEX_MAX',
            'ich_load_library', 'inchi_library_loaded', 'inchi', 'inchikey',
            'molecule_to_inchi', 'molecule_to_inchikey', 'inchi_to_molecule',

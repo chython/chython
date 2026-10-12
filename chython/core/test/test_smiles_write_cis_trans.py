@@ -438,7 +438,7 @@ def axial_in(m, a, b, odd=True):
 # named, the four are told apart by element in any string, and no automorphism can hide a frame error.
 TETRAHALOALLENE = ([(6, 0), (6, 0), (6, 0), (35, 0), (9, 0), (17, 0), (53, 0)],
                    [(0, 1, 2), (1, 2, 2), (0, 3, 1), (0, 4, 1), (2, 5, 1), (2, 6, 1)])
-# A five-carbon cumulene: axially chiral, named by the arena, and UNWRITABLE (see the refusal test).
+# A five-carbon cumulene: axially chiral, anchored and written at its middle atom like an allene.
 CUMULENE5 = ([(6, 1), (6, 0), (6, 0), (6, 0), (6, 1), (9, 0), (9, 0)],
              [(0, 1, 2), (1, 2, 2), (2, 3, 2), (3, 4, 2), (0, 5, 1), (4, 6, 1)])
 
@@ -609,23 +609,33 @@ def test_indigo_reads_our_axial_string_as_the_configuration_we_wrote():
     assert tags[True] != tags[False], tags
 
 
-def test_a_longer_odd_cumulene_is_reported_lost():
-    """SMILES HAS NO SYNTAX FOR A FIVE-CARBON AXIS, so this one is reported rather than written.
-
-    The arena names it the same way it names an allene -- odd chain, anchor at the centre -- and the
-    configuration is real.  But measured 2026-09-02, Indigo REFUSES `FC=C=[C@@]=C=CF` with "chirality
-    on atom 3 makes no sense", and a string a reader rejects is worse than a string that says less.
-    chython 2 writes the sign here; this is a deliberate divergence with a measurement behind it.
-    """
+def test_a_longer_odd_cumulene_writes_its_sign_on_the_centre():
+    """A five-carbon axis is written as OpenSMILES extended tetrahedral: `@` on the middle atom, over
+    the terminals' four directions, exactly as for an allene."""
     atoms, bonds = CUMULENE5
-    m, sids = build(atoms, bonds)
-    axial = [u['anchor'] for u in m.stereo_units() if u['kind'] == 2]
-    assert len(axial) == 1
-    m.set_parity(axial[0], 2)
-    assert smw_traversal(m)['lost'] == (axial[0],)
-    written = write_smiles(m)
-    assert '@' not in written, written
-    assert written == 'FC=C=C=C=CF'
+    written = {}
+    for parity in (1, 2):
+        m, sids = build(atoms, bonds)
+        axial = [u['anchor'] for u in m.stereo_units() if u['kind'] == 2]
+        assert len(axial) == 1
+        m.set_parity(axial[0], parity)
+        assert smw_traversal(m)['lost'] == ()
+        written[parity] = write_smiles(m)
+        assert '@' in written[parity], written[parity]
+        assert read_smiles(written[parity]) == m, written[parity]
+    assert written[1] != written[2]
+
+
+@mark.parametrize('text', ['C[CH]=C=[C@]=C=[CH]C', 'NC(Br)=C=[C@]=C=C(O)C', 'C1CCC[CH]=C=[C@]=C=[CH]CCC1'])
+def test_a_longer_odd_cumulene_round_trips_in_every_atom_order(text):
+    mol = read_smiles(text)
+    mirror = read_smiles(text.replace('@', '@@'))
+    assert mol != mirror, text
+    assert read_smiles(str(mol)) == mol, str(mol)
+    for _ in range(40):
+        spelling = format(mol, 'r')
+        assert '@' in spelling, spelling
+        assert read_smiles(spelling) == mol, (text, spelling)
 
 
 def test_an_axial_configuration_is_lost_without_the_bond_tokens():
@@ -650,7 +660,7 @@ def test_an_axial_parity_that_was_never_stated_is_not_a_loss():
 
     The ORDER is still reported, and that is the deliberate asymmetry: `directions` says which four
     directions an `@` on this atom would be read against, which is a fact about the axis and not about
-    the parity.  So an absent entry means the writer REFUSED the axis (the cumulene above) while an
+    the parity.  So an absent entry means the writer REFUSED the axis while an
     entry with no `@` in the string means the molecule never said which enantiomer it was -- two
     different situations that would be indistinguishable if the order were withheld too.
     """
@@ -973,3 +983,15 @@ def test_the_writers_own_respelling_does_not_move_the_geometry():
     a, b = read_smiles('F/C=C\\F'), read_smiles('C(/F)=C/F')
     assert molecule_to_inchi(a) == molecule_to_inchi(b)
     assert write_smiles(a) == write_smiles(b) == 'C(/F)=C/F'
+
+
+@mark.parametrize('text', ['O=c1[nH]c(=O)s\\c1=C/c1ccccc1', 'O=c1[nH]c(=O)s/c1=C/c1ccccc1'])
+def test_an_exocyclic_double_bond_on_an_aromatic_ring_keeps_its_geometry(text):
+    """5-Benzylidene-2,4-thiazolidinedione drawn aromatic: the ring end's references are aromatic bonds, whose
+    token is empty between lowercase atoms, so the `/` is written on them and nothing is lost."""
+    m = read_smiles(text)
+    assert smw_traversal(m)['lost'] == ()
+    back = read_smiles(str(m))
+    assert back == m and str(back) == str(m)
+    mirror = read_smiles(text.replace('=C/', '=C\\'))
+    assert mirror != m

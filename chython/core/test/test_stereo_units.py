@@ -20,7 +20,7 @@ import re
 
 import pytest
 
-from chython.core import MoleculeContainer, _core
+from chython.core import MoleculeContainer, _core, read_smiles
 
 _SYMBOL = re.compile(r'[A-Z][a-z]?')
 
@@ -241,9 +241,12 @@ def test_trimethylamine_lone_pair_does_not_count():
     assert m.stereo_units() == []
 
 
-def test_trimethylphosphine_lone_pair_does_not_count():
+def test_trimethylphosphine_lone_pair_counts_and_symmetry_refuses_it():
+    # the pair is the fourth direction, so the phosphorus is a candidate; three methyls are not a centre
     m, sids = _mol(atoms='PCCC', bonds=[(0, 1, 1), (0, 2, 1), (0, 3, 1)])
-    assert m.stereo_units() == []
+    units = m.stereo_units()
+    assert [(u['kind'], u['anchor'], u['stereogenic']) for u in units] == [(0, sids[0], False)]
+    assert units[0]['refs'][3] is None
 
 
 def test_symmetric_sulfone_is_not_a_candidate():
@@ -1190,3 +1193,15 @@ def test_a_cumulene_interior_with_a_third_neighbour_is_refused():
     m, sids = _mol(atoms='CCCCCC', hydrogens=[3, 1, 0, 1, 3, 3],
                    bonds=[(0, 1, 1), (1, 2, 2), (2, 3, 2), (3, 4, 1), (2, 5, 1)])
     assert all(u['kind'] != 2 for u in m.stereo_units())
+
+
+@pytest.mark.parametrize('text', ['Cc1cccc(O)c1c1c(C)cccc1O', 'Cc1cccc(O)c1-c1c(C)cccc1O', 'Cc1cccc(O)c1:c1c(C)cccc1O'])
+def test_a_biaryl_axis_is_the_same_axis_however_the_bond_is_spelled(text):
+    """6,6'-Dimethylbiphenyl-2,2'-diol, CID 11276446: OpenSMILES reads the implicit bond between two aromatic
+    atoms as aromatic, and outside every ring an aromatic bond is a single bond, so the axis is perceived."""
+    [axis] = [u for u in read_smiles(text).stereo_units() if u['kind'] == 3]
+    assert axis['stereogenic']
+
+
+def test_biphenyl_has_no_axis_however_the_bond_is_spelled():
+    assert not [u for u in read_smiles('c1ccccc1c1ccccc1').stereo_units() if u['kind'] == 3]

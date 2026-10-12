@@ -58,6 +58,7 @@ def molecule_scene(mol, *, style: DepictStyle | None = None, plane=None, overlay
         style = get_depict_style()
     if plane is None:
         plane = _plane_for(mol, log)
+    plane = _bridge_perspective(mol, plane)
     under, over = _molecule_nodes(mol, plane, style, log, overlays)
 
     # The colorbar comes after the content box is known: its position is derived from the content bounds.
@@ -166,6 +167,51 @@ def _plane_for(mol, log) -> dict[int, tuple[float, float]]:
                              'this molecule carried no 2D layout, so one was computed for this drawing '
                              'only and NOT stored; call clean2d() for a layout that is kept'))
     return plane
+
+
+#: ``cos(165 degrees)``: two ring bonds at a bridgehead closer to a straight line than this make a T with the
+#: bridge as its stem, on which no wedge states a sign.
+_STRAIGHT_COS = -0.966
+#: How far a T-shaped bridgehead is drawn toward its bridge atom, as a fraction of the bond.
+_BRIDGE_PULL = 0.3
+
+
+def _bridge_perspective(mol, plane) -> dict[int, tuple[float, float]]:
+    """`plane` with each T-shaped bridgehead of a bicycle drawn toward the one-atom bridge it shares.
+
+    A bridgehead whose two ring bonds are drawn in one straight line, its bridge the stem of the T, has no
+    bond a wedge can state its sign on that also shows the cage: with the hydrogen implicit, the stem is
+    flat.  Pulled toward the bridge, the T becomes a Y -- the perspective drawing of a bicycle -- and both
+    bridgeheads wedge to the bridge, which is how a reader sees the cage.  The drawing alone moves; the
+    molecule's stored coordinates are not touched.
+    """
+    implied = mol.implied_parities()
+    units = {u['anchor']: u for u in mol.stereo_units()
+             if u['coupled'] and (mol.parity_of(u['anchor']) or u['anchor'] in implied)}
+    if not units:
+        return plane
+    moved = dict(plane)
+    seen = set()
+    for anchor in sorted(units):
+        members = tuple(sorted((anchor, *(x for x in units[anchor]['coupled'] if x in units))))
+        if len(members) < 2 or members in seen:
+            continue
+        seen.add(members)
+        bridges = set.intersection(*(set(mol.neighbors_of(a)) for a in members)) - set(members)
+        if not bridges:
+            continue
+        b = min(bridges, key=lambda x: (mol.degree_of(x), x))
+        bx, by = plane[b]
+        for h in members:
+            others = [n for n in mol.neighbors_of(h) if n != b]
+            if len(others) != 2:
+                continue
+            hx, hy = plane[h]
+            (ux, uy), (vx, vy) = ((plane[n][0] - hx, plane[n][1] - hy) for n in others)
+            norm = sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy))
+            if norm and (ux * vx + uy * vy) / norm < _STRAIGHT_COS:
+                moved[h] = (hx + _BRIDGE_PULL * (bx - hx), hy + _BRIDGE_PULL * (by - hy))
+    return moved
 
 
 def _molecule_nodes(mol, plane, style: DepictStyle, log, overlays=()) -> tuple[list, list]:

@@ -19,9 +19,9 @@
 """`canonicalize()` -- the pre-pass that makes `canonical_bytes` a compound identity rather than a
 drawing identity, so equal compounds hash equal and a corpus deduplicates by hash.  The stage order
 is a correctness constraint, not taste: `kekule()`, `validate_stereo()`, `standardize()`,
-`implicify_hydrogens()`, `neutralize()`, `standardize_kekule()`, `thiele()`, `standardize_isomers()`, and
-`kekule()` again only under `keep_kekule=True`.  Each ordering pair is justified at its numbered step
-below.
+`implicify_hydrogens()`, `neutralize()`, `standardize_kekule()`, `thiele()`, `standardize_isomers()`,
+`kekule()` again only under `keep_kekule=True`, and `canonicalize_stereo_groups()`.  Each ordering pair
+is justified at its numbered step below.
 
 The order alone is not enough, because the last stage can unblock the third one: a `tautomer` row
 wanting a free ring nitrogen cannot fire while the mobile hydrogen sits on it, and the placement is
@@ -86,7 +86,8 @@ def _pin_lactim(molecule: MoleculeContainer) -> bool:
 
 
 def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
-                 keep_kekule: bool = False) -> bool:
+                 keep_kekule: bool = False, stereo_groups: bool = True,
+                 recover_racemate: bool = False) -> bool:
     """Bring `molecule` to the representation two drawings of one compound share.  Did it change?
 
     Run before deduplicating by `canonical_bytes`, `__hash__` or `__eq__`, which otherwise answer "same
@@ -98,7 +99,10 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     (`Oc1ccccn1` and `O=c1cccc[nH]1` stop hashing equal); it deliberately does not reach
     `standardize_isomers()`, which picks between two valid annular forms rather than repairing one.
     `keep_kekule=True` costs a second kekulisation rather than a skipped `thiele()`, the placement stage
-    needing the aromatic form.
+    needing the aromatic form.  `stereo_groups=False` skips step 11 and keeps the stored collection
+    labels and AND phases, which a reaction needs for a collection joined across its arrow.
+    `recover_racemate` is forwarded to `validate_stereo()`: a bridgehead pair no bicycle realises is then
+    read as the racemate instead of cleared.
 
     CHARGES ARE PAIRED OFF, not preserved atom by atom: glycine's zwitterion and its neutral drawing
     share a key, because step 5 runs `neutralize()`.  `neutralize()` leaves the NET charge untouched, so
@@ -141,8 +145,9 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     #    `canonical_bytes` whether or not the unit is stereogenic -- so the two bond-shift drawings of
     #    1,2-dimethylcyclooctatetraene keep two keys until it is gone.  The report is not recorded: the
     #    parities it names are the reader's own input and `validate_stereo()` returns them to a caller
-    #    that wants them.
-    molecule.validate_stereo()
+    #    that wants them.  A coupled bridgehead set signed as no bicycle is built is cleared, or with
+    #    `recover_racemate` read as the racemate its drawer most likely meant.
+    molecule.validate_stereo(recover_racemate=recover_racemate)
 
     # 3. Repair the drawing.
     standardize(molecule, fix_tautomers=fix_tautomers)
@@ -228,4 +233,9 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     if keep_kekule:
         molecule.kekule(canonical=True)
 
-    return molecule.canonical_bytes != before
+    # 11. Store the collections the canonical SMILES states: dead labels dropped, canonical ids, each AND
+    #     collection in its canonical phase.  Last, because every stage above can move a parity or a
+    #     unit.  `canonical_bytes` does not see it, so its answer is ORed in.
+    grouped = stereo_groups and molecule.canonicalize_stereo_groups()
+
+    return molecule.canonical_bytes != before or grouped

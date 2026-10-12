@@ -179,8 +179,8 @@ def test_the_merged_table_is_the_size_the_record_says():
     each gated by a test of its own.
     """
     absorbed = sum(len(members) - 1 for members in gen.MERGES.values())
-    assert len(GROUPS) + len(METALS) == 116 - absorbed - len(gen.DELETED) + len(gen.ADDED) == 104
-    assert len(GROUPS) == 85
+    assert len(GROUPS) + len(METALS) == 116 - absorbed - len(gen.DELETED) + len(gen.ADDED) == 105
+    assert len(GROUPS) == 86
     assert len(METALS) == 19
     assert set(gen.ADDED) <= {rule.id for rule in GROUPS}, (
         'a row `ADDED` names is not in the table; the record is of rows that were added, so a removal '

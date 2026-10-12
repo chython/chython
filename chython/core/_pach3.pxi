@@ -283,6 +283,8 @@ cdef int _pach3_stereo_record(MoleculeContainer mol, Structure structure, stereo
         kind 1 SU_CIS_TRANS     end A   a0      end B   b0
         kind 2 SU_ALLENE        end A   a0      end B   b0     (the chain centre is not stored)
         kind 3 SU_ATROPISOMER   pivot A oA0     pivot B oB0
+        kind 4 SU_HELICAL       fjord A iA0     fjord B iB0
+        kind 5 SU_PLANAR        anchor  r0      anchor  r2     (one owner, stated twice)
 
     A slot is an ATOM INDEX in the record's own atom block, which is arena slot order.  A
     configuration states the owner of each direction list and all but one of its directions; the last
@@ -361,6 +363,9 @@ cdef int _pach3_stereo_record(MoleculeContainer mol, Structure structure, stereo
             else:
                 owner_a = terms[1]
                 owner_b = terms[0]
+        elif kind == SU_PLANAR:
+            owner_a = anchor
+            owner_b = anchor
         else:
             owner_a = anchor
             owner_b = stereo_unit_partner(structure, u)
@@ -912,10 +917,10 @@ cdef int _pach3_apply_stereo(MoleculeContainer mol, const unsigned char *data, P
                             'configuration was dropped'
                             % (k, max(max(slot0, slot1), max(slot2, slot3)), n))
             continue
-        if kind > SU_ATROPISOMER:
-            problems.append('stereo record %d states kind %d and pach has four, 0 tetrahedral, 1 '
-                            'cis/trans, 2 allene and 3 atropisomer; the configuration was dropped'
-                            % (k, kind))
+        if kind > SU_PLANAR:
+            problems.append('stereo record %d states kind %d and pach has six, 0 tetrahedral, 1 '
+                            'cis/trans, 2 allene, 3 atropisomer, 4 helical and 5 planar; the '
+                            'configuration was dropped' % (k, kind))
             continue
         base_a = 0
         if kind == SU_TETRA:
@@ -928,6 +933,10 @@ cdef int _pach3_apply_stereo(MoleculeContainer mol, const unsigned char *data, P
             # adjacency cross-check: one CSR lookup per end and no chain walk.
             if u is not NULL and (csr_find_at(ptr, edges, slot0, slot1) is NULL
                                   or csr_find_at(ptr, edges, slot2, slot3) is NULL):
+                u = NULL
+        elif kind == SU_PLANAR:
+            u = stereo_unit_of(structure, slot0)
+            if u is not NULL and (u.kind != SU_PLANAR or slot2 != slot0):
                 u = NULL
         else:
             # Ruling F45 relocates an axis' anchor to the other pivot, so the unit is looked for at

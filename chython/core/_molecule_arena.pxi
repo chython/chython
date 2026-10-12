@@ -1721,6 +1721,48 @@ cdef Structure structure_with_parity(Structure src):
     return out
 
 
+cdef Structure structure_with_stereo_groups(Structure src):
+    """`src`'s persistent block, byte for byte, plus an EMPTY stereo-group segment.
+
+    For one caller: a labelling search whose result states a collection on a molecule stored with
+    none.  Every payload is carried, S-groups and parities included.  Derived segments are not
+    copied; the caller runs `rebuild_derived`.
+    """
+    cdef uint32_t seg_mask = SEG_MASK_STEREO
+    cdef uint32_t sg_var[3]
+    cdef uint32_t *var_len = NULL
+    if structure_has(src, SEG_XY):
+        seg_mask |= SEG_MASK_XY
+    if structure_has(src, SEG_PARITY):
+        seg_mask |= SEG_MASK_PARITY
+    if structure_has(src, SEG_OPAQUE_BLOB):
+        structure_sgroup_var_len(src, sg_var)
+        var_len = sg_var
+    cdef uint32_t conf_models = structure_conformer_count(src)
+    cdef Structure out = structure_alloc_full(src.header.atom_count, src.header.bond_count,
+                                              (src.header.flags & FLAG_WIDE_INDEX) != 0,
+                                              seg_mask, var_len, conf_models)
+    out.header.flags = src.header.flags
+    memcpy(out.atoms(), src.atoms(), structure_seg_len(out, SEG_ATOMS))
+    memcpy(csr_ptr(out), csr_ptr(src), structure_seg_len(out, SEG_CSR_PTR))
+    memcpy(csr_edges(out), csr_edges(src), structure_seg_len(out, SEG_CSR_EDGE))
+    if seg_mask & SEG_MASK_XY:
+        memcpy(structure_xy(out), structure_xy(src), structure_seg_len(out, SEG_XY))
+    if seg_mask & SEG_MASK_PARITY:
+        memcpy(structure_parities(out), structure_parities(src), structure_seg_len(out, SEG_PARITY))
+    if var_len is not NULL:
+        memcpy(out.segment(SEG_SGROUP_RECORD), src.segment(SEG_SGROUP_RECORD),
+               structure_seg_len(out, SEG_SGROUP_RECORD))
+        memcpy(out.segment(SEG_SGROUP_INDEX), src.segment(SEG_SGROUP_INDEX),
+               structure_seg_len(out, SEG_SGROUP_INDEX))
+        memcpy(structure_blob(out), structure_blob(src), structure_seg_len(out, SEG_OPAQUE_BLOB))
+    if conf_models:
+        memcpy(out.segment(SEG_CONFORMERS), src.segment(SEG_CONFORMERS),
+               structure_seg_len(out, SEG_CONFORMERS))
+    out.aromatic_bond_count = src.aromatic_bond_count
+    return out
+
+
 cdef Structure structure_migrate_conformers(Structure src):
     """`src`'s payload with SEG_CONFORMERS re-laid at this build's record width.
 

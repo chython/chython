@@ -757,19 +757,19 @@ other parity -- a cis/trans unit is two-state in exactly the same sense.
     vinyl = smiles('C/C=C/Br')
     vinyl.canonicalize()
 
-    for smirks in ('[C;z2:1][Br;D1]>>[C:1][O;D1;h1:2]',        # silent: dropped
-                   '[C;z2:1][Br;D1]>>[C@~:1][O;D1;h1:2]'):     # the other geometry
+    for smirks in ('[C;z2:1][Br;D1]>>[C:1][Cl;D1:2]',        # silent: dropped
+                   '[C;z2:1][Br;D1]>>[C@~:1][Cl;D1:2]'):     # the other geometry
         print(next(iter(read_smirks(smirks)(vinyl))).products[0])
 
-    out = next(iter(read_smirks('[C;z2:1][Br;D1]>>[C@=:1][O;D1;h1:2]')(vinyl)))
+    out = next(iter(read_smirks('[C;z2:1][Br;D1]>>[C@=:1][Cl;D1:2]')(vinyl)))
     print(out.products[0])
     svg = out.depict()
 
 .. testoutput::
 
-    CC=CO
-    C/C=C\O
-    C/C=C/O
+    CC=CCl
+    C/C=C\Cl
+    C/C=C/Cl
 
 .. figure:: images/smirks-stereo-keep-alkene.svg
    :width: 440px
@@ -891,14 +891,14 @@ of the bond names it:
 .. testcode::
 
     print(format(next(iter(read_smirks('[C:1]=[C;z2:2][Br;D1]'
-                                       '>>[C:1]=[C;&1:2][O;D1;h1:3]')(vinyl))).products[0], 'x'))
+                                       '>>[C:1]=[C;&1:2][Cl;D1:3]')(vinyl))).products[0], 'x'))
     print(format(next(iter(read_smirks('[C:1]=[C;z2:2][Br;D1]'
-                                       '>>[C;&1:1]=[C:2][O;D1;h1:3]')(vinyl))).products[0], 'x'))
+                                       '>>[C;&1:1]=[C:2][Cl;D1:3]')(vinyl))).products[0], 'x'))
 
 .. testoutput::
 
-    C/C=C/O |&1:2|
-    C/C=C/O |&1:2|
+    C/C=C/Cl |&1:2|
+    C/C=C/Cl |&1:2|
 
 The group is stored at the unit's **anchor** whichever terminal the template named, since a parity and a
 group are one statement about one unit; the tail then names the axis by an owner of its own choosing.

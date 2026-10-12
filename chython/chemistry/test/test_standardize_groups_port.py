@@ -341,7 +341,7 @@ def test_a_general_rule_takes_over_when_the_tautomer_rule_is_withheld(raw):
 
 
 def test_which_rules_the_gate_reaches():
-    """92 of the 116 rules fire somewhere in here, and the 24 that do not are named in `UNREACHED`.
+    """92 of the 117 rules fire somewhere in here, and the 25 that do not are named in `UNREACHED`.
 
     22 of them are the metal table, which V2 never tested.  The other two are group rules: `groups:44`
     (pyrylium dearomatization) has no case, and `groups:50`'s own documented example is taken by

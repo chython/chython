@@ -66,7 +66,8 @@ def test_the_wedge_and_the_bond_stereo_give_the_same_configuration(data):
     cml, cml_log = _cml(data('cml_stereo.cml'))
     assert write_smiles(mdl) == write_smiles(cml)
     assert _parities(mdl) == _parities(cml)
-    assert mdl_log == [] and cml_log == [], (mdl_log, cml_log)
+    # the molfile's chiral flag 1 is named on read; CML has no such flag
+    assert [r.rule for r in mdl_log] == ['ctab:chiral-flag-ignored'] and cml_log == [], (mdl_log, cml_log)
 
 
 def test_the_configuration_is_actually_there(data):

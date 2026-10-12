@@ -465,6 +465,26 @@ table                      ids        is
    ``groups:12`` on nitrobenzene. Both drawings are accepted input; the charge-separated one is the
    single form the rest of the library then matches against.
 
+A nitrogen left with four bonds and no charge has no hydrogen count a reader can derive, so it is stored
+unknown and written ``[N]``; ``standardize()`` gives it the charge its bonds imply. A nitro spelled with a
+hydroxyl, an azide drawn uncharged and a diazonium drawn neutral:
+
+.. testcode::
+
+    for text in ('ON(=O)c1ccccc1', 'c1ccccc1N=N=N', 'c1ccccc1N#N'):
+        mol = smiles(text)
+        print(mol, '->', end=' ')
+        mol.standardize()
+        print(mol, [r.rule for r in mol.log if r.rule.startswith('groups')])
+
+.. testoutput::
+
+    c1c([N](O)=O)cccc1 -> c1c([N+]([O-])=O)cccc1 ['groups:82']
+    c1ccccc1N=[N]=N -> c1cc(ccc1)N=[N+]=[N-] ['groups:23']
+    c1(ccccc1)[N]#N -> c1(ccccc1)[N+]#N ['groups:85']
+
+The diazonium gains a net charge: its counterion is not in the record, and none is invented.
+
 Both tables log ``INFO``: the group was drawn in one of its accepted forms and is now in the chosen one.
 A ``metals`` row installs the **dative bond** (order 8) that records coordination, which is
 exactly the bond ``split_salts()`` reads as its exemption signal — so the two passes compose, the second
@@ -835,6 +855,39 @@ ring, so requiring the aromatic form would put the whole lactam family out of re
         ma.standardize_isomers()
         mb.standardize_isomers()
         assert ma.canonical_bytes == mb.canonical_bytes, (a, b)
+
+A ring amidine or guanidine is decided by the ring it sits in:
+
+=========================================  ==================================================  ======================
+Ring                                       Placement                                           Instance
+=========================================  ==================================================  ======================
+conjugated: a C=C or an aromatic bond      the amino form; an exocyclic imine hands its        cytosine,
+                                           hydrogen back to a ring N-H, logged INFO            2-aminopyridine
+                                           ``isomers:exocyclic-imine``, and the ring path
+                                           places the rest
+no C=C                                     the amidine path: an N-H beside a C=O keeps its     creatinine
+                                           hydrogen, the canonical ranks place the rest
+=========================================  ==================================================  ======================
+
+.. testcode::
+
+    from chython import canonicalize
+
+    for name, drawings in [('cytosine', ['Nc1cc[nH]c(=O)n1', 'N=c1cc[nH]c(=O)[nH]1']),
+                           ('2-aminopyridine', ['Nc1ccccn1', 'N=C1C=CC=CN1']),
+                           ('creatinine', ['CN1CC(=O)N=C1N', 'CN1CC(=O)NC1=N'])]:
+        forms = set()
+        for text in drawings:
+            m = smiles(text)
+            canonicalize(m)
+            forms.add(str(m))
+        print(name, *forms)
+
+.. testoutput::
+
+    cytosine O=C1NC=CC(N)=N1
+    2-aminopyridine c1cccnc1N
+    creatinine C1(NC(=N)N(C)C1)=O
 
 A charge is as mobile as a hydrogen and moves the same way, both signs and on all three shapes: which
 nitrogen of a guanidinium carries the ``+``, or which one of a deprotonated guanidine carries the

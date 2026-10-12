@@ -26,7 +26,7 @@ Nothing here normalises: a configuration the foreign tool has no form for is rep
 """
 from collections.abc import Sequence
 from typing import NamedTuple
-from ..core import SU_ALLENE, SU_ATROPISOMER, SU_CIS_TRANS, SU_HELICAL, SU_TETRA
+from ..core import SU_ALLENE, SU_ATROPISOMER, SU_CIS_TRANS, SU_HELICAL, SU_PLANAR, SU_TETRA
 
 
 #: Every stereo-unit kind the core can emit, with a name fit for a log line.  Keyed off
@@ -38,6 +38,7 @@ KIND_NAMES = {
     SU_ALLENE: 'allene/cumulene',
     SU_ATROPISOMER: 'atropisomer',
     SU_HELICAL: 'helical',
+    SU_PLANAR: 'planar',
 }
 
 

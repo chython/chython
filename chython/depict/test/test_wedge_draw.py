@@ -1047,3 +1047,39 @@ def test_a_centre_with_two_stored_wedges_has_both_dropped_when_they_misstate_the
         f'BOTH stored pairs of anchor {anchor} must be dropped; still present: {remaining}'
     assert any(r.rule == 'depict:rewedged' and anchor in r.atoms for r in log), \
         f'the drop must be logged'
+
+
+@mark.parametrize('text', ['C[C@H](O)CC |&1:1|', 'C[C@@H](O)CC |&1:1|',
+                           'C[C@@H](NC)[C@H](O)c1ccccc1 |&1:1,4|'])
+def test_a_canonical_and_phase_is_drawn_with_its_stored_wedges(text):
+    """``canonicalize_stereo_groups()`` inverts the stored wedges with the collection, so none is rewedged"""
+    from chython.formats import mol as mol_io
+    mol = smiles(text)
+    mol.clean2d()
+    mol = mol_io(mol_io(mol))
+    assert mol.wedges(), 'premise: the wedges are stored ones'
+    mol.canonicalize_stereo_groups()
+    log = []
+    mol.depict(log=log)
+    assert not [r for r in log if r.rule == 'depict:rewedged'], log
+
+
+def test_a_t_shaped_bridgehead_is_drawn_toward_its_bridge_and_wedged_to_it():
+    """Cytisine, CID 10235, drawn with each bridgehead on the straight line between its ring neighbours: the
+    bridge is the stem of a T and no wedge on it states a sign.  The drawing pulls the bridgeheads toward the
+    bridge, and both are then wedged to it, which is how the cage reads."""
+    from chython.depict.figure import _bridge_perspective
+    from chython.depict.layout.molecule import layout2d
+
+    m = smiles('O=C1C=CC=C2N1C[C@@H]1CNC[C@H]2C1')
+    m.clean2d()
+    plane = dict(layout2d(m))
+    for h in (9, 13):
+        a, b = (n for n in m.neighbors_of(h) if n != 14)
+        plane[h] = ((plane[a][0] + plane[b][0]) / 2, (plane[a][1] + plane[b][1]) / 2)
+    flat, _ = wedges_for_write(m, plane=plane)
+    assert not [w for n, w, _ in flat if n in (9, 13) and w == 14]
+    drawn = _bridge_perspective(m, plane)
+    assert drawn[9] != plane[9] and drawn[13] != plane[13] and drawn[14] == plane[14]
+    wedges, _ = wedges_for_write(m, plane=drawn)
+    assert {(n, w) for n, w, _ in wedges if n in (9, 13)} == {(9, 14), (13, 14)}
