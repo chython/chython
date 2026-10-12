@@ -500,21 +500,21 @@ def _amidation(extra=()):
 
 
 def _pools(reaction):
-    """The label, and how many pools of inputs the walk offered the corpus to earn it."""
+    """The label, and how many times the walk applied a row to a pool of inputs to earn it."""
     from .. import _reconstruct
 
     offered = []
-    kept = _reconstruct._fitting
+    kept = _reconstruct._outcomes
 
-    def counting(molecules, *args, **kwargs):
+    def counting(rule, molecules):
         offered.append(len(molecules))
-        return kept(molecules, *args, **kwargs)
+        return kept(rule, molecules)
 
-    _reconstruct._fitting = counting
+    _reconstruct._outcomes = counting
     try:
         return reaction.reconstruct_mapping(), len(offered)
     finally:
-        _reconstruct._fitting = kept
+        _reconstruct._outcomes = kept
 
 
 def _mapping(reaction):
@@ -531,14 +531,57 @@ def test_inert_inputs_do_not_change_the_answer():
 
 
 def test_inert_inputs_do_not_multiply_the_work():
-    # `_applications` walks the subsets of the inputs A ROW COULD REACH, so the six inert reagents cost
-    # nothing: 3 pools either way.  Walking every subset instead costs `C(n, 1..4)`, measured at 162 on
-    # this record -- and a record may file more reagents than six.
+    # A pool is one molecule per slot, drawn from the inputs carrying that slot's group, so the six inert
+    # reagents are in no pool and cost nothing.
     plain_label, plain = _pools(_amidation())
     padded_label, padded = _pools(_amidation(_UNREACHABLE))
     assert plain_label == padded_label == ('react:amidation',)
-    assert plain == 3
     assert padded == plain, 'an input no row can reach must not be enumerated'
+
+
+def test_a_plate_record_offers_each_row_one_pool_per_slot_choice():
+    # One acid and a plate of ten amines, of which one reacted.  A pool is one molecule per slot, so the
+    # acid-amine row is offered ten pools and the amine-amine urea row `C(10, 2)` pairs plus ten
+    # symmetric ureas, each amine in excess.  Every subset of up to four inputs is `n**4/24` pools, which
+    # on a 76-input record does not finish.
+    from .. import _reconstruct
+
+    offered = Counter()
+    kept = _reconstruct._outcomes
+
+    def counting(rule, molecules):
+        offered[rule.id] += 1
+        assert len(molecules) <= len(rule.groups)
+        return kept(rule, molecules)
+
+    amines = [smiles('C' * k + 'N') for k in range(2, 12)]
+    rxn = ReactionContainer([smiles('CC(=O)O'), *amines], [smiles('CC(=O)NCC')])
+    _reconstruct._outcomes = counting
+    try:
+        assert rxn.reconstruct_mapping() == ('react:amidation',)
+    finally:
+        _reconstruct._outcomes = kept
+    assert offered['reactions:1'] == 10          # carboxylic_acid, primary_amine
+    assert offered['reactions:182'] == 55        # primary_amine, primary_amine
+
+
+def test_a_reagent_filed_once_fills_two_slots_as_an_excess():
+    # The ester takes two methyls from one recorded MeMgBr: the first keeps the reagent's numbers, the
+    # second equivalent is not in the record, so its carbon is left at 0 and the mapping stays 1-1.
+    rxn = smiles('COC(=O)c1ccccc1.C[Mg]Br>>CC(C)(O)c1ccccc1')
+    assert rxn.reconstruct_mapping() == ('react:grignard',)
+    assert [r.rule for r in rxn.log if r.rule == 'reconstruct:excess'] == ['reconstruct:excess']
+    product = rxn.products[0]
+    numbers = [product.map_number_of(n) for n in product.atom_numbers]
+    assert numbers.count(0) == 1
+    assert len(set(numbers) - {0}) == len(numbers) - 1
+
+
+def test_two_groups_on_one_input_are_one_molecule_not_two():
+    # An amino acid fills an acid slot and an amine slot; that is never read as two molecules, so its
+    # head-to-tail dimer is not an amidation of the monomer.
+    rxn = smiles('NCC(=O)O>>NCC(=O)NCC(=O)O')
+    assert rxn.reconstruct_mapping() == ()
 
 
 def test_the_composed_rung_only_walks_what_the_stripping_reached():

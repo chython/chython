@@ -270,7 +270,10 @@ _DELIBERATE_DELETIONS = {
     'n_acylation': {3},
     'sulfonamide_formation': {4},        # the sulfonic acid hydroxyl O, activated and displaced
     'hydrazide_formation': {3},
-    'acid_chlorination': {3},            # the carboxylic acid hydroxyl O, replaced by Cl
+    'acid_chlorination': {1, 3},         # the acid hydroxyl O (:3) or the carboxylate O- (:1), replaced by Cl
+    'deaminative_coupling': {1},         # the amine nitrogen, lost as the C-N bond becomes C-C
+    'deaminative_bromination': {1},      # the amine nitrogen, replaced by Br
+    'deoxychlorination': {1},            # the hydroxyl O, replaced by Cl
     'acid_to_alcohol': {3},              # the carboxylic acid hydroxyl O, released as water
     'deoxygenative_coupling': {1},       # the alcohol oxygen, the whole point of the coupling
     'decarboxylative_coupling': {1, 2, 3},  # the carboxyl carbon and its oxygen, leaving as CO2 -- which
@@ -282,6 +285,7 @@ _DELIBERATE_DELETIONS = {
     'knoevenagel': {1},                  # the carbonyl oxygen, leaving as water
     'hwe': {1},                          # the carbonyl oxygen, leaving on the phosphorus
     'wittig': {1},
+    'julia_kocienski': {1},              # the carbonyl oxygen, leaving on the sulfinate
     'ugi_4cr': {1, 3},                   # the aldehyde oxygen and the acid hydroxyl, both as water
     # A ring former condenses out every oxygen the new ring does not need.  The acid keeps neither of its
     # two, the 1,4-diketone neither of its two, and the oxadiazole's ring O comes from the hydrazide.

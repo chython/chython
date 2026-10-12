@@ -16,7 +16,8 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""`mol.react()`, `mol @ mol`, `mol.functional_groups()`, `mol.protective_groups()`, `mol.deprotect()`.
+"""`mol.react()`, `mol @ mol`, `mol.retro()`, `mol.functional_groups()`, `mol.protective_groups()`,
+`mol.deprotect()`.
 
 This file decides only WHICH templates to try; applying one is the core's `template(*molecules)`.  Every
 input goes to the matcher at once, so argument order cannot matter and a mixture handed in as one
@@ -28,13 +29,14 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from itertools import chain, combinations, product as cartesian
 from typing import NamedTuple
 from ._tables import (PROTECTS_ELEMENTS, ProtectiveGroup, ReactionRule,
-                      functional_rules as _group_table, protective_rules, reaction_rules)
+                      functional_rules as _group_table, protective_rules, reaction_rules, retro_templates)
 from ..core import MoleculeContainer, ReactionContainer, ReactionTemplate
+from ..core._core import valence_report
 
 
 __all__ = ['EnumeratedDeprotection', 'EnumeratedReaction', 'GroupHit', 'deprotect',
            'functional_group_hits', 'functional_groups', 'protective_group_hits', 'protective_groups',
-           'react']
+           'react', 'retro']
 
 
 class EnumeratedReaction(NamedTuple):
@@ -206,6 +208,146 @@ def react(molecule: MoleculeContainer, others=(), reaction: str | None = None
     `reaction` selects rows by chemical name; an unknown one raises.
     """
     return _run((molecule, *others), reaction_rules(), reaction)
+
+
+# --- retrosynthesis -------------------------------------------------------------------------------
+
+def _normalized(molecule: MoleculeContainer) -> MoleculeContainer:
+    """A copy in the one state `retro()` compares in: hydrogens implicit, kekulized, then aromatized."""
+    copy = molecule.copy()
+    copy.implicify_hydrogens()
+    copy.kekule()
+    copy.thiele()
+    return copy
+
+
+def _flat(molecule: MoleculeContainer) -> MoleculeContainer:
+    copy = molecule.copy()
+    copy.clean_stereo()
+    return copy
+
+
+class _Target:
+    """The target in its compared state, and what `_is_target` asks of it, built once per call.
+
+    `free` is every stereogenic unit the target leaves unconfigured, as the atoms owning it -- a CH3 is a
+    candidate and never a centre.  `position` is the flat target's canonical order, `{atom: position}`:
+    a product whose flat form equals the target's has the same canonical labelling, which pairs the two
+    atom by atom.
+    """
+    __slots__ = ('molecule', 'flat', 'configured', 'free', 'position')
+
+    def __init__(self, molecule: MoleculeContainer):
+        self.molecule = _normalized(molecule)
+        self.flat = _flat(self.molecule)
+        units = self.molecule.stereo_units()
+        self.configured = any(unit['parity'] for unit in units)
+        self.free = [unit['owners'] if isinstance(unit['owners'], tuple) else (unit['owners'],)
+                     for unit in units if unit['stereogenic'] and not unit['parity']]
+        self.position = self.flat.canonical_order() if self.configured and self.free else None
+
+
+def _is_target(products: Sequence[MoleculeContainer], target: _Target) -> bool:
+    """Are a forward outcome's products, unioned, the target?
+
+    Constitution exactly; a configuration the target states, exactly; a unit the target leaves
+    unconfigured accepts whatever the row made, which is what lets a flat alcohol come from a ketone.
+
+    The canonical labelling pairs atoms only up to symmetry, so the one pairing it gives is the answer.
+    A target configuring one of two constitutionally equivalent centres and leaving the other free may be
+    refused where some other pairing would accept it; walking every pairing instead is every automorphism
+    of every tert-butyl.
+    """
+    product = products[0]
+    for part in products[1:]:
+        product = product.union(part)
+    product = _normalized(product)
+    flat = _flat(product)
+    if flat != target.flat:
+        return False
+    if not target.configured:
+        return True
+    if product == target.molecule:
+        return True
+    if target.position is None:
+        return False
+    atom_at = {position: n for n, position in flat.canonical_order().items()}
+    masked = product.copy()
+    for owners in target.free:
+        for atom in owners:
+            n = atom_at[target.position[atom]]
+            if masked.parity_of(n):
+                masked.set_parity(n, 0)
+    return masked == target.molecule
+
+
+def _precursors(parts: Sequence[MoleculeContainer], where: Mapping[int, int],
+                hydrogens: tuple[tuple[int, int], ...]) -> list[MoleculeContainer]:
+    """A reverse outcome's components as the precursors a forward run is offered.
+
+    The spelled hydrogen counts go onto atoms the patch left unknown.  A component holding no atom the
+    template reported is untouched target -- a counter-ion -- and rides with the first precursor, as an
+    untouched component of a touched input, which the forward run keeps.
+
+    An answer whose patched atoms break the valence collection is no answer, and gives `[]`: a drawn
+    `[2H]` stays an atom, so restoring a carbonyl beside it makes a five-valent carbon the forward row
+    still accepts.  Only the reported atoms are asked, so a target that is garbage elsewhere is answered.
+    """
+    reported = set(where.values())
+    touched, untouched = [], []
+    for part in parts:
+        part = part.copy()
+        ids = set(part.atom_numbers)
+        for number, count in hydrogens:
+            n = where.get(number)
+            if n in ids and part.atom(n).implicit_h is None:
+                part.set_hydrogens(n, count)
+        if ids & reported:
+            part = _normalized(part)
+            kekule = part.copy()
+            kekule.kekule()
+            if any(verdict == 'violation' and n in reported for n, verdict in valence_report(kekule)):
+                return []
+            touched.append(part)
+        else:
+            untouched.append(_normalized(part))
+    if not touched:
+        return []
+    for part in untouched:
+        touched[0] = touched[0].union(part)
+    return touched
+
+
+def retro(molecule: MoleculeContainer, reaction: str | None = None) -> Iterator[EnumeratedReaction]:
+    """Every one-step precursor set the corpus turns into `molecule`, as the forward reaction.
+
+    Each row runs backwards through `retro_templates()` -- its `product` column as the query, its groups'
+    `precursor` spellings as the patch, one template per combination -- and an answer is kept only when the
+    row's own forward templates rebuild the target from it.  So every `EnumeratedReaction` yielded is one
+    `react()` yields on its reactants, and the forward row stays the one authority on what is chemistry.
+
+    The reverse query runs with `automorphism_filter=False`: a symmetric query such as Williamson's
+    `C-O-C` otherwise reports one of the two ether cuts.  Answers repeating a row and a precursor multiset
+    are dropped, which is what collapses a symmetric target.  `reaction` selects rows by name; an unknown
+    one raises.  `molecule` is not mutated.
+    """
+    target = _Target(molecule)
+    reverse = retro_templates()
+    seen = set()
+    for rule in _selected(reaction_rules(), reaction):
+        for retro_template in reverse[rule.id]:
+            for rxn, where in retro_template.template(target.molecule, automorphism_filter=False, report=True):
+                precursors = _precursors(rxn.products, where, retro_template.hydrogens)
+                if not precursors:
+                    continue
+                key = (rule.id, tuple(sorted(p.canonical_bytes for p in precursors)))
+                if key in seen:
+                    continue
+                for outcome in _outcomes(rule, precursors):
+                    if _is_target(outcome.reaction.products, target):
+                        seen.add(key)
+                        yield outcome
+                        break
 
 
 # --- deprotection ---------------------------------------------------------------------------------

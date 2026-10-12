@@ -20,7 +20,7 @@
 
 The corpus is TSV in `tables/`: `functional.tsv` names groups, `reactions.tsv` what happens to them,
 `protective.tsv` the protecting groups, `roles.tsv` the handles a coupling cuts.  Importing this package
-registers `react`, `functional_groups`, `functional_group_hits`, `protective_groups`,
+registers `react`, `retro`, `functional_groups`, `functional_group_hits`, `protective_groups`,
 `protective_group_hits`, `deprotect`, `sticky_fragments`, `sticky_linkers` and `@` onto
 `MoleculeContainer` by injection -- the direction is `core <- reactions`, and
 a special method must be compiled into the `cdef class` that owns the slot.
@@ -36,27 +36,27 @@ Each is keyed by the name its caller selects by -- `deprotect(protective=...)`, 
 """
 from ._enumerate import (EnumeratedDeprotection, EnumeratedReaction, GroupHit, deprotect,
                          functional_group_hits, functional_groups, protective_group_hits,
-                         protective_groups, react)
+                         protective_groups, react, retro)
 from .attention import attention_available, attention_mapping
 from ._numbering import fast_mapping, mapping_agrees
 from ._reconstruct import reconstruct_mapping
 from ._stickers import StickyFragment, StickyLinker, sticky_fragments, sticky_linkers
-from ._tables import (FunctionalGroup, ProtectiveGroup, ReactionRule, Role, SLOT_STRIDE,
-                      compose_smirks, functional_rules, protective_rules, reaction_rules, read_table,
-                      roles)
+from ._tables import (FunctionalGroup, ProtectiveGroup, ReactionRule, RetroTemplate, Role, SLOT_STRIDE,
+                      compose_retro, compose_smirks, functional_rules, protective_rules, reaction_rules,
+                      read_table, retro_templates, roles)
 from ..core._core import _set_attention_fn, _set_reactions_fns, _set_reconstruct_fn
 
 
 __all__ = ['EnumeratedDeprotection', 'EnumeratedReaction', 'FunctionalGroup', 'GroupHit',
-           'ProtectiveGroup', 'ReactionRule', 'Role', 'StickyFragment', 'StickyLinker',
+           'ProtectiveGroup', 'ReactionRule', 'RetroTemplate', 'Role', 'StickyFragment', 'StickyLinker',
            # `attention_available` answers about the installation and not about a reaction, so it is a
            # function on the façade where every other name here is a container method or the corpus.
            'attention_available',
-           'functional_rules', 'protective_rules', 'reaction_rules', 'roles']
+           'functional_rules', 'protective_rules', 'reaction_rules', 'retro_templates', 'roles']
 
 _set_reactions_fns(deprotect=deprotect, functional_group_hits=functional_group_hits,
                    functional_groups=functional_groups, protective_group_hits=protective_group_hits,
-                   protective_groups=protective_groups, react=react,
+                   protective_groups=protective_groups, react=react, retro=retro,
                    sticky_fragments=sticky_fragments, sticky_linkers=sticky_linkers)
 _set_reconstruct_fn(reconstruct_mapping)
 _set_attention_fn(attention_mapping)

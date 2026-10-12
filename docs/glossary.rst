@@ -24,7 +24,7 @@ name a molecule carries, and :doc:`reactions` documents it where it is applied.
 Functional groups
 -----------------
 
-265 functional groups, alphabetically.  The name is the key
+296 functional groups, alphabetically.  The name is the key
 :meth:`chython.MoleculeContainer.functional_groups` returns and the key
 :func:`chython.functional_rules` is keyed on; the id is what a consumer stores.
 
@@ -116,6 +116,10 @@ Functional groups
      - ``functional:63``
      - ``[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z2;x1,x2:1]=[C:2]``
      - vinylboronate ester
+   * - ``alkenyl_boroxine``
+     - ``functional:288``
+     - ``[B;D3;z1;x2;r6](-[O;D2;r6]-[B;r6])(-[O;D2;r6]-[B;r6])-;!@[C;z2:1]=[C:2]``
+     - (CH2=CHBO)3, trivinylboroxine the common one: a vinyl donor for the Suzuki
    * - ``alkenyl_bromide``
      - ``functional:49``
      - ``[Br;D1][C;z2;x1,x2:1]=[C:2]``
@@ -168,6 +172,10 @@ Functional groups
      - ``functional:232``
      - ``[O;D1;z1;x0;-:1]-[C;z1:2]``
      - RO-
+   * - ``alkoxy_ester``
+     - ``functional:294``
+     - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]``
+     - ``ester`` with the alkoxy O numbered, for the rows that keep it: partial reduction to the hemiacetal or lactol
    * - ``alkyl_boronic_acid``
      - ``functional:14``
      - ``[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z1;x1,x2,x3:1]``
@@ -196,6 +204,10 @@ Functional groups
      - ``functional:46``
      - ``[F;D1][C;z1;x1:1]``
      - R-F on sp3 carbon; not a leaving group, a metabolic-stability flag
+   * - ``alkyl_germatrane``
+     - ``functional:283``
+     - ``[Ge;D4;R]-;!@[C;z1:1]``
+     - an alkyl carbagermatrane, a bench-stable alkyl donor
    * - ``alkyl_grignard``
      - ``functional:110``
      - ``[Mg;D2](-[F,Cl,Br,I])-[C;z1:1]``
@@ -228,6 +240,10 @@ Functional groups
      - ``functional:243``
      - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C]``
      - ROSO2R' on sp3 carbon, any R'.  The SN2 leaving group as one class
+   * - ``alkyl_sulfonylhydrazide``
+     - ``functional:284``
+     - ``[S;D4;x3](=[O])(=[O])(-[C])-[N;D2;z1;x2]-[N;D2;z1;x1]-[C;z1:1]``
+     - R-NH-NH-SO2Ar, an alkyl radical source; ``sulfonylhydrazide`` requires the terminal NH2
    * - ``alkyl_tosylate``
      - ``functional:60``
      - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C;a]:1:[C;a;D2]:[C;a;D2]:[C;a](-[C;D1]):[C;a;D2]:[C;a;D2]:1``
@@ -284,6 +300,10 @@ Functional groups
      - ``functional:223``
      - ``[Cl,Br,I;D1:1]-[C;z1;x1:2]-[C;z2:3]=[C;z2:4]``
      - X-C-C=C, the allylic SN2/SN2' substrate
+   * - ``alpha_amino_acid``
+     - ``functional:292``
+     - ``[N;D1;z1;x0:1]-[C;z1;D2,D3:2]-[C;z2;x2:3](=[O;D1:4])-[O;D1:5]``
+     - H2N-CHR-COOH, the diazotization substrate that keeps its configuration
    * - ``alpha_haloester``
      - ``functional:74``
      - ``[O;D2;x0:1]-[C;D3;x2;z2:2](=[O:3])-[C;z1;D2,D3;x1:4]-[Cl,Br,I;D1]``
@@ -292,6 +312,14 @@ Functional groups
      - ``functional:73``
      - ``[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D2,D3;x1:3]-[Cl,Br,I;D1]``
      - alpha-halo ketone, the Hantzsch thiazole electrophile
+   * - ``alpha_hetero_alkyl_halide``
+     - ``functional:270``
+     - ``[Cl,Br,I;D1]-[C;z1;x2:1]-[O;M]-[C,P;M]=[O;M]``
+     - X-CH-O-C(=O) or X-CH-O-P(=O): acyloxymethyl, carbonate and phosphate halides; MOM-, SEM- and BOM-Cl stay protecting groups
+   * - ``alpha_hetero_alkyl_sulfonate``
+     - ``functional:273``
+     - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x2:1]-[N,O,S,P;M])-[C]``
+     - RSO2-O-C-Y with Y an N, O, S or P: TsOCH2P(O)(OEt)2; ``alkyl_sulfonate`` (``x1``) leaves it out
    * - ``alpha_heteroatom_halide``
      - ``functional:225``
      - ``[Cl,Br,I;D1:1]-[C;z1;h1,h2:2]-[N,O,S;z1:3]``
@@ -300,6 +328,10 @@ Functional groups
      - ``functional:72``
      - ``[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D1,D2;x0:3]``
      - ketone with an enolizable alpha CH2/CH3
+   * - ``amide_carbonyl``
+     - ``functional:295``
+     - ``[O;z2;x0:1]=[C;D2,D3;z2;x2:2]-[N:3]``
+     - any amide, lactam or imide C=O, the N kept: aromatic N included, carbamate and urea (``x3``) excluded
    * - ``amidine``
      - ``functional:152``
      - ``[N;D1;z1;x0:1]-[C;D3;z2;x2:2]=[N;D1:3]``
@@ -344,6 +376,10 @@ Functional groups
      - ``functional:13``
      - ``[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;a:1]``
      - ArB(OR)2, pinacol boronate and its kin
+   * - ``aryl_boronic_hemiester``
+     - ``functional:285``
+     - ``[B;D3;z1;x2](-[O;D1])(-[O;D2;x1])-;!@[C;a:1]``
+     - ArB(OH)(OR), a boronic hemiester or ring-opened pinacol boronate
    * - ``aryl_bromide``
      - ``functional:7``
      - ``[Br;D1]-[C;a:1]``
@@ -364,6 +400,14 @@ Functional groups
      - ``functional:6``
      - ``[Cl;D1]-[C;a:1]``
      - Ar-Cl
+   * - ``aryl_dialkylborane``
+     - ``functional:286``
+     - ``[B;D3;z1;x0](-[C;z1])(-[C;z1])-;!@[C;a:1]``
+     - ArBR2, diethyl(3-pyridyl)borane and its kin
+   * - ``aryl_difluoroborane``
+     - ``functional:287``
+     - ``[B;D3](-[F;D1])(-[F;D1])-;!@[C;a:1]``
+     - ArBF2, a trifluoroborate drawn without its fluoride and cation
    * - ``aryl_ether``
      - ``functional:185``
      - ``[O;D2;z1;x0:1](-[C;a:2])[C;z1,a:3]``
@@ -392,6 +436,10 @@ Functional groups
      - ``functional:8``
      - ``[I;D1]-[C;a:1]``
      - Ar-I
+   * - ``aryl_magnesium_cation``
+     - ``functional:289``
+     - ``[Mg;D1;+]-[C;a:1]``
+     - Ar-Mg+, an aryl Grignard drawn without its halide
    * - ``aryl_mesylate``
      - ``functional:56``
      - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C;D1]``
@@ -412,6 +460,14 @@ Functional groups
      - ``functional:242``
      - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C]``
      - ArOSO2R for any R -- triflate, mesylate, tosylate, besylate.  The three named rows answer "which pseudohalide"; this one answers "does this couple", which is the question a coupling row asks
+   * - ``aryl_sulfoxide``
+     - ``functional:269``
+     - ``[S;D3;z2;!R](=[O;D1])(-[C;z1])-[C;a:1]``
+     - Ar-S(O)R, a sulfinyl leaving group on an arene
+   * - ``aryl_thioether``
+     - ``functional:267``
+     - ``[S;D2;z1;x0;!R](-[C;z1])-[C;a:1]``
+     - Ar-SR, the C-S electrophile of the Liebeskind-Srogl and thioether Negishi couplings
    * - ``aryl_thiol``
      - ``functional:129``
      - ``[S;x0;D1;z1:1]-[C;a:2]``
@@ -492,6 +548,10 @@ Functional groups
      - ``functional:181``
      - ``[C,N;a:1]-;!@[C,O,N,S:2]-;!@[C,N;a:3]``
      - two rings joined through one bridging atom
+   * - ``bt_sulfone``
+     - ``functional:291``
+     - ``[C;z1:1]-[S;D4](=[O])(=[O])-[C;a]1:[N;a]:[C;a]:[C;a]:[S;a]:1``
+     - an alkyl benzothiazolyl sulfone, the Julia-Kocienski reagent
    * - ``carbamate``
      - ``functional:191``
      - ``[N:1]-[C;D3;z2;x3:2](=[O;D1;z2;x0:3])-[O;D2;z1:4]-[C:5]``
@@ -536,6 +596,10 @@ Functional groups
      - ``functional:229``
      - ``[F,Cl,Br,I;D1:1]-[Si;D4:2]``
      - Si-X, the silylating agent
+   * - ``chlorothionoformate``
+     - ``functional:276``
+     - ``[Cl;D1]-[C;D3;z2:1](=[S:2])-[O;D2:3]``
+     - Cl-C(=S)-OR, the O-thiocarbamate and thionocarbonate former
    * - ``cyclic_carbamate``
      - ``functional:192``
      - ``[N;D2,D3;z1;r5,r6:1]-[C;D3;z2;x3;r5,r6:2](=[O;D1;z2:3])-[O;D2;z1;r5,r6:4]``
@@ -572,6 +636,10 @@ Functional groups
      - ``functional:173``
      - ``[C;D3;z1;x2:1](-[F:2])-[F:3]``
      - -CHF2
+   * - ``difluoromethyl_sulfonate``
+     - ``functional:274``
+     - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x3;D3:1](-[F;M])-[F;M])-[C]``
+     - TfO-CHF2, the difluoromethylating sulfonate
    * - ``disulfide``
      - ``functional:130``
      - ``[S;D2;z1:1]-[S;D2;z1:2]``
@@ -620,14 +688,34 @@ Functional groups
      - ``functional:224``
      - ``[Cl,Br,I;D1:1]-[C;z1:2]-[Cl,Br,I;D1:3]``
      - Two halides on one carbon.  Fluorine is excluded because a gem-difluoride is ``difluoromethyl`` and not an alkylating agent
+   * - ``glycosyl_halide``
+     - ``functional:296``
+     - ``[Cl,Br,I;D1]-[C;z1;x2;R:1]-[O;D2;R;M]``
+     - X on the ring carbon beside the ring O: the glycosyl halide, the Koenigs-Knorr donor; an acyclic X-C-O is a protecting-group reagent
    * - ``guanidine``
      - ``functional:107``
      - ``[N;z1;x0:1]-[C;!R:2](-[N;z1;x0:3])=[N;x0:4]``
      - acyclic guanidine
+   * - ``halodifluoromethyl``
+     - ``functional:272``
+     - ``[Br,I;D1]-[C;z1;x3,x4:1](-[F;M])-[F;M]``
+     - Br-CF2-R and I-CF2-R, the difluoroalkylating electrophiles
    * - ``hemiketal``
      - ``functional:187``
      - ``[O;D1;z1;x0;h1:1]-[C;z1;x2:2]-[O;D2;z1:3]``
      - HO-C(-OR), the ring-opened sugar form
+   * - ``heteroaryl_ol``
+     - ``functional:293``
+     - ``[O;D1;z1;x0;h1:1]-[C;a:2]:[N,O,S;a;M]``
+     - an OH on an aromatic carbon beside a ring heteroatom, the deoxychlorination substrate ``phenol`` does not distinguish
+   * - ``heteroatom_alkene``
+     - ``functional:278``
+     - ``[C;z2;x1,x2:1]=[C;z2:2]``
+     - C=C with a heteroatom on at least one carbon: enol ether, enamine, nitroalkene, vinyl fluoride; ``alkene`` (``x0``) leaves it out
+   * - ``heteroatom_terminal_alkene``
+     - ``functional:277``
+     - ``[C;z2;x0;D1:1]=[C;z2;x1;D2,D3:2]``
+     - CH2=C with one heteroatom on the inner carbon: vinyl ether, enamide, vinyl sulfonamide, 2-fluoroacrylate, vinyl boronate
    * - ``hindered_aryloxyl``
      - ``functional:251``
      - ``[O;D1;h0;z1:1]-[C;a:2](:[C;a:3]-[C;D4;z1:4]):[C;a:5]-[C;D4;z1:6] |^1:0|``
@@ -660,6 +748,14 @@ Functional groups
      - ``functional:90``
      - ``[O;D2:1]-[C;z2;x3;D3:2](=[O:3])-[N;a;D3;r5]1:[C;a]:[N;a]:[C;a]:[C;a]:1``
      - CDI adduct of an alcohol; here the azole nitrogen leaves
+   * - ``imidoyl_halide``
+     - ``functional:266``
+     - ``[Cl,Br,I;D1]-[C;z2:1]=[N;M]``
+     - X-C=N outside an aromatic ring: chloropyridazinone, chloroisoxazoline, imidoyl chloride; the ring N is context, not consumed
+   * - ``imidoyl_thioether``
+     - ``functional:268``
+     - ``[S;D2;z1;x0;!R](-[C;z1])-[C;z2;!a:1]=[N:2]``
+     - RS-C=N outside an aromatic ring: an isothiourea or a 2-methylthio-pyrimidinone
    * - ``imine``
      - ``functional:213``
      - ``[N;D2;z2;x0:1]=[C;z2:2]``
@@ -684,6 +780,10 @@ Functional groups
      - ``functional:137``
      - ``[O;a;D2;r5:1]:[N;a;D2;r5:2]``
      - adjacent aromatic O/N pair
+   * - ``katritzky_pyridinium``
+     - ``functional:282``
+     - ``[C;z1:1]-;!@[N;a;+;D3](:[C;a]-;!@[C;a]):[C;a]-;!@[C;a]``
+     - an N-alkyl-2,6-diarylpyridinium, the deaminative alkyl radical source
    * - ``ketone``
      - ``functional:21``
      - ``[O;z2;x0:1]=[C;D3;x1;z2:2]``
@@ -720,6 +820,10 @@ Functional groups
      - ``functional:241``
      - ``[Mg,Zn,Cu,Li;D1;+:1]-[C:2]``
      - The ionic spelling of an organometallic, which the neutral ``alkyl_grignard`` row cannot match; the ``*_zinc`` rows take it too
+   * - ``metalloid_methyl_halide``
+     - ``functional:271``
+     - ``[Cl,Br,I;D1]-[C;z1;x2;D2:1]-[B,Si,Sn;*;M]``
+     - X-CH2-M with M boron, silicon or tin: ICH2SnBu3, BrCH2BF3K
    * - ``methanol``
      - ``functional:254``
      - ``[O;D1;z1;x0:1]-[C;D1:2]``
@@ -728,6 +832,10 @@ Functional groups
      - ``functional:170``
      - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]-[C;D1]``
      - R-CO-OMe; distinct saponification and transesterification behaviour
+   * - ``n_alkoxy_amide_nh``
+     - ``functional:281``
+     - ``[N;D2;z1;x1:1](-[C;z2;x2:2]=[O:3])-[O;D2:4]``
+     - a hydroxamate N-H, isoxazolidin-3-one included
    * - ``n_halo_imide``
      - ``functional:227``
      - ``[Cl,Br,I;D1:1]-[N;D3:2]``
@@ -744,6 +852,10 @@ Functional groups
      - ``functional:261``
      - ``[N;D1,D2;z1;x0:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2:4]``
      - a carbamate N-H, BocNH2 and the oxazolidinone included; ``carbamate`` does not bound the N
+   * - ``nh_hydrazine``
+     - ``functional:279``
+     - ``[N;D2;z1;x1;h1:1]-[N:2]``
+     - a substituted hydrazine, hydrazide or hydrazone N-H: the N-N nitrogen ``secondary_amine`` (``x0``) leaves out
    * - ``nh_sulfonamide``
      - ``functional:263``
      - ``[N;D1,D2;z1;x1:1]-[S;D4:2](=[O:3])=[O:4]``
@@ -836,6 +948,10 @@ Functional groups
      - ``functional:212``
      - ``[O;D1;z1;h1:1]-[P;D4:2](=[O;D1:3])-[O;D1;z1;h1:4]``
      - R-PO(OH)2
+   * - ``phosphonium_salt``
+     - ``functional:290``
+     - ``[P;+;D4;x0](-[C;a])(-[C;a])(-[C;a])-[C;z1:1]``
+     - R-CH2-PPh3+, the Wittig reagent recorded as the salt the ylide is made from
    * - ``phosphonium_ylide``
      - ``functional:125``
      - ``[P;D4;z2;x0]=[C:1]``
@@ -894,8 +1010,8 @@ Functional groups
      - NHPI/NHS ester; decarboxylative coupling transfers the alkyl
    * - ``ring_enamine_nh2``
      - ``functional:265``
-     - ``[N;D1;z1;x0:1]-[C;z2;x1;r5,r6:2]=[C;z2:3]``
-     - an NH2 on a ring C=C that ``primary_aniline`` (``[C;a]``) does not see: aminopyridone, 3-aminocoumarin
+     - ``[N;D1;z1;x0:1]-[C;z2;x1,x2;r5,r6:2]=[C;z2:3]``
+     - an NH2 on a ring C=C that ``primary_aniline`` (``[C;a]``) does not see: aminopyridone, 3-aminocoumarin, 6-aminouracil
    * - ``secondary_alcohol``
      - ``functional:16``
      - ``[O;D1;z1;x0:1][C;D3;x1;z1:2]``
@@ -912,6 +1028,10 @@ Functional groups
      - ``functional:28``
      - ``[N;D2;z1;x0:1]([C;a:2])[C;z1:3]``
      - Ar-NH-R
+   * - ``secondary_enamine``
+     - ``functional:280``
+     - ``[N;D2;z1;x0:1](-[C;z1:2])-[C;z2:3]=[C:4]``
+     - R-NH-C=C, the vinylogous-amide N-H ``secondary_amine`` (both carbons ``z1``) leaves out
    * - ``silyl_ether``
      - ``functional:189``
      - ``[Si;D4:1]-[O;D2;z1:2]-[C:3]``
@@ -1056,6 +1176,10 @@ Functional groups
      - ``functional:154``
      - ``[N;z1:1]-[C;D3;z2;x3:2](=[S;D1:3])-[N;z1:4]``
      - R2N-CS-NR2
+   * - ``togni_cf3``
+     - ``functional:275``
+     - ``[I;D2,D3]-[C;z1;x4:1](-[F;M])(-[F;M])-[F;M]``
+     - a hypervalent-iodine CF3 donor, the Togni reagents
    * - ``tosyl_isocyanide``
      - ``functional:165``
      - ``[C;-;D1:1]#[N;+;D2:2]-[C;D2,D3;z1;x2:3]-[S;D4;x2](=[O])=[O]``
@@ -1100,7 +1224,7 @@ Functional groups
 Protecting groups
 -----------------
 
-106 protecting groups, alphabetically.  *Protects* names the functional
+111 protecting groups, alphabetically.  *Protects* names the functional
 group the row reveals, which is a row of the table above.
 :meth:`chython.MoleculeContainer.protective_groups` reports a match and
 :meth:`chython.MoleculeContainer.deprotect` applies the patch.
@@ -1128,6 +1252,21 @@ every group that could.
      - ``amine``
      - ``[N;D2,D3:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2;z1;x1][C;D2;x0;z2]=[C;D1]``
      - allyloxycarbonyl, revealing an amine
+   * - ``amine_alpha_methyl_methoxybenzyl``
+     - ``protective:109``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[C;D3;z1;x1]([C;D1])-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1``
+     - 1-(4-methoxyphenyl)ethyl, revealing an amine
+   * - ``amine_alpha_methylbenzyl``
+     - ``protective:108``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[C;D3;z1;x1]([C;D1])-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1``
+     - alpha-methylbenzyl, revealing an amine
+   * - ``amine_benzhydryl``
+     - ``protective:107``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[C;D3;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:2``
+     - benzhydryl, revealing an amine
    * - ``amine_benzhydrylidene``
      - ``protective:85``
      - ``amine``
@@ -1228,6 +1367,11 @@ every group that could.
      - ``amine``
      - ``[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1``
      - nitrobenzenesulfonyl (Ns), revealing an amine
+   * - ``amine_o_nitrobenzyl``
+     - ``protective:111``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1``
+     - ortho-nitrobenzyl, revealing an amine
    * - ``amine_pbf``
      - ``protective:68``
      - ``amine``
@@ -1278,6 +1422,11 @@ every group that could.
      - ``amine``
      - ``[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x0]([C;D1]):[C;D2]:[C;D2]:1``
      - 4-toluenesulfonyl (Ts), revealing an amine
+   * - ``amine_trimethoxybenzyl``
+     - ``protective:110``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]:1[O;D2;x0][C;D1]``
+     - 2,4,6-trimethoxybenzyl, revealing an amine
    * - ``amine_tritil``
      - ``protective:80``
      - ``amine``

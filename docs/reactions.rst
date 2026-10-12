@@ -1,7 +1,8 @@
 Reactions & Templates
 =====================
 
-Parsing, standardization, SMIRKS templates, reaction enumeration, functional groups, and deprotection.
+Parsing, standardization, SMIRKS templates, reaction enumeration, retrosynthesis, functional groups, and
+deprotection.
 
 
 Parsing Reactions
@@ -1058,6 +1059,98 @@ scope that replaces it, and it is finer than the three methods were: one row fam
     appel reactions:21 C(C)(c1ccccc1)O>>C(C)(c1ccccc1)Br
 
 
+Retrosynthesis
+--------------
+
+``mol.retro()`` is ``react()`` run backwards over the same corpus: every one-step precursor set some row
+of ``reactions.tsv`` turns into the molecule.  It yields ``EnumeratedReaction(name, reaction, rule_id)``,
+and each ``reaction`` is the **forward** reaction the row runs on those precursors -- so ``react()`` on
+them yields it too.
+
+.. testcode::
+
+    anilide = smiles('CC(=O)Nc1ccccc1')
+    anilide.canonicalize()
+
+    for name, rxn, rule_id in anilide.retro(reaction='amidation'):
+        print(rule_id, rxn)
+
+.. testoutput::
+
+    reactions:2 C(C)(=O)O.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1
+    reactions:514 C(C)(=O)Cl.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1
+    reactions:520 C(C)(=O)Br.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1
+    reactions:524 C(C)(=O)F.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1
+    reactions:528 C(C)([O-])=O.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1
+
+A row runs backwards through a template composed from data the corpus already has: the ``product``
+column is the query, and each slot's group is rebuilt from its ``precursor`` column in
+``functional.tsv``.  **A reverse step is a proposal and the forward row is the judge** -- an answer is
+kept only when the row's own forward templates rebuild the target from it.  The reverse query cannot
+state what the forward query demands of a reactant (a ``D1`` amine is ``D2`` once acylated), so it
+over-generates, and the forward run removes what it would not make.
+
+``precursor`` is the concrete group, and a list of them where the group admits several.  **Each spelling
+is its own answer**, so a planner gets a buyable-looking reagent and not a pattern:
+
+.. testcode::
+
+    biphenyl = smiles('c1ccc(-c2ccccc2)cc1')
+    biphenyl.canonicalize()
+
+    for out in biphenyl.retro(reaction='suzuki'):
+        if out.rule_id == 'reactions:8':
+            print(out.reaction)
+
+.. testoutput::
+
+    B(O)(c1ccccc1)O.c1c(Cl)cccc1>>c1cc(-c2ccccc2)ccc1
+    B(O)(c1ccccc1)O.c1c(Br)cccc1>>c1cc(-c2ccccc2)ccc1
+    B(O)(c1ccccc1)O.c1c(I)cccc1>>c1cc(-c2ccccc2)ccc1
+
+Biphenyl's one biaryl bond is seen from both ends, and answers once per halide: an answer repeating a
+row and a precursor multiset is dropped.  A bond broken inside a ring leaves one precursor, which the
+row's intramolecular template closes again:
+
+.. testcode::
+
+    lactam = smiles('O=C1CCCN1')
+    lactam.canonicalize()
+    print([str(out.reaction) for out in lactam.retro(reaction='amidation')])
+
+.. testoutput::
+
+    ['C(O)(CCCN)=O>>C1CCC(N1)=O', 'C(Cl)(CCCN)=O>>C1CCC(N1)=O']
+
+**A configuration the target states must come back; a centre it leaves unconfigured accepts what the
+row makes.**  ``ketone_to_alcohol`` makes a racemate, so it answers a flat 2-butanol and the racemate,
+and not one drawn enantiomer:
+
+.. testcode::
+
+    for drawn in ('CC(O)CC', 'CC[C@@H](O)C |&1:2|', 'CC[C@H](C)O'):
+        alcohol = smiles(drawn)
+        alcohol.canonicalize()
+        print(len(list(alcohol.retro(reaction='ketone_to_alcohol'))))
+
+.. testoutput::
+
+    1
+    1
+    0
+
+An inverting row hands back the other configuration, since ``@~`` is its own inverse:
+``CC[C@@H](C)Oc1ccccc1`` comes from ``C(C)[C@@H](Br)C`` and phenol by ``williamson``.  A counter-ion
+the reverse step never touches rides with the first precursor, which the forward run keeps as an
+untouched component.
+
+A spelling states every atom's element, ``[A:n]`` only where the group's own atom is an alternative, and
+never a masked atom -- the target already carries the context.  ``h<k>`` on a numbered atom is the
+hydrogen count ``retro()`` writes where the patch leaves it unknown, which is what puts an imidazole N-H
+back on the nitrogen the forward row deprotonates.  ``compose_retro(rule.groups, rule.product)`` prints
+what a row runs backwards.
+
+
 How a Corpus Row Composes
 -------------------------
 
@@ -1240,6 +1333,7 @@ all four corpora.
     functional:18 phenol 1
     functional:31 secondary_amide 1
     functional:41 arene_ch 4
+    functional:295 amide_carbonyl 1
 
 Protective groups come from a different table, ``protective.tsv``, and answer a different question --
 what is masked here, and what does the molecule look like unmasked:
@@ -1390,7 +1484,7 @@ there is to carry:
 
 .. testoutput::
 
-    265 106
+    296 111
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']
@@ -1500,6 +1594,17 @@ every molecule it is handed:
 
     with_base = smiles('CCO.CC(=O)O.c1ccncc1>>CCOC(C)=O')     # pyridine is along for the ride
     assert with_base.reconstruct_mapping() == ('react:esterification',)
+
+A reagent the record files once may fill two slots of one row, as the excess it was in the flask: an ester
+takes two methyls from one MeMgBr.  The first equivalent keeps the reagent's numbers; the second is not in
+the record, so the atoms it gave stay at 0 and the log says ``reconstruct:excess``.  Only slots naming one
+group read this way -- an amino acid is one molecule, never its own acid and amine.
+
+.. testcode::
+
+    excess = smiles('COC(=O)c1ccccc1.C[Mg]Br>>CC(C)(O)c1ccccc1')
+    assert excess.reconstruct_mapping() == ('react:grignard',)
+    assert [r.rule for r in excess.log if r.rule == 'reconstruct:excess'] == ['reconstruct:excess']
 
 When more than one rung or row explains one record, the answer names the one applied and the log lists
 the rest as ``reconstruct:alternatives``.  When only part of the recorded product is reproduced, the

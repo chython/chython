@@ -30,10 +30,10 @@ each rung's paired components out to it.
 """
 from collections import Counter
 from collections.abc import Callable, Container, Iterator, Mapping, Sequence
-from itertools import chain, combinations
+from itertools import chain, product as cartesian
 from typing import NamedTuple
 
-from ._enumerate import (_deprotect_toward, _fitting, _outcomes, deprotect, EnumeratedReaction,
+from ._enumerate import (_deprotect_toward, _needs, _outcomes, deprotect, EnumeratedReaction,
                          functional_groups)
 from ._numbering import fast_mapping
 from ._tables import reaction_rules
@@ -64,6 +64,7 @@ class _Explanation(NamedTuple):
     label: str
     write: Callable[[MoleculeContainer], tuple[bool, list[_Link]]]
     rule: str = ''          # the table-qualified row id, when a row produced this; logged, not returned
+    excess: bool = False    # an input filled several slots of the row
 
 
 def reconstruct_mapping(reaction: ReactionContainer, *, max_size_ratio: float = 5.,
@@ -126,6 +127,10 @@ def reconstruct_mapping(reaction: ReactionContainer, *, max_size_ratio: float = 
                 _record(log, 'reconstruct:partial', INFO,
                         'some components of the recorded product were not reproduced and are left '
                         'unnumbered')
+            if found[0].excess:
+                _record(log, 'reconstruct:excess', INFO,
+                        'one input filled several slots of the row, read as an excess reagent; the atoms '
+                        'its extra equivalents gave the product are left unnumbered')
             if found[0].rule:
                 # The label is the chemistry, the id is the row; only the id says which spelling earned
                 # the hit.  The APPLIED rule only -- logging one merely considered is a false
@@ -220,9 +225,17 @@ def _translate(reaction, sources: Sequence[MoleculeContainer],
     `_run` guarantees -- an outcome names the inputs its match touched, in input order.  An atom the
     reactor left at 0, and one no source claims, stays 0.  `products` replaces the reaction's own, for a
     settled copy still wearing the reactor's numbers.
+
+    A source repeated is an excess equivalent (`_pools_of`): its first appearance is the recorded
+    molecule and keeps its numbers, every later one is a copy the record does not hold, so its atoms stay
+    0 and the mapping stays 1-1.
     """
     table = {}
+    claimed = set()
     for reactant, source in zip(reaction.reactants, sources):
+        if id(source) in claimed:
+            continue
+        claimed.add(id(source))
         for n in reactant.atom_numbers:
             number = reactant.map_number_of(n)
             if number:
@@ -247,7 +260,7 @@ def _react(recorded, inputs, options, memo) -> Iterator[_Explanation]:
         sources = [*_translate(outcome.reaction, pool, products), *inputs]
         yield _Explanation('react:%s' % outcome.name,
                            lambda target, s=sources, o=options: _number_product(target, s, o.loose),
-                           outcome.rule_id)
+                           outcome.rule_id, _repeats(pool))
 
 
 def _deprotect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
@@ -318,7 +331,7 @@ def _deprotect_then_react(recorded, inputs, options, memo) -> Iterator[_Explanat
         yield _Explanation('deprotect:%s+react:%s' % ('+'.join(chain.from_iterable(strips.values())),
                                                       outcome.name),
                            lambda target, s=sources, o=options: _number_product(target, s, o.loose),
-                           outcome.rule_id)
+                           outcome.rule_id, _repeats(subset))
 
 
 def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
@@ -893,19 +906,21 @@ def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContaine
     """Every way a corpus row applies to a SUBSET of `inputs`, with the subset it applied to.
 
     Subsets and not the whole list, because `_run` requires every molecule it is handed to be touched
-    while a recorded record files its base, solvent and catalyst among the inputs.  Bounded by the widest
-    row's slot count, so the count is a polynomial in the number of inputs and not a power set -- but
-    `C(n, 1..4)` is still `n**4/24`, which is why the walk is over `reachable` and not over every input.
+    while a recorded record files its base, solvent and catalyst among the inputs.
 
-    THE INPUTS A ROW COULD REACH, AND NOT ALL OF THEM.  An input carrying none of the groups any row
-    names a slot for cannot be one of an outcome's reactants, and `_run` keeps an outcome only when every
-    molecule it was handed was touched -- so every pool containing such an input is empty by
-    construction.  Enumerating them anyway lets a record's own solvents dominate its cost: a record files
-    its base and solvent among its reagents, and they are typically 2 of the 4 a median record carries.
+    ROW FIRST, AND A POOL IS ONE CHOICE OF MOLECULE PER SLOT.  A slot's reactant pattern is its group, so
+    a molecule fills a slot only if it carries that group, and a pool every member of which is touched is
+    the image of a slot assignment onto it.  The pools a row is offered are therefore the product of its
+    slots' candidate lists, deduplicated -- `len(groups)` factors where `C(n, 1..4)` over every input
+    was `n**4/24` pools, each scanned against the whole corpus.  A plate record of 76 amines and one
+    aryl halide is 76 pools for a Buchwald row and none for a row whose groups it lacks.  Pools come out
+    smallest first and in input order, each with its rows in corpus order.
 
-    Each input is scanned for its groups ONCE and the result handed to `_fitting`, rather than rescanned
-    per pool: a molecule's groups do not depend on what it is enumerated beside.  `recorded` is here for
-    `_supplies`, which is the one filter in the walk that reads the answer rather than the inputs.
+    One input may fill several slots that name ONE group, as an excess reagent -- `_pools_of`.
+
+    Each input is scanned for its groups ONCE: a molecule's groups do not depend on what it is enumerated
+    beside.  `recorded` is here for `_supplies`, which is the one filter in the walk that reads the answer
+    rather than the inputs.
 
     `required` is a set of indices a pool must draw at least one member from, and the caller's way of
     saying that the pools it omits were already walked: `_deprotect_then_react` runs after `_react` in the
@@ -921,32 +936,74 @@ def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContaine
     """
     if rules is None:
         rules = reaction_rules()
-    widest = 0
-    slots = set()
-    for family in rules.values():
-        for rule in family:
-            if len(rule.groups) > widest:
-                widest = len(rule.groups)
-            slots.update(rule.groups)
     carried = [functional_groups(molecule) for molecule in inputs]
-    reachable = [i for i, groups in enumerate(carried) if not slots.isdisjoint(groups)]
+    present = Counter()
+    for groups in carried:
+        present.update(groups)
+    fits: dict[tuple[int, ...], list] = {}
+    for rule in chain.from_iterable(rules.values()):
+        wanted, counts = _needs(rule)
+        if not wanted <= present.keys():        # presence only: an excess pool counts a repeat twice
+            continue
+        candidates = [[i for i, groups in enumerate(carried) if group in groups] for group in rule.groups]
+        for choice in cartesian(*candidates):
+            for subset in _pools_of(choice, rule.groups):
+                if required is not None and not any(i in required for i in subset):
+                    continue
+                fitting = fits.setdefault(subset, [])
+                if fitting and fitting[-1] is rule:
+                    continue
+                available = Counter()
+                for i in subset:
+                    available.update(carried[i])
+                if not counts - available:
+                    fitting.append(rule)
     targets = [part.element_counts for part in recorded.split()]
-    for size in range(1, min(widest, len(reachable)) + 1):
-        for subset in combinations(reachable, size):
-            if required is not None and not any(i in required for i in subset):
-                continue
-            pool = [inputs[i] for i in subset]
-            supply = Counter()
-            for molecule in pool:
-                supply.update(molecule.element_counts)
-            try:
-                for rule in _fitting(pool, rules, carried=[carried[i] for i in subset]):
-                    if not _supplies(supply, targets, rule):
-                        continue
-                    for outcome in _outcomes(rule, pool):
-                        yield pool, outcome
-            except Exception:
-                continue
+    for subset in sorted(fits, key=lambda subset: (len(subset), subset)):
+        if not fits[subset]:
+            continue
+        pool = [inputs[i] for i in subset]
+        # the reactor wants distinct molecules: an extra equivalent goes in as a copy
+        run = [molecule.copy() if k and subset[k - 1] == subset[k] else molecule
+               for k, molecule in enumerate(pool)]
+        supply = Counter()
+        for molecule in pool:
+            supply.update(molecule.element_counts)
+        try:
+            for rule in fits[subset]:
+                if not _supplies(supply, targets, rule):
+                    continue
+                for outcome in _outcomes(rule, run):
+                    yield pool, outcome
+        except Exception:
+            continue
+
+
+def _repeats(pool: Sequence[MoleculeContainer]) -> bool:
+    """Does `pool` hold one input more than once -- `_pools_of`'s excess reading?"""
+    return len({id(molecule) for molecule in pool}) < len(pool)
+
+
+def _pools_of(choice: tuple[int, ...], groups: Sequence[str]) -> Iterator[tuple[int, ...]]:
+    """The pools one slot assignment stands for: its distinct inputs, and its excess reading.
+
+    The distinct inputs always: a molecule filling two slots may be one molecule carrying both groups.
+    The excess reading as well where an input fills several slots NAMING ONE GROUP: the record files a
+    reagent once and the flask held two equivalents of it, as in a double Grignard addition to an ester.
+    It repeats that input once per slot, sorted.  Slots naming different groups never read as excess --
+    an amino acid filling an acid slot and an amine slot is one molecule, not two.
+    """
+    distinct = tuple(sorted(set(choice)))
+    yield distinct
+    if len(distinct) == len(choice):
+        return
+    slots = {}
+    for i, group in zip(choice, groups):
+        slots.setdefault(i, []).append(group)
+    excess = tuple(sorted(i for i in distinct
+                          for _ in range(len(slots[i]) if len(set(slots[i])) == 1 else 1)))
+    if excess != distinct:
+        yield excess
 
 
 def _reproduces(recorded: MoleculeContainer, products: Sequence[MoleculeContainer],

@@ -1052,15 +1052,15 @@ def _set_reactions_fns(**fns):
     and answer an iterable, so a swapped positional pair would be no type error anywhere and would
     silently report functional groups where the caller asked for reactions.
 
-    The core owns `react`, `functional_groups`, `functional_group_hits`, `protective_groups`,
+    The core owns `react`, `retro`, `functional_groups`, `functional_group_hits`, `protective_groups`,
     `protective_group_hits`, `deprotect`, `sticky_fragments`, `sticky_linkers` and `@` -- names on a
     `cdef class`, which cannot be extended from outside -- and `chython.reactions` owns the corpus behind
     them.  A special method is the reason this hook exists at all rather than the package simply exporting
     functions: `mol @ other` resolves through the type's slot, so `__matmul__` has to be defined here or
     `@` is a TypeError however many templates are loaded.
 
-    EIGHT NAMES, THREE QUESTIONS.  `react`, `functional_groups` and `functional_group_hits` read the
-    reaction corpus -- one enumerator, no per-scope variants of it -- `protective_groups`,
+    NINE NAMES, THREE QUESTIONS.  `react`, `retro`, `functional_groups` and `functional_group_hits` read
+    the reaction corpus -- one enumerator each way, no per-scope variants -- `protective_groups`,
     `protective_group_hits` and `deprotect` are the protecting-group half, a different question over a
     different table and not another view of the same one -- and `sticky_fragments`/`sticky_linkers` cut a
     coupling handle and cap it with an R, a third question over `roles.tsv`.  A `*_hits` name is the same
@@ -7922,6 +7922,20 @@ cdef class MoleculeContainer:
         if isinstance(other, (list, tuple)):
             return self.react(*other)
         return self.react(other)
+
+    def retro(self, *, reaction=None):
+        """Enumerate the one-step precursor sets the reaction corpus turns into this molecule.
+
+        Yields `EnumeratedReaction(name, reaction, rule_id)` in `react()`'s shape: each is the forward
+        reaction a row runs on the precursors, `precursors>>this molecule`, so `react()` on those
+        precursors yields it too.  Every leaving-group spelling a row's groups state in
+        `tables/functional.tsv` is its own answer -- three for an aryl halide.
+
+        A configuration this molecule states must come back; a centre it leaves unconfigured accepts
+        whatever the row makes.  `reaction=` restricts to rows of that name, and an unknown name raises.
+        The molecule is not mutated.  The knowledge is `chython/reactions/tables/`.
+        """
+        return _reactions_fn('retro')(self, reaction)
 
     def protective_groups(self):
         """`{name: count}` for every protecting group of `chython/reactions/tables/protective.tsv`.

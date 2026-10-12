@@ -112,10 +112,10 @@ def test_a_row_reveals_the_element_it_says_it_does(rule):
 # --- the table as a file --------------------------------------------------------------------------
 
 def test_the_table_reads_and_ids_are_one_space():
-    """106 rows numbered 1..106, which is what a positional id in a ported table has to be."""
+    """111 rows numbered 1..111, which is what a positional id in a ported table has to be."""
     rows = read_table('protective.tsv')
     assert [int(row['id']) for row in rows] == list(range(1, len(rows) + 1))
-    assert len(RULES) == len(rows) == 106
+    assert len(RULES) == len(rows) == 111
 
 
 def test_a_protecting_group_is_named_once():

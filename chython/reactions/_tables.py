@@ -23,14 +23,16 @@ accessor, nothing loaded at import, rule ids qualified by their table (`reaction
 names `functional.tsv` groups rather than repeating them.  This is the knowledge half of the package
 and may not import the enumerators beside it.
 """
+import re
 from importlib.resources import files
+from itertools import product as cartesian
 from typing import NamedTuple
 from ..core import QueryContainer, ReactionTemplate, read_smarts, read_smirks
 
 
-__all__ = ['FunctionalGroup', 'ProtectiveGroup', 'ReactionRule', 'Role', 'SLOT_STRIDE',
-           'compose_smirks', 'functional_rules', 'protective_rules', 'read_table', 'reaction_rules',
-           'roles']
+__all__ = ['FunctionalGroup', 'ProtectiveGroup', 'ReactionRule', 'RetroTemplate', 'Role', 'SLOT_STRIDE',
+           'compose_retro', 'compose_smirks', 'functional_rules', 'protective_rules', 'read_table',
+           'reaction_rules', 'retro_templates', 'roles']
 
 
 #: Slot *i*'s map numbers are offset by `i * SLOT_STRIDE`, so a group's own numbers never move: adding
@@ -47,6 +49,9 @@ class FunctionalGroup(NamedTuple):
     `example` and `decoys` are the row's own acceptance test, run by `test/test_functional.py`: a
     pattern that can never match is otherwise invisible, since an absent group and an unmatchable one
     are the same missing key in `mol.functional_groups()`.
+
+    `precursors` is the `precursor` column: the concrete spellings `retro()` rebuilds the group as, one
+    patch each, in the group's own map numbers.  Empty for a group no reaction row uses.
     """
     id: str
     name: str
@@ -55,6 +60,7 @@ class FunctionalGroup(NamedTuple):
     example: str
     decoys: tuple[str, ...]
     description: str
+    precursors: tuple[str, ...] = ()
 
 
 class ReactionRule(NamedTuple):
@@ -140,6 +146,18 @@ class Role(NamedTuple):
     description: str
 
 
+class RetroTemplate(NamedTuple):
+    """One reverse template of a `reactions.tsv` row, and the hydrogen counts its spellings state.
+
+    `hydrogens` pairs a map number with the count `retro()` writes onto that atom where the patch left it
+    unknown.  It is not in the patch: a patch `h` is a post-check, and an aromatic nitrogen whose count is
+    not derived yet fails it.  `smirks` is the composed string, for a failure message to show.
+    """
+    template: ReactionTemplate
+    smirks: str
+    hydrogens: tuple[tuple[int, int], ...]
+
+
 #: The map number every `roles.tsv` row gives its cap, so the enumerator finds the marker by number
 #: instead of scanning the product for an R -- an input that already carries one stays distinguishable.
 ROLE_CAP = 20
@@ -155,6 +173,10 @@ _PROTECTIVE_CACHE: dict[str, ProtectiveGroup] | None = None
 
 #: `roles.tsv` composed and grouped by role name, or `None` before anything asked for it.
 _ROLES_CACHE: dict[str, tuple[Role, ...]] | None = None
+
+#: `reactions.tsv` composed backwards, keyed by rule id, or `None`.  Separate from `_RULES_CACHE` so
+#: `react()` never pays for it.
+_RETRO_CACHE: dict[str, tuple[RetroTemplate, ...]] | None = None
 
 
 def read_table(name: str) -> list[dict[str, str]]:
@@ -319,6 +341,169 @@ def _attach_ring_sizes(product: str, atom: int, sizes: tuple[int, ...]) -> str:
     return ''.join(out)
 
 
+_BRACKET = re.compile(r'\[([^\]]*)\]')
+_MAP_NUMBER = re.compile(r':(\d+)$')
+_RELATIVE = re.compile(r'@~|@=')
+_GROUP_LABEL = re.compile(r'[&o]\d+')
+_HYDROGENS = re.compile(r'h(\d+)')
+#: An `r` or `R` primitive: the group puts the atom in a ring, so a bond between two such atoms may be
+#: aromatic.  Not `a`: an aromatic atom's bond to another ring is a biaryl single bond, and widening it
+#: lets a coupling row match every aromatic bond of the target.
+_RING_PIN = re.compile(r'(r\d*(,r\d+)*|R\d*)$')
+_TOKEN = re.compile(r'\[[^\]]*\]|%\d\d|\d|[()]|\.|[-=#:~]')
+
+
+def _atom(body: str) -> tuple[str, list[str], int | None]:
+    """`'C@~;+:3'` -> `('C@~', ['+'], 3)`.  An unnumbered atom gives `None`."""
+    match = _MAP_NUMBER.search(body)
+    number = None
+    if match is not None:
+        number = int(match.group(1))
+        body = body[:match.start()]
+    head, *clauses = body.split(';')
+    return head, clauses, number
+
+
+def _written(head: str, clauses: list[str], number: int | None) -> str:
+    body = ';'.join([head, *clauses])
+    return '[%s]' % body if number is None else '[%s:%d]' % (body, number)
+
+
+def _slot_atoms(groups: tuple[str, ...]) -> tuple[dict[int, str], set[int]]:
+    """Every slot atom's element head (`'C'`, `'C,N'`, `'A'`) by offset number, and the ring-pinned ones."""
+    known = functional_rules()
+    heads, pinned = {}, set()
+    for slot, name in enumerate(groups):
+        group = known.get(name)
+        if group is None:
+            raise ValueError(f'unknown functional group {name!r}')
+        for body in _BRACKET.findall(group.smarts):
+            head, clauses, number = _atom(body)
+            if number is None:
+                continue
+            number += slot * SLOT_STRIDE
+            heads[number] = head
+            if any(_RING_PIN.match(clause) for clause in clauses):
+                pinned.add(number)
+    return heads, pinned
+
+
+def _widen(query: str, pinned: set[int]) -> str:
+    """`-` and `=` between two ring-pinned atoms become `-,:` and `=,:`; every other bond stays literal."""
+    tokens = _TOKEN.findall(query)
+    if ''.join(tokens) != query:
+        raise ValueError(f'{query!r} has a token outside a bracket atom, a bond, a branch or a ring digit')
+    out, branches, previous = [], [], None
+    for token in tokens:
+        if token.startswith('['):
+            number = _atom(token[1:-1])[2]
+            if out and out[-1] in ('-', '=') and previous in pinned and number in pinned:
+                out[-1] += ',:'
+            previous = number
+        elif token == '(':
+            branches.append(previous)
+        elif token == ')':
+            previous = branches.pop()
+        elif token == '.':
+            previous = None
+        out.append(token)
+    return ''.join(out)
+
+
+def _reverse_query(groups: tuple[str, ...], product: str) -> tuple[str, dict[int, str]]:
+    """The `product` column as a query, and the relative stereo tokens it carried, by map number."""
+    heads, pinned = _slot_atoms(groups)
+    marks = {}
+
+    def atom(match):
+        head, clauses, number = _atom(match.group(1))
+        relative = _RELATIVE.search(head)
+        if relative is not None:
+            head = head[:relative.start()]
+            if number is not None:
+                marks[number] = relative.group()
+        clauses = [clause for clause in clauses if not _GROUP_LABEL.fullmatch(clause)]
+        if number is not None and head == 'A':
+            head = heads[number]
+        return _written(head, clauses, number)
+
+    return _widen(_BRACKET.sub(atom, product), pinned), marks
+
+
+def _reverse_patch(spellings: tuple[str, ...], numbers: set[int], marks: dict[int, str]
+                   ) -> tuple[str, tuple[tuple[int, int], ...]]:
+    """One combination of slot spellings as a patch, and the hydrogen counts it states.
+
+    A numbered atom the query does not carry is one the forward row deletes, so it is re-created and
+    loses its number -- which is why it must state its element.
+    """
+    hydrogens = []
+
+    def atom(match):
+        head, clauses, number = _atom(match.group(1))
+        if number is None:
+            return match.group(0)
+        kept = []
+        for clause in clauses:
+            count = _HYDROGENS.fullmatch(clause)
+            if count is None:
+                kept.append(clause)
+            elif number in numbers:
+                hydrogens.append((number, int(count.group(1))))
+        if number not in numbers:
+            if head == 'A':
+                raise ValueError(f'the spelling re-creates :{number} as `A`, which has no element to take')
+            return _written(head, kept, None)
+        return _written(head + marks.get(number, ''), kept, number)
+
+    return _BRACKET.sub(atom, '.'.join(spellings)), tuple(hydrogens)
+
+
+def compose_retro(groups: tuple[str, ...], product: str) -> tuple[tuple[str, tuple[tuple[int, int], ...]], ...]:
+    """The SMIRKS one reaction row means backwards: `product` as the query, the slots' spellings as the patch.
+
+    One `(smirks, hydrogens)` per combination of spellings, slot 0 slowest.  Public beside
+    `compose_smirks` because printing it is how a row author sees what `retro()` runs.
+
+    The query takes each `[A:n]`'s element from slot n's group, drops stereo-group labels, and moves `@~`
+    and `@=` onto the patch, each being its own inverse.  `-` and `=` between two atoms the groups pin to
+    a ring also match aromatic: a `product` column spells a new ring Kekule and the target is aromatized.
+    """
+    query, marks = _reverse_query(groups, product)
+    numbers = {_atom(body)[2] for body in _BRACKET.findall(query)} - {None}
+    known = functional_rules()
+    slots = []
+    for slot, name in enumerate(groups):
+        spellings = known[name].precursors
+        if not spellings:
+            raise ValueError(f'functional group {name!r} has no `precursor` spelling in functional.tsv, so '
+                             'no row using it can run backwards')
+        slots.append([_offset_map_numbers(spelling, slot * SLOT_STRIDE) for spelling in spellings])
+    out = []
+    for combination in cartesian(*slots):
+        patch, hydrogens = _reverse_patch(combination, numbers, marks)
+        out.append(('%s>>%s' % (query, patch), hydrogens))
+    return tuple(out)
+
+
+def retro_templates() -> dict[str, tuple[RetroTemplate, ...]]:
+    """Every row of `reactions.tsv` composed backwards, keyed by rule id, on first use."""
+    global _RETRO_CACHE
+    if _RETRO_CACHE is not None:
+        return _RETRO_CACHE
+    out = {}
+    for family in reaction_rules().values():
+        for rule in family:
+            try:
+                composed = compose_retro(rule.groups, rule.product)
+            except ValueError as e:
+                raise ValueError(f'{rule.id} ({rule.name}): {e}') from e
+            out[rule.id] = tuple(RetroTemplate(_read(smirks, rule.id, rule.name), smirks, hydrogens)
+                                 for smirks, hydrogens in composed)
+    _RETRO_CACHE = out
+    return out
+
+
 def functional_rules() -> dict[str, FunctionalGroup]:
     """Every row of `functional.tsv` by name, compiled on first use.
 
@@ -340,7 +525,8 @@ def functional_rules() -> dict[str, FunctionalGroup]:
             _FUNCTIONAL_CACHE[name] = FunctionalGroup(row_id, name, row['smarts'], query,
                                                       row['example'],
                                                       tuple(filter(None, row['decoys'].split(','))),
-                                                      row['description'])
+                                                      row['description'],
+                                                      tuple(filter(None, row['precursor'].split(','))))
     return _FUNCTIONAL_CACHE
 
 
