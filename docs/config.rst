@@ -13,10 +13,11 @@ Configuration Reference
 
     # 2D layout engine — validated at assignment
     chython.clean2d_engine = 'smilesdrawer'  # default
-    # Options: 'rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo'
+    # Options: 'rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo', 'chython'
 
-    # a peptide of 4+ residues lays out on its backbone; the engine lays out its side-chain rings
-    chython.peptide_layout = True  # default
+    # a chain -- a peptide of 4+ residues, a macrocycle of ring units -- lays out on its backbone;
+    # the engine lays out its side-chain rings.  `chython.peptide_layout` is the same switch
+    chython.chain_layout = False  # default
 
     # 3D conformer engine
     chython.conformer_engine = 'rdkit'  # default

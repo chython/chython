@@ -111,6 +111,17 @@ def test_a_lone_atom_is_labelled_whatever_it_is():
     assert labels(mol, plane, DepictStyle())[next(iter(mol))].text is not None
 
 
+def test_a_carbon_on_a_straight_run_of_one_bond_order_is_labelled():
+    """C=C=C and a straight C-C-C read as one long bond; C-C#C changes order, so its vertex shows"""
+    for text, kept in (('C=C=C', True), ('CCC', True), ('CC#C', False)):
+        mol = smiles(text)
+        a, b, c = mol
+        plane = {a: (0., 0.), b: (1., 0.), c: (2., 0.)}
+        assert (labels(mol, plane, DepictStyle())[b].text is not None) is kept, text
+        plane[b] = (1., .5)
+        assert labels(mol, plane, DepictStyle())[b].text is None, 'a bent chain shows its vertex: ' + text
+
+
 def test_hydrogen_count_is_written_as_a_subscript_run():
     # smilesdrawer places the heteroatom to the left of carbon in C-X molecules, so the carbon
     # neighbour is to the right and the hydrogen flips left: the label reads H first.
@@ -281,6 +292,13 @@ def test_flip_direction_is_determined_by_neighbour_position():
     runs = [r.text for r in label.text.runs]
     assert runs[0] == 'N', f'with C to the left, N should lead; got {runs}'
 
+
+def test_a_free_hydride_writes_hydrogen_first_from_group_16_on():
+    """the Red Book's binary hydrides: H2O, H2S and HCl, but NH3 and CH4"""
+    for smi, written in (('O', 'H2O'), ('S', 'H2S'), ('Cl', 'HCl'), ('[OH-]', 'HO−'), ('N', 'NH3'), ('C', 'CH4')):
+        mol = smiles(smi)
+        label = labels(mol, {1: (0., 0.)}, DepictStyle())[1]
+        assert ''.join(run.text for run in label.text.runs) == written
 
 def test_isotope_stays_beside_the_symbol_when_the_label_is_flipped():
     """when H groups move left, 13 still reads immediately before C, not 13 H2 C"""

@@ -26,15 +26,16 @@ its own.  Every rendering parameter lives in `style.py` instead, as a field of `
 from typing import Literal
 
 
-Clean2DEngine = Literal['rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo']
+Clean2DEngine = Literal['rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo', 'chython']
 
 # Which 2D layout backend `clean2d()` uses when the caller does not name one.  `smilesdrawer` is a
 # JavaScript bundle on QuickJS: ~1 MB installed, and its behaviour does not move between releases.
 clean2d_engine: Clean2DEngine = 'smilesdrawer'
 
-# Whether `layout2d()` lays a peptide of `MIN_RESIDUES`+ residues out on its backbone.  The engine above
-# still lays out its ring tiles and anything the backbone layout leaves.
-peptide_layout: bool = True
+# Whether `layout2d()` lays a chain -- a peptide of `MIN_RESIDUES`+ residues, a macrocycle of beads -- out on its
+# backbone, chords and teleports routed round it; off by default.  The engine above still lays out its ring tiles
+# and anything the backbone layout leaves.
+chain_layout: bool = False
 
 cpk = tuple('''
  #909090                                                                                         #D9FFFF
@@ -73,28 +74,32 @@ def get_clean2d_engine(engine: Clean2DEngine = None) -> Clean2DEngine:
 
 def set_clean2d_engine(engine: Clean2DEngine):
     """Set the default layout engine.  Validated here so a typo fails at assignment, not at draw."""
-    if engine not in ('rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo'):
+    if engine not in ('rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo', 'chython'):
         raise ValueError(f'Invalid clean2d engine: {engine}')
     global clean2d_engine
     clean2d_engine = engine
 
 
-def get_peptide_layout(flag: bool = None) -> bool:
-    """Resolve the peptide switch for one call: the argument if given, otherwise the module default."""
+def get_chain_layout(flag: bool = None) -> bool:
+    """Resolve the chain switch for one call: the argument if given, otherwise the module default."""
     if flag is None:
-        return peptide_layout
+        return chain_layout
     if not isinstance(flag, bool):
         raise TypeError(f'peptide takes a bool or None, not {type(flag).__name__}')
     return flag
 
 
-def set_peptide_layout(flag: bool):
-    """Set the default peptide switch."""
+def set_chain_layout(flag: bool):
+    """Set the default chain switch."""
     if not isinstance(flag, bool):
-        raise TypeError(f'peptide_layout takes a bool, not {type(flag).__name__}')
-    global peptide_layout
-    peptide_layout = flag
+        raise TypeError(f'chain_layout takes a bool, not {type(flag).__name__}')
+    global chain_layout
+    chain_layout = flag
+
+
+get_peptide_layout = get_chain_layout                   # the switch's name before chains held more than peptides
+set_peptide_layout = set_chain_layout
 
 
 __all__ = ['cpk', 'R_COLOUR', 'Clean2DEngine', 'clean2d_engine', 'get_clean2d_engine', 'set_clean2d_engine',
-           'peptide_layout', 'get_peptide_layout', 'set_peptide_layout']
+           'chain_layout', 'get_chain_layout', 'set_chain_layout', 'get_peptide_layout', 'set_peptide_layout']

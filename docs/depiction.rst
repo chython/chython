@@ -217,15 +217,15 @@ no heavy atom at all (``[H][H]``, ``[H-]``) is a chain along +x.
 Peptides
 ~~~~~~~~
 
-A molecule whose main chain has four or more residues, as segmented by ``monomers()``, is laid out on
+Off by default: ``layout2d(peptide=True)`` for one call, ``chython.chain_layout = True`` for the process.
+Then a molecule whose main chain has four or more residues, as segmented by ``monomers()``, is laid out on
 its backbone: a zigzag on the 120-degree lattice, side chains hung off it, cross-links routed around it.
 The backbone steps only where a side chain needs room, and takes the lowest such chain found.  Each
 connected component is its own case: every peptide gets its own backbone, every other component -- a
 counter-ion, a solvent -- goes to the engine, and the components are then placed side by side.
 Only side-chain rings -- Phe, Tyr, Trp, His -- go to the configured engine, one call per distinct ring
 system, so ``clean2d_engine`` still decides how an aromatic side chain looks.  A proline ring on the
-backbone is its lattice hexagon less the top or bottom vertex, so its chord is horizontal and its bonds
-to the chain meet at 120 degrees; the amide joining two such rings is a bridge twice a bond long.
+backbone is its regular pentagon; the amide joining two such rings is a bridge twice a bond long.
 
 A cross-link longer than one and a half bonds is drawn by routing, not as a straight bond:
 
@@ -257,10 +257,10 @@ whose backbone is off the lattice draws every cross-link as a plain bond.
                       'NC(CC(N)=O)C(=O)NC(CS%10)C(=O)N%11CCCC%11C(=O)NC(CC(C)C)C(=O)NCC(=O)N')
     print(len(monomers(oxytocin).main))
 
-    plane = oxytocin.layout2d()                    # on the backbone
-    plane = oxytocin.layout2d(peptide=False)       # the engine, as for any molecule
-    chython.peptide_layout = False                 # process-wide; validated at assignment
-    chython.peptide_layout = True
+    plane = oxytocin.layout2d(peptide=True)        # on the backbone
+    plane = oxytocin.layout2d()                    # the engine, as for any molecule: the default
+    chython.chain_layout = True                    # process-wide; validated at assignment
+    chython.chain_layout = False
 
 .. testoutput::
 

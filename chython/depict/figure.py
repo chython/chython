@@ -221,7 +221,9 @@ def _molecule_nodes(mol, plane, style: DepictStyle, log, overlays=()) -> tuple[l
     whole figure -- see the module docstring.  Overlays bracket the structure: field bands, highlight
     regions and halos go under the bonds, value labels over the atom labels.
     """
-    boxes = labels(mol, plane, style)
+    links = routed_links(mol, plane)                # a cross-link's carbon end bearing hydrogens is written out
+    boxes = labels(mol, plane, style, {x for k in links for x in (k.a, k.b) if mol.atom(x).atomic_symbol == 'C' and
+                                       mol.atom(x).implicit_h})
 
     # Overlays go under the structure: a highlight over a bond hides the chemistry it points at.
     overlay_under, overlay_over = render_overlays(overlays, mol, plane, boxes, style, log=log)
@@ -239,7 +241,6 @@ def _molecule_nodes(mol, plane, style: DepictStyle, log, overlays=()) -> tuple[l
 
     # The stereo bonds claim their keys, and the plain bonds skip them; so do routed peptide cross-links.
     wedges, claimed = wedge_paths(mol, plane, boxes, style, log=log)
-    links = routed_links(mol, plane)
     if links:
         claimed = set(claimed) | {(min(k.a, k.b), max(k.a, k.b)) for k in links}
     bond_nodes = bond_paths(mol, plane, boxes, style, skip=claimed,

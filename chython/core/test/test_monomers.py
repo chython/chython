@@ -61,6 +61,25 @@ def test_staple_links_on_a_single_bond(name):
     assert not any(len(r) <= 7 and a in r and b in r for r in mol.sssr)
 
 
+def test_an_alkene_staple_links_a_bond_away_from_its_double_bond():
+    mol = molecule('alkene staple')
+    (a, b), = monomers(mol).crosslinks
+    assert all(mol.order_of(x, y) == 1 for x in (a, b) for y in mol.neighbors_of(x))
+
+
+@pytest.mark.parametrize('text', [
+    'NC(C)C(=O)NCC(=O)NC(C)(CCC/C=C/%50)C(=O)NC(Cc1ccccc1)C(=O)NC(CC(C)C)C(=O)NC(C)C(=O)NC(C)(CCC%50)C(=O)NC(C)C(=O)O',
+    'CC[C@H](C)[C@H]1C(=O)O[C@@H]([C@@H](C(=O)N[C@H](C(=O)NC2CCC(N(C2=O)[C@@H](C(=O)N([C@H](C(=O)N1)'
+    'CC3=CC=C(C=C3)O)C)[C@@H](C)O)O)CC(C)C)NC(=O)[C@H](CCC(=O)N)NC(=O)C(CCC4=CC=C(C=C4)O)NC(=O)[C@@H](CO)O)C',
+    'C[C@H]([C@H]1C(=O)N[C@H](C(=O)N[C@@H](CCCCNC(=O)CC[C@@H](C(=O)N[C@@H](C(=O)N[C@H](C(=O)N1)CC2=CC=C(C=C2)CNC(C)C)'
+    'CC3=CNC4=CC=CC=C43)NC(=O)[C@H](CC5=CC=CC=C5)N)C(=O)N[C@@H](CO)C(=O)O)CC6=CC=CC=C6)O'],
+    ids=['alkene staple', 'pubchem 23228567', 'pubchem 11309298'])
+def test_a_cross_link_starts_on_the_backbone(text):
+    """A side-chain bridge goes whole to one residue: the cross-link joins the other's backbone atom to it."""
+    pep = monomers(smiles(text))
+    assert all(a in pep.backbone or b in pep.backbone for a, b in pep.crosslinks)
+
+
 def test_side_chain_branch_path_runs_to_the_next_residue():
     mol = molecule('side-chain branch')
     br, = monomers(mol).branches

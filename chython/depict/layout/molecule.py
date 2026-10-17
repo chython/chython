@@ -24,10 +24,12 @@ A plane is a plain `{n: (x, y)}` dict and is never the molecule -- only `clean2d
 and `_store_plane` write to the arena, so a renderer can lay a molecule out without changing it.
 """
 from importlib.resources import files
-from math import atan2, cos, fsum, hypot, pi, radians, sin
+from math import atan2, ceil, cos, fsum, hypot, log, pi, radians, sin, sqrt
 from ...exceptions import ImplementationError
-from ...core.monomers import monomers
-from .._config import Clean2DEngine, get_clean2d_engine, get_peptide_layout
+from ...core.chains import Chain, perceive
+from .._config import Clean2DEngine, get_chain_layout, get_clean2d_engine
+from ..label import ink_boxes
+from ..style import get_depict_style
 from .peptide import peptide_layout
 
 # `clean2d.js` is an esbuild IIFE bundle publishing a single global `$`; this line gives the binding a
@@ -38,6 +40,11 @@ _JS_SHIM = '\nfunction clean2d(tree) { return $.clean2d(tree); }\n'
 # deferred hydrogen when the engine's plane holds no bond length at all (`C[H]`, `[H]O[H]`), so that
 # such a molecule keeps one scale before `_rescale_plane` normalizes it.
 _ENGINE_BOND_LENGTH = 30.
+SPACE = .9                                  # gap between components
+WRAP = 6                                    # a line of components wider than tall by more breaks into rows
+CROWD = 5                                   # fewest components of a line that breaks once `ASPECT` times wider
+ASPECT = 2                                  # width to height ratio the rows come nearest
+COMB = 4                                    # fewest single atoms in a run of components set on a hexagonal grid
 
 try:
     from quickjs import Function as _JSFunction
@@ -78,7 +85,7 @@ def _stored_plane(mol):
     return dict.fromkeys(mol, (0., 0.))
 
 
-def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: bool = None):
+def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: bool = None, choose=None):
     """Compute a 2d layout and return it as `{n: (x, y)}`, leaving the molecule untouched.
 
     This is the form a renderer wants -- drawing must not change what it draws.  `clean2d()` is this
@@ -97,28 +104,31 @@ def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide:
     :param engine: override globally set engine
     :param force: recompute even if the molecule already carries a layout
     :param peptide: override the global peptide switch
+    :param choose: with `engine='chython'`, `choose(env, steps)` drives the controller greedily, a peptide's pins
+        included (`layout/greedy.py`); None runs the deterministic cascade (`layout/cascade.py`). Any other engine
+        refuses it.
     """
     if not force and mol.has_layout:
         return mol.coordinates()
 
     engine = get_clean2d_engine(engine)
-    plane = _peptide_planes(mol, engine) if get_peptide_layout(peptide) else None
+    if choose is not None and engine != 'chython':
+        raise ValueError(f'a step chooser drives only the chython engine, not {engine}')
+    plane = _chain_planes(mol, engine, choose) if get_chain_layout(peptide) else None
     if plane is None:
-        plane = _engine_layout(mol, engine)
+        plane = _engine_layout(mol, engine, choose)
         _rescale_plane(mol, plane)
     # EVERY COMPONENT IS PLACED, including the only one.  A backend returns a plane wherever its own
     # arithmetic landed, so a single-component molecule that skipped this kept the engine's offset --
     # which is what put a laid-out drawing thousands of units from the origin and outside a format's
     # coordinate field.  One component takes the same shift as the first component of a mixture, so
     # there is one placement rule rather than two.
-    shift_x = 0.
-    for c in mol.connected_components:
-        shift_x = _shift_plane_mean(mol, plane, shift_x, component=c) + .9
+    _place(mol, plane)
     _center_plane(plane)
     return plane
 
 
-def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: bool = None):
+def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: bool = None, choose=None):
     """Compute a 2d layout and store it on the molecule.
 
     Not always a recomputation: a molecule that already `has_layout` is left exactly as it is, since the
@@ -127,23 +137,26 @@ def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: 
     :param engine: override globally set engine
     :param force: lay the molecule out again whatever coordinates it already has
     :param peptide: override the global peptide switch
+    :param choose: with `engine='chython'`, `choose(env, steps)` drives the controller greedily, a peptide's pins
+        included (`layout/greedy.py`); None runs the deterministic cascade (`layout/cascade.py`). Any other engine
+        refuses it.
     """
     if not force and mol.has_layout:
         return
     # `force=True` below: the has_layout question is already answered, and asking it again would send a
     # molecule that has a layout down the stored-plane branch.
-    _store_plane(mol, layout2d(mol, engine=engine, force=True, peptide=peptide))
+    _store_plane(mol, layout2d(mol, engine=engine, force=True, peptide=peptide, choose=choose))
 
 
-def _peptide_planes(mol, engine: Clean2DEngine):
-    """A plane with each peptide component of `mol` on its backbone and the rest by `engine`, or None when
-    no component is a peptide the lattice takes."""
+def _chain_planes(mol, engine: Clean2DEngine, choose=None):
+    """A plane with each chain component of `mol` on its backbone and the rest by `engine`, or None when
+    no component is a chain the lattice takes."""
     components = mol.connected_components
     if len(components) == 1:
-        return _peptide_plane(mol, engine)
+        return _chain_plane(mol, engine, choose)
     plane, rest = {}, []
     for c in components:
-        sub = _peptide_plane(mol.substructure(c), engine) if len(c) > 1 else None
+        sub = _chain_plane(mol.substructure(c), engine, choose) if len(c) > 1 else None
         if sub is None:
             rest.extend(c)
         else:
@@ -152,29 +165,31 @@ def _peptide_planes(mol, engine: Clean2DEngine):
         return None
     if rest:
         other = mol.substructure(rest)
-        sub = _engine_layout(other, engine)
+        sub = _engine_layout(other, engine, choose)
         _rescale_plane(other, sub)
         plane.update(sub)
     return plane
 
 
-def _peptide_plane(mol, engine: Clean2DEngine):
-    """The peptide layout of `mol`, or None when it is no peptide or the lattice cannot take it.
+def _chain_plane(mol, engine: Clean2DEngine, choose=None):
+    """The chain layout of `mol`, or None when it is no chain or the lattice cannot take it.
 
     Explicit hydrogens are withheld as for an engine and placed afterwards at one bond length.  No
     `_rescale_plane`: the cross-link bonds are long by construction and would shrink the drawing.
     """
-    segmentation = monomers(mol)
-    if segmentation is None:
+    segmentation = perceive(mol)
+    if not isinstance(segmentation, Chain):             # no chain, or a circle the cascade draws
         return None
     deferred = _deferred_hydrogens(mol, _adjacency(mol))
     heavy = mol
     if deferred:
         heavy = mol.substructure(sorted(set(mol).difference(deferred)))
-        segmentation = monomers(heavy)
-        if segmentation is None:
+        segmentation = perceive(heavy)
+        if not isinstance(segmentation, Chain):
             return None
-    plane = peptide_layout(heavy, segmentation, _tile_fn(engine))
+    from .greedy import peptide_greedy
+    plane = peptide_layout(heavy, segmentation, _tile_fn(engine, choose),
+                           choose=None if choose is None else peptide_greedy(choose))
     if plane is None or not deferred:
         return plane
     _place_peptide_hydrogens(mol, plane, deferred, {frozenset(x) for x in segmentation.crosslinks})
@@ -219,16 +234,16 @@ def _place_peptide_hydrogens(mol, plane, deferred, links):
         put(n)
 
 
-def _tile_fn(engine: Clean2DEngine):
+def _tile_fn(engine: Clean2DEngine, choose=None):
     """The peptide layout's tile: `engine`'s plane of a fragment, at mean bond `.825`."""
     def tile(sub):
-        plane = _engine_layout(sub, engine)
+        plane = _engine_layout(sub, engine, choose)
         _rescale_plane(sub, plane)
         return plane
     return tile
 
 
-def _engine_layout(mol, engine: Clean2DEngine):
+def _engine_layout(mol, engine: Clean2DEngine, choose=None):
     """`{n: (x, y)}` from the named backend, unrescaled and unshifted.
 
     Every `to_*` import sits inside its branch: an unnamed toolkit must not be imported to lay a
@@ -313,6 +328,15 @@ def _engine_layout(mol, engine: Clean2DEngine):
         for n, a in zip(mol, ind.iterateAtoms()):
             x, y, _ = a.xyz()
             plane[n] = (x, y)
+    elif engine == 'chython':
+        if choose is None:                                  # the deterministic cascade
+            from .cascade import cascade_layout
+
+            plane = cascade_layout(mol)
+        else:                                               # a step chooser drives the controller
+            from .search import controller_layout
+
+            plane = controller_layout(mol, choose=choose)
     else:
         raise ValueError(f'Invalid clean2d engine: {engine}')
     return plane
@@ -345,6 +369,89 @@ def _rescale_plane(mol, plane) -> bool:
     return False
 
 
+def _place(mol, plane) -> None:
+    """Place each component of `plane` in place: left to right, their label inks `SPACE` apart. A line of several
+    over `WRAP` times wider than tall, of `CROWD` or more over `ASPECT` times, heights taken as `SPACE` at least,
+    breaks into rows `SPACE` apart whose box comes nearest `ASPECT` times wider than tall; rows of components of one
+    size stagger by half a pitch on a hexagonal grid, others are centred. A run of `COMB` single atoms is first
+    gathered into one component by `_combs`."""
+    ink = _ink(mol, plane)
+    comps = _combs(mol, plane, mol.connected_components, ink)
+    shift_x = 0.
+    widths = []
+    for c in comps:
+        end = _shift_plane_mean(mol, plane, shift_x, component=c, ink=ink)
+        widths.append(end - shift_x)
+        shift_x = end + SPACE
+    heights = [_height(plane, ink, c) for c in comps]
+    line = shift_x - SPACE
+    if len(comps) == 1 or line <= (ASPECT if len(comps) >= CROWD else WRAP) * max(max(heights), SPACE):
+        return
+    best = None
+    for r in range(2, len(comps) + 1):
+        rows = _rows(widths, _limit(widths, r))
+        width = max(fsum(widths[i] for i in row) + SPACE * (len(row) - 1) for row in rows)
+        height = fsum(max(heights[i] for i in row) for row in rows) + SPACE * (len(rows) - 1)
+        k = abs(log(max(width, SPACE) / max(height, SPACE) / ASPECT))
+        if best is None or k < best[0]:
+            best = k, rows
+    rows = best[1]
+    even = all(abs(w - widths[0]) < .01 and abs(h - heights[0]) < .01 for w, h in zip(widths, heights))
+    pitch = widths[0] + SPACE
+    shift_y = 0.
+    for j, row in enumerate(rows):
+        height = max(heights[i] for i in row)
+        if j:
+            shift_y -= max(height + SPACE / 2, pitch * sqrt(3) / 2) if even else (last + height) / 2 + SPACE
+        shift_x = pitch / 2 * (j % 2) if even else -(fsum(widths[i] for i in row) + SPACE * (len(row) - 1)) / 2
+        for i in row:
+            shift_x = _shift_plane_mean(mol, plane, shift_x, shift_y, comps[i], ink) + SPACE
+        last = height
+
+
+def _combs(mol, plane, comps, ink):
+    """`comps` with each run of `COMB` or more single atoms set on a hexagonal grid and merged into one: rows of
+    one pitch, the nearest square root of half the run, filled in order and staggered by half a pitch."""
+    out, run = [], []
+    for c in [*comps, None]:
+        if c is not None and len(c) == 1:
+            run.append(c)
+            continue
+        if len(run) >= COMB:
+            pitch = max(_shift_plane_mean(mol, plane, 0., component=x, ink=ink) for x in run) + SPACE
+            per = ceil(len(run) / ceil(sqrt(len(run) / 2)))
+            for q, (x,) in enumerate(run):
+                j = q // per
+                plane[x] = (pitch * (q % per + j % 2 / 2), -pitch * sqrt(3) / 2 * j)
+            out.append([x for x, in run])
+        else:
+            out.extend(run)
+        run = []
+        if c is not None:
+            out.append(c)
+    return out
+
+
+def _limit(widths, r):
+    """The shortest row `_rows` breaks `widths` into `r` rows or fewer at: no row a lone spill of the others."""
+    n = len(widths)
+    runs = sorted({fsum(widths[i:j]) + SPACE * (j - i - 1) for i in range(n) for j in range(i + 1, n + 1)})
+    return next(x for x in runs if x >= max(widths) and len(_rows(widths, x)) <= r)
+
+
+def _rows(widths, limit):
+    """Indices of `widths` broken into rows in order, each as long as fits `limit`, at least one."""
+    rows = [[]]
+    run = 0.
+    for i, w in enumerate(widths):
+        if rows[-1] and run + SPACE + w > limit + 1e-9:
+            rows.append([])
+            run = 0.
+        run += (SPACE if rows[-1] else 0.) + w
+        rows[-1].append(i)
+    return rows
+
+
 def _center_plane(plane) -> None:
     """Shift `plane` in place so the midpoint of its bounding box is the origin.
 
@@ -366,55 +473,47 @@ def _center_plane(plane) -> None:
         plane[n] = (x - dx, y - dy)
 
 
-def _shift_plane_mean(mol, plane, shift_x: float, shift_y=0., component=None) -> float:
+def _ink(mol, plane):
+    """`{atom: (left, bottom, right, top)}` of its label ink about its point; a bare vertex is all zeros."""
+    out = {}
+    for n, b in ink_boxes(mol, plane, get_depict_style()).items():
+        x, y = plane[n]
+        out[n] = b.min_x - x, b.min_y - y, b.max_x - x, b.max_y - y
+    return out
+
+
+def _shift_plane_mean(mol, plane, shift_x: float, shift_y=0., component=None, ink=None) -> float:
+    """Shift `component` so its ink starts at `shift_x` and its atoms centre on `shift_y`; the right end of the ink."""
     if component is None:
         component = plane
-
-    left = min(component, key=lambda x: plane[x][0])
-    right = max(component, key=lambda x: plane[x][0])
-
-    min_x = plane[left][0] - shift_x
-    if len(mol.atom(left).atomic_symbol) == 2:
-        min_x -= .2
-
-    max_x = plane[right][0] - min_x
+    if ink is None:
+        ink = _ink(mol, plane)
+    min_x = round(min(plane[x][0] + ink[x][0] for x in component) - shift_x, 4)  # stored grid: re-placing stays put
     min_y = min(plane[x][1] for x in component)
     max_y = max(plane[x][1] for x in component)
     mean_y = (max_y + min_y) / 2 - shift_y
     for n in component:
         x, y = plane[n]
         plane[n] = (x - min_x, y - mean_y)
-
-    if -.18 <= plane[right][1] <= .18:
-        # `implicit_h` is None for an undeterminable count, which is falsy and so takes the "no
-        # hydrogens" branch: an unknown count must not widen the box by a label that may not be drawn.
-        factor = mol.atom(right).implicit_h
-        if factor == 1:
-            max_x += .15
-        elif factor:
-            max_x += .25
-    return max_x
+    return max(plane[x][0] + ink[x][2] for x in component)
 
 
-def _shift_plane_min(mol, plane, shift_x: float, shift_y=0., component=None) -> float:
+def _shift_plane_min(mol, plane, shift_x: float, shift_y=0., component=None, ink=None) -> float:
+    """Shift `component` so its ink starts at `shift_x` and rests on `shift_y`; the right end of the ink."""
     if component is None:
         component = plane
-
-    right = max(component, key=lambda x: plane[x][0])
-    min_x = min(plane[x][0] for x in component) - shift_x
-    max_x = plane[right][0] - min_x
-    min_y = min(plane[x][1] for x in component) - shift_y
+    if ink is None:
+        ink = _ink(mol, plane)
+    min_x = round(min(plane[x][0] + ink[x][0] for x in component) - shift_x, 4)  # stored grid: re-placing stays put
+    min_y = min(plane[x][1] + ink[x][1] for x in component) - shift_y
     for n in component:
         x, y = plane[n]
         plane[n] = (x - min_x, y - min_y)
+    return max(plane[x][0] + ink[x][2] for x in component)
 
-    if shift_y - .18 <= plane[right][1] <= shift_y + .18:
-        factor = mol.atom(right).implicit_h
-        if factor == 1:
-            max_x += .15
-        elif factor:
-            max_x += .25
-    return max_x
+
+def _height(plane, ink, component):
+    return max(plane[x][1] + ink[x][3] for x in component) - min(plane[x][1] + ink[x][1] for x in component)
 
 
 def rescale2d(mol) -> bool:

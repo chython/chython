@@ -28,16 +28,29 @@ from chython.depict import figure
 from chython.depict.bonds import segment_hits_box
 from chython.depict.figure import molecule_scene
 from chython.depict.label import labels
-from chython.depict.layout import molecule as layout
+from chython.depict.layout import molecule as layout, peptide as peptide_layout
+from chython.depict.layout.lattice import _seg_dist
 from chython.depict.layout.molecule import clean2d, layout2d
-from chython.depict.peptide import BADGE, _free_directions, _on_lattice, link_paths, rounded, routed_links
+from chython.depict.peptide import (BAR, BADGE, CLOSE, _cross, _free_directions, _on_lattice, link_paths, rounded,
+                                    routed_links)
 from chython.depict.scene import Path
 from chython.depict.style import get_depict_style
+from chython.depict.test.test_peptide_layout import VANCOMYCIN
 
 
 def _kinds(name):
     mol = molecule(name)
     return [k.kind for k in routed_links(mol, layout2d(mol, force=True))]
+
+
+@pytest.fixture(autouse=True)
+def _chains():
+    """Chain layout is off by default; every drawing here is of one."""
+    from chython.depict import get_chain_layout, set_chain_layout
+    was = get_chain_layout()
+    set_chain_layout(True)
+    yield
+    set_chain_layout(was)
 
 
 @pytest.mark.parametrize('name, brackets, teleports', [('oxytocin', 1, 0), ('linaclotide', 2, 1),
@@ -50,6 +63,20 @@ def test_counts(name, brackets, teleports):
 @pytest.mark.parametrize('name', ['gramicidin S', 'cyclosporin A'])
 def test_head_to_tail(name):
     assert _kinds(name) == ['head_to_tail']
+
+
+def test_a_tail_drops_clear_of_every_atom():
+    """Gramicidin S's tail leaves its carbonyl at 120 degrees, lengthened until its drop passes the leucine
+    methyl beside it."""
+    mol = molecule('gramicidin S')
+    plane = layout2d(mol, force=True)
+    style = get_depict_style()
+    (link,) = routed_links(mol, plane)
+    (path,) = [n for n in link_paths(mol, plane, (link,), labels(mol, plane, style), style) if isinstance(n, Path)]
+    pts = _points(path)
+    for x, (cx, cy) in plane.items():
+        if x not in (link.a, link.b):
+            assert min(_seg_dist((cx, cy), p, q) for p, q in zip(pts, pts[1:])) > CLOSE, x
 
 
 @pytest.mark.parametrize('name', ['leu-enkephalin', 'semaglutide', 'branched'])
@@ -161,35 +188,35 @@ def test_bracket_leg_leaves_on_a_free_direction(name):
         assert max(dx * u + dy * v for u, v in want) == pytest.approx(1, abs=1e-4)
 
 
-def test_lactam_carbonyl_gives_its_slot_to_the_link():
-    """The acyl end's oxygen takes the slot facing the backbone, so its leg drops straight into the bar."""
-    mol, plane, link, leaving = _bracket_ends('lactam')
-    (c,) = [x for x in (link.a, link.b) if mol.element_of(x) == 6]
-    (o,) = [y for y in mol.neighbors_of(c) if mol.element_of(y) == 8]
-    assert link.side == -1 and plane[o][1] > plane[c][1]
-    assert leaving[c] == pytest.approx((0., -1.), abs=1e-6)
-
-
-def test_a_vertical_bond_leg_carries_straight_on():
-    """The lactam's amine end hangs on a vertical bond: its leg continues that line into the bar."""
-    mol, plane, link, leaving = _bracket_ends('lactam')
-    (n,) = [x for x in (link.a, link.b) if mol.element_of(x) == 7]
-    (y,) = [y for y in mol.neighbors_of(n) if y not in (link.a, link.b)]
-    assert plane[n][0] == pytest.approx(plane[y][0], abs=1e-6) and plane[n][1] < plane[y][1]
-    assert leaving[n] == pytest.approx((0., -1.), abs=1e-6)
+@pytest.mark.parametrize('name', ['triazole staple', 'alkene staple', 'lactam'])
+def test_a_bracket_bar_stands_bar_past_what_it_spans(name):
+    """The bar runs `BAR` past the outermost atom between its legs, the link ends among them."""
+    mol = molecule(name)
+    plane = layout2d(mol, force=True)
+    style = get_depict_style()
+    (link,) = routed_links(mol, plane)
+    (path,) = [n for n in link_paths(mol, plane, (link,), labels(mol, plane, style), style) if isinstance(n, Path)]
+    pts = _points(path)
+    s = link.side
+    x0, x1 = min(x for x, _ in pts), max(x for x, _ in pts)
+    outer = max([s * y for x, y in plane.values() if x0 - .1 <= x <= x1 + .1] +
+                [s * plane[link.a][1], s * plane[link.b][1]])
+    assert max(s * y for _, y in pts) - outer == pytest.approx(BAR, abs=.01)
 
 
 @pytest.mark.parametrize('name', ['oxytocin', 'linaclotide', 'lactam'])
 def test_a_leaf_link_end_leans_toward_its_partner(name):
-    """A bracket's leaf ends never lean out, so its legs mirror each other rather than run parallel."""
+    """A bracket's leaf ends never lean out, so its legs mirror each other rather than run parallel; a partner on
+    the backbone leaves its end as the bond drew it."""
     mol = molecule(name)
     plane = layout2d(mol, force=True)
+    backbone = set(monomers(mol).backbone)
     for k in routed_links(mol, plane):
         if k.kind != 'bracket':
             continue
         for x, o in ((k.a, k.b), (k.b, k.a)):
             ns = [y for y in mol.neighbors_of(x) if y != o]
-            if len(ns) == 1:
+            if len(ns) == 1 and o not in backbone:
                 dx, to = plane[x][0] - plane[ns[0]][0], plane[o][0] - plane[ns[0]][0]
                 assert dx * to > -1e-6, (name, x)
 
@@ -211,7 +238,150 @@ def test_a_counter_ion_goes_to_the_engine(monkeypatch):
     mol = smiles(CASES['oxytocin'] + '.CC(=O)O')
     seen = []
     engine = layout._engine_layout
-    monkeypatch.setattr(layout, '_engine_layout', lambda m, e: seen.append(len(m)) or engine(m, e))
+    monkeypatch.setattr(layout, '_engine_layout', lambda m, e, c=None: seen.append(len(m)) or engine(m, e, c))
     plane = layout2d(mol, force=True)
     assert 4 in seen and max(seen) < 10
     assert [k.kind for k in routed_links(mol, plane)] == ['bracket']
+
+
+# PubChem 16185392, a protected glycopeptide aglycone: four aryl link ends on rings hosted across the backbone
+AGLYCONE = ('CC(C)(C)C(=O)OCOC(=O)C1C2=C(C(=CC(=C2)O)O)C3=C(C=CC(=C3)C4C(=O)NC(C(C5=CC(=C(C=C5)OC6=CC7=CC(=C6O)OC8=C('
+            'C=C(CC9C(=O)NC(C2=CC(=CC(=C2)OC2=C(C=CC(=C2)C(C(=O)N9)NC(=O)OCC2=CC=CC=C2)O)O)C(=O)NC7C(=O)N4)C=C8)Cl)Cl'
+            ')O)C(=O)N1)O')
+
+
+@pytest.mark.parametrize('smi', [VANCOMYCIN, AGLYCONE], ids=['vancomycin', 'aglycone'])
+def test_a_bracket_leg_crosses_no_bond(smi, monkeypatch):
+    """A leg blocked on its way to the bar steps sideways past the obstruction, through no sugar and no own ring;
+    a link no leg can clear teleports.  Links left open, as closing them leaves no leg here."""
+    monkeypatch.setattr(peptide_layout, '_close_links', lambda ctx, best: best[0])
+    mol = smiles(smi)
+    plane = layout2d(mol, engine='chython', force=True)
+    style = get_depict_style()
+    links = [k for k in routed_links(mol, plane) if k.kind == 'bracket']
+    brackets = [n for n in link_paths(mol, plane, links, labels(mol, plane, style), style)
+                if isinstance(n, Path) and n.fill is None and n.dashes is None]
+    assert brackets
+    keys = {frozenset((k.a, k.b)) for k in links}
+    crossed = []
+    for path in brackets:
+        pts = _points(path)
+        for p, q in zip(pts, pts[1:]):
+            crossed.extend((b.n, b.m) for b in mol.bonds()
+                           if frozenset((b.n, b.m)) not in keys and _cross(p, q, plane[b.n], plane[b.m]))
+    assert crossed == []
+
+
+@pytest.mark.parametrize('smi', [VANCOMYCIN, AGLYCONE], ids=['vancomycin', 'aglycone'])
+def test_links_between_side_chain_rings_close_into_bonds(smi, monkeypatch):
+    """Every biaryl and diaryl ether link is drawn as a bond: its two side-chain groups turned and stretched
+    toward each other, no atom brought within `CLOSE` of another."""
+    mol = smiles(smi)
+    atoms = list(mol)
+
+    def near(plane):
+        return {(a, b) for i, a in enumerate(atoms) for b in atoms[i + 1:] if b not in mol.neighbors_of(a) and
+                hypot(plane[a][0] - plane[b][0], plane[a][1] - plane[b][1]) < peptide_layout.CLOSE}
+    plane = layout2d(mol, engine='chython', force=True)
+    assert routed_links(mol, plane) == ()
+    monkeypatch.setattr(peptide_layout, '_close_links', lambda ctx, best: best[0])
+    assert near(plane) <= near(layout2d(mol, engine='chython', force=True))
+
+
+# PubChem 11309298, a side-chain lactam linking a lysine amine to a glutamyl carbonyl
+SIDE_LACTAM = ('C[C@H]([C@H]1C(=O)N[C@H](C(=O)N[C@@H](CCCCNC(=O)CC[C@@H](C(=O)N[C@@H](C(=O)N[C@H](C(=O)N1)'
+               'CC2=CC=C(C=C2)CNC(C)C)CC3=CNC4=CC=CC=C43)NC(=O)[C@H](CC5=CC=CC=C5)N)C(=O)N[C@@H](CO)C(=O)O)'
+               'CC6=CC=CC=C6)O')
+# PubChem 13056982, a keto-chain closing on the N-terminal amine
+KETO_CHAIN = ('CCC(C)[C@H]1C(=O)N[C@H](C(=O)N[C@H](C(=O)NC(CCCCCC(=O)N[C@H](C(=O)N1)CC2=CC=C(C=C2)O)C(=O)NN)'
+              'CC(=O)N)CCC(=O)N')
+
+
+def test_an_end_level_with_its_backbone_takes_its_partners_side():
+    """A link whose ends both sit level with their backbone atoms brackets rather than teleports."""
+    mol = smiles(KETO_CHAIN)
+    plane = layout2d(mol, engine='chython', force=True)
+    assert [k.kind for k in routed_links(mol, plane)] == ['bracket']
+
+
+def test_a_cross_link_carbon_end_bearing_hydrogens_is_written():
+    mol = molecule('alkene staple')
+    plane = layout2d(mol)
+    svg = molecule_scene(mol, plane=plane).to_svg()
+    (a, b), = monomers(mol).crosslinks
+    end = a if mol.atom(a).implicit_h else b
+    assert mol.atom(end).atomic_symbol == 'C' and svg.count('>C</tspan>') == 1
+
+
+def test_a_leg_never_leaves_into_the_angle_of_its_two_bonds():
+    from math import atan2, pi
+    mol = smiles(SIDE_LACTAM)
+    plane = layout2d(mol, engine='chython', force=True)
+    for k in routed_links(mol, plane):
+        links = {frozenset((k.a, k.b))}
+        for x in (k.a, k.b):
+            ns = [y for y in mol.neighbors_of(x) if frozenset((x, y)) not in links]
+            if len(ns) != 2:
+                continue
+            a, b = (atan2(plane[y][1] - plane[x][1], plane[y][0] - plane[x][0]) for y in ns)
+            if (b - a) % (2 * pi) > pi:
+                a, b = b, a                             # the inner arc runs from a to b anticlockwise
+            for dx, dy in _free_directions(mol, plane, x, links):
+                assert (atan2(dy, dx) - a) % (2 * pi) > (b - a) % (2 * pi) - 1e-6
+
+
+@pytest.mark.parametrize('name', ['lactam', 'alkene staple', 'triazole staple', 'oxytocin', 'linaclotide'])
+def test_every_routed_link_starts_on_the_backbone(name):
+    mol = molecule(name)
+    plane = layout2d(mol, force=True)
+    backbone = set(monomers(mol).backbone)
+    for k in routed_links(mol, plane):
+        if k.kind != 'head_to_tail':
+            assert k.a in backbone or k.b in backbone, (name, k)
+
+
+def test_on_lattice_takes_a_bead_step_at_any_length():
+    from math import cos, radians, sin
+    from chython.depict.layout.lattice import L
+    plane = {1: (0., 0.), 2: (L * cos(radians(30)), L * sin(radians(30)))}
+    plane[3] = (plane[2][0] + 2.5 * L * cos(radians(-30)), plane[2][1] + 2.5 * L * sin(radians(-30)))
+    assert _on_lattice(plane, (1, 2, 3), (1,)) and not _on_lattice(plane, (1, 2, 3))
+
+
+def test_chain_layout_is_the_peptide_switch():
+    import chython
+    from chython.depict import get_chain_layout, get_peptide_layout, set_chain_layout, set_peptide_layout
+    assert get_chain_layout is get_peptide_layout and set_chain_layout is set_peptide_layout
+    chython.chain_layout = False
+    try:
+        assert chython.peptide_layout is False
+    finally:
+        chython.chain_layout = True
+
+
+@pytest.mark.parametrize('name', ['alpha-cd', 'calix4'])
+def test_a_cycle_closure_leaves_along_free_slots_and_crosses_nothing(name):
+    from math import atan2, pi
+    from chython.core.test.test_chains import ALPHA_CD, CALIX4
+    from chython.depict.peptide import _hits
+    mol = smiles({'alpha-cd': ALPHA_CD, 'calix4': CALIX4}[name])
+    plane = layout2d(mol, engine='chython', force=True)
+    style = get_depict_style()
+    boxes = labels(mol, plane, style)
+    (link,) = routed_links(mol, plane)
+    assert link.kind == 'head_to_tail'
+    keys = {frozenset((link.a, link.b))}
+    (path,) = [n for n in link_paths(mol, plane, (link,), boxes, style) if isinstance(n, Path)]
+    pts = _points(path)
+    ink = {x: lb.box for x, lb in boxes.items() if lb.text is not None}
+    ends = {link.a, link.b}
+    for p, q in zip(pts, pts[1:]):
+        assert _hits(mol, plane, None, p, q, ink, keys) <= sum(_hits(mol, plane, None, p, q, ink, keys) >
+                                                                _hits(mol, plane, x, p, q, ink, keys) for x in ends)
+    for x, (p, q) in ((min(ends, key=lambda x: (plane[x][0] - pts[0][0]) ** 2 + (plane[x][1] - pts[0][1]) ** 2),
+                       (pts[0], pts[1])),
+                      (min(ends, key=lambda x: (plane[x][0] - pts[-1][0]) ** 2 + (plane[x][1] - pts[-1][1]) ** 2),
+                       (pts[-1], pts[-2]))):
+        u = atan2(q[1] - p[1], q[0] - p[0])
+        assert min(abs((u - atan2(dy, dx) + pi) % (2 * pi) - pi) for dx, dy in _free_directions(mol, plane, x, keys)) \
+            < .1

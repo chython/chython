@@ -148,9 +148,9 @@ def test_no_overlapping_atoms(name, smi):
 
 @mark.parametrize('name,smi', flat, ids=[n for n, _ in flat])
 def test_bonds_are_even(name, smi):
-    """bond lengths stay close to uniform -- rings are not distorted"""
+    """bond lengths stay close to uniform -- rings are not distorted; the engine's own drawing, no chain chapter"""
     mol = smiles(smi)
-    mol.clean2d(engine='smilesdrawer')
+    mol.clean2d(engine='smilesdrawer', peptide=False)
 
     lengths = _bond_lengths(mol)
     mean = sum(lengths) / len(lengths)
@@ -234,6 +234,59 @@ def test_disconnected_components_are_separated():
     a, b = mol.connected_components
     xy = mol.coordinates()
     assert max(xy[n][0] for n in a) < min(xy[n][0] for n in b)
+
+
+def test_many_components_wrap_into_a_hexagonal_grid():
+    """a line of components over `WRAP` times wider than tall breaks into rows staggered by half a pitch"""
+    plane = layout_molecule.layout2d(smiles('.'.join(['[Na+].[Cl-]'] * 20)), engine='chython', force=True)
+    xs = [p[0] for p in plane.values()]
+    ys = [p[1] for p in plane.values()]
+    assert max(xs) - min(xs) < 4 * (max(ys) - min(ys))
+    rows = sorted({round(y, 3) for y in ys}, reverse=True)
+    first = sorted(x for x, y in plane.values() if round(y, 3) == rows[0])
+    second = min(x for x, y in plane.values() if round(y, 3) == rows[1])
+    assert second - first[0] == approx((first[1] - first[0]) / 2)
+
+
+def test_a_run_of_single_atoms_packs_into_a_staggered_block():
+    # PubChem 173227636: tungsten hexafluoride with titanium tetrachloride as ions
+    mol = smiles('F[W](F)(F)(F)(F)F.[Cl-].[Cl-].[Cl-].[Cl-].[Ti+4]')
+    plane = layout_molecule.layout2d(mol, engine='chython', force=True)
+    ions = [plane[x] for c in mol.connected_components if len(c) == 1 for x in c]
+    rows = sorted({round(y, 3) for _, y in ions}, reverse=True)
+    assert len(rows) == 2
+    top = sorted(x for x, y in ions if round(y, 3) == rows[0])
+    low = sorted(x for x, y in ions if round(y, 3) == rows[1])
+    assert (len(top), len(low)) == (3, 2)
+    assert low[0] - top[0] == approx((top[1] - top[0]) / 2)
+
+
+def test_components_keep_their_gap_between_label_inks():
+    from chython.depict.label import labels
+    from chython.depict.style import get_depict_style
+    mol = smiles('CCO.OCC')                                                                # PubChem 702, twice
+    plane = layout_molecule.layout2d(mol, engine='chython', force=True)
+    box = {n: v.box for n, v in labels(mol, plane, get_depict_style()).items()}
+    a, b = mol.connected_components
+    assert min(box[x].min_x for x in b) - max(box[x].max_x for x in a) > .99 * layout_molecule.SPACE
+
+
+def test_a_line_of_many_components_breaks_sooner():
+    # PubChem 162297779: two silyl amidines among five other components
+    mol = smiles('[3HH].[3HH].[3HH].[3HH].[Li+].[CH3-].[CH3-].C[Si](C)(C)OC1CCC(C1)[Si](C2=CC=CC=C2)(C3=CC=CC=C3)'
+                 'N4CCCN5C4=NCCC5.C[Si](C)(C)OC1=CC(C=C1)[Si](C2=CC=CC=C2)(C3=CC=CC=C3)N4CCCN5C4=NCCC5.F.'
+                 'F[Cr](F)(F)(Cl)(Cl)Cl.Cl[Cr]Cl')
+    plane = layout_molecule.layout2d(mol, engine='chython', force=True)
+    xs = [p[0] for p in plane.values()]
+    ys = [p[1] for p in plane.values()]
+    assert max(xs) - min(xs) < 3 * (max(ys) - min(ys))
+
+
+def test_a_few_components_stay_in_a_line():
+    mol = smiles('N.N.Cl[Pt]Cl')
+    plane = layout_molecule.layout2d(mol, engine='chython', force=True)
+    mids = {round(min(plane[x][1] for x in c) + max(plane[x][1] for x in c), 3) for c in mol.connected_components}
+    assert len(mids) == 1
 
 
 def test_layout_is_deterministic():

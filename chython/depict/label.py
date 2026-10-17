@@ -49,6 +49,8 @@ _DEGENERATE_SPAN = 0.01
 MINUS = '−'
 
 # CXSMILES' own vocabulary, so the picture and the `|&1:...|` the file carried spell it the same way.
+HYDRIDE_FIRST = frozenset(('O', 'S', 'Se', 'Te', 'Po', 'F', 'Cl', 'Br', 'I', 'At'))   # groups 16 and 17
+
 _GROUP_MARKS = {STEREO_AND: '&', STEREO_OR: 'o'}
 
 # Below this the annotation column's direction is vertical enough that a left/right anchor would hang the
@@ -64,6 +66,9 @@ _LABEL_COST = 2.
 # Two atoms on one point: no direction is derivable from that neighbour, so it does not vote.  The same
 # threshold `bonds.py` refuses a bond at, since it is the same question.
 _MIN_LENGTH = 1e-9
+
+# A two-bond carbon turned less than this off straight has no visible vertex: 5 degrees.
+_STRAIGHT = .087
 
 # How far off its one bond a terminal atom's annotation is turned, and the corner a crowded one falls back
 # to.  120 degrees is a drawing's own angle -- the place the next substituent would have been drawn -- and
@@ -103,6 +108,19 @@ def is_labelled(atom, style: DepictStyle) -> bool:
     return False
 
 
+def _straight_through(mol, plane, n) -> bool:
+    """A two-bond carbon on a straight line between bonds of one order: `C=C=C` reads as one long bond.
+
+    `C-C#C` changes order at the vertex, which marks the atom, so it stays bare.
+    """
+    nb = list(mol.neighbors_of(n))
+    if len(nb) != 2 or mol.bond(n, nb[0]).order != mol.bond(n, nb[1]).order:
+        return False
+    (x, y), (ax, ay), (bx, by) = plane[n], plane[nb[0]], plane[nb[1]]
+    t = abs(atan2(ay - y, ax - x) - atan2(by - y, bx - x)) % (2 * pi)
+    return abs(t - pi) < _STRAIGHT
+
+
 def element_colour(atom, style: DepictStyle) -> str:
     """The fill colour for this atom's label, as a normalized lowercase hex string."""
     if not style.atom.colour_by_element:
@@ -135,12 +153,13 @@ class Label(NamedTuple):
     annotations: tuple[Text, ...] = ()
 
 
-def labels(mol, plane, style: DepictStyle) -> dict[int, Label]:
+def labels(mol, plane, style: DepictStyle, shown=frozenset()) -> dict[int, Label]:
     """One `Label` per atom, in arena order.
 
     `plane` is passed rather than read off the molecule so a caller can draw a layout it has not stored.
     The guard therefore validates `plane` itself -- every atom present, non-degenerate span -- and not
-    `mol.has_layout`, which would refuse that very case.
+    `mol.has_layout`, which would refuse that very case.  A carbon of `shown` is written as a heteroatom is: a CH2
+    at the end of a routed cross-link.
 
     :raises ValueError: an atom is missing from `plane`, or every atom sits near one point.
     """
@@ -154,25 +173,29 @@ def labels(mol, plane, style: DepictStyle) -> dict[int, Label]:
         ys = [plane[sid][1] for sid in ids]
         if max(xs) - min(xs) < _DEGENERATE_SPAN and max(ys) - min(ys) < _DEGENERATE_SPAN:
             raise ValueError('plane is degenerate (all atoms near one point): call clean2d() first')
-    out = {}
-    for atom in mol.atoms():
-        sid = atom.n
-        point = plane[sid]
-        baseline = point[1] - style.label.baseline_shift * style.label.size
-        if is_labelled(atom, style):
-            runs, anchor_mode = _compose(atom, mol, plane, style)
-            text = Text(runs, x=point[0], y=baseline, anchor=anchor_mode,
-                        fill=element_colour(atom, style))
-            box = text_box(text).inflate(style.label.pad)
-        else:
-            text = None
-            box = Box(point[0], point[1], point[0], point[1])
-        out[sid] = Label(sid, text, box, point)
+    out = {atom.n: _label(atom, mol, plane, style, atom.n in shown) for atom in mol.atoms()}
     # A second pass, because where an annotation goes is decided against the OTHER labels' ink and the
     # trimmed bonds -- neither of which is known while the first atom is still being measured.
     if style.atom.stereo_labels or style.atom.map_numbers or style.atom.stereo_groups:
         _place_annotations(mol, plane, out, style)
     return out
+
+
+def ink_boxes(mol, plane, style: DepictStyle) -> dict[int, Box]:
+    """The ink `labels` gives each atom, annotations aside, without its guard: components lie on top of each other
+    before they are set apart."""
+    return {atom.n: _label(atom, mol, plane, style).box for atom in mol.atoms()}
+
+
+def _label(atom, mol, plane, style, shown=False):
+    sid = atom.n
+    point = plane[sid]
+    if shown or is_labelled(atom, style) or atom.atomic_symbol == 'C' and _straight_through(mol, plane, sid):
+        runs, anchor_mode = _compose(atom, mol, plane, style)
+        text = Text(runs, x=point[0], y=point[1] - style.label.baseline_shift * style.label.size,
+                    anchor=anchor_mode, fill=element_colour(atom, style))
+        return Label(sid, text, text_box(text).inflate(style.label.pad), point)
+    return Label(sid, None, Box(point[0], point[1], point[0], point[1]), point)
 
 
 def _compose(atom, mol, plane, style):
@@ -502,8 +525,11 @@ def _reads_right_to_left(atom, mol, plane) -> bool:
     """True when the hydrogens belong on the left of the symbol.
 
     Only when every neighbour is strictly to the right, leaving the left side clear: one neighbour at or
-    to the left already occupies it.  A degree-0 atom reads left to right by convention.
+    to the left already occupies it.  A degree-0 atom follows the Red Book's binary hydrides: `HYDRIDE_FIRST`
+    writes H2O and HCl, the rest NH3 and CH4.
     """
+    if not atom.degree:
+        return atom.atomic_symbol in HYDRIDE_FIRST
     x = plane[atom.n][0]
     has_neighbours = False
     for neighbour in mol.neighbors_of(atom.n):
