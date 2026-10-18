@@ -200,6 +200,27 @@ def test_a_group_over_every_centre_of_a_meso_triol_reads_as_absolute(text, kind)
     assert list(m.live_stereo_groups()) == [(1, 0)]
 
 
+#: cyclopropane-1,2,3-tricarboxylic acid and its triamide, C1 open and C2, C3 trans: the cis,cis,trans isomer
+TRANS_PAIR = ['OC(=O)C1[C@H](C(=O)O)[C@H]1C(=O)O', 'NC(=O)C1[C@H](C(N)=O)[C@H]1C(N)=O']
+
+
+@mark.parametrize('text', TRANS_PAIR, ids=['acid', 'amide'])
+@mark.parametrize('kind', ['&1', 'o1', 'a'])
+def test_a_group_over_a_pseudo_asymmetric_trans_pair_reads_as_absolute(text, kind):
+    """Each member is refused in every combination, and the pair pins the cis,cis,trans isomer, which is its
+    own mirror image: the group states it as ABS does, and `validate_stereo` keeps both signs."""
+    flat = read_smiles(text.replace('@', ''))
+    absolute = read_smiles(f'{text} |a:4,8|')
+    m = read_smiles(f'{text} |{kind}:4,8|')
+    assert m == absolute and hash(m) == hash(absolute) and str(m) == str(absolute)
+    assert m != read_smiles(text) and m != flat
+    assert re.search(r' \|a:\d+,\d+\|$', str(m)) and m.stereo_is_live(5) and m.stereo_is_live(9)
+    assert m.copy().validate_stereo() == []
+    c = m.copy()
+    c.canonicalize_stereo_groups()
+    assert c == absolute and str(c) == str(absolute)
+
+
 @mark.parametrize('signs', ANY_TRIOL)
 def test_an_absolute_centre_between_two_and_collections_states_nothing(signs):
     """`|a:3,&1:1,&2:5|` is `|&1:1,&2:5|` with C3 open, and its string reads back to itself."""

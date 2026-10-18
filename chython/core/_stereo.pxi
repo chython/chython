@@ -5687,16 +5687,20 @@ cdef int _stereogenic_in_some_phase(Structure structure, uint8_t *keep, dict cac
 
     | parity                    | kept when                                                        |
     | ------------------------- | ---------------------------------------------------------------- |
-    | an AND or OR group member | its unit is stereogenic in the drawing or in some combination    |
+    | an AND or OR group member | its unit is stereogenic in the drawing or in some combination,   |
+    |                           | or, refused in every one, inverting it changes what the drawing  |
+    |                           | states                                                           |
     | ABS or unlabelled         | that, and when refused in some combination, inverting it changes |
     |                           | what the drawing states                                          |
 
     Combinations are `phase_context`'s.  The inversion test compares `_phase_meaning` with and
     without the parity inverted: `CC(O)[C@H](O)C(O)C` states nothing at C3, since the completions of
     C2 and C4 are the four diastereomers either way, while `C[C@H](O)[C@H](O)C(O)C` states ribo or
-    L-arabino and its C3 inverse xylo or D-arabino.  Over PHASE_GROUP_LIMIT choices every parity is
-    kept: an unneeded parity makes two spellings of one compound compare unequal, never two
-    compounds equal.
+    L-arabino and its C3 inverse xylo or D-arabino.  A group member every combination refuses can
+    still state something with the rest of its group: C2 and C3 of cyclopropane-1,2,3-tricarboxylic
+    acid drawn trans with C1 open are each refused, and together pin the cis,cis,trans isomer.  Over
+    PHASE_GROUP_LIMIT choices every parity is kept: an unneeded parity makes two spellings of one
+    compound compare unequal, never two compounds equal.
     """
     cdef uint32_t n = structure.header.atom_count, i
     cdef phase_context_t ctx
@@ -5735,6 +5739,22 @@ cdef int _stereogenic_in_some_phase(Structure structure, uint8_t *keep, dict cac
                     keep[i] = 0
             except AutomorphismBudgetExceeded:
                 pass
+        if sg is NULL:
+            return 0
+        for i in range(n):
+            # a group member refused in every combination: kept when inverting it changes the meaning
+            if (keep[i] or not refused[i] or not sg[i] or sg_kind(sg[i]) == SG_KIND_ABS
+                    or not structure_parity_at(structure, i) or stereo_unit_of(structure, i) is NULL):
+                continue
+            if base is None:
+                base = _abs_read_clone(structure)
+            try:
+                if drawn is None:
+                    drawn = _phase_meaning(base, sg, &ctx, n, cache)
+                if _phase_meaning(base, sg, &ctx, i, cache) != drawn:
+                    keep[i] = 1
+            except AutomorphismBudgetExceeded:
+                keep[i] = 1                 # over budget a parity is kept, as over PHASE_GROUP_LIMIT
     finally:
         PyMem_Free(refused)
     return 0
