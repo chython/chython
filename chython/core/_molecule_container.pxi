@@ -4800,6 +4800,8 @@ cdef class MoleculeContainer:
         cdef int decided
         cdef uint32_t written = 0
         cdef list numbers = self._numbers
+        cdef str reason
+        cdef object exc
         # BEFORE ANY POINTER INTO THE ARENA: this appends SEG_STEREO_UNIT and so may move the buffer
         ensure_stereo_units(structure)
         atoms = structure.atoms()
@@ -4814,16 +4816,17 @@ cdef class MoleculeContainer:
                 parity = structure_parity_at(structure, u.anchor)
                 if parity == 0:
                     continue
+                reason = 'rules 1a/1b/2 do not settle the site'
                 try:
                     decided = cip_rank_directions(&ctx, u, order)
-                except OverflowError:
-                    # a node wider than CIP_KIDS_MAX or a branch deeper than CIP_DEPTH_MAX: refuse the
-                    # site through the same channel a tie takes, and go on to the next one
+                except OverflowError as exc:
+                    # a node wider than CIP_KIDS_MAX, a branch deeper than CIP_DEPTH_MAX or a site past
+                    # CIP_WORK_MAX: refuse it through the same channel a tie takes, and go on to the next
                     decided = 1
+                    reason = str(exc)
                 if decided:
-                    self._log_event('cip:undecided', 'cip',
-                                    'atom %d: rules 1a/1b/2 do not settle the site'
-                                    % numbers[u.anchor], mc_refused())
+                    self._log_event('cip:undecided', 'cip', 'atom %d: %s' % (numbers[u.anchor], reason),
+                                    mc_refused())
                     continue
                 if translate_parity(parity, order) == CIP_R_PARITY:
                     code = CIP_CODE_R
@@ -9210,7 +9213,7 @@ def _cip_subtree_probe(MoleculeContainer mol not None, tuple pairs, bint keys=Fa
             e = csr_find(mol._structure, ps, ns)
             if e is NULL:
                 raise KeyError('atoms %r and %r are not bonded' % (pair[1], pair[0]))
-            id_ = cip_branch(&ctx, ns, ps, e.order)
+            id_ = cip_branch(&ctx, ps, e)
             out.append(_cip_node_key(&ctx, id_) if keys else id_)
     finally:
         cip_ctx_free(&ctx)

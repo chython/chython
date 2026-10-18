@@ -125,9 +125,11 @@ cdef inline uint64_t cip_rank_word(atom_t *a, bint duplicate, uint32_t back) noe
 
 
 # THE SHARED DIGRAPH.  CIP's hierarchical digraph is a tree over simple paths, which is what makes it
-# exponential and per-centre.  Two things make it one DAG per molecule instead: nodes are hash-consed on
-# their FULL key, so identical branches are one node; and the key is depth-invariant (see `cip_word_of`),
-# so a branch hanging further out is still the same node.
+# exponential and per-centre.  Three things make it one DAG per molecule instead: nodes are hash-consed on
+# their FULL key, so identical branches are one node; the key is depth-invariant (see `cip_word_of`), so a
+# branch hanging further out is still the same node; and a branch entered across a bridge is built once
+# (`ctx.bridge`), since no path can reach back across a bridge.  Without the last, every ring on the way
+# out doubles the walk beyond it: two laps per ring, 2^k for k rings in series.
 DEF CIP_NO_ID = 0xffffffff
 DEF CIP_NODE_INIT = 256      # node pool, child pool and intern table all start from this and double
 DEF CIP_DEPTH_MAX = 1024     # a branch deeper than this refuses rather than recursing on.  Depth is
@@ -140,6 +142,12 @@ DEF CIP_NODE_UNDECIDABLE = 1 # order 4 or 8 in this node's bonds, an unknown hyd
                              # same anywhere below it
 DEF CIP_MEMO_INIT = 1024     # comparison verdicts; a steroid's centres re-ask the same pairs
 DEF CIP_MEMO_ABSENT = 2      # not a verdict: the three verdicts are -1, 0 and 1
+DEF CIP_WORK_MAX = 100000    # node expansions plus comparator pairs one site may spend before it refuses.
+                             # A guard against fused systems whose simple paths are exponential in their
+                             # cyclomatic number (perhydro-circumcoronene); the worst site of 115k chiral
+                             # drug-like records spends 4562.  The count is what the site did after what
+                             # earlier sites cached, so near the bound which site refuses can follow unit
+                             # order -- a refusal, never another letter
 
 # All bits set, and a `cdef` rather than a `DEF` because a 64-bit literal of this width is a Python int
 # to Cython, which cannot be compared under nogil.  No node pair can spell it: both ids would have to be
@@ -166,6 +174,8 @@ cdef struct cip_ctx_t:
     uint32_t *ring_system    # per atom, cip_ring_systems
     uint8_t *on_path         # per atom: 1 while the walk holds it, for expansion clause 4
     uint32_t *path_depth     # per atom: the sphere it sits at on the current path, for rule 1b's back
+    uint32_t *bridge         # per half-edge: the branch across a non-ring bond, CIP_NO_ID until built
+    uint64_t work            # this site's spend against CIP_WORK_MAX; `cip_rank_directions` zeroes it
     cip_node_t *node         # the interned node pool
     uint32_t *child          # child-id runs in the canonical intern order, indexed by node.first_child
     uint32_t *corder         # the same runs in CIP priority order, filled lazily
@@ -186,6 +196,7 @@ cdef void cip_ctx_free(cip_ctx_t *ctx) noexcept nogil:
     free(ctx.ring_system)
     free(ctx.on_path)
     free(ctx.path_depth)
+    free(ctx.bridge)
     free(ctx.node)
     free(ctx.child)
     free(ctx.corder)
@@ -197,6 +208,7 @@ cdef void cip_ctx_free(cip_ctx_t *ctx) noexcept nogil:
     ctx.ring_system = NULL
     ctx.on_path = NULL
     ctx.path_depth = NULL
+    ctx.bridge = NULL
     ctx.node = NULL
     ctx.child = NULL
     ctx.corder = NULL
@@ -208,7 +220,9 @@ cdef int cip_ctx_init(cip_ctx_t *ctx, Structure structure) except -1:
     cdef uint32_t i
     cdef uint32_t n = structure.header.atom_count
     cdef size_t span = <size_t> (n if n else 1)
+    cdef uint32_t n_half = csr_ptr(structure)[n]
     ctx.n = n
+    ctx.work = 0
     ctx.ptr = csr_ptr(structure)
     ctx.edges = csr_edges(structure)
     ctx.atoms = structure.atoms()
@@ -220,6 +234,7 @@ cdef int cip_ctx_init(cip_ctx_t *ctx, Structure structure) except -1:
     ctx.ring_system = <uint32_t *> malloc(span * sizeof(uint32_t))
     ctx.on_path = <uint8_t *> calloc(span, sizeof(uint8_t))
     ctx.path_depth = <uint32_t *> calloc(span, sizeof(uint32_t))
+    ctx.bridge = <uint32_t *> malloc(<size_t> (n_half if n_half else 1) * sizeof(uint32_t))
     ctx.node = <cip_node_t *> malloc(<size_t> ctx.cap_nodes * sizeof(cip_node_t))
     ctx.child = <uint32_t *> malloc(<size_t> ctx.cap_child * sizeof(uint32_t))
     ctx.corder = <uint32_t *> malloc(<size_t> ctx.cap_child * sizeof(uint32_t))
@@ -228,8 +243,8 @@ cdef int cip_ctx_init(cip_ctx_t *ctx, Structure structure) except -1:
     ctx.memo_mask = CIP_MEMO_INIT - 1
     ctx.memo_key = <uint64_t *> malloc(<size_t> CIP_MEMO_INIT * sizeof(uint64_t))
     ctx.memo_val = <int8_t *> malloc(<size_t> CIP_MEMO_INIT * sizeof(int8_t))
-    if (ctx.ring_system is NULL or ctx.on_path is NULL or ctx.path_depth is NULL or ctx.node is NULL
-            or ctx.child is NULL or ctx.corder is NULL or ctx.bucket is NULL
+    if (ctx.ring_system is NULL or ctx.on_path is NULL or ctx.path_depth is NULL or ctx.bridge is NULL
+            or ctx.node is NULL or ctx.child is NULL or ctx.corder is NULL or ctx.bucket is NULL
             or ctx.memo_key is NULL or ctx.memo_val is NULL):
         cip_ctx_free(ctx)
         raise MemoryError()
@@ -237,6 +252,8 @@ cdef int cip_ctx_init(cip_ctx_t *ctx, Structure structure) except -1:
         ctx.bucket[i] = CIP_NO_ID
     for i in range(CIP_MEMO_INIT):
         ctx.memo_key[i] = CIP_MEMO_EMPTY
+    for i in range(n_half):
+        ctx.bridge[i] = CIP_NO_ID
     cip_ring_systems(structure, ctx.ring_system)
     return 0
 
@@ -363,6 +380,30 @@ cdef inline uint32_t cip_intern_hydrogen(cip_ctx_t *ctx) except? CIP_NO_ID:
     return cip_intern(ctx, cip_word_of(1, 0, False, 0), 0, NULL, 0)
 
 
+cdef inline int _cip_spend(cip_ctx_t *ctx) except -1:
+    """One unit of the site's CIP_WORK_MAX.  Raises OverflowError, the refusal the other caps take."""
+    ctx.work += 1
+    if ctx.work > CIP_WORK_MAX:
+        raise OverflowError('CIP site spent more than %d steps' % CIP_WORK_MAX)
+    return 0
+
+
+cdef uint32_t cip_across(cip_ctx_t *ctx, uint32_t atom, uint32_t k, uint32_t depth) except? CIP_NO_ID:
+    """The branch across half-edge `k` of `atom`, entered at sphere `depth`: `ctx.bridge` across a bridge.
+
+    A bridge's far side holds no atom of the path that reached it, so clause 4 never fires there and the
+    branch is the same node whichever path asks; inside a ring system it is path-dependent and rebuilt.
+    """
+    cdef uint32_t kid
+    if ctx.edges[k].flags & HE_IN_RING:
+        return cip_subtree(ctx, ctx.edges[k].to, atom, ctx.edges[k].order, depth)
+    kid = ctx.bridge[k]
+    if kid == CIP_NO_ID:
+        kid = cip_subtree(ctx, ctx.edges[k].to, atom, ctx.edges[k].order, depth)
+        ctx.bridge[k] = kid
+    return kid
+
+
 cdef inline void _cip_sort_ids_desc(cip_ctx_t *ctx, uint32_t *ids, uint32_t n) noexcept nogil:
     """Insertion sort of `ids` by node word descending, then by id ascending.  n <= CIP_KIDS_MAX.
 
@@ -433,6 +474,7 @@ cdef uint32_t cip_subtree(cip_ctx_t *ctx, uint32_t atom, uint32_t parent, uint32
             break
     if flags & CIP_NODE_UNDECIDABLE:
         return cip_intern(ctx, cip_rank_word(a, False, 0), flags, kids, 0)
+    _cip_spend(ctx)
     ctx.on_path[atom] = 1
     ctx.path_depth[atom] = depth
     try:
@@ -455,7 +497,7 @@ cdef uint32_t cip_subtree(cip_ctx_t *ctx, uint32_t atom, uint32_t parent, uint32
                     n_kids += 1
                     reps -= 1
                 continue
-            kid = cip_subtree(ctx, target, atom, order, depth + 1)                      # clause 1
+            kid = cip_across(ctx, atom, k, depth + 1)                                   # clause 1
             flags |= ctx.node[kid].flags & CIP_NODE_UNDECIDABLE                         # clause 5
             if n_kids >= CIP_KIDS_MAX:
                 raise OverflowError('CIP node with more than %d children' % CIP_KIDS_MAX)
@@ -482,15 +524,15 @@ cdef uint32_t cip_subtree(cip_ctx_t *ctx, uint32_t atom, uint32_t parent, uint32
         ctx.on_path[atom] = 0
 
 
-cdef uint32_t cip_branch(cip_ctx_t *ctx, uint32_t atom, uint32_t parent,
-                         uint32_t in_order) except? CIP_NO_ID:
-    """One direction of a stereo unit, sphere 1.  The ANCHOR goes on the path first: a ring closing back
-    onto it has to close on a duplicate, and left off the path the anchor would be expanded again and the
-    branch would carry a whole extra lap of real atoms."""
+cdef uint32_t cip_branch(cip_ctx_t *ctx, uint32_t parent, halfedge_t *e) except? CIP_NO_ID:
+    """One direction of a stereo unit, sphere 1: the branch across `e`, a half-edge of the anchor `parent`.
+    The ANCHOR goes on the path first: a ring closing back onto it has to close on a duplicate, and left
+    off the path the anchor would be expanded again and the branch would carry a whole extra lap of real
+    atoms."""
     ctx.on_path[parent] = 1
     ctx.path_depth[parent] = 0
     try:
-        return cip_subtree(ctx, atom, parent, in_order, 1)
+        return cip_across(ctx, parent, <uint32_t> (e - ctx.edges), 1)
     finally:
         ctx.on_path[parent] = 0
 
@@ -568,6 +610,43 @@ cdef int _cip_frontier_grow(uint32_t **fa, uint32_t **fb, uint32_t **ga, uint32_
         buffers[i][0] = p
     cap[0] = c
     return 0
+
+
+DEF CIP_DEDUP_FROM = 32      # a sphere this long drops its repeated pairs before it is walked
+
+
+cdef uint32_t _cip_frontier_dedup(uint32_t *ga, uint32_t *gb, uint32_t n) except? 0:
+    """Drop every repeat of a `(ga[i], gb[i])` pair, keeping first occurrences in order; the new length.
+
+    EXACT, not a heuristic.  A repeat sits later in the sphere and its children land later in the next
+    one, as the same pairs the first occurrence already contributes; it can never be where the first
+    difference is.  Behind a ring the unfolded digraph repeats every branch once per lap, which without
+    this doubles the frontier per ring.
+    """
+    cdef uint32_t cap = 64
+    cdef uint32_t i, kept = 0, slot
+    cdef uint64_t key
+    cdef uint64_t *seen
+    while cap < 2 * n:
+        cap *= 2
+    seen = <uint64_t *> malloc(<size_t> cap * sizeof(uint64_t))
+    if seen is NULL:
+        raise MemoryError()
+    for i in range(cap):
+        seen[i] = CIP_MEMO_EMPTY
+    for i in range(n):
+        key = (<uint64_t> ga[i] << 32) | <uint64_t> gb[i]
+        slot = <uint32_t> (((key * <uint64_t> 0x9e3779b97f4a7c15) >> 32) & (cap - 1))
+        while seen[slot] != CIP_MEMO_EMPTY and seen[slot] != key:
+            slot = (slot + 1) & (cap - 1)
+        if seen[slot] == key:
+            continue
+        seen[slot] = key
+        ga[kept] = ga[i]
+        gb[kept] = gb[i]
+        kept += 1
+    free(seen)
+    return kept
 
 
 cdef inline void _cip_frontier_swap(uint32_t **fa, uint32_t **fb,
@@ -689,6 +768,9 @@ cdef int cip_compare_nodes(cip_ctx_t *ctx, uint32_t a, uint32_t b) except -2:
         while la:
             lb = 0
             for i in range(la):
+                if fa[i] == fb[i]:          # one node, one subtree: nothing below it can differ
+                    continue
+                _cip_spend(ctx)
                 ka = cip_children_ordered(ctx, fa[i])
                 kb = cip_children_ordered(ctx, fb[i])
                 ca = ctx.node[fa[i]].n_children
@@ -715,6 +797,8 @@ cdef int cip_compare_nodes(cip_ctx_t *ctx, uint32_t a, uint32_t b) except -2:
                 lb += ca
             if settled:
                 break
+            if lb > CIP_DEDUP_FROM:
+                lb = _cip_frontier_dedup(ga, gb, lb)
             _cip_frontier_swap(&fa, &fb, &ga, &gb)
             la = lb
         _cip_memo_put(ctx, key, verdict)
@@ -747,12 +831,14 @@ cdef int cip_rank_directions(cip_ctx_t *ctx, stereo_unit_t *u, uint32_t *order_o
 
     Returns 0 on a full ranking and 1 when rules 1a/1b/2 do not settle the unit -- a tie between two
     directions, or a ligand carrying CIP_NODE_UNDECIDABLE.  The caller refuses on 1; it never breaks a
-    tie itself.
+    tie itself.  OverflowError past any cap, CIP_WORK_MAX included, is a refusal too; the work count is
+    this site's, zeroed here.
     """
     cdef uint32_t ids[4]
     cdef uint32_t i, j, v
     cdef int cmp_
     cdef halfedge_t *e
+    ctx.work = 0
     # EVERY SUBTREE FIRST: interning may move ctx.corder, and the sort below holds pointers into it
     for i in range(4):
         order_out[i] = i
@@ -761,7 +847,7 @@ cdef int cip_rank_directions(cip_ctx_t *ctx, stereo_unit_t *u, uint32_t *order_o
             e = csr_find_at(ctx.ptr, ctx.edges, u.anchor, u.refs[i])
             if e is NULL:
                 raise KeyError('a stereo unit names a direction that is not a bond')
-            ids[i] = cip_branch(ctx, u.refs[i], u.anchor, e.order)
+            ids[i] = cip_branch(ctx, u.anchor, e)
             if ctx.node[ids[i]].flags & CIP_NODE_UNDECIDABLE:
                 return 1
     for i in range(1, 4):
