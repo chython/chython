@@ -524,3 +524,11 @@ def test_a_meso_group_beside_another_group_reads_as_absolute():
     m = read_smiles('C[C@H]1C[C@@H](C)C1.C[C@H](O)CC |&1:1,3,o1:7|')
     assert str(m) == 'C1[C@@H](C)C[C@H]1C.C[C@H](O)CC |a:1,4,o1:7|'
     assert [f.code for f in audit_stereo(m).findings] == ['stereo-audit:meso-absolute']
+
+
+def test_a_copy_is_audited_as_the_original_is():
+    """Reader findings come from `molecule.log`, which `copy()` carries."""
+    mol = read_smiles('CC(O)CC {A1=q}')
+    codes = [f.code for f in audit_stereo(mol).findings]
+    assert 'smiles:cip-undetermined' in codes
+    assert [f.code for f in audit_stereo(mol.copy()).findings] == codes

@@ -565,13 +565,13 @@ class ReactionContainer:
     # --- copies ----------------------------------------------------------------------------------
 
     def copy(self) -> 'ReactionContainer':
-        """A deep copy: every molecule is copied, metadata and title come along."""
+        """A deep copy: every molecule is copied, metadata, title and log come along."""
         copy = object.__new__(type(self))
         copy._reactants = tuple(m.copy() for m in self._reactants)
         copy._products = tuple(m.copy() for m in self._products)
         copy._agents = tuple(m.copy() for m in self._agents)
         copy._meta = None if self._meta is None else self._meta.copy()
-        copy._log = None  # per handle, exactly as the molecule's is
+        copy._log = None if self._log is None else Log(self._log)  # provenance, in a list of its own, as the molecule's
         copy._title = self._title
         return copy
 

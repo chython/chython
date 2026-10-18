@@ -302,19 +302,20 @@ def test_copy_carries_the_descriptors():
     assert clone.shares_arena_with(mol)
 
 
-def test_a_copy_starts_with_an_empty_drop_log():
-    """The descriptors travel with the arena; the drop history does not, and that is deliberate.
-
-    `cip_log` records what THIS handle's edits lost, the same standing `sgroup_log` has.  A copy has
-    made no edits, so it has lost nothing, and a copied log would attribute one handle's losses to
-    another.  Read the log from the container you edited.
-    """
+def test_a_copy_carries_the_drop_log_and_logs_its_own_edits_alone():
+    """The drop history is provenance and travels with `copy()`; an edit after the copy is logged on the
+    handle that made it."""
     mol, c1, c2, c3, f = _propene()
     mol.set_atom_cip(c2, 'R')
     with mol.edit() as e:
         e.delete_atom(f)
     assert mol.cip_log, 'the delete should have logged'
-    assert mol.copy().cip_log == ()
+    clone = mol.copy()
+    assert clone.cip_log == mol.cip_log
+    clone.set_atom_cip(c2, 'S')
+    with clone.edit() as e:
+        e.delete_atom(c1)
+    assert len(clone.cip_log) > len(mol.cip_log) and clone.cip_log[:len(mol.cip_log)] == mol.cip_log
 
 
 def test_a_pack_round_trip_keeps_every_descriptor():

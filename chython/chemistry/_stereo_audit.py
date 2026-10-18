@@ -466,13 +466,17 @@ def _waits_for(ctx):
 
 
 def _logs_unrealisable(molecule):
-    """A copy, whose log starts empty, logs `stereo:bridgehead-unrealisable` on an uncached write.
+    """Does an uncached write of `molecule` log `stereo:bridgehead-unrealisable`?
 
-    `copy()` carries the cached `str()` and identity, which therefore log nothing; the slot-order spec
-    `'i'` is never cached and always reads the coupled sets.
+    Asked of a copy with its log cleared: `copy()` carries the log, and the writer logs the record once per
+    log, so a record inherited from the source would answer for the source.  `copy()` also carries the
+    cached `str()` and identity, which therefore log nothing; the slot-order spec `'i'` is never cached and
+    always reads the coupled sets.
     """
-    format(molecule, 'i')
-    return any(r.rule == _UNREALISABLE for r in molecule.log)
+    probe = molecule.copy()
+    del probe.log[:]
+    format(probe, 'i')
+    return any(r.rule == _UNREALISABLE for r in probe.log)
 
 
 def _label_strength(key):

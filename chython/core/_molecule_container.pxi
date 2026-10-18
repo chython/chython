@@ -2628,6 +2628,9 @@ cdef class MoleculeContainer:
         # Shallow: the values are the caller's objects and copying them would be a second policy
         # nobody asked for.
         mol._meta = None if self._meta is None else dict(self._meta)
+        # The log is the record's provenance -- what was read, repaired or lost to get here -- and a copy is
+        # the same record.  Its own list, so what either handle does afterwards is logged on that handle.
+        mol._log = None if self._log is None else _MC_LOG(self._log)
         return mol
 
     def shares_arena_with(self, MoleculeContainer other not None):
@@ -6837,9 +6840,9 @@ cdef class MoleculeContainer:
         A `chython.core.Log`, so `by_stage`, `by_severity`, `repaired()` and `lost()` all work.  ONE
         STORAGE: `sgroup_log` and `cip_log` are read-only views over this, filtered by stage.
 
-        PER HANDLE.  `copy()` does not carry it, because `cip_log` records what THIS handle's edits
-        lost -- the standing `core/test/test_cip_storage.py:306` states, now that both live here.  It is
-        in neither `to_bytes` nor `pack`: derived diagnostics, not data.
+        PROVENANCE, SO A COPY CARRIES IT.  `copy()` starts the copy with every record so far, in a list of
+        its own: `audit_stereo(m.copy())` sees what the reader logged, and an edit after the copy is logged
+        on the handle that made it.  It is in neither `to_bytes` nor `pack`: derived diagnostics, not data.
         """
         if self._log is None:
             mc_lazy_log_imports()

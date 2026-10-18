@@ -89,8 +89,11 @@ def test_a_second_kekulisation_repairs_nothing():
             assert [str(x) for x in mol.log if x.rule not in routine] == before, smi
 
 
-def test_copy_leaves_the_log_behind():
-    """`cip_log` is per handle -- `test_cip_storage.py:306` states why -- and it lives here now."""
+def test_a_copy_carries_the_log_in_a_list_of_its_own():
+    """The log is provenance: a copy starts with every record, and appends afterwards stay per handle."""
     mol = smiles('CCO')
     mol.log.record('read something')
-    assert len(mol.copy().log) == 0
+    clone = mol.copy()
+    assert [str(x) for x in clone.log] == [str(x) for x in mol.log]
+    clone.log.record('on the copy only')
+    assert len(clone.log) == len(mol.log) + 1
