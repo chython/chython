@@ -1895,27 +1895,57 @@ cdef Py_ssize_t _twisted_units(Structure structure, atom_t *atoms, uint32_t *ptr
     return count
 
 
+cdef inline bint _holds_h(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t x) noexcept nogil:
+    """Does `x` hold a hydrogen, counted or drawn as an atom?  An unknown count is no hydrogen, so a drawing
+    that never said keeps its geometry."""
+    cdef uint32_t k
+    if at_explicit_h(&atoms[x]) or (not at_implicit_h_unknown(&atoms[x]) and at_implicit_h(&atoms[x])):
+        return True
+    for k in range(ptr[x], ptr[x + 1]):
+        if atoms[edges[k].to].element == 1:
+            return True
+    return False
+
+
+cdef inline bint _acylated(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t n,
+                           uint32_t skip) noexcept nogil:
+    """Is nitrogen `n` bonded, other than to `skip`, to a C or S carrying a double-bonded O or S: an amide,
+    a thioamide, a carbamate, a urea, a sulfonamide?"""
+    cdef uint32_t k, j, y
+    for k in range(ptr[n], ptr[n + 1]):
+        y = edges[k].to
+        if y == skip or (atoms[y].element != 6 and atoms[y].element != 16):
+            continue
+        for j in range(ptr[y], ptr[y + 1]):
+            if edges[j].order == 2 and (atoms[edges[j].to].element == 8 or atoms[edges[j].to].element == 16):
+                return True
+    return False
+
+
 cdef inline bint _protic_neighbour(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t end,
                                    uint32_t other) noexcept nogil:
-    """Does `end` carry, beside `other`, a single-bonded O or N that holds a hydrogen?  An unknown count is
-    no hydrogen, so a drawing that never said keeps its geometry."""
+    """Does `end` carry, beside `other`, a single-bonded O-H, or an N-H that is not acylated?  An enamide's
+    N-H does not move: a dehydroamino acid keeps its geometry."""
     cdef uint32_t k, x
     for k in range(ptr[end], ptr[end + 1]):
         x = edges[k].to
         if x == other or edges[k].order != 1 or (atoms[x].element != 7 and atoms[x].element != 8):
             continue
-        if at_explicit_h(&atoms[x]) or (not at_implicit_h_unknown(&atoms[x]) and at_implicit_h(&atoms[x])):
+        if _holds_h(atoms, ptr, edges, x) and (atoms[x].element == 8 or not _acylated(atoms, ptr, edges, x, end)):
             return True
     return False
 
 
-cdef inline bint _oxygen_on(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t end) noexcept nogil:
-    """Is a nitrogen double-bond end bonded to an oxygen: an oxime, its ether, a nitrone, an azoxy?"""
-    cdef uint32_t k
+cdef inline bint _heteroatom_on(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t end,
+                                uint32_t other) noexcept nogil:
+    """Is a nitrogen double-bond end bonded, other than to `other`, to an O or N: an oxime, its ether, a
+    nitrone, an azoxy, a hydrazone, an acylhydrazone, a semicarbazone, an azine?"""
+    cdef uint32_t k, x
     if atoms[end].element != 7:
         return False
     for k in range(ptr[end], ptr[end + 1]):
-        if atoms[edges[k].to].element == 8:
+        x = edges[k].to
+        if x != other and (atoms[x].element == 8 or atoms[x].element == 7):
             return True
     return False
 
@@ -1924,13 +1954,17 @@ cdef inline bint _labile_double_bond(atom_t *atoms, uint32_t *ptr, halfedge_t *e
                                      stereo_unit_t *u) noexcept nogil:
     """A cis/trans unit whose geometry the compound does not keep, so a sign on it names the drawing.
 
-    | double bond                         | labile because                                          |
-    | ----------------------------------- | ------------------------------------------------------- |
-    | C=N, N=N                            | nitrogen inversion and tautomerism interconvert E and Z |
-    | C=C with an O-H or N-H on a terminal | an enol or enamine: the geometry is the tautomer drawn  |
+    | double bond                                | labile because                                     |
+    | ------------------------------------------ | -------------------------------------------------- |
+    | C=N, no O or N on the nitrogen end         | nitrogen inversion and tautomerism: an imine, an   |
+    |                                            | amidine, a guanidine                               |
+    | N=N with a hydrogen on an end              | a diazene tautomerises                             |
+    | C=C with an O-H, or an N-H not acylated,   | an enol or enamine: the geometry is the tautomer   |
+    | on a terminal                              | drawn                                              |
 
-    An oxime, an oxime ether, a nitrone and an azoxy keep theirs: an oxygen on the nitrogen end makes the
-    E and Z isomers isolable.  A tertiary enamine has no hydrogen to move and keeps its geometry too.
+    An O or N on the nitrogen end raises the inversion barrier past isolation: oximes, their ethers,
+    nitrones, hydrazones and acylhydrazones keep their geometry, as azobenzene does.  So do a tertiary
+    enamine, with no hydrogen to move, and an enamide, whose N-H does not tautomerise.
     """
     cdef uint32_t a, b
     if u.kind != SU_CIS_TRANS:
@@ -1939,8 +1973,10 @@ cdef inline bint _labile_double_bond(atom_t *atoms, uint32_t *ptr, halfedge_t *e
     b = _stereo_partner_raw(atoms, ptr, edges, u)
     if b == SU_NO_REF:
         return False
+    if atoms[a].element == 7 and atoms[b].element == 7:
+        return _holds_h(atoms, ptr, edges, a) or _holds_h(atoms, ptr, edges, b)
     if atoms[a].element == 7 or atoms[b].element == 7:
-        return not (_oxygen_on(atoms, ptr, edges, a) or _oxygen_on(atoms, ptr, edges, b))
+        return not (_heteroatom_on(atoms, ptr, edges, a, b) or _heteroatom_on(atoms, ptr, edges, b, a))
     if atoms[a].element == 6 and atoms[b].element == 6:
         return _protic_neighbour(atoms, ptr, edges, a, b) or _protic_neighbour(atoms, ptr, edges, b, a)
     return False
@@ -3157,7 +3193,7 @@ cdef int mark_stereogenic(Structure structure) except -1:
             elif _twisted_dead(structure, u):
                 verdict[k] = SG_NO  # a medium ring held cis has no twist to name (see PLANAR UNITS)
             elif _labile_double_bond(atoms, ptr, edges, u):
-                verdict[k] = SG_NO  # an imine, azo, enol or enamine: E and Z interconvert; it keeps
+                verdict[k] = SG_NO  # an imine, diazene, enol or enamine: E and Z interconvert; it keeps
                                     # constraining, as the protic case does, until `validate_stereo`
             else:
                 undecided += 1

@@ -108,10 +108,12 @@ def test_an_amide_bond_is_never_a_cis_trans_unit(name, smi):
     ('butan-2-one oxime',   'CCC(C)=NO'),
     ('benzaldehyde oxime',  'c1ccccc1C=NO'),
     ('acetaldoxime O-methyl ether', 'CC=NOC'),
+    ('acetaldehyde hydrazone', 'CC=NN'),
+    ('acetaldehyde acetylhydrazone', 'CC=NNC(C)=O'),
 ])
 def test_a_carbon_nitrogen_double_bond_is_a_cis_trans_unit(name, smi):
-    """An oxime's C=N is planar-stereogenic; C-N is not.  Order, not sp2 character.  Every other C=N is
-    labile (`test_a_labile_double_bond_states_no_geometry`).
+    """An oxime's or a hydrazone's C=N is planar-stereogenic; C-N is not.  Order, not sp2 character.  A C=N with
+    no O or N on its nitrogen is labile (`test_a_labile_double_bond_states_no_geometry`).
 
     Butan-2-one oxime and not ACETONE oxime: acetone's two methyls make its carbon terminal
     symmetric, so that molecule is a candidate and not stereogenic -- correctly, and it would
@@ -121,16 +123,15 @@ def test_a_carbon_nitrogen_double_bond_is_a_cis_trans_unit(name, smi):
 
 
 # A LABILE DOUBLE BOND states no geometry: E and Z interconvert through nitrogen inversion or
-# tautomerism, so a sign on it names the drawing.  Every C=N and N=N but an oxime's, its ether's or a
-# nitrone's, and a C=C carrying an O-H or N-H: (E)-ethanimine, an N-methyl and an N-phenyl imine,
-# acetaldehyde hydrazone, diazene, azobenzene, an enol and a secondary enamine.
+# tautomerism, so a sign on it names the drawing.  A C=N with no O or N on its nitrogen, an N=N holding
+# a hydrogen, and a C=C carrying an O-H or an N-H not acylated: (E)-ethanimine, an N-methyl and an
+# N-phenyl imine, an N-methyl amidine, diazene, an enol and a secondary enamine.
 @pytest.mark.parametrize('e,z', [
     ('C/C=N/[H]',     'C/C=N\\[H]'),
     ('C/C=N/C',       'C/C=N\\C'),
     ('C/C=N/c1ccccc1', 'C/C=N\\c1ccccc1'),
-    ('C/C=N/N',       'C/C=N\\N'),
+    ('C/C(N)=N/C',    'C/C(N)=N\\C'),
     ('[H]/N=N/[H]',   '[H]/N=N\\[H]'),
-    ('c1ccccc1/N=N/c1ccccc1', 'c1ccccc1/N=N\\c1ccccc1'),
     ('C/C=C/O',       'C/C=C\\O'),
     ('C/C=C/NC',      'C/C=C\\NC'),
 ])
@@ -145,9 +146,17 @@ def test_a_labile_double_bond_states_no_geometry(e, z):
 @pytest.mark.parametrize('e,z', [
     ('C/C=N/OC',          'C/C=N\\OC'),
     ('C/C=[N+](/C)[O-]',  'C/C=[N+](\\C)[O-]'),
+    ('C/C=N/N(C)C',       'C/C=N\\N(C)C'),
+    ('C/C=N/NC(C)=O',     'C/C=N\\NC(C)=O'),
+    ('c1ccccc1/N=N/c1ccccc1', 'c1ccccc1/N=N\\c1ccccc1'),
     ('C/C=C/N(C)C',       'C/C=C\\N(C)C'),
+    ('C/C=C/NC(C)=O',     'C/C=C\\NC(C)=O'),
+    ('C/C=C(/NC(C)=O)C(=O)O', 'C/C=C(\\NC(C)=O)C(=O)O'),
 ])
-def test_an_oxime_ether_a_nitrone_and_a_tertiary_enamine_keep_theirs(e, z):
+def test_an_oxime_ether_a_nitrone_a_hydrazone_azobenzene_and_an_enamide_keep_theirs(e, z):
+    """An O or N on the nitrogen end raises the inversion barrier past isolation; a tertiary enamine has no
+    hydrogen to move and an enamide's acylated N-H does not tautomerise: (Z)-dehydroalanine's N-acetyl
+    analogue keeps its geometry."""
     assert read_smiles(e) != read_smiles(z)
 
 

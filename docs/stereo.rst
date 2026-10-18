@@ -89,7 +89,8 @@ tetrahedral     0         an atom with four directions, a lone pair counting as 
                           short-bridged bicycle.  Never an N-H, a P-H, any other amine, O or Bi
 cis/trans       1         a double bond or an even cumulated chain, outside rings smaller than 8;
                           never a bond an alternating cycle can move, and never a labile one: a
-                          C=N or N=N with no oxygen on the nitrogen, or a C=C with an O-H or N-H
+                          C=N with no O or N on the nitrogen, an N=N holding a hydrogen, or a C=C
+                          with an O-H or an N-H not acylated
 allene          2         the middle atom of an odd cumulated chain: ``C=C=C``, ``C=C=C=C=C``
 atropisomer     3         an acyclic single bond between two hydrogen-free ring atoms, each with an
                           ortho substituent or a ring fusion, the two ortho pairs distinguishable
@@ -100,23 +101,27 @@ planar          5         a substituted atom of an η5 ring under a metal, a sub
 ==============  ========  ========================================================================
 
 A labile double bond has a geometry the compound does not keep: E and Z interconvert through nitrogen
-inversion or tautomerism, so a sign on an imine, a hydrazone, an azo bond, an enol or a secondary enamine
-names the drawing and states nothing.  An oxime, its ether and a nitrone keep theirs, and so does a
-tertiary enamine:
+inversion or tautomerism, so a sign on an imine, an amidine, a diazene, an enol or a secondary enamine
+names the drawing and states nothing.  An O or N on the nitrogen end raises the inversion barrier past
+isolation, so an oxime, its ether, a nitrone, a hydrazone and an acylhydrazone keep theirs, as azobenzene
+does; so do a tertiary enamine, with no hydrogen to move, and an enamide, whose N-H does not tautomerise:
 
 .. testcode::
 
-    for e, z in (('C/C=N/C', 'C/C=N\\C'), ('c1ccccc1/N=N/c1ccccc1', 'c1ccccc1/N=N\\c1ccccc1'),
-                 ('C/C=C/O', 'C/C=C\\O'), ('C/C=N/OC', 'C/C=N\\OC'), ('C/C=C/N(C)C', 'C/C=C\\N(C)C')):
+    for e, z in (('C/C=N/C', 'C/C=N\\C'), ('C/C=C/O', 'C/C=C\\O'), ('C/C=N/OC', 'C/C=N\\OC'),
+                 ('C/C=N/NC(C)=O', 'C/C=N\\NC(C)=O'), ('c1ccccc1/N=N/c1ccccc1', 'c1ccccc1/N=N\\c1ccccc1'),
+                 ('C/C=C/N(C)C', 'C/C=C\\N(C)C'), ('C/C=C/NC(C)=O', 'C/C=C\\NC(C)=O')):
         print(e, smiles(e) == smiles(z), smiles(e))
 
 .. testoutput::
 
     C/C=N/C True N(C)=CC
-    c1ccccc1/N=N/c1ccccc1 True c1cccc(N=Nc2ccccc2)c1
     C/C=C/O True CC=CO
     C/C=N/OC False C/C=N/OC
+    C/C=N/NC(C)=O False O=C(N/N=C/C)C
+    c1ccccc1/N=N/c1ccccc1 False c1cccc(/N=N/c2ccccc2)c1
     C/C=C/N(C)C False N(/C=C/C)(C)C
+    C/C=C/NC(C)=O False C(=O)(N/C=C/C)C
 
 Each kind reads and writes as follows.  CXSMILES is the tail ``str(mol)`` writes; plain SMILES is the
 ``!x`` format spec.
