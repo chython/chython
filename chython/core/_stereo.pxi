@@ -2411,7 +2411,7 @@ cdef inline bint _is_group_15_or_16(uint8_t element) noexcept nogil:
 
 
 cdef inline bint _anchor_is_protic(atom_t *atoms, stereo_unit_t *u) noexcept nogil:
-    """Does a tetrahedral anchor carry a hydrogen it can invert through?
+    """Does a tetrahedral anchor carry a hydrogen it can invert through?  Not a four-coordinate P(V).
 
     A TETRAHEDRAL question only.  At a double-bond terminal an N-H is one of two in-plane directions,
     not an inversion path, and a bond kind anchors on whichever terminal the atom order puts first --
@@ -2436,8 +2436,19 @@ cdef inline bint _anchor_is_protic(atom_t *atoms, stereo_unit_t *u) noexcept nog
     perception admits the sentinel only at a full frame -- and it is spelled out anyway, because the
     safe reading must not depend on the other cut staying exactly as narrow as it is now.
     """
+    cdef uint32_t k, filled
     if u.kind != SU_TETRA or not _is_group_15_or_16(atoms[u.anchor].element):
         return False
+    if atoms[u.anchor].element == 15 and not at_implicit_h_unknown(&atoms[u.anchor]):
+        # A FOUR-COORDINATE P(V) HAS NO PAIR TO INVERT THROUGH: a secondary phosphine oxide R(R')P(=O)H,
+        # an H-phosphinate, an H-phosphonate diester.  Its four directions are all substituents, the
+        # hydrogen among them, and it is isolable as one P-epimer.  A P(III)-H fills three and keeps a pair.
+        filled = at_implicit_h(&atoms[u.anchor])
+        for k in range(4):
+            if u.refs[k] != SU_NO_REF:
+                filled += 1
+        if filled == 4:
+            return False
     if at_explicit_h(&atoms[u.anchor]) != 0:
         return True
     if at_implicit_h_unknown(&atoms[u.anchor]):

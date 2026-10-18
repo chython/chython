@@ -355,12 +355,24 @@ def test_a_ring_closure_on_a_lone_pair_centre_reads_by_the_implicit_hydrogen_rul
     ('selenophene',                   'c1cc[se]c1'),
 ])
 def test_no_lone_pair_centre_without_three_distinct_named_directions(name, smi):
-    """Inversion through an N-H or P-H, an amine outside a three-membered ring, a repeated group or
+    """Inversion through an N-H or P(III)-H, an amine outside a three-membered ring, a repeated group or
     too few directions: no tetrahedral unit on the heteroatom."""
     mol = read_smiles(smi)
     assert not [u for u in mol.stereogenic_units()
                 if u['kind'] == SU_TETRA and mol.atom(u['anchor']).atomic_symbol in ('N', 'P', 'Se')], name
 
+
+@pytest.mark.parametrize('name,e,z', [
+    ('tert-butyl(phenyl)phosphine oxide', 'CC(C)(C)[P@H](=O)c1ccccc1', 'CC(C)(C)[P@@H](=O)c1ccccc1'),
+    ('ethyl methyl H-phosphonate',        'CO[P@H](=O)OCC',            'CO[P@@H](=O)OCC'),
+    ('methyl phenyl-H-phosphinate',       'CO[P@H](=O)c1ccccc1',       'CO[P@@H](=O)c1ccccc1'),
+])
+def test_a_four_coordinate_phosphorus_with_a_hydrogen_keeps_its_configuration(name, e, z):
+    """A P(V)-H has no lone pair to invert through: secondary phosphine oxides, H-phosphinates and
+    H-phosphonate diesters are isolable as single P-epimers.  A P(III)-H and P(=O)H with two equal groups
+    stay excluded (`test_no_lone_pair_centre_without_three_distinct_named_directions`)."""
+    assert read_smiles(e) != read_smiles(z), name
+    assert read_smiles('C[P@H](=O)C') == read_smiles('C[P@@H](=O)C')
 
 # ============================================================================================
 # 3. ALLENE / CUMULENE.  The odd/even ladder is the single rule, and it is the thing most easily

@@ -85,8 +85,9 @@ Kind            ``kind``  Perceived on
 ==============  ========  ========================================================================
 tetrahedral     0         an atom with four directions, a lone pair counting as one: C, Si, Ge,
                           B⁻, N⁺, a tetrahedral metal; S, Se, Te, P, As and Sb with a pair left;
-                          N with a pair only in a three-membered ring or at a bridgehead of a
-                          short-bridged bicycle.  Never an N-H, a P-H, any other amine, O or Bi
+                          a four-coordinate P(V), a hydrogen among its four; N with a pair only
+                          in a three-membered ring or at a bridgehead of a short-bridged bicycle.
+                          Never an N-H, a P(III)-H, any other amine, O or Bi
 cis/trans       1         a double bond or an even cumulated chain, outside rings smaller than 8;
                           never a bond an alternating cycle can move, and never a labile one: a
                           C=N with no O or N on the nitrogen, an N=N holding a hydrogen, or a C=C
@@ -1565,9 +1566,9 @@ Limit                       Behaviour
 ``identity_approximate``    True when a block of groups holds more than five units or the molecule more
                             than 1000 atoms; only AND phases are searched and one meaning can have two
                             identities (`Labelled drawings`_)
-not perceived               an amine nitrogen outside the rule of `Stereo units`_, a P-H or N-H centre,
-                            oxonium, bismuthine, a ring C=C below 8 atoms, a bond of an alternating cycle,
-                            a biaryl pivot carrying hydrogen
+not perceived               an amine nitrogen outside the rule of `Stereo units`_, a P(III)-H or N-H
+                            centre, oxonium, bismuthine, a ring C=C below 8 atoms, a bond of an
+                            alternating cycle, a biaryl pivot carrying hydrogen
 metals                      a four-coordinate metal is a tetrahedral centre; ``@SP``, ``@TB`` and ``@OH``
                             read unconfigured, LOST ``smiles:chiral-class-unsupported``; a metallocene
                             written as separate ions perceives no planar unit
@@ -1585,7 +1586,7 @@ plain SMILES                atropisomer, helix and planar units are not written,
 
     from chython.core._core import write_smiles
 
-    for text in ('CN(CC)CCC', 'C[P@H](CC)=O', 'C[Bi](CC)c1ccccc1', 'C1CCC=CCC1', 'CC1CN1C',
+    for text in ('CN(CC)CCC', 'C[P@H](CC)C', 'C[Bi](CC)c1ccccc1', 'C1CCC=CCC1', 'CC1CN1C',
                  'C[P@](CC)CCC', 'C1CCCC=CCC1'):
         m = smiles(text)
         print(f'{text:20} {[u["kind"] for u in m.stereo_units() if u["stereogenic"]]}')
@@ -1595,7 +1596,7 @@ plain SMILES                atropisomer, helix and planar units are not written,
 .. testoutput::
 
     CN(CC)CCC            []
-    C[P@H](CC)=O         []
+    C[P@H](CC)C          []
     C[Bi](CC)c1ccccc1    []
     C1CCC=CCC1           []
     CC1CN1C              [0, 0]
