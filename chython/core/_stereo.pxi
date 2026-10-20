@@ -4038,8 +4038,10 @@ cdef Structure structure_stereogenic_view(Structure structure, dict cache=None):
     A clear loosens `_stereo_consistent`'s pins and can in principle unmark another unit, so the
     clear repeats on a fresh table until nothing is left to clear; each round clears at least one
     parity, which bounds the loop.  An ABS or unlabelled parity clears only jointly with the ones
-    cleared before it, by `_clear_jointly`.  The clear goes into a CLONE (ruling F65) and the input arena is
-    not written.  `cache` is `_phase_meaning`'s, shared among structures of one constitution.
+    cleared before it, by `_clear_jointly`.  Last, a ring system's signed set that states nothing beside
+    an open unit clears whole (`_ring_sets_stating_nothing`).  The clear goes into a CLONE (ruling F65)
+    and the input arena is not written.  `cache` is `_phase_meaning`'s, shared among structures of one
+    constitution.
     """
     cdef Structure view = _bridgeheads_filled(structure, cache)
     cdef Structure base = None
@@ -4101,10 +4103,80 @@ cdef Structure structure_stereogenic_view(Structure structure, dict cache=None):
             refresh_parity_features(view)
     finally:
         PyMem_Free(keep)
-    return view
+    return _ring_sets_cleared(view, cache)
 
 
 DEF JOINT_CLEAR_LIMIT = 10          # parities cleared jointly; past it a refused parity is kept
+
+
+cdef list _ring_sets_stating_nothing(Structure view, dict cache):
+    """The members of each ring system's signed set that states nothing beside an open unit of that system.
+
+    A set is a ring system's signed units that perception does not mark stereogenic, two or more, read
+    jointly by `_set_states_nothing`: each sign alone can state something while together they leave every
+    completion open.  Cyclopropane-1,2,3-tricarboxylic acid with C2/C3 cis and C1 open is both isomers,
+    as the unsigned acid is, under any label; with C2/C3 trans C1 has one configuration and no candidate
+    forms.  Nested reads (b'P') skip the pass, as `_bridgeheads_filled` does.
+    """
+    cdef uint32_t n = view.header.atom_count, i
+    cdef uint32_t *system = NULL
+    cdef dict sets = {}
+    cdef set opened = set()
+    cdef list out = []
+    cdef list members
+    cdef stereo_unit_t *u
+    cdef atom_t *atoms
+    cdef object key
+    if cache is not None and b'P' in cache:
+        return out
+    ensure_stereo_units(view)
+    atoms = view.atoms()
+    system = <uint32_t *> PyMem_Malloc((<size_t> n + 1) * sizeof(uint32_t))
+    if system is NULL:
+        raise MemoryError()
+    try:
+        cip_ring_systems(view, system)
+        for i in range(n):
+            u = stereo_unit_of(view, i)
+            if u is NULL or not system[i]:
+                continue
+            if not structure_parity_at(view, i):
+                if u.spare & SU_STEREOGENIC:
+                    opened.add(system[i])
+            elif not u.spare & SU_STEREOGENIC and not _refused_by_chemistry(view, atoms, u):
+                sets.setdefault(system[i], []).append(i)
+    finally:
+        PyMem_Free(system)
+    for key, members in sets.items():
+        if (key in opened and 2 <= len(members) <= JOINT_CLEAR_LIMIT
+                and _set_states_nothing(view, tuple(members), cache, False)):
+            out.extend(members)
+    return out
+
+
+cdef Structure _ring_sets_cleared(Structure structure, dict cache):
+    """`structure` without the parities and group bytes of `_ring_sets_stating_nothing`; itself when none.
+    The view applies it to what it reads, and identity to the drawing before `_meaning_canonical` reads it,
+    since that search reads the drawn signs and not the view's."""
+    cdef list quiet
+    cdef uint8_t *par
+    cdef uint8_t *sg
+    cdef object a
+    if not _has_parity(structure):
+        return structure
+    quiet = _ring_sets_stating_nothing(structure, cache)
+    if not quiet:
+        return structure
+    structure = structure_clone(structure)
+    par = structure_parities(structure)
+    sg = structure_stereo_groups(structure) if structure_has(structure, SEG_STEREO_GROUPS) else NULL
+    for a in quiet:
+        par[<uint32_t> a] = 0
+        if sg is not NULL:
+            sg[<uint32_t> a] = 0
+    structure_invalidate_stereo_units(structure)
+    refresh_parity_features(structure)
+    return structure
 
 
 cdef inline bint _refused_by_chemistry(Structure structure, atom_t *atoms, stereo_unit_t *u) noexcept nogil:
@@ -5083,7 +5155,7 @@ cdef bint _open_besides(Structure view, tuple members) except -1:
     return False
 
 
-cdef bint _set_states_nothing(Structure view, tuple members, dict cache) except -1:
+cdef bint _set_states_nothing(Structure view, tuple members, dict cache, bint shortcut=True) except -1:
     """Does the signed coupled set `members` state nothing: is what the drawing states, `_phase_meaning` over
     every AND phase, OR choice and open unit, the same with the set cleared to open choices?
 
@@ -5093,7 +5165,8 @@ cdef bint _set_states_nothing(Structure view, tuple members, dict cache) except 
     signs it exactly as the signed reading does.  Nested reads go to a cache of
     their own, flagged b'P', under which no coupled set is cleared: each species reads its signs as stated,
     so a set an automorphism inverts gives one species either way.  Over a limit, or on a truncated
-    identity, the set is kept.
+    identity, the set is kept.  `shortcut` reads a set with nothing else open by its inversion alone, which
+    holds for a coupled set; any other set takes the full comparison, so a meso pair read ABS is kept.
     """
     cdef dict inner = {b'P': True}
     cdef phase_context_t ctx, sctx
@@ -5110,7 +5183,7 @@ cdef bint _set_states_nothing(Structure view, tuple members, dict cache) except 
     try:
         if phase_context(view, &sctx, NULL, NULL, inner):
             return False
-        if sctx.n_groups + sctx.n_unknown == 0 and not _open_besides(view, members):
+        if shortcut and sctx.n_groups + sctx.n_unknown == 0 and not _open_besides(view, members):
             # nothing else is a choice, so the cleared reading's worlds are the set's own two signings:
             # it states nothing exactly when its inversion is the same species
             base = _abs_read_clone(view)
@@ -5448,6 +5521,7 @@ cdef Structure structure_live_groups_view(Structure structure, list dead=None, b
     cdef uint8_t *sg1
     cdef uint32_t i
     structure = _bridgeheads_filled(drawn, cache, inert)   # the implied signs, before any phase is read
+    structure = _ring_sets_cleared(structure, cache)       # a ring set stating nothing is no choice either
     view = structure_stereogenic_view(structure, cache)
     respelled = _restating_as_abs(structure, view, cache)
     if respelled is not structure:

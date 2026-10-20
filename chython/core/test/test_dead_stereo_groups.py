@@ -221,6 +221,26 @@ def test_a_group_over_a_pseudo_asymmetric_trans_pair_reads_as_absolute(text, kin
     assert c == absolute and str(c) == str(absolute)
 
 
+@mark.parametrize('text', [t.replace('@H]1C', '@@H]1C') for t in TRANS_PAIR], ids=['acid', 'amide'])
+@mark.parametrize('tail', ['', ' |a:4,8|', ' |o1:4,8|'])
+def test_a_cis_pair_beside_an_open_pseudo_asymmetric_centre_states_nothing(text, tail):
+    """C2, C3 cis with C1 open: the completions are all-cis and cis,cis,trans, those of the unsigned acid, so
+    the pair clears whole, as tropine's bridgeheads do with C3 open."""
+    flat = read_smiles(text.replace('@', ''))
+    m = read_smiles(text + tail)
+    assert m == flat and hash(m) == hash(flat) and str(m) == str(flat) and '@' not in str(m)
+    assert m.canonical_bytes == flat.canonical_bytes
+
+
+@mark.parametrize('text', [t.replace('@H]1C', '@@H]1C') for t in TRANS_PAIR], ids=['acid', 'amide'])
+def test_a_cis_pair_in_and_beside_an_open_centre_is_a_mixture(text):
+    """In AND the members' mirror leaves C1, so the two phases are all-cis and cis,cis,trans: the mixture,
+    as tropine's bridgeheads in AND with C3 open, and not the unsigned acid."""
+    m = read_smiles(f'{text} |&1:4,8|')
+    assert m != read_smiles(text.replace('@', ''))
+    assert str(read_smiles(str(m))) == str(m)
+
+
 @mark.parametrize('signs', ANY_TRIOL)
 def test_an_absolute_centre_between_two_and_collections_states_nothing(signs):
     """`|a:3,&1:1,&2:5|` is `|&1:1,&2:5|` with C3 open, and its string reads back to itself."""

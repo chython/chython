@@ -375,7 +375,10 @@ An AND or OR group whose live members, inverted, restate the molecule in every p
 groups -- a meso pair -- states the drawn diastereomer and no enantiomer, which is what ABS states:
 ``|&1:1,4|``, ``|o1:1,4|`` and ``|a:1,4|`` on ``C[C@H](O)C[C@H](O)C`` are meso-pentane-2,4-diol, written
 ``|a:1,4|``.  Unlabelled is unknown, so none of them is the unlabelled drawing, which may be either
-diastereomer; ``|&1:1,&2:4|`` splits the pair and both groups stay.
+diastereomer; ``|&1:1,&2:4|`` splits the pair and both groups stay.  A ring system's signs whose
+completions with an open centre are the unsigned compound's state nothing together:
+cyclopropane-1,2,3-tricarboxylic acid with C2, C3 cis and C1 open is both isomers, unlabelled or under
+``a`` or ``o1``.  An AND mirror leaves C1, so ``&1`` there is the all-cis and cis,cis,trans mixture.
 ``mol.live_stereo_groups()`` answers the written membership in ``canonical_stereo_groups()`` shape,
 ``mol.dead_stereo_groups()`` the dropped members under their stored ids, and ``mol.stereo_is_live(x)``
 one member.
