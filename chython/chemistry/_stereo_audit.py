@@ -22,7 +22,7 @@ A reader: the molecule is not changed and nothing is logged.  Codes and messages
 """
 from typing import NamedTuple
 from ._tables import stereo_audit_codes
-from ..core import STEREO_ABS, STEREO_AND, STEREO_OR, STEREO_UNSPECIFIED
+from ..core import STEREO_ABS, STEREO_AND, STEREO_OR, STEREO_UNSPECIFIED, identity_memo
 
 
 __all__ = ['Fix', 'Finding', 'StereoAudit', 'audit_stereo']
@@ -583,7 +583,15 @@ def audit_stereo(molecule):
     computed on a copy taken here, so even a bridgehead molecule that logs on `str()` stays clean.
     Every finding carries the code it describes and a tuple of `Fix` suggestions.  `StereoAudit.clean`
     is True when no finding is above `'info'` severity.
+
+    Every fix and comparison is a copy of one constitution, so the whole audit runs in one
+    `identity_memo()` scope: each phase combination's identity is computed once across all of them.
     """
+    with identity_memo():
+        return _audit(molecule)
+
+
+def _audit(molecule):
     ctx = _Context(molecule)
     bridgeheads = _bridgeheads(ctx)
     # `bridgehead-unrealisable` alone names the members of an impossible pair

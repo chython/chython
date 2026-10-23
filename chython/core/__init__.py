@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from pathlib import Path
-from ._core import (Atom, AutomorphismBudgetExceeded, Bond, MoleculeContainer, QueryContainer,
+from ._core import (Atom, AutomorphismBudgetExceeded, Bond, MoleculeContainer, QueryContainer, identity_memo,
                     WEDGE_DOWN, WEDGE_EITHER, WEDGE_NONE, WEDGE_UP,
                     STEREO_ABS, STEREO_AND, STEREO_OR, STEREO_UNSPECIFIED,
                     # the stereo-unit kinds, because `stereo_units()` reports `kind` as an
@@ -95,7 +95,7 @@ from ._facade import pach, smiles, unpach, unpack
 from ._log import INFO, LOST, REFUSED, REPAIRED, Log, LogRecord, recording
 
 
-__all__ = ['Atom', 'AutomorphismBudgetExceeded', 'Bond', 'Log', 'LogRecord', 'recording',
+__all__ = ['Atom', 'AutomorphismBudgetExceeded', 'Bond', 'Log', 'LogRecord', 'recording', 'identity_memo',
            'INFO', 'REPAIRED', 'LOST', 'REFUSED',
            'MoleculeContainer', 'QueryContainer',
            'MappingResult', 'ReactionContainer', 'ReactionModelingView',

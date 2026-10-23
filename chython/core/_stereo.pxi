@@ -6941,7 +6941,69 @@ cdef int canonical_stereo_group_ids(Structure structure, uint8_t *ids_out,
     return 0
 
 
+# IDENTITY MEMO.  `mol_identity_bytes` reads the persistent arena and tables derived from it alone, so it is
+# a pure function of `structure.buffer` and a digest of those bytes is an exact key.  It is OFF unless an
+# `identity_memo()` scope is open: a pass that compares many copies of one constitution -- `audit_stereo`
+# compares a few hundred, each enumerating its phase combinations -- opens one and pays for each distinct
+# combination once.  Process-wide while open; past IDENTITY_MEMO_LIMIT entries it is emptied, not grown.
+DEF IDENTITY_MEMO_LIMIT = 8192
+cdef object _identity_memo = None
+cdef object _blake2b = None             # hashlib's, bound on the first lookup
+
+
+cdef class _IdentityMemoScope:
+    """`identity_memo()`'s context manager.  An inner scope shares the outer memo; the outermost drops it."""
+    cdef bint outermost
+
+    def __enter__(self):
+        global _identity_memo
+        self.outermost = _identity_memo is None
+        if self.outermost:
+            _identity_memo = {}
+        return self
+
+    def __exit__(self, *exc):
+        global _identity_memo
+        if self.outermost:
+            _identity_memo = None
+        return False
+
+
+def identity_memo():
+    """A scope in which `==`, `hash()` and `str()` reuse each identity computed on byte-equal arenas.
+
+    Answers are unchanged; only repeated work is.  Nested scopes share the outer memo, and leaving the
+    outermost drops it.
+    """
+    return _IdentityMemoScope()
+
+
+def _identity_memo_size():
+    """Entries in the open memo, or None outside any scope.  For tests."""
+    return None if _identity_memo is None else len(_identity_memo)
+
+
 cdef bytes mol_identity_bytes(Structure structure):
+    """`_mol_identity_bytes`, through the identity memo when one is open.  The key is the persistent arena,
+    which no read changes (`test_arena_identity.py`)."""
+    global _blake2b
+    cdef object memo = _identity_memo
+    cdef bytes key, got
+    if memo is None:
+        return _mol_identity_bytes(structure)
+    if _blake2b is None:
+        _blake2b = __import__('hashlib').blake2b
+    key = _blake2b((<char *> structure.buffer)[:structure.buffer_len], digest_size=16).digest()
+    got = memo.get(key)
+    if got is None:
+        got = _mol_identity_bytes(structure)
+        if len(memo) >= IDENTITY_MEMO_LIMIT:
+            memo.clear()
+        memo[key] = got
+    return got
+
+
+cdef bytes _mol_identity_bytes(Structure structure):
     """The molecule's canonical form as bytes: what `==` compares and what `hash()` hashes.
 
     Three parts, in this order, and all read off CANONICAL POSITIONS so that none mentions the

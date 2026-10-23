@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from chython.chemistry import audit_stereo
-from chython.chemistry._stereo_audit import _PASS_THROUGH, _apply_fix
+from chython.chemistry._stereo_audit import _PASS_THROUGH, _apply_fix, _audit
 from chython.chemistry._tables import read_table, stereo_audit_codes
 from chython.core import MoleculeContainer, read_smiles
 from pathlib import Path
@@ -532,3 +532,18 @@ def test_a_copy_is_audited_as_the_original_is():
     codes = [f.code for f in audit_stereo(mol).findings]
     assert 'smiles:cip-undetermined' in codes
     assert [f.code for f in audit_stereo(mol.copy()).findings] == codes
+
+
+def _oligolactate(n):
+    """HO-[CH(CH3)-C(=O)-O]n-H, L throughout, the first two centres in `&1`: every other sign is unlabelled
+    beside a live relative group, one `unlabelled-sign` each, three fixes apiece -- the audit's widest fan
+    of copies of one constitution."""
+    return read_smiles('O' + '[C@@H](C)C(=O)O' * n + ' |&1:1,6|')
+
+
+@mark.parametrize('text', ['C[C@H]1C[C@@H](C)C1.C[C@H](O)CC |&1:1,3,o1:7|', 'C[C@@]12CC[C@H](C1(C)C)CC2=O',
+                           'NC(=O)C1[C@H](C(N)=O)[C@H]1C(N)=O |&1:4,8|', 'C[C@H](O)[C@H](O)[C@@H](C)O |&1:1,o1:3|'])
+def test_the_identity_memo_changes_no_finding(text):
+    """`audit_stereo` runs in an `identity_memo()` scope; without it, every finding and fix is the same."""
+    for m in (read_smiles(text), _oligolactate(8)):
+        assert audit_stereo(m).findings == _audit(m).findings
