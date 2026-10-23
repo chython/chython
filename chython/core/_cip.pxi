@@ -86,6 +86,7 @@ DEF CIP_REAL_BIT    = 47     # bit 47: 1 real atom, 0 duplicate -- rule 1b, abov
 DEF CIP_BACK_SHIFT  = 32     # bits 46-32: spheres from the duplicate UP TO the atom it duplicates
 DEF CIP_BACK_MAX    = 0x7fff
 DEF CIP_MASS_SCALE  = 1000   # bits 31-0: mass in millidaltons -- rule 2
+DEF CIP_RULES       = 3      # 1a, 1b, 2: each is exhausted over the whole digraph before the next is read
 
 
 cdef inline uint64_t cip_word_of(uint32_t z, uint32_t isotope, bint duplicate,
@@ -124,6 +125,16 @@ cdef inline uint64_t cip_rank_word(atom_t *a, bint duplicate, uint32_t back) noe
     return cip_word_of(a.element, a.isotope, duplicate, back)
 
 
+cdef inline uint64_t cip_rule_word(uint64_t word, uint32_t rule) noexcept nogil:
+    """The part of `word` rule `rule` reads: 0 the atomic number (1a), 1 that and the duplicate fields (1b),
+    2 all of it, mass included (2).  A rule reaches past the whole digraph only on a tie of the one before."""
+    if rule == 0:
+        return word & ((<uint64_t> 0xffff) << CIP_Z_SHIFT)
+    if rule == 1:
+        return word & ((<uint64_t> 0xffffffff) << CIP_BACK_SHIFT)
+    return word
+
+
 # THE SHARED DIGRAPH.  CIP's hierarchical digraph is a tree over simple paths, which is what makes it
 # exponential and per-centre.  Three things make it one DAG per molecule instead: nodes are hash-consed on
 # their FULL key, so identical branches are one node; the key is depth-invariant (see `cip_word_of`), so a
@@ -160,7 +171,7 @@ cdef struct cip_node_t:
     uint32_t first_child     # index into ctx.child; equals ctx.n_child when n_children is 0
     uint32_t n_children
     uint8_t flags            # CIP_NODE_UNDECIDABLE.  PART OF THE INTERN KEY
-    uint8_t ordered          # ctx.corder[first_child ...] holds the CIP priority order
+    uint8_t ordered          # bit r: ctx.corder[r][first_child ...] holds the priority order through rule r
 
 
 # The context is C pointers only, never the `Structure` object: a struct holding an extension type would
@@ -178,14 +189,14 @@ cdef struct cip_ctx_t:
     uint64_t work            # this site's spend against CIP_WORK_MAX; `cip_rank_directions` zeroes it
     cip_node_t *node         # the interned node pool
     uint32_t *child          # child-id runs in the canonical intern order, indexed by node.first_child
-    uint32_t *corder         # the same runs in CIP priority order, filled lazily
+    uint32_t *corder[CIP_RULES]  # the same runs in priority order through rule r, filled lazily
     uint32_t *bucket         # open-addressed intern table, CIP_NO_ID for empty
     uint32_t mask            # bucket count - 1; always a power of two minus one
     uint32_t n_nodes
     uint32_t cap_nodes
     uint32_t n_child
     uint32_t cap_child
-    uint64_t *memo_key       # comparison verdicts, keyed (a << 32) | b
+    uint64_t *memo_key       # comparison verdicts, keyed (rule << 62) | (a << 32) | b
     int8_t *memo_val
     uint32_t memo_mask
     uint32_t n_memo
@@ -193,13 +204,16 @@ cdef struct cip_ctx_t:
 
 cdef void cip_ctx_free(cip_ctx_t *ctx) noexcept nogil:
     """Safe on a partly built context, so `cip_ctx_init` has one failure path rather than six."""
+    cdef uint32_t r
     free(ctx.ring_system)
     free(ctx.on_path)
     free(ctx.path_depth)
     free(ctx.bridge)
     free(ctx.node)
     free(ctx.child)
-    free(ctx.corder)
+    for r in range(CIP_RULES):
+        free(ctx.corder[r])
+        ctx.corder[r] = NULL
     free(ctx.bucket)
     free(ctx.memo_key)
     free(ctx.memo_val)
@@ -211,13 +225,13 @@ cdef void cip_ctx_free(cip_ctx_t *ctx) noexcept nogil:
     ctx.bridge = NULL
     ctx.node = NULL
     ctx.child = NULL
-    ctx.corder = NULL
     ctx.bucket = NULL
 
 
 cdef int cip_ctx_init(cip_ctx_t *ctx, Structure structure) except -1:
     """One context per molecule: the pointers the walk reads, and the pools it fills."""
-    cdef uint32_t i
+    cdef uint32_t i, r
+    cdef bint missing = False
     cdef uint32_t n = structure.header.atom_count
     cdef size_t span = <size_t> (n if n else 1)
     cdef uint32_t n_half = csr_ptr(structure)[n]
@@ -237,14 +251,16 @@ cdef int cip_ctx_init(cip_ctx_t *ctx, Structure structure) except -1:
     ctx.bridge = <uint32_t *> malloc(<size_t> (n_half if n_half else 1) * sizeof(uint32_t))
     ctx.node = <cip_node_t *> malloc(<size_t> ctx.cap_nodes * sizeof(cip_node_t))
     ctx.child = <uint32_t *> malloc(<size_t> ctx.cap_child * sizeof(uint32_t))
-    ctx.corder = <uint32_t *> malloc(<size_t> ctx.cap_child * sizeof(uint32_t))
+    for r in range(CIP_RULES):
+        ctx.corder[r] = <uint32_t *> malloc(<size_t> ctx.cap_child * sizeof(uint32_t))
+        missing = missing or ctx.corder[r] is NULL
     ctx.bucket = <uint32_t *> malloc(<size_t> (ctx.mask + 1) * sizeof(uint32_t))
     ctx.n_memo = 0
     ctx.memo_mask = CIP_MEMO_INIT - 1
     ctx.memo_key = <uint64_t *> malloc(<size_t> CIP_MEMO_INIT * sizeof(uint64_t))
     ctx.memo_val = <int8_t *> malloc(<size_t> CIP_MEMO_INIT * sizeof(int8_t))
     if (ctx.ring_system is NULL or ctx.on_path is NULL or ctx.path_depth is NULL or ctx.bridge is NULL
-            or ctx.node is NULL or ctx.child is NULL or ctx.corder is NULL or ctx.bucket is NULL
+            or ctx.node is NULL or ctx.child is NULL or missing or ctx.bucket is NULL
             or ctx.memo_key is NULL or ctx.memo_val is NULL):
         cip_ctx_free(ctx)
         raise MemoryError()
@@ -281,7 +297,7 @@ cdef int _cip_reserve(cip_ctx_t *ctx, uint32_t n_kids) except -1:
     CALLED BEFORE THE PROBE, not after it: a rehash moves every bucket, so a slot computed first and
     used after a growth would write the new node into the wrong place.
     """
-    cdef uint32_t i, id_, slot, cap
+    cdef uint32_t i, id_, slot, cap, r
     cdef cip_node_t *node
     cdef uint32_t *child
     cdef uint32_t *bucket
@@ -300,10 +316,11 @@ cdef int _cip_reserve(cip_ctx_t *ctx, uint32_t n_kids) except -1:
         if child is NULL:
             raise MemoryError()
         ctx.child = child
-        child = <uint32_t *> realloc(ctx.corder, <size_t> cap * sizeof(uint32_t))
-        if child is NULL:
-            raise MemoryError()
-        ctx.corder = child
+        for r in range(CIP_RULES):
+            child = <uint32_t *> realloc(ctx.corder[r], <size_t> cap * sizeof(uint32_t))
+            if child is NULL:
+                raise MemoryError()
+            ctx.corder[r] = child
         ctx.cap_child = cap
     if (ctx.n_nodes + 1) * 10 > (ctx.mask + 1) * 7:
         cap = (ctx.mask + 1) * 2
@@ -353,6 +370,8 @@ cdef uint32_t cip_intern(cip_ctx_t *ctx, uint64_t word, uint8_t flags, uint32_t 
                 return id_
         slot = (slot + 1) & ctx.mask
     id_ = ctx.n_nodes
+    if id_ >= (1u << 30):
+        raise OverflowError('CIP digraph past 2^30 nodes')     # the memo key packs the rule above 30-bit ids
     ctx.node[id_].word = word
     ctx.node[id_].flags = flags
     ctx.node[id_].ordered = 0
@@ -410,7 +429,7 @@ cdef inline void _cip_sort_ids_desc(cip_ctx_t *ctx, uint32_t *ids, uint32_t n) n
     THIS IS THE INTERN ORDER, NOT THE CIP ORDER.  Its only job is to make the key canonical, so that two
     spellings of one child multiset hash the same; because an id is itself a function of the subtree,
     `(word, id)` is a function of the multiset and nothing else.  The CIP priority order is computed
-    separately, into `ctx.corder` -- reordering `ctx.child` in place would invalidate every bucket
+    separately, into `ctx.corder[rule]` -- reordering `ctx.child` in place would invalidate every bucket
     already written.
     """
     cdef uint32_t i, j, v
@@ -689,43 +708,66 @@ cdef object _cip_node_key(cip_ctx_t *ctx, uint32_t id_):
 # node's children compares subtrees one sphere shallower than the node itself.
 #
 # NOTHING MAY INTERN WHILE A COMPARISON IS IN FLIGHT.  `cip_children_ordered` hands back a pointer into
-# `ctx.corder`, and `_cip_reserve` can move that array; `cip_rank_directions` therefore interns all four
-# directions before it sorts any of them.
-cdef uint32_t *cip_children_ordered(cip_ctx_t *ctx, uint32_t id_) except NULL:
-    """The node's children in descending CIP priority, cached on the node.
+# `ctx.corder[rule]`, and `_cip_reserve` can move those arrays; `cip_rank_directions` therefore interns all
+# four directions before it sorts any of them.
+#
+# THE RULES ARE PASSES, NOT FIELDS OF ONE KEY.  Rule 1a is read over every sphere before rule 1b is read at
+# any: vinyl outranks isopropyl because sphere 3 holds a carbon against a hydrogen (1a), although at sphere
+# 2 isopropyl's second carbon is real and vinyl's is a duplicate (1b).  Each pass explores branches in the
+# order the rules up to its own establish.
+cdef uint32_t *cip_children_ordered(cip_ctx_t *ctx, uint32_t id_, uint32_t rule) except NULL:
+    """The node's children in descending priority through rule `rule`, cached on the node.
 
-    The cache is `ctx.corder`, parallel to `ctx.child` and never a reordering of it: `ctx.child` is the
-    intern key and every bucket already written depends on its order.  Ties fall back to the id, so the
+    The cache is `ctx.corder[rule]`, parallel to `ctx.child` and never a reordering of it: `ctx.child` is
+    the intern key and every bucket already written depends on its order.  Ties fall back to the id, so the
     order is total and deterministic even where CIP is silent.
     """
     cdef uint32_t n = ctx.node[id_].n_children
     cdef uint32_t base = ctx.node[id_].first_child
+    cdef uint32_t *order = ctx.corder[rule]
     cdef uint32_t i, j, v
     cdef int cmp_
-    if ctx.node[id_].ordered:
-        return &ctx.corder[base]
+    if ctx.node[id_].ordered & (1 << rule):
+        return &order[base]
     for i in range(n):
-        ctx.corder[base + i] = ctx.child[base + i]
+        order[base + i] = ctx.child[base + i]
     for i in range(1, n):
-        v = ctx.corder[base + i]
+        v = order[base + i]
         j = i
         while j > 0:
-            cmp_ = cip_compare_nodes(ctx, ctx.corder[base + j - 1], v)
-            if cmp_ < 0 or (cmp_ == 0 and ctx.corder[base + j - 1] < v):
+            cmp_ = cip_compare_through(ctx, order[base + j - 1], v, rule)
+            if cmp_ < 0 or (cmp_ == 0 and order[base + j - 1] < v):
                 break
-            ctx.corder[base + j] = ctx.corder[base + j - 1]
+            order[base + j] = order[base + j - 1]
             j -= 1
-        ctx.corder[base + j] = v
-    ctx.node[id_].ordered = 1
-    return &ctx.corder[base]
+        order[base + j] = v
+    ctx.node[id_].ordered |= <uint8_t> (1 << rule)
+    return &ctx.corder[rule][base]
 
 
-cdef int cip_compare_nodes(cip_ctx_t *ctx, uint32_t a, uint32_t b) except -2:
-    """-1 when subtree `a` outranks `b`, 1 when `b` outranks `a`, 0 when rules 1a/1b/2 tie.
+cdef int cip_compare_through(cip_ctx_t *ctx, uint32_t a, uint32_t b, uint32_t rule) except -2:
+    """Rules 1a .. `rule` in turn, each over the whole digraph; the first that separates `a` and `b` decides."""
+    cdef uint32_t r
+    cdef int verdict
+    for r in range(rule + 1):
+        verdict = cip_compare_rule(ctx, a, b, r)
+        if verdict:
+            return verdict
+    return 0
+
+
+cdef inline int cip_compare_nodes(cip_ctx_t *ctx, uint32_t a, uint32_t b) except -2:
+    """-1 when subtree `a` outranks `b`, 1 when `b` outranks `a`, 0 when rules 1a/1b/2 tie."""
+    return cip_compare_through(ctx, a, b, CIP_RULES - 1)
+
+
+cdef int cip_compare_rule(cip_ctx_t *ctx, uint32_t a, uint32_t b, uint32_t rule) except -2:
+    """Rule `rule` alone over the whole digraph, sphere by sphere: -1, 1, or 0 on a tie.
 
     `fa[i]` and `fb[i]` are the paired nodes of the current sphere.  They are paired because the previous
     sphere compared EQUAL at every position -- the only way this loop continues -- so the two frontiers
-    have equal length and their entries correspond one to one.
+    have equal length and their entries correspond one to one.  Children are walked in the order rules
+    1a .. `rule` give them.
     """
     cdef uint64_t key
     cdef uint32_t *fa = NULL
@@ -743,13 +785,15 @@ cdef int cip_compare_nodes(cip_ctx_t *ctx, uint32_t a, uint32_t b) except -2:
     cdef bint settled = False
     if a == b:
         return 0
-    key = (<uint64_t> a << 32) | <uint64_t> b
+    key = (<uint64_t> rule << 62) | (<uint64_t> a << 32) | <uint64_t> b
     verdict = _cip_memo_get(ctx, key)
     if verdict != CIP_MEMO_ABSENT:
         return verdict
     verdict = 0
-    if ctx.node[a].word != ctx.node[b].word:
-        verdict = -1 if ctx.node[a].word > ctx.node[b].word else 1
+    wa = cip_rule_word(ctx.node[a].word, rule)
+    wb = cip_rule_word(ctx.node[b].word, rule)
+    if wa != wb:
+        verdict = -1 if wa > wb else 1
         _cip_memo_put(ctx, key, verdict)
         return verdict
     fa = <uint32_t *> malloc(<size_t> cap * sizeof(uint32_t))
@@ -771,15 +815,15 @@ cdef int cip_compare_nodes(cip_ctx_t *ctx, uint32_t a, uint32_t b) except -2:
                 if fa[i] == fb[i]:          # one node, one subtree: nothing below it can differ
                     continue
                 _cip_spend(ctx)
-                ka = cip_children_ordered(ctx, fa[i])
-                kb = cip_children_ordered(ctx, fb[i])
+                ka = cip_children_ordered(ctx, fa[i], rule)
+                kb = cip_children_ordered(ctx, fb[i], rule)
                 ca = ctx.node[fa[i]].n_children
                 cb = ctx.node[fb[i]].n_children
                 kmax = ca if ca > cb else cb
                 for j in range(kmax):
                     # a child group shorter than its partner pads with word 0: CIP's phantom
-                    wa = ctx.node[ka[j]].word if j < ca else 0
-                    wb = ctx.node[kb[j]].word if j < cb else 0
+                    wa = cip_rule_word(ctx.node[ka[j]].word, rule) if j < ca else 0
+                    wb = cip_rule_word(ctx.node[kb[j]].word, rule) if j < cb else 0
                     if wa != wb:
                         verdict = -1 if wa > wb else 1
                         settled = True
@@ -789,8 +833,8 @@ cdef int cip_compare_nodes(cip_ctx_t *ctx, uint32_t a, uint32_t b) except -2:
                 # the groups tied, so ca == cb and the next sphere stays paired
                 if lb + ca > cap:
                     _cip_frontier_grow(&fa, &fb, &ga, &gb, &cap, lb + ca)
-                    ka = cip_children_ordered(ctx, fa[i])
-                    kb = cip_children_ordered(ctx, fb[i])
+                    ka = cip_children_ordered(ctx, fa[i], rule)
+                    kb = cip_children_ordered(ctx, fb[i], rule)
                 for j in range(ca):
                     ga[lb + j] = ka[j]
                     gb[lb + j] = kb[j]
@@ -839,7 +883,7 @@ cdef int cip_rank_directions(cip_ctx_t *ctx, stereo_unit_t *u, uint32_t *order_o
     cdef int cmp_
     cdef halfedge_t *e
     ctx.work = 0
-    # EVERY SUBTREE FIRST: interning may move ctx.corder, and the sort below holds pointers into it
+    # EVERY SUBTREE FIRST: interning may move ctx.corder[rule], and the sort below holds pointers into it
     for i in range(4):
         order_out[i] = i
         ids[i] = CIP_NO_ID

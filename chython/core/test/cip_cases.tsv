@@ -9,3 +9,7 @@ C[C@H](N)C(=O)O	2	S	1a	(S)-alanine
 C[C@@H](N)C(=O)O	2	R	1a	(R)-alanine
 C[C@H]([2H])O	2	S	2	(S)-1-deuterioethanol
 C[C@@H]([2H])O	2	R	2	(R)-1-deuterioethanol
+[C@H](C)(C=C)C(C)C	1	R	1a before 1b	(3R)-3,4-dimethylpent-1-ene
+[C@@H](C)(C=C)C(C)C	1	S	1a before 1b	(3S)-3,4-dimethylpent-1-ene
+[C@H](C)(C#C)C(C)(C)C	1	R	1a before 1b	(3R)-3,4,4-trimethylpent-1-yne
+[C@H](O)([13CH3])CC	1	S	1a before 2	(2S)-(1-13C)butan-2-ol
