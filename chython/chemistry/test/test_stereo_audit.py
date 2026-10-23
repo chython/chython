@@ -547,3 +547,22 @@ def test_the_identity_memo_changes_no_finding(text):
     """`audit_stereo` runs in an `identity_memo()` scope; without it, every finding and fix is the same."""
     for m in (read_smiles(text), _oligolactate(8)):
         assert audit_stereo(m).findings == _audit(m).findings
+
+
+def test_reported_fixes_are_built_on_first_read_and_equal_the_eager_ones(monkeypatch):
+    """4-aminopentan-2-ol with C2 in `&1` and C4 signed alone: `unlabelled-sign` only reports its fixes, so
+    they wait until read; the snapshot keeps them those of the audited molecule, and they pickle as a tuple."""
+    import pickle
+    from chython.chemistry._stereo_audit import Fixes, _Context
+    text = 'C[C@H](O)C[C@H](N)C |&1:1|'
+    mol = read_smiles(text)
+    [finding] = audit_stereo(mol).findings
+    assert finding.code == 'stereo-audit:unlabelled-sign' and isinstance(finding.fixes, Fixes)
+    assert finding.fixes._fixes is None, 'nothing read yet, nothing built'
+    with mol.edit() as e:
+        e.set_parity(5, 0)
+    lazy = tuple(finding.fixes)
+    monkeypatch.setattr(_Context, 'later', _Context.fix)
+    [eager] = audit_stereo(read_smiles(text)).findings
+    assert lazy == tuple(eager.fixes) and finding == eager and hash(finding.fixes) == hash(lazy)
+    assert len(lazy) == 3 and pickle.loads(pickle.dumps(finding.fixes)) == lazy

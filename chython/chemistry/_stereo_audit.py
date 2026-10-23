@@ -20,6 +20,7 @@
 
 A reader: the molecule is not changed and nothing is logged.  Codes and messages are `tables/stereo_audit.tsv`.
 """
+from collections.abc import Sequence
 from typing import NamedTuple
 from ._tables import stereo_audit_codes
 from ..core import STEREO_ABS, STEREO_AND, STEREO_OR, STEREO_UNSPECIFIED, identity_memo
@@ -106,7 +107,7 @@ class Finding(NamedTuple):
     `severity` is `'error'`, `'warning'` or `'info'`.  `atoms` are the atoms the observation is
     about.  `group` is `(kind, stored_id)` from `stereo_groups()`, or None.  `because` names the
     atoms or groups that motivate the observation.  `message` is the formatted template sentence.
-    `fixes` is a tuple of `Fix` suggestions.
+    `fixes` is a sequence of `Fix` suggestions (`Fixes`), equal to the tuple of them.
     """
     code: str
     severity: str
@@ -115,6 +116,44 @@ class Finding(NamedTuple):
     because: tuple
     message: str
     fixes: tuple
+
+
+class Fixes(Sequence):
+    """A finding's fixes, built on first read: each costs a fixed copy's `str()` and identity, and a finding
+    that only reports its fixes need not pay for them until someone looks.  Fixes with an equal `result`
+    keep the first.  Equal to, hashed and pickled as the plain tuple of `Fix`."""
+    __slots__ = ('_pending', '_fixes')
+
+    def __init__(self, fixes):
+        self._pending, self._fixes = tuple(fixes), None
+
+    def _built(self):
+        if self._fixes is None:
+            unique = {}
+            with identity_memo():                   # a finding's fixes share most of their identities
+                for fix in self._pending:
+                    fix = fix() if callable(fix) else fix
+                    unique.setdefault(fix.result, fix)
+            self._fixes, self._pending = tuple(unique.values()), ()
+        return self._fixes
+
+    def __getitem__(self, i):
+        return self._built()[i]
+
+    def __len__(self):
+        return len(self._built())
+
+    def __eq__(self, other):
+        return self._built() == (other._built() if isinstance(other, Fixes) else other)
+
+    def __hash__(self):
+        return hash(self._built())
+
+    def __repr__(self):
+        return repr(self._built())
+
+    def __reduce__(self):
+        return tuple, (self._built(),)
 
 
 class StereoAudit(NamedTuple):
@@ -151,14 +190,11 @@ def _group_text(group):
 
 
 def _finding(code, atoms, group=None, because=(), fixes=()):
-    """Build one Finding from the table row for `code`; fixes with an equal `result` keep the first."""
+    """Build one Finding from the table row for `code`.  `fixes` holds `Fix`es or `_Context.later` thunks."""
     row = stereo_audit_codes()[code]
     message = row.template.format(atoms=_units_text(atoms), because=_units_text(because), group=_group_text(group))
-    unique = {}
-    for fix in fixes:
-        unique.setdefault(fix.result, fix)
     return Finding(f'stereo-audit:{code}', row.severity, tuple(atoms), group,
-                   tuple(because), message, tuple(unique.values()))
+                   tuple(because), message, Fixes(fixes))
 
 
 def _anchors(units):
@@ -207,8 +243,9 @@ class _Context:
     __slots__ = ('molecule', 'baseline', 'baseline_str', 'units', 'anchors')
 
     def __init__(self, molecule):
-        self.molecule = molecule
-        # str() and == can write to a log (`stereo:bridgehead-unrealisable`); a copy's log starts empty
+        # a snapshot, since fixes deferred by `later` run after the call returns and the caller may edit
+        self.molecule = molecule.copy()
+        # str() and == can write to a log (`stereo:bridgehead-unrealisable`); a copy writes to its own
         self.baseline = molecule.copy()
         self.baseline_str = str(self.baseline)
         self.units = molecule.stereo_units()
@@ -224,6 +261,10 @@ class _Context:
         fixed_str = str(fixed)
         same = fixed == self.baseline and hash(fixed) == hash(self.baseline) and fixed_str == self.baseline_str
         return Fix(action, tuple(atoms), tuple(args), same, fixed_str)
+
+    def later(self, action, atoms, args=()):
+        """`fix` deferred until the finding's fixes are read: for a finding that only reports them."""
+        return lambda: self.fix(action, atoms, args)
 
 
 def _dead(ctx, code, atoms, group):
@@ -350,7 +391,7 @@ def _groups(ctx):
             atoms = tuple(sorted((x for part, _ in parts for x in part), key=_member_key))
             keys = tuple(sorted({stored_of[x] for x in atoms if x in stored_of}))
             gid = min((g for _, g in keys), default=1)
-            fix = ctx.fix('merge-groups', atoms, ('AND', gid))
+            fix = ctx.later('merge-groups', atoms, ('AND', gid))
             out.append(_finding('and-split', atoms, group=keys, fixes=(fix,)))
 
     # a stored AND or OR member read as ABS: another group fixes its phase, or with no other group in its
@@ -385,9 +426,9 @@ def _groups(ctx):
                 continue
             if ctx.apply('clear-sign', (x,)) == ctx.baseline:
                 continue                # the sign states nothing
-            fixes = (ctx.fix('set-group', (x,), ('ABS',)),
-                     ctx.fix('set-group', (x,), ('AND', free[STEREO_AND])),
-                     ctx.fix('set-group', (x,), ('OR', free[STEREO_OR])))
+            fixes = (ctx.later('set-group', (x,), ('ABS',)),
+                     ctx.later('set-group', (x,), ('AND', free[STEREO_AND])),
+                     ctx.later('set-group', (x,), ('OR', free[STEREO_OR])))
             out.append(_finding('unlabelled-sign', (x,), fixes=fixes))
     return out
 
@@ -457,7 +498,7 @@ def _waits_for(ctx):
             if signed is None or ctx.apply('clear-sign', (x,), molecule=signed) == signed:
                 continue
             if y not in sign_fixes:
-                sign_fixes[y] = tuple(ctx.fix('set-sign', (y,), (p,)) for p in (1, 2))
+                sign_fixes[y] = tuple(ctx.later('set-sign', (y,), (p,)) for p in (1, 2))
             because.append(y)
             fixes.extend(sign_fixes[y])
         if because:
