@@ -194,7 +194,8 @@ token        meaning                                                     range
 ``x``        heteroatom neighbours (not C, not H), **excluding dative**   0-14
 ``h``        hydrogen count, implicit and drawn, of any isotope --       0-14
              ``[2H]`` answers as protium
-``r``        ring size membership -- ``r5`` is "in a 5-membered ring"     3-14
+``r``        ring size membership -- ``r5`` is "in a 5-membered ring";   3-24
+             25-32, 33-48 and above 48 each answer as one bucket
 ``a``        aromatic flag; the same thing as ``z4``                      --
 ``M``        metal wildcard, and in a template the deletion mask         --
 ``+``/``-``  formal charge -- ``+2``, ``-1``, and so on                  --

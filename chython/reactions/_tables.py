@@ -279,27 +279,40 @@ def compose_smirks(groups: tuple[str, ...], product: str, *, intramolecular: boo
     return '%s>>%s' % (reactants, product)
 
 
-def _parse_ring_sizes(cell: str, row_id: str) -> tuple[int, tuple[int, ...]]:
-    """`'1:5,6,7'` -> `(1, (5, 6, 7))`, and `''` -> `(0, ())`.
+#: The `r` primitive is exact for 3-24 and buckets the rest: 25-32, 33-48 and above 48 each answer as one.
+_RING_BUCKETS = ((25, 32), (33, 48), (49, None))
 
+
+def _parse_ring_sizes(cell: str, row_id: str) -> tuple[int, tuple[int, ...]]:
+    """`'1:5,6,7'` -> `(1, (5, 6, 7))`, `'1:5,12-60'` a range, and `''` -> `(0, ())`.
+
+    A size above 24 is stated by its bucket's first size, since the `r` primitive answers the bucket and
+    not the size: `1:12-60` is `r12` to `r24`, `r25`, `r33` and `r49`, and so also matches a ring of 70.
     Refused at load rather than tolerated: every way of getting the cell wrong composes a template that
     reads and never fires, which is invisible.
     """
     if not cell:
         return 0, ()
-    atom, _, sizes = cell.partition(':')
-    if not sizes:
+    atom, _, spec = cell.partition(':')
+    if not spec:
         raise ValueError(f'{row_id}: ring_sizes is {cell!r}; the column is `<atom>:<sizes>`, as in '
                          '`1:5,6,7` -- "the ring through product atom :1 is 5-, 6- or 7-membered"')
+    sizes = []
     try:
-        parsed = (int(atom), tuple(int(size) for size in sizes.split(',')))
+        for token in spec.split(','):
+            low, dash, high = token.partition('-')
+            sizes.extend(range(int(low), int(high) + 1) if dash else (int(low),))
+        atom = int(atom)
     except ValueError as e:
         raise ValueError(f'{row_id}: ring_sizes is {cell!r}, which is not `<atom>:<sizes>`') from e
-    for size in parsed[1]:
-        if not 3 <= size <= 14:
+    stated = set()
+    for size in sizes:
+        if size < 3:
             raise ValueError(f'{row_id}: ring_sizes asks for a {size}-membered ring; the `r` primitive '
-                             'spans 3-14, so this row would compose a template that never fires')
-    return parsed
+                             'starts at 3, so this row would compose a template that never fires')
+        stated.add(next((low for low, high in _RING_BUCKETS if size >= low and (high is None or size <= high)),
+                        size))
+    return atom, tuple(sorted(stated))
 
 
 def _attach_ring_sizes(product: str, atom: int, sizes: tuple[int, ...]) -> str:

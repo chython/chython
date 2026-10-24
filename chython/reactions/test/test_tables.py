@@ -163,12 +163,27 @@ def test_the_map_number_is_not_part_of_the_and_or_grammar():
         assert query.box_counts() == [2], f'{smarts} should be two boxes, one per ring size'
 
 
-def test_a_ring_size_outside_the_primitives_range_is_refused():
-    """`r` spans 3-14, so a 20 composes a template that reads and can never match -- refused at load,
+def test_a_ring_size_below_three_is_refused():
+    """`r` starts at 3, so a 2 composes a template that reads and can never match -- refused at load,
     because a row that never fires is invisible."""
     with pytest.raises(ValueError) as exc:
-        _parse_ring_sizes('1:20', 'reactions:99')
-    assert '20-membered' in str(exc.value) and 'reactions:99' in str(exc.value)
+        _parse_ring_sizes('1:2', 'reactions:99')
+    assert '2-membered' in str(exc.value) and 'reactions:99' in str(exc.value)
+
+
+def test_a_macrocycle_is_stated_by_range_and_bucket():
+    """`r` is exact to 24 and answers 25-32, 33-48 and above 48 as one bucket each, so a range collapses
+    onto the buckets it touches."""
+    assert _parse_ring_sizes('1:5,6', 'x') == (1, (5, 6))
+    assert _parse_ring_sizes('2:22-60', 'x') == (2, (22, 23, 24, 25, 33, 49))
+    assert _parse_ring_sizes('1:30', 'x') == (1, (25,))
+
+
+def test_a_macrocycle_row_closes_an_eighteen_membered_ring():
+    product = _ring('[A:1]-[A:101]-[A:102]', 1, _parse_ring_sizes('1:12-60', 'x')[1])
+    template = read_smirks(compose_smirks(('alkyl_halide', 'thiol'), product, intramolecular=True))
+    chain = read_smiles('ClCC(=O)N' + 'CC' * 6 + 'CCS')
+    assert any(len(p) == len(chain) - 1 for r in template(chain) for p in r.products)
 
 
 def test_a_ring_atom_the_product_does_not_mention_is_refused():

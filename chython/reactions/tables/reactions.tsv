@@ -21,7 +21,8 @@
 # components; filling `ring_sizes` composes a SECOND template demanding them in ONE, with the sizes as a
 # product-side `r` on the atom named.  `1:5,6,7` reads "the ring through product atom :1 is 5-, 6- or
 # 7-membered", and the atom must be one that lies on the new ring -- pick the wrong one and the row composes
-# fine and never fires.  The two templates are mutually exclusive, so a substrate never yields the same
+# fine and never fires.  `1:12-60` is a range; `r` is exact to 24 and answers 25-32, 33-48 and above 48 as
+# one bucket each, so a macrocycle range above 24 also matches any larger ring.  The two templates are mutually exclusive, so a substrate never yields the same
 # product twice.  A ONE-SLOT ROW MAY NOT FILL IT: there is no intermolecular reading to distinguish such a
 # row from, so the constraint goes in `product` by hand and the loader refuses the column outright.  LEAVE
 # `ring_sizes` EMPTY UNLESS THE RING SIZE IS KNOWN -- an empty cell says "the intramolecular case of this
@@ -93,7 +94,7 @@ id	name	groups	product	ring_sizes	probe	description
 16	n_alkylation	alkyl_halide,secondary_amine	[A@~:1]-[A:101](-[A:102])-[A:103]	1:5,6	C[C@H](Br)CC.CNC>>C(C)[C@H](N(C)C)C	RX + R'2NH -> RNR'2 (SN2)
 17	williamson	alkyl_halide,phenol	[A@~:1]-[A:101]-[A:102]	1:5,6	C[C@H](Br)CC.c1c(O)cccc1>>c1ccccc1O[C@H](C)CC	RX + ArOH -> ArOR (Williamson)
 18	urea_synthesis	isocyanate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]		C(=NCC)=O.C(C)N>>N(CC)C(=O)NCC	RNCO + R'NH2 -> RNHC(=O)NHR'
-19	thioether_synthesis	alkyl_halide,thiol	[A@~:1]-[A:101]-[A:102]	1:5,6	C[C@H](Br)CC.C(C)S>>C([C@H](SCC)C)C	RX + R'SH -> RSR'
+19	thioether_synthesis	alkyl_halide,thiol	[A@~:1]-[A:101]-[A:102]	1:5,6,12-60	C[C@H](Br)CC.C(C)S>>C([C@H](SCC)C)C	RX + R'SH -> RSR'
 #
 # ================================================================================================
 # INTERCONVERSIONS.  One group in, one out, and neither an oxidation nor a reduction: a halide
@@ -1372,9 +1373,9 @@ id	name	groups	product	ring_sizes	probe	description
 1163	alcohol_dehydration	tertiary_carbinol_alpha_ch	[A:2]=[A:3]		CCC(C)(C)O>>CC=C(C)C	tertiary alcohol -> alkene
 1164	alcohol_dehydration	secondary_carbinol_alpha_ch	[A:2]=[A:3]		OC1CCCCC1>>C1=CCCCC1	secondary alcohol -> alkene
 1165	alcohol_dehydration	primary_carbinol_alpha_ch	[A:2]=[A:3]		OCCc1ccccc1>>C=Cc1ccccc1	primary alcohol -> alkene
-1166	olefin_metathesis	terminal_alkene,terminal_alkene	[A:2]=[A:102]	2:5,6,7,8,9,10,11,12,13,14	C=CCN(CC=C)C(=O)OC(C)(C)C>>CC(C)(C)OC(=O)N1CC=CC1	Two terminal alkenes, losing ethylene (Grubbs; ring-closing when intramolecular)
-1167	olefin_metathesis	terminal_alkene,propenyl	[A:2]=[A:102]	2:5,6,7,8,9,10,11,12,13,14	C=CCN(CC=CC)C(=O)OC(C)(C)C>>CC(C)(C)OC(=O)N1CC=CC1	A terminal alkene and a propenyl group, losing propene (Grubbs; ring-closing when intramolecular)
-1168	olefin_metathesis	terminal_alkene,heteroatom_terminal_alkene	[A:2]=[A:102]	2:5,6,7,8,9,10,11,12,13,14	C=CCN(Cc1ccccc1)S(=O)(=O)C=C>>O=S1(=O)C=CCN1Cc1ccccc1	A terminal alkene and a vinyl sulfonamide, ether or amide, losing ethylene (Grubbs)
+1166	olefin_metathesis	terminal_alkene,terminal_alkene	[A:2]=[A:102]	2:5-60	C=CCN(CC=C)C(=O)OC(C)(C)C>>CC(C)(C)OC(=O)N1CC=CC1	Two terminal alkenes, losing ethylene (Grubbs; ring-closing when intramolecular)
+1167	olefin_metathesis	terminal_alkene,propenyl	[A:2]=[A:102]	2:5-60	C=CCN(CC=CC)C(=O)OC(C)(C)C>>CC(C)(C)OC(=O)N1CC=CC1	A terminal alkene and a propenyl group, losing propene (Grubbs; ring-closing when intramolecular)
+1168	olefin_metathesis	terminal_alkene,heteroatom_terminal_alkene	[A:2]=[A:102]	2:5-60	C=CCN(Cc1ccccc1)S(=O)(=O)C=C>>O=S1(=O)C=CCN1Cc1ccccc1	A terminal alkene and a vinyl sulfonamide, ether or amide, losing ethylene (Grubbs)
 1169	enolate_alkylation	alpha_heteroatom_halide,enolizable_ch	[A:3]-[A:2]-[A:101]		ClCOC.CC(=O)c1ccccc1>>COCCC(=O)c1ccccc1	An alpha-heteroatom alkyl halide alkylating the alpha carbon of a carbonyl or nitrile
 1170	claisen	carbonate,enolizable_ch	[A:1]-[A:2]-[A:3](=[A:4])-[A:101]		COC(=O)OC.CC(=O)c1ccccc1>>COC(=O)CC(=O)c1ccccc1	Dialkyl carbonate alkoxycarbonylating an enolizable alpha carbon
 1171	oxime_formation	aldehyde,O_alkylhydroxylamine	[A:2]=[A:101]-[A:102]-[A:103]		CCC=O.CON>>CCC=NOC	Aldehyde and an O-alkylhydroxylamine, giving the oxime ether
@@ -1469,24 +1470,24 @@ id	name	groups	product	ring_sizes	probe	description
 1258	epoxide_n_alkylation	oriented_epoxide,pyrrole	[A:1]-[A:2]-[A@~:3]-[A:101]		C[C@@H]1O[C@@H]1C.c1cc[nH]c1>>[C@H]([C@H](C)n1cccc1)(O)C	Epoxide opened by a pyrrole or indole N-H under base
 1259	epoxide_n_alkylation	oriented_epoxide,secondary_amide	[A:1]-[A:2]-[A@~:3]-[A:101]-[A:102]=[A:103]	3:5,6,7	C[C@@H]1O[C@@H]1C.CNC(C)=O>>N(C(C)=O)([C@@H](C)[C@@H](O)C)C	Epoxide opened by an amide N-H under base
 1260	epoxide_n_alkylation	oriented_epoxide,nh_sulfonamide	[A:1]-[A:2]-[A@~:3]-[A:101]-[A:102](=[A:103])=[A:104]	3:5,6,7	C[C@@H]1O[C@@H]1C.CNS(=O)(=O)c1ccccc1>>O[C@@H](C)[C@H](C)N(S(c1ccccc1)(=O)=O)C	Epoxide opened by a sulfonamide N-H under base
-1261	urea_from_carbamate	aryl_carbamate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]	2:5,6,7	CNC(=O)Oc1ccccc1.NCc1ccccc1>>CNC(=O)NCc1ccccc1	Aryl carbamate and a primary amine, giving the urea
-1262	urea_from_carbamate	aryl_carbamate,secondary_amine	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]	2:5,6,7	CNC(=O)Oc1ccccc1.C1CCNCC1>>CNC(=O)N1CCCCC1	Aryl carbamate and a secondary amine, giving the urea
-1263	urea_from_carbamate	aryl_carbamate,primary_aniline	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]	2:5,6,7	CNC(=O)Oc1ccccc1.Nc1ccccc1>>CNC(=O)Nc1ccccc1	Aryl carbamate and a primary aniline, giving the urea
-1264	urea_from_carbamate	aryl_carbamate,secondary_aniline	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]	2:5,6,7	CNC(=O)Oc1ccccc1.CNc1ccccc1>>CNC(=O)N(C)c1ccccc1	Aryl carbamate and a secondary aniline, giving the urea
+1261	urea_from_carbamate	aryl_carbamate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]	2:5,6,7,12-60	CNC(=O)Oc1ccccc1.NCc1ccccc1>>CNC(=O)NCc1ccccc1	Aryl carbamate and a primary amine, giving the urea
+1262	urea_from_carbamate	aryl_carbamate,secondary_amine	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]	2:5,6,7,12-60	CNC(=O)Oc1ccccc1.C1CCNCC1>>CNC(=O)N1CCCCC1	Aryl carbamate and a secondary amine, giving the urea
+1263	urea_from_carbamate	aryl_carbamate,primary_aniline	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]	2:5,6,7,12-60	CNC(=O)Oc1ccccc1.Nc1ccccc1>>CNC(=O)Nc1ccccc1	Aryl carbamate and a primary aniline, giving the urea
+1264	urea_from_carbamate	aryl_carbamate,secondary_aniline	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]	2:5,6,7,12-60	CNC(=O)Oc1ccccc1.CNc1ccccc1>>CNC(=O)N(C)c1ccccc1	Aryl carbamate and a secondary aniline, giving the urea
 1265	urea_from_carbamate	aryl_carbamate,aziridine_nh	[A:1]-[A:2](=[A:3])-[A:101]		CNC(=O)Oc1ccccc1.C1CN1>>CNC(=O)N1CC1	Aryl carbamate and an aziridine N-H, giving the urea
 1266	urea_from_carbamate	aryl_carbamate,ammonia	[A:1]-[A:2](=[A:3])-[A:101]		CNC(=O)Oc1ccccc1.N>>CNC(N)=O	Aryl carbamate and NH3, giving the urea
 1267	urea_from_carbamate	aryl_carbamate,pyrazole	[A:1]-[A:2](=[A:3])-[A:102]:[A:101]		CNC(=O)Oc1ccccc1.c1cn[nH]c1>>CNC(=O)n1cccn1	Aryl carbamate and a pyrazole N-H, giving the urea
 1268	urea_from_carbamate	aryl_carbamate,imidazole	[A:1]-[A:2](=[A:3])-[A:103]:[A:102]:[A:101]		CNC(=O)Oc1ccccc1.c1c[nH]cn1>>CNC(=O)n1ccnc1	Aryl carbamate and an imidazole N-H, giving the urea
-1269	urea_from_carbamate	succinimidyl_carbamate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]	2:5,6,7	CNC(=O)ON1C(=O)CCC1=O.NCc1ccccc1>>CNC(=O)NCc1ccccc1	Succinimidyl carbamate and a primary amine, giving the urea
-1270	urea_from_carbamate	succinimidyl_carbamate,secondary_amine	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]	2:5,6,7	CNC(=O)ON1C(=O)CCC1=O.C1CCNCC1>>CNC(=O)N1CCCCC1	Succinimidyl carbamate and a secondary amine, giving the urea
-1271	urea_from_carbamate	succinimidyl_carbamate,primary_aniline	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]	2:5,6,7	CNC(=O)ON1C(=O)CCC1=O.Nc1ccccc1>>CNC(=O)Nc1ccccc1	Succinimidyl carbamate and a primary aniline, giving the urea
-1272	urea_from_carbamate	succinimidyl_carbamate,secondary_aniline	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]	2:5,6,7	CNC(=O)ON1C(=O)CCC1=O.CNc1ccccc1>>CNC(=O)N(C)c1ccccc1	Succinimidyl carbamate and a secondary aniline, giving the urea
+1269	urea_from_carbamate	succinimidyl_carbamate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]	2:5,6,7,12-60	CNC(=O)ON1C(=O)CCC1=O.NCc1ccccc1>>CNC(=O)NCc1ccccc1	Succinimidyl carbamate and a primary amine, giving the urea
+1270	urea_from_carbamate	succinimidyl_carbamate,secondary_amine	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]	2:5,6,7,12-60	CNC(=O)ON1C(=O)CCC1=O.C1CCNCC1>>CNC(=O)N1CCCCC1	Succinimidyl carbamate and a secondary amine, giving the urea
+1271	urea_from_carbamate	succinimidyl_carbamate,primary_aniline	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]	2:5,6,7,12-60	CNC(=O)ON1C(=O)CCC1=O.Nc1ccccc1>>CNC(=O)Nc1ccccc1	Succinimidyl carbamate and a primary aniline, giving the urea
+1272	urea_from_carbamate	succinimidyl_carbamate,secondary_aniline	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]	2:5,6,7,12-60	CNC(=O)ON1C(=O)CCC1=O.CNc1ccccc1>>CNC(=O)N(C)c1ccccc1	Succinimidyl carbamate and a secondary aniline, giving the urea
 1273	urea_from_carbamate	succinimidyl_carbamate,aziridine_nh	[A:1]-[A:2](=[A:3])-[A:101]		CNC(=O)ON1C(=O)CCC1=O.C1CN1>>CNC(=O)N1CC1	Succinimidyl carbamate and an aziridine N-H, giving the urea
 1274	urea_from_carbamate	succinimidyl_carbamate,ammonia	[A:1]-[A:2](=[A:3])-[A:101]		CNC(=O)ON1C(=O)CCC1=O.N>>CNC(N)=O	Succinimidyl carbamate and NH3, giving the urea
 1275	urea_from_carbamate	succinimidyl_carbamate,pyrazole	[A:1]-[A:2](=[A:3])-[A:102]:[A:101]		CNC(=O)ON1C(=O)CCC1=O.c1cn[nH]c1>>CNC(=O)n1cccn1	Succinimidyl carbamate and a pyrazole N-H, giving the urea
 1276	urea_from_carbamate	succinimidyl_carbamate,imidazole	[A:1]-[A:2](=[A:3])-[A:103]:[A:102]:[A:101]		CNC(=O)ON1C(=O)CCC1=O.c1c[nH]cn1>>CNC(=O)n1ccnc1	Succinimidyl carbamate and an imidazole N-H, giving the urea
-1277	urea_from_carbamate	alkyl_carbamate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]	2:5,6,7	COC(=O)NCCCN>>O=C1NCCCN1	Alkyl carbamate closed by a primary amine of the same molecule, giving the cyclic urea
-1278	urea_from_carbamate	alkyl_carbamate,secondary_amine	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]	2:5,6,7	COC(=O)NCCCNC>>CN1CCCNC1=O	Alkyl carbamate closed by a secondary amine of the same molecule, giving the cyclic urea
+1277	urea_from_carbamate	alkyl_carbamate,primary_amine	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]	2:5,6,7,12-60	COC(=O)NCCCN>>O=C1NCCCN1	Alkyl carbamate closed by a primary amine of the same molecule, giving the cyclic urea
+1278	urea_from_carbamate	alkyl_carbamate,secondary_amine	[A:1]-[A:2](=[A:3])-[A:101](-[A:102])-[A:103]	2:5,6,7,12-60	COC(=O)NCCCNC>>CN1CCCNC1=O	Alkyl carbamate closed by a secondary amine of the same molecule, giving the cyclic urea
 1279	urea_from_carbamate	alkyl_carbamate,secondary_amide	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]=[A:103]	2:5,6	CC(C)(C)OC(=O)NCC(=O)NC>>CN1C(=O)CNC1=O	Alkyl carbamate closed by an amide N-H of the same molecule, giving the hydantoin
 1280	urea_from_carbamate	aryl_carbamate,ring_enamine_nh2	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]=[A:103]		CNC(=O)Oc1ccccc1.NC1=CN(C)C(=O)C=C1>>CNC(=O)NC1=CN(C)C(=O)C=C1	Aryl carbamate and an aminopyridone-type ring enamine, giving the urea
 1281	urea_from_carbamate	alkyl_carbamate,primary_aniline	[A:1]-[A:2](=[A:3])-[A:101]-[A:102]		COC(=O)NS(=O)(=O)c1ccccc1.Nc1ccccc1>>O=C(Nc1ccccc1)NS(=O)(=O)c1ccccc1	Alkyl carbamate and a primary aniline, giving the urea
