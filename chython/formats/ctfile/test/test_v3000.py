@@ -1016,7 +1016,7 @@ def _drawing_agrees(m):
 
 
 @mark.parametrize('text', ['C[C@H](O)CC |&1:1|', 'C[C@@H](O)CC |&1:1|',
-                           'C[C@H](O)[C@@H](O)[C@H](O)C |&1:1,&2:5,o1:3|',     # the phase the rewrite inverts
+                           'C[C@@H](O)[C@H](O)[C@@H](O)C |&1:1,&2:5,o1:3|',
                            'C[C@H](NC)[C@@H](O)c1ccccc1 |&1:1,4|', 'C[C@@H](NC)[C@H](O)c1ccccc1 |&1:1,4|'])
 def test_an_inverted_collection_carries_its_wedges_and_descriptors(text):
     """canonicalize_stereo_groups() inverts an AND collection's wedges and R/S with its signs."""
@@ -1087,7 +1087,7 @@ def test_a_wedge_on_a_centre_no_phase_makes_stereogenic_is_ignored():
 def test_a_wedge_on_an_unconfigured_unit_is_dropped_on_inversion():
     # the reader configures the C3 wedge; cleared here, the unit is unconfigured and its wedge would
     # be read as a configuration in the canonical phase
-    m = _drawn('C[C@H](O)[C@@H](O)[C@H](O)C |&1:3,5|')       # the phase the rewrite inverts
+    m = _drawn('C[C@H](O)[C@H](O)[C@@H](O)C |&1:3,5|')
     with m.edit():
         m.set_parity(4, 0)
     assert m.wedge_of(4, 5) and not m.parity_of(4)

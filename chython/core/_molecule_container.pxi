@@ -6068,9 +6068,9 @@ cdef class MoleculeContainer:
         | any other descriptor on an inverted unit   | dropped, `stereo-groups:cip-dropped`          |
         | wedge on an unconfigured unit              | dropped, `stereo-groups:wedge-dropped`        |
 
-        The last row holds only when something was inverted: a wedge a reader ignored on a unit that is
-        not stereogenic in the drawn phase can be read as a configuration in the other one.  Coordinates
-        are not moved, so a cis/trans unit's drawing is not inverted with its parity.
+        A wedge on a unit with no parity is never data: it drew a sign that is gone, or one the reader
+        ignored, and a reader could configure the unit from it again -- in the other phase after an
+        inversion.  Coordinates are not moved, so a cis/trans unit's drawing is not inverted with its parity.
         """
         cdef list records = []
         cdef stereo_unit_t *units
@@ -6084,19 +6084,11 @@ cdef class MoleculeContainer:
         cdef uint8_t p0, p1, code
         cdef int decided
         cdef cip_ctx_t ctx
-        cdef bint ranked = False, inverted = False
+        cdef bint ranked = False
         # BEFORE ANY POINTER INTO EITHER ARENA: this may append SEG_STEREO_UNIT to `stored`
         ensure_stereo_units(stored)
         units = structure_stereo_units(stored)
         count = structure_stereo_unit_count(stored)
-        for i in range(count):
-            p0 = structure_parity_at(stored, units[i].anchor)
-            p1 = structure_parity_at(view, units[i].anchor)
-            if p0 and p1 and p0 != p1:
-                inverted = True
-                break
-        if not inverted:
-            return records
         atoms = view.atoms()
         ptr = csr_ptr(view)
         edges = csr_edges(view)
