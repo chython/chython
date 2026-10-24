@@ -161,11 +161,13 @@ def test_needs_v3000_names_an_and_or_stereo_group(kind):
 
 
 @pytest.mark.parametrize('kind', [3, 2])
-def test_a_group_on_an_unconfigured_centre_does_not_need_v3000(kind):
-    """A dead member is not written in any version, so it asks for none."""
+def test_a_group_on_an_unconfigured_centre_needs_v3000_until_the_rewrite(kind):
+    """A dead member is written as stored, so it asks for V3000; `canonicalize_stereo_groups()` drops it."""
     m = read_smiles('ClC(Br)(F)I')
     c = next(sid for sid in m.atom_numbers if m.atom(sid).element == 6)
     m.set_stereo_group(c, kind, 1)
+    assert needs_v3000(m) is not None and 'V3000' in mol(m).split('\n')[3]
+    assert m.canonicalize_stereo_groups()
     assert needs_v3000(m) is None
     assert 'V2000' in mol(m).split('\n')[3]
 

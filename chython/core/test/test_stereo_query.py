@@ -1468,8 +1468,9 @@ def test_an_and_group_of_one_carries_no_parity_under_any_relabelling():
 
     2,3-dichlorobutane with one AND group per centre is therefore ONE molecule for all four frame
     assignments -- the C2-symmetric (1, 1) and (2, 2) and the meso (1, 2) and (2, 1) alike -- in every
-    creation order: one `==` class, one identity, one string, and one ambiguity class covering both
-    keys, because the swap of the centres is now a symmetry of every assignment.
+    creation order: one `==` class, one identity, one string once `canonicalize_stereo_groups()` has run,
+    and one ambiguity class covering both keys, because the swap of the centres is now a symmetry of every
+    assignment.
     """
     reference = None
     for frame in ((1, 1), (1, 2), (2, 1), (2, 2)):
@@ -1479,6 +1480,7 @@ def test_an_and_group_of_one_carries_no_parity_under_any_relabelling():
             assert sorted(view) == [(SG_AND, 1), (SG_AND, 2)], 'two AND groups, densely numbered'
             assert m.canonical_stereo_group_ambiguities() == (frozenset(view),), \
                 f'frame {frame}, creation order {order}: the swap of the centres is a symmetry'
+            m.canonicalize_stereo_groups()
             if reference is None:
                 reference = m
             else:
@@ -1762,6 +1764,7 @@ def test_an_and_group_of_a_non_tetrahedral_kind_reads_the_same_in_every_encoding
                 'and neither of them absorbed the other'
             assert m.canonical_stereo_group_ambiguities() == (frozenset(view),), \
                 f'order {order}: the component swap is an automorphism, so the groups tie'
+            m.canonicalize_stereo_groups()
             if split is None:
                 split = m
             else:

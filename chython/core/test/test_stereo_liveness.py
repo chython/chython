@@ -21,15 +21,22 @@ whose sign the view fills from a signed partner."""
 from chython.core import read_smiles
 
 
+def canon(text):
+    """`text` read and canonicalized: signs that state nothing go by the explicit rewrite."""
+    m = read_smiles(text)
+    m.canonicalize_stereo_groups()
+    return m
+
+
 SPIRO_TERMINALS = 'C[C@H]1CC2(C1)C[C@H](C)C2'       # 2,6-dimethylspiro[3.3]heptane, CID 21304360, centre unsigned
 SPIRO_SIGNED = 'C[C@H]1C[C@]2(C1)C[C@H](C)C2'       # CID 21304360, centre signed
 SPIRO_UNSIGNED = 'CC1CC2(C1)CC(C)C2'                # CID 21304360
 
 
 def test_terminal_signs_over_an_unsigned_centre_are_the_unsigned_compound():
-    m = read_smiles(SPIRO_TERMINALS)
-    assert m == read_smiles(SPIRO_UNSIGNED)
-    assert str(m) == str(read_smiles(SPIRO_UNSIGNED))
+    m = canon(SPIRO_TERMINALS)
+    assert m == canon(SPIRO_UNSIGNED)
+    assert str(m) == str(canon(SPIRO_UNSIGNED))
 
 
 def test_signing_the_spiro_centre_makes_the_terminals_live():
@@ -39,10 +46,10 @@ def test_signing_the_spiro_centre_makes_the_terminals_live():
 
 def test_mixed_groups_on_unsigned_spiro_terminals_are_the_racemate():
     # flipping one terminal inverts the molecule, so each terminal in AND states both enantiomers
-    m = read_smiles(SPIRO_TERMINALS + ' |&1:1,&2:6|')
-    assert m != read_smiles(SPIRO_UNSIGNED)
+    m = canon(SPIRO_TERMINALS + ' |&1:1,&2:6|')
+    assert m != canon(SPIRO_UNSIGNED)
     assert m == read_smiles(str(m))
-    assert m == read_smiles(SPIRO_SIGNED + ' |&1:1,3,6|')
+    assert m == canon(SPIRO_SIGNED + ' |&1:1,3,6|')
 
 
 def test_every_live_group_member_is_live():

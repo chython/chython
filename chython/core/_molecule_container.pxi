@@ -369,40 +369,36 @@ cdef tuple mc_group_ambiguities_in(Structure structure):
     return tuple(out)
 
 
-cdef Structure _mc_canonical_group_arena(Structure stored):
-    """A sealed clone of `stored` holding the canonical collections, or None when `stored` has none.
+DEF MC_RELABEL_ROUNDS = 4             # stored-frame relabelling rounds; one or two settle every record seen
 
-    The frame is slot order: `str()` numbers and phases the same labelling in written order, and a
-    string read back has its atoms in written order."""
-    cdef Structure view
-    cdef list dead = []
-    cdef uint32_t n = stored.header.atom_count, i
-    cdef uint32_t *pos
-    cdef uint8_t *sg
-    cdef bint grouped = False
-    view = structure_live_groups_view(stored, dead)
-    if view is stored:
-        sg = structure_stereo_groups(view)
-        for i in range(n):
-            if sg[i] and sg_kind(sg[i]) > SG_KIND_ABS:
-                grouped = True
-                break
-        if not grouped:
-            return None
-        view = structure_clone(stored)
-    ensure_stereo_units_unmarked(view)
-    pos = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
-    if pos is NULL:
-        raise MemoryError()
-    try:
-        for i in range(n):
-            pos[i] = i
-        structure_canonical_group_labels(view, pos, True)
-    finally:
-        PyMem_Free(pos)
+
+cdef Structure _mc_canonical_group_arena(MoleculeContainer molecule):
+    """A sealed clone of `molecule`'s arena holding the canonical collections, or None when the stored ones
+    already are.
+
+    The least labelling the canonical meaning write states (`smw_meaning_arena`), then its ids and AND
+    phases read again in the order a write of the stored collections takes, until nothing moves
+    (`smw_stored_frame_labels`): that write reads the phase, and its string must read back canonical."""
+    cdef Structure stored = molecule._structure
+    cdef Structure view = structure_clone(smw_meaning_arena(molecule))   # it may be a cached view
+    cdef uint32_t rounds, i
     # the unit marks were decided against the parities just moved: the next reader derives them again
     structure_invalidate_stereo_units(view)
     refresh_parity_features(view)
+    for rounds in range(MC_RELABEL_ROUNDS):
+        if not smw_stored_frame_labels(molecule, view):
+            break
+        structure_invalidate_stereo_units(view)
+        refresh_parity_features(view)
+    # the same stored state up to a symmetry -- a read-back canonical string, whose symmetric ends may swap
+    # ids or phase -- is already canonical: nothing to rewrite, unless the rewrite clears a parity, which
+    # identity never reads but the CTfile and MRV writers do
+    for i in range(stored.header.atom_count):
+        if structure_parity_at(stored, i) and not structure_parity_at(view, i):
+            return view
+    if (mol_identity_bytes(structure_stored_groups_view(view), True)
+            == mol_identity_bytes(structure_stored_groups_view(stored), True)):
+        return None
     return view
 
 
@@ -1248,7 +1244,7 @@ cdef class MoleculeContainer:
     cdef uint32_t _identity_gen
     cdef str _smiles_cache        # str(self), the EMPTY spec only, valid while _smiles_gen == _gen
     cdef uint32_t _smiles_gen
-    cdef tuple _view_cache        # (gen, {phases: (view, dead, approximate)}); see `_live_view`
+    cdef tuple _view_cache        # (gen, {phases: (view, dead, approximate), 2: stored}); `_live_view`
     cdef object _log              # this handle's Log, created on first use; see the `log` property
     cdef dict _meta               # record metadata, created on first access; see the `meta` property
     cdef bint _representation_change   # set ONLY by kekule/thiele around their own edit scope
@@ -5978,22 +5974,24 @@ cdef class MoleculeContainer:
         return report
 
     def canonicalize_stereo_groups(self):
-        """Store exactly the collections the canonical SMILES states.  Changed anything?
+        """Rewrite the stored stereo to the canonical spelling of its meaning.  Changed anything?
 
-        The stored labelling becomes the one `str()` writes, so `stereo_groups()`, `to_bytes()`, `pack()`
-        and every writer then carry it; `==`, `hash`, `canonical_bytes` and `str()` do not move.
+        THE EXPLICIT REWRITE: `str()`, `==`, `hash` and `canonical_bytes` state the stored labels and signs,
+        so they move with it, and two spellings of one meaning are one record afterwards.  `stereo_groups()`,
+        `to_bytes()`, `pack()` and every writer carry the result.
 
         | step            | the rewrite                                                        | rule               |
         | --------------- | ------------------------------------------------------------------ | ------------------ |
         | dead labels     | a member on an unconfigured or non-stereogenic unit is dropped     | `:dead`            |
-        | stereogenicity  | a parity on a unit no AND phase makes stereogenic is dropped       | `:not-stereogenic` |
+        | stereogenicity  | a parity that states nothing in any reading is dropped             | `:not-stereogenic` |
         | relabelling     | the least labelling of the same meaning (`live_stereo_groups()`)   | `:relabelled`      |
         | phase           | each AND collection inverted into its canonical phase              | `:phase`           |
         | ids             | OR and AND ids numbered canonically per kind                       | `:relabelled`      |
 
         One INFO record per changed atom on `log`, stage `stereo-groups`, rule `stereo-groups:<step>`.
-        `C[C@@H](O)CC |&2:1|` stores `C[C@H](O)CC |&1:1|`.  Ids and phases are read in slot order, which
-        is the written order for a molecule read from `str()`, so that read-back is already canonical.
+        `C[C@@H](O)CC |&2:1|` writes `C(C)[C@H](O)C |&1:2|` after it.  Ids and phases are read in the order `str()`
+        writes the result in, so its string read back is already canonical.  A record with no collection
+        is rewritten too: a sign that states nothing beside an open partner is dropped.
 
         An inverted unit's wedges and its `R`/`S` are inverted with it, so a writer, `depict()` and
         `atom_cips()` state the phase stored; a descriptor that cannot be inverted without a ranking of
@@ -6004,11 +6002,18 @@ cdef class MoleculeContainer:
         """
         cdef Structure stored, view
         cdef list records
+        cdef list approximate = []
         self._require_clean()
         stored = self._structure
-        if stored.header.atom_count == 0 or not structure_has(stored, SEG_STEREO_GROUPS):
+        if stored.header.atom_count == 0 or not (structure_has(stored, SEG_STEREO_GROUPS) or _has_parity(stored)):
             return False
-        view = _mc_canonical_group_arena(stored)
+        self._live_view(True, None, approximate)        # cached: the meaning write below reads it
+        if approximate:
+            self._log_event('stereo:identity-approximate', 'stereo',
+                            'atoms %s: over the labelling search limit, so two spellings of one enhanced-stereo '
+                            'meaning can canonicalize to two labellings'
+                            % ', '.join([str(self._numbers[<uint32_t> i]) for i in approximate]), mc_info())
+        view = _mc_canonical_group_arena(self)
         if view is None:
             return False
         records = self._group_records(stored, view)
@@ -6025,21 +6030,23 @@ cdef class MoleculeContainer:
         cdef list records = []
         cdef list numbers = self._numbers
         cdef uint32_t n = stored.header.atom_count, i
-        cdef uint8_t *sg0 = structure_stereo_groups(stored)
-        cdef uint8_t *sg1 = structure_stereo_groups(view)
-        cdef uint8_t p0, p1
+        cdef uint8_t *sg0 = structure_stereo_groups(stored) if structure_has(stored, SEG_STEREO_GROUPS) else NULL
+        cdef uint8_t *sg1 = structure_stereo_groups(view) if structure_has(view, SEG_STEREO_GROUPS) else NULL
+        cdef uint8_t p0, p1, g0, g1
         mc_lazy_log_imports()
         for i in range(n):
             p0 = structure_parity_at(stored, i)
             p1 = structure_parity_at(view, i)
-            if sg0[i] and not sg1[i]:
+            g0 = sg0[i] if sg0 is not NULL else 0
+            g1 = sg1[i] if sg1 is not NULL else 0
+            if g0 and not g1:
                 records.append(_MC_RECORD('stereo-groups:dead', (numbers[i],),
                                           'atom %s: %s states no configuration and is dropped'
-                                          % (numbers[i], _sg_label(sg0[i])), _MC_INFO, 'stereo-groups', ''))
-            elif sg0[i] != sg1[i]:
+                                          % (numbers[i], _sg_label(g0)), _MC_INFO, 'stereo-groups', ''))
+            elif g0 != g1:
                 records.append(_MC_RECORD('stereo-groups:relabelled', (numbers[i],),
                                           'atom %s: %s is stored as %s'
-                                          % (numbers[i], _sg_label(sg0[i]), _sg_label(sg1[i])),
+                                          % (numbers[i], _sg_label(g0), _sg_label(g1)),
                                           _MC_INFO, 'stereo-groups', ''))
             if p0 and not p1:
                 records.append(_MC_RECORD('stereo-groups:not-stereogenic', (numbers[i],),
@@ -6048,8 +6055,7 @@ cdef class MoleculeContainer:
             elif p0 != p1:
                 records.append(_MC_RECORD('stereo-groups:phase', (numbers[i],),
                                           'atom %s: %s is inverted into its canonical phase'
-                                          % (numbers[i], _sg_label(sg0[i] or sg1[i])), _MC_INFO, 'stereo-groups',
-                                          ''))
+                                          % (numbers[i], _sg_label(g0 or g1)), _MC_INFO, 'stereo-groups', ''))
         return records
 
     cdef list _carry_inversion(self, Structure stored, Structure view):
@@ -7460,8 +7466,8 @@ cdef class MoleculeContainer:
         THE ONLY CALLER THAT PASSES False IS `isomorphism`, and there is no public spelling of it:
         a stereo-blind labelling is canonical for the CONSTITUTION and not for the molecule, so a
         caller hashing it would call two diastereomers one compound.  True also carries the ABS, AND
-        and OR collections (CANON_GROUPS_IDENTITY), so the order is the one `canonical_bytes` is read
-        in.
+        and OR collections as stored (CANON_GROUPS_STORED), so the order is the one `canonical_bytes` is
+        read in.
         """
         self._require_clean()
         cdef uint32_t n_atoms = self._structure.header.atom_count
@@ -7483,13 +7489,13 @@ cdef class MoleculeContainer:
         try:
             # Raises on a truncated search, and leaves `order` untouched when it does -- the flag
             # is read by no one here because the exception is the answer.
-            structure = self._live_view(True) if stereo else self._structure
+            structure = self._stored_view() if stereo else self._structure
             if node_budget:
                 _canon_order(structure, labels, order, &flags, node_budget, stereo,
-                             CANON_GROUPS_IDENTITY if stereo else CANON_GROUPS_NONE)
+                             CANON_GROUPS_STORED if stereo else CANON_GROUPS_NONE)
             else:
                 mol_canonical_order(structure, labels, order, &flags, stereo,
-                                    CANON_GROUPS_IDENTITY if stereo else CANON_GROUPS_NONE)
+                                    CANON_GROUPS_STORED if stereo else CANON_GROUPS_NONE)
             for i in range(n_atoms):
                 out[numbers[i]] = order[i]
         finally:
@@ -8374,6 +8380,26 @@ cdef class MoleculeContainer:
             approximate.extend(entry[2])
         return entry[0]
 
+    cdef Structure _stored_view(self):
+        """`structure_stored_groups_view` of the stored arena, CACHED per generation beside `_live_view`.
+
+        What identity, `canonical_order()` and every writer read: the stored collections verbatim, without
+        the parities no phase makes stereogenic.  SHARED, like `_live_view`'s.
+        """
+        cdef tuple cache = self._view_cache
+        cdef dict entries
+        cdef object view
+        if cache is not None and cache[0] == self._gen:
+            entries = cache[1]
+        else:
+            entries = {}
+            self._view_cache = (self._gen, entries)
+        view = entries.get(2)
+        if view is None:
+            view = structure_stored_groups_view(self._structure)
+            entries[2] = view
+        return <Structure> view
+
     cdef bytes _identity(self):
         """`canonical_bytes`, CACHED, keyed on the same generation counter `atoms_order` uses.
 
@@ -8399,15 +8425,9 @@ cdef class MoleculeContainer:
         self._require_clean()
         if self._identity_cache is not None and self._identity_gen == self._gen:
             return self._identity_cache
-        # `structure_live_groups_view`: a parity on a unit `mark_stereogenic` refused is not identity,
-        # and neither is a dead group member
-        cdef list approximate = []
-        cdef bytes out = mol_identity_bytes(self._live_view(True, None, approximate))
-        if approximate:
-            self._log_event('stereo:identity-approximate', 'stereo',
-                            'atoms %s: over the labelling search limit, so two spellings of one enhanced-stereo '
-                            'meaning can be two identities'
-                            % ', '.join([str(self._numbers[<uint32_t> i]) for i in approximate]), mc_info())
+        # `structure_stored_groups_view`: a parity on a unit `mark_stereogenic` refused is not identity; the
+        # stored collections are, verbatim -- the meaning is `canonicalize_stereo_groups()`'s to store
+        cdef bytes out = mol_identity_bytes(self._stored_view(), True)
         self._log_bridgehead_conflicts()
         self._identity_cache = out
         self._identity_gen = self._gen
@@ -8436,10 +8456,9 @@ cdef class MoleculeContainer:
 
         True when a block of components joined by AND or OR groups holds more than five units, or more
         candidate labellings than the search weighs, or sits in a molecule of more than 1000 atoms: its
-        labels are then relabelled rather than searched,
-        and `==`, `hash` and `str` can tell two spellings of one meaning apart.  An identity computed
-        so logs one `stereo:identity-approximate` record.  Nonane-2,3,4,5,6,7,8-heptol with its seven
-        centres in groups is one such block.
+        labels are then relabelled rather than searched, and `canonicalize_stereo_groups()` can leave two
+        spellings of one meaning as two labellings; it logs one `stereo:identity-approximate` record then.
+        Nonane-2,3,4,5,6,7,8-heptol with its seven centres in groups is one such block.
         """
         cdef list approximate = []
         self._require_clean()

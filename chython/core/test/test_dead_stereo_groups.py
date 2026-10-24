@@ -16,14 +16,14 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""DEAD STEREO-GROUP MEMBERS: stored, ignored by identity, and never written.
+"""DEAD STEREO-GROUP MEMBERS: stored, written and identity as stored, dropped by the explicit rewrite.
 
 A member is dead when its unit is unconfigured or not stereogenic in any combination of the context: the
 other AND and OR groups and the unconfigured stereogenic units. A whole group is dead when inverting its live
-members restates the molecule in every such combination: a meso pair under any kind. A labelling is rewritten
-to the least one stating the same mixture, and an ABS or unlabelled parity whose inversion leaves the mixture
-unchanged is cleared. The reader keeps the byte; `str()` and every format spec write the molecule as if it
-were absent.
+members restates the molecule in every such combination: a meso pair under any kind. `canonicalize_stereo_groups()`
+rewrites a labelling to the least one stating the same mixture and clears an ABS or unlabelled parity whose
+inversion leaves the mixture unchanged; until it runs, `str()` and identity state the stored labels, dead
+members included. `live_stereo_groups()`, `dead_stereo_groups()` and `stereo_is_live` read the meaning either way.
 """
 import re
 
@@ -47,24 +47,32 @@ PAIRS = [
 SPECS = ['', '!e', '!x', '!s', 'i', 'A', 'm', 'h', 'i!e']
 
 
+def canon(text):
+    """`text` read and canonicalized: the explicit rewrite the meaning tests below compare after."""
+    m = read_smiles(text)
+    m.canonicalize_stereo_groups()
+    return m
+
+
 @mark.parametrize('dead, clean', PAIRS)
-def test_str_is_a_function_of_identity(dead, clean):
+def test_the_explicit_rewrite_drops_dead_members(dead, clean):
     a, b = read_smiles(dead), read_smiles(clean)
-    assert a == b and hash(a) == hash(b)
+    assert a != b and str(a) != str(b), 'a dead member is stored, written and identity until the rewrite'
     assert a.stereo_groups() != b.stereo_groups(), 'the reader stores the dead byte'
+    a, b = canon(dead), canon(clean)
+    assert a == b and hash(a) == hash(b)
     for spec in SPECS:
         assert format(a, spec) == format(b, spec), spec
-    assert str(a) == str(b)
 
 
-@mark.parametrize('text, written', [
-    ('CC(O)CC |o1:1|', 'C(C)C(O)C'),
-    ('CCCC |a:1|', 'C(C)CC'),
-    ('C[C@H](C)C |&1:1|', 'C(C)(C)C'),
-    ('C[C@H](O)C[C@H](O)C |a:1,o1:4|', 'O[C@@H](C)C[C@@H](C)O |a:1,o1:4|'),
+@mark.parametrize('text, stored, written', [
+    ('CC(O)CC |o1:1|', 'C(C)C(O)C |o1:2|', 'C(C)C(O)C'),
+    ('CCCC |a:1|', 'C(C)CC |a:2|', 'C(C)CC'),
+    ('C[C@H](C)C |&1:1|', 'C(C)(C)C |&1:0|', 'C(C)(C)C'),
+    ('C[C@H](O)C[C@H](O)C |a:1,o1:4|', 'O[C@@H](C)C[C@@H](C)O |a:1,o1:4|', 'O[C@@H](C)C[C@@H](C)O |a:1,o1:4|'),
 ])
-def test_the_written_string(text, written):
-    assert str(read_smiles(text)) == written
+def test_the_written_string(text, stored, written):
+    assert str(read_smiles(text)) == stored and str(canon(text)) == written
 
 
 #: (template, centre slots): pentane-2,3,4-triol and 2,3,4-trihydroxyglutaric acid, both symmetric chains
@@ -88,25 +96,24 @@ ANY_TRIOL = [('@', '@', '@'), ('@', '@@', '@'), ('@', '@', '@@'), ('@@', '@', '@
 @mark.parametrize('signs', ANY_TRIOL)
 def test_an_or_member_between_two_and_collections_states_nothing(signs):
     """Pentane-2,3,4-triol, C2 and C4 in two AND groups: each OR choice at C3 is all four diastereomers."""
-    plain = read_smiles(both_orders(TRIOL, (signs[0], '', signs[2]), '|&1:1,&2:5|')[0])
+    plain = canon(both_orders(TRIOL, (signs[0], '', signs[2]), '|&1:1,&2:5|')[0])
     for text in both_orders(TRIOL, signs, '|&1:1,&2:5,o1:3|'):
-        m = read_smiles(text)
+        assert list(read_smiles(text).dead_stereo_groups()) == [(2, 1)], text
+        m = canon(text)
         assert m == plain and hash(m) == hash(plain) and str(m) == str(plain), text
-        assert list(m.dead_stereo_groups()) == [(2, 1)], text
         back = read_smiles(str(m))
         assert back == m and str(back) == str(m), text
 
 
-def test_each_dead_member_is_one_info_record_where_the_tail_states_collections():
+def test_each_dead_member_is_written_until_the_rewrite_drops_it():
     m = read_smiles('C[C@H](O)CC.CC(O)CC.CCCC |&1:1,6,o1:11|')
     log = []
     write_smiles(m, '', log=log)
-    dead = [r for r in log if r.rule == 'smiles:stereo-group-dead']
-    assert len(dead) == 2 and all(r.severity == INFO for r in dead), log
-    for spec in ('!e', '!x', '!s'):
-        log = []
-        write_smiles(m, spec, log=log)
-        assert not any(r.rule == 'smiles:stereo-group-dead' for r in log), (spec, log)
+    assert not any(r.rule == 'smiles:stereo-group-dead' for r in log), log
+    assert str(m).count(',') + 1 == 3, str(m)             # three members stated, two of them dead
+    assert m.canonicalize_stereo_groups()
+    dead = [r for r in m.log.by_stage('stereo-groups') if r.rule == 'stereo-groups:dead']
+    assert len(dead) == 2 and all(r.severity == INFO for r in dead), m.log
 
 
 def test_live_dead_and_stored_memberships():
@@ -128,7 +135,7 @@ def test_copy_and_pach_keep_the_dead_byte():
     assert m.copy().stereo_groups() == m.stereo_groups() == {(2, 1): [2]}
     back = type(m).unpack(m.pack())
     assert back.stereo_groups() == m.stereo_groups()
-    assert str(back) == str(m) == 'C(C)C(O)C'
+    assert str(back) == str(m) == 'C(C)C(O)C |o1:2|'
 
 
 # --- a group whose inversion restates the molecule ------------------------------------------------------------
@@ -142,9 +149,10 @@ MESO_DIOL = ['C[C@H](O)C[C@H](O)C', 'O[C@@H](C)C[C@@H](C)O']
 def test_a_group_over_a_meso_pair_reads_as_absolute(text, tail):
     """A label over a configuration that is its own mirror image states the drawn diastereomer and no
     enantiomer, as ABS does; unlabelled is unknown, so it is not the unlabelled drawing."""
-    plain = read_smiles(MESO_DIOL[0])
-    absolute = read_smiles(f'{MESO_DIOL[0]} |a:1,4|')
-    m = read_smiles(f'{text} {tail}')
+    plain = canon(MESO_DIOL[0])
+    absolute = canon(f'{MESO_DIOL[0]} |a:1,4|')
+    assert read_smiles(f'{text} {tail}').live_stereo_groups() == {(1, 0): [2, 5]}
+    m = canon(f'{text} {tail}')
     assert m == absolute and hash(m) == hash(absolute) and m != plain
     assert str(m) == 'O[C@@H](C)C[C@@H](C)O |a:1,4|'
     assert m.live_stereo_groups() == {(1, 0): [2, 5]} and m.dead_stereo_groups() == {}
@@ -166,27 +174,26 @@ def test_a_group_over_part_of_a_meso_pair_is_live(tail, other):
 
 def test_a_group_over_a_meso_pair_and_a_chiral_centre_is_live():
     """meso-Pentane-2,4-diol with butan-2-amine: inverting the group gives the other amine enantiomer."""
-    first = read_smiles('C[C@H](O)C[C@H](O)C.C[C@H](N)CC |&1:1,4,8|')
-    second = read_smiles('C[C@@H](N)CC.O[C@@H](C)C[C@@H](C)O |&1:1,6,9|')
+    assert read_smiles('C[C@H](O)C[C@H](O)C.C[C@H](N)CC |&1:1,4,8|').dead_stereo_groups() == {}
+    first = canon('C[C@H](O)C[C@H](O)C.C[C@H](N)CC |&1:1,4,8|')
+    second = canon('C[C@@H](N)CC.O[C@@H](C)C[C@@H](C)O |&1:1,6,9|')
     assert first == second and str(first) == str(second)
-    assert first.dead_stereo_groups() == {}
-    assert first != read_smiles('C[C@H](O)C[C@H](O)C.C[C@H](N)CC')
-    assert first != read_smiles('C[C@H](O)C[C@H](O)C.C[C@H](N)CC |&1:1,4|')
+    assert first != canon('C[C@H](O)C[C@H](O)C.C[C@H](N)CC')
+    assert first != canon('C[C@H](O)C[C@H](O)C.C[C@H](N)CC |&1:1,4|')
 
 
 def test_the_meso_group_of_two_reads_as_absolute():
     """meso-Pentane-2,4-diol and racemic pseudoephedrine: the meso group reads as ABS and the pseudoephedrine
     group keeps canonical id 1 in every order."""
-    plain = read_smiles('C[C@H](O)C[C@H](O)C.C[C@H](NC)[C@@H](O)c1ccccc1 |a:1,4,&1:8,11|')
-    forms = [
-        read_smiles('C[C@H](O)C[C@H](O)C.C[C@H](NC)[C@@H](O)c1ccccc1 |&1:1,4,&2:8,11|'),
-        read_smiles('C[C@H](NC)[C@@H](O)c1ccccc1.C[C@H](O)C[C@H](O)C |&1:13,16,&2:1,4|'),
-        read_smiles('C[C@H](NC)[C@@H](O)c1ccccc1.C[C@H](O)C[C@H](O)C |&2:13,16,&1:1,4|'),
-    ]
-    for m in forms:
+    texts = ['C[C@H](O)C[C@H](O)C.C[C@H](NC)[C@@H](O)c1ccccc1 |&1:1,4,&2:8,11|',
+             'C[C@H](NC)[C@@H](O)c1ccccc1.C[C@H](O)C[C@H](O)C |&1:13,16,&2:1,4|',
+             'C[C@H](NC)[C@@H](O)c1ccccc1.C[C@H](O)C[C@H](O)C |&2:13,16,&1:1,4|']
+    plain = canon('C[C@H](O)C[C@H](O)C.C[C@H](NC)[C@@H](O)c1ccccc1 |a:1,4,&1:8,11|')
+    for text in texts:
+        assert sorted(read_smiles(text).live_stereo_groups()) == [(1, 0), (3, 1)]
+        assert read_smiles(text).dead_stereo_groups() == {}
+        m = canon(text)
         assert m == plain and hash(m) == hash(plain) and str(m) == str(plain)
-        assert sorted(m.live_stereo_groups()) == [(1, 0), (3, 1)]
-        assert m.dead_stereo_groups() == {}
     assert str(plain) == 'c1cccc(c1)[C@H](O)[C@@H](NC)C.C[C@@H](O)C[C@H](C)O |a:13,16,&1:6,8|'
 
 
@@ -195,9 +202,9 @@ def test_the_meso_group_of_two_reads_as_absolute():
 def test_a_group_over_every_centre_of_a_meso_triol_reads_as_absolute(text, kind):
     """Both meso pentane-2,3,4-triols: the three centres inverted together are the same compound, so the group
     states the diastereomer as ABS does, and not the unlabelled drawing."""
-    m = read_smiles(f'{text} |{kind}:1,3,5|')
-    assert m == read_smiles(f'{text} |a:1,3,5|') and m != read_smiles(text)
-    assert list(m.live_stereo_groups()) == [(1, 0)]
+    assert list(read_smiles(f'{text} |{kind}:1,3,5|').live_stereo_groups()) == [(1, 0)]
+    m = canon(f'{text} |{kind}:1,3,5|')
+    assert m == canon(f'{text} |a:1,3,5|') and m != canon(text)
 
 
 #: cyclopropane-1,2,3-tricarboxylic acid and its triamide, C1 open and C2, C3 trans: the cis,cis,trans isomer
@@ -209,16 +216,14 @@ TRANS_PAIR = ['OC(=O)C1[C@H](C(=O)O)[C@H]1C(=O)O', 'NC(=O)C1[C@H](C(N)=O)[C@H]1C
 def test_a_group_over_a_pseudo_asymmetric_trans_pair_reads_as_absolute(text, kind):
     """Each member is refused in every combination, and the pair pins the cis,cis,trans isomer, which is its
     own mirror image: the group states it as ABS does, and `validate_stereo` keeps both signs."""
-    flat = read_smiles(text.replace('@', ''))
-    absolute = read_smiles(f'{text} |a:4,8|')
-    m = read_smiles(f'{text} |{kind}:4,8|')
+    read = read_smiles(f'{text} |{kind}:4,8|')
+    assert read.stereo_is_live(5) and read.stereo_is_live(9) and read.copy().validate_stereo() == []
+    flat = canon(text.replace('@', ''))
+    absolute = canon(f'{text} |a:4,8|')
+    m = canon(f'{text} |{kind}:4,8|')
     assert m == absolute and hash(m) == hash(absolute) and str(m) == str(absolute)
-    assert m != read_smiles(text) and m != flat
-    assert re.search(r' \|a:\d+,\d+\|$', str(m)) and m.stereo_is_live(5) and m.stereo_is_live(9)
-    assert m.copy().validate_stereo() == []
-    c = m.copy()
-    c.canonicalize_stereo_groups()
-    assert c == absolute and str(c) == str(absolute)
+    assert m != canon(text) and m != flat
+    assert re.search(r' \|a:\d+,\d+\|$', str(m))
 
 
 @mark.parametrize('text', [t.replace('@H]1C', '@@H]1C') for t in TRANS_PAIR], ids=['acid', 'amide'])
@@ -226,8 +231,8 @@ def test_a_group_over_a_pseudo_asymmetric_trans_pair_reads_as_absolute(text, kin
 def test_a_cis_pair_beside_an_open_pseudo_asymmetric_centre_states_nothing(text, tail):
     """C2, C3 cis with C1 open: the completions are all-cis and cis,cis,trans, those of the unsigned acid, so
     the pair clears whole, as tropine's bridgeheads do with C3 open."""
-    flat = read_smiles(text.replace('@', ''))
-    m = read_smiles(text + tail)
+    flat = canon(text.replace('@', ''))
+    m = canon(text + tail)
     assert m == flat and hash(m) == hash(flat) and str(m) == str(flat) and '@' not in str(m)
     assert m.canonical_bytes == flat.canonical_bytes
 
@@ -236,17 +241,17 @@ def test_a_cis_pair_beside_an_open_pseudo_asymmetric_centre_states_nothing(text,
 def test_a_cis_pair_in_and_beside_an_open_centre_is_a_mixture(text):
     """In AND the members' mirror leaves C1, so the two phases are all-cis and cis,cis,trans: the mixture,
     as tropine's bridgeheads in AND with C3 open, and not the unsigned acid."""
-    m = read_smiles(f'{text} |&1:4,8|')
-    assert m != read_smiles(text.replace('@', ''))
+    m = canon(f'{text} |&1:4,8|')
+    assert m != canon(text.replace('@', ''))
     assert str(read_smiles(str(m))) == str(m)
 
 
 @mark.parametrize('signs', ANY_TRIOL)
 def test_an_absolute_centre_between_two_and_collections_states_nothing(signs):
     """`|a:3,&1:1,&2:5|` is `|&1:1,&2:5|` with C3 open, and its string reads back to itself."""
-    plain = read_smiles(both_orders(TRIOL, (signs[0], '', signs[2]), '|&1:1,&2:5|')[0])
+    plain = canon(both_orders(TRIOL, (signs[0], '', signs[2]), '|&1:1,&2:5|')[0])
     for text in both_orders(TRIOL, signs, '|a:3,&1:1,&2:5|'):
-        m = read_smiles(text)
+        m = canon(text)
         assert m == plain and str(m) == str(plain), text
         back = read_smiles(str(m))
         assert back == m and str(back) == str(m), text
@@ -286,12 +291,12 @@ def test_both_enantiomers_drawn_apart_read_back_under_any_label(tail):
     centres swaps the components, so an AND over all of them states the pair as ABS does, and either reads
     back to itself; the unlabelled pair is another identity."""
     pair = 'C[C@H]1CCCC[C@@H]1C(=O)O.C[C@@H]1CCCC[C@H]1C(=O)O'
-    m = read_smiles(f'{pair} {tail}'.strip())
+    m = canon(f'{pair} {tail}'.strip())
     back = read_smiles(str(m))
     assert back == m and str(back) == str(m)
-    assert (m == read_smiles(pair)) == (not tail)
+    assert (m == canon(pair)) == (not tail)
     if tail:
-        assert m == read_smiles(f'{pair} |a:1,6,11,16|')
+        assert m == canon(f'{pair} |a:1,6,11,16|')
 
 
 @mark.parametrize('text', ['CC(O)CC |&1:1|', 'C[C@H](O)CC |w:1.0,&1:1|'])
@@ -300,7 +305,8 @@ def test_validate_stereo_heals_an_unsigned_and_singleton(text):
     centre takes one, the group is kept, and the repair is logged."""
     m = read_smiles(text)
     assert m.validate_stereo() == []
-    assert m == read_smiles('C[C@H](O)CC |&1:1|')
+    m.canonicalize_stereo_groups()
+    assert m == canon('C[C@H](O)CC |&1:1|')
     assert [r.severity for r in m.log if r.rule == 'stereo:racemate-unsigned'] == ['repaired']
 
 

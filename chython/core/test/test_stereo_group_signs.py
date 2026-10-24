@@ -28,14 +28,21 @@ ABS    the enantiomer: signs kept as drawn, and an explicit label is not the sam
 
 Only a mirror symmetry makes the inverted signs the same compound: a meso form under any kind, where the
 label states nothing and the molecule is the unlabelled one. Two labellings stating one mixture are one
-compound and write one string.
+compound and write one string after `canonicalize_stereo_groups()`; read, each is its stored labelling.
 """
 import re
 from itertools import product
 
 from pytest import mark
 
-from chython.core._core import read_smiles as smiles
+from chython.core._core import read_smiles
+
+
+def smiles(text):
+    """`text` read and canonicalized: what these tests compare is the meaning, by the explicit rewrite."""
+    m = read_smiles(text)
+    m.canonicalize_stereo_groups()
+    return m
 
 
 def inverted(text):
@@ -121,6 +128,7 @@ def test_one_group_per_kind_in_every_atom_order():
     ('C[C@H](C)C |&1:1|', 'C(C)(C)C'),             # a sign on a centre that is not stereogenic
 ])
 def test_a_label_that_states_nothing_is_not_written(text, written):
+    assert str(read_smiles(text)) != written, 'read, the stored label is written'
     molecule = smiles(text)
     assert str(molecule) == written
     assert molecule == smiles(written)
@@ -147,7 +155,7 @@ def test_four_labellings_of_one_meso_triol_mixture_write_one_string(signs):
     forms = [smiles(t) for tail in tails for t in triol_orders(signs, tail)]
     for m in forms:
         assert m == forms[0] and hash(m) == hash(forms[0]) and str(m) == str(forms[0]), str(m)
-    assert str(forms[0]).endswith(' |&1:0,5|')
+    assert re.search(r' \|&1:\d+,\d+\|$', str(forms[0])), str(forms[0])     # the pair alone, one AND group
 
 
 def test_an_or_pair_is_not_two_or_centres():
@@ -224,7 +232,7 @@ def test_no_string_states_two_meanings(name):
                 groups.setdefault(g, []).append(str(slot))
             text = f"{template % signs} |{','.join(f'{g}:' + ','.join(v) for g, v in groups.items())}|"
             written = str(smiles(text))
-            assert str(smiles(written)) == written, text
+            assert str(read_smiles(written)) == written, text
             key = meaning(species, signs, lab)
             by_string.setdefault(written, set()).add(key)
             by_meaning.setdefault(key, set()).add(written)

@@ -68,7 +68,7 @@ def test_a_configured_centre_must_come_back_configured():
     """`ketone_to_alcohol` makes a racemate, so it cannot make one drawn enantiomer."""
     assert _answers('CC[C@H](C)O', 'ketone_to_alcohol') == []
     assert _answers('CC[C@@H](O)C |&1:2|', 'ketone_to_alcohol') == [
-        ('reactions:46', 'C(C)C(C)=O>>C(C)[C@H](O)C |&1:7|')]
+        ('reactions:46', 'C(C)C(C)=O>>C(C)[C@@H](O)C |&1:7|')]      # the racemate in its stored phase
 
 
 def test_an_untouched_component_rides_with_the_first_precursor():

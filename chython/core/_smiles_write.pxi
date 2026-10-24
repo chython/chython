@@ -138,6 +138,8 @@ cdef struct smw_opts_t:
     bint cxsmiles           # append the CXSMILES tail
     bint asymmetric_closure  # write the bond token on the opening side of a closure only
     bint group_phase        # write each AND collection in its canonical phase; not a spec key
+    bint meaning            # write the canonical meaning (`canonicalize_stereo_groups()`'s), not the
+                            # stored collections; not a spec key
     bint wedges             # an axis writes as a `wU`/`wD` tail wedge; set by the whole-molecule and
                             # reaction writers under `x`, never by a fragment writer; not a spec key
 
@@ -2405,9 +2407,10 @@ cdef tuple smw_tail_parts(Structure structure, smw_scratch_t *s, dict groups, di
 
     | `groups`          | the collections come from            | and that is what |
     | ----------------- | ------------------------------------ | ---------------- |
-    | `{n: (kind, no)}` | `live_stereo_groups()` inverted      | canonical output wants, group NUMBERS canonical too |
-    | `None`            | the `SEG_STEREO_GROUPS` bytes of     | stored-order output shows; dead members are zeroed |
-    |                   | `structure`, the `smw_structure` view| there                                              |
+    | `{n: (kind, no)}` | `structure`'s groups inverted        | canonical output: the stored ids, or the meaning   |
+    |                   |                                      | write's canonical ones                             |
+    | `None`            | the `SEG_STEREO_GROUPS` bytes of     | stored-order output shows                          |
+    |                   | `structure`, the `smw_structure` view|                                                    |
     | `{}`              | nothing -- no atom carries one       | `!s` and `!e` both assert, see below |
 
     An atom absent from a non-None `groups` carries no group, which is why `{}` suppresses the whole
@@ -2803,6 +2806,7 @@ cdef int smw_parse_spec(str spec, smw_opts_t *o) except -1:
     o.cxsmiles = True
     o.asymmetric_closure = False
     o.group_phase = True
+    o.meaning = False
     o.wedges = False
     cdef Py_ssize_t i = 0
     cdef Py_ssize_t k = len(spec)
@@ -3034,23 +3038,24 @@ cdef dict smw_group_atoms(MoleculeContainer molecule, Structure structure, smw_s
 
 
 cdef Structure smw_structure(MoleculeContainer molecule, smw_opts_t *o, list log=None):
-    """The arena a write reads: `structure_live_groups_view` when it writes stereo, else the stored one.
+    """The arena a write reads: `structure_stored_groups_view` when it writes stereo, else the stored one.
 
     A sign on a unit `mark_stereogenic` refused names no configuration, so no spelling writes it and a
-    string read back holds none: `C[C@H](C)C` writes `C(C)(C)C`.  A group member on an unconfigured or
-    non-stereogenic unit states nothing and is not written either: `CC(O)CC |o1:1|` writes `C(C)C(O)C`.
-    The input arena is not written; each dropped sign is one INFO `smiles:stereo-not-stereogenic`
-    record on `log`, and each dropped member, where the tail states collections, one INFO
-    `smiles:stereo-group-dead`.
-    An unrealisable bridgehead pair goes to `molecule.log`, LOST `stereo:bridgehead-unrealisable`, once.
+    string read back holds none: `C[C@H](C)C` writes `C(C)(C)C`; each dropped sign is one INFO
+    `smiles:stereo-not-stereogenic` record on `log`.  The collections are written as stored -- kind, id,
+    membership and AND phase, a member on an unconfigured unit included: `CC(O)CC |o1:1|` writes `o1`.
+    The input arena is not written.  An unrealisable bridgehead pair goes to `molecule.log`, LOST
+    `stereo:bridgehead-unrealisable`, once.
 
-    A canonical write stating collections gets a private arena whenever a group byte is in the view,
-    the view being the molecule's cached one (`_live_view`), since `smw_prepare` relabels it in place
-    (`structure_canonical_group_labels`): canonical ids, and each AND collection in its canonical phase
-    unless `o.group_phase` is off.  A coupled set's label is written on every member, as the view fills
-    it from whichever member carried it.  Off, the least labelling
-    is also searched on the stored signs alone, so a collection joined across a reaction's molecules
-    keeps the phase that states retention or inversion.
+    `o.meaning` writes the canonical meaning instead, the spelling `canonicalize_stereo_groups()` stores:
+    the live view (`structure_live_groups_view`), each dropped member, where the tail states collections,
+    one INFO `smiles:stereo-group-dead`.  A meaning write stating collections gets a private arena
+    whenever a group byte is in the view, the view being the molecule's cached one (`_live_view`), since
+    `smw_prepare` relabels it in place (`structure_canonical_group_labels`): canonical ids, and each AND
+    collection in its canonical phase unless `o.group_phase` is off.  A coupled set's label is written on
+    every member, as the view fills it from whichever member carried it.  Off, the least labelling is
+    also searched on the stored signs alone, so a collection joined across a reaction's molecules keeps
+    the phase that states retention or inversion.
     """
     cdef Structure view
     cdef atom_t *atoms
@@ -3061,6 +3066,16 @@ cdef Structure smw_structure(MoleculeContainer molecule, smw_opts_t *o, list log
     if not o.stereo:
         return molecule._structure
     molecule._log_bridgehead_conflicts()
+    if not o.meaning:
+        view = molecule._stored_view()
+        if log is not None and view is not molecule._structure:
+            atoms = molecule._structure.atoms()
+            for i in range(molecule._structure.header.atom_count):
+                if structure_parity_at(molecule._structure, i) and not structure_parity_at(view, i):
+                    log.append(mc_record('smiles:stereo-not-stereogenic', (atoms[i].n,),
+                                         'atom %s carries a parity on a unit that is not stereogenic, and '
+                                         'no sign is written for it' % atoms[i].n))
+        return view
     view = molecule._live_view(o.group_phase, dead)
     if log is not None and view is not molecule._structure:
         atoms = molecule._structure.atoms()
@@ -3143,8 +3158,8 @@ cdef dict smw_prepare(MoleculeContainer molecule, Structure structure, smw_scrat
         # writer does not work around it (kekulising the input would make this a mutator, note 1 at
         # the top of the file); `format(mol, 'i')` is the stored-order escape that claims nothing.
         smw_canonical_positions(structure, s.pos, o.stereo,
-                                CANON_GROUPS_WRITTEN if o.stereo and o.enhanced_stereo
-                                else CANON_GROUPS_NONE)
+                                (CANON_GROUPS_WRITTEN if o.meaning else CANON_GROUPS_STORED)
+                                if o.stereo and o.enhanced_stereo else CANON_GROUPS_NONE)
     else:
         for i in range(n):
             s.pos[i] = i
@@ -3176,7 +3191,7 @@ cdef dict smw_prepare(MoleculeContainer molecule, Structure structure, smw_scrat
         smw_sticky_frames(structure, s, sticky)
     else:
         smw_traverse(structure, s)
-    if (o.canonical and not o.random_order and o.stereo and o.enhanced_stereo and o.cxsmiles
+    if (o.meaning and o.canonical and not o.random_order and o.stereo and o.enhanced_stereo and o.cxsmiles
             and structure is not molecule._structure):
         # the private arena `smw_structure` handed over: canonical ids, and the canonical AND phase
         # unless the caller keeps the stored signs, both read in the WRITTEN order, which is the slot
@@ -3192,6 +3207,74 @@ cdef dict smw_prepare(MoleculeContainer molecule, Structure structure, smw_scrat
     if sticky is not NULL:
         smw_sticky_ends(structure, s, sticky)
     return groups
+
+
+cdef Structure smw_meaning_arena(MoleculeContainer molecule):
+    """The arena a canonical MEANING write emits from, its collections relabelled in that write's order.
+
+    What `canonicalize_stereo_groups()` stores, so a write of the stored collections afterwards is the
+    meaning write's string: the least labelling (`structure_live_groups_view`), canonical ids and each
+    AND collection in its canonical phase, both read in the written order.  The stored arena itself
+    when nothing is written differently.
+    """
+    cdef Structure structure = molecule._structure
+    cdef uint32_t n = structure.header.atom_count
+    cdef smw_opts_t o
+    cdef smw_scratch_t s
+    if n == 0:
+        return structure
+    smw_parse_spec('', &o)
+    o.wedges = o.cxsmiles
+    o.meaning = True
+    structure = smw_structure(molecule, &o, None)
+    if structure is molecule._structure:
+        return structure
+    smw_scratch_alloc(&s, n, csr_ptr(structure)[n])
+    try:
+        smw_prepare(molecule, structure, &s, &o, NULL, NULL, None)
+    finally:
+        smw_scratch_free(&s)
+    return structure
+
+
+cdef bint smw_stored_frame_labels(MoleculeContainer molecule, Structure structure) except -1:
+    """Relabel `structure`'s collections, in place, to the canonical ids and AND phases read in the order a
+    write of the STORED collections takes for it.  Moved anything?
+
+    `canonicalize_stereo_groups()` repeats it until nothing moves: the stored order reads the AND phase,
+    so a phase or id moved can move the order, and the string the result writes reads back canonical.
+    """
+    cdef uint32_t n = structure.header.atom_count
+    cdef smw_opts_t o
+    cdef smw_scratch_t s
+    cdef uint32_t *frame
+    cdef uint32_t i, k
+    cdef bint moved
+    if n == 0 or not structure_has(structure, SEG_STEREO_GROUPS):
+        return False
+    smw_parse_spec('', &o)
+    o.wedges = o.cxsmiles
+    smw_scratch_alloc(&s, n, csr_ptr(structure)[n])
+    frame = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
+    if frame is NULL:
+        smw_scratch_free(&s)
+        raise MemoryError()
+    try:
+        smw_prepare(molecule, structure, &s, &o, NULL, NULL, None)
+        k = s.nseq
+        for i in range(n):
+            frame[i] = SMW_NONE
+        for i in range(s.nseq):
+            frame[s.seq[i]] = i
+        for i in range(n):
+            if frame[s.bypos[i]] == SMW_NONE:
+                frame[s.bypos[i]] = k
+                k += 1
+        moved = structure_canonical_group_labels(structure, frame, True)
+    finally:
+        PyMem_Free(frame)
+        smw_scratch_free(&s)
+    return moved
 
 
 cdef int smw_group_labels_written(Structure structure, smw_scratch_t *s, bint phase) except -1:
@@ -3572,7 +3655,7 @@ cdef set smw_linked_molecules(list molecules):
     cdef object key, members, member, atom, number, first
     for i in range(len(molecules)):
         mol = <MoleculeContainer> molecules[i]
-        for key, members in mol.live_stereo_groups().items():
+        for key, members in mol.stereo_groups().items():
             if key[0] != SG_KIND_AND:
                 continue
             for member in members:

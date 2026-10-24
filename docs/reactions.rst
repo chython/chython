@@ -875,7 +875,7 @@ the mechanism does not hold it:
 
 .. testoutput::
 
-    C(O)[C@H](N(C)C)C |&1:2|
+    C(O)[C@@H](N(C)C)C |&1:2|
 
 .. figure:: images/smirks-stereo-racemic.svg
    :width: 480px
@@ -926,7 +926,7 @@ reactant sign:
 
 .. testoutput::
 
-    C1C[C@H]([C@@H](CC1)N(C)C)O |&1:2,3|
+    C1C[C@@H]([C@H](CC1)N(C)C)O |&1:2,3|
 
 .. figure:: images/smirks-stereo-relative.svg
    :width: 500px

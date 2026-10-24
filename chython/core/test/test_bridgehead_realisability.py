@@ -27,6 +27,13 @@ from pytest import importorskip, mark, skip
 from chython.core import LOST, REPAIRED, inchi_library_loaded, read_smiles
 
 
+def canon(text):
+    """`text` read and canonicalized: a coupled set's label states the set after the explicit rewrite."""
+    m = read_smiles(text)
+    m.canonicalize_stereo_groups()
+    return m
+
+
 #: (name, PubChem CID, isomeric SMILES, bridgehead atom numbers in SMILES order).
 COMPOUNDS = [
     # bridged: every bridge 1-3 atoms
@@ -226,15 +233,15 @@ CAMPHOR = 'C[C@@]12CC[C@@H](C1(C)C)CC2=O'
 def test_a_coupled_set_takes_the_strongest_label_of_its_members(partial):
     """(+)-camphor, CID 159055: C1 and C4 are one choice, so one label states both, whichever member carries
     it, and AND outranks OR and ABS."""
-    whole = read_smiles(f'{CAMPHOR} |&1:1,4|')
-    one = read_smiles(f'{CAMPHOR} {partial}')
+    whole = canon(f'{CAMPHOR} |&1:1,4|')
+    one = canon(f'{CAMPHOR} {partial}')
     assert one == whole and str(one) == str(whole) and hash(one) == hash(whole)
 
 
 def test_an_or_group_on_one_bridgehead_is_the_or_group_on_both():
-    one = read_smiles(f'{CAMPHOR} |o1:1|')
-    assert one == read_smiles(f'{CAMPHOR} |o1:1,4|')
-    assert one != read_smiles(CAMPHOR) and one != read_smiles(f'{CAMPHOR} |&1:1,4|')
+    one = canon(f'{CAMPHOR} |o1:1|')
+    assert one == canon(f'{CAMPHOR} |o1:1,4|')
+    assert one != canon(CAMPHOR) and one != canon(f'{CAMPHOR} |&1:1,4|')
 
 
 def test_stereo_units_name_the_coupled_partner():
@@ -313,8 +320,8 @@ def test_the_tropine_and_pseudotropine_mixture_is_not_the_unsigned_compound():
 
 def test_an_or_pair_of_tropane_bridgeheads_with_c3_open_states_nothing():
     """An OR set keeps its sign: with C3 open its worlds are tropine and pseudotropine alone, as unsigned."""
-    m = read_smiles('CN1[C@@H]2CC[C@H]1CC(C2)O |o1:2,5|')
-    assert m == read_smiles('CN1C2CCC1CC(C2)O')
+    m = canon('CN1[C@@H]2CC[C@H]1CC(C2)O |o1:2,5|')
+    assert m == canon('CN1C2CCC1CC(C2)O')
     assert str(read_smiles(str(m))) == str(m)
 
 
@@ -367,11 +374,11 @@ CAMPHOR_SPELLINGS = ['|&1:1|', '|&1:4|', '|&1:1,4|', '|&1:1,a:4|', '|a:1,&1:4|',
 def test_every_spelling_of_a_racemic_cage_writes_one_string_from_every_atom_order(tail):
     """(+)-camphor's racemate, CID 159055: one string, its label on both bridgeheads, whatever the spelling and
     the atom order."""
-    whole = read_smiles(f'{CAMPHOR} |&1:1,4|')
-    m = read_smiles(f'{CAMPHOR} {tail}')
+    whole = canon(f'{CAMPHOR} |&1:1,4|')
+    m = canon(f'{CAMPHOR} {tail}')
     assert m == whole and hash(m) == hash(whole) and str(m) == str(whole)
     for _ in range(20):
-        spelling = read_smiles(format(m, 'r'))
+        spelling = canon(format(m, 'r'))
         assert spelling == whole and str(spelling) == str(whole), format(m, 'r')
     back = read_smiles(str(m))
     assert back == whole and str(back) == str(m)
@@ -385,7 +392,7 @@ def test_a_cage_label_is_written_on_every_bridgehead(kind):
             continue                                # the cage alone: no other centre to share a group
         a, b = (x - 1 for x in pair)
         label = 'a' if kind == 'a' else f'{kind}1'
-        m = read_smiles(f'{text} |{label}:{a}|')
+        m = canon(f'{text} |{label}:{a}|')
         back = read_smiles(str(m))
         assert back == m and [len(v) for v in back.stereo_groups().values()] in ([2], []), (name, str(m))
 
@@ -398,19 +405,19 @@ NORBORNANE_ACID = 'C1C[C@@H]2C[C@H]1C[C@@H]2C(=O)O'
 def test_two_groups_on_one_cage_are_one_group(tail):
     """The cage inverts with every group it carries, so a group on C2 and another on a bridgehead join: the
     racemate of the acid, its relative configuration stated."""
-    whole = read_smiles(f'{NORBORNANE_ACID} |&1:2,4,6|')
-    m = read_smiles(f'{NORBORNANE_ACID} {tail}')
+    whole = canon(f'{NORBORNANE_ACID} |&1:2,4,6|')
+    m = canon(f'{NORBORNANE_ACID} {tail}')
     assert m == whole and str(m) == str(whole), str(m)
     for _ in range(10):
-        assert str(read_smiles(format(m, 'r'))) == str(whole)
+        assert str(canon(format(m, 'r'))) == str(whole)
 
 
 def test_a_cage_apart_from_its_neighbour_centre_is_another_compound():
     """C2 racemic beside a racemic cage of its own group is the mixture of all four isomers' two
     diastereomeric racemates -- not the acid's racemate."""
-    apart = read_smiles(f'{NORBORNANE_ACID} |&1:6,&2:2,4|')
-    assert apart != read_smiles(f'{NORBORNANE_ACID} |&1:2,4,6|')
-    assert apart == read_smiles(f'{NORBORNANE_ACID} |&1:6,&2:2,&3:4|')       # the cage's two groups merge
+    apart = canon(f'{NORBORNANE_ACID} |&1:6,&2:2,4|')
+    assert apart != canon(f'{NORBORNANE_ACID} |&1:2,4,6|')
+    assert apart == canon(f'{NORBORNANE_ACID} |&1:6,&2:2,&3:4|')       # the cage's two groups merge
     assert str(read_smiles(str(apart))) == str(apart)
     assert sorted(len(v) for v in read_smiles(str(apart)).stereo_groups().values()) == [1, 2]
 

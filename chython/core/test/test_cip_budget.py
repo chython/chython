@@ -70,17 +70,25 @@ def test_a_fused_system_past_the_budget_refuses_every_site_and_names_the_budget(
 
 
 def test_an_inverted_ranked_letter_swaps():
-    """`canonicalize_stereo_groups` inverts the AND group's phase, and rules 1a/1b/2 rank the site."""
-    mol = read_smiles(_chain(12).replace('C[C@H](O)', 'C[C@@H](O)', 1) + ' |&1:1|')
-    mol.assign_cip()
-    assert mol.atom_cips()[2] == 'R'
-    assert mol.canonicalize_stereo_groups() is True
-    assert mol.atom_cips()[2] == 'S'
+    """`canonicalize_stereo_groups` inverts the AND group's phase, and rules 1a/1b/2 rank the site: of the two
+    phases one is canonical, so the other one is inverted."""
+    for sign in ('C[C@@H](O)', 'C[C@H](O)'):
+        mol = read_smiles(_chain(12).replace('C[C@H](O)', sign, 1) + ' |&1:1|')
+        mol.assign_cip()
+        before = mol.atom_cips()[2]
+        if mol.canonicalize_stereo_groups():
+            break
+    else:
+        raise AssertionError('neither phase was inverted')
+    assert before in ('R', 'S') and mol.atom_cips()[2] == {'R': 'S', 'S': 'R'}[before]
 
 
 def test_an_inverted_letter_past_the_budget_is_dropped_not_kept():
     """`_carry_inversion` ranks before it swaps; a ranking refused by the budget drops the stated letter."""
     mol = read_smiles(FLAKE + ' |&1:2|')
+    if not mol.copy().canonicalize_stereo_groups():          # of the two phases, take the one inverted
+        with mol.edit() as e:
+            e.set_parity(3, 3 - mol.parity_of(3))
     mol.set_atom_cip(3, 'R')
     start = perf_counter()
     assert mol.canonicalize_stereo_groups() is True

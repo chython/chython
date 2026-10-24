@@ -148,9 +148,10 @@ cdef canon_prepare_fn _canon_prepare_hook = NULL
 # | CANON_GROUPS_NONE      | none                                     | `!s`, `!e`, `isomorphism`      |
 # | CANON_GROUPS_IDENTITY  | ABS, AND and OR on a configured anchor   | identity, `canonical_order()`, |
 # |                        |                                          | canonical group ids            |
-# | CANON_GROUPS_WRITTEN   | every stored ABS, AND and OR byte        | the CXSMILES writer            |
-# |                        | of the arena given; the writer gives the |                                |
-# |                        | live view, `structure_live_groups_view`  |                                |
+# | CANON_GROUPS_WRITTEN   | every stored ABS, AND and OR byte        | the meaning writer behind      |
+# |                        | of the arena given, AND phase-free       | `canonicalize_stereo_groups()` |
+# | CANON_GROUPS_STORED    | every stored ABS, AND and OR byte, and   | identity, `canonical_order()`, |
+# |                        | the AND phase as stored                  | the CXSMILES writer            |
 #
 # An explicit ABS label is in identity: a configured unit in no collection is a sign of unknown
 # reliability, and `C[C@H](O)CC |a:1|` is not `C[C@H](O)CC`.
@@ -159,7 +160,8 @@ cdef canon_prepare_fn _canon_prepare_hook = NULL
 #     the mode counts no member.  With `pos` (a discrete 1-based colouring) and `out` it writes the
 #     tail: per member two words, `kind << 62 | rlo << 31 | rhi` and `lo << 32 | hi`, sorted ascending,
 #     where `lo`/`hi` are the 0-based positions of the atoms the member is named on and `(rlo, rhi)` is
-#     the smallest `(lo, hi)` of the member's collection.  Kind and partition, never the stored id.  With
+#     the smallest `(lo, hi)` of the member's collection.  Kind and partition, never the stored id -- but
+#     CANON_GROUPS_STORED adds a third word per member, its stored byte, so the id orders too.  With
 #     `colour` (n words, zeroed by the caller) it writes at every named atom `2 * byte + single + 1`,
 #     `single` 1 for a member named on one atom, and CANON_GROUP_CLASH where two keys name one atom.
 #   * `_canon_group_span_hook(structure, mode, comp)` is True when one collection has members in two
@@ -178,6 +180,7 @@ cdef enum:
     CANON_GROUPS_NONE = 0
     CANON_GROUPS_IDENTITY = 1
     CANON_GROUPS_WRITTEN = 2
+    CANON_GROUPS_STORED = 3
     CANON_GROUP_KEYS = 514          # `colour` values 0 .. 512, and the clash
     CANON_GROUP_CLASH = 513
     CANON_GROUP_ATOM_LIMIT = 2000000  # (4n + 4) * CANON_GROUP_KEYS + n fits in 32 bits
@@ -1716,9 +1719,9 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
         raise MemoryError('canonical order component scratch allocation failed')
     # 2n + bonds words of certificate per component, n of parity tail, n of seed -- so the whole record
     # fits in 4n + bond_count however it is divided -- then at most two words per atom of group keys,
-    # a member being one anchor slot.
-    keys = <uint64_t *> PyMem_Malloc((<size_t> (6 if groups else 4) * n + structure.header.bond_count)
-                                    * sizeof(uint64_t))
+    # a member being one anchor slot, three under CANON_GROUPS_STORED.
+    keys = <uint64_t *> PyMem_Malloc((<size_t> ((7 if groups == CANON_GROUPS_STORED else 6) if groups else 4) * n
+                                      + structure.header.bond_count) * sizeof(uint64_t))
     if keys is NULL:
         PyMem_Free(block)
         raise MemoryError('canonical order component key allocation failed')

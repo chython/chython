@@ -20,6 +20,14 @@ from chython.chemistry import audit_stereo
 from chython.chemistry._stereo_audit import _PASS_THROUGH, _apply_fix, _audit
 from chython.chemistry._tables import read_table, stereo_audit_codes
 from chython.core import MoleculeContainer, read_smiles
+
+
+def canonical(m):
+    """`m` (a molecule or a SMILES) canonicalized on a copy: the meaning the audit compares, by the explicit
+    rewrite, since `==` and `str()` follow the stored labels."""
+    m = (read_smiles(m) if isinstance(m, str) else m).copy()
+    m.canonicalize_stereo_groups()
+    return m
 from pathlib import Path
 from pytest import mark
 from re import DOTALL, MULTILINE, findall, search
@@ -67,7 +75,7 @@ def test_a_label_without_a_sign_is_dead_unconfigured():
     assert f.code == 'stereo-audit:dead-unconfigured' and f.group == (3, 1)
     [fix] = f.fixes
     assert fix.action == 'drop-label' and fix.preserves_meaning
-    assert read_smiles(fix.result) == read_smiles('CC(O)CC |&1:1|')
+    assert canonical(fix.result) == canonical('CC(O)CC |&1:1|')
 
 
 def test_an_unsigned_double_bond_is_unknown():
@@ -236,7 +244,7 @@ def test_a_respelled_label_is_not_dead():
     # Fecht acid, CID 240836: the canonical form states ABS 4 and OR 6 on the spiro atom; neither is dead -- an
     # ABS is never muted and the OR group restating the molecule reads as ABS
     m = build('OC(=O)C1CC2(C1)CC(C2)C(=O)O', {4: 1, 6: 1, 9: 1}, {4: (1, 0), 6: (2, 1), 9: (2, 2)})
-    assert m.dead_stereo_groups() == {} and str(m).endswith(' |o1:5|')
+    assert m.dead_stereo_groups() == {} and str(canonical(m)).endswith(' |o1:5|')
     assert not [f for f in audit_stereo(m).findings if f.code in DEAD]
 
 
@@ -285,7 +293,7 @@ def test_an_unlabelled_axis_takes_the_next_free_ids():
     for fix, kind in zip(f.fixes, (1, 3, 2)):
         assert fix.action == 'set-group' and fix.atoms == ((4, 6),)
         back = read_smiles(fix.result)                           # the written axis is renumbered (1, 3)
-        assert back == _apply_fix(m, fix.action, fix.atoms, fix.args)
+        assert back == canonical(_apply_fix(m, fix.action, fix.atoms, fix.args))
         assert any(k == kind and (1, 3) in ms for (k, _), ms in back.stereo_groups().items())
 
 
@@ -366,7 +374,7 @@ def test_a_set_no_single_flip_realises_is_cleared():
     [fix] = f.fixes
     assert fix.action == 'clear-sign' and fix.atoms == (2, 4, 6, 8)
     fixed = _apply_fix(m, fix.action, fix.atoms, fix.args)
-    assert audit_stereo(fixed).clean and str(fixed) == fix.result
+    assert audit_stereo(fixed).clean and str(canonical(fixed)) == fix.result
 
 
 def test_a_realisable_or_achiral_bridgehead_pair_is_not_an_error():
@@ -460,14 +468,18 @@ def test_every_fix_removes_its_finding(text):
             fixed = _apply_fix(m, fix.action, fix.atoms, fix.args)          # same atom numbers as `m`
             after = audit_stereo(fixed)
             assert (f.code, f.atoms) not in {(g.code, g.atoms) for g in _computed(after)}, (text, f, fix)
-            assert str(fixed) == fix.result
+            assert str(canonical(fixed)) == fix.result
             if fix.preserves_meaning:
-                assert fixed == m
+                assert canonical(fixed) == canonical(m)
 
 
-# A write drops or respells a label: the finding before, the one it may become after, and whether its atoms stay.
-AFTER_A_WRITE = {'stereo-audit:bridgehead-unrealisable': ('stereo-audit:unknown-unit', True),
-                 'stereo-audit:and-absorbed': ('stereo-audit:and-single-member-racemate', False)}
+# A write drops a sign or fills an implied one and keeps every label: the finding before, the ones it may become
+# after, and whether their atoms stay.
+AFTER_A_WRITE = {'stereo-audit:bridgehead-unrealisable': (('stereo-audit:unknown-unit', True),
+                                                          ('stereo-audit:dead-unconfigured', True)),
+                 'stereo-audit:dead-not-stereogenic': (('stereo-audit:dead-unconfigured', False),),
+                 'stereo-audit:bridgehead-redundant-label': (('stereo-audit:bridgehead-half-labelled', False),),
+                 'stereo-audit:and-absorbed': (('stereo-audit:and-single-member-racemate', False),)}
 
 
 @mark.parametrize('text', TABLE)
@@ -481,8 +493,8 @@ def test_the_audit_survives_a_round_trip(text):
         if (g.code, g.severity) in kept:
             continue
         atoms = {to_m[x] for x in g.atoms if isinstance(x, int)}
-        assert any(f.code in AFTER_A_WRITE and AFTER_A_WRITE[f.code][0] == g.code and
-                   (not AFTER_A_WRITE[f.code][1] or atoms <= set(f.atoms)) for f in before), (text, g)
+        assert any(code == g.code and (not stays or atoms <= set(f.atoms))
+                   for f in before for code, stays in AFTER_A_WRITE.get(f.code, ())), (text, g)
 
 
 def test_the_docs_table_names_every_code_and_severity():
@@ -522,7 +534,7 @@ def test_a_meso_group_beside_another_group_reads_as_absolute():
     """cis-1,3-Dimethylcyclobutane in AND beside an OR butan-2-ol: the pair is its own mirror image, so the label
     states the cis isomer as ABS does -- not a phase another group fixes -- and is kept as ABS."""
     m = read_smiles('C[C@H]1C[C@@H](C)C1.C[C@H](O)CC |&1:1,3,o1:7|')
-    assert str(m) == 'C1[C@@H](C)C[C@H]1C.C[C@H](O)CC |a:1,4,o1:7|'
+    assert str(canonical(m)) == 'C1[C@@H](C)C[C@H]1C.C[C@H](O)CC |a:1,4,o1:7|'
     assert [f.code for f in audit_stereo(m).findings] == ['stereo-audit:meso-absolute']
 
 

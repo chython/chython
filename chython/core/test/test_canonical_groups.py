@@ -60,6 +60,20 @@ def test_every_atom_order_writes_one_string(text):
     assert back == m and back.canonical_bytes == m.canonical_bytes and hash(back) == hash(m)
 
 
+def _canon(text):
+    """`text` read and canonicalized: the meaning the tests below compare, an explicit rewrite."""
+    m = read_smiles(text)
+    m.canonicalize_stereo_groups()
+    return m
+
+
+def _read_pair(a, b):
+    """Both read, then both canonicalized: on read `==` follows the stored labels, so it agrees with `str()`."""
+    ra, rb = read_smiles(a), read_smiles(b)
+    assert (ra == rb) == (str(ra) == str(rb)) == (ra.canonical_bytes == rb.canonical_bytes)
+    return _canon(a), _canon(b)
+
+
 @mark.parametrize('a,b,equal', [
     ('C[C@H](O)CC |&1:1|', 'C[C@H](O)CC', False),                    # racemate vs single enantiomer
     ('C[C@H](O)CC |&1:1|', 'C[C@H](O)CC |o1:1|', False),             # AND vs OR
@@ -81,7 +95,7 @@ def test_every_atom_order_writes_one_string(text):
      'C[C@H](O)CC.C[C@H](O)CC.C[C@H](O)CC |&1:1,&2:6,11|', True),   # one partition up to symmetry
 ])
 def test_identity_reads_kind_and_partition(a, b, equal):
-    ma, mb = read_smiles(a), read_smiles(b)
+    ma, mb = _read_pair(a, b)
     assert (ma == mb) is equal
     assert (ma.canonical_bytes == mb.canonical_bytes) is equal
     if equal:
@@ -101,7 +115,7 @@ def test_identity_reads_kind_and_partition(a, b, equal):
 ])
 def test_an_explicit_abs_label_is_identity(a, b, equal):
     # the writer states every stored label, so an empty one is compared on the extension-free string
-    ma, mb = read_smiles(a), read_smiles(b)
+    ma, mb = _read_pair(a, b)
     assert (ma == mb) is equal
     assert (ma.canonical_bytes == mb.canonical_bytes) is equal
     if equal:
@@ -163,7 +177,7 @@ def test_the_extension_free_string_ignores_groups(text):
     ('C[C@H](O)C[C@@H](O)C |&1:1,4|', 'C[C@H](O)C[C@H](O)C |&1:1,4|', False),
 ])
 def test_a_group_is_read_in_its_canonical_phase(a, b, equal):
-    ma, mb = read_smiles(a), read_smiles(b)
+    ma, mb = _read_pair(a, b)
     assert (ma == mb) is equal
     assert (ma.canonical_bytes == mb.canonical_bytes) is equal
     assert (str(ma) == str(mb)) is equal
@@ -200,20 +214,20 @@ def test_the_phase_is_one_string_in_every_atom_order(text):
 def test_a_pseudo_asymmetric_centre_is_read_against_its_neighbours_phases(tail, signs, equal):
     # C3 of pentane-2,3,4-triol is stereogenic only when C2 and C4 differ; its sign is kept when inverting
     # it changes what the drawing states in some phase of the groups
-    a = read_smiles('C[C@@H](O)[C@H](O)[C@@H](O)C |%s|' % tail)
-    b = read_smiles('C[C@@H](O)[C@@H](O)[C@@H](O)C |%s|' % tail)
+    a, b = _read_pair('C[C@@H](O)[C@H](O)[C@@H](O)C |%s|' % tail, 'C[C@@H](O)[C@@H](O)[C@@H](O)C |%s|' % tail)
     assert len(findall(r'\[C@@?H\]', str(a).split(' ')[0])) == signs, str(a)
     assert (a == b) is equal
     assert (str(a) == str(b)) is equal
 
 
 def test_the_stored_signs_are_untouched():
-    # the phase is a reading: the arena keeps what was read, and `!e` writes it
+    # the canonical phase is an explicit rewrite: the arena keeps what was read, and `str()` writes it
     m = read_smiles('C[C@H](O)CC |&1:1|')
     before = m.to_bytes()
-    assert str(m) == 'C(C)[C@H](O)C |&1:2|'
+    assert str(m) == 'C(C)[C@@H](O)C |&1:2|'
     assert m.to_bytes() == before
     assert format(m, '!e') == 'C(C)[C@@H](O)C'
+    assert m.canonicalize_stereo_groups() and str(m) == 'C(C)[C@H](O)C |&1:2|'
     # an OR singleton writes the sign it was read with
     assert str(read_smiles('C[C@H](O)CC |o1:1|')) == 'C(C)[C@@H](O)C |o1:2|'
     assert str(read_smiles('C[C@@H](O)CC |o1:1|')) == 'C(C)[C@H](O)C |o1:2|'

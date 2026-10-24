@@ -239,27 +239,49 @@ def _apply_fix(molecule, action, atoms, args, anchors=None):
 
 
 class _Context:
-    """The input, its baseline copy, and the unit table, computed once per `audit_stereo` call."""
-    __slots__ = ('molecule', 'baseline', 'baseline_str', 'units', 'anchors')
+    """The input, its baseline copy, and the unit table, computed once per `audit_stereo` call.
+
+    The audit compares MEANINGS: `==` and `str()` follow the stored labels, so two molecules are compared, and
+    a fix's `result` written, after `canonicalize_stereo_groups()` on a copy (`canonical`).
+    """
+    __slots__ = ('molecule', 'baseline', 'canonical_baseline', 'baseline_str', 'units', 'anchors', '_canon')
 
     def __init__(self, molecule):
         # a snapshot, since fixes deferred by `later` run after the call returns and the caller may edit
         self.molecule = molecule.copy()
         # str() and == can write to a log (`stereo:bridgehead-unrealisable`); a copy writes to its own
         self.baseline = molecule.copy()
-        self.baseline_str = str(self.baseline)
+        self._canon = {}
+        self.canonical_baseline = self.canonical(self.baseline)
+        self.baseline_str = str(self.canonical_baseline)
         self.units = molecule.stereo_units()
         self.anchors = _anchors(self.units)
+
+    def canonical(self, molecule):
+        """`molecule` canonicalized, on a copy, memoised for the molecules this audit made."""
+        key = id(molecule)
+        hit = self._canon.get(key)
+        if hit is None or hit[0] is not molecule:
+            out = molecule.copy()
+            out.canonicalize_stereo_groups()
+            hit = self._canon[key] = (molecule, out)
+        return hit[1]
+
+    def same(self, a, b):
+        """Do `a` and `b` state one meaning?"""
+        return self.canonical(a) == self.canonical(b)
 
     def apply(self, action, atoms, args=(), molecule=None):
         """`_apply_fix` on `molecule`, the input by default, resolving axes through the unit table."""
         return _apply_fix(self.molecule if molecule is None else molecule, action, atoms, args, self.anchors)
 
     def fix(self, action, atoms, args=()):
-        """One Fix: the fixed copy's `str()`, and whether `==`, `hash` and `str()` all match the baseline."""
-        fixed = self.apply(action, atoms, args)
+        """One Fix: the canonical `str()` of the fixed copy, and whether its meaning is the baseline's --
+        `==`, `hash` and `str()` of the two canonicalized."""
+        fixed = self.canonical(self.apply(action, atoms, args))
         fixed_str = str(fixed)
-        same = fixed == self.baseline and hash(fixed) == hash(self.baseline) and fixed_str == self.baseline_str
+        base = self.canonical_baseline
+        same = fixed == base and hash(fixed) == hash(base) and fixed_str == self.baseline_str
         return Fix(action, tuple(atoms), tuple(args), same, fixed_str)
 
     def later(self, action, atoms, args=()):
@@ -340,7 +362,7 @@ def _restates(ctx, members):
                 e.set_parity(target, 3 - fixed.parity_of(target))
         return out
 
-    return inverted(members) == fixed and all(inverted((x,)) != fixed for x in members)
+    return ctx.same(inverted(members), fixed) and all(not ctx.same(inverted((x,)), fixed) for x in members)
 
 
 def _groups(ctx):
@@ -424,7 +446,7 @@ def _groups(ctx):
             x = u['owners']
             if not u['parity'] or x in stored_of or component(x) not in relative:
                 continue
-            if ctx.apply('clear-sign', (x,)) == ctx.baseline:
+            if ctx.same(ctx.apply('clear-sign', (x,)), ctx.baseline):
                 continue                # the sign states nothing
             fixes = (ctx.later('set-group', (x,), ('ABS',)),
                      ctx.later('set-group', (x,), ('AND', free[STEREO_AND])),
@@ -487,15 +509,15 @@ def _waits_for(ctx):
         here = systems(u)
         targets = [y for y, s in unsigned if s & here]
         x = u['owners']
-        if not targets or ctx.apply('clear-sign', (x,)) != ctx.baseline:
+        if not targets or not ctx.same(ctx.apply('clear-sign', (x,)), ctx.baseline):
             continue
         because, fixes = [], []
         for y in targets:
             if y not in signed_copy:
                 signed = ctx.apply('set-sign', (y,), (1,))
-                signed_copy[y] = None if signed == ctx.baseline else signed     # None: the drawing states `y`
+                signed_copy[y] = None if ctx.same(signed, ctx.baseline) else signed   # None: the drawing states `y`
             signed = signed_copy[y]
-            if signed is None or ctx.apply('clear-sign', (x,), molecule=signed) == signed:
+            if signed is None or ctx.same(ctx.apply('clear-sign', (x,), molecule=signed), signed):
                 continue
             if y not in sign_fixes:
                 sign_fixes[y] = tuple(ctx.later('set-sign', (y,), (p,)) for p in (1, 2))

@@ -32,10 +32,12 @@ RULES = tuple(rule for family in reaction_rules().values() for rule in family)
 
 
 def _prepared(smiles: str):
-    """One record, in the one state a probe is read and compared in: kekulized, then aromatized."""
+    """One record, in the one state a probe is read and compared in: kekulized, then aromatized, its stereo
+    collections canonicalized -- a racemate's drawn phase is the drawing's, not the row's."""
     molecule = read_smiles(smiles)
     molecule.kekule()
     molecule.thiele()
+    molecule.canonicalize_stereo_groups()
     return molecule
 
 
@@ -49,6 +51,7 @@ def test_every_row_yields_its_own_probe_product(rule):
             for product in reaction.products:
                 product.kekule()
                 product.thiele()
+                product.canonicalize_stereo_groups()
                 assert all(atom.implicit_h is not None for atom in product.atoms()), (
                     f'{rule.id} ({rule.name}) leaves an unknown hydrogen count: an all-`:` product side '
                     'states aromaticity the row cannot derive a count from.  Spell the new ring Kekule '

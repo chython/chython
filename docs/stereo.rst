@@ -321,10 +321,22 @@ not a rank, not a count, and two records' ``OR 1`` are unrelated.  Three consequ
   ``canonical_bond_stereo_groups()`` is the pair-spelled view of ``canonical_stereo_groups()`` and
   shares its ids.
 
+Ids, like an AND phase, are stored and written as stored: two records differing in them but not in meaning
+are equal after ``canonicalize_stereo_groups()`` (`What identity includes`_).  The samples on this page read
+such records through ``canonical``:
+
+.. testcode::
+
+    def canonical(text):
+        """`text` read and canonicalized: its meaning, by the explicit rewrite."""
+        m = smiles(text)
+        m.canonicalize_stereo_groups()
+        return m
+
 .. testcode::
 
     diols = 'C[C@H](O)CC.C[C@H](N)CC'
-    cells = [(smiles(f'{diols} |{tail}|'), [tail, note]) for tail, note in [('o1:1,o2:6', 'two pure isomers'),
+    cells = [(canonical(f'{diols} |{tail}|'), [tail, note]) for tail, note in [('o1:1,o2:6', 'two pure isomers'),
                                                                            ('o2:1,o1:6', 'the same two'),
                                                                            ('o1:1,6', 'as drawn or both inverted')]]
     first = cells[0][0]
@@ -353,35 +365,38 @@ What identity includes
 
     True C(C)(C)C
 
-``canonical_bytes``, ``hash(mol)`` and ``mol == other`` fold each ABS, OR and AND group's **kind and
-membership**, atom and bond, and never its id.  ``str(mol)`` is seeded by the same partition.
+**Identity and every writer state the stored collections.**  ``canonical_bytes``, ``hash(mol)``,
+``mol == other`` and ``str(mol)`` read each ABS, OR and AND group's kind, id and membership, atom and bond,
+and the AND phase its members' signs state; a member on an unconfigured unit is stored, written and
+compared like any other.  What a labelling *means* -- its least labelling, its AND phase, a meso pair as
+ABS, a dead member dropped -- is an explicit rewrite, ``mol.canonicalize_stereo_groups()``
+(`Storing the canonical labelling`_): two spellings of one meaning are two records until it runs on both.
+The pairs and readings on this page that equate two spellings hold after it, through ``canonical``
+(`Group ids are labels`_):
 
-==================================================  ========
-Pair                                                ``==``
-==================================================  ========
-``C[C@H](O)CC |&1:1|`` and ``C[C@H](O)CC``           False
-``C[C@H](O)CC |&1:1|`` and ``C[C@H](O)CC |o1:1|``    False
-``C[C@H](O)CC |a:1|`` and ``C[C@H](O)CC``            False
-``...|o1:1,o2:3|`` and ``...|o2:1,o1:3|``            True
-==================================================  ========
+==================================================  ========  ==========================
+Pair                                                ``==``    after ``canonical``
+==================================================  ========  ==========================
+``C[C@H](O)CC |&1:1|`` and ``C[C@H](O)CC``           False     False
+``C[C@H](O)CC |&1:1|`` and ``C[C@H](O)CC |o1:1|``    False     False
+``C[C@H](O)CC |a:1|`` and ``C[C@H](O)CC``            False     False
+``...|o1:1,o2:3|`` and ``...|o2:1,o1:3|``            False     True
+==================================================  ========  ==========================
 
 An explicit ABS label counts: a configured centre in no collection is a sign of unknown reliability,
 and one labelled ABS is stated absolute.  A group member on a unit that is unconfigured, or not
-stereogenic in any combination of AND phases, is **dead**: it states nothing, does not count, and no
-writer writes it.  The byte stays stored -- ``copy()`` and pach keep it -- while CXSMILES in every mode,
-V2000, V3000 and MRV write the molecule as if it were absent, so ``str(a) == str(b)`` whenever
-``a == b`` holds only because of dead members.  A collection with no live member is not written at all.
+stereogenic in any combination of AND phases, is **dead**: it states nothing, and the rewrite drops it.
 An AND or OR group whose live members, inverted, restate the molecule in every phase of the other AND
 groups -- a meso pair -- states the drawn diastereomer and no enantiomer, which is what ABS states:
-``|&1:1,4|``, ``|o1:1,4|`` and ``|a:1,4|`` on ``C[C@H](O)C[C@H](O)C`` are meso-pentane-2,4-diol, written
-``|a:1,4|``.  Unlabelled is unknown, so none of them is the unlabelled drawing, which may be either
-diastereomer; ``|&1:1,&2:4|`` splits the pair and both groups stay.  A ring system's signs whose
-completions with an open centre are the unsigned compound's state nothing together:
+canonicalized, ``|&1:1,4|``, ``|o1:1,4|`` and ``|a:1,4|`` on ``C[C@H](O)C[C@H](O)C`` are
+meso-pentane-2,4-diol, written ``|a:1,4|``.  Unlabelled is unknown, so none of them is the unlabelled
+drawing, which may be either diastereomer; ``|&1:1,&2:4|`` splits the pair and both groups stay.  A ring
+system's signs whose completions with an open centre are the unsigned compound's state nothing together:
 cyclopropane-1,2,3-tricarboxylic acid with C2, C3 cis and C1 open is both isomers, unlabelled or under
 ``a`` or ``o1``.  An AND mirror leaves C1, so ``&1`` there is the all-cis and cis,cis,trans mixture.
-``mol.live_stereo_groups()`` answers the written membership in ``canonical_stereo_groups()`` shape,
-``mol.dead_stereo_groups()`` the dropped members under their stored ids, and ``mol.stereo_is_live(x)``
-one member.
+``mol.live_stereo_groups()`` answers the membership the rewrite keeps, in ``canonical_stereo_groups()``
+shape, ``mol.dead_stereo_groups()`` the members it drops under their stored ids, and
+``mol.stereo_is_live(x)`` one member; all three read the meaning without rewriting anything.
 
 .. testcode::
 
@@ -395,15 +410,17 @@ one member.
 .. testcode::
 
     print(str(smiles('CC(O)CC |o1:1|')), str(smiles('CCCC |a:1|')), str(smiles('C[C@H](C)C |&1:1|')))
+    print(str(canonical('CC(O)CC |o1:1|')), str(canonical('CCCC |a:1|')), str(canonical('C[C@H](C)C |&1:1|')))
     print(smiles('CC(O)CC |o1:1|').stereo_groups(), smiles('CC(O)CC |o1:1|').live_stereo_groups())
 
 .. testoutput::
 
+    C(C)C(O)C |o1:2| C(C)CC |a:2| C(C)(C)C |&1:0|
     C(C)C(O)C C(C)CC C(C)(C)C
     {(2, 1): [2]} {}
 
 Depiction draws what is stored, so a sign on a unit that is not stereogenic is drawn as a wedge that
-identity ignores.
+identity ignores; the figure compares each record, canonicalized, with its unlabelled drawing.
 
 .. testcode::
 
@@ -412,8 +429,8 @@ identity ignores.
                               ('CC(O)CC |o1:1|', 'CC(O)CC', 'an OR on an open centre'),
                               ('C[C@H](O)C[C@H](O)C |&1:1,4|', 'C[C@H](O)C[C@H](O)C', 'a meso pair in one group'),
                               ('C[C@H](O)C[C@H](O)C |&1:1,&2:4|', 'C[C@H](O)C[C@H](O)C', 'the pair split in two')]:
-        m = smiles(text)
-        cells.append((m, [note, text.split()[-1] if '|' in text else text, f'== unlabelled: {m == smiles(plain)}']))
+        m = canonical(text)
+        cells.append((m, [note, text.split()[-1] if '|' in text else text, f'== unlabelled: {m == canonical(plain)}']))
     svg = grid(cells, columns=4)
 
 .. figure:: images/stereo-dead.svg
@@ -448,10 +465,10 @@ identity and on write; identity, SMILES and InChI log      unsigned; the stored 
 ``recover_racemate`` reads it as the racemate              (+)-camphor
 a set whose inversion restates the molecule states         adamantane signed out,out is adamantane
 nothing
-a set is one element: it takes the strongest label of      ``|&1:4|`` and ``|a:1,&1:4|`` on camphor
-its signed members -- AND, OR, ABS, none -- two groups     are ``|&1:1,4|``, written so
-of one kind on it merge, and it is written on every
-member
+a set is one element: it takes the strongest label of      canonicalized, ``|&1:4|`` and
+its signed members -- AND, OR, ABS, none -- two groups     ``|a:1,&1:4|`` on camphor are
+of one kind on it merge, and the rewrite writes it on      ``|&1:1,4|``, written so
+every member
 a nitrogen bridgehead of a bridged bicycle is a            Tröger's base; indolizidine's fused N
 lone-pair centre; a fused one is not                       inverts
 =========================================================  ==========================================
@@ -467,7 +484,7 @@ writes ``?``, as PubChem's (2R)-bicyclo[2.2.2]octane-2-carboxylic acid (CID 6928
     half, inverted = smiles('C[C@@]12CCC(C1(C)C)CC2=O'), smiles('C[C@@]12CC[C@H](C1(C)C)CC2=O')
     print(half == camphor, str(half))
     print(inverted == smiles('CC12CCC(C1(C)C)CC2=O'), [r.rule for r in inverted.log])
-    print(str(smiles('C[C@@]12CC[C@@H](C1(C)C)CC2=O |&1:1|')), camphor.unit_of(2)['coupled'])
+    print(str(canonical('C[C@@]12CC[C@@H](C1(C)C)CC2=O |&1:1|')), camphor.unit_of(2)['coupled'])
 
 .. testoutput::
 
@@ -531,7 +548,7 @@ pair its realisable signing in a new AND group, logged REPAIRED ``stereo:bridgeh
 .. testoutput::
 
     [2, 5] True
-    [] C1[C@@H]2CC[C@](C)(C1=O)C2(C)C |&1:1,4|
+    [] C1[C@H]2CC[C@@](C)(C1=O)C2(C)C |&1:1,4|
     [('stereo:bridgehead-racemate', 'repaired')]
 
 A nitrogen bridgehead of a bridged bicycle couples the same way.  Quinine (CID 3034034) is drawn with
@@ -565,8 +582,8 @@ each terminal, and all of them are stereogenic.
 Rule                                                    Instance
 ======================================================  ====================================================
 a terminal's sign counts only when the axis is          both acid carbons of spiro[3.3]heptane-2,6-
-configured: the spiro centre, or the C=C                dicarboxylic acid signed, the spiro atom not, is
-                                                        the unsigned compound and writes no sign
+configured: the spiro centre, or the C=C; the rewrite   dicarboxylic acid signed, the spiro atom not, is
+drops it                                                the unsigned compound once canonicalized
 with the axis signed, every sign is written and         inverting one acid carbon gives the enantiomer;
 compared                                                inverting both is the same compound
 ======================================================  ====================================================
@@ -574,11 +591,11 @@ compared                                                inverting both is the sa
 .. testcode::
 
     SPIRO = 'OC(=O)[C%sH]1C[C%s]2(C[C%sH](C(=O)O)C2)C1'        # C3, the spiro C5 and C7, 0 unsigned
-    plain = smiles(SPIRO % ('', '', ''))
-    drawn = smiles(SPIRO % ('@', '@', '@'))
+    plain = canonical(SPIRO % ('', '', ''))
+    drawn = canonical(SPIRO % ('@', '@', '@'))
     print(f"{'C3 C5 C7':12} {'== plain':9} {'== @ @ @':9} str")
     for signs in [('@', '', '@'), ('@', '', '@@'), ('@', '@', '@'), ('@', '@', '@@'), ('@@', '@', '@@')]:
-        m = smiles(SPIRO % signs)
+        m = canonical(SPIRO % signs)
         print(f"{' '.join(x or '0' for x in signs):12} {m == plain!s:9} {m == drawn!s:9} {m}")
 
 .. testoutput::
@@ -595,10 +612,11 @@ The cyclohexylidene's axis is its C=C, configured here through ``set_parity`` on
 .. testcode::
 
     ACID = 'C[C%sH]1CCC(=CC(=O)O)CC1'                     # the C=C is anchored at atom 5
-    plain = smiles(ACID % '')
-    terminal = smiles(ACID % '@')
+    plain = canonical(ACID % '')
+    terminal = canonical(ACID % '@')
     axis = smiles(ACID % '@')
     axis.set_parity(5, 1)
+    axis.canonicalize_stereo_groups()
     print(terminal == plain, str(terminal))
     print(axis == plain, str(axis))
 
@@ -609,10 +627,10 @@ The cyclohexylidene's axis is its C=C, configured here through ``set_parity`` on
 
 .. testcode::
 
-    unsigned = smiles(SPIRO % ('', '', ''))
+    unsigned = canonical(SPIRO % ('', '', ''))
     cells = []
     for signs, note in [(('@', '', '@'), 'terminals signed'), (('@', '@', '@'), 'spiro atom signed too')]:
-        m = smiles(SPIRO % signs)
+        m = canonical(SPIRO % signs)
         cells.append((m, [note, f'== unsigned: {m == unsigned}']))
     cells += [(terminal, ['terminal signed', f'== unsigned: {terminal == plain}']),
               (smiles(str(axis)), ['C=C configured too', f'== unsigned: {axis == plain}'])]
@@ -629,10 +647,10 @@ Signs inside a group
 
 **An AND group's signs are relative; an OR group's signs name the isomer.**
 
-- **AND** is a racemate.  Inverting every member states the same mixture, so identity and ``str(mol)``
-  read the group in one canonical phase.  Inverting some members and not others is another
-  diastereomer.  An AND group of one member carries no parity: ``C[C@H](O)CC |&1:1|`` is racemic
-  butan-2-ol whichever enantiomer it is drawn from.
+- **AND** is a racemate.  Inverting every member states the same mixture, so the rewrite stores the
+  group in one canonical phase; read, each drawing is its stored phase.  Inverting some members and not
+  others is another diastereomer.  An AND group of one member carries no parity: canonicalized,
+  ``C[C@H](O)CC |&1:1|`` is racemic butan-2-ol whichever enantiomer it is drawn from.
 - **OR** is one pure isomer whose absolute configuration is unknown.  The drawn signs tell two isolated
   isomers apart, so they are kept as drawn: inverting an OR group gives the other isomer, and an OR
   group of one member keeps its sign.
@@ -650,8 +668,8 @@ trans-cyclohexane-1,2-diol ``O[C@@H]1CCCC[C@H]1O |*1:1,6|``       True    False 
 cis-cyclohexane-1,2-diol ``O[C@@H]1CCCC[C@@H]1O |*1:1,6|``, meso  True    True    False
 ================================================================  ======  ======  =============
 
-``*1`` stands for the group in the column; ``*1`` = none compares the labelled drawing with the unlabelled
-one under ``&1``, ``o1`` and ``a`` alike.  Unlabelled is unknown, so a label is never the unlabelled
+Each pair is compared canonicalized.  ``*1`` stands for the group in the column; ``*1`` = none compares the
+labelled drawing with the unlabelled one under ``&1``, ``o1`` and ``a`` alike.  Unlabelled is unknown, so a label is never the unlabelled
 drawing, the meso form's included: there the three kinds state one thing, the drawn diastereomer, and are
 written ``|a:...|``.  Inverting one member of a two-member group is unequal under both kinds:
 pseudoephedrine becomes ephedrine.
@@ -663,10 +681,10 @@ pseudoephedrine becomes ephedrine.
 
     for kind in ('&1', 'o1'):
         drawn = f'C[C@H](NC)[C@@H](O)c1ccccc1 |{kind}:1,4|'
-        print(kind, smiles(drawn) == smiles(inverted(drawn)), str(smiles(drawn)))
+        print(kind, canonical(drawn) == canonical(inverted(drawn)), str(canonical(drawn)))
     cis = 'O[C@@H]1CCCC[C@@H]1O'
-    labelled = {str(smiles(f'{cis} |{kind}:1,6|')) for kind in ('&1', 'o1', 'a')}
-    print(labelled, smiles(f'{cis} |&1:1,6|') == smiles(cis))
+    labelled = {str(canonical(f'{cis} |{kind}:1,6|')) for kind in ('&1', 'o1', 'a')}
+    print(labelled, canonical(f'{cis} |&1:1,6|') == canonical(cis))
 
 .. testoutput::
 
@@ -686,7 +704,7 @@ pseudoephedrine becomes ephedrine.
                        ('trans-cyclohexane-1,2-diol', 'O[C@@H]1CCCC[C@H]1O |*1:1,6|'),
                        ('cis-cyclohexane-1,2-diol', 'O[C@@H]1CCCC[C@@H]1O |*1:1,6|')]:
         for kind in ('&1', 'o1'):
-            one, other = smiles(text.replace('*1', kind)), smiles(inverted(text).replace('*1', kind))
+            one, other = canonical(text.replace('*1', kind)), canonical(inverted(text).replace('*1', kind))
             cells += [(one, [name, kind]), (other, [f'{kind} inverted', f'== drawn: {one == other}'])]
     svg = grid(cells, columns=4)
 
@@ -697,8 +715,8 @@ pseudoephedrine becomes ephedrine.
    is the other isomer unless the molecule is meso.
 
 **An AND group on a double bond states both geometries.**  Its two phases are E and Z, so dimethyl
-maleate in ``AND 1`` and dimethyl fumarate in ``AND 1`` are one E + Z mixture and write one string,
-in the canonical phase.  An OR group on a double bond keeps its drawn geometry, as on a centre.
+maleate in ``AND 1`` and dimethyl fumarate in ``AND 1`` are one E + Z mixture and, canonicalized, write one
+string, in the canonical phase.  An OR group on a double bond keeps its drawn geometry, as on a centre.
 
 .. testcode::
 
@@ -715,9 +733,11 @@ in the canonical phase.  An OR group on a double bond keeps its drawn geometry, 
         return m
 
 
-    fumarate = smiles('COC(=O)/C=C/C(=O)OC |&1:4|')
+    fumarate = canonical('COC(=O)/C=C/C(=O)OC |&1:4|')
+    racemic = maleate('|&1:4|')
+    racemic.canonicalize_stereo_groups()
     cells = [(maleate(), ['dimethyl maleate', 'Z']), (smiles('COC(=O)/C=C/C(=O)OC'), ['dimethyl fumarate', 'E']),
-             (maleate('|&1:4|'), ['maleate, &1', 'Z + E', f'== fumarate &1: {maleate("|&1:4|") == fumarate}']),
+             (maleate('|&1:4|'), ['maleate, &1', 'Z + E', f'== fumarate &1: {racemic == fumarate}']),
              (fumarate, ['fumarate, &1', 'E + Z', f'str: {fumarate}'])]
     svg = grid(cells, columns=4)
 
@@ -735,7 +755,8 @@ never gets a wrong answer.
 Racemates and relative stereo: pitfalls
 ---------------------------------------
 
-Each row is one pair the sample below compares; ``str`` is what each side writes.
+Each row is one pair the sample below compares canonicalized, as ``canonical`` reads it; ``str`` is what
+each side then writes.  Read and not rewritten, two different spellings are two records.
 
 ===  ===============================================  ======  ===============================================
 Row  Pitfall                                          ``==``  Reading
@@ -767,7 +788,7 @@ Rows 4 to 6 are (+)-pseudoephedrine, ``C[C@H](NC)[C@@H](O)c1ccccc1`` (CID 7028).
              ('C[C@H](O)CC |o1:1|', 'C[C@@H](O)CC |o1:1|'), ('C[C@H](O)CC |a:1|', 'C[C@H](O)CC'),
              ('C[C@H](O)CC', 'C[C@H](O)CC |o1:1|'), ('C[C@H](O)CC', 'CC(O)CC')]
     for row, (left, right) in enumerate(PAIRS, 1):
-        a, b = smiles(left), smiles(right)
+        a, b = canonical(left), canonical(right)
         print(f'{row:<2} {a == b!s:5} {a!s:40} {b}')
 
 .. testoutput::
@@ -787,10 +808,11 @@ Rows 4 to 6 are (+)-pseudoephedrine, ``C[C@H](NC)[C@@H](O)c1ccccc1`` (CID 7028).
 Storing the canonical labelling
 -------------------------------
 
-``str(mol)`` writes the collections in their canonical labelling from a private copy; the stored
-ids and signs are kept.  ``mol.canonicalize_stereo_groups()`` stores that labelling, so every writer,
-``stereo_groups()``, ``to_bytes()`` and pach then carry it.  ``==``, ``hash``, ``canonical_bytes`` and
-``str(mol)`` do not move.  It returns whether anything changed, and a second call returns False.
+``str(mol)`` writes the stored collections and signs.  ``mol.canonicalize_stereo_groups()`` is the explicit
+rewrite to the canonical labelling of their meaning; every writer, ``stereo_groups()``, ``to_bytes()`` and
+pach then carry it, and ``==``, ``hash``, ``canonical_bytes`` and ``str(mol)``, which follow the stored
+labels, move with it.  It returns whether anything changed, and a second call returns False.  A record with
+no collection is rewritten too: a sign that states nothing beside an open partner is dropped.
 
 =====================  =====================================================================
 Step                   Rewrite
@@ -801,12 +823,12 @@ AND phase              each AND collection inverted into its canonical phase
 ids                    OR and AND ids numbered canonically per kind
 =====================  =====================================================================
 
-Ids and phases are read in atom order, and a molecule read from ``str(mol)`` has its atoms in written
-order, so that read-back is already canonical.  An inverted unit's stored wedges and its ``R``/``S`` are
+Ids and phases are read in the order ``str(mol)`` writes the result in, so its string read back is
+already canonical.  An inverted unit's stored wedges and its ``R``/``S`` are
 inverted with it; any other descriptor on it, and a wedge on a unit left unconfigured, are dropped and
-logged.  Until the method runs, ``live_stereo_groups()`` is the labelling that pairs with the stored
-signs, which is what V2000, V3000 and MRV write; ``str(mol)`` may hold an AND collection in its other
-phase to state fewer labels, as on ``C[C@H](O)[C@H](O)[C@@H](O)C |&1:3,5|``, written with C3 as ABS.
+logged.  ``live_stereo_groups()`` is the labelling the rewrite would keep against the stored signs;
+the canonical form may hold an AND collection in its other phase to state fewer labels, as on
+``C[C@H](O)[C@H](O)[C@@H](O)C |&1:3,5|``, stored with C3 as ABS.
 
 Each changed atom is one INFO record on ``mol.log`` at stage ``stereo-groups``.  It is the last stage of
 ``canonicalize()``; ``canonicalize(stereo_groups=False)`` skips it, and ``ReactionContainer.canonicalize()``
@@ -822,28 +844,28 @@ from inversion.
 
 .. testoutput::
 
-    True {(3, 1): [2]} {(3, 2): [2]}
-    False True False
-    True {(3, 1): [2]} C[C@H](O)CC |&1:1| C(C)[C@H](O)C |&1:2|
+    False {(3, 1): [2]} {(3, 2): [2]}
+    True True False
+    True {(3, 1): [2]} C[C@@H](O)CC |&1:1| C(C)[C@H](O)C |&1:2|
 
 .. testcode::
 
-    def canonical(m):
+    def rewritten(m):
         """A copy of `m` after `canonicalize_stereo_groups()`, and the rules it logged."""
         after = m.copy()
         after.canonicalize_stereo_groups()
         return after, sorted({r.rule.split(':')[1] for r in after.log.by_stage('stereo-groups')})
 
 
-    butanol = wedged('C[C@@H](O)CC |&2:1|')
+    butanol = wedged('C[C@H](O)CC |&2:1|')
     butanol.assign_cip()
-    pseudoephedrine = wedged('C[C@@H](NC)[C@H](O)c1ccccc1 |&1:1,4|')
+    pseudoephedrine = wedged('C[C@H](NC)[C@@H](O)c1ccccc1 |&1:1,4|')
     with pseudoephedrine.edit() as e:
         e.set_atom_cip(2, 'R')
     triol = wedged('C[C@@H](O)[C@H](O)[C@@H](O)C |&1:1,&2:5,o1:3|')
     cells = []
     for m in (butanol, pseudoephedrine, triol):
-        after, rules = canonical(m)
+        after, rules = rewritten(m)
         cells += [(m, ['drawn']), (after, ['stored', ', '.join(rules)])]
     svg = grid(cells, columns=2, cip=True)
 
@@ -851,7 +873,7 @@ from inversion.
    :width: 560px
 
    Before and after, stored R/S drawn.  Butan-2-ol: ``&2`` becomes ``&1`` in the other phase, its
-   wedge and (R) inverted with it.  (1R,2R)-Pseudoephedrine: the other phase is (1S,2S), and the stored
+   wedge and (S) inverted with it.  (1S,2S)-Pseudoephedrine: the other phase is (1R,2R), and the stored
    (R) on C2 is dropped, since ``assign_cip()`` leaves that centre undecided.  The meso triol:
    C3 is dead, so its parity and its wedge are dropped.
 
@@ -888,7 +910,8 @@ Rule                                            meso-Tartaric acid (CID 447315)
 ==============================================  ==============================================================
 the full inversion is the same compound         ``==`` its inversion is True; L-tartaric acid (CID 444305)
                                                 inverted is D-tartaric acid
-``&1``, ``o1`` or ``a`` over both centres       one compound, written ``|a:...|``; not the unlabelled drawing
+``&1``, ``o1`` or ``a`` over both centres       canonicalized, one compound written ``|a:...|``; not the
+                                                unlabelled drawing
 a collection over one centre                    live: ``|&1:0|`` is the meso form mixed with one enantiomer
 ``assign_cip()``                                R and S
 ==============================================  ==============================================================
@@ -908,7 +931,7 @@ a centre no descriptor and logs ``cip:undecided`` (:doc:`molecule`).
     meso = smiles(MESO)
     print(meso == smiles(inverted(MESO)), smiles(inverted(L)) == smiles(L), str(meso))
     for tail in ('&1:0,1', 'o1:0,1', 'a:0,1', '&1:0'):
-        m = smiles(f'{MESO} |{tail}|')
+        m = canonical(f'{MESO} |{tail}|')
         print(f'{tail:7} {m == meso!s:5} {m}')
     meso.assign_cip()
     print([meso.atom(n).cip for n in (1, 2)])
@@ -1161,23 +1184,23 @@ every string its labellings write.
     ribo                                             [C@H]([C@@H]([C@@H](C)O)O)(O)C |a:0,1,2|
     xylo                                             [C@H]([C@H]([C@@H](C)O)O)(O)C |a:0,1,2|
     D + L                                            [C@@H](O)(C)C(O)[C@@H](C)O |&1:0,5|
-    ribo + D                                         [C@@H](O)(C)[C@@H](O)[C@H](C)O |a:0,3,&1:5|
-    ribo + L                                         [C@H]([C@@H]([C@H](C)O)O)(O)C |a:0,1,&1:2|
-    ribo + xylo                                      [C@@H](O)(C)C(O)[C@H](C)O |&1:0,5|
+    ribo + D                                         [C@H]([C@@H]([C@@H](C)O)O)(O)C |a:1,2,&1:0|
+    ribo + L                                         [C@H](O)(C)[C@@H](O)[C@H](C)O |a:3,5,&1:0|
+    ribo + xylo                                      [C@H](C([C@@H](C)O)O)(O)C |&1:0,2|
     xylo + D                                         [C@@H](O)(C)[C@@H](O)[C@@H](C)O |a:3,5,&1:0|
-    xylo + L                                         [C@H]([C@H]([C@H](C)O)O)(O)C |a:0,1,&1:2|
-    ribo + D + L                                     [C@@H](O)(C)[C@@H](O)[C@H](C)O |&1:5,&2:0,3|
-    ribo + xylo + D                                  [C@@H](O)(C)[C@H](O)[C@@H](C)O |a:5,&1:0,&2:3|
-    ribo + xylo + L                                  [C@H]([C@H]([C@H](C)O)O)(O)C |a:0,&1:1,&2:2|
-    xylo + D + L                                     [C@@H](O)(C)[C@H](O)[C@H](C)O |&1:0,&2:3,5|
-    ribo + xylo + D + L                              [C@@H](O)(C)C(O)[C@H](C)O |&1:0,&2:5|
+    xylo + L                                         [C@H](O)(C)[C@@H](O)[C@H](C)O |a:0,3,&1:5|
+    ribo + D + L                                     [C@H]([C@@H]([C@@H](C)O)O)(O)C |&1:0,&2:1,2|
+    ribo + xylo + D                                  [C@H]([C@H]([C@@H](C)O)O)(O)C |a:2,&1:0,&2:1|
+    ribo + xylo + L                                  [C@H](O)(C)[C@@H](O)[C@H](C)O |a:5,&1:3,&2:0|
+    xylo + D + L                                     [C@H]([C@H]([C@@H](C)O)O)(O)C |&1:0,&2:1,2|
+    ribo + xylo + D + L                              [C@H](C([C@@H](C)O)O)(O)C |&1:2,&2:0|
     D or L                                           [C@@H](O)(C)C(O)[C@@H](C)O |o1:0,5|
     D or ribo                                        [C@@H](O)(C)[C@@H](O)[C@@H](C)O |a:0,3,o1:5|
-    D or ribo + xylo                                 [C@@H](O)(C)[C@H](O)[C@@H](C)O |a:5,&1:3,o1:0|
+    D or ribo + xylo                                 [C@@H](O)(C)[C@@H](O)[C@@H](C)O |a:0,&1:3,o1:5|
     D or xylo                                        [C@@H](O)(C)[C@@H](O)[C@@H](C)O |a:3,5,o1:0|
     L or D                                           [C@H](O)(C)C(O)[C@H](C)O |o1:0,5|
     L or ribo                                        [C@H](O)(C)[C@@H](O)[C@H](C)O |a:3,5,o1:0|
-    L or ribo + xylo                                 [C@H](O)(C)[C@H](O)[C@H](C)O |a:5,&1:3,o1:0|
+    L or ribo + xylo                                 [C@H](O)(C)[C@@H](O)[C@H](C)O |a:0,&1:3,o1:5|
     L or xylo                                        [C@H](O)(C)[C@@H](O)[C@H](C)O |a:0,3,o1:5|
     ribo or D                                        [C@H]([C@@H]([C@@H](C)O)O)(O)C |a:1,2,o1:0|
     ribo or L                                        [C@H]([C@@H]([C@@H](C)O)O)(O)C |a:0,1,o1:2|
@@ -1185,27 +1208,27 @@ every string its labellings write.
     xylo or D                                        [C@H]([C@H]([C@@H](C)O)O)(O)C |a:1,2,o1:0|
     xylo or L                                        [C@H]([C@H]([C@@H](C)O)O)(O)C |a:0,1,o1:2|
     xylo or ribo                                     [C@H]([C@H]([C@@H](C)O)O)(O)C |a:0,2,o1:1|
-    ribo + D or ribo + L                             [C@@H](O)(C)[C@@H](O)[C@H](C)O |&1:5,o1:0,3|
-    ribo + D or xylo + D                             [C@@H](O)(C)[C@@H](O)[C@H](C)O |a:0,&1:5,o1:3|
-    ribo + D or xylo + L                             [C@@H](O)(C)[C@@H](O)[C@H](C)O |a:3,&1:5,o1:0|
-    ribo + L or ribo + D                             [C@H]([C@H]([C@H](C)O)O)(O)C |&1:1,2,o1:0|
-    ribo + L or xylo + D                             [C@H]([C@@H]([C@H](C)O)O)(O)C |a:1,&1:2,o1:0|
-    ribo + L or xylo + L                             [C@H]([C@@H]([C@H](C)O)O)(O)C |a:0,&1:2,o1:1|
+    ribo + D or ribo + L                             [C@H]([C@@H]([C@@H](C)O)O)(O)C |&1:0,o1:1,2|
+    ribo + D or xylo + D                             [C@H]([C@@H]([C@@H](C)O)O)(O)C |a:2,&1:0,o1:1|
+    ribo + D or xylo + L                             [C@H]([C@@H]([C@@H](C)O)O)(O)C |a:1,&1:0,o1:2|
+    ribo + L or ribo + D                             [C@H](O)(C)[C@@H](O)[C@H](C)O |&1:3,5,o1:0|
+    ribo + L or xylo + D                             [C@H](O)(C)[C@@H](O)[C@H](C)O |a:3,&1:0,o1:5|
+    ribo + L or xylo + L                             [C@H](O)(C)[C@@H](O)[C@H](C)O |a:5,&1:0,o1:3|
     ribo + xylo or D                                 [C@H]([C@H]([C@@H](C)O)O)(O)C |a:2,&1:1,o1:0|
     ribo + xylo or L                                 [C@H]([C@H]([C@@H](C)O)O)(O)C |a:0,&1:1,o1:2|
     xylo + D or ribo + D                             [C@@H](O)(C)[C@@H](O)[C@@H](C)O |a:5,&1:0,o1:3|
     xylo + D or ribo + L                             [C@@H](O)(C)[C@@H](O)[C@@H](C)O |a:3,&1:0,o1:5|
-    xylo + D or xylo + L                             [C@@H](O)(C)[C@H](O)[C@H](C)O |&1:3,5,o1:0|
-    xylo + L or ribo + D                             [C@H]([C@H]([C@H](C)O)O)(O)C |a:1,&1:2,o1:0|
-    xylo + L or ribo + L                             [C@H]([C@H]([C@H](C)O)O)(O)C |a:0,&1:2,o1:1|
-    xylo + L or xylo + D                             [C@H]([C@H]([C@H](C)O)O)(O)C |&1:2,o1:0,1|
-    ribo + xylo + D or ribo + xylo + L               [C@@H](O)(C)[C@H](O)[C@@H](C)O |&1:0,&2:3,o1:5|
-    ribo + xylo + L or ribo + xylo + D               [C@H]([C@H]([C@H](C)O)O)(O)C |&1:1,&2:2,o1:0|
-    D or L or ribo + xylo                            [C@@H](O)(C)[C@H](O)[C@@H](C)O |&1:3,o1:0,o2:5|
+    xylo + D or xylo + L                             [C@H]([C@H]([C@@H](C)O)O)(O)C |&1:0,1,o1:2|
+    xylo + L or ribo + D                             [C@H](O)(C)[C@@H](O)[C@H](C)O |a:3,&1:5,o1:0|
+    xylo + L or ribo + L                             [C@H](O)(C)[C@@H](O)[C@H](C)O |a:0,&1:5,o1:3|
+    xylo + L or xylo + D                             [C@H](O)(C)[C@@H](O)[C@H](C)O |&1:5,o1:0,3|
+    ribo + xylo + D or ribo + xylo + L               [C@H]([C@H]([C@@H](C)O)O)(O)C |&1:0,&2:1,o1:2|
+    ribo + xylo + L or ribo + xylo + D               [C@H](O)(C)[C@@H](O)[C@H](C)O |&1:3,&2:0,o1:5|
+    D or L or ribo + xylo                            [C@@H](O)(C)[C@@H](O)[C@@H](C)O |&1:3,o1:5,o2:0|
     D or ribo or L                                   [C@@H](O)(C)[C@@H](O)[C@@H](C)O |o1:5,o2:0,3|
     D or ribo or xylo                                [C@@H](O)(C)C(O)[C@@H](C)O |a:5,o1:0|
     D or xylo or L                                   [C@@H](O)(C)[C@@H](O)[C@@H](C)O |o1:0,o2:3,5|
-    L or D or ribo + xylo                            [C@H](O)(C)[C@H](O)[C@H](C)O |&1:3,o1:0,o2:5|
+    L or D or ribo + xylo                            [C@H](O)(C)[C@@H](O)[C@H](C)O |&1:3,o1:5,o2:0|
     L or ribo or D                                   [C@H](O)(C)[C@@H](O)[C@H](C)O |o1:0,o2:3,5|
     L or ribo or xylo                                [C@H](O)(C)C(O)[C@H](C)O |a:5,o1:0|
     L or xylo or D                                   [C@H](O)(C)[C@@H](O)[C@H](C)O |o1:5,o2:0,3|
@@ -1216,14 +1239,14 @@ every string its labellings write.
     xylo or ribo or D                                [C@H]([C@H]([C@@H](C)O)O)(O)C |a:2,o1:0,o2:1|
     xylo or ribo or L                                [C@H]([C@H]([C@@H](C)O)O)(O)C |a:0,o1:1,o2:2|
     ribo + xylo or D or L                            [C@H]([C@H]([C@@H](C)O)O)(O)C |&1:1,o1:0,o2:2|
-    D or ribo or xylo or L                           [C@@H](O)(C)C(O)[C@@H](C)O |o1:0,o2:5|
-    L or ribo or xylo or D                           [C@H](O)(C)C(O)[C@H](C)O |o1:0,o2:5|
+    D or ribo or xylo or L                           [C@@H](O)(C)C(O)[C@@H](C)O |o1:5,o2:0|
+    L or ribo or xylo or D                           [C@H](O)(C)C(O)[C@H](C)O |o1:5,o2:0|
     ribo or xylo or D or L                           [C@H]([C@@H]([C@@H](C)O)O)(O)C |a:1,o1:0,o2:2|
     xylo or ribo or D or L                           [C@H]([C@H]([C@@H](C)O)O)(O)C |a:1,o1:0,o2:2|
-    ribo + D or ribo + L or xylo + D or xylo + L     [C@@H](O)(C)[C@@H](O)[C@H](C)O |&1:5,o1:3,o2:0|
-    ribo + L or ribo + D or xylo + D or xylo + L     [C@H]([C@@H]([C@H](C)O)O)(O)C |&1:2,o1:0,o2:1|
+    ribo + D or ribo + L or xylo + D or xylo + L     [C@H]([C@@H]([C@@H](C)O)O)(O)C |&1:0,o1:1,o2:2|
+    ribo + L or ribo + D or xylo + D or xylo + L     [C@H](O)(C)[C@@H](O)[C@H](C)O |&1:0,o1:5,o2:3|
     xylo + D or ribo + D or ribo + L or xylo + L     [C@@H](O)(C)[C@@H](O)[C@@H](C)O |&1:0,o1:3,o2:5|
-    xylo + L or ribo + D or ribo + L or xylo + D     [C@H]([C@H]([C@H](C)O)O)(O)C |&1:2,o1:0,o2:1|
+    xylo + L or ribo + D or ribo + L or xylo + D     [C@H](O)(C)[C@@H](O)[C@H](C)O |&1:5,o1:0,o2:3|
 
 The listing is the handbook's table of rules in instances:
 
@@ -1248,8 +1271,8 @@ is found apart and three copies of hexane-2,3,4,5-tetrol, twelve units, are thre
 four.  A block is searched over at most five units, each unit that is signed or stereogenic in some
 choice of the signs, and in a molecule of at most 1000 atoms, since every choice costs a whole-molecule
 identity.  Past either limit only the AND phases are searched, a sign or label is kept as drawn where a
-choice would decide it, two labellings of one meaning can be two identities, ``identity_approximate`` is
-True and an identity logs ``stereo:identity-approximate``.
+choice would decide it, two labellings of one meaning can stay two records after the rewrite,
+``identity_approximate`` is True and ``canonicalize_stereo_groups()`` logs ``stereo:identity-approximate``.
 
 .. testcode::
 
@@ -1259,7 +1282,7 @@ True and an identity logs ``stereo:identity-approximate``.
               'C[C@H](O)[C@H]([C@H]([C@H]([C@H]([C@H](O)[C@H](C)O)O)O)O)O |a:4,6,&1:7,&2:1,&3:5,&4:9,&5:3|')]
     cells = []
     for name, left, right in pairs:
-        one, other = smiles(left), smiles(right)
+        one, other = canonical(left), canonical(right)
         cells += [(one, [name, left.split()[-1]]), (other, [name, right.split()[-1], f'== left: {one == other}'])]
         assert one.identity_approximate == (name != 'triol')
     svg = grid(cells, columns=2)
@@ -1709,14 +1732,6 @@ Rule                                           When
 =============================================  ==========================================================
 ``v2000:enhanced-stereo-not-written``          V2000 write; the molecule carries any live group, ABS
                                                included: the chiral flag is not an ABS label
-``smiles:stereo-group-dead``                   CXSMILES write stating collections; one INFO per dead
-                                               member, which is not written
-``v2000:stereo-group-dead``                    V2000 write; one INFO per dead member, which neither sets
-                                               the chiral flag nor asks for V3000
-``v3000:stereo-group-dead``                    V3000 write; one INFO per dead member, left out of its
-                                               ``STE*`` collection; an emptied collection is not written
-``mrv:stereo-group-dead``                      MRV write; one INFO per dead member, which gets no
-                                               ``mrvStereoGroup``
 ``sgroup:stereo-label-dead``                   V2000 or V3000 write; a ``STEREOLABEL`` data record none
                                                of whose atoms or bonds is a configured stereogenic unit
                                                is not written
@@ -1758,10 +1773,9 @@ Three records come from an answer rather than an edit, in ``molecule.log``:
 =============================================  ==========================================================
 Rule                                           When
 =============================================  ==========================================================
-``stereo:identity-approximate``                an identity (``==``, ``hash``, ``canonical_bytes``); a
-                                               block of groups exceeds the labelling search, its labels
-                                               are relabelled, not searched, and
-                                               ``identity_approximate`` is True
+``stereo:identity-approximate``                ``canonicalize_stereo_groups()``; a block of groups
+                                               exceeds the labelling search, its labels are relabelled,
+                                               not searched, and ``identity_approximate`` is True
 ``stereo:bridgehead-unrealisable``             an identity, SMILES or InChI write (LOST), once;
                                                two coupled bridgeheads
                                                carry signs no out,out bicycle realises, so both read
@@ -1971,7 +1985,6 @@ Rule                                            Severity          Stage         
                                                                                  planar sign
 ``smiles:stereo-not-stereogenic``               INFO              write          a parity on a unit that is not
                                                                                  stereogenic
-``smiles:stereo-group-dead``                    INFO              write          a dead group member, not written
 ``smiles:stereo-group-axis-ambiguous``          LOST              write          an axis whose owners each own a second
                                                                                  unit
 ``inchi:stereo-kind-not-represented``           LOST              inchi          a configured helix or planar unit
@@ -1981,7 +1994,7 @@ Rule                                            Severity          Stage         
                                                                                  realises; once
 ``stereo:bridgehead-racemate``                  REPAIRED          stereo         such a pair read as the racemate
 ``stereo:racemate-unsigned``                    REPAIRED          stereo         an unsigned AND singleton given a sign
-``stereo:identity-approximate``                 INFO              stereo         a group block past the labelling search
+``stereo:identity-approximate``                 INFO              stereo         the rewrite: a group block past the search
 ``stereo-groups:dead``                          INFO              stereo-groups  a member stating no configuration,
                                                                                  dropped
 ``stereo-groups:not-stereogenic``               INFO              stereo-groups  a parity on a non-stereogenic unit,
@@ -2031,8 +2044,6 @@ Rule                                            Severity          Stage         
 ``sgroup:stereo-label-not-promoted``            INFO or LOST      read           a ``STEREOLABEL`` left as data; LOST
                                                                                  when its word names nothing
 ``v2000:enhanced-stereo-not-written``           LOST              write          V2000 cannot state a group
-``v2000:stereo-group-dead``                     INFO              write          a dead member, not written
-``v3000:stereo-group-dead``                     INFO              write          a dead member, not written
 ``v2000:unlabelled-sign-flag``                  INFO              write          chiral flag 1 for signs in no
                                                                                  collection
 ``v3000:unlabelled-sign-flag``                  INFO              write          chiral flag 1 for signs in no
@@ -2118,7 +2129,6 @@ Rule                                            Severity          Stage         
 ``mrv:bond-stereo-bad-code``                    LOST              read           a convention value not 0, 1, 3, 4 or 6
 ``mrv:bond-stereo-foreign-dict``                LOST              read           a ``bondStereo`` dictionary not read
 ``mrv:bond-stereo-cis-trans-unknown``           LOST              read           "cis or trans, unknown which"
-``mrv:stereo-group-dead``                       INFO              write          a dead member, no ``mrvStereoGroup``
 ``mmcif:chem-comp-stereo``                      LOST              read           ``_chem_comp_bond`` stereo rows, not
                                                                                  modelled
 ``depict:rewedged``                             INFO              depict         a stored wedge reads the other sign in

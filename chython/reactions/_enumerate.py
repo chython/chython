@@ -213,11 +213,13 @@ def react(molecule: MoleculeContainer, others=(), reaction: str | None = None
 # --- retrosynthesis -------------------------------------------------------------------------------
 
 def _normalized(molecule: MoleculeContainer) -> MoleculeContainer:
-    """A copy in the one state `retro()` compares in: hydrogens implicit, kekulized, then aromatized."""
+    """A copy in the one state `retro()` compares in: hydrogens implicit, kekulized, then aromatized, and its
+    stereo collections canonicalized, since `==` reads the stored labels and the question is the meaning."""
     copy = molecule.copy()
     copy.implicify_hydrogens()
     copy.kekule()
     copy.thiele()
+    copy.canonicalize_stereo_groups()
     return copy
 
 
@@ -278,6 +280,7 @@ def _is_target(products: Sequence[MoleculeContainer], target: _Target) -> bool:
             n = atom_at[target.position[atom]]
             if masked.parity_of(n):
                 masked.set_parity(n, 0)
+    masked.canonicalize_stereo_groups()
     return masked == target.molecule
 
 

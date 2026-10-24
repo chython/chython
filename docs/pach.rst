@@ -177,7 +177,7 @@ record written under either reads back as the molecule that spec writes:
 
 .. testoutput::
 
-    C([C@H](C)N)(=O)O |&1:1|
+    C([C@H](C)N)(=O)O |&3:1|
     True C(C(C)N)(=O)O
     True C([C@H](C)N)(=O)O
 

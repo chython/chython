@@ -30,7 +30,7 @@ from ...core import INFO, LogRecord, LOST, REPAIRED, STEREO_ABS, STEREO_AND, STE
 
 
 __all__ = ['SGroup', 'SGroupStore', 'SGROUP_TYPES', 'NO_INDEX', 'DISP_MAX', 'DISP_MIN',
-           'resolve_output', 'live_groups_for_write', 'UNSUPPORTED', 'merge_log',
+           'resolve_output', 'groups_for_write', 'UNSUPPORTED', 'merge_log',
            'add_data_sgroup', 'data_sgroups', 'FIELDDISP_TAIL', 'MAX_STEREO_GROUP',
            'STEREOLABEL', 'stereo_labels', 'promote_stereo_labels']
 
@@ -727,17 +727,8 @@ def _drop_dead_stereo_labels(mol, store, log):
     return SGroupStore(kept, store.aliases, store.log)
 
 
-def live_groups_for_write(mol, rule, log):
-    """`mol.live_stereo_groups()`, with one INFO `rule` line on `log` per dead member dropped.
-
-    What every CTfile and MRV writer states collections from: a member on an unconfigured or
-    non-stereogenic unit states nothing and is not written, so `CC(O)CC |o1:1|` writes no collection.
-    """
-    if not mol.has_stereo_groups:
-        return {}
-    for (kind, group), members in mol.dead_stereo_groups().items():
-        for member in members:
-            log.append(LogRecord(rule, member if isinstance(member, tuple) else (member,),
-                                 f'{member} is in a stereo collection on a unit that is unconfigured or not '
-                                 f'stereogenic, and no label is written for it', INFO))
-    return mol.live_stereo_groups()
+def groups_for_write(mol):
+    """`mol.stereo_groups()`: what every CTfile and MRV writer states collections from, as stored -- kind,
+    id and membership, a member on an unconfigured unit included.  `canonicalize_stereo_groups()` is the
+    explicit rewrite to the canonical labelling."""
+    return mol.stereo_groups() if mol.has_stereo_groups else {}

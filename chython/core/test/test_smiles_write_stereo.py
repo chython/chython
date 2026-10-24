@@ -738,8 +738,8 @@ def test_an_atropisomer_group_is_a_fixed_point_of_three_write_read_cycles():
 
 def test_dead_owner_members_leave_the_axis_its_own_index():
     """An allene's owners are sp2 terminals, so a collection member on either owner atom names no
-    configured unit: both are dropped from the tail and logged, and the configured axis they would have
-    crowded out writes on its anchor with no ambiguity to report.
+    configured unit: both are written as stored until `canonicalize_stereo_groups()` drops them, and then
+    the configured axis they would have crowded out writes on its anchor with no ambiguity to report.
     """
     mol = read_smiles('C[CH]=[C@]=[CH]C')
     mol.set_stereo_group(3, 3, 1)                         # AND 1 on the allene anchor -> axis (2, 4)
@@ -750,7 +750,10 @@ def test_dead_owner_members_leave_the_axis_its_own_index():
     assert mol.stereo_groups() == {(3, 1): [2, (2, 4), 4]}, mol.stereo_groups()
     assert mol.live_stereo_groups() == {(3, 1): [(2, 4)]}
     assert mol.dead_stereo_groups() == {(3, 1): [2, 4]}
+    assert write_smiles(mol, 'x') == 'CC=[C@]=CC |&1:1,3|'
+    assert mol.canonicalize_stereo_groups()
+    assert [r.rule for r in mol.log.by_stage('stereo-groups')] == ['stereo-groups:dead'] * 2, mol.log
     log = []
     text = write_smiles(mol, 'x', log=log)
     assert text == 'CC=[C@]=CC |&1:3|', text
-    assert [r.rule for r in log] == ['smiles:stereo-group-dead'] * 2, log
+    assert not log, log

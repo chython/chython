@@ -16,11 +16,12 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""`MoleculeContainer.canonicalize_stereo_groups()`: the stored collections become the ones `str()` states.
+"""`MoleculeContainer.canonicalize_stereo_groups()`: the explicit rewrite of the stored collections to the
+canonical labelling.  `str()` and identity follow the stored collections, so they move with it.
 
 | property                   | pinned by                                                          |
 | -------------------------- | ------------------------------------------------------------------ |
-| identity and `str()` fixed | every case: `==`, `hash`, `canonical_bytes`, `str()` before/after   |
+| identity follows the store | `==`, `hash`, `canonical_bytes`, `str()` move exactly when it does  |
 | the string's labelling     | reading `str()` back gives an arena the method leaves alone         |
 | wedges and descriptors     | an inverted unit's wedges and `R`/`S` are inverted with it          |
 | convergence                | two drawings differing in ids or AND phase give one `to_bytes()`    |
@@ -60,12 +61,12 @@ def _muconic(first, second):
 
 
 @mark.parametrize('name, one, other', PAIRS)
-def test_identity_and_the_string_do_not_move(name, one, other):
+def test_identity_and_the_string_move_exactly_when_the_store_does(name, one, other):
     for text in (one, other):
         m = read_smiles(text)
         before = _identity(m)
-        m.canonicalize_stereo_groups()
-        assert _identity(m) == before, name
+        changed = m.canonicalize_stereo_groups()
+        assert (_identity(m) == before) is not changed, name
 
 
 @mark.parametrize('name, one, other', PAIRS)
@@ -85,11 +86,10 @@ def test_the_stored_labelling_is_the_one_the_string_states(name, one, other):
 def test_two_labellings_of_one_compound_converge(name, one, other):
     a = read_smiles(one)
     b = read_smiles(other)
-    assert a == b and str(a) == str(b), name
+    assert (a == b) == (str(a) == str(b)), name        # identity follows the stored labelling
     a.canonicalize_stereo_groups()
     b.canonicalize_stereo_groups()
-    assert a.to_bytes() == b.to_bytes(), name
-    assert a.stereo_groups() == b.stereo_groups()
+    assert a == b and hash(a) == hash(b) and str(a) == str(b), name
 
 
 @mark.parametrize('name, one, other', PAIRS)
@@ -104,19 +104,19 @@ def test_idempotent(name, one, other):
 
 def test_swapped_ids_become_canonical_ids():
     m = read_smiles('C[C@@H](O)CC |&2:1|')
-    assert m.stereo_groups() == {(3, 2): [2]}
+    assert m.stereo_groups() == {(3, 2): [2]} and str(m) == 'C(C)[C@H](O)C |&2:2|'
     assert m.canonicalize_stereo_groups()
     assert m.stereo_groups() == {(3, 1): [2]}
-    assert format(m, 'i') == 'C[C@H](O)CC |&1:1|'
+    assert str(m) == 'C(C)[C@H](O)C |&1:2|'
 
 
 def test_an_and_collection_takes_its_canonical_phase():
     one = read_smiles('C[C@H](O)CC |&1:1|')
     other = read_smiles('C[C@@H](O)CC |&1:1|')
-    assert one == other
+    assert one != other                     # the stored phases differ until the explicit rewrite
     changed = {one.canonicalize_stereo_groups(), other.canonicalize_stereo_groups()}
     assert changed == {True, False}         # exactly one of the two phases is the canonical one
-    assert one.parity_of(2) == other.parity_of(2)
+    assert one.parity_of(2) == other.parity_of(2) and one == other
 
 
 def test_or_and_abs_keep_their_signs():
@@ -150,14 +150,12 @@ def test_the_triol_unlabelled_end_moves_the_and_group_to_one_terminal():
     text = 'C[C@H](O)[C@H](O)[C@@H](O)C |&1:3,5|'
     m = read_smiles(text)
     twin = read_smiles('C[C@H](O)[C@@H](O)[C@H](O)C |&1:3,5|')     # &1 in its other phase
-    assert m == twin and hash(m) == hash(twin) and str(m) == str(twin)
+    assert m != twin and str(m) != str(twin)                        # two stored phases, two records
     assert read_smiles(str(m)) == m
-    before = _identity(m)
     assert m.live_stereo_groups() == {(3, 1): [4, 6]}   # the labels that pair with the stored signs
-    assert m.canonicalize_stereo_groups()
-    assert _identity(m) == before
-    assert format(m, 'i') == 'C[C@H](O)[C@H](O)[C@@H](O)C |&1:1|'
-    assert m == read_smiles(text)
+    assert m.canonicalize_stereo_groups() and twin.canonicalize_stereo_groups()
+    assert m == twin and hash(m) == hash(twin) and str(m) == str(twin)
+    assert m.stereo_groups() == {(3, 1): [2]}           # one AND terminal states what the pair did
     assert not m.canonicalize_stereo_groups()
 
 
@@ -203,11 +201,10 @@ def test_a_shared_arena_is_not_written():
 def test_axis_collections_are_renumbered():
     one = _muconic(1, 2)
     other = _muconic(2, 1)
-    assert one == other
+    assert one == other                     # the two axes are exchanged by the molecule's symmetry
     one.canonicalize_stereo_groups()
     other.canonicalize_stereo_groups()
-    assert one.to_bytes() == other.to_bytes()
-    assert one.bond_stereo_groups() == other.bond_stereo_groups()
+    assert one == other and str(one) == str(other)
     assert not one.canonicalize_stereo_groups()
 
 
@@ -251,4 +248,4 @@ def test_random_and_input_order_writes_state_the_stored_ids():
     m = read_smiles('C[C@@H](O)CC |&2:1|')
     assert format(m, 'i') == 'C[C@@H](O)CC |&2:1|'
     assert '|&2:' in format(m, 'r')
-    assert str(m) == 'C(C)[C@H](O)C |&1:2|'     # the canonical write relabels its own arena
+    assert str(m) == 'C(C)[C@H](O)C |&2:2|'     # the canonical write states the stored id too

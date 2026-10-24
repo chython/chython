@@ -186,14 +186,15 @@ cached on a mutable container outlives the edit that makes it wrong.
 
 Standard InChI has no layer for an AND or OR stereo group. Such a member's sign is not written, the
 rest are written from the least labelling of the same meaning (:doc:`stereo`), and one LOST
-``inchi:enhanced-stereo-not-stated`` record goes to ``mol.log``; so equal molecules write one InChI.
-ABS labels and unlabelled signs are written as drawn:
+``inchi:enhanced-stereo-not-stated`` record goes to ``mol.log``; so two labellings of one meaning write
+one InChI, while ``==`` tells them apart until ``canonicalize_stereo_groups()`` runs. ABS labels and
+unlabelled signs are written as drawn:
 
 .. testcode::
 
     racemate = smiles('C[C@H](O)[C@H](O)[C@H](O)C |&1:1,5,&2:3|')
     same = smiles('C[C@H](O)[C@H](O)[C@H](O)C |a:1,5,&1:3|')
-    assert racemate == same and racemate.inchi == same.inchi
+    assert racemate != same and racemate.inchi == same.inchi
     print(racemate.inchi)
     print([r.rule for r in racemate.log])
     print(smiles('C[C@H](O)CC |a:1|').inchi)

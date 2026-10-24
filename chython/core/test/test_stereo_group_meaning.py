@@ -16,7 +16,8 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""One string per meaning of an enhanced-stereo drawing, against a brute-force reading of every labelling.
+"""One string per meaning of an enhanced-stereo drawing, after `canonicalize_stereo_groups()`, against a
+brute-force reading of every labelling.  Before it, `str()` states the stored labels and reads back to them.
 
 ==========  =========================================================================================
 Label       Reading
@@ -39,6 +40,13 @@ from random import Random
 from pytest import mark
 from time import perf_counter
 from chython.core import inchi_library_loaded, read_smiles
+
+
+def canon(text):
+    """`text` read and canonicalized: the meaning, by the explicit rewrite."""
+    m = read_smiles(text)
+    m.canonicalize_stereo_groups()
+    return m
 
 
 class Reading:
@@ -213,6 +221,10 @@ def test_every_meaning_writes_one_string_and_reads_back(smiles, elements):
             for i, p in zip(configured, signs):
                 parities[i] = p
             m = reading.build(parities, labels)
+            stored = str(m)
+            back = read_smiles(stored)
+            assert back == m and str(back) == stored, (labels, parities, stored)
+            m.canonicalize_stereo_groups()
             text = str(m)
             meaning = reading.meaning(parities, labels)
             by_meaning.setdefault(meaning, set()).add(text)
@@ -233,7 +245,7 @@ FECHT = 'OC(=O)[C@@H]1C[C@]2(C[C@@H](C(=O)O)C2)C1'
     ('&1:3,5,7', 'OC(=O)C1C[C@]2(CC(C(=O)O)C2)C1 |&1:5|'),  # racemate: the spiro sign alone, the ends open
 ])
 def test_the_fecht_acid_label_sits_on_the_spiro_atom(tail, written):
-    m = read_smiles(f'{FECHT} |{tail}|' if tail else FECHT)
+    m = canon(f'{FECHT} |{tail}|' if tail else FECHT)
     assert str(m) == written
     assert read_smiles(written) == m
 
@@ -241,26 +253,27 @@ def test_the_fecht_acid_label_sits_on_the_spiro_atom(tail, written):
 def test_a_spiro_sign_with_open_ends_states_nothing_but_in_and():
     # every fill of the open ends gives both enantiomers under an AND phase, and one isomer otherwise
     for tail in ('', ' |a:5|', ' |o1:5|'):
-        m = read_smiles('OC(=O)C1C[C@]2(CC(C(=O)O)C2)C1' + tail)
+        m = canon('OC(=O)C1C[C@]2(CC(C(=O)O)C2)C1' + tail)
         assert str(m) == 'OC(=O)C1CC2(CC(C(=O)O)C2)C1', tail
-    assert read_smiles('OC(=O)C1C[C@]2(CC(C(=O)O)C2)C1 |&1:5|') == read_smiles(f'{FECHT} |&1:3,5,7|')
+    assert canon('OC(=O)C1C[C@]2(CC(C(=O)O)C2)C1 |&1:5|') == canon(f'{FECHT} |&1:3,5,7|')
 
 
 def test_the_bicyclohexylidene_racemate_is_the_double_bond_in_and():
-    m = read_smiles('C/1(=C/2\\CC[C@@H](CC2)C)\\CC[C@@H](CC1)C |&1:0,5,12|')
-    assert str(m) == 'C/1(=C\\2/CCC(CC2)C)\\CCC(CC1)C |&1:0|'
+    m = canon('C/1(=C/2\\CC[C@@H](CC2)C)\\CC[C@@H](CC1)C |&1:0,5,12|')
+    assert str(m) == 'C/1(=C/2\\CCC(CC2)C)\\CCC(CC1)C |&1:0|'
+    assert not read_smiles(str(m)).canonicalize_stereo_groups()
 
 
 def test_an_and_group_over_one_axis_states_the_pure_compound():
     # inverting both units of 4-methylcyclohexylideneacetic acid restates it: the pair in AND is not the
     # racemate but the pure compound, as ABS states it, and a stated label is not the unlabelled drawing;
     # one unit in AND is the racemate
-    plain = read_smiles('C(/C(O)=O)=C/1\\CC[C@H](C)CC1')
-    pair = read_smiles('C(/C(O)=O)=C/1\\CC[C@H](C)CC1 |&1:0,7|')
-    assert pair == read_smiles('C(/C(O)=O)=C/1\\CC[C@H](C)CC1 |a:0,7|') and pair != plain
-    racemate = read_smiles('C(/C(O)=O)=C/1\\CC[C@H](C)CC1 |&1:7|')
+    plain = canon('C(/C(O)=O)=C/1\\CC[C@H](C)CC1')
+    pair = canon('C(/C(O)=O)=C/1\\CC[C@H](C)CC1 |&1:0,7|')
+    assert pair == canon('C(/C(O)=O)=C/1\\CC[C@H](C)CC1 |a:0,7|') and pair != plain
+    racemate = canon('C(/C(O)=O)=C/1\\CC[C@H](C)CC1 |&1:7|')
     assert racemate != plain
-    assert racemate == read_smiles('C(/C(O)=O)=C/1\\CC[C@H](C)CC1 |&1:0|')
+    assert racemate == canon('C(/C(O)=O)=C/1\\CC[C@H](C)CC1 |&1:0|')
 
 
 @mark.parametrize('kind', ['&', 'o'])
@@ -312,6 +325,8 @@ def test_blocks_joined_by_no_group_are_searched_apart_and_exactly():
         meaning = mixture.meaning(*a)[0], tuple(sorted(map(repr, meanings)))
         assert mixture.meaning(*b)[0] == meaning[0]
         ma, mb = mixture.build(*a), mixture.build(*b)
+        ma.canonicalize_stereo_groups()
+        mb.canonicalize_stereo_groups()
         assert str(ma) == str(mb) and ma == mb and hash(ma) == hash(mb), (a, b)
         assert not ma.identity_approximate
         by_string.setdefault(str(ma), set()).add(meaning)
@@ -323,6 +338,8 @@ def test_a_block_over_the_unit_limit_is_flagged():
     m = read_smiles('O[C@H](C)[C@H]([C@H]([C@H](O)[C@@H](O)[C@H]([C@H](C)O)O)O)O |&1:5,&2:3,&3:9,&4:1,&5:10,&6:4,7|')
     assert m.identity_approximate
     hash(m)
+    assert not [r for r in m.log if r.rule == 'stereo:identity-approximate'], 'identity reads the stored labels'
+    m.canonicalize_stereo_groups()
     assert [r.stage for r in m.log if r.rule == 'stereo:identity-approximate'] == ['stereo']
     assert not read_smiles('CC(O)C(O)C(O)C |&1:1,3,5|').identity_approximate
 
@@ -356,8 +373,8 @@ def test_past_the_atom_limit_the_labelling_is_not_searched():
     """Each combination costs a whole-molecule identity, so beside a 1000-carbon chain the ribo-triol's two
     labellings of one mixture are two identities, flagged and logged, and each reads back to itself."""
     left, right = 'C[C@H](O)[C@H](O)[C@H](O)C |&1:1,5,&2:3|', 'C[C@H](O)[C@H](O)[C@H](O)C |a:1,5,&1:3|'
-    assert read_smiles(left) == read_smiles(right)
-    big = [read_smiles(t.replace(' ', '.' + 'C' * 1000 + ' ')) for t in (left, right)]
+    assert canon(left) == canon(right)
+    big = [canon(t.replace(' ', '.' + 'C' * 1000 + ' ')) for t in (left, right)]
     assert big[0] != big[1]
     for m in big:
         assert m.identity_approximate
