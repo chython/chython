@@ -577,6 +577,42 @@ cdef class QueryContainer:
         finally:
             matcher_free(&mt)
 
+    def _get_mapping_by(self, MoleculeContainer molecule not None, bytes rows, uint32_t count):
+        """`get_mapping(molecule, True)` collapsing by `rows` -- `count` automorphism rows in this query's
+        position order -- instead of the query's whole group: a template's patch-respecting subset.
+        Zero rows filter nothing.  `rows` is held by this frame for the whole search."""
+        cdef Query query = self.sealed()
+        cdef tuple query_ids = self._query_numbers(query)
+        cdef Structure structure
+        cdef list molecule_ids
+        cdef matcher_t mt
+        cdef uint32_t i, n_atoms
+        cdef bint found
+        cdef dict out
+        if len(rows) != <Py_ssize_t> count * query.header.atom_count * sizeof(uint32_t):
+            raise ValueError('automorphism rows do not match this query')
+        molecule._require_clean()
+        structure = molecule._structure
+        molecule_ids = molecule._numbers
+        n_atoms = query.header.atom_count
+        matcher_init(&mt, query, structure, True)
+        # borrowed, like the query's own rows: `matcher_free` releases only what the matcher allocated
+        mt.automorphisms = <uint32_t *> (<char *> rows)
+        mt.automorphism_count = count
+        try:
+            while True:
+                with nogil:
+                    found = matcher_next(&mt)
+                if not found:
+                    break
+                out = {}
+                for i in range(n_atoms):
+                    out[query_ids[i]] = molecule_ids[mt.mapping[i]]
+                yield out
+                matcher_reseat(&mt, structure)
+        finally:
+            matcher_free(&mt)
+
     def get_raw_mapping(self, MoleculeContainer molecule not None, bint automorphism_filter=False):
         """Yield each embedding as a tuple of molecule stable ids, in query DFS order.
 

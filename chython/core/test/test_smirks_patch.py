@@ -112,9 +112,10 @@ def test_deletion_closure_takes_the_unmapped_fragment():
 
     One deliberate difference from V2: it starts the walk at a neighbour of the deleted atom without
     testing that neighbour for membership in the doomed set, so a chain of two deleted atoms lets the
-    walk cross the first one.  Here nothing crosses a deleted atom.
+    walk cross the first one.  Here nothing crosses a deleted atom.  `:1` is pinned to the sp2 carbon:
+    bare, `[C:1][O][C]` also reads the ethyl carbon as `:1`, which is the other cut and a second answer.
     """
-    t = read_smirks('[C:1][O][C]>>[C:1][O;D1:9]')
+    t = read_smirks('[C;z2:1][O][C]>>[C:1][O;D1:9]')
     assert products_of(t, smiles('CC(=O)OCC')) == [['C(C)(=O)O']]
 
 
@@ -127,7 +128,7 @@ def test_mask_exempts_an_atom_from_deletion():
     masked = read_smirks('[C:1][O:2][C;M]>>[C:1][O:2]')
     assert products_of(masked, smiles('CC(=O)OCC')) == [['C(C)OC(C)=O']]
 
-    bare = read_smirks('[C:1][O:2][C]>>[C:1][O:2]')
+    bare = read_smirks('[C;z2:1][O:2][C]>>[C:1][O:2]')     # `:1` pinned, as in the test above
     assert products_of(bare, smiles('CC(=O)OCC')) == [['C(C)(=O)O']]
 
 
@@ -496,6 +497,25 @@ def test_equivalent_sites_give_one_answer():
     t = read_smirks('[C:1][Br;D1]>>[C:1][O;D1:2]')
     assert products_of(t, smiles('BrCCCCBr')) == [['C(CBr)CCO']]
     assert len(list(t(smiles('BrCCCCBr'), automorphism_filter=False))) == 1
+
+
+def test_a_symmetry_the_patch_breaks_does_not_collapse_embeddings():
+    """The filter collapses by the TEMPLATE'S symmetry, not the reactant query's.
+
+    `[C:1]1[C:2]O1` is symmetric in :1 and :2, but a product side bonding the amine to :1 tells the two
+    embeddings apart: propylene oxide opens at either carbon, and both regioisomers are answers.
+    """
+    t = read_smirks('[C:1]1-[C:2]-[O:3]-1.[N;D1:4]-[C:5]>>[C:1](-[N:4]-[C:5])-[C:2]-[O:3]')
+    assert sorted(p for ps in products_of(t, smiles('CC1CO1.CN')) for p in ps) == ['C(O)C(NC)C', 'OC(C)CNC']
+
+
+def test_a_symmetry_the_patch_keeps_still_collapses_the_search():
+    """Where the product side treats :1 and :2 alike, one embedding per orbit is still all the search
+    offers: with `dedupe=False` the symmetric patch yields once, the asymmetric one twice."""
+    keep = read_smirks('[C:1]1-[C:2]-[O:3]-1>>[C:1]=[C:2]')
+    assert len(list(keep(smiles('CC1CO1'), dedupe=False))) == 1
+    split = read_smirks('[C:1]1-[C:2]-[O:3]-1>>[C:1](-[Br])-[C:2]-[O:3]')
+    assert len(list(split(smiles('C1CO1'), dedupe=False))) == 2
 
 
 def test_dedupe_off_yields_every_site_of_one_structure():

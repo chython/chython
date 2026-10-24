@@ -1113,6 +1113,13 @@ cdef class ReactionTemplate:
     # other product statement about a configuration: a geometry needs no chiral influence, so a template
     # may name E or Z outright.  See the header above `smk_directions`.
     cdef readonly dict product_stereo_geometry
+    # The reactant query's automorphisms THE PATCH ALSO RESPECTS, as `uint32_t` rows in the query's own
+    # position order -- what `__call__`'s `automorphism_filter` may collapse by.  A symmetry of the
+    # reactant side alone is not one of the template: `[C:1]1[C:2]O1` is symmetric in :1 and :2, and a
+    # product side that bonds the nucleophile to :1 tells the two embeddings apart.  `None` when every
+    # row is respected, so the matcher's own group is used unchanged.
+    cdef bytes _automorphism_rows
+    cdef uint32_t _automorphism_row_count
 
     @cython.warn.unused_arg(False)
     def __init__(self, *args, **kwargs):
@@ -1418,4 +1425,85 @@ def read_smirks(text, log=None, *, rule_id=None):
     t.product_stereo_keep = frozenset(prod_keep)
     t.product_stereo_invert = frozenset(prod_invert)
     t.product_stereo_geometry = prod_geometry
+    smk_patch_automorphisms(t)
     return t
+
+
+cdef bint smk_patch_respects(ReactionTemplate t, dict moved, frozenset masked):
+    """Does the reactant-side permutation `moved` (`{reactant id: reactant id}`) leave the patch unchanged?
+
+    The permuted embedding writes the same product exactly when every reactant atom keeps its fate --
+    paired, masked, deleted -- every paired product atom states what its image's partner states, and the
+    product bonds among paired atoms map onto themselves.  Conservative wherever the comparison would
+    need more than that: a created atom or a stereo statement on a MOVED paired atom rejects the
+    permutation, which only lets the matcher report a duplicate embedding, never lose one.
+    """
+    cdef dict to_product = {}
+    cdef dict image = {}
+    cdef dict bonds = {}
+    cdef set shifted = set()
+    cdef tuple pair, stated, spec
+    cdef frozenset members
+    cdef object r, s, a, b, p, q
+    for pair in t.mapped_pairs.values():
+        to_product[pair[0]] = pair[1]
+    for r, s in moved.items():
+        if (r in to_product) != (s in to_product) or (r in masked) != (s in masked):
+            return False
+        if r in to_product:
+            p, q = to_product[r], to_product[s]
+            image[p] = q
+            if p != q:
+                shifted.add(p)
+    if not shifted:
+        return True
+    stated = (t.product_inherited_elements, t.product_radicals, t.product_stereo_keep, t.product_stereo_invert)
+    for p in shifted:
+        q = image[p]
+        if (t.product_atom_build[p] != t.product_atom_build[q] or t.product_atom_check[p] != t.product_atom_check[q]
+                or p in t.product_stereo_correlated):
+            return False
+        for members in stated:
+            if (p in members) != (q in members):
+                return False
+    for a, b in t.product_bonds:
+        if (a in t.created_atoms or b in t.created_atoms) and (a in shifted or b in shifted):
+            return False
+        if a in image and b in image:
+            bonds[(a, b)] = (t.product_bond_build[(a, b)], t.product_bond_check[(a, b)])
+    for a, b in t.product_stereo_geometry:
+        if a in shifted or b in shifted:
+            return False
+    for pair, spec in bonds.items():
+        p, q = image[pair[0]], image[pair[1]]
+        if bonds.get((p, q) if p < q else (q, p)) != spec:
+            return False
+    return True
+
+
+cdef void smk_patch_automorphisms(ReactionTemplate t) except *:
+    """Keep the reactant query's automorphism rows the patch respects: `_automorphism_rows`."""
+    cdef Query q = t.reactants.sealed()
+    cdef uint32_t n = q.header.atom_count, count = q.header.automorphism_count, row, i, k = 0
+    cdef uint32_t *autos = query_automorphisms(q)
+    cdef tuple ids = t.reactants._query_numbers(q)
+    cdef frozenset masked = t.reactants.masked_atoms()
+    cdef list kept = []
+    cdef dict moved
+    for row in range(count):
+        moved = {}
+        for i in range(n):
+            moved[ids[i]] = ids[autos[row * n + i]]
+        if smk_patch_respects(t, moved, masked):
+            kept.append(row)
+    t._automorphism_row_count = <uint32_t> len(kept)
+    if len(kept) == count:
+        t._automorphism_rows = None
+        return
+    cdef bytearray buf = bytearray(len(kept) * n * sizeof(uint32_t))
+    cdef uint32_t *out = <uint32_t *> (<char *> buf)
+    for row in kept:
+        for i in range(n):
+            out[k * n + i] = autos[row * n + i]
+        k += 1
+    t._automorphism_rows = bytes(buf)

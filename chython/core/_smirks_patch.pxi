@@ -1252,7 +1252,7 @@ def smk_enumerate(ReactionTemplate t, list inputs, bint automorphism_filter, obj
     cdef set before
     cdef list added
     cdef Py_ssize_t k
-    cdef object sid, other, mapping, made, key, exc
+    cdef object sid, other, mapping, made, key, exc, candidates
     for sid in work.atom_numbers:
         origin[sid] = 0
         origin_n[sid] = sid
@@ -1284,7 +1284,13 @@ def smk_enumerate(ReactionTemplate t, list inputs, bint automorphism_filter, obj
 
     cdef set seen_keys = set()
     cdef Py_ssize_t start
-    for mapping in t.reactants.get_mapping(work, automorphism_filter):
+    # THE TEMPLATE'S SYMMETRY, NOT THE REACTANT QUERY'S: an orbit of the query alone may hold embeddings
+    # the patch tells apart, and collapsing them loses an outcome -- see `_automorphism_rows`.
+    if automorphism_filter and t._automorphism_rows is not None:
+        candidates = t.reactants._get_mapping_by(work, t._automorphism_rows, t._automorphism_row_count)
+    else:
+        candidates = t.reactants.get_mapping(work, automorphism_filter)
+    for mapping in candidates:
         # THE OUTCOME CARRIES WHAT ITS OWN PATCH REPORTED, on `rxn.log` under stage `react`, whether or
         # not the caller passed a `log=`.  A candidate that produced nothing has no container to write
         # to, so its line is only on the caller's list -- and a duplicate outcome is not yielded, so
