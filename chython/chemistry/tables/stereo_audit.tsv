@@ -12,6 +12,7 @@ and-split	warning	component has AND groups {group}	separate AND groups state eve
 and-absorbed	info	{group} on {atoms} reads as absolute	another group already fixes this group's phase
 meso-absolute	info	{group} on {atoms} reads as absolute	the drawn configuration is its own mirror image, so the group states the diastereomer as ABS does; unlabelled would leave it unknown
 bridgehead-unrealisable	error	bridgeheads {atoms} are signed impossibly	no out,out bicycle realises this pair of signs
+fused-strained	warning	the trans fusion at {atoms} is strained	a trans-fused 3/6 or 4/5 bicycle is made but strained; check the drawing
 bridgehead-implied	info	bridgehead {atoms} takes its sign from {because}	the bicycle allows one sign here once the partner is signed
 bridgehead-redundant-label	warning	label {group} on bridgehead {atoms} differs from {because}	a coupled set takes the strongest label of its signed members: AND, OR, ABS, none
 bridgehead-half-labelled	warning	bridgehead {atoms} carries no label beside {because}	a coupled set is one element and is labelled on every member

@@ -41,7 +41,7 @@ def test_the_table_names_every_spec_code():
     assert set(stereo_audit_codes()) == {
         'unknown-unit', 'unlabelled-sign', 'dead-unconfigured', 'dead-not-stereogenic', 'dead-waits-for',
         'dead-restating-group', 'and-single-member-racemate', 'and-split', 'and-absorbed',
-        'bridgehead-unrealisable', 'bridgehead-implied', 'bridgehead-redundant-label',
+        'bridgehead-unrealisable', 'fused-strained', 'bridgehead-implied', 'bridgehead-redundant-label',
         'bridgehead-half-labelled', 'bridgehead-merged-groups', 'meso-absolute', 'identity-approximate',
         'truncated'}
 
@@ -578,3 +578,31 @@ def test_reported_fixes_are_built_on_first_read_and_equal_the_eager_ones(monkeyp
     [eager] = audit_stereo(read_smiles(text)).findings
     assert lazy == tuple(eager.fixes) and finding == eager and hash(finding.fixes) == hash(lazy)
     assert len(lazy) == 3 and pickle.loads(pickle.dumps(finding.fixes)) == lazy
+
+
+@mark.parametrize('trans, cis, code', [
+    ('[C@H]12C[C@@H]1CCC2', '[C@H]12C[C@H]1CCC2', 'stereo-audit:bridgehead-unrealisable'),      # [3.1.0]
+    ('[C@H]12CC[C@@H]1CC2', '[C@H]12CC[C@H]1CC2', 'stereo-audit:bridgehead-unrealisable'),      # [2.2.0]
+    ('[C@H]12C[C@@H]1CCCC2', '[C@H]12C[C@H]1CCCC2', 'stereo-audit:fused-strained'),            # [4.1.0]
+    ('[C@H]12CC[C@@H]1CCC2', '[C@H]12CC[C@H]1CCC2', 'stereo-audit:fused-strained'),            # [3.2.0]
+    ('[C@H]12C[C@@H]1CCCCC2', '[C@H]12C[C@H]1CCCCC2', None),                                  # [5.1.0]
+    ('[C@H]12CC[C@@H]1CCCC2', '[C@H]12CC[C@H]1CCCC2', None),                                  # [4.2.0]
+])
+def test_a_trans_fused_small_bicycle_is_unrealisable_or_strained(trans, cis, code):
+    """Trans fusion by size, MMFF over an RDKit embedding against the cis isomer: [3.1.0] and [2.2.0] do not
+    embed; [4.1.0] +25 kcal/mol and [3.2.0] +20 are made but strained; [5.1.0] +9 and [4.2.0] +4 are ordinary.
+    Cis is never reported."""
+    found = {f.code for f in audit_stereo(read_smiles(trans)).findings}
+    assert (code in found) if code else not found & {'stereo-audit:bridgehead-unrealisable',
+                                                       'stereo-audit:fused-strained'}
+    assert not {f.code for f in audit_stereo(read_smiles(cis)).findings}
+
+
+def test_a_strained_fusion_keeps_its_signs_and_offers_the_cis_fusion():
+    """`fused-strained` is a warning: both signs stay live, and either fix flips one fusion atom to cis."""
+    mol = read_smiles('[C@H]12C[C@@H]1CCCC2')
+    [finding] = audit_stereo(mol).findings
+    assert finding.severity == 'warning' and finding.atoms == (1, 3)
+    assert all(mol.stereo_is_live(a) for a in (1, 3)) and '@' in str(mol)
+    for fix in finding.fixes:
+        assert not audit_stereo(read_smiles(fix.result)).findings

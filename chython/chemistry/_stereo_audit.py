@@ -619,6 +619,57 @@ def _bridgeheads(ctx):
     return out
 
 
+_STRAINED_FUSIONS = {(3, 6), (4, 5)}     # trans is made but strained; smaller ones cannot be built (core)
+
+
+def _frame_parity(refs, frame):
+    """Parity of the permutation taking `(exo, *frame)` onto `refs`; None when a frame atom is not a ref."""
+    perm = []
+    for f in frame:
+        if f not in refs:
+            return None
+        perm.append(refs.index(f))
+    perm.insert(0, ({0, 1, 2, 3} - set(perm)).pop())
+    return sum(perm[i] > perm[j] for i in range(4) for j in range(i + 1, 4)) & 1
+
+
+def _fused_strained(ctx):
+    """`fused-strained` on each trans-fused 3/6 or 4/5 pair: two signed fusion atoms sharing a bond.
+
+    The frame is the core's for a coupled pair: (exo, then the three bridges ordered by their atom at `a`), the
+    shared bond being the zero bridge, and out,out -- cis -- where the parity xor matches OUT_OUT_XOR (1).
+    """
+    molecule, out = ctx.molecule, []
+    tetra = {u['anchor']: u for u in ctx.units if u['kind'] == 0 and u['parity'] and isinstance(u['owners'], int)}
+    rings = [tuple(r) for r in molecule.sssr]
+    for a in tetra:
+        for b in molecule.neighbors_of(a):
+            if b <= a or b not in tetra:
+                continue
+            through = sorted((r for r in rings if a in r and b in r
+                              and abs(r.index(a) - r.index(b)) in (1, len(r) - 1)), key=len)
+            if len(through) < 2 or (len(through[0]), len(through[1])) not in _STRAINED_FUSIONS:
+                continue
+            ua, ub = tetra[a], tetra[b]
+            if sum(x is not None for x in ua['refs']) < 3 or sum(x is not None for x in ub['refs']) < 3:
+                continue
+            bridges = [(b, a)]
+            for r in through[:2]:
+                i, j = r.index(a), r.index(b)
+                step = 1 if (i - j) % len(r) == 1 else -1           # walk from `a` away from `b`
+                bridges.append((r[(i + step) % len(r)], r[(j - step) % len(r)]))
+            bridges.sort()
+            pa = _frame_parity(ua['refs'], [f for f, _ in bridges])
+            pb = _frame_parity(ub['refs'], [g for _, g in bridges])
+            if pa is None or pb is None:
+                continue
+            if ((ua['parity'] - 1) ^ (ub['parity'] - 1)) != 1 ^ pa ^ pb:          # not out,out: trans
+                out.append(_finding('fused-strained', (a, b),
+                                    fixes=(ctx.later('set-sign', (b,), (3 - ub['parity'],)),
+                                           ctx.later('set-sign', (a,), (3 - ua['parity'],)))))
+    return out
+
+
 def _limits(molecule):
     """Molecule-level limit findings: identity-approximate and truncated."""
     out = []
@@ -664,7 +715,7 @@ def _audit(molecule):
     waits = [f for f in _waits_for(ctx) if not impossible.intersection(f.atoms)]
     waiting = {f.atoms[0] for f in waits}
     awaited = {(c,) for f in waits for c in f.because}
-    out = waits + bridgeheads
+    out = waits + bridgeheads + _fused_strained(ctx)
     for f in _units(ctx) + _groups(ctx):
         if impossible.intersection(f.atoms):
             continue

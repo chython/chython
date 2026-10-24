@@ -1099,7 +1099,8 @@ cdef inline bint _terminal_pair(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
 # | bicycle | bridges, interior atoms                  | instance                               |
 # | ------- | ---------------------------------------- | -------------------------------------- |
 # | bridged | each 1-3                                 | camphor, tropane, adamantane           |
-# | fused   | one 0, the other two at most 2 each      | bicyclo[1.1.0]butane, ladderanes       |
+# | fused   | one 0; the others 1 and 1-3, or 2 and 2  | bicyclo[1.1.0]butane, [3.1.0]hexane,   |
+# |         |                                          | ladderanes                             |
 #
 # In (exo, bridge 1, bridge 2, bridge 3) order, bridges matched between the two ends, the out,out
 # parities differ: OUT_OUT_XOR, measured on PubChem isomeric SMILES of camphor, cocaine, pinenes, tropine,
@@ -1194,7 +1195,7 @@ cdef bint _bh_pair(uint32_t *ptr, halfedge_t *edges, uint32_t a, uint32_t b, bin
     cdef uint32_t path[BH_MAX_INTERIOR + 1]
     cdef uint32_t f[3]
     cdef uint32_t g[3]
-    cdef uint32_t x, y, z, t, zeros, longest
+    cdef uint32_t x, y, z, t, zeros, longest, shortest
     cdef int count
     cdef bint found = False
     cdef bh_path_t *tri[3]
@@ -1214,12 +1215,18 @@ cdef bint _bh_pair(uint32_t *ptr, halfedge_t *edges, uint32_t a, uint32_t b, bin
                 tri[2] = &paths[z]
                 zeros = 0
                 longest = 0
+                shortest = BH_MAX_INTERIOR + 1
                 for t in range(3):
                     if tri[t].length == 0:
                         zeros += 1
-                    elif tri[t].length > longest:
-                        longest = tri[t].length
-                if zeros and (bridged_only or longest > 2):
+                    else:
+                        if tri[t].length > longest:
+                            longest = tri[t].length
+                        if tri[t].length < shortest:
+                            shortest = tri[t].length
+                # a fused pair is coupled where trans fusion cannot be built: a 3-ring on a 3-, 4- or 5-ring,
+                # a 4-ring on a 4-ring; trans-bicyclo[4.1.0] and [3.2.0] are strained but made
+                if zeros and (bridged_only or longest > 3 or (longest == 3 and shortest != 1)):
                     continue
                 # three bridges sorted by their direction at `a`
                 for t in range(3):

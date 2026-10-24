@@ -450,8 +450,12 @@ in/out isomers, so both are *out* and one sign implies the other.
 Family   Bridges                                           Instances
 =======  ================================================  ==========================================
 bridged  every bridge 1-3 atoms                            camphor, cocaine, pinenes, tropine
-fused    one zero bridge, the other two at most 2 atoms    bicyclo[1.1.0]butane, ladderanes
+fused    one zero bridge, the other two 1 and 1-3, or 2    bicyclo[1.1.0]butane, [3.1.0]hexane,
+         and 2 atoms                                       ladderanes
 =======  ================================================  ==========================================
+
+A trans-fused 3/6 or 4/5 bicycle is made but strained -- trans-bicyclo[4.1.0]heptane and [3.2.0]heptane --
+so its two signs stay free and ``audit_stereo`` warns ``fused-strained``.
 
 =========================================================  ==========================================
 Rule                                                       Instance
@@ -1666,6 +1670,7 @@ Code                                         Severity  Condition
 ``stereo-audit:and-absorbed``                info      another group fixes an AND group's phase; it reads as ABS
 ``stereo-audit:meso-absolute``               info      an AND or OR group on a meso configuration; it reads as ABS
 ``stereo-audit:bridgehead-unrealisable``     error     no out,out bicycle realises the signed bridgehead pair
+``stereo-audit:fused-strained``              warning   a trans-fused 3/6 or 4/5 bicycle: made, but strained
 ``stereo-audit:bridgehead-implied``          info      an unsigned bridgehead takes its sign from its partner
 ``stereo-audit:bridgehead-redundant-label``  warning   a bridgehead's label is weaker than its set's: AND > OR > ABS
 ``stereo-audit:bridgehead-half-labelled``    warning   a bridgehead without the label its set carries elsewhere
