@@ -59,10 +59,13 @@ LABELS = [
     ('Brc1ccccc1.CCCCB1OC(C)(C)C(C)(C)O1>>CCCCc1ccccc1', 'suzuki_alkyl'),
     ('Brc1ccccc1.CB1OB(C)OB(C)O1>>Cc1ccccc1', 'suzuki_alkyl'),
     ('Brc1ccccc1.[K+].F[B-](F)(F)CCCC>>CCCCc1ccccc1', 'suzuki_alkyl_bf3k'),
-    # borylation: the diboron with Pd, the borate after lithiation
+    # borylation: the boron source is an agent, and the product form names the conditions
     ('Brc1ccccc1.CC1(C)OB(B2OC(C)(C)C(C)(C)O2)OC1(C)C>>CC1(C)OB(c2ccccc2)OC1(C)C', 'miyaura_borylation'),
+    ('Brc1ccccc1>>CC1(C)OB(c2ccccc2)OC1(C)C', 'miyaura_borylation'),
+    ('Brc1ccccc1.CC1(C)COB(B2OCC(C)(C)CO2)OC1>>CC1(C)COB(c2ccccc2)OC1', 'miyaura_borylation'),
+    ('Brc1ccccc1.CCC1(CC)OB(B2OC(CC)(CC)C(CC)(CC)O2)OC1(CC)CC>>CCC1(CC)OB(c2ccccc2)OC1(CC)CC', 'miyaura_borylation'),
     ('Brc1ccccc1.CC(C)OB(OC(C)C)OC(C)C>>OB(O)c1ccccc1', 'lithiation_borylation'),
-    ('Brc1ccccc1.CC(C)OB1OC(C)(C)C(C)(C)O1>>CC1(C)OB(c2ccccc2)OC1(C)C', 'lithiation_borylation'),
+    ('Brc1ccccc1.CC1(C)OB(B2OC(C)(C)C(C)(C)O2)OC1(C)C>>OB(O)c1ccccc1', 'lithiation_borylation'),
     # amide bond: by what leaves the carbonyl
     ('CCC(=O)O.CCN>>CCNC(=O)CC', 'amidation'),
     ('CCC(=O)[O-].[Na+].CCN>>CCNC(=O)CC', 'amidation'),
@@ -87,13 +90,15 @@ def test_a_record_gets_the_label_of_its_conditions(record, label):
 
 
 @pytest.mark.parametrize('record', [
-    'Brc1ccccc1.CC1(C)OB(B2OC(C)(C)C(C)(C)O2)OC1(C)C>>OB(O)c1ccccc1',
-    'Brc1ccccc1>>OB(O)c1ccccc1',
+    'Brc1ccccc1.CC1(C)OB(B2OC(C)(C)C(C)(C)O2)OC1(C)C>>CC1(C)OB(c2ccccc2)OC1(C)C',
+    'Brc1ccccc1.CC(C)OB(OC(C)C)OC(C)C>>OB(O)c1ccccc1',
 ])
-def test_no_borylation_row_supplies_its_own_boron(record):
-    """A diboron in the record is not read as a borate quench, and a record naming no boron source is not
-    read as either: the boron source is a slot of every borylation row."""
-    assert smiles(record).reconstruct_mapping() == ()
+def test_the_boron_source_is_an_agent(record):
+    """No atom of the diboron or the borate is mapped: the row creates the boron it installs."""
+    rxn = smiles(record)
+    assert rxn.reconstruct_mapping()
+    boron = rxn.reactants[1]
+    assert all(not boron.map_number_of(n) for n in boron.atom_numbers)
 
 
 METAL_CATALYSED = {'buchwald_hartwig', 'ullmann_phenol', 'ullmann_pyrrole', 'ullmann_alcohol'}
@@ -108,8 +113,46 @@ def test_an_aryl_fluoride_never_carries_a_metal_label():
 def test_an_activated_electrophile_row_is_snar_and_an_unactivated_one_is_not():
     rows = [rule for family in reaction_rules().values() for rule in family]
     for rule in rows:
-        if any(group.startswith('activated_') and group.split('_', 2)[1] in ('aza', 'nitro')
+        if any(group.startswith('activated_') and group.split('_', 2)[1] in ('aza', 'azole', 'nitro')
                for group in rule.groups):
             assert rule.name == 'snar_activated', rule.id
         elif {'aryl_halide', 'aryl_sulfonate'} & set(rule.groups):
             assert rule.name != 'snar', rule.id
+
+
+# An aryl halide is SNAr-activated beside or para to a six-ring aza N, beside or para to NO2, or between
+# two ring heteroatoms of a five-ring, one of them an aza N.  Every ring system class, against ethylamine.
+HETEROARYL = [
+    # 6
+    ('Clc1ccccn1', 'snar_activated'), ('Clc1ccncc1', 'snar_activated'), ('Brc1cccnc1', 'buchwald_hartwig'),
+    ('Clc1ncccn1', 'snar_activated'), ('Clc1ccncn1', 'snar_activated'), ('Brc1cncnc1', 'buchwald_hartwig'),
+    ('Clc1cnccn1', 'snar_activated'), ('Clc1cccnn1', 'snar_activated'), ('Clc1ncncn1', 'snar_activated'),
+    # 5
+    ('Clc1nccs1', 'snar_activated'), ('Clc1ncco1', 'snar_activated'), ('Cn1ccnc1Br', 'snar_activated'),
+    ('Cn1nnnc1Cl', 'snar_activated'), ('Cn1cnc(Br)n1', 'snar_activated'), ('Clc1nncs1', 'snar_activated'),
+    ('Clc1ncns1', 'snar_activated'),
+    ('Brc1cnn(C)c1', 'buchwald_hartwig'), ('Brc1cccs1', 'buchwald_hartwig'), ('Brc1ccsc1', 'buchwald_hartwig'),
+    ('Brc1cn(C)cn1', 'buchwald_hartwig'), ('Brc1ccn(C)n1', 'buchwald_hartwig'),
+    # 5+6
+    ('Clc1nc2ccccc2s1', 'snar_activated'), ('Clc1nc2ccccc2o1', 'snar_activated'),
+    ('Cn1c(Cl)nc2ccccc21', 'snar_activated'), ('Clc1ncnc2[nH]cnc12', 'snar_activated'),
+    ('Cn1c(Br)nc2cncnc21', 'snar_activated'), ('Clc1ncnc2[nH]ccc12', 'snar_activated'),
+    ('Clc1ccc2nccn2n1', 'snar_activated'), ('Clc1ncnc2ccsc12', 'snar_activated'),
+    ('Brc1ccc2[nH]ccc2c1', 'buchwald_hartwig'), ('Cn1nc(Br)c2ccccc21', 'buchwald_hartwig'),
+    # 6+6
+    ('Clc1ccc2ccccc2n1', 'snar_activated'), ('Clc1ccnc2ccccc12', 'snar_activated'),
+    ('Clc1nccc2ccccc12', 'snar_activated'), ('Clc1cnc2ccccc2n1', 'snar_activated'),
+    ('Clc1ncnc2ccccc12', 'snar_activated'), ('Clc1ccnc2cccnc12', 'snar_activated'),
+    ('Brc1cnc2ccccc2c1', 'buchwald_hartwig'), ('Brc1ccc2ncccc2c1', 'buchwald_hartwig'),
+]
+
+
+@pytest.mark.parametrize('halide, label', HETEROARYL, ids=[h for h, _ in HETEROARYL])
+def test_every_heteroaromatic_ring_class_is_classified(halide, label):
+    for x in ('Cl', 'Br'):
+        if halide.startswith(x):
+            product = 'CCN' + halide[len(x):]
+            break
+    else:
+        product = halide.replace('Cl', 'NCC').replace('Br', 'NCC')
+    assert smiles(f'{halide}.CCN>>{product}').reconstruct_mapping() == ('react:' + label,)

@@ -1579,13 +1579,14 @@ label                          the conditions it names
 ``ullmann_phenol``             Cu or Pd: an unactivated aryl electrophile and a phenol
 ``ullmann_pyrrole``            Cu or Pd: an unactivated aryl electrophile and an azole N-H
 ``ullmann_alcohol``            Pd or Cu: an unactivated aryl electrophile and an aliphatic alcohol
-``snar_activated``             Ar-Cl/Br/I/OSO2R ortho or para to a six-ring aza N or to NO2
+``snar_activated``             Ar-Cl/Br/I/OSO2R ortho or para to a six-ring aza N or to NO2, or between
+                               two ring heteroatoms of a five-ring, one an aza N
 ``snar``                       Ar-F, activated or not
 ``suzuki``                     sp2 boron
 ``suzuki_alkyl``               sp3 boronic acid, ester or boroxine
 ``suzuki_alkyl_bf3k``          sp3 trifluoroborate
-``miyaura_borylation``         a diboron
-``lithiation_borylation``      a trialkyl borate or alkoxy boronic ester quench
+``miyaura_borylation``         ArX to a boronic ester, the diboron an agent
+``lithiation_borylation``      ArX to the boronic acid, the borate an agent
 ``amidation``                  a free acid or carboxylate
 ``acyl_halide_amidation``      an acyl chloride, bromide or fluoride
 ``anhydride_amidation``        an anhydride, cyclic included
@@ -1595,8 +1596,8 @@ label                          the conditions it names
 ``grignard_from_halide``       the organometallic made in the pot from the halide
 =============================  ===================================================================
 
-Every borylation row names its boron source as a slot, so a record that names none is unexplained rather
-than credited to either.  **Within one set of inputs the more specific row is applied**: where two rows
+A borylation is an interconversion: the boron source is an agent, never mapped, and the product form
+names the conditions.  **Within one set of inputs the more specific row is applied**: where two rows
 build the recorded product, the one whose groups match more atoms wins, and the other is logged as an
 alternative.
 

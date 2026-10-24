@@ -84,6 +84,14 @@ Functional groups
      - ``functional:302``
      - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1)-[C]``
      - ArOSO2R para to a six-ring aza N
+   * - ``activated_azole_halide``
+     - ``functional:305``
+     - ``[Cl,Br,I;D1]-[C;a;r5:1](:[N;a;D2;h0;r5;M]):[N,O,S;a;r5;M]``
+     - Ar-X (Cl, Br, I) on a five-ring carbon between two ring heteroatoms, one an aza N: 2-haloazoles and benzazoles, C8 of purine
+   * - ``activated_azole_sulfonate``
+     - ``functional:306``
+     - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a;r5:1](:[N;a;D2;h0;r5;M]):[N,O,S;a;r5;M])-[C]``
+     - ArOSO2R on a five-ring carbon between two ring heteroatoms, one an aza N
    * - ``activated_ester``
      - ``functional:264``
      - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x1]-[N]``
@@ -204,10 +212,6 @@ Functional groups
      - ``functional:232``
      - ``[O;D1;z1;x0;-:1]-[C;z1:2]``
      - RO-
-   * - ``alkoxy_boronic_ester``
-     - ``functional:306``
-     - ``[B;D3;x3:1](-[O:2])(-[O:3])-;!@[O;D2;!R]-[C;z1]``
-     - RO-B(OR')2, one acyclic alkoxy leaving: iPrO-Bpin the common one, the borate quench that keeps the diol
    * - ``alkoxy_ester``
      - ``functional:294``
      - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]``
@@ -1224,10 +1228,6 @@ Functional groups
      - ``functional:165``
      - ``[C;-;D1:1]#[N;+;D2:2]-[C;D2,D3;z1;x2:3]-[S;D4;x2](=[O])=[O]``
      - TosMIC, the Van Leusen oxazole reagent
-   * - ``trialkyl_borate``
-     - ``functional:305``
-     - ``[B;D3;x3:1](-[O;D2:2]-[C;z1])(-[O;D2:3]-[C;z1])-[O;D2]-[C;z1]``
-     - B(OR)3, the borate a lithiated or magnesiated arene is quenched with; its alkyls leave, giving the boronic acid
    * - ``triarylmethyl_radical``
      - ``functional:253``
      - ``[C;D3;h0;z1:1](-[C;a:2])(-[C;a:3])-[C;a:4] |^1:0|``
