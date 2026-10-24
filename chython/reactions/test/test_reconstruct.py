@@ -925,3 +925,16 @@ def test_a_protected_azole_pairs_with_its_input_tautomer():
         rxn = ReactionContainer([smiles(x) for x in inputs], [smiles(product)])
         assert rxn.reconstruct_mapping() == (label,)
         assert rxn.remove_reagents(keep_reagents=True) is True
+
+
+@pytest.mark.parametrize('record, label', [
+    ('COC(=O)CC1=CCN(C(=O)OCc2ccccc2)CC1>>COC(=O)CC1CCNCC1', 'deprotect:amine_cbz+react:alkene_to_alkane'),
+    ('OC(=O)CCCC(C(=O)OC)NC(=O)OC(C)(C)C>>O=C1CCCC(C(=O)OC)N1', 'deprotect:amine_boc+react:amidation'),
+    ('COC(=O)CCC(=O)CCCCNC(=O)OC(C)(C)C>>COC(=O)CCC1=NCCCC1', 'deprotect:amine_boc+react:imine_condensation'),
+    ('CC(C)(C)OC(=O)N1CCC(CC1)C=Cc1ccc(OCc2ccccc2)cc1>>CC(C)(C)OC(=O)N1CCC(CC1)CCc1ccc(O)cc1',
+     'deprotect:hydroxyl_benzyl+react:alkene_to_alkane'),
+])
+def test_a_group_the_product_keeps_is_not_stripped(record, label):
+    """The composed rung strips the groups the product lost, not every group it could: the ester or the Boc
+    the product still carries stays on."""
+    assert smiles(record).reconstruct_mapping() == (label,)

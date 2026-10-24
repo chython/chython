@@ -34,7 +34,7 @@ from itertools import chain, product as cartesian
 from typing import NamedTuple
 
 from ._enumerate import (_deprotect_toward, _needs, _outcomes, deprotect, EnumeratedReaction,
-                         functional_groups)
+                         functional_groups, protective_groups)
 from ._numbering import fast_mapping
 from ._tables import functional_rules, reaction_rules
 from ..core import (INFO, LOST, LogRecord, MoleculeContainer, REFUSED, ReactionContainer, STEREO_ABS,
@@ -282,13 +282,14 @@ def _deprotect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
                            '+'.join(outcome.rule_ids))
 
 
-def _strip(inputs) -> tuple[list[MoleculeContainer], dict[int, tuple[int, tuple[str, ...]]]]:
-    """`inputs` with every protecting group taken off, and which members of the result a strip produced.
+def _strip(inputs, names: Sequence[str] = ()) -> tuple[list[MoleculeContainer], dict[int, tuple[int, tuple[str, ...]]]]:
+    """`inputs` with their protecting groups taken off, and which members of the result a strip produced.
 
-    A stripped member maps to the input it came from and that strip's `labels`, which name the
-    `deprotect:` half of the composed label.
+    `names` restricts the strip to those protective rows; empty strips every group.  A stripped member
+    maps to the input it came from and that strip's `labels`, which name the `deprotect:` half of the
+    composed label.
 
-    ONE all-stripped pass and not every raw/stripped combination, which would be exponential in the
+    ONE pass per name set and not every raw/stripped combination, which would be exponential in the
     number of protected inputs: a deliberate lower bound on what composition buys.  A stripped form
     keeps the stable ids it came in with, so numbering survives the composition unaided.  A stripped
     form is canonicalized, as the inputs were: the corpus is written against that form, and a strip
@@ -297,7 +298,7 @@ def _strip(inputs) -> tuple[list[MoleculeContainer], dict[int, tuple[int, tuple[
     pool = []
     stripped = {}
     for source, molecule in enumerate(inputs):
-        outcome = next(deprotect(molecule), None)
+        outcome = next(deprotect(molecule, names), None)
         if outcome is None:
             pool.append(molecule)
         else:
@@ -308,30 +309,63 @@ def _strip(inputs) -> tuple[list[MoleculeContainer], dict[int, tuple[int, tuple[
     return pool, stripped
 
 
+def _lost(recorded, inputs) -> tuple[str, ...]:
+    """The protective rows the inputs carry more sites of than the recorded product: what came off.
+
+    A row whose sites the product kept is not stripped, so a Cbz removed beside a methyl ester the product
+    keeps leaves the ester on.  Counted per row name, not per site.
+    """
+    carried = Counter()
+    for molecule in inputs:
+        carried.update(protective_groups(molecule))
+    carried.subtract(protective_groups(recorded))
+    return tuple(sorted(name for name, n in carried.items() if n > 0))
+
+
+def _pools(recorded, inputs) -> list:
+    """The stripped pools `_deprotect_then_react` walks: the groups the product lost, then every group.
+
+    The selective strip first, because it is the claim the record supports; the full strip second, for
+    the record whose product makes a group of the same row as one that came off -- an acetamide formed
+    while an acetate is cleaved counts level.  A pool equal to an earlier one is not walked twice.
+    """
+    out, seen = [], set()
+    lost = _lost(recorded, inputs)
+    for names in ((lost, ()) if lost else ((),)):
+        pool, stripped = _strip(inputs, names)
+        if not stripped:
+            continue
+        key = tuple(sorted(stripped.items()))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((pool, stripped))
+    return out
+
+
 def _deprotect_then_react(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """Strip what can be stripped, then let the corpus fire on what is left.
 
     Labelled `deprotect:<strips>+react:<row>`, the strips being those of the inputs the row consumed, in
     input order: `deprotect:amine_boc+react:amidation`.
 
-    Only the pools a stripping reached are walked -- `stripped`, handed on as `_applications`' `required`.
-    A pool of unstripped members is one `_react` already put to the corpus, and this rung runs after it.
+    Two stripped pools at most, by `_pools`: the groups the product lost, then every group.  Only the pools
+    a stripping reached are walked -- `stripped`, handed on as `_applications`' `required`.  A pool of
+    unstripped members is one `_react` already put to the corpus, and this rung runs after it.
     """
-    pool, stripped = _once(memo, 'strip', lambda: _strip(inputs))
-    if not stripped:
-        return
-    for subset, outcome, products in _once(memo, 'deprotect+react',
-                                           lambda: _settled(recorded,
-                                                            _applications(recorded, pool, required=stripped))):
-        if not _reproduces(recorded, products, subset, options.loose):
-            continue
-        sources = [*_translate(outcome.reaction, subset, products), *pool, *inputs]
-        consumed = {id(molecule) for molecule in subset}
-        strips = dict(stripped[i] for i in sorted(stripped) if id(pool[i]) in consumed)
-        yield _Explanation('deprotect:%s+react:%s' % ('+'.join(chain.from_iterable(strips.values())),
-                                                      outcome.name),
-                           lambda target, s=sources, o=options: _number_product(target, s, o.loose),
-                           outcome.rule_id, _repeats(subset))
+    for k, (pool, stripped) in enumerate(_once(memo, 'strip', lambda: _pools(recorded, inputs))):
+        for subset, outcome, products in _once(memo, f'deprotect+react:{k}',
+                                               lambda: _settled(recorded, _applications(recorded, pool,
+                                                                                        required=stripped))):
+            if not _reproduces(recorded, products, subset, options.loose):
+                continue
+            sources = [*_translate(outcome.reaction, subset, products), *pool, *inputs]
+            consumed = {id(molecule) for molecule in subset}
+            strips = dict(stripped[i] for i in sorted(stripped) if id(pool[i]) in consumed)
+            yield _Explanation('deprotect:%s+react:%s' % ('+'.join(chain.from_iterable(strips.values())),
+                                                          outcome.name),
+                               lambda target, s=sources, o=options: _number_product(target, s, o.loose),
+                               outcome.rule_id, _repeats(subset))
 
 
 def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
