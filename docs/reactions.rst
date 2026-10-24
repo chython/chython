@@ -1118,7 +1118,7 @@ row's intramolecular template closes again:
 
 .. testoutput::
 
-    ['C(O)(CCCN)=O>>C1CCC(N1)=O']
+    ['C(O)(CCCN)=O>>C1CCC(N1)=O', 'C(N)CCC(=O)[O-]>>C1CCC(N1)=O']
 
 **A configuration the target states must come back; a centre it leaves unconfigured accepts what the
 row makes.**  ``ketone_to_alcohol`` makes a racemate, so it answers a flat 2-butanol and the racemate,
@@ -1204,13 +1204,18 @@ product-side ``r``:
 
 .. testcode::
 
+    row = reaction_rules()['acyl_halide_amidation'][0]      # reactions:4, an acyl chloride and an amine
+
     print(row.ring_atom, row.ring_sizes)
     print(row.intramolecular)
 
 .. testoutput::
 
     1 (5, 6, 7)
-    read_smirks('([O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2].[N;D1;z1;x0:101][C;z1:102])>>[A;r5,r6,r7:1](=[A:2])-[A:101]-[A:102]')
+    read_smirks('([Cl;D1][C;z2;x2;D3:1]=[O:2].[N;D1;z1;x0:101][C;z1:102])>>[A;r5,r6,r7:1](=[A:2])-[A:101]-[A:102]')
+
+A range states a macrocycle: ``1:4,5,6,7,10-60`` is ``reactions:1``'s, and a size above 24 is stated by
+the ``r`` bucket it falls in (25-32, 33-48, above 48).
 
 The two groupings are mutually exclusive, so no substrate ever yields the same product twice.  What the
 ring size buys is that the cyclization fires where the ring is plausible and nowhere else:
@@ -1484,7 +1489,7 @@ there is to carry:
 
 .. testoutput::
 
-    373 111
+    420 115
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']

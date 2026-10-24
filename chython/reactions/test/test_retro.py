@@ -57,7 +57,8 @@ def test_every_leaving_group_alternative_is_its_own_outcome_and_symmetry_is_one(
 
 
 def test_a_lactam_opens_to_one_precursor():
-    assert _answers('O=C1CCCN1', 'amidation') == [('reactions:1', 'C(O)(CCCN)=O>>C1CCC(N1)=O')]
+    assert _answers('O=C1CCCN1', 'amidation') == [('reactions:1', 'C(O)(CCCN)=O>>C1CCC(N1)=O'),
+                                                  ('reactions:526', 'C(N)CCC(=O)[O-]>>C1CCC(N1)=O')]
     assert _answers('O=C1CCCN1', 'acyl_halide_amidation') == [('reactions:4', 'C(Cl)(CCCN)=O>>C1CCC(N1)=O')]
 
 

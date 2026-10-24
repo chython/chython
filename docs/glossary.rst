@@ -24,7 +24,7 @@ name a molecule carries, and :doc:`reactions` documents it where it is applied.
 Functional groups
 -----------------
 
-373 functional groups, alphabetically.  The name is the key
+420 functional groups, alphabetically.  The name is the key
 :meth:`chython.MoleculeContainer.functional_groups` returns and the key
 :func:`chython.functional_rules` is keyed on; the id is what a consumer stores.
 
@@ -72,10 +72,18 @@ Functional groups
      - ``functional:196``
      - ``[C;z2;D1:1]=[C;z2:2]-[C;D3;z2;x2:3](=[O;D1;x0:4])-[O;D2:5]``
      - H2C=CH-CO-O-R, the polymerizable monomer.  ``D1`` as in ``acrylamide``
+   * - ``activated_alkyl_halide``
+     - ``functional:390``
+     - ``[Cl,Br,I;D1]-[C;z1;x1;h1,h2:1]-[C;z2,z4;M]``
+     - X-CH or X-CH2 on an aromatic or sp2 carbon: benzylic, allylic, beside C=N or C=O.  The halide is the leaving group, unlike ``benzyl_halide`` and ``allyl_halide``, which number it
    * - ``activated_aza_ortho_halide``
      - ``functional:297``
      - ``[Cl,Br,I;D1]-[C;a;r6:1]:[N;a;D2;h0;r6;M]``
      - Ar-X (Cl, Br, I) beside a six-ring aza N: the SNAr electrophile ``aryl_halide`` also matches
+   * - ``activated_aza_ortho_nitro``
+     - ``functional:376``
+     - ``[O;-;D1]-[N;+;D3](=[O;D1])-[C;a;r6:1]:[N;a;D2;h0;r6;M]``
+     - Ar-NO2 beside a six-ring aza N: nitrite is the SNAr leaving group
    * - ``activated_aza_ortho_sulfonate``
      - ``functional:301``
      - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a;r6:1]:[N;a;D2;h0;r6;M])-[C]``
@@ -88,6 +96,10 @@ Functional groups
      - ``functional:298``
      - ``[Cl,Br,I;D1]-[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1``
      - Ar-X (Cl, Br, I) para to a six-ring aza N
+   * - ``activated_aza_para_nitro``
+     - ``functional:377``
+     - ``[O;-;D1]-[N;+;D3](=[O;D1])-[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1``
+     - Ar-NO2 para to a six-ring aza N: nitrite is the SNAr leaving group
    * - ``activated_aza_para_sulfonate``
      - ``functional:302``
      - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1)-[C]``
@@ -160,10 +172,18 @@ Functional groups
      - ``functional:85``
      - ``[F;D1]-[C;z2;x2;D3:1]=[O:2]``
      - R-COF
+   * - ``acyl_hemiaminal``
+     - ``functional:398``
+     - ``[O;D1;z1;x0:1]-[C;z1;x2:2]-[N;z1;D3;M]-[C;z2;M]=[O;M]``
+     - HO-C-N(acyl), the N-acyliminium precursor
    * - ``aldehyde``
      - ``functional:20``
      - ``[O;z2;x0:1]=[C;D2;x1;z2:2]``
      - R-CHO
+   * - ``aldoxime_ch``
+     - ``functional:400``
+     - ``[O;D1,D2;z1;x1:1]-[N;D2;z2;x1:2]=[C;D2;h1:3]``
+     - an aldoxime or its O-alkyl ether with the C-H numbered, the hydroximoyl halide precursor
    * - ``alkene``
      - ``functional:2``
      - ``[C;z2;x0;D2,D3:1]=[C;z2;x0;D2,D3:2]``
@@ -212,6 +232,10 @@ Functional groups
      - ``functional:68``
      - ``[B;D4;z1;x3;-](-[F])(-[F])(-[F])-;!@[C;z2:1]=[C:2]``
      - vinyl trifluoroborate
+   * - ``alkenyl_nitrile``
+     - ``functional:408``
+     - ``[C;z2;x0:1]=[C;z2:2]-[C;D2;z3:3]#[N;D1:4]``
+     - C=C-C#N, the unsaturated nitrile Michael acceptor
    * - ``alkenyl_silane``
      - ``functional:123``
      - ``[Si;D4]-;!@[C;z2:1]=[C:2]``
@@ -224,6 +248,10 @@ Functional groups
      - ``functional:256``
      - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z2;x1,x2:1]=[C:2])-[C]``
      - enol triflate, nonaflate or tosylate, the vinylic pseudohalide
+   * - ``alkenyl_sulfonium``
+     - ``functional:413``
+     - ``[C;z2;x0:1]=[C;z2;D2:2]-[S;+;D3:3]``
+     - C=C-S+R2, the alkenyl sulfonium (thianthrenium) acceptor
    * - ``alkenyl_thiol``
      - ``functional:353``
      - ``[S;x0;D1;z1:1]-[C;z2:2]=[C;M]``
@@ -352,6 +380,10 @@ Functional groups
      - ``functional:51``
      - ``[F;D1][C;z3;x1:1]#[C:2]``
      - C(sp)-F; ``z3`` is genuine sp here
+   * - ``alkynyl_grignard``
+     - ``functional:417``
+     - ``[Mg;D2](-[F,Cl,Br,I])-[C;z3:1]#[C:2]``
+     - alkynyl Grignard
    * - ``alkynyl_iodide``
      - ``functional:54``
      - ``[I;D1][C;z3;x1:1]#[C:2]``
@@ -420,6 +452,10 @@ Functional groups
      - ``functional:152``
      - ``[N;D1;z1;x0:1]-[C;D3;z2;x2:2]=[N;D1:3]``
      - RC(=NH)NH2, the pyrimidine partner
+   * - ``amidine_nh``
+     - ``functional:416``
+     - ``[N;D1;z1;x0:1]-[C;D3;z2:2]=[N;D1;x0:3]``
+     - H2N-C(=NH)-R for R = C, N or S: the free amidine, guanidine or isothiourea
    * - ``amidoxime``
      - ``functional:151``
      - ``[N;D1;z2;x0:1]=[C;D3;x2:2]-[N;D2;z1;x1:3]-[O;D1:4]``
@@ -428,6 +464,10 @@ Functional groups
      - ``functional:159``
      - ``[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[O;D1:4]``
      - 1,2-amino alcohol
+   * - ``aminopyrazole_nh``
+     - ``functional:419``
+     - ``[N;D1;z1;x0:1]-[C;a;r5:2]:[N;a;D2;r5:3]:[N;a;D2;r5:4]``
+     - NH2 on an azole carbon beside an N-N pair with no N-substituent: 3(5)-aminopyrazole and aminotriazole in either drawing
    * - ``aminopyridine``
      - ``functional:158``
      - ``[N;D1;z1;x0:1]-[C;a:2]:[N;a;h0;D2:3]``
@@ -584,6 +624,10 @@ Functional groups
      - ``functional:114``
      - ``[Zn;*]-[C;a:1]``
      - ArZnX, Ar2Zn or ArZn+
+   * - ``aryloxymethyl_halide``
+     - ``functional:380``
+     - ``[Cl,Br,I;D1]-[C;z1;x2;D2:1]-[O;D2;M]-[C;a;M]``
+     - ArO-CH2-X, the aryloxymethylating agent
    * - ``aza_ortho_chloride``
      - ``functional:338``
      - ``[Cl;D1]-[C;a;r6:1]:[N;a;D2;h0;r6:2]``
@@ -648,10 +692,30 @@ Functional groups
      - ``functional:347``
      - ``[N;a;D3;r5;r6:1]1:[C;a;R1;r6:2]:[C;a;R1;r6:3]:[C;a;R1;r6:4]:[C;a;R1;r6:5]:[C;a;D3;r5;r6:6]:1``
      - the azine ring of an azole fused through its bridgehead N: imidazo-, pyrazolo- and triazolo[1,5-a]pyridine
+   * - ``azolone``
+     - ``functional:374``
+     - ``[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[C;z2;r5:3]=[C;z2;r5;M]-[N,O,S;r5;M]-[N;z1;D2;h1;r5:4]1``
+     - five-ring lactam whose O-substituted form is aromatic: isoxazol-3-one, pyrazol-3-one; ``azinone`` is the six-ring class
+   * - ``azolone_aza``
+     - ``functional:375``
+     - ``[O;z2;x0:1]=[C;z2;x3;D3;r5:2](-[N;z2;r5:3])-[N;z1;D2;h1;r5:4]``
+     - five-ring cyclic urea flanked by an imine N and an N-H, the 1,2,4-triazol-3-one; ``azinone_aza`` is the six-ring class
+   * - ``azolone_vinylogous``
+     - ``functional:388``
+     - ``[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[C;z2;r5:3]=[C;z2;r5:4]-[N;z1;D2;h1;r5:5]-[N,O,S;r5;M]1``
+     - five-ring lactam with C=O and N-H across a ring C=C, the 1-substituted pyrazol-5-one; its O-substituted form is the aromatic 5-alkoxypyrazole
+   * - ``benzo_pyridine_ring``
+     - ``functional:406``
+     - ``[N;a;D2;h0;R1:1]1:[C;a;R1:2]:[C;a;R1:3]:[C;a;R1:4]:[C;a;R2:5]:[C;a;R2:6]:1``
+     - the pyridine ring of a quinoline, 7-azaindole or naphthyridine, nitrogen beside the fusion carbon
    * - ``benzyl_halide``
      - ``functional:222``
      - ``[Cl,Br,I;D1:1]-[C;z1;x1;h1,h2:2]-[C;a:3]``
      - Ar-CH2-X.  ``alkyl_halide`` already matches it; this says the SN2 is a benzylic one, which is a different rate and a different selectivity
+   * - ``benzylic_alcohol``
+     - ``functional:397``
+     - ``[O;D1;z1;x0:1]-[C;z1;x1:2]-[C;a,z3;M]``
+     - an alcohol on a carbon beside an arene or an alkyne, the stabilized carbocation silane reduction needs
    * - ``benzylic_ch``
      - ``functional:42``
      - ``[C;z1;h1,h2;D2,D3:1]-[C;a:2]``
@@ -660,6 +724,18 @@ Functional groups
      - ``functional:157``
      - ``[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[C;a:4]:[C;a;D2:5]``
      - the Pictet-Spengler substrate
+   * - ``beta_carbonyl_acid``
+     - ``functional:403``
+     - ``[O;D1;z1;x0]-[C;z2;x2;D3](=[O;z2;x0])-[C;z1:1]-[C,S,N;z2,z3,z5;M]=,#[O,N;M]``
+     - a carboxylic acid beside a second carbonyl, nitrile or sulfonyl: malonic, beta-keto and cyanoacetic acids
+   * - ``beta_carbonyl_ester``
+     - ``functional:402``
+     - ``[O;z2;x0]=[C;z2;x2;D3](-[O;D2;x0]-[C;z1;D1,D2,D3])-[C;z1:1]-[C,S,N;z2,z3,z5;M]=,#[O,N;M]``
+     - an alkyl ester on a carbon beside a second carbonyl, nitrile or sulfonyl, the ester unnumbered so it leaves whole; a tert-butyl ester is left to ``carboxyl_tbu``
+   * - ``beta_dicarbonyl_ketone``
+     - ``functional:392``
+     - ``[O;z2;x0:1]=[C;D3;x1;z2:2]-[C;z1;h1,h2:3]-[C;z2;x1,x2;M]=[O;z2;x0;M]``
+     - a ketone whose alpha C-H is flanked by a second carbonyl (1,3-dione, beta-keto ester or amide), enolized by an amine base
    * - ``beta_ketoester``
      - ``functional:78``
      - ``[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D2;x0:3]-[C;z2;x2;D3:4](=[O:5])-[O;D2]``
@@ -732,6 +808,10 @@ Functional groups
      - ``functional:174``
      - ``[O;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[O;D1;z1;x0:4]``
      - 1,2-dihydroxyarene
+   * - ``cdi``
+     - ``functional:383``
+     - ``[O;D1;z2:1]=[C;D3;x3:2](-[N;a;r5:3]1:[C;a;M]:[N;a;M]:[C;a;M]:[C;a;M]:1)-[N;a;r5]1:[C;a]:[N;a]:[C;a]:[C;a]:1``
+     - carbonyldiimidazole as the reagent that keeps one imidazole: the carbamoyl imidazole
    * - ``chloroazine``
      - ``functional:133``
      - ``[Cl;D1]-[C;a:1]:[N;a;D2:2]``
@@ -840,6 +920,10 @@ Functional groups
      - ``functional:194``
      - ``[C;z2:1]=[C;z2:2]-[C;D3;z2;x1:3]=[O;D1;x0:4]``
      - C=C-C=O, the Michael acceptor.  The conjugation is the group: neither ``ketone`` nor ``alkene`` alone says a molecule is electrophilic at the beta carbon
+   * - ``enoyl``
+     - ``functional:407``
+     - ``[C;z2;x0:1]=[C;z2:2]-[C;D3;z2;x1,x2:3]=[O;D1;x0:4]``
+     - C=C-C(=O)R for R = C, O or N -- enone, unsaturated ester, acid, amide, lactone -- numbered from a beta carbon with no heteroatom
    * - ``epoxide``
      - ``functional:39``
      - ``[O;D2;r3:1]1-[C;r3:2]-[C;r3:3]-1``
@@ -860,6 +944,10 @@ Functional groups
      - ``functional:323``
      - ``[N;D1;z1;x0:1]-[C;D2;x2;z2;h1:2]=[O:3]``
      - H2N-CHO, the carbamoyl radical source
+   * - ``formate``
+     - ``functional:378``
+     - ``[O;D1;z1;x0;-:1]-[C;D2;z2:2]=[O;D1;z2;x0:3]``
+     - HCOO-, which ``carboxylate`` (``D3``) leaves out
    * - ``furan_o``
      - ``functional:204``
      - ``[O;a;D2:1]``
@@ -888,6 +976,10 @@ Functional groups
      - ``functional:187``
      - ``[O;D1;z1;x0;h1:1]-[C;z1;x2:2]-[O;D2;z1:3]``
      - HO-C(-OR), the ring-opened sugar form
+   * - ``hetero_methyl_halide``
+     - ``functional:379``
+     - ``[Cl,Br,I;D1]-[C;z1;x2;D2:1]-[S,P,F;M]``
+     - X-CH2 on S, P or F: a halomethyl sulfide, sulfone, sulfonamide or phosphonate, or FCH2X.  ``alkyl_halide`` (``x1``) leaves it out; the O-bonded halomethyls are ``alpha_hetero_alkyl_halide`` or protecting groups
    * - ``heteroaryl_ol``
      - ``functional:293``
      - ``[O;D1;z1;x0;h1:1]-[C;a:2]:[N,O,S;a;M]``
@@ -984,6 +1076,10 @@ Functional groups
      - ``functional:106``
      - ``[N;+;D2;x0:1]#[C;-;D1:2]``
      - R-NC, charge-separated
+   * - ``isopropylamine``
+     - ``functional:386``
+     - ``[N;D1;z1;x0:1]-[C;D3;x1]([C;D1;x0])[C;D1;x0]``
+     - iPrNH2, the transaminase amine donor; acetone leaves
    * - ``isothiocyanate``
      - ``functional:109``
      - ``[N;z2;x0;D2:1]=[C:2]=[S;D1:3]``
@@ -996,10 +1092,18 @@ Functional groups
      - ``functional:282``
      - ``[C;z1:1]-;!@[N;a;+;D3](:[C;a]-;!@[C;a]):[C;a]-;!@[C;a]``
      - an N-alkyl-2,6-diarylpyridinium, the deaminative alkyl radical source
+   * - ``ketimine``
+     - ``functional:396``
+     - ``[N;D2;z2;x0:1]=[C;z2;D3;x1:2]``
+     - R2C=NR, a ketone-derived imine, cyclic 1-pyrroline included; ``x1`` on the carbon excludes the amidine
    * - ``ketone``
      - ``functional:21``
      - ``[O;z2;x0:1]=[C;D3;x1;z2:2]``
      - R2C=O
+   * - ``ketone_alpha_ch``
+     - ``functional:391``
+     - ``[O;z2;x0:1]=[C;D3;x1;z2:2]-[C;z1;h1,h2,h3:3]``
+     - a ketone with its carbonyl oxygen and an alpha C-H numbered, the enol triflate and silyl enol ether site
    * - ``knorr_dicarbonyl``
      - ``functional:368``
      - ``[O;D1;z2]=[C;z2;x1:1]-[C;z1;D2,D3:2]-[C;z2;x1;D2,D3:3]=[O;D1;z2]``
@@ -1032,10 +1136,22 @@ Functional groups
      - ``functional:249``
      - ``[F,Cl,Br,I;D1]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1``
      - Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C5 of a 2-pyridinone
+   * - ``lactim_ether``
+     - ``functional:418``
+     - ``[N;D2;z2;x0:1]=[C;D3;z2;x2:2]-[O;D2]-[C;z1]``
+     - R-C(=NR)-OR', the N-substituted imidate or lactim ether; the alkoxide leaves
+   * - ``lactone``
+     - ``functional:389``
+     - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0;R:3]``
+     - a ring ester whose ring oxygen stays on the product: opening it by a nucleophile gives the hydroxy acyl compound, which ``ester`` (alkoxy unnumbered) deletes
    * - ``maleimide``
      - ``functional:177``
      - ``[N;r5:1]1-[C;z2;r5:2](=[O:3])-[C;z2;r5:4]=[C;z2;r5:5]-[C;z2;r5:6]1=[O:7]``
      - maleimide, the thiol-conjugation warhead
+   * - ``malonic_acid``
+     - ``functional:382``
+     - ``[O;D1;z1;x0]-[C;z2;x2;D3](=[O;D1])-[C;z1;x0;h1,h2:1]-[C;z2;x2;D3:2](=[O;D1:3])-[O;D1;z1:4]``
+     - HOOC-CH2-COOH; one carboxyl is lost as CO2
    * - ``malonic_half_ester``
      - ``functional:324``
      - ``[O;D1;*]-[C;z2;x2](=[O])-[C;z1;h1,h2:1]-[C;z2;x2;M](=[O;M])-[O;D2;M]``
@@ -1052,6 +1168,10 @@ Functional groups
      - ``functional:254``
      - ``[O;D1;z1;x0:1]-[C;D1:2]``
      - CH3-OH, which ``primary_alcohol`` (``D2``) leaves out
+   * - ``methyl_aryl_thioether``
+     - ``functional:401``
+     - ``[C;z1;D1:1]-[S;D2;z1;x0;M]-[C;a;M]``
+     - the S-methyl of a thioanisole, chlorinated by NCS through the sulfonium
    * - ``methyl_ester``
      - ``functional:170``
      - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]-[C;D1]``
@@ -1068,6 +1188,10 @@ Functional groups
      - ``functional:216``
      - ``[O;D1;z1;x1;h1:1]-[N;z1;x1:2]-[C;z1,a:3]``
      - HO-N with carbon on the nitrogen.  The carbon is stated to exclude the hydroxamic acid, whose nitrogen carries a carbonyl
+   * - ``n_methyl_amine``
+     - ``functional:399``
+     - ``[C;D1;z1;x1]-[N;D3;z1;x0:1](-[C;z1:2])-[C;z1:3]``
+     - R2N-CH3 on an sp3 amine; the methyl is the leaving carbon
    * - ``n_substituted_azole``
      - ``functional:205``
      - ``[N;a;D3:1]-[C;z1,a:2]``
@@ -1076,6 +1200,10 @@ Functional groups
      - ``functional:317``
      - ``[N;D1;z1;x1:1]-[N;D2,D3;z1:2]``
      - a substituted hydrazine, hydrazide, carbazate or sulfonylhydrazide NH2
+   * - ``nh2_hydrazone``
+     - ``functional:384``
+     - ``[N;D1;z1;x1:1]-[N;D2;z2;x1:2]=[C;z2:3]``
+     - R2C=N-NH2; ``hydrazone`` (``D2``) is the N-substituted one
    * - ``nh_carbamate``
      - ``functional:261``
      - ``[N;D1,D2;z1;x0:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2:4]``
@@ -1088,6 +1216,10 @@ Functional groups
      - ``functional:263``
      - ``[N;D1,D2;z1;x1:1]-[S;D4:2](=[O:3])=[O:4]``
      - a sulfonamide N-H; ``sulfonamide`` matches the tertiary one too
+   * - ``nh_sulfoximine``
+     - ``functional:387``
+     - ``[N;D1;h1:1]=[S;D4:2](=[O;D1:3])(-[C:4])-[C:5]``
+     - an N-H sulfoximine
    * - ``nh_thiocarbonyl``
      - ``functional:352``
      - ``[S;D1;z2;x0:1]=[C;D3;z2;x2,x3:2]-[N;D2;h1:3]``
@@ -1112,6 +1244,14 @@ Functional groups
      - ``functional:33``
      - ``[N;D3;x2;+:1]([O;-:2])=[O:3]``
      - R-NO2, charge-separated as chython stores it
+   * - ``nitroalkane_ch``
+     - ``functional:381``
+     - ``[C;z1;x1;h2,h3:1]-[N;+;D3;M](=[O;D1;M])-[O;-;D1;M]``
+     - MeNO2 or RCH2NO2: the carbon that condenses to the nitroalkene
+   * - ``nitroalkene``
+     - ``functional:412``
+     - ``[C;z2;x0:1]=[C;z2:2]-[N;+;D3:3](=[O;D1:4])-[O;-;D1:5]``
+     - C=C-NO2, numbered from the beta carbon
    * - ``nitroalkene_methyl``
      - ``functional:331``
      - ``[C;D1;z1:1]-[C;z2;M]=[C;z2;M]-[N;+;M](=[O;M])-[O;-;M]``
@@ -1252,10 +1392,22 @@ Functional groups
      - ``functional:328``
      - ``[O;D1;z1;x0:1]-[C;D2;x1;z1:2]-[C;z1;h1,h2:3]``
      - RCH2-OH with an sp3 CH or CH2 beside the carbinol
+   * - ``primary_sulfinamide``
+     - ``functional:414``
+     - ``[N;D1;z1:1]-[S;D3;z2:2](=[O;D1:3])-[C:4]``
+     - R-S(=O)-NH2, the Ellman or Davis auxiliary
    * - ``propenyl``
      - ``functional:329``
      - ``[C;D1;z1]-[C;z2;x0;D2:1]=[C;z2;x0;D2:2]``
      - CH3-CH=CH-R, the internal alkene that metathesis cleaves to propene
+   * - ``pyrazol_3_one``
+     - ``functional:394``
+     - ``[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[N;z1;D2;h1;r5:3]-[N;z1;D3;r5;M]-[C;z2;r5;M]=[C;z2;r5;M]-1``
+     - an N1-substituted 1,2-dihydropyrazol-3-one drawn as its NH tautomer, the 3-hydroxypyrazole in disguise
+   * - ``pyrazol_5_one``
+     - ``functional:393``
+     - ``[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[N;z1;D3;r5;M]-[N;z1;D2;h1;r5:3]-[C;z2;r5:4]=[C;z2;r5:5]-1``
+     - an N1-substituted 1,2-dihydropyrazol-3-one drawn as its NH tautomer, the 5-hydroxypyrazole in disguise
    * - ``pyrazole``
      - ``functional:135``
      - ``[N;h1;D2;a;r5:1]:[N;h0;D2;r5:2]``
@@ -1272,6 +1424,10 @@ Functional groups
      - ``functional:40``
      - ``[N;a;D2;h0:1]``
      - an aromatic nitrogen with no hydrogen, the N-oxidation substrate
+   * - ``pyridine_ring``
+     - ``functional:405``
+     - ``[N;a;D2;h0;R1:1]1:[C;a;R1:2]:[C;a;R1:3]:[C;a;R1:4]:[C;a;R1:5]:[C;a;R1:6]:1``
+     - an unfused pyridine ring, all six atoms numbered for the full hydrogenation
    * - ``pyrrole``
      - ``functional:134``
      - ``[N;h1;D2;a;r5:1]``
@@ -1284,6 +1440,10 @@ Functional groups
      - ``functional:128``
      - ``[C;z1:1]-[C;z2;x2;D3:2](=[O:3])-[O;D2;x1]-[N;D3;x1;r5](-[C;z2;r5]=[O])-[C;z2;r5]=[O]``
      - NHPI/NHS ester; decarboxylative coupling transfers the alkyl
+   * - ``ring_ch_ch``
+     - ``functional:404``
+     - ``[C;z1;h1,h2;R:1](-;@[C;z1;h1,h2;R:2])-[A;z2,z4;M]``
+     - two adjacent ring sp3 C-H carbons, one of them beside an sp2 or aromatic atom: the desaturation site that conjugates or aromatizes
    * - ``ring_enamine_nh2``
      - ``functional:265``
      - ``[N;D1;z1;x0:1]-[C;z2;x1,x2;r5,r6:2]=[C;z2:3]``
@@ -1348,6 +1508,14 @@ Functional groups
      - ``functional:202``
      - ``[S;D3;z2:1](=[O;D1:2])(-[O;D2:3]-[C:4])[C:5]``
      - R-S(=O)-O-R
+   * - ``sulfinimine``
+     - ``functional:415``
+     - ``[C;z2:1]=[N;D2;z2:2]-[S;D3:3](=[O;D1:4])-[C:5]``
+     - R-S(=O)-N=CR2, the N-sulfinyl imine
+   * - ``sulfinyl_ketimine``
+     - ``functional:395``
+     - ``[N;D2;z2;x1:1](=[C;z2;D3;x1:2])-[S;D3:3]=[O;D1:4]``
+     - a ketone-derived N-sulfinyl imine (Ellman), the auxiliary S kept and numbered
    * - ``sulfo``
      - ``functional:97``
      - ``[S;D4;x3:1](=[O:2])(=[O:3])-[O;D1:4]``
@@ -1484,6 +1652,10 @@ Functional groups
      - ``functional:165``
      - ``[C;-;D1:1]#[N;+;D2:2]-[C;D2,D3;z1;x2:3]-[S;D4;x2](=[O])=[O]``
      - TosMIC, the Van Leusen oxazole reagent
+   * - ``trialkylborane``
+     - ``functional:385``
+     - ``[C;z1:1]-;!@[B;D3;x0](-[C;z1])-[C;z1]``
+     - R3B: Et3B, or a B-alkyl-9-BBN whose exocyclic alkyl transfers
    * - ``triarylmethyl_radical``
      - ``functional:253``
      - ``[C;D3;h0;z1:1](-[C;a:2])(-[C;a:3])-[C;a:4] |^1:0|``
@@ -1508,10 +1680,22 @@ Functional groups
      - ``functional:19``
      - ``[O;D1;z1;x0:1]-[C;z1;x1:2]-[C;z1;x1:3]-[O;D1;z1;x0:4]``
      - 1,2-diol, the dihydroxylation product
+   * - ``vinyl_azine_ortho``
+     - ``functional:410``
+     - ``[C;z2;x0;D1:1]=[C;z2;D2:2]-[C;a;r6:3]:[N;a;D2;h0;r6;M]``
+     - CH2=CH- beside a six-ring aza N, the 2-vinylazine Michael acceptor
+   * - ``vinyl_azine_para``
+     - ``functional:411``
+     - ``[C;z2;x0;D1:1]=[C;z2;D2:2]-[C;a:3]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1``
+     - CH2=CH- para to a six-ring aza N, the 4-vinylazine Michael acceptor
    * - ``vinyl_sulfone``
      - ``functional:175``
      - ``[S;D4:1](=[O:2])(=[O:3])(-[O,N,C:4])-[C;z2:5]=[C:6]``
      - vinyl sulfone, sulfonamide or sulfonate -- a covalent warhead.  chython 2 wrote the third substituent ``[O,N]`` and so missed every true sulfone; widened here, which is why the ``x3`` it carried had to go
+   * - ``vinyl_sulfonyl``
+     - ``functional:409``
+     - ``[C;z2;x0:1]=[C;z2:2]-[S;D4:3](=[O;D1:4])=[O;D1:5]``
+     - C=C-SO2X for any X -- sulfone, sulfonamide, sulfonate, sulfonyl fluoride -- numbered from the beta carbon
    * - ``vinylogous_azinone``
      - ``functional:333``
      - ``[O;z2;x0:1]=[C;z2;x1,x2;D3;r6:2]1-[C;z2;r6:3]=[C;z2;r6:4]-[N;z1;D2;r6:5]-[A;M]~[A;M]1``
@@ -1528,11 +1712,15 @@ Functional groups
      - ``functional:220``
      - ``[S;D1,D2:1]-[C;D3;z2:2](=[S;D1;x0:3])-[O;D2:4]``
      - S-C(=S)-O-R, the RAFT agent.  ``D1,D2`` because the second sulfur is a free thiol as often as it is substituted
+   * - ``xec_aryl_halide``
+     - ``functional:420``
+     - ``[Cl,Br,I;D1]-[C;a:1]``
+     - ``aryl_halide`` under a second name, for the second electrophile of a biaryl XEC: slots naming two groups never read one aryl halide as both
 
 Protecting groups
 -----------------
 
-111 protecting groups, alphabetically.  *Protects* names the functional
+115 protecting groups, alphabetically.  *Protects* names the functional
 group the row reveals, which is a row of the table above.
 :meth:`chython.MoleculeContainer.protective_groups` reports a match and
 :meth:`chython.MoleculeContainer.deprotect` applies the patch.
@@ -1600,6 +1788,11 @@ every group that could.
      - ``amine``
      - ``[N;D2,D3:1]-;!@[C;z2;x3](=O)-[O;D2;x0]-[C;D4;x1;z1]([C;D1])([C;D1])[C;D1]``
      - tert-butoxycarbonyl, revealing an amine
+   * - ``amine_bom``
+     - ``protective:113``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1``
+     - benzyloxymethyl, revealing an amine, amide or azole N-H
    * - ``amine_cbz``
      - ``protective:60``
      - ``amine``
@@ -1650,6 +1843,11 @@ every group that could.
      - ``amine``
      - ``[N;D2:1]=;!@[C;x1;D3]([C;D2;x0;z1][C;D3;x0;z1]([C;D1])[C;D1])-[C;D3;r6;x0;z1]1[C;x1;z2;D3](=O)[C;D2][C;D4;x0;z1]([C;D1])([C;D1])[C;D2][C;D3;x1;z2]1=O``
      - ivDde, as the imine tautomer, revealing an amine
+   * - ``amine_mem``
+     - ``protective:115``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][O;D2;x0][C;D1]``
+     - 2-methoxyethoxymethyl (MEM), revealing an amine or azole N-H
    * - ``amine_methoxy_benzyl``
      - ``protective:76``
      - ``amine``
@@ -1695,6 +1893,11 @@ every group that could.
      - ``amine``
      - ``[N;D3:1]1[C;z2;x2;D3](=O)[C;a;r6]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2[C;z2;x2;D3]1=O``
      - phthalimide, revealing an amine
+   * - ``amine_pom``
+     - ``protective:112``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[C;D2;x2;z1][O;D2;x0]-[C;z2;x2](=[O;D1])-[C;D4]([C;D1])([C;D1])[C;D1]``
+     - pivaloyloxymethyl (POM), revealing an amine or azole N-H
    * - ``amine_sem``
      - ``protective:58``
      - ``amine``
@@ -1745,6 +1948,11 @@ every group that could.
      - ``amine``
      - ``[N;D2,D3:1]-;!@[C;z2;x3](=O)[O;D2;x0]-[C;D2][C;D4;x3]([Cl;D1])([Cl;D1])[Cl;D1]``
      - 2,2,2-trichloroethoxycarbonyl, revealing an amine
+   * - ``amine_veratryl``
+     - ``protective:114``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:1``
+     - 3,4-dimethoxybenzyl, revealing an amine
    * - ``carbonyl_dimethoxy``
      - ``protective:52``
      - ``carbonyl``

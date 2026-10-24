@@ -298,6 +298,16 @@ _DELIBERATE_DELETIONS = {
                                          # and losing this one with inversion is the reaction
     'reductive_amination': {1},          # the carbonyl oxygen, leaving as water before the reduction
     'knoevenagel': {1},                  # the carbonyl oxygen, leaving as water
+    'ionic_deoxygenation': {1},          # the alcohol or hemiaminal oxygen, removed as silanol or water
+    'protodecarboxylation': {1, 2},      # the carboxyl carbon and its carbonyl oxygen, leaving as CO2
+    'oxidative_cleavage': {1},           # the terminal CH2, leaving as formaldehyde
+    'sulfinimine_condensation': {1},     # the carbonyl oxygen, leaving as water
+    'thioamide_amination': {1},          # the thiocarbonyl sulfur, leaving as H2S
+    'amide_amination': {3},              # the amide oxygen, activated and displaced
+    'azinone_etherification': {1},       # the lactam oxygen, activated and displaced
+    'transamination': {1},               # the ketone oxygen
+    'henry_condensation': {1},           # the aldehyde oxygen, leaving as water
+    'doebner_condensation': {1},         # the aldehyde oxygen, leaving as water
     'alpha_methylenation': {1},          # the formaldehyde oxygen, leaving as water
     'imine_condensation': {1},           # the carbonyl oxygen, leaving as water
     'hydrazone_formation': {1},          # the carbonyl oxygen, leaving as water

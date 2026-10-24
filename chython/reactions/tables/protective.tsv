@@ -144,3 +144,8 @@ id	name	protects	smarts	product	protected	cleaved	decoys	description
 109	amine_alpha_methyl_methoxybenzyl	amine	[N;D2,D3:1]-;!@[C;D3;z1;x1]([C;D1])-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D2]:1	[A:1]	CC(NC(C)C)c1ccc(OC)cc1	C(C)(N)C	CC(OC(C)C)c1ccc(OC)cc1	1-(4-methoxyphenyl)ethyl, revealing an amine
 110	amine_trimethoxybenzyl	amine	[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:[C;D3;x1]:1[O;D2;x0][C;D1]	[A:1]	COc1cc(OC)c(CNC(C)C)c(OC)c1	C(C)(N)C	COc1cc(OC)c(COC(C)C)c(OC)c1	2,4,6-trimethoxybenzyl, revealing an amine
 111	amine_o_nitrobenzyl	amine	[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	CC(C)NCc1ccccc1[N+](=O)[O-]	C(C)(N)C	CC(C)OCc1ccccc1[N+](=O)[O-]	ortho-nitrobenzyl, revealing an amine
+# --- N-alkoxymethyl and benzyl-type groups on azole and lactam N ----------------------------------
+112	amine_pom	amine	[N;D2,D3:1]-;!@[C;D2;x2;z1][O;D2;x0]-[C;z2;x2](=[O;D1])-[C;D4]([C;D1])([C;D1])[C;D1]	[A:1]	CC(C)(C)C(=O)OCn1nccc1	c1cn[nH]c1		pivaloyloxymethyl (POM), revealing an amine or azole N-H
+113	amine_bom	amine	[N;D2,D3:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	O=C1CCCCN1COCc1ccccc1	O=C1CCCCN1		benzyloxymethyl, revealing an amine, amide or azole N-H
+114	amine_veratryl	amine	[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:1	[A:1]	COc1ccc(CNC(C)C)cc1OC	CC(C)N		3,4-dimethoxybenzyl, revealing an amine
+115	amine_mem	amine	[N;D2,D3:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][O;D2;x0][C;D1]	[A:1]	COCCOCn1nccc1	c1cn[nH]c1		2-methoxyethoxymethyl (MEM), revealing an amine or azole N-H

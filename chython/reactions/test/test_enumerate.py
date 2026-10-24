@@ -260,15 +260,14 @@ def test_an_intramolecular_reaction_needs_no_second_molecule():
 
 
 def test_the_ring_size_is_what_makes_it_a_reaction():
-    """5, 6 and 7 close; 4 and 12 do not.  The product-side `r` is doing this and nothing else is.
+    """4-7 and 10 and up close; 8 and 9 do not.  The product-side `r` is doing this and nothing else is.
 
     Which is why the intramolecular template is a separate composition rather than an unconstrained `.`
-    join: `.` says only "not bonded", so it fires on a strained four-ring as happily as on a six.
+    join: `.` says only "not bonded", so it fires on any ring size as happily as on a six.
     """
-    closes = {4: 'NCCC(=O)O', 5: 'NCCCC(=O)O', 6: 'NCCCCC(=O)O', 7: 'NCCCCCC(=O)O',
-              12: 'NCCCCCCCCCCC(=O)O'}
+    closes = {size: 'N' + 'C' * (size - 2) + 'C(=O)O' for size in (4, 5, 6, 7, 8, 9, 12)}
     fired = {size for size, s in closes.items() if products(smiles(s).react(reaction='amidation'))}
-    assert fired == {5, 6, 7}, 'reactions:1 names 1:5,6,7'
+    assert fired == {4, 5, 6, 7, 12}, 'reactions:1 names 1:4,5,6,7,10-60'
 
 
 def test_the_two_readings_never_both_fire():
