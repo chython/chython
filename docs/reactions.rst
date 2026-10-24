@@ -973,8 +973,8 @@ detection as the pre-filter.  It yields ``EnumeratedReaction(name, reaction, rul
 
     amidation reactions:1 C(C)(=O)O.C(C)N>>C(=O)(NCC)C
 
-``name`` is the chemistry (``'amidation'``, ``'suzuki'``) and ``rule_id`` is the row that produced this
-one outcome.  Only the id can say *which* spelling of a reaction earned its place in the corpus, which
+``name`` is the family of conditions (``'amidation'`` for the free acid, ``'acyl_halide_amidation'`` for its
+chloride) and ``rule_id`` is the row that produced this one outcome.  Only the id can say *which* spelling of a reaction earned its place in the corpus, which
 is what a coverage measurement counts on.
 
 ``mol @ other`` is ``mol.react(other)``, and ``mol @ [a, b]`` is ``mol.react(a, b)``.  The argument
@@ -1078,9 +1078,6 @@ them yields it too.
 .. testoutput::
 
     reactions:2 C(C)(=O)O.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1
-    reactions:514 C(C)(=O)Cl.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1
-    reactions:520 C(C)(=O)Br.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1
-    reactions:524 C(C)(=O)F.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1
     reactions:528 C(C)([O-])=O.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1
 
 A row runs backwards through a template composed from data the corpus already has: the ``product``
@@ -1120,7 +1117,7 @@ row's intramolecular template closes again:
 
 .. testoutput::
 
-    ['C(O)(CCCN)=O>>C1CCC(N1)=O', 'C(Cl)(CCCN)=O>>C1CCC(N1)=O']
+    ['C(O)(CCCN)=O>>C1CCC(N1)=O']
 
 **A configuration the target states must come back; a centre it leaves unconfigured accepts what the
 row makes.**  ``ketone_to_alcohol`` makes a racemate, so it answers a flat 2-butanol and the racemate,
@@ -1156,7 +1153,7 @@ How a Corpus Row Composes
 
 ``reaction_rules()`` is the accessor for the corpus that ``react()`` and ``@`` enumerate over -- one
 table, ``reactions.tsv``, and one id space.  It is keyed by the name ``reaction=`` selects on, and each
-value is that name's whole **family** of rows: ``amidation`` holds one per acyl source and N-H partner.
+value is that name's whole **family** of rows: ``amidation`` holds one per free-acid form and N-H partner.
 A row does not carry a SMIRKS string of its own: it names **slots** by the functional-group name they
 take, out of ``functional.tsv``, and its ``product`` column patches the atoms those groups number.  The
 template is composed from the two lazily, and cached for the table as a whole.
@@ -1484,7 +1481,7 @@ there is to carry:
 
 .. testoutput::
 
-    296 111
+    307 111
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']
@@ -1559,7 +1556,7 @@ these things reacted, and a row says this is what they make.
 
     assert rxn.reconstruct_mapping() == ('react:esterification',)
 
-**The label is the chemistry and the id is the row**, and only the id says which spelling of a reaction
+**The label is the conditions and the id is the row**, and only the id says which spelling of a reaction
 earned the hit -- so the id goes in the log rather than in the answer, where a caller comparing labels
 would have to parse it back out.  Only the rule that was actually *applied* is named, because a rule
 that was merely considered would read as a false attribution:
@@ -1571,6 +1568,45 @@ that was merely considered would read as a false attribution:
     assert rxn.reconstruct_mapping() == ('react:suzuki',)
     assert ([r.message for r in rxn.log if r.rule == 'reconstruct:rules']
             == ['explained by reactions:8'])
+
+**A label names one family of conditions.**  Two records run under different conditions get different
+labels, even where a chemist calls both by one name:
+
+=============================  ===================================================================
+label                          the conditions it names
+=============================  ===================================================================
+``buchwald_hartwig``           Pd: an unactivated Ar-Cl/Br/I/OSO2R and an N-H
+``ullmann_phenol``             Cu or Pd: an unactivated aryl electrophile and a phenol
+``ullmann_pyrrole``            Cu or Pd: an unactivated aryl electrophile and an azole N-H
+``ullmann_alcohol``            Pd or Cu: an unactivated aryl electrophile and an aliphatic alcohol
+``snar_activated``             Ar-Cl/Br/I/OSO2R ortho or para to a six-ring aza N or to NO2
+``snar``                       Ar-F, activated or not
+``suzuki``                     sp2 boron
+``suzuki_alkyl``               sp3 boronic acid, ester or boroxine
+``suzuki_alkyl_bf3k``          sp3 trifluoroborate
+``miyaura_borylation``         a diboron
+``lithiation_borylation``      a trialkyl borate or alkoxy boronic ester quench
+``amidation``                  a free acid or carboxylate
+``acyl_halide_amidation``      an acyl chloride, bromide or fluoride
+``anhydride_amidation``        an anhydride, cyclic included
+``activated_ester_amidation``  an N-O ester or aryl ester
+``aminolysis``                 an alkyl ester
+``grignard``                   a preformed organomagnesium
+``grignard_from_halide``       the organometallic made in the pot from the halide
+=============================  ===================================================================
+
+Every borylation row names its boron source as a slot, so a record that names none is unexplained rather
+than credited to either.  **Within one set of inputs the more specific row is applied**: where two rows
+build the recorded product, the one whose groups match more atoms wins, and the other is logged as an
+alternative.
+
+.. testcode::
+
+    rxn = smiles('Clc1ncccn1.CCN>>CCNc1ncccn1')
+
+    assert rxn.reconstruct_mapping() == ('react:snar_activated',)
+    assert ([r.message for r in rxn.log if r.rule == 'reconstruct:alternatives']
+            == ['alternative explanations not applied: react:buchwald_hartwig'])
 
 The three lower rungs read a record whose product is a masked or unmasked form of an input, and the one
 between them composes: strip every input that can be stripped, then let the corpus fire on what is left.

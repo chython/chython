@@ -24,7 +24,7 @@ name a molecule carries, and :doc:`reactions` documents it where it is applied.
 Functional groups
 -----------------
 
-296 functional groups, alphabetically.  The name is the key
+307 functional groups, alphabetically.  The name is the key
 :meth:`chython.MoleculeContainer.functional_groups` returns and the key
 :func:`chython.functional_rules` is keyed on; the id is what a consumer stores.
 
@@ -68,6 +68,22 @@ Functional groups
      - ``functional:196``
      - ``[C;z2;D1:1]=[C;z2:2]-[C;D3;z2;x2:3](=[O;D1;x0:4])-[O;D2:5]``
      - H2C=CH-CO-O-R, the polymerizable monomer.  ``D1`` as in ``acrylamide``
+   * - ``activated_aza_ortho_halide``
+     - ``functional:297``
+     - ``[Cl,Br,I;D1]-[C;a;r6:1]:[N;a;D2;h0;r6;M]``
+     - Ar-X (Cl, Br, I) beside a six-ring aza N: the SNAr electrophile ``aryl_halide`` also matches
+   * - ``activated_aza_ortho_sulfonate``
+     - ``functional:301``
+     - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a;r6:1]:[N;a;D2;h0;r6;M])-[C]``
+     - ArOSO2R beside a six-ring aza N
+   * - ``activated_aza_para_halide``
+     - ``functional:298``
+     - ``[Cl,Br,I;D1]-[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1``
+     - Ar-X (Cl, Br, I) para to a six-ring aza N
+   * - ``activated_aza_para_sulfonate``
+     - ``functional:302``
+     - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1)-[C]``
+     - ArOSO2R para to a six-ring aza N
    * - ``activated_ester``
      - ``functional:264``
      - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x1]-[N]``
@@ -76,6 +92,22 @@ Functional groups
      - ``functional:166``
      - ``[C;-;D1:1]#[N;+;D2:2]-[C;z1;h1,h2:3]``
      - isocyanide with an acidic alpha C-H; what activates it is left unstated
+   * - ``activated_nitro_ortho_halide``
+     - ``functional:299``
+     - ``[Cl,Br,I;D1]-[C;a:1]:[C;a;M]-[N;+;D3;M](=[O;M])-[O;-;M]``
+     - Ar-X (Cl, Br, I) ortho to a nitro group
+   * - ``activated_nitro_ortho_sulfonate``
+     - ``functional:303``
+     - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]:[C;a;M]-[N;+;D3;M](=[O;M])-[O;-;M])-[C]``
+     - ArOSO2R ortho to a nitro group
+   * - ``activated_nitro_para_halide``
+     - ``functional:300``
+     - ``[Cl,Br,I;D1]-[C;a:1]1:[C;a;M]:[C;a;M]:[C;a;M](-[N;+;D3;M](=[O;M])-[O;-;M]):[C;a;M]:[C;a;M]:1``
+     - Ar-X (Cl, Br, I) para to a nitro group
+   * - ``activated_nitro_para_sulfonate``
+     - ``functional:304``
+     - ``[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]1:[C;a;M]:[C;a;M]:[C;a;M](-[N;+;D3;M](=[O;M])-[O;-;M]):[C;a;M]:[C;a;M]:1)-[C]``
+     - ArOSO2R para to a nitro group
    * - ``active_methylene``
      - ``functional:167``
      - ``[C;z1;D2,D3;x0:1](-[C;z2,z3;x1,x2:2])-[C;z2,z3;x1,x2:3]``
@@ -172,6 +204,10 @@ Functional groups
      - ``functional:232``
      - ``[O;D1;z1;x0;-:1]-[C;z1:2]``
      - RO-
+   * - ``alkoxy_boronic_ester``
+     - ``functional:306``
+     - ``[B;D3;x3:1](-[O:2])(-[O:3])-;!@[O;D2;!R]-[C;z1]``
+     - RO-B(OR')2, one acyclic alkoxy leaving: iPrO-Bpin the common one, the borate quench that keeps the diol
    * - ``alkoxy_ester``
      - ``functional:294``
      - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]``
@@ -408,6 +444,10 @@ Functional groups
      - ``functional:287``
      - ``[B;D3](-[F;D1])(-[F;D1])-;!@[C;a:1]``
      - ArBF2, a trifluoroborate drawn without its fluoride and cation
+   * - ``aryl_ester``
+     - ``functional:307``
+     - ``[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0]-[C;a]``
+     - R-CO-OAr -- pentafluorophenyl, 4-nitrophenyl, phenyl -- the acylating agent; ``ester`` also matches
    * - ``aryl_ether``
      - ``functional:185``
      - ``[O;D2;z1;x0:1](-[C;a:2])[C;z1,a:3]``
@@ -1184,6 +1224,10 @@ Functional groups
      - ``functional:165``
      - ``[C;-;D1:1]#[N;+;D2:2]-[C;D2,D3;z1;x2:3]-[S;D4;x2](=[O])=[O]``
      - TosMIC, the Van Leusen oxazole reagent
+   * - ``trialkyl_borate``
+     - ``functional:305``
+     - ``[B;D3;x3:1](-[O;D2:2]-[C;z1])(-[O;D2:3]-[C;z1])-[O;D2]-[C;z1]``
+     - B(OR)3, the borate a lithiated or magnesiated arene is quenched with; its alkyls leave, giving the boronic acid
    * - ``triarylmethyl_radical``
      - ``functional:253``
      - ``[C;D3;h0;z1:1](-[C;a:2])(-[C;a:3])-[C;a:4] |^1:0|``

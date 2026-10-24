@@ -153,7 +153,7 @@ id	name	smarts	precursor	example	decoys	description
 93	primary_amidine_amine	[N;D1;z1;x0:1]-[C;z2:2]=[N:3]	[N:1]-[C:2]=[N:3]	NC(C)=N	CC(N)=O	NH2 on an sp2 carbon that also carries C=N
 94	aziridine_nh	[N;D2;z1;x0;h1;r3:1]	[N:1]	C1CN1	C1CNC1,CN1CC1	aziridine N-H, matched alone so a ring opening leaves the ring intact
 95	biaryl_aniline	[N;D2;z1;x0:1](-[C;a:2])-[C;a:3]	[N:1](-[C:2])-[C:3]	c1ccc(Nc2ccccc2)cc1	CNc1ccccc1	Ar-NH-Ar
-96	anhydride	[C;z2;x2;D3:1](=[O:2])-[O;D2;x0]-[C;z2;x2;D3:3]=[O:4]		CC(=O)OC(C)=O	CC(=O)OC	R-CO-O-CO-R; also matches `ester` twice
+96	anhydride	[C;z2;x2;D3:1](=[O:2])-[O;D2;x0]-[C;z2;x2;D3:3]=[O:4]	[C:1](=[O:2])-[O]-[C:3]=[O:4]	CC(=O)OC(C)=O	CC(=O)OC	R-CO-O-CO-R; also matches `ester` twice
 97	sulfo	[S;D4;x3:1](=[O:2])(=[O:3])-[O;D1:4]	[S:1](=[O:2])(=[O:3])-[O:4]	CS(=O)(=O)O	CS(=O)(=O)OC	R-SO3H, distinct from a sulfonyl halide or a sulfonamide
 98	sulfonyl_chloride	[Cl;D1]-[S;D4:1](=[O:2])=[O:3]	[Cl]-[S:1](=[O:2])=[O:3]	CS(=O)(=O)Cl	CS(=O)(=O)O	R-SO2Cl
 99	sulfonyl_fluoride	[F;D1]-[S;D4:1](=[O:2])=[O:3]	[F]-[S:1](=[O:2])=[O:3]	CS(=O)(=O)F	CS(=O)(=O)Cl	R-SO2F
@@ -373,3 +373,15 @@ id	name	smarts	precursor	example	decoys	description
 294	alkoxy_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]	[O:1]=[C:2]-[O:3]	CC(=O)OC	CC(=O)O,CC(=O)N	`ester` with the alkoxy O numbered, for the rows that keep it: partial reduction to the hemiacetal or lactol
 295	amide_carbonyl	[O;z2;x0:1]=[C;D2,D3;z2;x2:2]-[N:3]	[O:1]=[C:2]-[N:3]	CN(C)C(C)=O	CC(=O)OC,CNC(=O)OC,CC(C)=O	any amide, lactam or imide C=O, the N kept: aromatic N included, carbamate and urea (`x3`) excluded
 296	glycosyl_halide	[Cl,Br,I;D1]-[C;z1;x2;R:1]-[O;D2;R;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	BrC1CCCCO1	ClCOCC[Si](C)(C)C,BrC1CCCCC1,BrCC1CCCO1	X on the ring carbon beside the ring O: the glycosyl halide, the Koenigs-Knorr donor; an acyclic X-C-O is a protecting-group reagent
+# --- the activated SNAr electrophiles, the borate quenches and the aryl ester -------------
+297	activated_aza_ortho_halide	[Cl,Br,I;D1]-[C;a;r6:1]:[N;a;D2;h0;r6;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ncccn1	Clc1cccnc1,Clc1ccccc1,Fc1ccccn1	Ar-X (Cl, Br, I) beside a six-ring aza N: the SNAr electrophile `aryl_halide` also matches
+298	activated_aza_para_halide	[Cl,Br,I;D1]-[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ccncc1	Clc1cccnc1,Clc1ccccc1,Fc1ccncc1	Ar-X (Cl, Br, I) para to a six-ring aza N
+299	activated_nitro_ortho_halide	[Cl,Br,I;D1]-[C;a:1]:[C;a;M]-[N;+;D3;M](=[O;M])-[O;-;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ccccc1[N+](=O)[O-]	Clc1cccc(c1)[N+](=O)[O-],Fc1ccccc1[N+](=O)[O-]	Ar-X (Cl, Br, I) ortho to a nitro group
+300	activated_nitro_para_halide	[Cl,Br,I;D1]-[C;a:1]1:[C;a;M]:[C;a;M]:[C;a;M](-[N;+;D3;M](=[O;M])-[O;-;M]):[C;a;M]:[C;a;M]:1	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ccc(cc1)[N+](=O)[O-]	Clc1cccc(c1)[N+](=O)[O-],Fc1ccc(cc1)[N+](=O)[O-]	Ar-X (Cl, Br, I) para to a nitro group
+301	activated_aza_ortho_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a;r6:1]:[N;a;D2;h0;r6;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccccn1)C(F)(F)F	O=S(=O)(Oc1cccnc1)C(F)(F)F,O=S(=O)(Oc1ccccc1)C(F)(F)F	ArOSO2R beside a six-ring aza N
+302	activated_aza_para_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1)-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccncc1)C(F)(F)F	O=S(=O)(Oc1cccnc1)C(F)(F)F,O=S(=O)(Oc1ccccc1)C(F)(F)F	ArOSO2R para to a six-ring aza N
+303	activated_nitro_ortho_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]:[C;a;M]-[N;+;D3;M](=[O;M])-[O;-;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccccc1[N+](=O)[O-])C(F)(F)F	O=S(=O)(Oc1cccc(c1)[N+](=O)[O-])C(F)(F)F	ArOSO2R ortho to a nitro group
+304	activated_nitro_para_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]1:[C;a;M]:[C;a;M]:[C;a;M](-[N;+;D3;M](=[O;M])-[O;-;M]):[C;a;M]:[C;a;M]:1)-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccc(cc1)[N+](=O)[O-])C(F)(F)F	O=S(=O)(Oc1cccc(c1)[N+](=O)[O-])C(F)(F)F	ArOSO2R para to a nitro group
+305	trialkyl_borate	[B;D3;x3:1](-[O;D2:2]-[C;z1])(-[O;D2:3]-[C;z1])-[O;D2]-[C;z1]	[B:1](-[O:2]-[C])(-[O:3]-[C])-[O]-[C]	CC(C)OB(OC(C)C)OC(C)C	OB(O)c1ccccc1,CC1(C)OB(B2OC(C)(C)C(C)(C)O2)OC1(C)C	B(OR)3, the borate a lithiated or magnesiated arene is quenched with; its alkyls leave, giving the boronic acid
+306	alkoxy_boronic_ester	[B;D3;x3:1](-[O:2])(-[O:3])-;!@[O;D2;!R]-[C;z1]	[B:1](-[O:2])(-[O:3])-[O]-[C]	CC(C)OB1OC(C)(C)C(C)(C)O1	CC1(C)OB(c2ccccc2)OC1(C)C,CC1(C)OB(B2OC(C)(C)C(C)(C)O2)OC1(C)C	RO-B(OR')2, one acyclic alkoxy leaving: iPrO-Bpin the common one, the borate quench that keeps the diol
+307	aryl_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0]-[C;a]	[O:1]=[C:2]-[O]-[C]1=[C]-[C]=[C]-[C]=[C]-1	CC(=O)Oc1c(F)c(F)c(F)c(F)c1F	CC(=O)OC,CC(=O)ON1C(=O)CCC1=O	R-CO-OAr -- pentafluorophenyl, 4-nitrophenyl, phenyl -- the acylating agent; `ester` also matches

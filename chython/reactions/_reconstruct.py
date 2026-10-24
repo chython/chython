@@ -36,7 +36,7 @@ from typing import NamedTuple
 from ._enumerate import (_deprotect_toward, _needs, _outcomes, deprotect, EnumeratedReaction,
                          functional_groups)
 from ._numbering import fast_mapping
-from ._tables import reaction_rules
+from ._tables import functional_rules, reaction_rules
 from ..core import (INFO, LOST, LogRecord, MoleculeContainer, REFUSED, ReactionContainer, STEREO_ABS,
                     STEREO_UNSPECIFIED)
 
@@ -900,6 +900,18 @@ def _supplies(supply: Counter, targets: Sequence[Mapping[str, int]], rule) -> bo
     return False
 
 
+_SPECIFICITY_CACHE: dict[str, int] = {}
+
+
+def _specificity(rule) -> int:
+    """How many atoms the row's groups match together: the larger pattern is the narrower claim."""
+    size = _SPECIFICITY_CACHE.get(rule.id)
+    if size is None:
+        groups = functional_rules()
+        size = _SPECIFICITY_CACHE[rule.id] = sum(len(groups[group].query) for group in rule.groups)
+    return size
+
+
 def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContainer],
                   rules=None, required: Container[int] | None = None
                   ) -> Iterator[tuple[list[MoleculeContainer], 'EnumeratedReaction']]:
@@ -914,7 +926,12 @@ def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContaine
     slots' candidate lists, deduplicated -- `len(groups)` factors where `C(n, 1..4)` over every input
     was `n**4/24` pools, each scanned against the whole corpus.  A plate record of 76 amines and one
     aryl halide is 76 pools for a Buchwald row and none for a row whose groups it lacks.  Pools come out
-    smallest first and in input order, each with its rows in corpus order.
+    smallest first and in input order.
+
+    THE MOST SPECIFIC ROW OF A POOL FIRST, by `_specificity`, and corpus order between equals.  A label
+    names the conditions, so where two rows build the same product the narrower group is the claim the
+    record supports: `activated_aza_ortho_halide` (SNAr) before `aryl_halide` (Buchwald-Hartwig), and
+    `anhydride` before `ester`.
 
     One input may fill several slots that name ONE group, as an excess reagent -- `_pools_of`.
 
@@ -970,7 +987,7 @@ def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContaine
         for molecule in pool:
             supply.update(molecule.element_counts)
         try:
-            for rule in fits[subset]:
+            for rule in sorted(fits[subset], key=_specificity, reverse=True):
                 if not _supplies(supply, targets, rule):
                     continue
                 for outcome in _outcomes(rule, run):

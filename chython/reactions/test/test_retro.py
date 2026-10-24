@@ -33,12 +33,19 @@ def _answers(smiles, reaction):
 
 
 def test_an_amide_comes_from_every_acyl_source_the_corpus_has():
+    """Each acyl source answers under the family of its conditions: the free acid and its salt under
+    `amidation`, the acyl halides under `acyl_halide_amidation`, the N-O and aryl esters under
+    `activated_ester_amidation`."""
     assert _answers('CC(=O)Nc1ccccc1', 'amidation') == [
         ('reactions:2', 'C(C)(=O)O.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1'),
+        ('reactions:528', 'C(C)([O-])=O.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1')]
+    assert _answers('CC(=O)Nc1ccccc1', 'acyl_halide_amidation') == [
         ('reactions:514', 'C(C)(=O)Cl.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1'),
         ('reactions:520', 'C(C)(=O)Br.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1'),
-        ('reactions:524', 'C(C)(=O)F.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1'),
-        ('reactions:528', 'C(C)([O-])=O.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1')]
+        ('reactions:524', 'C(C)(=O)F.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1')]
+    assert _answers('CC(=O)Nc1ccccc1', 'activated_ester_amidation') == [
+        ('reactions:532', 'O=C1N(C(CC1)=O)OC(=O)C.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1'),
+        ('reactions:1034', 'c1(ccccc1)OC(C)=O.c1c(N)cccc1>>c1ccc(NC(=O)C)cc1')]
 
 
 def test_every_leaving_group_alternative_is_its_own_outcome_and_symmetry_is_one():
@@ -50,8 +57,8 @@ def test_every_leaving_group_alternative_is_its_own_outcome_and_symmetry_is_one(
 
 
 def test_a_lactam_opens_to_one_precursor():
-    assert _answers('O=C1CCCN1', 'amidation') == [('reactions:1', 'C(O)(CCCN)=O>>C1CCC(N1)=O'),
-                                                  ('reactions:4', 'C(Cl)(CCCN)=O>>C1CCC(N1)=O')]
+    assert _answers('O=C1CCCN1', 'amidation') == [('reactions:1', 'C(O)(CCCN)=O>>C1CCC(N1)=O')]
+    assert _answers('O=C1CCCN1', 'acyl_halide_amidation') == [('reactions:4', 'C(Cl)(CCCN)=O>>C1CCC(N1)=O')]
 
 
 def test_an_inverting_row_hands_back_the_other_configuration():

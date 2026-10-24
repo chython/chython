@@ -42,7 +42,7 @@ __all__ = ['EnumeratedDeprotection', 'EnumeratedReaction', 'GroupHit', 'deprotec
 class EnumeratedReaction(NamedTuple):
     """One enumerated outcome: the rule's name, the reaction it produced, and the row it came from.
 
-    `name` is the chemistry (`'suzuki'`), shared by every row spelling a variant of it, and is what
+    `name` is the family of conditions (`'suzuki'`), shared by every row run under them, and is what
     `reaction=` selects on.  `rule_id` is the row (`'reactions:8'`): only the id says which spelling
     earned the hit, which is what a coverage measurement counts on.
     """
