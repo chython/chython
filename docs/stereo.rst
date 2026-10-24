@@ -1598,8 +1598,10 @@ not perceived               an amine nitrogen outside the rule of `Stereo units`
 metals                      a four-coordinate metal is a tetrahedral centre; ``@SP``, ``@TB`` and ``@OH``
                             read unconfigured, LOST ``smiles:chiral-class-unsupported``; a metallocene
                             written as separate ions perceives no planar unit
-``assign_cip()``            rules 1a, 1b and 2; no Rp/Sp, no axial Ra/Sa or M/P, no r/s; a centre the
-                            rules do not decide stays ``None`` and logs ``cip:undecided``
+``assign_cip()``            rules 1a, 1b and 2, each over the whole digraph in turn; a double bond at
+                            a four-coordinate P(V) or S(VI) counts as single (P-93.2.4), an S(IV) S=O
+                            is duplicated; no Rp/Sp, no axial Ra/Sa or M/P, no r/s; a centre the rules
+                            do not decide stays ``None`` and logs ``cip:undecided``
 InChI                       a configured atropisomer axis is not written and logs nothing; a helix and a
                             planar unit are omitted, LOST ``inchi:stereo-kind-not-represented``
 MOL after ``clean2d()``     a trans-cycloalkene is drawn cis and reads back Z; an extended cis/trans chain

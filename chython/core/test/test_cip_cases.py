@@ -41,13 +41,17 @@ comes first when nothing precedes the atom, otherwise straight after the precedi
 | `[C@H](C)(C=C)C(C)C` | H, CH3, vinyl, iPr | vinyl, iPr, CH3, H | 3, 4, 2, 1 | odd | R |
 | `[C@H](C)(C#C)C(C)(C)C` | H, CH3, ethynyl, tBu | ethynyl, tBu, CH3, H | 3, 4, 2, 1 | odd | R |
 | `[C@H](O)([13CH3])CC` | H, OH, 13CH3, C2H5 | OH, C2H5, 13CH3, H | 2, 4, 3, 1 | even | S |
+| `[P@](=O)(F)(CC)OC` | =O, F, C2H5, OCH3 | F, OCH3, =O, C2H5 | 2, 4, 1, 3 | odd | R |
+| `[S@@](=O)(=NC)(CC)OC` | =O, =NCH3, C2H5, OCH3 | OCH3, =O, =NCH3, C2H5 | 4, 1, 2, 3 | odd | `@@` S |
 
 The rankings each row rests on: ethyl over methyl at sphere 2, (C,H,H) against (H,H,H); CHO over CH2OH at
 sphere 2, (O, O-duplicate, H) against (O, H, H), which is what the digraph's duplicate atoms buy; COOH
 over CH3 at sphere 2, (O, O, O-duplicate) against (H,H,H); and 2H over 1H by rule 2 alone, the one row
 rules 1a and 1b are blind to.  The last three rows order the rules: vinyl over isopropyl and ethynyl over
 tert-butyl by rule 1a at sphere 3, (C, C-duplicate, H) against (H,H,H), although at sphere 2 a duplicate
-faces a real carbon (rule 1b); ethyl over 13CH3 by rule 1a at sphere 2 before rule 2 reads the 13C.
+faces a real carbon (rule 1b); ethyl over 13CH3 by rule 1a at sphere 2 before rule 2 reads the 13C.  A
+double bond at a four-coordinate P(V) or S(VI) counts as single (IUPAC 2013 P-93.2.4), so its =O carries no
+duplicate: OCH3 over =O at sphere 2, (C) against nothing.
 """
 from pathlib import Path
 

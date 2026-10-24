@@ -443,6 +443,34 @@ cdef inline void _cip_sort_ids_desc(cip_ctx_t *ctx, uint32_t *ids, uint32_t n) n
         ids[j] = v
 
 
+cdef inline bint _cip_hypervalent(cip_ctx_t *ctx, uint32_t atom) noexcept nogil:
+    """A four-coordinate P(V), As(V) or Sb(V), or an S(VI), Se(VI) or Te(VI): valence past 3, or past 4.
+
+    An S(IV) sulfoxide or sulfinate is not one: three ligands and a lone pair, and its S=O is duplicated.
+    """
+    cdef uint32_t k, total = 0
+    cdef uint8_t z = ctx.atoms[atom].element
+    if z != 15 and z != 33 and z != 51 and z != 16 and z != 34 and z != 52:
+        return False
+    for k in range(ctx.ptr[atom], ctx.ptr[atom + 1]):
+        total += ctx.edges[k].order
+    if not at_implicit_h_unknown(&ctx.atoms[atom]):
+        total += at_implicit_h(&ctx.atoms[atom])
+    return total > (3 if z == 15 or z == 33 or z == 51 else 4)
+
+
+cdef inline uint32_t _cip_order(cip_ctx_t *ctx, uint32_t atom, uint32_t target, uint32_t order) noexcept nogil:
+    """The order the digraph duplicates by: a double bond at a four-coordinate hypervalent end counts as single.
+
+    IUPAC 2013 P-93.2.4: the P=O of a phosphate or phosphonate "is considered as a single bond, as there are
+    already four atoms or groups in the tetrahedral configuration".  The same reason holds for P=S, P=N and an
+    S(VI) S=O or S=N, so neither end gains a duplicate: a phosphonate's =O ranks below its -OR.
+    """
+    if order == 2 and (_cip_hypervalent(ctx, atom) or _cip_hypervalent(ctx, target)):
+        return 1
+    return order
+
+
 cdef uint32_t cip_subtree(cip_ctx_t *ctx, uint32_t atom, uint32_t parent, uint32_t in_order,
                           uint32_t depth) except? CIP_NO_ID:
     """The interned id of the branch rooted at `atom`, entered from `parent` across `in_order`.
@@ -451,7 +479,8 @@ cdef uint32_t cip_subtree(cip_ctx_t *ctx, uint32_t atom, uint32_t parent, uint32
     of an anchor.  Five expansion clauses, and the node's children are all of them together:
 
     1. every incident bond except the one back to `parent`: one REAL child, plus `order - 1` duplicates
-       of the far atom.  That is how rule 1a sees a double bond;
+       of the far atom, the order `_cip_order` gives (a hypervalent double bond counts as single).  That
+       is how rule 1a sees a double bond;
     2. the bond back to `parent`: `in_order - 1` duplicates OF THE PARENT and no real child.  A carbonyl
        oxygen entered from its carbon has a duplicate carbon among its children; omitting this is the
        classic way to rank an aldehyde below an alcohol;
@@ -506,7 +535,7 @@ cdef uint32_t cip_subtree(cip_ctx_t *ctx, uint32_t atom, uint32_t parent, uint32
                 # they all carry the same jump back up to it; the parent alone contributes no closure
                 # duplicate, because it is this node's parent rather than a ring closure.
                 back = depth + 1 - ctx.path_depth[target]
-                reps = order        # 1, 2 or 3
+                reps = _cip_order(ctx, atom, target, order)        # 1, 2 or 3
                 if target == parent:
                     reps -= 1
                 while reps:
@@ -522,7 +551,7 @@ cdef uint32_t cip_subtree(cip_ctx_t *ctx, uint32_t atom, uint32_t parent, uint32
                 raise OverflowError('CIP node with more than %d children' % CIP_KIDS_MAX)
             kids[n_kids] = kid
             n_kids += 1
-            reps = order - 1                                                            # clause 1
+            reps = _cip_order(ctx, atom, target, order) - 1                             # clause 1
             while reps:
                 if n_kids >= CIP_KIDS_MAX:
                     raise OverflowError('CIP node with more than %d children' % CIP_KIDS_MAX)
