@@ -283,6 +283,23 @@ _DELIBERATE_DELETIONS = {
                                          # and losing this one with inversion is the reaction
     'reductive_amination': {1},          # the carbonyl oxygen, leaving as water before the reduction
     'knoevenagel': {1},                  # the carbonyl oxygen, leaving as water
+    'alpha_methylenation': {1},          # the formaldehyde oxygen, leaving as water
+    'imine_condensation': {1},           # the carbonyl oxygen, leaving as water
+    'hydrazone_formation': {1},          # the carbonyl oxygen, leaving as water
+    'oxime_formation': {1},              # the carbonyl oxygen, leaving as water
+    'azinone_amination': {1},            # the lactam oxygen, activated (BOP, PyBOP) and displaced
+    'nitrile_alcoholysis': {1},          # the imidate nitrogen, leaving as ammonium
+    'alcohol_dehydration': {1},          # the hydroxyl oxygen, leaving as water
+    'deoxyfluorination': {1},            # the C=O or C-OH oxygen, replaced by fluorine
+    'amide_hydrolysis': {1},             # the primary amide nitrogen, leaving as ammonia
+    'olefin_metathesis': {1},            # the terminal CH2 of each alkene, leaving as ethylene
+    'enolate_alkylation': {1},           # the leaving-group-bearing atom numbered by the electrophile
+    'meldrum_acylation': {3},            # the acid hydroxyl oxygen, activated by the carbodiimide
+    'masamune_claisen': {3},             # the malonate carboxyl, leaving as CO2
+    'claisen': {5, 6},                   # the ester or carbonate alkoxy, leaving as the alcohol
+    'minisci': {1, 2},                   # the carboxyl carbon and oxygen, leaving as CO2
+    'minisci_redox_active_ester': {2, 3},# the carboxyl carbon and oxygen of the N-O ester, leaving as CO2
+    'reductive_benzimidazole': {1, 2, 3},# the nitro oxygens and the carbonyl oxygen, reduced and condensed away
     'hwe': {1},                          # the carbonyl oxygen, leaving on the phosphorus
     'wittig': {1},
     'julia_kocienski': {1},              # the carbonyl oxygen, leaving on the sulfinate

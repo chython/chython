@@ -1034,6 +1034,7 @@ is no ``oxidize()``, ``reduce()`` or ``transform()``, and ``~mol`` raises ``Type
     appel_chloride reactions:22 C(C)O>>C(C)Cl
     alcohol_to_aldehyde reactions:35 C(C)O>>C(C)=O
     appel_iodide reactions:400 C(C)O>>C(C)I
+    deoxyfluorination reactions:1197 C(C)O>>C(C)F
 
 The oxidation/reduction taxonomy is not a column and never was computed: that ``aldehyde_to_acid``
 oxidizes something was a filing decision, and the corpus's multi-component rows never had a class at
@@ -1331,6 +1332,8 @@ all four corpora.
     functional:31 secondary_amide 1
     functional:41 arene_ch 4
     functional:295 amide_carbonyl 1
+    functional:308 enolizable_ch 1
+    functional:310 enolizable_ch2 1
 
 Protective groups come from a different table, ``protective.tsv``, and answer a different question --
 what is masked here, and what does the molecule look like unmasked:
@@ -1481,7 +1484,7 @@ there is to carry:
 
 .. testoutput::
 
-    307 111
+    373 111
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']
