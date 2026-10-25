@@ -1720,7 +1720,7 @@ Functional groups
 Protecting groups
 -----------------
 
-115 protecting groups, alphabetically.  *Protects* names the functional
+118 protecting groups, alphabetically.  *Protects* names the functional
 group the row reveals, which is a row of the table above.
 :meth:`chython.MoleculeContainer.protective_groups` reports a match and
 :meth:`chython.MoleculeContainer.deprotect` applies the patch.
@@ -2148,6 +2148,11 @@ every group that could.
      - ``hydroxyl``
      - ``[O;D2:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][O;D2;x0][C;D1]``
      - 2-methoxyethoxymethyl, revealing an alcohol
+   * - ``hydroxyl_mesyl``
+     - ``protective:117``
+     - ``hydroxyl``
+     - ``[O;D2:1]-;!@[S;D4;x3](=O)(=O)-[C;D1]``
+     - methanesulfonyl (Ms), the mesylate pseudohalide, revealing an alcohol or phenol
    * - ``hydroxyl_methoxy_benzoate``
      - ``protective:17``
      - ``hydroxyl``
@@ -2253,11 +2258,21 @@ every group that could.
      - ``hydroxyl``
      - ``[O;D2:1]-;!@[Si;D4;z1;x1]([C;D1])([C;D1])[C;D1]``
      - trimethylsilyl, revealing an alcohol
+   * - ``hydroxyl_tosyl``
+     - ``protective:118``
+     - ``hydroxyl``
+     - ``[O;D2:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x0]([C;D1]):[C;D2]:[C;D2]:1``
+     - 4-toluenesulfonyl (Ts), the tosylate pseudohalide, revealing an alcohol or phenol
    * - ``hydroxyl_trifluoroethyl``
      - ``protective:31``
      - ``hydroxyl``
      - ``[O;D2:1]-;!@[C;D2;x1;z1][C;D4;x3;z1](F)(F)F``
      - 2,2,2-trifluoroethyl, revealing an alcohol
+   * - ``hydroxyl_triflyl``
+     - ``protective:116``
+     - ``hydroxyl``
+     - ``[O;D2:1]-;!@[S;D4;x3](=O)(=O)-[C;D4]([F;D1])([F;D1])[F;D1]``
+     - trifluoromethanesulfonyl (Tf), the triflate pseudohalide, revealing an alcohol or phenol
    * - ``hydroxyl_tritil``
      - ``protective:26``
      - ``hydroxyl``

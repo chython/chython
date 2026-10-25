@@ -940,6 +940,8 @@ def test_a_protected_azole_pairs_with_its_input_tautomer():
     ('COC(=O)CCC(=O)CCCCNC(=O)OC(C)(C)C>>COC(=O)CCC1=NCCCC1', 'deprotect:amine_boc+react:imine_condensation'),
     ('CC(C)(C)OC(=O)N1CCC(CC1)C=Cc1ccc(OCc2ccccc2)cc1>>CC(C)(C)OC(=O)N1CCC(CC1)CCc1ccc(O)cc1',
      'deprotect:hydroxyl_benzyl+react:alkene_to_alkane'),
+    ('CS(=O)(=O)OCCc1ccccc1.Oc1ccc(NC(=O)OC(C)(C)C)cc1>>Nc1ccc(OCCc2ccccc2)cc1',
+     'deprotect:amine_boc+react:williamson'),       # the mesylate is the leaving group, not a strip
 ])
 def test_a_group_the_product_keeps_is_not_stripped(record, label):
     """The composed rung strips the groups the product lost, not every group it could: the ester or the Boc
@@ -956,4 +958,23 @@ def test_a_group_the_product_keeps_is_not_stripped(record, label):
 def test_an_ester_installed_on_the_acid_is_named_by_the_acid(record, label):
     """One `hydroxyl_*` row reads an ether and an ester alike; the installs run under different conditions,
     so the ester made on the acid's oxygen is `carboxyl_*`."""
+    assert smiles(record).reconstruct_mapping() == (label,)
+
+
+TF2O, PHNTF2 = 'O=S(=O)(OS(=O)(=O)C(F)(F)F)C(F)(F)F', 'O=S(=O)(N(c1ccccc1)S(=O)(=O)C(F)(F)F)C(F)(F)F'
+
+
+@pytest.mark.parametrize('record, label', [
+    (f'Oc1ccccc1.{TF2O}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:hydroxyl_triflyl'),
+    (f'Oc1ccccc1.{PHNTF2}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:hydroxyl_triflyl'),
+    ('OCCc1ccccc1.CS(=O)(=O)Cl>>CS(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_mesyl'),
+    ('OCCc1ccccc1.CS(=O)(=O)OS(C)(=O)=O>>CS(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_mesyl'),
+    ('OCCc1ccccc1.Cc1ccc(cc1)S(=O)(=O)Cl>>Cc1ccc(cc1)S(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_tosyl'),
+    (f'O=C1CCCCC1.{PHNTF2}>>O=S(=O)(OC1=CCCCC1)C(F)(F)F', 'react:enol_triflation'),
+    ('O=S(=O)(Oc1ccccc1)C(F)(F)F.OB(O)c1ccccc1>>c1ccc(-c2ccccc2)cc1', 'react:suzuki'),
+    ('CS(=O)(=O)OCCc1ccccc1.N1CCCCC1>>C(CN1CCCCC1)c1ccccc1', 'react:n_alkylation'),
+])
+def test_an_o_sulfonyl_pseudohalide_is_installed_as_a_group(record, label):
+    """Tf, Ms and Ts on an OH are set by many reagents, so they are groups and the reagent an agent; the
+    enol triflate of a ketone needs an enolate and stays a reaction, and using the pseudohalide is one."""
     assert smiles(record).reconstruct_mapping() == (label,)

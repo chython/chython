@@ -322,16 +322,25 @@ def _lost(recorded, inputs) -> tuple[str, ...]:
     return tuple(sorted(name for name, n in carried.items() if n > 0))
 
 
+#: The O-sulfonyl pseudohalides: groups a corpus row may also consume as its leaving group.
+_LEAVING = frozenset(('hydroxyl_triflyl', 'hydroxyl_mesyl', 'hydroxyl_tosyl'))
+
+
 def _pools(recorded, inputs) -> list:
     """The stripped pools `_deprotect_then_react` walks: the groups the product lost, then every group.
 
     The selective strip first, because it is the claim the record supports; the full strip second, for
-    the record whose product makes a group of the same row as one that came off -- an acetamide formed
-    while an acetate is cleaved counts level.  A pool equal to an earlier one is not walked twice.
+    the record whose product makes a group of the row it cleaves -- an acetamide formed while an acetate
+    is cleaved counts level.  Ahead of both, where a pseudohalide is among the lost groups beside another,
+    the strip that KEEPS it: a mesylate displaced beside a Boc cut is `deprotect:amine_boc+react:williamson`,
+    and stripping the mesylate too reads the same record as a Mitsunobu on the bare alcohol.  A pool equal
+    to an earlier one is not walked twice.
     """
     out, seen = [], set()
     lost = _lost(recorded, inputs)
-    for names in ((lost, ()) if lost else ((),)):
+    kept = tuple(name for name in lost if name not in _LEAVING)
+    first = (kept,) if kept and len(kept) < len(lost) else ()
+    for names in (*first, *((lost, ()) if lost else ((),))):
         pool, stripped = _strip(inputs, names)
         if not stripped:
             continue

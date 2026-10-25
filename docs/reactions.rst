@@ -1489,7 +1489,7 @@ there is to carry:
 
 .. testoutput::
 
-    420 115
+    420 118
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']
@@ -1538,8 +1538,10 @@ protecting group: methyl benzoate is a methyl ester of benzoic acid, not a benzo
 **Protection comes right after purification.** A label names conditions, and installing a protecting
 group is one family of them whatever supplies the group, so the group's source is an agent and is never
 mapped: an acetate from Ac\ :sub:`2`\ O, AcCl or AcOH is ``protect:hydroxyl_acyl`` each time.  Every named
-group of ``protective.tsv`` reads this way, a methyl ether, a benzylamine and a tosylamide included; an
-acylation by an acid no row names is a reaction.
+group of ``protective.tsv`` reads this way, a methyl ether, a benzylamine and a tosylamide included, and so
+do the triflate, mesylate and tosylate pseudohalides of an OH, which are set by many reagents
+(``protect:hydroxyl_triflyl``); an acylation by an acid no row names is a reaction, and so is the enol
+triflate of a ketone, which needs an enolate.
 
 .. testcode::
 

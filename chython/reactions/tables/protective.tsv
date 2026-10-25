@@ -149,3 +149,7 @@ id	name	protects	smarts	product	protected	cleaved	decoys	description
 113	amine_bom	amine	[N;D2,D3:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	O=C1CCCCN1COCc1ccccc1	O=C1CCCCN1		benzyloxymethyl, revealing an amine, amide or azole N-H
 114	amine_veratryl	amine	[N;D2,D3:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x1]([O;D2;x0][C;D1]):[C;D3;x1]([O;D2;x0][C;D1]):[C;D2]:1	[A:1]	COc1ccc(CNC(C)C)cc1OC	CC(C)N		3,4-dimethoxybenzyl, revealing an amine
 115	amine_mem	amine	[N;D2,D3:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][O;D2;x0][C;D1]	[A:1]	COCCOCn1nccc1	c1cn[nH]c1		2-methoxyethoxymethyl (MEM), revealing an amine or azole N-H
+# --- O-sulfonyl pseudohalides: set by many reagents, so installed as a group ----------------------
+116	hydroxyl_triflyl	hydroxyl	[O;D2:1]-;!@[S;D4;x3](=O)(=O)-[C;D4]([F;D1])([F;D1])[F;D1]	[A:1]	O=S(=O)(Oc1ccccc1)C(F)(F)F	Oc1ccccc1	O=S(=O)(Nc1ccccc1)C(F)(F)F	trifluoromethanesulfonyl (Tf), the triflate pseudohalide, revealing an alcohol or phenol
+117	hydroxyl_mesyl	hydroxyl	[O;D2:1]-;!@[S;D4;x3](=O)(=O)-[C;D1]	[A:1]	CS(=O)(=O)OCCc1ccccc1	OCCc1ccccc1	CS(=O)(=O)NCCc1ccccc1	methanesulfonyl (Ms), the mesylate pseudohalide, revealing an alcohol or phenol
+118	hydroxyl_tosyl	hydroxyl	[O;D2:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x0]([C;D1]):[C;D2]:[C;D2]:1	[A:1]	Cc1ccc(cc1)S(=O)(=O)OCCc1ccccc1	OCCc1ccccc1	Cc1ccc(cc1)S(=O)(=O)NCCc1ccccc1	4-toluenesulfonyl (Ts), the tosylate pseudohalide, revealing an alcohol or phenol
