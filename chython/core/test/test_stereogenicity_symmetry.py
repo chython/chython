@@ -97,3 +97,32 @@ def test_tropine_and_pseudotropine_stay_apart():
     tropine, pseudo = 'CN1[C@@H]2CC[C@H]1C[C@@H](O)C2', 'CN1[C@@H]2CC[C@H]1C[C@H](O)C2'
     assert read_smiles(tropine) != read_smiles(pseudo)
     assert len(_units('CN1C2CCC1CC(O)C2')) >= 2
+
+
+_TWO_CAGES = '''
+import sys
+sys.path.insert(0, sys.argv[1])
+from chython.core import read_smiles
+m = read_smiles('N1C2CCC1CN(C2)CC1CC2CCC(C2)C1')
+with m.edit() as e:
+    for n, p in {2: 1, 5: 2, 10: 2, 12: 1, 15: 2}.items():
+        e.set_parity(n, p)
+    for k, n in enumerate((2, 5, 10, 12, 15), 1):
+        e.set_stereo_group(n, 3, k)
+c = m.copy()
+c.canonicalize_stereo_groups()
+print(str(c))
+'''
+
+
+def test_two_cages_in_singleton_and_groups_do_not_recurse():
+    """3-(norbornan-2-ylmethyl)-3,8-diazabicyclo[3.2.1]octane, every signed centre its own AND group, built in
+    this atom order: a combination's view asked the meaning about the same combination, which asked for its
+    view again until the stack ran out.  Run in a child, so a regression fails here rather than killing pytest."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = str(Path(__file__).resolve().parents[3])          # the tree holding this chython package
+    run = subprocess.run([sys.executable, '-c', _TWO_CAGES, root], capture_output=True, text=True, timeout=120)
+    assert run.returncode == 0, run.stderr[-500:]
+    assert run.stdout.strip() == 'C1CC2CN(C[C@H]3CC4CCC(C4)C3)CC1N2 |&1:6|'

@@ -5202,6 +5202,35 @@ cdef Structure _abs_read_clone(Structure view):
     return base
 
 
+# A combination whose view is being computed: `_combination_identity` marks its parity state with this
+# before the view and replaces it after, so the view asking for the same state again is seen.
+cdef object _VIEW_IN_FLIGHT = object()
+
+
+cdef bytes _combination_identity(Structure v, bytes state, dict cache):
+    """`mol_identity_bytes` of `v`'s stereogenic view, memoised in `cache` by the parity `state`.
+
+    RE-ENTRANT BY CONSTRUCTION.  The view of a combination can ask `_stereogenic_in_some_phase` about
+    that same combination, and the meaning asks for its view again: on a record with several coupled
+    cages and singleton AND groups the two re-entered each other until the stack ran out.  A state met
+    again while its own view is still being computed is read as drawn, every parity kept -- the
+    conservative answer, which keeps a unit rather than dropping one.
+    """
+    cdef object identity = cache.get(state)
+    if identity is _VIEW_IN_FLIGHT:
+        return mol_identity_bytes(v)
+    if identity is not None:
+        return identity
+    cache[state] = _VIEW_IN_FLIGHT
+    try:
+        identity = mol_identity_bytes(structure_stereogenic_view(v, cache))
+    except BaseException:
+        del cache[state]
+        raise
+    cache[state] = identity
+    return identity
+
+
 cdef tuple _phase_meaning(Structure base, uint8_t *sg, phase_context_t *ctx, uint32_t flip, dict cache):
     """`(drawn worlds, all worlds)`: what a drawing states, with the parity at slot `flip` inverted
     first; `flip` past the last atom inverts nothing.
@@ -5238,10 +5267,7 @@ cdef tuple _phase_meaning(Structure base, uint8_t *sg, phase_context_t *ctx, uin
                 continue
         par = structure_parities(v)
         state = (<char *> par)[:v.header.atom_count]
-        identity = cache.get(state)
-        if identity is None:
-            identity = mol_identity_bytes(structure_stereogenic_view(v, cache))
-            cache[state] = identity
+        identity = _combination_identity(v, state, cache)
         key = mask & ctx.world_bits
         if key not in worlds:
             worlds[key] = set()
@@ -5331,9 +5357,7 @@ cdef int _groups_stating_nothing(Structure view, uint8_t *mute, dict cache) exce
             phase_apply(v, vsg, &ctx, mask)
             try:
                 state = (<char *> structure_parities(v))[:n]
-                before = cache.get(state)
-                if before is None:
-                    before = cache[state] = mol_identity_bytes(structure_stereogenic_view(v, cache))
+                before = _combination_identity(v, state, cache)
                 v = structure_clone(v)
                 par = structure_parities(v)
                 for i in range(n):
@@ -5342,9 +5366,7 @@ cdef int _groups_stating_nothing(Structure view, uint8_t *mute, dict cache) exce
                 structure_invalidate_stereo_units(v)
                 refresh_parity_features(v)
                 state = (<char *> par)[:n]
-                after = cache.get(state)
-                if after is None:
-                    after = cache[state] = mol_identity_bytes(structure_stereogenic_view(v, cache))
+                after = _combination_identity(v, state, cache)
                 same = after == before
             except AutomorphismBudgetExceeded:
                 same = False
