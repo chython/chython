@@ -78,7 +78,6 @@ Cookbook
    substructure
    reactions
    ml
-   glossary
    depiction
    config
 

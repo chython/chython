@@ -21,6 +21,11 @@
 #                `[C;a]:[C;a]` does not match a ring spelled `C1=CC=C...`.
 #   decoys       comma-joined SMILES this row must NOT match.  Where a pattern was widened once and
 #                went too far, the thing it wrongly caught lives here.  May be empty.
+#   site         `<prefix>:<atom>` on a group whose atom `<atom>` can carry a protecting group: the prefix
+#                `protect:`/`deprotect:` report an `amine_`/`hydroxyl_` group under when that atom is the one
+#                it sits on -- `primary_aniline` is `aniline:1`, so `amine_boc` there is `aniline_boc`.  The
+#                stripped substrate is matched and the largest group whose `<atom>` is the revealed atom
+#                decides; an atom no group claims keeps the row's own name.  Empty on every other group.
 #
 # The `example`/`decoys` pair is an acceptance test and not a comment: `test/test_functional.py` runs
 # every row against both.  A row with a pattern that can never match is otherwise invisible.
@@ -57,450 +62,451 @@
 # EXACTLY ONE RADICAL ATOM, which is what lets a caller ask whether every radical in a record is named: the
 # radical rows' counts sum to the radical atom count when they are, and fall short when one is a drawing
 # error.  A `decoys` cell splits on commas, so a decoy's tail may name one atom only.
-id	name	smarts	precursor	example	decoys	description
-1	terminal_alkene	[C;z2;x0;D1:1]=[C;z2;x0;D2,D3:2]	[C:1]=[C:2]	C=CCC	CC=CC,C=CN	monosubstituted C=C
-2	alkene	[C;z2;x0;D2,D3:1]=[C;z2;x0;D2,D3:2]	[C:1]=[C:2]	CC=CC	C=CCC,CC=CO	internal C=C, no heteroatom on either carbon
-3	terminal_alkyne	[C;z3;x0;D1:1]#[C;D2:2]	[C:1]#[C:2]	C#CCC	CC#CC	monosubstituted C#C, the Sonogashira nucleophile
-4	alkyne	[C;z3;x0;D2:1]#[C;x0;D2:2]	[C:1]#[C:2]	CC#CC	C#CCC	internal C#C
-5	aryl_fluoride	[F;D1]-[C;a:1]	[F]-[C:1]	Fc1ccccc1	FCc1ccccc1	Ar-F, an SNAr electrophile rather than a cross-coupling one
-6	aryl_chloride	[Cl;D1]-[C;a:1]	[Cl]-[C:1]	Clc1ccccc1	ClCc1ccccc1	Ar-Cl
-7	aryl_bromide	[Br;D1]-[C;a:1]	[Br]-[C:1]	Brc1ccccc1	BrCc1ccccc1	Ar-Br
-8	aryl_iodide	[I;D1]-[C;a:1]	[I]-[C:1]	Ic1ccccc1	ICc1ccccc1	Ar-I
-9	alkyl_chloride	[Cl;D1][C;z1;x1:1]		CCCCl	Clc1ccccc1,ClC(Cl)Cl	R-Cl on sp3 carbon
-10	alkyl_bromide	[Br;D1][C;z1;x1:1]		CCCBr	Brc1ccccc1,BrC(Br)Br	R-Br on sp3 carbon
-11	alkyl_iodide	[I;D1][C;z1;x1:1]		CCCI	Ic1ccccc1	R-I on sp3 carbon
-12	aryl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;a:1]	[B](-[O])(-[O])-[C:1]	OB(O)c1ccccc1	CC1(C)OB(OC1(C)C)c1ccccc1	ArB(OH)2
-13	aryl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;a:1]	[B]1(-[C:1])-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CC1(C)OB(OC1(C)C)c1ccccc1	OB(O)c1ccccc1	ArB(OR)2, pinacol boronate and its kin
-14	alkyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z1;x1,x2,x3:1]	[B](-[O])(-[O])-[C:1]	OB(O)CCCC	OB(O)c1ccccc1	RB(OH)2 on sp3 carbon
-15	primary_alcohol	[O;D1;z1;x0:1][C;D2;x1;z1:2]	[O:1]-[C:2]	CCO	CC(C)O,Oc1ccccc1	R-CH2-OH
-16	secondary_alcohol	[O;D1;z1;x0:1][C;D3;x1;z1:2]	[O:1]-[C:2]	CC(C)O	CCO,CC(C)(C)O	R2CH-OH
-17	tertiary_alcohol	[O;D1;z1;x0:1][C;D4;x1;z1:2]	[O:1]-[C:2]	CC(C)(C)O	CC(C)O	R3C-OH
-18	phenol	[O;D1;z1;x0:1]-[C;a:2]	[O:1]-[C:2]	Oc1ccccc1	OCc1ccccc1	Ar-OH
-19	vicinal_diol	[O;D1;z1;x0:1]-[C;z1;x1:2]-[C;z1;x1:3]-[O;D1;z1;x0:4]		OCCO	OCCCO	1,2-diol, the dihydroxylation product
-20	aldehyde	[O;z2;x0:1]=[C;D2;x1;z2:2]	[O:1]=[C:2]	CCC=O	CC(C)=O,CC(=O)O	R-CHO
-21	ketone	[O;z2;x0:1]=[C;D3;x1;z2:2]	[O:1]=[C:2]	CC(C)=O	CCC=O,CC(=O)OC	R2C=O
-22	carboxylic_acid	[O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]	[O:3]-[C:1]=[O:2]	CC(=O)O	CC(=O)OC,CC(=O)N	R-COOH; the hydroxyl is the leaving group
-23	acyl_chloride	[Cl;D1][C;z2;x2;D3:1]=[O:2]	[Cl]-[C:1]=[O:2]	CC(=O)Cl	CC(=O)O	R-COCl
-24	ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0]	[O:1]=[C:2]-[O]-[C]	CC(=O)OC	CC(=O)O	R-CO-OR'; the alkoxy is the leaving group
-25	primary_amine	[N;D1;z1;x0:1][C;z1:2]	[N:1]-[C:2]	CCN	Nc1ccccc1,CC(=O)N	R-NH2 on sp3 carbon
-26	primary_aniline	[N;D1;z1;x0:1][C;a:2]	[N:1]-[C:2]	Nc1ccccc1	NCc1ccccc1	Ar-NH2
-27	secondary_amine	[N;D2;z1;x0:1]([C;z1:2])[C;z1:3]	[N:1](-[C:2])-[C:3]	CNC	CN(C)C,CNc1ccccc1	R2NH, both substituents sp3 carbon
-28	secondary_aniline	[N;D2;z1;x0:1]([C;a:2])[C;z1:3]	[N:1](-[C:2])-[C:3]	CNc1ccccc1	CNC,c1ccc(Nc2ccccc2)cc1	Ar-NH-R
-29	tertiary_amine	[N;D3;z1;x0:1]([C;z1,a:2])([C;z1,a:3])[C;z1,a:4]	[N:1](-[C:2])(-[C:3])-[C:4]	CN(C)C	CNC,c1ccncc1,CN(C)C=O,O=C(OC(C)(C)C)N1CCCCC1,CN(C)C=C	R3N, the N-oxidation substrate.  The three substituents are stated because the bare `[N;D3;z1;x0]` also matched every TERTIARY AMIDE and every carbamate -- an N-Boc amine reported as an amine, and `nitrogen_oxidation` offered to oxidize DMF.  `primary_amine` and `secondary_amine` always stated theirs
-30	primary_amide	[N;D1;z1;x0:1][C;z2;x2;D2,D3:2]=[O:3]	[N:1]-[C:2]=[O:3]	NC=O	CC(=O)NC,CCN,NC(=O)N,COC(=O)N	R-CO-NH2.  `D2,D3` because a FORMAMIDE carbonyl is D2, hydrogens not counting toward `D`, and `D3` alone reported formamide as carrying no group at all
-31	secondary_amide	[N;D2;z1;x0:1][C;z2;x2;D2,D3:2]=[O:3]	[N:1]-[C:2]=[O:3]	CNC=O	CC(=O)N,CC(=O)N(C)C,CNC(=O)OC	R-CO-NH-R', N-methylformamide included -- see `primary_amide` on `D2,D3`
-32	nitrile	[N;D1;z3;x0:1]#[C;D2;x1:2]	[N:1]#[C:2]	CCC#N	CC#CC	R-CN; `z3` here is a genuine sp nitrogen
-33	nitro	[N;D3;x2;+:1]([O;-:2])=[O:3]	[N;+:1](-[O;-:2])=[O:3]	CC[N+](=O)[O-]	CCN=O	R-NO2, charge-separated as chython stores it
-34	isocyanate	[N;z2;x0;D2:1]=[C:2]=[O:3]	[N:1]=[C:2]=[O:3]	CCN=C=O	CCN=C=S	R-N=C=O
-35	thiol	[S;x0;D1;z1:1][C;z1:2]	[S:1]-[C:2]	CCS	Sc1ccccc1	R-SH
-36	thioether	[S;D2;z1;x0:1]([C:2])[C:3]	[S:1](-[C:2])-[C:3]	CSC	CCS,CS(C)=O	R-S-R'
-37	sulfoxide	[S;D3;z2:1](=[O:2])([C:3])[C:4]	[S:1](=[O:2])(-[C:3])-[C:4]	CS(C)=O	CS(C)(=O)=O,CSC	R-S(=O)-R'
-38	sulfone	[S;D4:1](=[O:2])(=[O:3])([C:4])[C:5]		CS(C)(=O)=O	CS(C)=O	R-SO2-R'
-39	epoxide	[O;D2;r3:1]1-[C;r3:2]-[C;r3:3]-1	[O:1]1-[C:2]-[C:3]-1	C1CO1	C1CCO1	oxirane
-40	pyridine_n	[N;a;D2;h0:1]	[N:1]	c1ccncc1	c1cc[nH]c1	an aromatic nitrogen with no hydrogen, the N-oxidation substrate
-41	arene_ch	[C;a;D2:1]	[C:1]	c1ccccc1	Cc1c(C)c(C)c(C)c(C)c1C	an aromatic CH, the electrophilic-substitution site
-42	benzylic_ch	[C;z1;h1,h2;D2,D3:1]-[C;a:2]	[C:1]-[C:2]	CCc1ccccc1	Cc1ccccc1,CC(C)(C)c1ccccc1	an sp3 carbon bearing hydrogen next to a ring.  `D2,D3` excludes a TOLUENE METHYL, which is a D1 -- so `benzylic_bromination` does not reach one
-43	aryl_halide	[Cl,Br,I;D1]-[C;a:1]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Brc1ccccc1	Fc1ccccc1	Ar-X, the cross-coupling electrophile; F excluded, it does SNAr instead
-44	aryl_bromide_iodide	[Br,I;D1]-[C;a:1]	[Br]-[C:1],[I]-[C:1]	Brc1ccccc1	Clc1ccccc1	Ar-Br or Ar-I, the halides that couple without a specialist ligand
-45	alkyl_halide	[Cl,Br,I;D1][C;z1;x1:1]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	CCCBr	CCCF	R-X on sp3 carbon, the SN2 electrophile
-46	alkyl_fluoride	[F;D1][C;z1;x1:1]		CCCF	Fc1ccccc1,FC(F)F	R-F on sp3 carbon; not a leaving group, a metabolic-stability flag
-47	alkenyl_fluoride	[F;D1][C;z2;x1:1]=[C:2]		FC=C	Fc1ccccc1,CCCF	vinylic C-F
-48	alkenyl_chloride	[Cl;D1][C;z2;x1,x2:1]=[C:2]		ClC=C	Clc1ccccc1,CCCCl	vinylic C-Cl, the Heck/Negishi electrophile
-49	alkenyl_bromide	[Br;D1][C;z2;x1,x2:1]=[C:2]		BrC=C	Brc1ccccc1,CCCBr	vinylic C-Br
-50	alkenyl_iodide	[I;D1][C;z2;x1,x2:1]=[C:2]		IC=C	Ic1ccccc1,CCCI	vinylic C-I
-51	alkynyl_fluoride	[F;D1][C;z3;x1:1]#[C:2]		FC#CC	FC=C	C(sp)-F; `z3` is genuine sp here
-52	alkynyl_chloride	[Cl;D1][C;z3;x1:1]#[C:2]		ClC#CC	ClC=C	C(sp)-Cl
-53	alkynyl_bromide	[Br;D1][C;z3;x1:1]#[C:2]		BrC#CC	BrC=C	C(sp)-Br
-54	alkynyl_iodide	[I;D1][C;z3;x1:1]#[C:2]		IC#CC	IC=C	C(sp)-I
-55	aryl_triflate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C;D4](-[F])(-[F])-[F]		O=S(=O)(Oc1ccccc1)C(F)(F)F	CS(=O)(=O)Oc1ccccc1	ArOTf, the pseudohalide that couples like an aryl bromide
-56	aryl_mesylate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C;D1]		CS(=O)(=O)Oc1ccccc1	O=S(=O)(Oc1ccccc1)C(F)(F)F	ArOMs
-57	aryl_tosylate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C;a]:1:[C;a;D2]:[C;a;D2]:[C;a](-[C;D1]):[C;a;D2]:[C;a;D2]:1		Cc1ccc(cc1)S(=O)(=O)Oc1ccccc1	CS(=O)(=O)Oc1ccccc1	ArOTs
-58	alkyl_triflate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C;D4](-[F])(-[F])-[F]		O=S(=O)(OCC)C(F)(F)F	CS(=O)(=O)OCC	ROTf on sp3 carbon, a strong SN2 leaving group
-59	alkyl_mesylate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C;D1]		CS(=O)(=O)OCC	O=S(=O)(OCC)C(F)(F)F	ROMs
-60	alkyl_tosylate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C;a]:1:[C;a;D2]:[C;a;D2]:[C;a](-[C;D1]):[C;a;D2]:[C;a;D2]:1		Cc1ccc(cc1)S(=O)(=O)OCC	CS(=O)(=O)OCC	ROTs
-61	alkyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z1;x1,x2,x3:1]	[B]1(-[C:1])-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CC1(C)OB(OC1(C)C)CCCC	OB(O)CCCC	RB(OR')2 on sp3 carbon
-62	alkenyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z2;x1,x2:1]=[C:2]	[B](-[O])(-[O])-[C:1]=[C:2]	OB(O)C=C	OB(O)c1ccccc1	vinylboronic acid
-63	alkenyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z2;x1,x2:1]=[C:2]	[B]1(-[C:1]=[C:2])-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CC1(C)OB(OC1(C)C)C=C	OB(O)C=C	vinylboronate ester
-64	alkynyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z3;x1:1]#[C:2]		OB(O)C#CC	OB(O)C=C	alkynylboronic acid
-65	alkynyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z3;x1:1]#[C:2]	[B]1(-[C:1]#[C:2])-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CC1(C)OB(OC1(C)C)C#CC	OB(O)C#CC	alkynylboronate ester
-66	aryl_molander_salt	[B;D4;z1;x3;-](-[F])(-[F])(-[F])-;!@[C;a:1]	[B;-](-[F])(-[F])(-[F])-[C:1]	[K+].[B-](F)(F)(F)c1ccccc1	OB(O)c1ccccc1	ArBF3-, the air-stable trifluoroborate
-67	alkyl_molander_salt	[B;D4;z1;x3;-](-[F])(-[F])(-[F])-;!@[C;z1:1]	[B;-](-[F])(-[F])(-[F])-[C:1]	[K+].[B-](F)(F)(F)CCCC	OB(O)CCCC	RBF3- on sp3 carbon
-68	alkenyl_molander_salt	[B;D4;z1;x3;-](-[F])(-[F])(-[F])-;!@[C;z2:1]=[C:2]	[B;-](-[F])(-[F])(-[F])-[C:1]=[C:2]	[K+].[B-](F)(F)(F)C=C	[K+].[B-](F)(F)(F)CCCC	vinyl trifluoroborate
-69	alkynyl_molander_salt	[B;D4;z1;x3;-](-[F])(-[F])(-[F])-;!@[C;z3;x1:1]#[C:2]	[B;-](-[F])(-[F])(-[F])-[C:1]#[C:2]	[K+].[B-](F)(F)(F)C#CC	[K+].[B-](F)(F)(F)C=C	alkynyl trifluoroborate
-70	tertiary_alcohol_with_alpha_h	[O;D1;z1;x0:1]-[C;D4;x1;z1:2]-[C;z1;h1,h2:3]		CCC(C)(C)O	CC(C)(C)O	R3C-OH with an eliminable alpha C-H, the dehydration substrate
-71	enal	[O;z2;x0:1]=[C;D2;x1;z2:2]-[C;z2;x0:3]=[C;x0:4]		C=CC=O	CCC=O	alpha,beta-unsaturated aldehyde
-72	alpha_ketone	[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D1,D2;x0:3]		CC(=O)CC	O=C(c1ccccc1)c1ccccc1	ketone with an enolizable alpha CH2/CH3
-73	alpha_haloketone	[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D2,D3;x1:3]-[Cl,Br,I;D1]	[O:1]=[C:2]-[C:3]-[Cl],[O:1]=[C:2]-[C:3]-[Br],[O:1]=[C:2]-[C:3]-[I]	CC(=O)CBr	CC(=O)CC	alpha-halo ketone, the Hantzsch thiazole electrophile
-74	alpha_haloester	[O;D2;x0:1]-[C;D3;x2;z2:2](=[O:3])-[C;z1;D2,D3;x1:4]-[Cl,Br,I;D1]	[O:1]-[C:2](=[O:3])-[C:4]-[Cl],[O:1]-[C:2](=[O:3])-[C:4]-[Br],[O:1]-[C:2](=[O:3])-[C:4]-[I]	CCOC(=O)CBr	CCOC(=O)CC	alpha-halo ester
-75	1_2_diketone	[O;z2;x0:1]=[C;D3;x1:2]-[C;z2;x1;D3:3]=[O:4]		CC(=O)C(C)=O	CC(=O)CC(C)=O	1,2-diketone
-76	1_3_diketone	[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D2,D3:3]-[C;z2;x1;D3:4]=[O:5]		CC(=O)CC(C)=O	CC(=O)C(C)=O	1,3-diketone
-77	1_4_diketone	[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D2,D3:3]-[C;z1;D2,D3:4]-[C;z2;x1;D3:5]=[O:6]	[O:1]=[C:2]-[C:3]-[C:4]-[C:5]=[O:6]	CC(=O)CCC(C)=O	CC(=O)CC(C)=O	1,4-diketone, the Paal-Knorr substrate
-78	beta_ketoester	[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D2;x0:3]-[C;z2;x2;D3:4](=[O:5])-[O;D2]		CCOC(=O)CC(C)=O	CC(=O)CC(C)=O	beta-keto ester
-79	alkyl_carboxylic_acid	[O;D1;z1;x0]-[C;z2;x2;D3:1](=[O:2])-[C;z1:3]	[O]-[C:1](=[O:2])-[C:3]	CCC(=O)O	OC(=O)c1ccccc1	R-COOH on sp3 carbon
-80	aryl_carboxylic_acid	[O;D1;z1;x0]-[C;z2;x2;D3:1](=[O:2])-[C;a:3]	[O]-[C:1](=[O:2])-[C:3]	OC(=O)c1ccccc1	CCC(=O)O	Ar-COOH
-81	alkenyl_carboxylic_acid	[O;D1;z1;x0]-[C;z2;x2;D3:1](=[O:2])-[C;z2:3]=[C:4]		C=CC(=O)O	CCC(=O)O	alpha,beta-unsaturated acid
-82	alkynyl_carboxylic_acid	[O;D1;z1;x0]-[C;z2;x2;D3:1](=[O:2])-[C;z3;x0:3]#[C:4]		C#CC(=O)O	C=CC(=O)O	propiolic-type acid
-83	cyclic_carboxylic_acid	[O;D1;z1;x0]-[C;z2;x2;D3:1](=[O:2])-[C;z1;r5,r6:3]		OC(=O)C1CCCCC1	CCC(=O)O	COOH on a saturated 5- or 6-ring
-84	acyl_bromide	[Br;D1]-[C;z2;x2;D3:1]=[O:2]	[Br]-[C:1]=[O:2]	CC(=O)Br	CC(=O)Cl	R-COBr
-85	acyl_fluoride	[F;D1]-[C;z2;x2;D3:1]=[O:2]	[F]-[C:1]=[O:2]	CC(=O)F	CC(=O)Cl	R-COF
-86	chloroformate	[Cl;D1]-[C;z2;x3;D3:1](=[O:2])-[O;D2:3]	[Cl]-[C:1](=[O:2])-[O:3]	CCOC(=O)Cl	CC(=O)Cl	RO-CO-Cl, the carbamoylation reagent
-87	fluoroformate	[F;D1]-[C;z2;x3;D3:1](=[O:2])-[O;D2:3]	[F]-[C:1](=[O:2])-[O:3]	CCOC(=O)F	CC(=O)F	RO-CO-F
-88	succinimidyl_carbonate	[O;D2:1]-[C;z2;x3;D3:2](=[O:3])-[O;D2;x1]-[N;D3;x1;r5](-[C;z2;r5]=[O])-[C;z2;r5]=[O]	[O:1]-[C:2](=[O:3])-[O]-[N]1-[C](=[O])-[C]-[C]-[C]-1=[O]	CCOC(=O)ON1C(=O)CCC1=O	CCOC(=O)Oc1ccccc1	NHS/DSC carbonate; numbered like chloroformate so it drops into the same rows
-89	aryl_carbonate	[O;D2:1]-[C;z2;x3;D3:2](=[O:3])-[O;D2;x0]-[C;a]	[O:1]-[C:2](=[O:3])-[O]-[C]1=[C]-[C]=[C]-[C]=[C]-1	CCOC(=O)Oc1ccccc1	CCOC(=O)OCC	aryl carbonate; the aryloxide is the leaving group
-90	imidazolyl_carbonate	[O;D2:1]-[C;z2;x3;D3:2](=[O:3])-[N;a;D3;r5]1:[C;a]:[N;a]:[C;a]:[C;a]:1	[O:1]-[C:2](=[O:3])-[N]1-[C]=[N]-[C]=[C]-1	CCOC(=O)n1ccnc1	CCOC(=O)OCC	CDI adduct of an alcohol; here the azole nitrogen leaves
-91	carbamoyl_chloride	[Cl;D1]-[C;z2;x3;D3:1](=[O:2])-[N;D2,D3:3]	[Cl]-[C:1](=[O:2])-[N:3]	CN(C)C(=O)Cl	CCOC(=O)Cl	R2N-CO-Cl
-92	carbamoyl_fluoride	[F;D1]-[C;z2;x3;D3:1](=[O:2])-[N;D2,D3:3]	[F]-[C:1](=[O:2])-[N:3]	CN(C)C(=O)F	CCOC(=O)F	R2N-CO-F
-93	primary_amidine_amine	[N;D1;z1;x0:1]-[C;z2:2]=[N:3]	[N:1]-[C:2]=[N:3]	NC(C)=N	CC(N)=O	NH2 on an sp2 carbon that also carries C=N
-94	aziridine_nh	[N;D2;z1;x0;h1;r3:1]	[N:1]	C1CN1	C1CNC1,CN1CC1	aziridine N-H, matched alone so a ring opening leaves the ring intact
-95	biaryl_aniline	[N;D2;z1;x0:1](-[C;a:2])-[C;a:3]	[N:1](-[C:2])-[C:3]	c1ccc(Nc2ccccc2)cc1	CNc1ccccc1	Ar-NH-Ar
-96	anhydride	[C;z2;x2;D3:1](=[O:2])-[O;D2;x0]-[C;z2;x2;D3:3]=[O:4]	[C:1](=[O:2])-[O]-[C:3]=[O:4]	CC(=O)OC(C)=O	CC(=O)OC	R-CO-O-CO-R; also matches `ester` twice
-97	sulfo	[S;D4;x3:1](=[O:2])(=[O:3])-[O;D1:4]	[S:1](=[O:2])(=[O:3])-[O:4]	CS(=O)(=O)O	CS(=O)(=O)OC	R-SO3H, distinct from a sulfonyl halide or a sulfonamide
-98	sulfonyl_chloride	[Cl;D1]-[S;D4:1](=[O:2])=[O:3]	[Cl]-[S:1](=[O:2])=[O:3]	CS(=O)(=O)Cl	CS(=O)(=O)O	R-SO2Cl
-99	sulfonyl_fluoride	[F;D1]-[S;D4:1](=[O:2])=[O:3]	[F]-[S:1](=[O:2])=[O:3]	CS(=O)(=O)F	CS(=O)(=O)Cl	R-SO2F
-100	sulfonamide	[S;D4;x3:1](=[O:2])(=[O:3])-[N;z1:4]		CS(=O)(=O)N	CS(=O)(=O)O	R-SO2-NR2
-101	sulfonyl_anhydride	[S;D4;x3:1](=[O:2])(=[O:3])-[O;D2]-[S;D4;x3](=[O])=[O]	[S:1](=[O:2])(=[O:3])-[O]-[S](=[O])(=[O])-[C]	CS(=O)(=O)OS(C)(=O)=O	CS(=O)(=O)OC	R-SO2-O-SO2-R
-102	azide	[N;x1;D2:1]=[N;+:2]=[N;-:3]	[N:1]=[N;+:2]=[N;-:3]	CCN=[N+]=[N-]	CCN=NCC	R-N3
-103	diazo	[C;z2:1]=[N;+;D2:2]=[N;-;D1:3]		CCOC(=O)C=[N+]=[N-]	CCN=[N+]=[N-]	R2C=N2
-104	diazonium	[C;a:1]-[N;+;D2:2]#[N;D1:3]		[Cl-].c1ccc([N+]#N)cc1	CCN=[N+]=[N-]	ArN2+
-105	azo	[N;D2;x1:1]=[N;D2;x1:2]		c1ccc(N=Nc2ccccc2)cc1	CCN=[N+]=[N-]	R-N=N-R
-106	isocyano	[N;+;D2;x0:1]#[C;-;D1:2]	[N;+:1]#[C;-:2]	CC[N+]#[C-]	CCC#N	R-NC, charge-separated
-107	guanidine	[N;z1;x0:1]-[C;!R:2](-[N;z1;x0:3])=[N;x0:4]		NC(N)=N	NC(N)=O	acyclic guanidine
-108	nitroso	[N;D2;z2:1]=[O;D1:2]		CCN=O	CC[N+](=O)[O-]	R-N=O
-109	isothiocyanate	[N;z2;x0;D2:1]=[C:2]=[S;D1:3]		CCN=C=S	CCN=C=O	R-N=C=S
-110	alkyl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;z1:1]	[Cl]-[Mg]-[C:1],[Br]-[Mg]-[C:1],[I]-[Mg]-[C:1]	CC[Mg]Br	Br[Mg]c1ccccc1	RMgX on sp3 carbon
-111	aryl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;a:1]	[Cl]-[Mg]-[C:1],[Br]-[Mg]-[C:1],[I]-[Mg]-[C:1]	Br[Mg]c1ccccc1	CC[Mg]Br	ArMgX
-112	alkenyl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;z2:1]=[C:2]	[Cl]-[Mg]-[C:1]=[C:2],[Br]-[Mg]-[C:1]=[C:2],[I]-[Mg]-[C:1]=[C:2]	Br[Mg]C=C	CC[Mg]Br	vinyl Grignard
-113	alkyl_zinc	[Zn;*]-[C;z1:1]	[Cl]-[Zn]-[C:1],[Br]-[Zn]-[C:1],[I]-[Zn]-[C:1]	CC[Zn]Br	Br[Zn]c1ccccc1,N#C[Zn]C#N	RZnX, R2Zn or RZn+, the Negishi nucleophile; `*` takes the zinc at any charge
-114	aryl_zinc	[Zn;*]-[C;a:1]	[Cl]-[Zn]-[C:1],[Br]-[Zn]-[C:1],[I]-[Zn]-[C:1]	Br[Zn]c1ccccc1	CC[Zn]Br,N#C[Zn]C#N	ArZnX, Ar2Zn or ArZn+
-115	alkenyl_zinc	[Zn;*]-[C;z2:1]=[C:2]	[Cl]-[Zn]-[C:1]=[C:2],[Br]-[Zn]-[C:1]=[C:2],[I]-[Zn]-[C:1]=[C:2]	Br[Zn]C=C	CC[Zn]Br,N#C[Zn]C#N	vinylzinc
-116	boronate_alkyl_chloride	[Cl;D1]-[C;z1;D2;x2:1]-[B:2]		ClCB(O)O	CCCCl	B-CH2-Cl, the one-carbon SN2 electrophile
-117	boronate_alkyl_bromide	[Br;D1]-[C;z1;D2;x2:1]-[B:2]		BrCB(O)O	CCCBr	B-CH2-Br
-118	boronate_alkyl_iodide	[I;D1]-[C;z1;D2;x2:1]-[B:2]		ICB(O)O	CCCI	B-CH2-I
-119	aryl_stannane	[Sn;D4;z1]-;!@[C;a:1]	[Sn](-[C])(-[C])(-[C])-[C:1],[Sn](-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])-[C:1]	C[Sn](C)(C)c1ccccc1	CCCC[Sn](C)(C)C	ArSnR3, the Stille nucleophile
-120	alkenyl_stannane	[Sn;D4;z1]-;!@[C;z2:1]=[C:2]	[Sn](-[C])(-[C])(-[C])-[C:1]=[C:2],[Sn](-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])-[C:1]=[C:2]	C[Sn](C)(C)C=C	C[Sn](C)(C)c1ccccc1	vinylstannane
-121	alkyl_stannane	[Sn;D4;z1]-;!@[C;z1;D2,D3,D4:1]	[Sn](-[C])(-[C])(-[C])-[C:1],[Sn](-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])-[C:1]	CCCC[Sn](C)(C)C	C[Sn](C)(C)c1ccccc1	RSnR3 on sp3 carbon, terminal methyls excluded
-122	aryl_silane	[Si;D4]-;!@[C;a:1]		C[Si](C)(C)c1ccccc1	C[Si](C)(C)C	ArSiR3, the Hiyama nucleophile
-123	alkenyl_silane	[Si;D4]-;!@[C;z2:1]=[C:2]		C[Si](C)(C)C=C	C[Si](C)(C)c1ccccc1	vinylsilane
-124	alkynyl_silane	[Si;D4]-;!@[C;z3:1]#[C:2]		C[Si](C)(C)C#C	C[Si](C)(C)C=C	TMS-protected alkyne
-125	phosphonium_ylide	[P;D4;z2;x0]=[C:1]	[P](=[C:1])(-[C]1=[C]-[C]=[C]-[C]=[C]-1)(-[C]2=[C]-[C]=[C]-[C]=[C]-2)-[C]3=[C]-[C]=[C]-[C]=[C]-3	C=P(c1ccccc1)(c1ccccc1)c1ccccc1	CCOP(=O)(OCC)C	R3P=CR2, the Wittig reagent
-126	phosphonate	[P;D4;x3](=[O])(-[O;D2;x1])(-[O;D2;x1])-[C:1]	[P](=[O])(-[O]-[C]-[C])(-[O]-[C]-[C])-[C:1]	CCOP(=O)(OCC)C	CCOP(=O)(OCC)OCC	(RO)2P(=O)R, the HWE reagent
-127	weinreb_amide	[O:1]=[C;D3;x2:2]-[N;D3;x1](-[C;z1])-[O;D2;x1]	[O:1]=[C:2]-[N](-[C])-[O]-[C]	CON(C)C(C)=O	CC(=O)N(C)C	N-methoxy-N-methyl amide; the extra C on N excludes an N-acyloxy imide
-128	redox_active_ester	[C;z1:1]-[C;z2;x2;D3:2](=[O:3])-[O;D2;x1]-[N;D3;x1;r5](-[C;z2;r5]=[O])-[C;z2;r5]=[O]	[C:1]-[C:2](=[O:3])-[O]-[N]1-[C](=[O])-[C]2=[C]-[C]=[C]-[C]=[C]-2-[C]-1=[O]	CCC(=O)ON1C(=O)CCC1=O	CCC(=O)OC	NHPI/NHS ester; decarboxylative coupling transfers the alkyl
-129	aryl_thiol	[S;x0;D1;z1:1]-[C;a:2]	[S:1]-[C:2]	Sc1ccccc1	CCS	Ar-SH
-130	disulfide	[S;D2;z1:1]-[S;D2;z1:2]		CSSC	CSC	R-S-S-R
-131	thioester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[S;D2;z1;x0]	[O:1]=[C:2]-[S]-[C]	CC(=O)SC	CC(=O)OC	R-CO-S-R', the Liebeskind-Srogl electrophile
-132	azinone	[O;z2;x0:1]=[C;z2;x2;D3;r6:2](-[C,N;z2,z4;r6:3])-[N;z1;D2;r6:4]	[O:1]=[C:2](-[A:3])-[N:4]	O=C1C=Cc2ccccc2N1	O=C1CCCCN1	aromatizable cyclic amide; the sp2/aromatic flank excludes a saturated lactam
-133	chloroazine	[Cl;D1]-[C;a:1]:[N;a;D2:2]		Clc1ccccn1	Clc1ccccc1,Clc1cccnc1	Cl on an aromatic carbon next to a ring N; hydrolyses to the azinone
-134	pyrrole	[N;h1;D2;a;r5:1]	[N;h1:1]	c1cc[nH]c1	c1ccncc1,C1CCNC1	azole N-H; the H stays out of a template for tautomerism
-135	pyrazole	[N;h1;D2;a;r5:1]:[N;h0;D2;r5:2]	[N;h1:1]:[N;h0:2]	c1cc[nH]n1	c1cc[nH]c1,c1c[nH]cn1	adjacent N-H/N pair
-136	imidazole	[N;h1;D2;a;r5:1]:[A:2]:[N;h0;D2;r5:3]	[N;h1:1]:[A:2]:[N;h0:3]	c1c[nH]cn1	c1cc[nH]n1	N-H and N separated by one ring atom
-137	isoxazole	[O;a;D2;r5:1]:[N;a;D2;r5:2]		c1ccno1	c1cc[nH]n1	adjacent aromatic O/N pair
-138	pyridazine	[N;a;D2;r6:1]:[N;a;D2;r6:2]		c1ccnnc1	c1ccncc1	adjacent aromatic N pair in a 6-ring
-139	alkyl_hydrazine	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z1:3]	[N:1]-[N:2]-[C:3]	CCNN	NNc1ccccc1	R-NH-NH2 on sp3 carbon
-140	aryl_hydrazine	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;a:3]	[N:1]-[N:2]-[C:3]	NNc1ccccc1	CCNN	Ar-NH-NH2, no constraint on the ring beyond the attachment carbon
-141	aryl_hydrazine_ortho_ch	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;a:3]:[C;a;D2:4]		NNc1ccccc1	NNc1c(C)cccc1C	Ar-NH-NH2 with a free ortho CH, which an indolization consumes
-142	hydrazone	[C;z2:1]=[N;D2;z2;x1:2]-[N;D2;z1;x1:3]		CC(C)=NNc1ccccc1	CC(C)=NO	C=N-NH-R
-143	sulfonylhydrazone	[C;z2:1]=[N;D2;z2;x1:2]-[N;D2;z1;x2:3]-[S;D4;x3](=[O])=[O]		CC(C)=NNS(=O)(=O)c1ccccc1	CC(C)=NNc1ccccc1	tosylhydrazone and kin, the Bamford-Stevens diazo precursor
-144	sulfonylhydrazide	[N;D1;z1;x1:1]-[N;D2;z1;x2:2]-[S;D4;x3:3](=[O:4])=[O:5]		NNS(=O)(=O)c1ccccc1	CCNN	R-SO2-NH-NH2, the reagent that makes the above
-145	thioamide	[S;z2;x0;D1:1]=[C;D2,D3;x2:2]-[N;D1:3]		NC=S	CC(N)=O,NC(=S)N	R-CS-NH2, the Hantzsch thiazole partner.  `D2,D3` as in `primary_amide`
-146	o_diaminoarene	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[N;D1,D2;z1;x0:4]	[N:1]-[C:2]:[C:3]-[N:4]	Nc1ccccc1N	Nc1ccc(N)cc1	ortho-phenylenediamine
-147	o_aminophenol	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[O;D1:4]		Nc1ccccc1O	Nc1ccc(O)cc1	2-aminophenol
-148	o_aminothiophenol	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[S;D1:4]		Nc1ccccc1S	Nc1ccc(S)cc1	2-aminothiophenol
-149	o_aminobenzaldehyde	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[C;D2;z2;x1:4]=[O:5]		Nc1ccccc1C=O	Nc1ccc(C=O)cc1	2-aminobenzaldehyde, the Friedlander partner
-150	anthranilic_acid	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[C;z2;x2;D3:4](=[O:5])-[O;D1]		Nc1ccccc1C(=O)O	Nc1ccc(C(=O)O)cc1	2-aminobenzoic acid
-151	amidoxime	[N;D1;z2;x0:1]=[C;D3;x2:2]-[N;D2;z1;x1:3]-[O;D1:4]		CC(=N)NO	CC(N)=N	RC(=NH)NHOH, the 1,2,4-oxadiazole precursor
-152	amidine	[N;D1;z1;x0:1]-[C;D3;z2;x2:2]=[N;D1:3]		NC(C)=N	CC(=N)NO	RC(=NH)NH2, the pyrimidine partner
-153	urea	[N;z1:1]-[C;D3;z2;x3:2](=[O:3])-[N;z1:4]		NC(N)=O	NC(N)=S	R2N-CO-NR2
-154	thiourea	[N;z1:1]-[C;D3;z2;x3:2](=[S;D1:3])-[N;z1:4]		NC(N)=S	NC(N)=O	R2N-CS-NR2
-155	nh_urea	[N;z1;h1,h2;!R:1]-[C;D3;z2;x3:2](=[O:3])-[N;z1;h1,h2;!R:4]		NC(N)=O	CN(C)C(=O)N(C)C,O=C1NCCN1	acyclic urea with an N-H on both nitrogens, the Biginelli subset
-156	nh_thiourea	[N;z1;h1,h2;!R:1]-[C;D3;z2;x3:2](=[S;D1:3])-[N;z1;h1,h2;!R:4]		NC(N)=S	CN(C)C(=S)N(C)C	the thiourea half of the same
-157	beta_arylethylamine	[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[C;a:4]:[C;a;D2:5]		NCCc1ccccc1	NCc1ccccc1	the Pictet-Spengler substrate
-158	aminopyridine	[N;D1;z1;x0:1]-[C;a:2]:[N;a;h0;D2:3]	[N:1]-[C:2]:[N:3]	Nc1ccccn1	Nc1ccccc1,Nc1cccnc1	2-aminoazine, the GBB partner
-159	amino_alcohol	[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[O;D1:4]		NCCO	NCCCO	1,2-amino alcohol
-160	hydroxamic_acid	[O;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]		CC(=O)NO	CC(=O)NC	R-CO-NH-OH
-161	hydrazide	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]	[N:1]-[N:2]-[C:3]=[O:4]	CC(=O)NN	CC(=O)NO	R-CO-NH-NH2
-162	oxime	[O;D1;z1;x1:1]-[N;D2;z2;x1:2]=[C:3]		CC(C)=NO	CC(C)=NN	C=N-OH
-163	O_alkylhydroxylamine	[N;D1;z1;x1:1]-[O;D2;z1;x1:2]-[C:3]	[N:1]-[O:2]-[C:3]	NOC	CON(C)C	R-O-NH2
-164	NO_dialkylhydroxylamine	[N;D2;z1;x1;h1:1](-[C;z1:2])-[O;D2;z1;x1:3]-[C;z1:4]	[N:1](-[C:2])-[O:3]-[C:4]	CNOC	NOC,CON(C)C	R'-O-NH-R'', the Weinreb amine
-165	tosyl_isocyanide	[C;-;D1:1]#[N;+;D2:2]-[C;D2,D3;z1;x2:3]-[S;D4;x2](=[O])=[O]		[C-]#[N+]CS(=O)(=O)c1ccc(C)cc1	[C-]#[N+]CC(=O)OC	TosMIC, the Van Leusen oxazole reagent
-166	activated_isocyanide	[C;-;D1:1]#[N;+;D2:2]-[C;z1;h1,h2:3]		[C-]#[N+]CC(=O)OC	[C-]#[N+]c1ccccc1,[C-]#[N+]C(C)(C)C	isocyanide with an acidic alpha C-H; what activates it is left unstated
-167	active_methylene	[C;z1;D2,D3;x0:1](-[C;z2,z3;x1,x2:2])-[C;z2,z3;x1,x2:3]	[C:1](-[C:2])-[C:3]	CCOC(=O)CC(=O)OCC	CCCCC	CH flanked by two EWGs, the Knoevenagel nucleophile
-168	aniline_ortho_ch	[N;D1;z1;x0:1]-[C;a:2]:[C;a;D2:3]		Nc1ccccc1	Nc1c(C)cccc1C	Ar-NH2 with a free ortho CH
-169	o_haloaniline	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[Cl,Br,I;D1]		Nc1ccccc1Br	Nc1ccc(Br)cc1	2-haloaniline, the Larock indole substrate
-170	methyl_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]-[C;D1]		CC(=O)OC	CC(=O)OCC	R-CO-OMe; distinct saponification and transesterification behaviour
-171	terminal_epoxide	[O;D2;r3:1]1-[C;r3:2]-[C;r3;D2:3]-1		CC1CO1	CC1OC1C	epoxide oriented for opening: `:3` is the CH2 a nucleophile attacks
-172	trifluoromethyl	[C;D4;z1;x3:1](-[F:2])(-[F:3])-[F:4]		FC(F)(F)c1ccccc1	FC(F)c1ccccc1	-CF3
-173	difluoromethyl	[C;D3;z1;x2:1](-[F:2])-[F:3]		FC(F)c1ccccc1	FC(F)(F)c1ccccc1	-CHF2
-174	catechol	[O;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[O;D1;z1;x0:4]		Oc1ccccc1O	Oc1ccc(O)cc1	1,2-dihydroxyarene
-175	vinyl_sulfone	[S;D4:1](=[O:2])(=[O:3])(-[O,N,C:4])-[C;z2:5]=[C:6]		C=CS(=O)(=O)c1ccccc1	CCS(=O)(=O)N	vinyl sulfone, sulfonamide or sulfonate -- a covalent warhead.  chython 2 wrote the third substituent `[O,N]` and so missed every true sulfone; widened here, which is why the `x3` it carried had to go
-176	peroxide	[O;D2;z1:1]-[O;D2;z1:2]		CCOOCC	CCOCC	R-O-O-R
-177	maleimide	[N;r5:1]1-[C;z2;r5:2](=[O:3])-[C;z2;r5:4]=[C;z2;r5:5]-[C;z2;r5:6]1=[O:7]		O=C1C=CC(=O)N1C	O=C1CCC(=O)N1C	maleimide, the thiol-conjugation warhead
-178	fused_aromatic	[A;a;D3:1](:[A;a:2])(:[A;a:3]):[A;a:4]		c1ccc2ccccc2c1	c1ccccc1,Cc1ccccc1	a ring-fusion atom: three aromatic neighbours
-179	polyarene	[A;a:1]:[A;a;D3:2](:[A;a:3]):[A;a:4]:[A;a;D3:5](:[A;a:6]):[A;a:7]		c1ccc2cc3ccccc3cc2c1	c1ccccc1,c1ccc2ccccc2c1	two fusion atoms one atom apart, as in a linear triarene
-180	diaryl	[C,N;a:1]-;!@[C,N;a:2]		c1ccc(-c2ccccc2)cc1	c1ccc2ccccc2c1	two rings joined by an acyclic single bond
-181	bridged_diaryl	[C,N;a:1]-;!@[C,O,N,S:2]-;!@[C,N;a:3]		c1ccc(Cc2ccccc2)cc1	c1ccc(-c2ccccc2)cc1	two rings joined through one bridging atom
-182	enamine	[C;z2;D2,D3:1]=[C;z2;D2,D3:2]-[N;z1;D2,D3:3]		CC=CN(C)C	CCN(C)C	C=C-N, the hydrogenation and Stork substrate
-183	enol_ether	[C;z2;D2,D3:1]=[C;z2;D2,D3:2]-[O;D2:3]	[C:1]=[C:2]-[O:3]	CC=COC	CCOC	C=C-O-R
+id	name	smarts	precursor	example	decoys	site	description
+1	terminal_alkene	[C;z2;x0;D1:1]=[C;z2;x0;D2,D3:2]	[C:1]=[C:2]	C=CCC	CC=CC,C=CN		monosubstituted C=C
+2	alkene	[C;z2;x0;D2,D3:1]=[C;z2;x0;D2,D3:2]	[C:1]=[C:2]	CC=CC	C=CCC,CC=CO		internal C=C, no heteroatom on either carbon
+3	terminal_alkyne	[C;z3;x0;D1:1]#[C;D2:2]	[C:1]#[C:2]	C#CCC	CC#CC		monosubstituted C#C, the Sonogashira nucleophile
+4	alkyne	[C;z3;x0;D2:1]#[C;x0;D2:2]	[C:1]#[C:2]	CC#CC	C#CCC		internal C#C
+5	aryl_fluoride	[F;D1]-[C;a:1]	[F]-[C:1]	Fc1ccccc1	FCc1ccccc1		Ar-F, an SNAr electrophile rather than a cross-coupling one
+6	aryl_chloride	[Cl;D1]-[C;a:1]	[Cl]-[C:1]	Clc1ccccc1	ClCc1ccccc1		Ar-Cl
+7	aryl_bromide	[Br;D1]-[C;a:1]	[Br]-[C:1]	Brc1ccccc1	BrCc1ccccc1		Ar-Br
+8	aryl_iodide	[I;D1]-[C;a:1]	[I]-[C:1]	Ic1ccccc1	ICc1ccccc1		Ar-I
+9	alkyl_chloride	[Cl;D1][C;z1;x1:1]		CCCCl	Clc1ccccc1,ClC(Cl)Cl		R-Cl on sp3 carbon
+10	alkyl_bromide	[Br;D1][C;z1;x1:1]		CCCBr	Brc1ccccc1,BrC(Br)Br		R-Br on sp3 carbon
+11	alkyl_iodide	[I;D1][C;z1;x1:1]		CCCI	Ic1ccccc1		R-I on sp3 carbon
+12	aryl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;a:1]	[B](-[O])(-[O])-[C:1]	OB(O)c1ccccc1	CC1(C)OB(OC1(C)C)c1ccccc1		ArB(OH)2
+13	aryl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;a:1]	[B]1(-[C:1])-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CC1(C)OB(OC1(C)C)c1ccccc1	OB(O)c1ccccc1		ArB(OR)2, pinacol boronate and its kin
+14	alkyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z1;x1,x2,x3:1]	[B](-[O])(-[O])-[C:1]	OB(O)CCCC	OB(O)c1ccccc1		RB(OH)2 on sp3 carbon
+15	primary_alcohol	[O;D1;z1;x0:1][C;D2;x1;z1:2]	[O:1]-[C:2]	CCO	CC(C)O,Oc1ccccc1	hydroxyl:1	R-CH2-OH
+16	secondary_alcohol	[O;D1;z1;x0:1][C;D3;x1;z1:2]	[O:1]-[C:2]	CC(C)O	CCO,CC(C)(C)O	hydroxyl:1	R2CH-OH
+17	tertiary_alcohol	[O;D1;z1;x0:1][C;D4;x1;z1:2]	[O:1]-[C:2]	CC(C)(C)O	CC(C)O	hydroxyl:1	R3C-OH
+18	phenol	[O;D1;z1;x0:1]-[C;a:2]	[O:1]-[C:2]	Oc1ccccc1	OCc1ccccc1	phenol:1	Ar-OH
+19	vicinal_diol	[O;D1;z1;x0:1]-[C;z1;x1:2]-[C;z1;x1:3]-[O;D1;z1;x0:4]		OCCO	OCCCO		1,2-diol, the dihydroxylation product
+20	aldehyde	[O;z2;x0:1]=[C;D2;x1;z2:2]	[O:1]=[C:2]	CCC=O	CC(C)=O,CC(=O)O		R-CHO
+21	ketone	[O;z2;x0:1]=[C;D3;x1;z2:2]	[O:1]=[C:2]	CC(C)=O	CCC=O,CC(=O)OC		R2C=O
+22	carboxylic_acid	[O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]	[O:3]-[C:1]=[O:2]	CC(=O)O	CC(=O)OC,CC(=O)N	carboxyl:3	R-COOH; the hydroxyl is the leaving group
+23	acyl_chloride	[Cl;D1][C;z2;x2;D3:1]=[O:2]	[Cl]-[C:1]=[O:2]	CC(=O)Cl	CC(=O)O		R-COCl
+24	ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0]	[O:1]=[C:2]-[O]-[C]	CC(=O)OC	CC(=O)O		R-CO-OR'; the alkoxy is the leaving group
+25	primary_amine	[N;D1;z1;x0:1][C;z1:2]	[N:1]-[C:2]	CCN	Nc1ccccc1,CC(=O)N	amine:1	R-NH2 on sp3 carbon
+26	primary_aniline	[N;D1;z1;x0:1][C;a:2]	[N:1]-[C:2]	Nc1ccccc1	NCc1ccccc1	aniline:1	Ar-NH2
+27	secondary_amine	[N;D2;z1;x0:1]([C;z1:2])[C;z1:3]	[N:1](-[C:2])-[C:3]	CNC	CN(C)C,CNc1ccccc1	amine:1	R2NH, both substituents sp3 carbon
+28	secondary_aniline	[N;D2;z1;x0:1]([C;a:2])[C;z1:3]	[N:1](-[C:2])-[C:3]	CNc1ccccc1	CNC,c1ccc(Nc2ccccc2)cc1	aniline:1	Ar-NH-R
+29	tertiary_amine	[N;D3;z1;x0:1]([C;z1,a:2])([C;z1,a:3])[C;z1,a:4]	[N:1](-[C:2])(-[C:3])-[C:4]	CN(C)C	CNC,c1ccncc1,CN(C)C=O,O=C(OC(C)(C)C)N1CCCCC1,CN(C)C=C		R3N, the N-oxidation substrate.  The three substituents are stated because the bare `[N;D3;z1;x0]` also matched every TERTIARY AMIDE and every carbamate -- an N-Boc amine reported as an amine, and `nitrogen_oxidation` offered to oxidize DMF.  `primary_amine` and `secondary_amine` always stated theirs
+30	primary_amide	[N;D1;z1;x0:1][C;z2;x2;D2,D3:2]=[O:3]	[N:1]-[C:2]=[O:3]	NC=O	CC(=O)NC,CCN,NC(=O)N,COC(=O)N	amide:1	R-CO-NH2.  `D2,D3` because a FORMAMIDE carbonyl is D2, hydrogens not counting toward `D`, and `D3` alone reported formamide as carrying no group at all
+31	secondary_amide	[N;D2;z1;x0:1][C;z2;x2;D2,D3:2]=[O:3]	[N:1]-[C:2]=[O:3]	CNC=O	CC(=O)N,CC(=O)N(C)C,CNC(=O)OC	amide:1	R-CO-NH-R', N-methylformamide included -- see `primary_amide` on `D2,D3`
+32	nitrile	[N;D1;z3;x0:1]#[C;D2;x1:2]	[N:1]#[C:2]	CCC#N	CC#CC		R-CN; `z3` here is a genuine sp nitrogen
+33	nitro	[N;D3;x2;+:1]([O;-:2])=[O:3]	[N;+:1](-[O;-:2])=[O:3]	CC[N+](=O)[O-]	CCN=O		R-NO2, charge-separated as chython stores it
+34	isocyanate	[N;z2;x0;D2:1]=[C:2]=[O:3]	[N:1]=[C:2]=[O:3]	CCN=C=O	CCN=C=S		R-N=C=O
+35	thiol	[S;x0;D1;z1:1][C;z1:2]	[S:1]-[C:2]	CCS	Sc1ccccc1		R-SH
+36	thioether	[S;D2;z1;x0:1]([C:2])[C:3]	[S:1](-[C:2])-[C:3]	CSC	CCS,CS(C)=O		R-S-R'
+37	sulfoxide	[S;D3;z2:1](=[O:2])([C:3])[C:4]	[S:1](=[O:2])(-[C:3])-[C:4]	CS(C)=O	CS(C)(=O)=O,CSC		R-S(=O)-R'
+38	sulfone	[S;D4:1](=[O:2])(=[O:3])([C:4])[C:5]		CS(C)(=O)=O	CS(C)=O		R-SO2-R'
+39	epoxide	[O;D2;r3:1]1-[C;r3:2]-[C;r3:3]-1	[O:1]1-[C:2]-[C:3]-1	C1CO1	C1CCO1		oxirane
+40	pyridine_n	[N;a;D2;h0:1]	[N:1]	c1ccncc1	c1cc[nH]c1		an aromatic nitrogen with no hydrogen, the N-oxidation substrate
+41	arene_ch	[C;a;D2:1]	[C:1]	c1ccccc1	Cc1c(C)c(C)c(C)c(C)c1C		an aromatic CH, the electrophilic-substitution site
+42	benzylic_ch	[C;z1;h1,h2;D2,D3:1]-[C;a:2]	[C:1]-[C:2]	CCc1ccccc1	Cc1ccccc1,CC(C)(C)c1ccccc1		an sp3 carbon bearing hydrogen next to a ring.  `D2,D3` excludes a TOLUENE METHYL, which is a D1 -- so `benzylic_bromination` does not reach one
+43	aryl_halide	[Cl,Br,I;D1]-[C;a:1]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Brc1ccccc1	Fc1ccccc1		Ar-X, the cross-coupling electrophile; F excluded, it does SNAr instead
+44	aryl_bromide_iodide	[Br,I;D1]-[C;a:1]	[Br]-[C:1],[I]-[C:1]	Brc1ccccc1	Clc1ccccc1		Ar-Br or Ar-I, the halides that couple without a specialist ligand
+45	alkyl_halide	[Cl,Br,I;D1][C;z1;x1:1]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	CCCBr	CCCF		R-X on sp3 carbon, the SN2 electrophile
+46	alkyl_fluoride	[F;D1][C;z1;x1:1]		CCCF	Fc1ccccc1,FC(F)F		R-F on sp3 carbon; not a leaving group, a metabolic-stability flag
+47	alkenyl_fluoride	[F;D1][C;z2;x1:1]=[C:2]		FC=C	Fc1ccccc1,CCCF		vinylic C-F
+48	alkenyl_chloride	[Cl;D1][C;z2;x1,x2:1]=[C:2]		ClC=C	Clc1ccccc1,CCCCl		vinylic C-Cl, the Heck/Negishi electrophile
+49	alkenyl_bromide	[Br;D1][C;z2;x1,x2:1]=[C:2]		BrC=C	Brc1ccccc1,CCCBr		vinylic C-Br
+50	alkenyl_iodide	[I;D1][C;z2;x1,x2:1]=[C:2]		IC=C	Ic1ccccc1,CCCI		vinylic C-I
+51	alkynyl_fluoride	[F;D1][C;z3;x1:1]#[C:2]		FC#CC	FC=C		C(sp)-F; `z3` is genuine sp here
+52	alkynyl_chloride	[Cl;D1][C;z3;x1:1]#[C:2]		ClC#CC	ClC=C		C(sp)-Cl
+53	alkynyl_bromide	[Br;D1][C;z3;x1:1]#[C:2]		BrC#CC	BrC=C		C(sp)-Br
+54	alkynyl_iodide	[I;D1][C;z3;x1:1]#[C:2]		IC#CC	IC=C		C(sp)-I
+55	aryl_triflate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C;D4](-[F])(-[F])-[F]		O=S(=O)(Oc1ccccc1)C(F)(F)F	CS(=O)(=O)Oc1ccccc1		ArOTf, the pseudohalide that couples like an aryl bromide
+56	aryl_mesylate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C;D1]		CS(=O)(=O)Oc1ccccc1	O=S(=O)(Oc1ccccc1)C(F)(F)F		ArOMs
+57	aryl_tosylate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C;a]:1:[C;a;D2]:[C;a;D2]:[C;a](-[C;D1]):[C;a;D2]:[C;a;D2]:1		Cc1ccc(cc1)S(=O)(=O)Oc1ccccc1	CS(=O)(=O)Oc1ccccc1		ArOTs
+58	alkyl_triflate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C;D4](-[F])(-[F])-[F]		O=S(=O)(OCC)C(F)(F)F	CS(=O)(=O)OCC		ROTf on sp3 carbon, a strong SN2 leaving group
+59	alkyl_mesylate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C;D1]		CS(=O)(=O)OCC	O=S(=O)(OCC)C(F)(F)F		ROMs
+60	alkyl_tosylate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C;a]:1:[C;a;D2]:[C;a;D2]:[C;a](-[C;D1]):[C;a;D2]:[C;a;D2]:1		Cc1ccc(cc1)S(=O)(=O)OCC	CS(=O)(=O)OCC		ROTs
+61	alkyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z1;x1,x2,x3:1]	[B]1(-[C:1])-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CC1(C)OB(OC1(C)C)CCCC	OB(O)CCCC		RB(OR')2 on sp3 carbon
+62	alkenyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z2;x1,x2:1]=[C:2]	[B](-[O])(-[O])-[C:1]=[C:2]	OB(O)C=C	OB(O)c1ccccc1		vinylboronic acid
+63	alkenyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z2;x1,x2:1]=[C:2]	[B]1(-[C:1]=[C:2])-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CC1(C)OB(OC1(C)C)C=C	OB(O)C=C		vinylboronate ester
+64	alkynyl_boronic_acid	[B;D3;z1;x2](-[O;D1])(-[O;D1])-;!@[C;z3;x1:1]#[C:2]		OB(O)C#CC	OB(O)C=C		alkynylboronic acid
+65	alkynyl_boronic_ester	[B;D3;z1;x2](-[O;D2;x1])(-[O;D2;x1])-;!@[C;z3;x1:1]#[C:2]	[B]1(-[C:1]#[C:2])-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CC1(C)OB(OC1(C)C)C#CC	OB(O)C#CC		alkynylboronate ester
+66	aryl_molander_salt	[B;D4;z1;x3;-](-[F])(-[F])(-[F])-;!@[C;a:1]	[B;-](-[F])(-[F])(-[F])-[C:1]	[K+].[B-](F)(F)(F)c1ccccc1	OB(O)c1ccccc1		ArBF3-, the air-stable trifluoroborate
+67	alkyl_molander_salt	[B;D4;z1;x3;-](-[F])(-[F])(-[F])-;!@[C;z1:1]	[B;-](-[F])(-[F])(-[F])-[C:1]	[K+].[B-](F)(F)(F)CCCC	OB(O)CCCC		RBF3- on sp3 carbon
+68	alkenyl_molander_salt	[B;D4;z1;x3;-](-[F])(-[F])(-[F])-;!@[C;z2:1]=[C:2]	[B;-](-[F])(-[F])(-[F])-[C:1]=[C:2]	[K+].[B-](F)(F)(F)C=C	[K+].[B-](F)(F)(F)CCCC		vinyl trifluoroborate
+69	alkynyl_molander_salt	[B;D4;z1;x3;-](-[F])(-[F])(-[F])-;!@[C;z3;x1:1]#[C:2]	[B;-](-[F])(-[F])(-[F])-[C:1]#[C:2]	[K+].[B-](F)(F)(F)C#CC	[K+].[B-](F)(F)(F)C=C		alkynyl trifluoroborate
+70	tertiary_alcohol_with_alpha_h	[O;D1;z1;x0:1]-[C;D4;x1;z1:2]-[C;z1;h1,h2:3]		CCC(C)(C)O	CC(C)(C)O		R3C-OH with an eliminable alpha C-H, the dehydration substrate
+71	enal	[O;z2;x0:1]=[C;D2;x1;z2:2]-[C;z2;x0:3]=[C;x0:4]		C=CC=O	CCC=O		alpha,beta-unsaturated aldehyde
+72	alpha_ketone	[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D1,D2;x0:3]		CC(=O)CC	O=C(c1ccccc1)c1ccccc1		ketone with an enolizable alpha CH2/CH3
+73	alpha_haloketone	[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D2,D3;x1:3]-[Cl,Br,I;D1]	[O:1]=[C:2]-[C:3]-[Cl],[O:1]=[C:2]-[C:3]-[Br],[O:1]=[C:2]-[C:3]-[I]	CC(=O)CBr	CC(=O)CC		alpha-halo ketone, the Hantzsch thiazole electrophile
+74	alpha_haloester	[O;D2;x0:1]-[C;D3;x2;z2:2](=[O:3])-[C;z1;D2,D3;x1:4]-[Cl,Br,I;D1]	[O:1]-[C:2](=[O:3])-[C:4]-[Cl],[O:1]-[C:2](=[O:3])-[C:4]-[Br],[O:1]-[C:2](=[O:3])-[C:4]-[I]	CCOC(=O)CBr	CCOC(=O)CC		alpha-halo ester
+75	1_2_diketone	[O;z2;x0:1]=[C;D3;x1:2]-[C;z2;x1;D3:3]=[O:4]		CC(=O)C(C)=O	CC(=O)CC(C)=O		1,2-diketone
+76	1_3_diketone	[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D2,D3:3]-[C;z2;x1;D3:4]=[O:5]		CC(=O)CC(C)=O	CC(=O)C(C)=O		1,3-diketone
+77	1_4_diketone	[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D2,D3:3]-[C;z1;D2,D3:4]-[C;z2;x1;D3:5]=[O:6]	[O:1]=[C:2]-[C:3]-[C:4]-[C:5]=[O:6]	CC(=O)CCC(C)=O	CC(=O)CC(C)=O		1,4-diketone, the Paal-Knorr substrate
+78	beta_ketoester	[O;z2;x0:1]=[C;D3;x1:2]-[C;z1;D2;x0:3]-[C;z2;x2;D3:4](=[O:5])-[O;D2]		CCOC(=O)CC(C)=O	CC(=O)CC(C)=O		beta-keto ester
+79	alkyl_carboxylic_acid	[O;D1;z1;x0]-[C;z2;x2;D3:1](=[O:2])-[C;z1:3]	[O]-[C:1](=[O:2])-[C:3]	CCC(=O)O	OC(=O)c1ccccc1		R-COOH on sp3 carbon
+80	aryl_carboxylic_acid	[O;D1;z1;x0]-[C;z2;x2;D3:1](=[O:2])-[C;a:3]	[O]-[C:1](=[O:2])-[C:3]	OC(=O)c1ccccc1	CCC(=O)O		Ar-COOH
+81	alkenyl_carboxylic_acid	[O;D1;z1;x0]-[C;z2;x2;D3:1](=[O:2])-[C;z2:3]=[C:4]		C=CC(=O)O	CCC(=O)O		alpha,beta-unsaturated acid
+82	alkynyl_carboxylic_acid	[O;D1;z1;x0]-[C;z2;x2;D3:1](=[O:2])-[C;z3;x0:3]#[C:4]		C#CC(=O)O	C=CC(=O)O		propiolic-type acid
+83	cyclic_carboxylic_acid	[O;D1;z1;x0]-[C;z2;x2;D3:1](=[O:2])-[C;z1;r5,r6:3]		OC(=O)C1CCCCC1	CCC(=O)O		COOH on a saturated 5- or 6-ring
+84	acyl_bromide	[Br;D1]-[C;z2;x2;D3:1]=[O:2]	[Br]-[C:1]=[O:2]	CC(=O)Br	CC(=O)Cl		R-COBr
+85	acyl_fluoride	[F;D1]-[C;z2;x2;D3:1]=[O:2]	[F]-[C:1]=[O:2]	CC(=O)F	CC(=O)Cl		R-COF
+86	chloroformate	[Cl;D1]-[C;z2;x3;D3:1](=[O:2])-[O;D2:3]	[Cl]-[C:1](=[O:2])-[O:3]	CCOC(=O)Cl	CC(=O)Cl		RO-CO-Cl, the carbamoylation reagent
+87	fluoroformate	[F;D1]-[C;z2;x3;D3:1](=[O:2])-[O;D2:3]	[F]-[C:1](=[O:2])-[O:3]	CCOC(=O)F	CC(=O)F		RO-CO-F
+88	succinimidyl_carbonate	[O;D2:1]-[C;z2;x3;D3:2](=[O:3])-[O;D2;x1]-[N;D3;x1;r5](-[C;z2;r5]=[O])-[C;z2;r5]=[O]	[O:1]-[C:2](=[O:3])-[O]-[N]1-[C](=[O])-[C]-[C]-[C]-1=[O]	CCOC(=O)ON1C(=O)CCC1=O	CCOC(=O)Oc1ccccc1		NHS/DSC carbonate; numbered like chloroformate so it drops into the same rows
+89	aryl_carbonate	[O;D2:1]-[C;z2;x3;D3:2](=[O:3])-[O;D2;x0]-[C;a]	[O:1]-[C:2](=[O:3])-[O]-[C]1=[C]-[C]=[C]-[C]=[C]-1	CCOC(=O)Oc1ccccc1	CCOC(=O)OCC		aryl carbonate; the aryloxide is the leaving group
+90	imidazolyl_carbonate	[O;D2:1]-[C;z2;x3;D3:2](=[O:3])-[N;a;D3;r5]1:[C;a]:[N;a]:[C;a]:[C;a]:1	[O:1]-[C:2](=[O:3])-[N]1-[C]=[N]-[C]=[C]-1	CCOC(=O)n1ccnc1	CCOC(=O)OCC		CDI adduct of an alcohol; here the azole nitrogen leaves
+91	carbamoyl_chloride	[Cl;D1]-[C;z2;x3;D3:1](=[O:2])-[N;D2,D3:3]	[Cl]-[C:1](=[O:2])-[N:3]	CN(C)C(=O)Cl	CCOC(=O)Cl		R2N-CO-Cl
+92	carbamoyl_fluoride	[F;D1]-[C;z2;x3;D3:1](=[O:2])-[N;D2,D3:3]	[F]-[C:1](=[O:2])-[N:3]	CN(C)C(=O)F	CCOC(=O)F		R2N-CO-F
+93	primary_amidine_amine	[N;D1;z1;x0:1]-[C;z2:2]=[N:3]	[N:1]-[C:2]=[N:3]	NC(C)=N	CC(N)=O		NH2 on an sp2 carbon that also carries C=N
+94	aziridine_nh	[N;D2;z1;x0;h1;r3:1]	[N:1]	C1CN1	C1CNC1,CN1CC1	amine:1	aziridine N-H, matched alone so a ring opening leaves the ring intact
+95	biaryl_aniline	[N;D2;z1;x0:1](-[C;a:2])-[C;a:3]	[N:1](-[C:2])-[C:3]	c1ccc(Nc2ccccc2)cc1	CNc1ccccc1	aniline:1	Ar-NH-Ar
+96	anhydride	[C;z2;x2;D3:1](=[O:2])-[O;D2;x0]-[C;z2;x2;D3:3]=[O:4]	[C:1](=[O:2])-[O]-[C:3]=[O:4]	CC(=O)OC(C)=O	CC(=O)OC		R-CO-O-CO-R; also matches `ester` twice
+97	sulfo	[S;D4;x3:1](=[O:2])(=[O:3])-[O;D1:4]	[S:1](=[O:2])(=[O:3])-[O:4]	CS(=O)(=O)O	CS(=O)(=O)OC		R-SO3H, distinct from a sulfonyl halide or a sulfonamide
+98	sulfonyl_chloride	[Cl;D1]-[S;D4:1](=[O:2])=[O:3]	[Cl]-[S:1](=[O:2])=[O:3]	CS(=O)(=O)Cl	CS(=O)(=O)O		R-SO2Cl
+99	sulfonyl_fluoride	[F;D1]-[S;D4:1](=[O:2])=[O:3]	[F]-[S:1](=[O:2])=[O:3]	CS(=O)(=O)F	CS(=O)(=O)Cl		R-SO2F
+100	sulfonamide	[S;D4;x3:1](=[O:2])(=[O:3])-[N;z1:4]		CS(=O)(=O)N	CS(=O)(=O)O		R-SO2-NR2
+101	sulfonyl_anhydride	[S;D4;x3:1](=[O:2])(=[O:3])-[O;D2]-[S;D4;x3](=[O])=[O]	[S:1](=[O:2])(=[O:3])-[O]-[S](=[O])(=[O])-[C]	CS(=O)(=O)OS(C)(=O)=O	CS(=O)(=O)OC		R-SO2-O-SO2-R
+102	azide	[N;x1;D2:1]=[N;+:2]=[N;-:3]	[N:1]=[N;+:2]=[N;-:3]	CCN=[N+]=[N-]	CCN=NCC		R-N3
+103	diazo	[C;z2:1]=[N;+;D2:2]=[N;-;D1:3]		CCOC(=O)C=[N+]=[N-]	CCN=[N+]=[N-]		R2C=N2
+104	diazonium	[C;a:1]-[N;+;D2:2]#[N;D1:3]		[Cl-].c1ccc([N+]#N)cc1	CCN=[N+]=[N-]		ArN2+
+105	azo	[N;D2;x1:1]=[N;D2;x1:2]		c1ccc(N=Nc2ccccc2)cc1	CCN=[N+]=[N-]		R-N=N-R
+106	isocyano	[N;+;D2;x0:1]#[C;-;D1:2]	[N;+:1]#[C;-:2]	CC[N+]#[C-]	CCC#N		R-NC, charge-separated
+107	guanidine	[N;z1;x0:1]-[C;!R:2](-[N;z1;x0:3])=[N;x0:4]		NC(N)=N	NC(N)=O		acyclic guanidine
+108	nitroso	[N;D2;z2:1]=[O;D1:2]		CCN=O	CC[N+](=O)[O-]		R-N=O
+109	isothiocyanate	[N;z2;x0;D2:1]=[C:2]=[S;D1:3]		CCN=C=S	CCN=C=O		R-N=C=S
+110	alkyl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;z1:1]	[Cl]-[Mg]-[C:1],[Br]-[Mg]-[C:1],[I]-[Mg]-[C:1]	CC[Mg]Br	Br[Mg]c1ccccc1		RMgX on sp3 carbon
+111	aryl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;a:1]	[Cl]-[Mg]-[C:1],[Br]-[Mg]-[C:1],[I]-[Mg]-[C:1]	Br[Mg]c1ccccc1	CC[Mg]Br		ArMgX
+112	alkenyl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;z2:1]=[C:2]	[Cl]-[Mg]-[C:1]=[C:2],[Br]-[Mg]-[C:1]=[C:2],[I]-[Mg]-[C:1]=[C:2]	Br[Mg]C=C	CC[Mg]Br		vinyl Grignard
+113	alkyl_zinc	[Zn;*]-[C;z1:1]	[Cl]-[Zn]-[C:1],[Br]-[Zn]-[C:1],[I]-[Zn]-[C:1]	CC[Zn]Br	Br[Zn]c1ccccc1,N#C[Zn]C#N		RZnX, R2Zn or RZn+, the Negishi nucleophile; `*` takes the zinc at any charge
+114	aryl_zinc	[Zn;*]-[C;a:1]	[Cl]-[Zn]-[C:1],[Br]-[Zn]-[C:1],[I]-[Zn]-[C:1]	Br[Zn]c1ccccc1	CC[Zn]Br,N#C[Zn]C#N		ArZnX, Ar2Zn or ArZn+
+115	alkenyl_zinc	[Zn;*]-[C;z2:1]=[C:2]	[Cl]-[Zn]-[C:1]=[C:2],[Br]-[Zn]-[C:1]=[C:2],[I]-[Zn]-[C:1]=[C:2]	Br[Zn]C=C	CC[Zn]Br,N#C[Zn]C#N		vinylzinc
+116	boronate_alkyl_chloride	[Cl;D1]-[C;z1;D2;x2:1]-[B:2]		ClCB(O)O	CCCCl		B-CH2-Cl, the one-carbon SN2 electrophile
+117	boronate_alkyl_bromide	[Br;D1]-[C;z1;D2;x2:1]-[B:2]		BrCB(O)O	CCCBr		B-CH2-Br
+118	boronate_alkyl_iodide	[I;D1]-[C;z1;D2;x2:1]-[B:2]		ICB(O)O	CCCI		B-CH2-I
+119	aryl_stannane	[Sn;D4;z1]-;!@[C;a:1]	[Sn](-[C])(-[C])(-[C])-[C:1],[Sn](-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])-[C:1]	C[Sn](C)(C)c1ccccc1	CCCC[Sn](C)(C)C		ArSnR3, the Stille nucleophile
+120	alkenyl_stannane	[Sn;D4;z1]-;!@[C;z2:1]=[C:2]	[Sn](-[C])(-[C])(-[C])-[C:1]=[C:2],[Sn](-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])-[C:1]=[C:2]	C[Sn](C)(C)C=C	C[Sn](C)(C)c1ccccc1		vinylstannane
+121	alkyl_stannane	[Sn;D4;z1]-;!@[C;z1;D2,D3,D4:1]	[Sn](-[C])(-[C])(-[C])-[C:1],[Sn](-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])-[C:1]	CCCC[Sn](C)(C)C	C[Sn](C)(C)c1ccccc1		RSnR3 on sp3 carbon, terminal methyls excluded
+122	aryl_silane	[Si;D4]-;!@[C;a:1]		C[Si](C)(C)c1ccccc1	C[Si](C)(C)C		ArSiR3, the Hiyama nucleophile
+123	alkenyl_silane	[Si;D4]-;!@[C;z2:1]=[C:2]		C[Si](C)(C)C=C	C[Si](C)(C)c1ccccc1		vinylsilane
+124	alkynyl_silane	[Si;D4]-;!@[C;z3:1]#[C:2]		C[Si](C)(C)C#C	C[Si](C)(C)C=C		TMS-protected alkyne
+125	phosphonium_ylide	[P;D4;z2;x0]=[C:1]	[P](=[C:1])(-[C]1=[C]-[C]=[C]-[C]=[C]-1)(-[C]2=[C]-[C]=[C]-[C]=[C]-2)-[C]3=[C]-[C]=[C]-[C]=[C]-3	C=P(c1ccccc1)(c1ccccc1)c1ccccc1	CCOP(=O)(OCC)C		R3P=CR2, the Wittig reagent
+126	phosphonate	[P;D4;x3](=[O])(-[O;D2;x1])(-[O;D2;x1])-[C:1]	[P](=[O])(-[O]-[C]-[C])(-[O]-[C]-[C])-[C:1]	CCOP(=O)(OCC)C	CCOP(=O)(OCC)OCC		(RO)2P(=O)R, the HWE reagent
+127	weinreb_amide	[O:1]=[C;D3;x2:2]-[N;D3;x1](-[C;z1])-[O;D2;x1]	[O:1]=[C:2]-[N](-[C])-[O]-[C]	CON(C)C(C)=O	CC(=O)N(C)C		N-methoxy-N-methyl amide; the extra C on N excludes an N-acyloxy imide
+128	redox_active_ester	[C;z1:1]-[C;z2;x2;D3:2](=[O:3])-[O;D2;x1]-[N;D3;x1;r5](-[C;z2;r5]=[O])-[C;z2;r5]=[O]	[C:1]-[C:2](=[O:3])-[O]-[N]1-[C](=[O])-[C]2=[C]-[C]=[C]-[C]=[C]-2-[C]-1=[O]	CCC(=O)ON1C(=O)CCC1=O	CCC(=O)OC		NHPI/NHS ester; decarboxylative coupling transfers the alkyl
+129	aryl_thiol	[S;x0;D1;z1:1]-[C;a:2]	[S:1]-[C:2]	Sc1ccccc1	CCS		Ar-SH
+130	disulfide	[S;D2;z1:1]-[S;D2;z1:2]		CSSC	CSC		R-S-S-R
+131	thioester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[S;D2;z1;x0]	[O:1]=[C:2]-[S]-[C]	CC(=O)SC	CC(=O)OC		R-CO-S-R', the Liebeskind-Srogl electrophile
+132	azinone	[O;z2;x0:1]=[C;z2;x2;D3;r6:2](-[C,N;z2,z4;r6:3])-[N;z1;D2;r6:4]	[O:1]=[C:2](-[A:3])-[N:4]	O=C1C=Cc2ccccc2N1	O=C1CCCCN1	amide:4	aromatizable cyclic amide; the sp2/aromatic flank excludes a saturated lactam
+133	chloroazine	[Cl;D1]-[C;a:1]:[N;a;D2:2]		Clc1ccccn1	Clc1ccccc1,Clc1cccnc1		Cl on an aromatic carbon next to a ring N; hydrolyses to the azinone
+134	pyrrole	[N;h1;D2;a;r5:1]	[N;h1:1]	c1cc[nH]c1	c1ccncc1,C1CCNC1	azole:1	azole N-H; the H stays out of a template for tautomerism
+135	pyrazole	[N;h1;D2;a;r5:1]:[N;h0;D2;r5:2]	[N;h1:1]:[N;h0:2]	c1cc[nH]n1	c1cc[nH]c1,c1c[nH]cn1	azole:1	adjacent N-H/N pair
+136	imidazole	[N;h1;D2;a;r5:1]:[A:2]:[N;h0;D2;r5:3]	[N;h1:1]:[A:2]:[N;h0:3]	c1c[nH]cn1	c1cc[nH]n1	azole:1	N-H and N separated by one ring atom
+137	isoxazole	[O;a;D2;r5:1]:[N;a;D2;r5:2]		c1ccno1	c1cc[nH]n1		adjacent aromatic O/N pair
+138	pyridazine	[N;a;D2;r6:1]:[N;a;D2;r6:2]		c1ccnnc1	c1ccncc1		adjacent aromatic N pair in a 6-ring
+139	alkyl_hydrazine	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z1:3]	[N:1]-[N:2]-[C:3]	CCNN	NNc1ccccc1		R-NH-NH2 on sp3 carbon
+140	aryl_hydrazine	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;a:3]	[N:1]-[N:2]-[C:3]	NNc1ccccc1	CCNN		Ar-NH-NH2, no constraint on the ring beyond the attachment carbon
+141	aryl_hydrazine_ortho_ch	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;a:3]:[C;a;D2:4]		NNc1ccccc1	NNc1c(C)cccc1C		Ar-NH-NH2 with a free ortho CH, which an indolization consumes
+142	hydrazone	[C;z2:1]=[N;D2;z2;x1:2]-[N;D2;z1;x1:3]		CC(C)=NNc1ccccc1	CC(C)=NO		C=N-NH-R
+143	sulfonylhydrazone	[C;z2:1]=[N;D2;z2;x1:2]-[N;D2;z1;x2:3]-[S;D4;x3](=[O])=[O]		CC(C)=NNS(=O)(=O)c1ccccc1	CC(C)=NNc1ccccc1		tosylhydrazone and kin, the Bamford-Stevens diazo precursor
+144	sulfonylhydrazide	[N;D1;z1;x1:1]-[N;D2;z1;x2:2]-[S;D4;x3:3](=[O:4])=[O:5]		NNS(=O)(=O)c1ccccc1	CCNN		R-SO2-NH-NH2, the reagent that makes the above
+145	thioamide	[S;z2;x0;D1:1]=[C;D2,D3;x2:2]-[N;D1:3]		NC=S	CC(N)=O,NC(=S)N		R-CS-NH2, the Hantzsch thiazole partner.  `D2,D3` as in `primary_amide`
+146	o_diaminoarene	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[N;D1,D2;z1;x0:4]	[N:1]-[C:2]:[C:3]-[N:4]	Nc1ccccc1N	Nc1ccc(N)cc1		ortho-phenylenediamine
+147	o_aminophenol	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[O;D1:4]		Nc1ccccc1O	Nc1ccc(O)cc1		2-aminophenol
+148	o_aminothiophenol	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[S;D1:4]		Nc1ccccc1S	Nc1ccc(S)cc1		2-aminothiophenol
+149	o_aminobenzaldehyde	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[C;D2;z2;x1:4]=[O:5]		Nc1ccccc1C=O	Nc1ccc(C=O)cc1		2-aminobenzaldehyde, the Friedlander partner
+150	anthranilic_acid	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[C;z2;x2;D3:4](=[O:5])-[O;D1]		Nc1ccccc1C(=O)O	Nc1ccc(C(=O)O)cc1		2-aminobenzoic acid
+151	amidoxime	[N;D1;z2;x0:1]=[C;D3;x2:2]-[N;D2;z1;x1:3]-[O;D1:4]		CC(=N)NO	CC(N)=N		RC(=NH)NHOH, the 1,2,4-oxadiazole precursor
+152	amidine	[N;D1;z1;x0:1]-[C;D3;z2;x2:2]=[N;D1:3]		NC(C)=N	CC(=N)NO		RC(=NH)NH2, the pyrimidine partner
+153	urea	[N;z1:1]-[C;D3;z2;x3:2](=[O:3])-[N;z1:4]		NC(N)=O	NC(N)=S		R2N-CO-NR2
+154	thiourea	[N;z1:1]-[C;D3;z2;x3:2](=[S;D1:3])-[N;z1:4]		NC(N)=S	NC(N)=O		R2N-CS-NR2
+155	nh_urea	[N;z1;h1,h2;!R:1]-[C;D3;z2;x3:2](=[O:3])-[N;z1;h1,h2;!R:4]		NC(N)=O	CN(C)C(=O)N(C)C,O=C1NCCN1		acyclic urea with an N-H on both nitrogens, the Biginelli subset
+156	nh_thiourea	[N;z1;h1,h2;!R:1]-[C;D3;z2;x3:2](=[S;D1:3])-[N;z1;h1,h2;!R:4]		NC(N)=S	CN(C)C(=S)N(C)C		the thiourea half of the same
+157	beta_arylethylamine	[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[C;a:4]:[C;a;D2:5]		NCCc1ccccc1	NCc1ccccc1		the Pictet-Spengler substrate
+158	aminopyridine	[N;D1;z1;x0:1]-[C;a:2]:[N;a;h0;D2:3]	[N:1]-[C:2]:[N:3]	Nc1ccccn1	Nc1ccccc1,Nc1cccnc1	aniline:1	2-aminoazine, the GBB partner
+159	amino_alcohol	[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[O;D1:4]		NCCO	NCCCO		1,2-amino alcohol
+160	hydroxamic_acid	[O;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]		CC(=O)NO	CC(=O)NC		R-CO-NH-OH
+161	hydrazide	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]	[N:1]-[N:2]-[C:3]=[O:4]	CC(=O)NN	CC(=O)NO		R-CO-NH-NH2
+162	oxime	[O;D1;z1;x1:1]-[N;D2;z2;x1:2]=[C:3]		CC(C)=NO	CC(C)=NN	enol:1	C=N-OH
+163	O_alkylhydroxylamine	[N;D1;z1;x1:1]-[O;D2;z1;x1:2]-[C:3]	[N:1]-[O:2]-[C:3]	NOC	CON(C)C		R-O-NH2
+164	NO_dialkylhydroxylamine	[N;D2;z1;x1;h1:1](-[C;z1:2])-[O;D2;z1;x1:3]-[C;z1:4]	[N:1](-[C:2])-[O:3]-[C:4]	CNOC	NOC,CON(C)C		R'-O-NH-R'', the Weinreb amine
+165	tosyl_isocyanide	[C;-;D1:1]#[N;+;D2:2]-[C;D2,D3;z1;x2:3]-[S;D4;x2](=[O])=[O]		[C-]#[N+]CS(=O)(=O)c1ccc(C)cc1	[C-]#[N+]CC(=O)OC		TosMIC, the Van Leusen oxazole reagent
+166	activated_isocyanide	[C;-;D1:1]#[N;+;D2:2]-[C;z1;h1,h2:3]		[C-]#[N+]CC(=O)OC	[C-]#[N+]c1ccccc1,[C-]#[N+]C(C)(C)C		isocyanide with an acidic alpha C-H; what activates it is left unstated
+167	active_methylene	[C;z1;D2,D3;x0:1](-[C;z2,z3;x1,x2:2])-[C;z2,z3;x1,x2:3]	[C:1](-[C:2])-[C:3]	CCOC(=O)CC(=O)OCC	CCCCC		CH flanked by two EWGs, the Knoevenagel nucleophile
+168	aniline_ortho_ch	[N;D1;z1;x0:1]-[C;a:2]:[C;a;D2:3]		Nc1ccccc1	Nc1c(C)cccc1C		Ar-NH2 with a free ortho CH
+169	o_haloaniline	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[Cl,Br,I;D1]		Nc1ccccc1Br	Nc1ccc(Br)cc1		2-haloaniline, the Larock indole substrate
+170	methyl_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]-[C;D1]		CC(=O)OC	CC(=O)OCC		R-CO-OMe; distinct saponification and transesterification behaviour
+171	terminal_epoxide	[O;D2;r3:1]1-[C;r3:2]-[C;r3;D2:3]-1		CC1CO1	CC1OC1C		epoxide oriented for opening: `:3` is the CH2 a nucleophile attacks
+172	trifluoromethyl	[C;D4;z1;x3:1](-[F:2])(-[F:3])-[F:4]		FC(F)(F)c1ccccc1	FC(F)c1ccccc1		-CF3
+173	difluoromethyl	[C;D3;z1;x2:1](-[F:2])-[F:3]		FC(F)c1ccccc1	FC(F)(F)c1ccccc1		-CHF2
+174	catechol	[O;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[O;D1;z1;x0:4]		Oc1ccccc1O	Oc1ccc(O)cc1	phenol:1	1,2-dihydroxyarene
+175	vinyl_sulfone	[S;D4:1](=[O:2])(=[O:3])(-[O,N,C:4])-[C;z2:5]=[C:6]		C=CS(=O)(=O)c1ccccc1	CCS(=O)(=O)N		vinyl sulfone, sulfonamide or sulfonate -- a covalent warhead.  chython 2 wrote the third substituent `[O,N]` and so missed every true sulfone; widened here, which is why the `x3` it carried had to go
+176	peroxide	[O;D2;z1:1]-[O;D2;z1:2]		CCOOCC	CCOCC		R-O-O-R
+177	maleimide	[N;r5:1]1-[C;z2;r5:2](=[O:3])-[C;z2;r5:4]=[C;z2;r5:5]-[C;z2;r5:6]1=[O:7]		O=C1C=CC(=O)N1C	O=C1CCC(=O)N1C		maleimide, the thiol-conjugation warhead
+178	fused_aromatic	[A;a;D3:1](:[A;a:2])(:[A;a:3]):[A;a:4]		c1ccc2ccccc2c1	c1ccccc1,Cc1ccccc1		a ring-fusion atom: three aromatic neighbours
+179	polyarene	[A;a:1]:[A;a;D3:2](:[A;a:3]):[A;a:4]:[A;a;D3:5](:[A;a:6]):[A;a:7]		c1ccc2cc3ccccc3cc2c1	c1ccccc1,c1ccc2ccccc2c1		two fusion atoms one atom apart, as in a linear triarene
+180	diaryl	[C,N;a:1]-;!@[C,N;a:2]		c1ccc(-c2ccccc2)cc1	c1ccc2ccccc2c1		two rings joined by an acyclic single bond
+181	bridged_diaryl	[C,N;a:1]-;!@[C,O,N,S:2]-;!@[C,N;a:3]		c1ccc(Cc2ccccc2)cc1	c1ccc(-c2ccccc2)cc1		two rings joined through one bridging atom
+182	enamine	[C;z2;D2,D3:1]=[C;z2;D2,D3:2]-[N;z1;D2,D3:3]		CC=CN(C)C	CCN(C)C		C=C-N, the hydrogenation and Stork substrate
+183	enol_ether	[C;z2;D2,D3:1]=[C;z2;D2,D3:2]-[O;D2:3]	[C:1]=[C:2]-[O:3]	CC=COC	CCOC		C=C-O-R
 # --- ethers and acetals -------------------------------------------------------------------
-184	dialkyl_ether	[O;D2;z1;x0:1]([C;z1:2])[C;z1:3]		COCCOC	CC(=O)OC,COc1ccccc1,C=COC,C[Si](C)(C)OC	R-O-R, both sp3.  `x0` and both carbons stated: the bare `[O;D2;z1]` is also every ester O, every anisole and every silyl ether
-185	aryl_ether	[O;D2;z1;x0:1](-[C;a:2])[C;z1,a:3]		COc1ccccc1	COC,CC(=O)Oc1ccccc1	Ar-O-R and Ar-O-Ar.  Separate from `dialkyl_ether` because only this one is an SNAr and Ullmann product and a demethylation substrate
-186	acetal	[O;D2;z1:1]-[C;z1;x2;h0,h1:2]-[O;D2;z1:3]		COC(C)OC	COC,CC(=O)OC,OCCO	R-O-CH(R)-O-R, the masked carbonyl.  `h0,h1` admits the ketal and excludes an orthoester
-187	hemiketal	[O;D1;z1;x0;h1:1]-[C;z1;x2:2]-[O;D2;z1:3]	[O:1]-[C:2]-[O:3]	OC1(OC)CCCCC1	OCCOC,CCO	HO-C(-OR), the ring-opened sugar form
-188	enol	[O;D1;z1;x0;h1:1]-[C;z2:2]=[C;z2:3]	[O:1]-[C:2]=[C:3]	OC1=CCCCC1	OCC=C,CCO,Oc1ccccc1	HO-C=C.  `z2` on both carbons, so a phenol -- aromatic, not `z2` -- is not one
-189	silyl_ether	[Si;D4:1]-[O;D2;z1:2]-[C:3]		C[Si](C)(C)OCC	C[Si](C)(C)C,CCO,COC	R3Si-O-R, a protected alcohol.  `protective.tsv` removes the named ones; this reports any
+184	dialkyl_ether	[O;D2;z1;x0:1]([C;z1:2])[C;z1:3]		COCCOC	CC(=O)OC,COc1ccccc1,C=COC,C[Si](C)(C)OC		R-O-R, both sp3.  `x0` and both carbons stated: the bare `[O;D2;z1]` is also every ester O, every anisole and every silyl ether
+185	aryl_ether	[O;D2;z1;x0:1](-[C;a:2])[C;z1,a:3]		COc1ccccc1	COC,CC(=O)Oc1ccccc1		Ar-O-R and Ar-O-Ar.  Separate from `dialkyl_ether` because only this one is an SNAr and Ullmann product and a demethylation substrate
+186	acetal	[O;D2;z1:1]-[C;z1;x2;h0,h1:2]-[O;D2;z1:3]		COC(C)OC	COC,CC(=O)OC,OCCO		R-O-CH(R)-O-R, the masked carbonyl.  `h0,h1` admits the ketal and excludes an orthoester
+187	hemiketal	[O;D1;z1;x0;h1:1]-[C;z1;x2:2]-[O;D2;z1:3]	[O:1]-[C:2]-[O:3]	OC1(OC)CCCCC1	OCCOC,CCO		HO-C(-OR), the ring-opened sugar form
+188	enol	[O;D1;z1;x0;h1:1]-[C;z2:2]=[C;z2:3]	[O:1]-[C:2]=[C:3]	OC1=CCCCC1	OCC=C,CCO,Oc1ccccc1	enol:1	HO-C=C.  `z2` on both carbons, so a phenol -- aromatic, not `z2` -- is not one
+189	silyl_ether	[Si;D4:1]-[O;D2;z1:2]-[C:3]		C[Si](C)(C)OCC	C[Si](C)(C)C,CCO,COC		R3Si-O-R, a protected alcohol.  `protective.tsv` removes the named ones; this reports any
 # --- the carbonyl derivatives beside primary_amide/secondary_amide/ester ------------------
-190	tertiary_amide	[N;D3;z1;x0:1]-[C;D2,D3;z2;x2:2]=[O;D1;z2;x0:3]	[N:1]-[C:2]=[O:3]	CN(C)C=O	CC(=O)NC,CC(=O)N,CN(C)C,O=C(OC(C)(C)C)N1CCCCC1,CN(C)C(=O)N(C)C,CN(C)S(=O)(=O)C	R-CO-NR2, the level `primary_amide` and `secondary_amide` left out.  `x0` on the nitrogen because an amide N's three neighbours are all CARBON; `x2` on the carbonyl is what excludes a carbamate and a urea, whose carbonyl is `x3`
-191	carbamate	[N:1]-[C;D3;z2;x3:2](=[O;D1;z2;x0:3])-[O;D2;z1:4]-[C:5]		O=C(OC(C)(C)C)N1CCCCC1	CC(=O)OC,CC(=O)N(C)C,COC(=O)OC,NC(=O)N	N-CO-O-R, the Boc/Cbz/Fmoc backbone.  Reported wherever it occurs, unlike `protective.tsv`, which only names the ones it can cleave
-192	cyclic_carbamate	[N;D2,D3;z1;r5,r6:1]-[C;D3;z2;x3;r5,r6:2](=[O;D1;z2:3])-[O;D2;z1;r5,r6:4]		O=C1OCCN1	O=C1CCCN1,O=C(OC)NC,O=C1OCCC1	The oxazolidinone/cyclic-carbamate ring, which is a scaffold rather than a protected amine
-193	carbonate	[C:1]-[O;D2;z1:2]-[C;D3;z2;x3:3](=[O;D1;z2;x0:4])-[O;D2;z1:5]-[C:6]	[C:1]-[O:2]-[C:3](=[O:4])-[O:5]-[C:6]	COC(=O)OC	CC(=O)OC,O=C(OC(C)(C)C)NC	R-O-CO-O-R, both oxygens esterified
-194	enone	[C;z2:1]=[C;z2:2]-[C;D3;z2;x1:3]=[O;D1;x0:4]		CC(=O)C=C	CC(=O)CC,CC(=O)C#C,O=Cc1ccccc1	C=C-C=O, the Michael acceptor.  The conjugation is the group: neither `ketone` nor `alkene` alone says a molecule is electrophilic at the beta carbon
-195	acrylamide	[C;z2;D1:1]=[C;z2:2]-[C;D3;z2;x2:3](=[O;D1;x0:4])-[N:5]		NC(=O)C=C	CCC(=O)N,NC(=O)C=CC	H2C=CH-CO-N, the covalent-warhead acceptor.  `D1` on the terminal carbon: a beta-substituted acrylamide is a far weaker acceptor and is not this
-196	acrylate_ester	[C;z2;D1:1]=[C;z2:2]-[C;D3;z2;x2:3](=[O;D1;x0:4])-[O;D2:5]		COC(=O)C=C	CCC(=O)OC	H2C=CH-CO-O-R, the polymerizable monomer.  `D1` as in `acrylamide`
+190	tertiary_amide	[N;D3;z1;x0:1]-[C;D2,D3;z2;x2:2]=[O;D1;z2;x0:3]	[N:1]-[C:2]=[O:3]	CN(C)C=O	CC(=O)NC,CC(=O)N,CN(C)C,O=C(OC(C)(C)C)N1CCCCC1,CN(C)C(=O)N(C)C,CN(C)S(=O)(=O)C		R-CO-NR2, the level `primary_amide` and `secondary_amide` left out.  `x0` on the nitrogen because an amide N's three neighbours are all CARBON; `x2` on the carbonyl is what excludes a carbamate and a urea, whose carbonyl is `x3`
+191	carbamate	[N:1]-[C;D3;z2;x3:2](=[O;D1;z2;x0:3])-[O;D2;z1:4]-[C:5]		O=C(OC(C)(C)C)N1CCCCC1	CC(=O)OC,CC(=O)N(C)C,COC(=O)OC,NC(=O)N		N-CO-O-R, the Boc/Cbz/Fmoc backbone.  Reported wherever it occurs, unlike `protective.tsv`, which only names the ones it can cleave
+192	cyclic_carbamate	[N;D2,D3;z1;r5,r6:1]-[C;D3;z2;x3;r5,r6:2](=[O;D1;z2:3])-[O;D2;z1;r5,r6:4]		O=C1OCCN1	O=C1CCCN1,O=C(OC)NC,O=C1OCCC1	amide:1	The oxazolidinone/cyclic-carbamate ring, which is a scaffold rather than a protected amine
+193	carbonate	[C:1]-[O;D2;z1:2]-[C;D3;z2;x3:3](=[O;D1;z2;x0:4])-[O;D2;z1:5]-[C:6]	[C:1]-[O:2]-[C:3](=[O:4])-[O:5]-[C:6]	COC(=O)OC	CC(=O)OC,O=C(OC(C)(C)C)NC		R-O-CO-O-R, both oxygens esterified
+194	enone	[C;z2:1]=[C;z2:2]-[C;D3;z2;x1:3]=[O;D1;x0:4]		CC(=O)C=C	CC(=O)CC,CC(=O)C#C,O=Cc1ccccc1		C=C-C=O, the Michael acceptor.  The conjugation is the group: neither `ketone` nor `alkene` alone says a molecule is electrophilic at the beta carbon
+195	acrylamide	[C;z2;D1:1]=[C;z2:2]-[C;D3;z2;x2:3](=[O;D1;x0:4])-[N:5]		NC(=O)C=C	CCC(=O)N,NC(=O)C=CC		H2C=CH-CO-N, the covalent-warhead acceptor.  `D1` on the terminal carbon: a beta-substituted acrylamide is a far weaker acceptor and is not this
+196	acrylate_ester	[C;z2;D1:1]=[C;z2:2]-[C;D3;z2;x2:3](=[O;D1;x0:4])-[O;D2:5]		COC(=O)C=C	CCC(=O)OC		H2C=CH-CO-O-R, the polymerizable monomer.  `D1` as in `acrylamide`
 # --- the sulfur oxyacids beyond mesylate/tosylate/triflate --------------------------------
-197	sulfonate_ester	[C:1]-[O;D2;z1:2]-[S;D4:3](=[O;D1:4])=[O;D1:5]		CS(=O)(=O)OC	CS(=O)(=O)O,CS(=O)(=O)N,COC(=O)C	R-O-SO2-R, any sulfonate ester.  The named ones each have a row; this catches the rest
-198	sulfamide	[N:1]-[S;D4;x4:2](=[O;D1:3])(=[O;D1:4])-[N:5]		CNS(=O)(=O)N(C)C	NS(=O)(=O)c1ccccc1,NS(=O)(=O)OC	N-SO2-N, nitrogen on both sides
-199	sulfamate	[N:1]-[S;D4;x4:2](=[O;D1:3])(=[O;D1:4])-[O;D2:5]-[C:6]		NS(=O)(=O)OCC	NS(=O)(=O)N,NS(=O)(=O)c1ccccc1,CS(=O)(=O)OC	N-SO2-O-R
-200	sulfoximine	[S;D4;z5:1](=[O;D1:2])(=[N:3])([C:4])[C:5]		CS(C)(=O)=N	CS(C)(=O)=O,CS(C)=O,CS(=O)(=O)N	R2S(=O)=N, the sulfone bioisostere.  A stereocentre at sulfur, which is why the substituents are numbered rather than left to a template
-201	sulfinamide	[S;D3;z2:1](=[O;D1:2])(-[N:3])[C:4]		CS(=O)N(C)C	CS(=O)(=O)N(C)C,CS(C)=O	R-S(=O)-N, the Ellman auxiliary and the sulfoximine precursor
-202	sulfinate_ester	[S;D3;z2:1](=[O;D1:2])(-[O;D2:3]-[C:4])[C:5]		CS(=O)OC	CS(=O)(=O)OC,CS(C)=O	R-S(=O)-O-R
+197	sulfonate_ester	[C:1]-[O;D2;z1:2]-[S;D4:3](=[O;D1:4])=[O;D1:5]		CS(=O)(=O)OC	CS(=O)(=O)O,CS(=O)(=O)N,COC(=O)C		R-O-SO2-R, any sulfonate ester.  The named ones each have a row; this catches the rest
+198	sulfamide	[N:1]-[S;D4;x4:2](=[O;D1:3])(=[O;D1:4])-[N:5]		CNS(=O)(=O)N(C)C	NS(=O)(=O)c1ccccc1,NS(=O)(=O)OC		N-SO2-N, nitrogen on both sides
+199	sulfamate	[N:1]-[S;D4;x4:2](=[O;D1:3])(=[O;D1:4])-[O;D2:5]-[C:6]		NS(=O)(=O)OCC	NS(=O)(=O)N,NS(=O)(=O)c1ccccc1,CS(=O)(=O)OC		N-SO2-O-R
+200	sulfoximine	[S;D4;z5:1](=[O;D1:2])(=[N:3])([C:4])[C:5]		CS(C)(=O)=N	CS(C)(=O)=O,CS(C)=O,CS(=O)(=O)N		R2S(=O)=N, the sulfone bioisostere.  A stereocentre at sulfur, which is why the substituents are numbered rather than left to a template
+201	sulfinamide	[S;D3;z2:1](=[O;D1:2])(-[N:3])[C:4]		CS(=O)N(C)C	CS(=O)(=O)N(C)C,CS(C)=O		R-S(=O)-N, the Ellman auxiliary and the sulfoximine precursor
+202	sulfinate_ester	[S;D3;z2:1](=[O;D1:2])(-[O;D2:3]-[C:4])[C:5]		CS(=O)OC	CS(=O)(=O)OC,CS(C)=O		R-S(=O)-O-R
 # --- heteroaryl heteroatoms beyond `pyridine_n` -------------------------------------------
-203	thiophene_s	[S;a;D2:1]		c1ccsc1	CSC,c1ccccc1,c1ccoc1	The aromatic divalent sulfur of a thiophene, thiazole or isothiazole
-204	furan_o	[O;a;D2:1]		c1ccoc1	COC,c1ccsc1,C1CCOC1	The aromatic divalent oxygen of a furan, oxazole or isoxazole
-205	n_substituted_azole	[N;a;D3:1]-[C;z1,a:2]		Cn1cccc1	c1cc[nH]c1,c1ccncc1	The substituted pyrrole-type nitrogen -- an N-alkylated or N-arylated azole, as distinct from the `nh_azole` that could still be alkylated
-206	azine_n_oxide	[N;a;D3;+:1]-[O;D1;z1;-:2]		[O-][n+]1ccccc1	c1ccncc1,C[n+]1ccccc1,CN(C)C	The pyridine N-oxide, an activated ring for C-H functionalization.  The oxygen is NUMBERED: a deoxygenation omits it from its own product side, and leaving it unnumbered would delete it from every other template too
+203	thiophene_s	[S;a;D2:1]		c1ccsc1	CSC,c1ccccc1,c1ccoc1		The aromatic divalent sulfur of a thiophene, thiazole or isothiazole
+204	furan_o	[O;a;D2:1]		c1ccoc1	COC,c1ccsc1,C1CCOC1		The aromatic divalent oxygen of a furan, oxazole or isoxazole
+205	n_substituted_azole	[N;a;D3:1]-[C;z1,a:2]		Cn1cccc1	c1cc[nH]c1,c1ccncc1		The substituted pyrrole-type nitrogen -- an N-alkylated or N-arylated azole, as distinct from the `nh_azole` that could still be alkylated
+206	azine_n_oxide	[N;a;D3;+:1]-[O;D1;z1;-:2]		[O-][n+]1ccccc1	c1ccncc1,C[n+]1ccccc1,CN(C)C		The pyridine N-oxide, an activated ring for C-H functionalization.  The oxygen is NUMBERED: a deoxygenation omits it from its own product side, and leaving it unnumbered would delete it from every other template too
 # --- fluorinated and hypervalent substituents ---------------------------------------------
-207	trifluoromethoxy	[F:1][C;D4;z1;x4:2]([F:3])([F:4])-[O;D2:5]		FC(F)(F)Oc1ccccc1	FC(F)(F)c1ccccc1,FC(F)Oc1ccccc1,COc1ccccc1	OCF3.  `x4` on the carbon: three fluorines and the oxygen all count
-208	difluoromethoxy	[F:1][C;D3;z1;x3:2]([F:3])-[O;D2:4]		FC(F)Oc1ccccc1	FC(F)(F)Oc1ccccc1,FC(F)c1ccccc1	OCHF2
-209	pentafluorosulfanyl	[S;D6:1]([F:2])([F:3])([F:4])([F:5])-[C:6]		FS(F)(F)(F)(F)c1ccccc1	FC(F)(F)c1ccccc1,CS(=O)(=O)F	SF5, the CF3 replacement
+207	trifluoromethoxy	[F:1][C;D4;z1;x4:2]([F:3])([F:4])-[O;D2:5]		FC(F)(F)Oc1ccccc1	FC(F)(F)c1ccccc1,FC(F)Oc1ccccc1,COc1ccccc1		OCF3.  `x4` on the carbon: three fluorines and the oxygen all count
+208	difluoromethoxy	[F:1][C;D3;z1;x3:2]([F:3])-[O;D2:4]		FC(F)Oc1ccccc1	FC(F)(F)Oc1ccccc1,FC(F)c1ccccc1		OCHF2
+209	pentafluorosulfanyl	[S;D6:1]([F:2])([F:3])([F:4])([F:5])-[C:6]		FS(F)(F)(F)(F)c1ccccc1	FC(F)(F)c1ccccc1,CS(=O)(=O)F		SF5, the CF3 replacement
 # --- phosphorus beyond `phosphonate` ------------------------------------------------------
-210	phosphate_ester	[C:1]-[O;D2:2]-[P;D4:3](=[O;D1:4])(-[O;D2:5])-[O;D2:6]		COP(=O)(OC)OC	CCOP(=O)(OCC)Cc1ccccc1,COP(C)C	R-O-PO(OR)(OR), three oxygens on phosphorus
-211	phosphine_oxide	[P;D4:1](=[O;D1;x1:2])([C:3])([C:4])[C:5]		O=P(c1ccccc1)(c1ccccc1)c1ccccc1	COP(=O)(OC)OC,CP(C)C	R3P=O, the Wittig and Mitsunobu byproduct.  `x1` on the oxygen: its only neighbour is phosphorus, which is a heteroatom
-212	phosphonic_acid	[O;D1;z1;h1:1]-[P;D4:2](=[O;D1:3])-[O;D1;z1;h1:4]		OP(O)(=O)c1ccccc1	COP(=O)(OC)OC,CS(=O)(=O)O	R-PO(OH)2
+210	phosphate_ester	[C:1]-[O;D2:2]-[P;D4:3](=[O;D1:4])(-[O;D2:5])-[O;D2:6]		COP(=O)(OC)OC	CCOP(=O)(OCC)Cc1ccccc1,COP(C)C		R-O-PO(OR)(OR), three oxygens on phosphorus
+211	phosphine_oxide	[P;D4:1](=[O;D1;x1:2])([C:3])([C:4])[C:5]		O=P(c1ccccc1)(c1ccccc1)c1ccccc1	COP(=O)(OC)OC,CP(C)C		R3P=O, the Wittig and Mitsunobu byproduct.  `x1` on the oxygen: its only neighbour is phosphorus, which is a heteroatom
+212	phosphonic_acid	[O;D1;z1;h1:1]-[P;D4:2](=[O;D1:3])-[O;D1;z1;h1:4]		OP(O)(=O)c1ccccc1	COP(=O)(OC)OC,CS(=O)(=O)O		R-PO(OH)2
 # --- nitrogen: the imines, hydrazines and hydroxylamines ----------------------------------
-213	imine	[N;D2;z2;x0:1]=[C;z2:2]		CN=Cc1ccccc1	CN=C=NC,CC(=O)N,CC#N,CN=O,c1ccncc1	R-N=C, the reductive-amination intermediate and the aza-Michael acceptor.  `x0` excludes the oxime and the hydrazone, which have their own rows
-214	imine_nh	[N;D1;z2;x0;h1:1]=[C;z2:2]	[N:1]=[C:2]	N=C1CCCCC1	CN=Cc1ccccc1,CC(=O)N,CC#N	HN=C, the free imine
-215	hydrazine	[N;z1;x1:1]-[N;z1;x1:2]		CN(C)N	CNC,CON,c1ccncc1	N-N single bond, both sp3.  A hydrazide matches this too and `hydrazide` names it more precisely
-216	n_hydroxylamine	[O;D1;z1;x1;h1:1]-[N;z1;x1:2]-[C;z1,a:3]		ON1CCCCC1	CON,CC(=O)NO,CC(C)=NO,CCO	HO-N with carbon on the nitrogen.  The carbon is stated to exclude the hydroxamic acid, whose nitrogen carries a carbonyl
-217	carbodiimide	[N;D2;z2:1]=[C;D2;z5:2]=[N;D2;z2:3]		CN=C=NC	CN=C=O,CN=C=S	N=C=N, the DCC/EDC coupling reagent.  `z5` is the cumulated-double centre; chython 2 wrote `z3` here and V3's `z3` is sp and nothing else
+213	imine	[N;D2;z2;x0:1]=[C;z2:2]		CN=Cc1ccccc1	CN=C=NC,CC(=O)N,CC#N,CN=O,c1ccncc1		R-N=C, the reductive-amination intermediate and the aza-Michael acceptor.  `x0` excludes the oxime and the hydrazone, which have their own rows
+214	imine_nh	[N;D1;z2;x0;h1:1]=[C;z2:2]	[N:1]=[C:2]	N=C1CCCCC1	CN=Cc1ccccc1,CC(=O)N,CC#N		HN=C, the free imine
+215	hydrazine	[N;z1;x1:1]-[N;z1;x1:2]		CN(C)N	CNC,CON,c1ccncc1		N-N single bond, both sp3.  A hydrazide matches this too and `hydrazide` names it more precisely
+216	n_hydroxylamine	[O;D1;z1;x1;h1:1]-[N;z1;x1:2]-[C;z1,a:3]		ON1CCCCC1	CON,CC(=O)NO,CC(C)=NO,CCO		HO-N with carbon on the nitrogen.  The carbon is stated to exclude the hydroxamic acid, whose nitrogen carries a carbonyl
+217	carbodiimide	[N;D2;z2:1]=[C;D2;z5:2]=[N;D2;z2:3]		CN=C=NC	CN=C=O,CN=C=S		N=C=N, the DCC/EDC coupling reagent.  `z5` is the cumulated-double centre; chython 2 wrote `z3` here and V3's `z3` is sp and nothing else
 # --- thiocarbonyls beyond thioamide/thiourea ----------------------------------------------
-218	thione	[S;D1;z2;x0:1]=[C;D3;z2;x1:2]		S=C1CCCCC1	CC(N)=S,CC(C)=O,S=C=S	C=S with one heteroatom on the carbon, the thioketone
-219	thiocarbamate	[N:1]-[C;D3;z2:2](=[S;D1;x0:3])-[O;D2:4]		CNC(=S)OC	CC(N)=S,O=C(OC)NC,CCOC(=S)S	N-C(=S)-O-R, the Newman-Kwart substrate
-220	xanthate	[S;D1,D2:1]-[C;D3;z2:2](=[S;D1;x0:3])-[O;D2:4]		CCOC(=S)S	CNC(=S)OC,CC(N)=S	S-C(=S)-O-R, the RAFT agent.  `D1,D2` because the second sulfur is a free thiol as often as it is substituted
-221	thiocyanate	[N;D1;z3:1]#[C;D2;z3:2]-[S;D2:3]		CSC#N	CN=C=S,CC#N	R-S-C#N, which is not the isothiocyanate `S=C=N-R`
+218	thione	[S;D1;z2;x0:1]=[C;D3;z2;x1:2]		S=C1CCCCC1	CC(N)=S,CC(C)=O,S=C=S		C=S with one heteroatom on the carbon, the thioketone
+219	thiocarbamate	[N:1]-[C;D3;z2:2](=[S;D1;x0:3])-[O;D2:4]		CNC(=S)OC	CC(N)=S,O=C(OC)NC,CCOC(=S)S		N-C(=S)-O-R, the Newman-Kwart substrate
+220	xanthate	[S;D1,D2:1]-[C;D3;z2:2](=[S;D1;x0:3])-[O;D2:4]		CCOC(=S)S	CNC(=S)OC,CC(N)=S		S-C(=S)-O-R, the RAFT agent.  `D1,D2` because the second sulfur is a free thiol as often as it is substituted
+221	thiocyanate	[N;D1;z3:1]#[C;D2;z3:2]-[S;D2:3]		CSC#N	CN=C=S,CC#N		R-S-C#N, which is not the isothiocyanate `S=C=N-R`
 # --- halides the `x1` and `D1` on the existing rows exclude -------------------------------
-222	benzyl_halide	[Cl,Br,I;D1:1]-[C;z1;x1;h1,h2:2]-[C;a:3]		ClCc1ccccc1	Cc1ccccc1,ClCCc1ccccc1	Ar-CH2-X.  `alkyl_halide` already matches it; this says the SN2 is a benzylic one, which is a different rate and a different selectivity
-223	allyl_halide	[Cl,Br,I;D1:1]-[C;z1;x1:2]-[C;z2:3]=[C;z2:4]		BrCC=C	BrCCC=C,ClCc1ccccc1	X-C-C=C, the allylic SN2/SN2' substrate
-224	gem_dihalide	[Cl,Br,I;D1:1]-[C;z1:2]-[Cl,Br,I;D1:3]		ClCCl	ClCC,ClCCCl,FC(F)(F)c1ccccc1	Two halides on one carbon.  Fluorine is excluded because a gem-difluoride is `difluoromethyl` and not an alkylating agent
-225	alpha_heteroatom_halide	[Cl,Br,I;D1:1]-[C;z1;h1,h2:2]-[N,O,S;z1:3]	[Cl:1]-[C:2]-[A:3]	ClCOC	ClCC,ClCC(=O)OC,ClCc1ccccc1	X-C-Het, the MOM-chloride class: an alkylating agent far more reactive than `alkyl_halide` says
-226	trihalomethyl	[Cl,Br,I;D1:1]-[C;D4;z1:2](-[Cl,Br,I;D1:3])-[Cl,Br,I;D1:4]		ClC(Cl)(Cl)c1ccccc1	ClCCl,FC(F)(F)c1ccccc1	CX3 for X other than fluorine
-227	n_halo_imide	[Cl,Br,I;D1:1]-[N;D3:2]		ClN1C(=O)CCC1=O	ClCC,CN(C)C	N-X, the NBS/NCS halogen source
-228	phosphorus_halide	[F,Cl,Br,I;D1:1]-[P:2]		ClP(Cl)Cl	ClCC,COP(=O)(OC)OC	P-X
-229	chlorosilane	[F,Cl,Br,I;D1:1]-[Si;D4:2]		C[Si](C)(C)Cl	C[Si](C)(C)C,ClCC	Si-X, the silylating agent
+222	benzyl_halide	[Cl,Br,I;D1:1]-[C;z1;x1;h1,h2:2]-[C;a:3]		ClCc1ccccc1	Cc1ccccc1,ClCCc1ccccc1		Ar-CH2-X.  `alkyl_halide` already matches it; this says the SN2 is a benzylic one, which is a different rate and a different selectivity
+223	allyl_halide	[Cl,Br,I;D1:1]-[C;z1;x1:2]-[C;z2:3]=[C;z2:4]		BrCC=C	BrCCC=C,ClCc1ccccc1		X-C-C=C, the allylic SN2/SN2' substrate
+224	gem_dihalide	[Cl,Br,I;D1:1]-[C;z1:2]-[Cl,Br,I;D1:3]		ClCCl	ClCC,ClCCCl,FC(F)(F)c1ccccc1		Two halides on one carbon.  Fluorine is excluded because a gem-difluoride is `difluoromethyl` and not an alkylating agent
+225	alpha_heteroatom_halide	[Cl,Br,I;D1:1]-[C;z1;h1,h2:2]-[N,O,S;z1:3]	[Cl:1]-[C:2]-[A:3]	ClCOC	ClCC,ClCC(=O)OC,ClCc1ccccc1		X-C-Het, the MOM-chloride class: an alkylating agent far more reactive than `alkyl_halide` says
+226	trihalomethyl	[Cl,Br,I;D1:1]-[C;D4;z1:2](-[Cl,Br,I;D1:3])-[Cl,Br,I;D1:4]		ClC(Cl)(Cl)c1ccccc1	ClCCl,FC(F)(F)c1ccccc1		CX3 for X other than fluorine
+227	n_halo_imide	[Cl,Br,I;D1:1]-[N;D3:2]		ClN1C(=O)CCC1=O	ClCC,CN(C)C		N-X, the NBS/NCS halogen source
+228	phosphorus_halide	[F,Cl,Br,I;D1:1]-[P:2]		ClP(Cl)Cl	ClCC,COP(=O)(OC)OC		P-X
+229	chlorosilane	[F,Cl,Br,I;D1:1]-[Si;D4:2]		C[Si](C)(C)Cl	C[Si](C)(C)C,ClCC		Si-X, the silylating agent
 # --- salt forms.  UNSTATED CHARGE MEANS CHARGE ZERO, so no neutral row can reach one ------
-230	carboxylate	[O;D1;z1;x0;-:1]-[C;D3;z2:2]=[O;D1;z2;x0:3]	[O;-:1]-[C:2]=[O:3]	CC(=O)[O-].[Na+]	CC(=O)O,CS(=O)(=O)[O-],[O-]c1ccccc1	The deprotonated acid.  `carboxylic_acid` cannot match it, its own oxygen being neutral by omission, so a registration salt reports no acid at all without this row
-231	sulfonate	[O;D1;z1;-:1]-[S;D4:2](=[O;D1:3])=[O;D1:4]		CS(=O)(=O)[O-].[Na+]	CS(=O)(=O)O,CS(=O)(=O)OC	The deprotonated sulfonic acid
-232	alkoxide	[O;D1;z1;x0;-:1]-[C;z1:2]	[O;-:1]-[C:2]	CC[O-].[Na+]	CCO,CC(=O)[O-],[O-]c1ccccc1	RO-
-233	phenoxide	[O;D1;z1;x0;-:1]-[C;a:2]	[O;-:1]-[C:2]	[O-]c1ccccc1.[Na+]	Oc1ccccc1,CC[O-]	ArO-
-234	thiolate	[S;D1;z1;x0;-:1]-[C:2]	[S;-:1]-[C:2]	CC[S-].[Na+]	CCS	RS-
-235	ammonium	[N;z1;x0;+;h1,h2,h3:1]		CC[NH3+].[Cl-]	CCN,CCCC[N+](CCCC)(CCCC)CCCC	The protonated amine.  `h1,h2,h3` is what distinguishes it from a quaternary salt
-236	quaternary_ammonium	[N;D4;z1;x0;+;h0:1]		CCCC[N+](CCCC)(CCCC)CCCC	CC[NH3+],CCN	R4N+, a phase-transfer catalyst rather than a protonation state
+230	carboxylate	[O;D1;z1;x0;-:1]-[C;D3;z2:2]=[O;D1;z2;x0:3]	[O;-:1]-[C:2]=[O:3]	CC(=O)[O-].[Na+]	CC(=O)O,CS(=O)(=O)[O-],[O-]c1ccccc1		The deprotonated acid.  `carboxylic_acid` cannot match it, its own oxygen being neutral by omission, so a registration salt reports no acid at all without this row
+231	sulfonate	[O;D1;z1;-:1]-[S;D4:2](=[O;D1:3])=[O;D1:4]		CS(=O)(=O)[O-].[Na+]	CS(=O)(=O)O,CS(=O)(=O)OC		The deprotonated sulfonic acid
+232	alkoxide	[O;D1;z1;x0;-:1]-[C;z1:2]	[O;-:1]-[C:2]	CC[O-].[Na+]	CCO,CC(=O)[O-],[O-]c1ccccc1		RO-
+233	phenoxide	[O;D1;z1;x0;-:1]-[C;a:2]	[O;-:1]-[C:2]	[O-]c1ccccc1.[Na+]	Oc1ccccc1,CC[O-]		ArO-
+234	thiolate	[S;D1;z1;x0;-:1]-[C:2]	[S;-:1]-[C:2]	CC[S-].[Na+]	CCS		RS-
+235	ammonium	[N;z1;x0;+;h1,h2,h3:1]		CC[NH3+].[Cl-]	CCN,CCCC[N+](CCCC)(CCCC)CCCC		The protonated amine.  `h1,h2,h3` is what distinguishes it from a quaternary salt
+236	quaternary_ammonium	[N;D4;z1;x0;+;h0:1]		CCCC[N+](CCCC)(CCCC)CCCC	CC[NH3+],CCN		R4N+, a phase-transfer catalyst rather than a protonation state
 # --- strained rings, where ring size is the reactivity ------------------------------------
-237	oxetane	[O;D2;z1;r4:1]([C;z1;r4:2])[C;z1;r4:3]		C1COC1	C1CO1,C1CCOC1	The four-membered ether, a carbonyl bioisostere and a slow electrophile
-238	azetidine	[N;D2;z1;x0;r4;h1:1]([C;z1;r4:2])[C;z1;r4:3]		C1CNC1	C1CN1,C1CCNC1,O=C1CCN1,CN1CCC1	The four-membered NH amine
-239	beta_lactam	[N;D2,D3;z1;r4:1]-[C;D3;z2;r4:2]=[O;D1;x0:3]		O=C1CC2N1CCS2	O=C1CCCN1,CC(=O)N,C1CNC1	The four-membered lactam.  `D2,D3` because a fused penicillin or cephalosporin nitrogen is D3 and `D2` alone reaches only the monocyclic model compound
+237	oxetane	[O;D2;z1;r4:1]([C;z1;r4:2])[C;z1;r4:3]		C1COC1	C1CO1,C1CCOC1		The four-membered ether, a carbonyl bioisostere and a slow electrophile
+238	azetidine	[N;D2;z1;x0;r4;h1:1]([C;z1;r4:2])[C;z1;r4:3]		C1CNC1	C1CN1,C1CCNC1,O=C1CCN1,CN1CCC1	amine:1	The four-membered NH amine
+239	beta_lactam	[N;D2,D3;z1;r4:1]-[C;D3;z2;r4:2]=[O;D1;x0:3]		O=C1CC2N1CCS2	O=C1CCCN1,CC(=O)N,C1CNC1	amide:1	The four-membered lactam.  `D2,D3` because a fused penicillin or cephalosporin nitrogen is D3 and `D2` alone reaches only the monocyclic model compound
 # --- and two spellings that only a charge or a metal distinguishes ------------------------
-240	acyl_azide	[N;D1;z2;-:1]=[N;D2;+:2]=[N;D2;z2:3]-[C;D3;z2:4]=[O;D1;x0:5]		O=C(c1ccccc1)N=[N+]=[N-]	CCN=[N+]=[N-]	R-CO-N3, the Curtius substrate, as distinct from the alkyl azide
-241	metalate_carbanion	[Mg,Zn,Cu,Li;D1;+:1]-[C:2]		CC[Zn+].[Br-]	CC[Mg]Br,CCC,CC[O-].[Na+]	The ionic spelling of an organometallic, which the neutral `alkyl_grignard` row cannot match; the `*_zinc` rows take it too
+240	acyl_azide	[N;D1;z2;-:1]=[N;D2;+:2]=[N;D2;z2:3]-[C;D3;z2:4]=[O;D1;x0:5]		O=C(c1ccccc1)N=[N+]=[N-]	CCN=[N+]=[N-]		R-CO-N3, the Curtius substrate, as distinct from the alkyl azide
+241	metalate_carbanion	[Mg,Zn,Cu,Li;D1;+:1]-[C:2]		CC[Zn+].[Br-]	CC[Mg]Br,CCC,CC[O-].[Na+]		The ionic spelling of an organometallic, which the neutral `alkyl_grignard` row cannot match; the `*_zinc` rows take it too
 # --- the merged leaving-group classes, for a row that couples any sulfonate ---------------
-242	aryl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccccc1)C(F)(F)F	CS(=O)(=O)Nc1ccccc1,CS(=O)(=O)c1ccccc1,CS(=O)(=O)OCC	ArOSO2R for any R -- triflate, mesylate, tosylate, besylate.  The three named rows answer "which pseudohalide"; this one answers "does this couple", which is the question a coupling row asks
-243	alkyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C]	CS(=O)(=O)OCC	CS(=O)(=O)NCC,CS(=O)(=O)CC,CS(=O)(=O)Oc1ccccc1	ROSO2R' on sp3 carbon, any R'.  The SN2 leaving group as one class
+242	aryl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccccc1)C(F)(F)F	CS(=O)(=O)Nc1ccccc1,CS(=O)(=O)c1ccccc1,CS(=O)(=O)OCC		ArOSO2R for any R -- triflate, mesylate, tosylate, besylate.  The three named rows answer "which pseudohalide"; this one answers "does this couple", which is the question a coupling row asks
+243	alkyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C]	CS(=O)(=O)OCC	CS(=O)(=O)NCC,CS(=O)(=O)CC,CS(=O)(=O)Oc1ccccc1		ROSO2R' on sp3 carbon, any R'.  The SN2 leaving group as one class
 # --- the azine lactam halides, by where the halide sits on the ring -----------------------
-244	lactam_1_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]1=[C,N;z2;M]-[C;D3;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1N(C)C=CC(Cl)=C1	O=C1N(C)C=CC=C1Cl	Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C4 of a 2-pyridinone.  Every ring atom but the reacting carbon is masked, so a reaction row bonds to :1 and restates nothing
-245	lactam_2_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]=1-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C,N;z2;M]=1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1N(C)C(Cl)=CC=C1	O=C1N(C)C=C(Cl)C=C1	Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C6 of a 2-pyridinone, adjacent to the ring nitrogen
-246	lactam_3_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]=1-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C;D3;z2;M]-[C,N;z2;M]=1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1C=C(Cl)N(C)C=C1	O=C1C(Cl)=CN(C)C=C1	Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C2 of a 4-pyridinone, adjacent to the ring nitrogen
-247	lactam_4_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]=1-[C;D3;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C,N;z2;M]=1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1N(C)C=CC=C1Cl	O=C1N(C)C=CC(Cl)=C1	Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C3 of a 2-pyridinone, adjacent to the carbonyl
-248	lactam_5_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C;D3;z2;M]1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1C(Cl)=CN(C)C=C1	O=C1C=C(Cl)N(C)C=C1	Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C3 of a 4-pyridinone, adjacent to the carbonyl
-249	lactam_6_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1N(C)C=C(Cl)C=C1	O=C1N(C)C(Cl)=CC=C1	Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C5 of a 2-pyridinone
+244	lactam_1_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]1=[C,N;z2;M]-[C;D3;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1N(C)C=CC(Cl)=C1	O=C1N(C)C=CC=C1Cl		Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C4 of a 2-pyridinone.  Every ring atom but the reacting carbon is masked, so a reaction row bonds to :1 and restates nothing
+245	lactam_2_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]=1-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C,N;z2;M]=1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1N(C)C(Cl)=CC=C1	O=C1N(C)C=C(Cl)C=C1		Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C6 of a 2-pyridinone, adjacent to the ring nitrogen
+246	lactam_3_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]=1-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C;D3;z2;M]-[C,N;z2;M]=1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1C=C(Cl)N(C)C=C1	O=C1C(Cl)=CN(C)C=C1		Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C2 of a 4-pyridinone, adjacent to the ring nitrogen
+247	lactam_4_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]=1-[C;D3;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C,N;z2;M]=1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1N(C)C=CC=C1Cl	O=C1N(C)C=CC(Cl)=C1		Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C3 of a 2-pyridinone, adjacent to the carbonyl
+248	lactam_5_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]-[C;D3;z2;M]1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1C(Cl)=CN(C)C=C1	O=C1C=C(Cl)N(C)C=C1		Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C3 of a 4-pyridinone, adjacent to the carbonyl
+249	lactam_6_halide	[F,Cl,Br,I;D1]-[C;z2;r6:1]1=[C,N;z2;M]-[N;D3;M]-[C;D3;z2;M]-[C,N;z2,z4;M]=,:[C,N;z2,z4;M]1	[F]-[C:1],[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	O=C1N(C)C=C(Cl)C=C1	O=C1N(C)C(Cl)=CC=C1		Activated C(sp2)-X on an N-substituted six-membered lactam, halide at C5 of a 2-pyridinone
 # --- the persistent radicals, where the substituents are what make the radical isolable ---
-250	nitroxide	[O;D1;h0;z1:1]-[N;D3;z1:2](-[C;z1,z4;D3,D4:3])-[C;z1,z4;D3,D4:4] |^1:0|		CC1(C)CCCC(C)(C)N1[O] |^1:10|	CC1(C)CCCC(C)(C)N1O,CC1(C)CCCC(C)(C)[N+]1=O,C[N]([O])C |^1:2|	R2N-O•, the radical on oxygen -- TEMPO and its kin.  `D3,D4` on both alpha carbons is the isolability: a nitroxide with an alpha hydrogen disproportionates, so dimethylnitroxide is a decoy and not a match.  The hydroxylamine and the oxoammonium cation are the same skeleton at the other two oxidation states
-251	hindered_aryloxyl	[O;D1;h0;z1:1]-[C;a:2](:[C;a:3]-[C;D4;z1:4]):[C;a:5]-[C;D4;z1:6] |^1:0|		[O]c1c(C(C)(C)C)cc(C(C)(C)C)cc1C(C)(C)C |^1:0|	[O]c1ccccc1 |^1:0|,Oc1c(C(C)(C)C)cc(C)cc1C(C)(C)C	Ar-O• with a quaternary carbon at BOTH ortho positions, which is what makes it isolable; the unhindered phenoxyl radical is a decoy
-252	hydrazyl	[N;D2;h0;z1:1](-[C;a:2])-[N;D3;z1:3](-[C;a:4])-[C;a:5] |^1:0|		[N](N(c1ccccc1)c1ccccc1)c1c([N+](=O)[O-])cc([N+](=O)[O-])cc1[N+](=O)[O-] |^1:0|	c1ccccc1N(c1ccccc1)Nc1ccccc1,C[N]N(C)C |^1:1|	Ar2N-N•-Ar, the DPPH class: three aryl rings to delocalise over, and the trialkyl hydrazyl with none of them is a decoy
-253	triarylmethyl_radical	[C;D3;h0;z1:1](-[C;a:2])(-[C;a:3])-[C;a:4] |^1:0|		[C](c1ccccc1)(c1ccccc1)c1ccccc1 |^1:0|	C(c1ccccc1)(c1ccccc1)c1ccccc1,[C+](c1ccccc1)(c1ccccc1)c1ccccc1,C[C](C)c1ccccc1 |^1:1|	Ar3C•, Gomberg's radical and the trityl spin labels.  `_radical` is in the name because `protective.tsv`'s trityl rows are this skeleton without one
+250	nitroxide	[O;D1;h0;z1:1]-[N;D3;z1:2](-[C;z1,z4;D3,D4:3])-[C;z1,z4;D3,D4:4] |^1:0|		CC1(C)CCCC(C)(C)N1[O] |^1:10|	CC1(C)CCCC(C)(C)N1O,CC1(C)CCCC(C)(C)[N+]1=O,C[N]([O])C |^1:2|		R2N-O•, the radical on oxygen -- TEMPO and its kin.  `D3,D4` on both alpha carbons is the isolability: a nitroxide with an alpha hydrogen disproportionates, so dimethylnitroxide is a decoy and not a match.  The hydroxylamine and the oxoammonium cation are the same skeleton at the other two oxidation states
+251	hindered_aryloxyl	[O;D1;h0;z1:1]-[C;a:2](:[C;a:3]-[C;D4;z1:4]):[C;a:5]-[C;D4;z1:6] |^1:0|		[O]c1c(C(C)(C)C)cc(C(C)(C)C)cc1C(C)(C)C |^1:0|	[O]c1ccccc1 |^1:0|,Oc1c(C(C)(C)C)cc(C)cc1C(C)(C)C		Ar-O• with a quaternary carbon at BOTH ortho positions, which is what makes it isolable; the unhindered phenoxyl radical is a decoy
+252	hydrazyl	[N;D2;h0;z1:1](-[C;a:2])-[N;D3;z1:3](-[C;a:4])-[C;a:5] |^1:0|		[N](N(c1ccccc1)c1ccccc1)c1c([N+](=O)[O-])cc([N+](=O)[O-])cc1[N+](=O)[O-] |^1:0|	c1ccccc1N(c1ccccc1)Nc1ccccc1,C[N]N(C)C |^1:1|		Ar2N-N•-Ar, the DPPH class: three aryl rings to delocalise over, and the trialkyl hydrazyl with none of them is a decoy
+253	triarylmethyl_radical	[C;D3;h0;z1:1](-[C;a:2])(-[C;a:3])-[C;a:4] |^1:0|		[C](c1ccccc1)(c1ccccc1)c1ccccc1 |^1:0|	C(c1ccccc1)(c1ccccc1)c1ccccc1,[C+](c1ccccc1)(c1ccccc1)c1ccccc1,C[C](C)c1ccccc1 |^1:1|		Ar3C•, Gomberg's radical and the trityl spin labels.  `_radical` is in the name because `protective.tsv`'s trityl rows are this skeleton without one
 # --- the cross-coupling partners the classes above leave out ----------------------------------
-254	methanol	[O;D1;z1;x0:1]-[C;D1:2]	[O:1]-[C:2]	CO	CCO,C[O-].[Na+],COC	CH3-OH, which `primary_alcohol` (`D2`) leaves out
-255	alkenyl_halide	[Cl,Br,I;D1]-[C;z2;x1,x2:1]=[C:2]	[Cl]-[C:1]=[C:2],[Br]-[C:1]=[C:2],[I]-[C:1]=[C:2]	BrC=C	Brc1ccccc1,CCCBr,FC=C	vinylic C-X, the three `alkenyl_*` halides as one class; F excluded as in `aryl_halide`
-256	alkenyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z2;x1,x2:1]=[C:2])-[C]	[S](=[O])(=[O])(-[O]-[C:1]=[C:2])-[C](-[F])(-[F])-[F]	O=S(=O)(OC1=CCCCC1)C(F)(F)F	O=S(=O)(Oc1ccccc1)C(F)(F)F,CS(=O)(=O)OCC,CS(=O)(=O)C=C	enol triflate, nonaflate or tosylate, the vinylic pseudohalide
-257	tetramethylstannane	[Sn;D4](-[C;D1])(-[C;D1])(-[C;D1])-[C;D1:1]	[Sn](-[C])(-[C])(-[C])-[C:1]	C[Sn](C)(C)C	C[Sn](C)(C)c1ccccc1,CCCC[Sn](CCCC)(CCCC)C	Me4Sn, the Stille methylating agent; `alkyl_stannane` excludes the methyls of a Me3Sn dummy
-258	diboron_ester	[B;D3:1](-[O;D2:2])(-[O;D2:3])-[B;D3](-[O;D2])-[O;D2]	[B:1](-[O:2])(-[O:3])-[B]1-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CC1(C)OB(B2OC(C)(C)C(C)(C)O2)OC1(C)C	CC1(C)OB(c2ccccc2)OC1(C)C,OB(O)B(O)O	B2pin2 and its kin, the Miyaura boron source; one boron and its two oxygens are kept
-259	acyclic_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-;!@[O;D2;x0]	[O:1]=[C:2]-[O]-[C]	CC(=O)OC	O=C1CCCO1,CC(=O)O,CC(=O)N	`ester` outside a ring, so hydrolysis leaves one product; a lactone opens to a hydroxy acid instead
-260	alkyl_boroxine	[B;D3;z1;x2;r6](-[O;D2;r6]-[B;r6])(-[O;D2;r6]-[B;r6])-;!@[C;z1:1]	[B]1(-[C:1])-[O]-[B](-[C])-[O]-[B](-[C])-[O]-1	CB1OB(C)OB(C)O1	CC1(C)OB(C)OC1(C)C,OB(O)C	(RBO)3, trimethylboroxine the common one: a methyl donor for the Suzuki
+254	methanol	[O;D1;z1;x0:1]-[C;D1:2]	[O:1]-[C:2]	CO	CCO,C[O-].[Na+],COC	hydroxyl:1	CH3-OH, which `primary_alcohol` (`D2`) leaves out
+255	alkenyl_halide	[Cl,Br,I;D1]-[C;z2;x1,x2:1]=[C:2]	[Cl]-[C:1]=[C:2],[Br]-[C:1]=[C:2],[I]-[C:1]=[C:2]	BrC=C	Brc1ccccc1,CCCBr,FC=C		vinylic C-X, the three `alkenyl_*` halides as one class; F excluded as in `aryl_halide`
+256	alkenyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z2;x1,x2:1]=[C:2])-[C]	[S](=[O])(=[O])(-[O]-[C:1]=[C:2])-[C](-[F])(-[F])-[F]	O=S(=O)(OC1=CCCCC1)C(F)(F)F	O=S(=O)(Oc1ccccc1)C(F)(F)F,CS(=O)(=O)OCC,CS(=O)(=O)C=C		enol triflate, nonaflate or tosylate, the vinylic pseudohalide
+257	tetramethylstannane	[Sn;D4](-[C;D1])(-[C;D1])(-[C;D1])-[C;D1:1]	[Sn](-[C])(-[C])(-[C])-[C:1]	C[Sn](C)(C)C	C[Sn](C)(C)c1ccccc1,CCCC[Sn](CCCC)(CCCC)C		Me4Sn, the Stille methylating agent; `alkyl_stannane` excludes the methyls of a Me3Sn dummy
+258	diboron_ester	[B;D3:1](-[O;D2:2])(-[O;D2:3])-[B;D3](-[O;D2])-[O;D2]	[B:1](-[O:2])(-[O:3])-[B]1-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CC1(C)OB(B2OC(C)(C)C(C)(C)O2)OC1(C)C	CC1(C)OB(c2ccccc2)OC1(C)C,OB(O)B(O)O		B2pin2 and its kin, the Miyaura boron source; one boron and its two oxygens are kept
+259	acyclic_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-;!@[O;D2;x0]	[O:1]=[C:2]-[O]-[C]	CC(=O)OC	O=C1CCCO1,CC(=O)O,CC(=O)N		`ester` outside a ring, so hydrolysis leaves one product; a lactone opens to a hydroxy acid instead
+260	alkyl_boroxine	[B;D3;z1;x2;r6](-[O;D2;r6]-[B;r6])(-[O;D2;r6]-[B;r6])-;!@[C;z1:1]	[B]1(-[C:1])-[O]-[B](-[C])-[O]-[B](-[C])-[O]-1	CB1OB(C)OB(C)O1	CC1(C)OB(C)OC1(C)C,OB(O)C		(RBO)3, trimethylboroxine the common one: a methyl donor for the Suzuki
 # --- the N-H nucleophiles the amide rows leave out, and the activated ester -------------------
-261	nh_carbamate	[N;D1,D2;z1;x0:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2:4]	[N:1]-[C:2](=[O:3])-[O:4]	CC(C)(C)OC(=O)NC	CC(C)(C)OC(=O)N(C)C,CNC(=O)NC,CC(=O)NC	a carbamate N-H, BocNH2 and the oxazolidinone included; `carbamate` does not bound the N
-262	nh_urea_any	[N;D1,D2;z1;x0:1]-[C;D3;z2;x3:2](=[O;D1:3])-[N;z1:4]	[N:1]-[C:2](=[O:3])-[N:4]	O=C1NCCN1C	CN(C)C(=O)N(C)C,CNC(=O)OC,CC(=O)NC	a urea N-H, ring or chain; `nh_urea` is the acyclic both-NH subset
-263	nh_sulfonamide	[N;D1,D2;z1;x1:1]-[S;D4:2](=[O:3])=[O:4]	[N:1]-[S:2](=[O:3])=[O:4]	CNS(=O)(=O)c1ccccc1	CN(C)S(=O)(=O)c1ccccc1,CS(=O)(=O)O	a sulfonamide N-H; `sulfonamide` matches the tertiary one too
-264	activated_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x1]-[N]	[O:1]=[C:2]-[O]-[N]1-[C](=[O])-[C]-[C]-[C]-1=[O]	CC(=O)ON1C(=O)CCC1=O	CC(=O)OC,CC(=O)O	an N-O ester -- NHS, HOBt, HOAt, oxime -- the acylating agent `ester` (`x0` oxygen) leaves out
-265	ring_enamine_nh2	[N;D1;z1;x0:1]-[C;z2;x1,x2;r5,r6:2]=[C;z2:3]	[N:1]-[C:2]=[C:3]	NC1=CN(C)C(=O)C=C1	NC=CC,NC1=NCCC1,Nc1ccccc1	an NH2 on a ring C=C that `primary_aniline` (`[C;a]`) does not see: aminopyridone, 3-aminocoumarin, 6-aminouracil
+261	nh_carbamate	[N;D1,D2;z1;x0:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2:4]	[N:1]-[C:2](=[O:3])-[O:4]	CC(C)(C)OC(=O)NC	CC(C)(C)OC(=O)N(C)C,CNC(=O)NC,CC(=O)NC	amide:1	a carbamate N-H, BocNH2 and the oxazolidinone included; `carbamate` does not bound the N
+262	nh_urea_any	[N;D1,D2;z1;x0:1]-[C;D3;z2;x3:2](=[O;D1:3])-[N;z1:4]	[N:1]-[C:2](=[O:3])-[N:4]	O=C1NCCN1C	CN(C)C(=O)N(C)C,CNC(=O)OC,CC(=O)NC	amide:1	a urea N-H, ring or chain; `nh_urea` is the acyclic both-NH subset
+263	nh_sulfonamide	[N;D1,D2;z1;x1:1]-[S;D4:2](=[O:3])=[O:4]	[N:1]-[S:2](=[O:3])=[O:4]	CNS(=O)(=O)c1ccccc1	CN(C)S(=O)(=O)c1ccccc1,CS(=O)(=O)O	amide:1	a sulfonamide N-H; `sulfonamide` matches the tertiary one too
+264	activated_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x1]-[N]	[O:1]=[C:2]-[O]-[N]1-[C](=[O])-[C]-[C]-[C]-1=[O]	CC(=O)ON1C(=O)CCC1=O	CC(=O)OC,CC(=O)O		an N-O ester -- NHS, HOBt, HOAt, oxime -- the acylating agent `ester` (`x0` oxygen) leaves out
+265	ring_enamine_nh2	[N;D1;z1;x0:1]-[C;z2;x1,x2;r5,r6:2]=[C;z2:3]	[N:1]-[C:2]=[C:3]	NC1=CN(C)C(=O)C=C1	NC=CC,NC1=NCCC1,Nc1ccccc1		an NH2 on a ring C=C that `primary_aniline` (`[C;a]`) does not see: aminopyridone, 3-aminocoumarin, 6-aminouracil
 # --- the electrophiles the halide and sulfonate rows leave out ----------------------------
-266	imidoyl_halide	[Cl,Br,I;D1]-[C;z2:1]=[N;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	ClC1=NOCC1	Clc1ccccn1,ClC=C,CC(Cl)=O	X-C=N outside an aromatic ring: chloropyridazinone, chloroisoxazoline, imidoyl chloride; the ring N is context, not consumed
-267	aryl_thioether	[S;D2;z1;x0;!R](-[C;z1])-[C;a:1]	[S](-[C])-[C:1]	CSc1ccccc1	CSC,c1ccsc1,CC(=O)Sc1ccccc1	Ar-SR, the C-S electrophile of the Liebeskind-Srogl and thioether Negishi couplings
-268	imidoyl_thioether	[S;D2;z1;x0;!R](-[C;z1])-[C;z2;!a:1]=[N:2]	[S](-[C])-[C:1]=[N:2]	CSC1=NCCN1	CSc1ncccn1,CSC,CSC=C	RS-C=N outside an aromatic ring: an isothiourea or a 2-methylthio-pyrimidinone
-269	aryl_sulfoxide	[S;D3;z2;!R](=[O;D1])(-[C;z1])-[C;a:1]	[S](=[O])(-[C])-[C:1]	CS(=O)c1ccccc1	CS(C)=O,CS(=O)(=O)c1ccccc1	Ar-S(O)R, a sulfinyl leaving group on an arene
-270	alpha_hetero_alkyl_halide	[Cl,Br,I;D1]-[C;z1;x2:1]-[O;M]-[C,P;M]=[O;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	ClCOC(=O)C(C)(C)C	ClCCl,ClCCOC,CC(=O)Cl,ClCOCC[Si](C)(C)C,ClCOC	X-CH-O-C(=O) or X-CH-O-P(=O): acyloxymethyl, carbonate and phosphate halides; MOM-, SEM- and BOM-Cl stay protecting groups
-271	metalloid_methyl_halide	[Cl,Br,I;D1]-[C;z1;x2;D2:1]-[B,Si,Sn;*;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	CCCC[Sn](CCCC)(CCCC)CI	ClCCl,BrCC[Si](C)(C)C	X-CH2-M with M boron, silicon or tin: ICH2SnBu3, BrCH2BF3K
-272	halodifluoromethyl	[Br,I;D1]-[C;z1;x3,x4:1](-[F;M])-[F;M]	[Br]-[C:1],[I]-[C:1]	CCOC(=O)C(F)(F)Br	BrCC,FC(F)Cl	Br-CF2-R and I-CF2-R, the difluoroalkylating electrophiles
-273	alpha_hetero_alkyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x2:1]-[N,O,S,P;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C]1=[C]-[C]=[C](-[C])-[C]=[C]-1	CCOP(=O)(COS(=O)(=O)c1ccc(C)cc1)OCC	CS(=O)(=O)OCC,CS(=O)(=O)OC(F)F	RSO2-O-C-Y with Y an N, O, S or P: TsOCH2P(O)(OEt)2; `alkyl_sulfonate` (`x1`) leaves it out
-274	difluoromethyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x3;D3:1](-[F;M])-[F;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	FC(F)OS(=O)(=O)C(F)(F)F	CS(=O)(=O)OCC,FC(F)(F)OS(C)(=O)=O	TfO-CHF2, the difluoromethylating sulfonate
-275	togni_cf3	[I;D2,D3]-[C;z1;x4:1](-[F;M])(-[F;M])-[F;M]	[I]1(-[C:1])-[O]-[C](-[C])(-[C])-[C]2=[C]-[C]=[C]-[C]=[C]-1-2	CC1(C)OI(C(F)(F)F)c2ccccc21	FC(F)(F)I,FC(F)(F)c1ccccc1	a hypervalent-iodine CF3 donor, the Togni reagents
-276	chlorothionoformate	[Cl;D1]-[C;D3;z2:1](=[S:2])-[O;D2:3]	[Cl]-[C:1](=[S:2])-[O:3]	ClC(=S)Oc1ccccc1	ClC(=O)Oc1ccccc1,CC(=S)Cl	Cl-C(=S)-OR, the O-thiocarbamate and thionocarbonate former
+266	imidoyl_halide	[Cl,Br,I;D1]-[C;z2:1]=[N;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	ClC1=NOCC1	Clc1ccccn1,ClC=C,CC(Cl)=O		X-C=N outside an aromatic ring: chloropyridazinone, chloroisoxazoline, imidoyl chloride; the ring N is context, not consumed
+267	aryl_thioether	[S;D2;z1;x0;!R](-[C;z1])-[C;a:1]	[S](-[C])-[C:1]	CSc1ccccc1	CSC,c1ccsc1,CC(=O)Sc1ccccc1		Ar-SR, the C-S electrophile of the Liebeskind-Srogl and thioether Negishi couplings
+268	imidoyl_thioether	[S;D2;z1;x0;!R](-[C;z1])-[C;z2;!a:1]=[N:2]	[S](-[C])-[C:1]=[N:2]	CSC1=NCCN1	CSc1ncccn1,CSC,CSC=C		RS-C=N outside an aromatic ring: an isothiourea or a 2-methylthio-pyrimidinone
+269	aryl_sulfoxide	[S;D3;z2;!R](=[O;D1])(-[C;z1])-[C;a:1]	[S](=[O])(-[C])-[C:1]	CS(=O)c1ccccc1	CS(C)=O,CS(=O)(=O)c1ccccc1		Ar-S(O)R, a sulfinyl leaving group on an arene
+270	alpha_hetero_alkyl_halide	[Cl,Br,I;D1]-[C;z1;x2:1]-[O;M]-[C,P;M]=[O;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	ClCOC(=O)C(C)(C)C	ClCCl,ClCCOC,CC(=O)Cl,ClCOCC[Si](C)(C)C,ClCOC		X-CH-O-C(=O) or X-CH-O-P(=O): acyloxymethyl, carbonate and phosphate halides; MOM-, SEM- and BOM-Cl stay protecting groups
+271	metalloid_methyl_halide	[Cl,Br,I;D1]-[C;z1;x2;D2:1]-[B,Si,Sn;*;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	CCCC[Sn](CCCC)(CCCC)CI	ClCCl,BrCC[Si](C)(C)C		X-CH2-M with M boron, silicon or tin: ICH2SnBu3, BrCH2BF3K
+272	halodifluoromethyl	[Br,I;D1]-[C;z1;x3,x4:1](-[F;M])-[F;M]	[Br]-[C:1],[I]-[C:1]	CCOC(=O)C(F)(F)Br	BrCC,FC(F)Cl		Br-CF2-R and I-CF2-R, the difluoroalkylating electrophiles
+273	alpha_hetero_alkyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x2:1]-[N,O,S,P;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C]1=[C]-[C]=[C](-[C])-[C]=[C]-1	CCOP(=O)(COS(=O)(=O)c1ccc(C)cc1)OCC	CS(=O)(=O)OCC,CS(=O)(=O)OC(F)F		RSO2-O-C-Y with Y an N, O, S or P: TsOCH2P(O)(OEt)2; `alkyl_sulfonate` (`x1`) leaves it out
+274	difluoromethyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x3;D3:1](-[F;M])-[F;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	FC(F)OS(=O)(=O)C(F)(F)F	CS(=O)(=O)OCC,FC(F)(F)OS(C)(=O)=O		TfO-CHF2, the difluoromethylating sulfonate
+275	togni_cf3	[I;D2,D3]-[C;z1;x4:1](-[F;M])(-[F;M])-[F;M]	[I]1(-[C:1])-[O]-[C](-[C])(-[C])-[C]2=[C]-[C]=[C]-[C]=[C]-1-2	CC1(C)OI(C(F)(F)F)c2ccccc21	FC(F)(F)I,FC(F)(F)c1ccccc1		a hypervalent-iodine CF3 donor, the Togni reagents
+276	chlorothionoformate	[Cl;D1]-[C;D3;z2:1](=[S:2])-[O;D2:3]	[Cl]-[C:1](=[S:2])-[O:3]	ClC(=S)Oc1ccccc1	ClC(=O)Oc1ccccc1,CC(=S)Cl		Cl-C(=S)-OR, the O-thiocarbamate and thionocarbonate former
 # --- the nucleophiles and coupling partners the classes above leave out -------------------
-277	heteroatom_terminal_alkene	[C;z2;x0;D1:1]=[C;z2;x1;D2,D3:2]	[C:1]=[C:2]	C=COCC	C=CCC,CC=CO	CH2=C with one heteroatom on the inner carbon: vinyl ether, enamide, vinyl sulfonamide, 2-fluoroacrylate, vinyl boronate
-278	heteroatom_alkene	[C;z2;x1,x2:1]=[C;z2:2]	[C:1]=[C:2]	FC1=CCCCC1	CC=CC,C=CCC,Oc1ccccc1,C=C=C	C=C with a heteroatom on at least one carbon: enol ether, enamine, nitroalkene, vinyl fluoride; `alkene` (`x0`) leaves it out
-279	nh_hydrazine	[N;D2;z1;x1;h1:1]-[N:2]	[N:1]-[N:2]	CC(=O)N1CCCN1	NN,CN(C)N(C)C,NNS(=O)(=O)c1ccccc1	a substituted hydrazine, hydrazide or hydrazone N-H: the N-N nitrogen `secondary_amine` (`x0`) leaves out
-280	secondary_enamine	[N;D2;z1;x0:1](-[C;z1:2])-[C;z2:3]=[C:4]	[N:1](-[C:2])-[C:3]=[C:4]	CNC1=CC(=O)CCC1	CNC,CN(C)C=C,CNc1ccccc1	R-NH-C=C, the vinylogous-amide N-H `secondary_amine` (both carbons `z1`) leaves out
-281	n_alkoxy_amide_nh	[N;D2;z1;x1:1](-[C;z2;x2:2]=[O:3])-[O;D2:4]	[N:1](-[C:2]=[O:3])-[O:4]	O=C1CCON1	CN(C)C=O,CC(=O)NC,CC(=O)N(C)OC	a hydroxamate N-H, isoxazolidin-3-one included
-282	katritzky_pyridinium	[C;z1:1]-;!@[N;a;+;D3](:[C;a]-;!@[C;a]):[C;a]-;!@[C;a]	[C:1]-[N;+]1=[C](-[C]2=[C]-[C]=[C]-[C]=[C]-2)-[C]=[C](-[C]2=[C]-[C]=[C]-[C]=[C]-2)-[C]=[C]-1-[C]1=[C]-[C]=[C]-[C]=[C]-1	CC[n+]1c(-c2ccccc2)cc(-c2ccccc2)cc1-c1ccccc1	C[n+]1ccccc1,CC[n+]1ccccc1	an N-alkyl-2,6-diarylpyridinium, the deaminative alkyl radical source
-283	alkyl_germatrane	[Ge;D4;R]-;!@[C;z1:1]	[C:1]-[Ge]12-[C]-[C]-[C]-[N](-[C]-[C]-[C]-1)-[C]-[C]-[C]-2	CCCC[Ge]12CCCN(CCC1)CCC2	C[Ge](C)(C)C	an alkyl carbagermatrane, a bench-stable alkyl donor
-284	alkyl_sulfonylhydrazide	[S;D4;x3](=[O])(=[O])(-[C])-[N;D2;z1;x2]-[N;D2;z1;x1]-[C;z1:1]	[C:1]-[N]-[N]-[S](=[O])(=[O])-[C]1=[C]-[C]=[C](-[C])-[C]=[C]-1	CCCCNNS(=O)(=O)c1ccc(C)cc1	NNS(=O)(=O)c1ccccc1,CNS(=O)(=O)c1ccccc1	R-NH-NH-SO2Ar, an alkyl radical source; `sulfonylhydrazide` requires the terminal NH2
-285	aryl_boronic_hemiester	[B;D3;z1;x2](-[O;D1])(-[O;D2;x1])-;!@[C;a:1]	[B](-[O])(-[O]-[C])-[C:1]	COB(O)c1ccccc1	OB(O)c1ccccc1,CC1(C)OB(OC1(C)C)c1ccccc1	ArB(OH)(OR), a boronic hemiester or ring-opened pinacol boronate
-286	aryl_dialkylborane	[B;D3;z1;x0](-[C;z1])(-[C;z1])-;!@[C;a:1]	[B](-[C]-[C])(-[C]-[C])-[C:1]	CCB(CC)c1cccnc1	OB(O)c1ccccc1,CB(C)C	ArBR2, diethyl(3-pyridyl)borane and its kin
-287	aryl_difluoroborane	[B;D3](-[F;D1])(-[F;D1])-;!@[C;a:1]	[B](-[F])(-[F])-[C:1]	FB(F)c1ccccc1	[K+].[B-](F)(F)(F)c1ccccc1,OB(O)c1ccccc1	ArBF2, a trifluoroborate drawn without its fluoride and cation
-288	alkenyl_boroxine	[B;D3;z1;x2;r6](-[O;D2;r6]-[B;r6])(-[O;D2;r6]-[B;r6])-;!@[C;z2:1]=[C:2]	[B]1(-[C:1]=[C:2])-[O]-[B](-[C]=[C])-[O]-[B](-[C]=[C])-[O]-1	C=CB1OB(C=C)OB(C=C)O1	CB1OB(C)OB(C)O1,OB(O)C=C	(CH2=CHBO)3, trivinylboroxine the common one: a vinyl donor for the Suzuki
-289	aryl_magnesium_cation	[Mg;D1;+]-[C;a:1]	[Mg;+]-[C:1]	c1ccc([Mg+])cc1	Br[Mg]c1ccccc1	Ar-Mg+, an aryl Grignard drawn without its halide
-290	phosphonium_salt	[P;+;D4;x0](-[C;a])(-[C;a])(-[C;a])-[C;z1:1]	[P;+](-[C:1])(-[C]1=[C]-[C]=[C]-[C]=[C]-1)(-[C]1=[C]-[C]=[C]-[C]=[C]-1)-[C]1=[C]-[C]=[C]-[C]=[C]-1	C[P+](c1ccccc1)(c1ccccc1)c1ccccc1	C=P(c1ccccc1)(c1ccccc1)c1ccccc1,CP(c1ccccc1)c1ccccc1	R-CH2-PPh3+, the Wittig reagent recorded as the salt the ylide is made from
-291	bt_sulfone	[C;z1:1]-[S;D4](=[O])(=[O])-[C;a]1:[N;a]:[C;a]:[C;a]:[S;a]:1	[C:1]-[S](=[O])(=[O])-[C]1=[N]-[C]2=[C]-[C]=[C]-[C]=[C]-2-[S]-1	CS(=O)(=O)c1nc2ccccc2s1	CS(C)(=O)=O,CSc1nc2ccccc2s1	an alkyl benzothiazolyl sulfone, the Julia-Kocienski reagent
-292	alpha_amino_acid	[N;D1;z1;x0:1]-[C;z1;D2,D3:2]-[C;z2;x2:3](=[O;D1:4])-[O;D1:5]	[N:1]-[C:2]-[C:3](=[O:4])-[O:5]	CC(N)C(=O)O	NCCC(=O)O,CC(N)C(=O)OC	H2N-CHR-COOH, the diazotization substrate that keeps its configuration
-293	heteroaryl_ol	[O;D1;z1;x0;h1:1]-[C;a:2]:[N,O,S;a;M]	[O:1]-[C:2]	Oc1ccno1	Oc1ccccc1,OCc1ccno1	an OH on an aromatic carbon beside a ring heteroatom, the deoxychlorination substrate `phenol` does not distinguish
-294	alkoxy_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]	[O:1]=[C:2]-[O:3]	CC(=O)OC	CC(=O)O,CC(=O)N	`ester` with the alkoxy O numbered, for the rows that keep it: partial reduction to the hemiacetal or lactol
-295	amide_carbonyl	[O;z2;x0:1]=[C;D2,D3;z2;x2:2]-[N:3]	[O:1]=[C:2]-[N:3]	CN(C)C(C)=O	CC(=O)OC,CNC(=O)OC,CC(C)=O	any amide, lactam or imide C=O, the N kept: aromatic N included, carbamate and urea (`x3`) excluded
-296	glycosyl_halide	[Cl,Br,I;D1]-[C;z1;x2;R:1]-[O;D2;R;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	BrC1CCCCO1	ClCOCC[Si](C)(C)C,BrC1CCCCC1,BrCC1CCCO1	X on the ring carbon beside the ring O: the glycosyl halide, the Koenigs-Knorr donor; an acyclic X-C-O is a protecting-group reagent
+277	heteroatom_terminal_alkene	[C;z2;x0;D1:1]=[C;z2;x1;D2,D3:2]	[C:1]=[C:2]	C=COCC	C=CCC,CC=CO		CH2=C with one heteroatom on the inner carbon: vinyl ether, enamide, vinyl sulfonamide, 2-fluoroacrylate, vinyl boronate
+278	heteroatom_alkene	[C;z2;x1,x2:1]=[C;z2:2]	[C:1]=[C:2]	FC1=CCCCC1	CC=CC,C=CCC,Oc1ccccc1,C=C=C		C=C with a heteroatom on at least one carbon: enol ether, enamine, nitroalkene, vinyl fluoride; `alkene` (`x0`) leaves it out
+279	nh_hydrazine	[N;D2;z1;x1;h1:1]-[N:2]	[N:1]-[N:2]	CC(=O)N1CCCN1	NN,CN(C)N(C)C,NNS(=O)(=O)c1ccccc1		a substituted hydrazine, hydrazide or hydrazone N-H: the N-N nitrogen `secondary_amine` (`x0`) leaves out
+280	secondary_enamine	[N;D2;z1;x0:1](-[C;z1:2])-[C;z2:3]=[C:4]	[N:1](-[C:2])-[C:3]=[C:4]	CNC1=CC(=O)CCC1	CNC,CN(C)C=C,CNc1ccccc1		R-NH-C=C, the vinylogous-amide N-H `secondary_amine` (both carbons `z1`) leaves out
+281	n_alkoxy_amide_nh	[N;D2;z1;x1:1](-[C;z2;x2:2]=[O:3])-[O;D2:4]	[N:1](-[C:2]=[O:3])-[O:4]	O=C1CCON1	CN(C)C=O,CC(=O)NC,CC(=O)N(C)OC	amide:1	a hydroxamate N-H, isoxazolidin-3-one included
+282	katritzky_pyridinium	[C;z1:1]-;!@[N;a;+;D3](:[C;a]-;!@[C;a]):[C;a]-;!@[C;a]	[C:1]-[N;+]1=[C](-[C]2=[C]-[C]=[C]-[C]=[C]-2)-[C]=[C](-[C]2=[C]-[C]=[C]-[C]=[C]-2)-[C]=[C]-1-[C]1=[C]-[C]=[C]-[C]=[C]-1	CC[n+]1c(-c2ccccc2)cc(-c2ccccc2)cc1-c1ccccc1	C[n+]1ccccc1,CC[n+]1ccccc1		an N-alkyl-2,6-diarylpyridinium, the deaminative alkyl radical source
+283	alkyl_germatrane	[Ge;D4;R]-;!@[C;z1:1]	[C:1]-[Ge]12-[C]-[C]-[C]-[N](-[C]-[C]-[C]-1)-[C]-[C]-[C]-2	CCCC[Ge]12CCCN(CCC1)CCC2	C[Ge](C)(C)C		an alkyl carbagermatrane, a bench-stable alkyl donor
+284	alkyl_sulfonylhydrazide	[S;D4;x3](=[O])(=[O])(-[C])-[N;D2;z1;x2]-[N;D2;z1;x1]-[C;z1:1]	[C:1]-[N]-[N]-[S](=[O])(=[O])-[C]1=[C]-[C]=[C](-[C])-[C]=[C]-1	CCCCNNS(=O)(=O)c1ccc(C)cc1	NNS(=O)(=O)c1ccccc1,CNS(=O)(=O)c1ccccc1		R-NH-NH-SO2Ar, an alkyl radical source; `sulfonylhydrazide` requires the terminal NH2
+285	aryl_boronic_hemiester	[B;D3;z1;x2](-[O;D1])(-[O;D2;x1])-;!@[C;a:1]	[B](-[O])(-[O]-[C])-[C:1]	COB(O)c1ccccc1	OB(O)c1ccccc1,CC1(C)OB(OC1(C)C)c1ccccc1		ArB(OH)(OR), a boronic hemiester or ring-opened pinacol boronate
+286	aryl_dialkylborane	[B;D3;z1;x0](-[C;z1])(-[C;z1])-;!@[C;a:1]	[B](-[C]-[C])(-[C]-[C])-[C:1]	CCB(CC)c1cccnc1	OB(O)c1ccccc1,CB(C)C		ArBR2, diethyl(3-pyridyl)borane and its kin
+287	aryl_difluoroborane	[B;D3](-[F;D1])(-[F;D1])-;!@[C;a:1]	[B](-[F])(-[F])-[C:1]	FB(F)c1ccccc1	[K+].[B-](F)(F)(F)c1ccccc1,OB(O)c1ccccc1		ArBF2, a trifluoroborate drawn without its fluoride and cation
+288	alkenyl_boroxine	[B;D3;z1;x2;r6](-[O;D2;r6]-[B;r6])(-[O;D2;r6]-[B;r6])-;!@[C;z2:1]=[C:2]	[B]1(-[C:1]=[C:2])-[O]-[B](-[C]=[C])-[O]-[B](-[C]=[C])-[O]-1	C=CB1OB(C=C)OB(C=C)O1	CB1OB(C)OB(C)O1,OB(O)C=C		(CH2=CHBO)3, trivinylboroxine the common one: a vinyl donor for the Suzuki
+289	aryl_magnesium_cation	[Mg;D1;+]-[C;a:1]	[Mg;+]-[C:1]	c1ccc([Mg+])cc1	Br[Mg]c1ccccc1		Ar-Mg+, an aryl Grignard drawn without its halide
+290	phosphonium_salt	[P;+;D4;x0](-[C;a])(-[C;a])(-[C;a])-[C;z1:1]	[P;+](-[C:1])(-[C]1=[C]-[C]=[C]-[C]=[C]-1)(-[C]1=[C]-[C]=[C]-[C]=[C]-1)-[C]1=[C]-[C]=[C]-[C]=[C]-1	C[P+](c1ccccc1)(c1ccccc1)c1ccccc1	C=P(c1ccccc1)(c1ccccc1)c1ccccc1,CP(c1ccccc1)c1ccccc1		R-CH2-PPh3+, the Wittig reagent recorded as the salt the ylide is made from
+291	bt_sulfone	[C;z1:1]-[S;D4](=[O])(=[O])-[C;a]1:[N;a]:[C;a]:[C;a]:[S;a]:1	[C:1]-[S](=[O])(=[O])-[C]1=[N]-[C]2=[C]-[C]=[C]-[C]=[C]-2-[S]-1	CS(=O)(=O)c1nc2ccccc2s1	CS(C)(=O)=O,CSc1nc2ccccc2s1		an alkyl benzothiazolyl sulfone, the Julia-Kocienski reagent
+292	alpha_amino_acid	[N;D1;z1;x0:1]-[C;z1;D2,D3:2]-[C;z2;x2:3](=[O;D1:4])-[O;D1:5]	[N:1]-[C:2]-[C:3](=[O:4])-[O:5]	CC(N)C(=O)O	NCCC(=O)O,CC(N)C(=O)OC		H2N-CHR-COOH, the diazotization substrate that keeps its configuration
+293	heteroaryl_ol	[O;D1;z1;x0;h1:1]-[C;a:2]:[N,O,S;a;M]	[O:1]-[C:2]	Oc1ccno1	Oc1ccccc1,OCc1ccno1	phenol:1	an OH on an aromatic carbon beside a ring heteroatom, the deoxychlorination substrate `phenol` does not distinguish
+294	alkoxy_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0:3]	[O:1]=[C:2]-[O:3]	CC(=O)OC	CC(=O)O,CC(=O)N		`ester` with the alkoxy O numbered, for the rows that keep it: partial reduction to the hemiacetal or lactol
+295	amide_carbonyl	[O;z2;x0:1]=[C;D2,D3;z2;x2:2]-[N:3]	[O:1]=[C:2]-[N:3]	CN(C)C(C)=O	CC(=O)OC,CNC(=O)OC,CC(C)=O		any amide, lactam or imide C=O, the N kept: aromatic N included, carbamate and urea (`x3`) excluded
+296	glycosyl_halide	[Cl,Br,I;D1]-[C;z1;x2;R:1]-[O;D2;R;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	BrC1CCCCO1	ClCOCC[Si](C)(C)C,BrC1CCCCC1,BrCC1CCCO1		X on the ring carbon beside the ring O: the glycosyl halide, the Koenigs-Knorr donor; an acyclic X-C-O is a protecting-group reagent
 # --- the activated SNAr electrophiles and the aryl ester ----------------------------------
-297	activated_aza_ortho_halide	[Cl,Br,I;D1]-[C;a;r6:1]:[N;a;D2;h0;r6;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ncccn1	Clc1cccnc1,Clc1ccccc1,Fc1ccccn1	Ar-X (Cl, Br, I) beside a six-ring aza N: the SNAr electrophile `aryl_halide` also matches
-298	activated_aza_para_halide	[Cl,Br,I;D1]-[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ccncc1	Clc1cccnc1,Clc1ccccc1,Fc1ccncc1	Ar-X (Cl, Br, I) para to a six-ring aza N
-299	activated_nitro_ortho_halide	[Cl,Br,I;D1]-[C;a:1]:[C;a;M]-[N;+;D3;M](=[O;M])-[O;-;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ccccc1[N+](=O)[O-]	Clc1cccc(c1)[N+](=O)[O-],Fc1ccccc1[N+](=O)[O-]	Ar-X (Cl, Br, I) ortho to a nitro group
-300	activated_nitro_para_halide	[Cl,Br,I;D1]-[C;a:1]1:[C;a;M]:[C;a;M]:[C;a;M](-[N;+;D3;M](=[O;M])-[O;-;M]):[C;a;M]:[C;a;M]:1	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ccc(cc1)[N+](=O)[O-]	Clc1cccc(c1)[N+](=O)[O-],Fc1ccc(cc1)[N+](=O)[O-]	Ar-X (Cl, Br, I) para to a nitro group
-301	activated_aza_ortho_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a;r6:1]:[N;a;D2;h0;r6;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccccn1)C(F)(F)F	O=S(=O)(Oc1cccnc1)C(F)(F)F,O=S(=O)(Oc1ccccc1)C(F)(F)F	ArOSO2R beside a six-ring aza N
-302	activated_aza_para_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1)-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccncc1)C(F)(F)F	O=S(=O)(Oc1cccnc1)C(F)(F)F,O=S(=O)(Oc1ccccc1)C(F)(F)F	ArOSO2R para to a six-ring aza N
-303	activated_nitro_ortho_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]:[C;a;M]-[N;+;D3;M](=[O;M])-[O;-;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccccc1[N+](=O)[O-])C(F)(F)F	O=S(=O)(Oc1cccc(c1)[N+](=O)[O-])C(F)(F)F	ArOSO2R ortho to a nitro group
-304	activated_nitro_para_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]1:[C;a;M]:[C;a;M]:[C;a;M](-[N;+;D3;M](=[O;M])-[O;-;M]):[C;a;M]:[C;a;M]:1)-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccc(cc1)[N+](=O)[O-])C(F)(F)F	O=S(=O)(Oc1cccc(c1)[N+](=O)[O-])C(F)(F)F	ArOSO2R para to a nitro group
-305	activated_azole_halide	[Cl,Br,I;D1]-[C;a;r5:1](:[N;a;D2;h0;r5;M]):[N,O,S;a;r5;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1nc2ccccc2s1	Brc1cnn(C)c1,Brc1cccs1,Brc1cn(C)cn1,Brc1ccn(C)n1,Fc1nccs1	Ar-X (Cl, Br, I) on a five-ring carbon between two ring heteroatoms, one an aza N: 2-haloazoles and benzazoles, C8 of purine
-306	activated_azole_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a;r5:1](:[N;a;D2;h0;r5;M]):[N,O,S;a;r5;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1nc2ccccc2s1)C(F)(F)F	O=S(=O)(Oc1cccs1)C(F)(F)F	ArOSO2R on a five-ring carbon between two ring heteroatoms, one an aza N
-307	aryl_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0]-[C;a]	[O:1]=[C:2]-[O]-[C]1=[C]-[C]=[C]-[C]=[C]-1	CC(=O)Oc1c(F)c(F)c(F)c(F)c1F	CC(=O)OC,CC(=O)ON1C(=O)CCC1=O	R-CO-OAr -- pentafluorophenyl, 4-nitrophenyl, phenyl -- the acylating agent; `ester` also matches
+297	activated_aza_ortho_halide	[Cl,Br,I;D1]-[C;a;r6:1]:[N;a;D2;h0;r6;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ncccn1	Clc1cccnc1,Clc1ccccc1,Fc1ccccn1		Ar-X (Cl, Br, I) beside a six-ring aza N: the SNAr electrophile `aryl_halide` also matches
+298	activated_aza_para_halide	[Cl,Br,I;D1]-[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ccncc1	Clc1cccnc1,Clc1ccccc1,Fc1ccncc1		Ar-X (Cl, Br, I) para to a six-ring aza N
+299	activated_nitro_ortho_halide	[Cl,Br,I;D1]-[C;a:1]:[C;a;M]-[N;+;D3;M](=[O;M])-[O;-;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ccccc1[N+](=O)[O-]	Clc1cccc(c1)[N+](=O)[O-],Fc1ccccc1[N+](=O)[O-]		Ar-X (Cl, Br, I) ortho to a nitro group
+300	activated_nitro_para_halide	[Cl,Br,I;D1]-[C;a:1]1:[C;a;M]:[C;a;M]:[C;a;M](-[N;+;D3;M](=[O;M])-[O;-;M]):[C;a;M]:[C;a;M]:1	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1ccc(cc1)[N+](=O)[O-]	Clc1cccc(c1)[N+](=O)[O-],Fc1ccc(cc1)[N+](=O)[O-]		Ar-X (Cl, Br, I) para to a nitro group
+301	activated_aza_ortho_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a;r6:1]:[N;a;D2;h0;r6;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccccn1)C(F)(F)F	O=S(=O)(Oc1cccnc1)C(F)(F)F,O=S(=O)(Oc1ccccc1)C(F)(F)F		ArOSO2R beside a six-ring aza N
+302	activated_aza_para_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1)-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccncc1)C(F)(F)F	O=S(=O)(Oc1cccnc1)C(F)(F)F,O=S(=O)(Oc1ccccc1)C(F)(F)F		ArOSO2R para to a six-ring aza N
+303	activated_nitro_ortho_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]:[C;a;M]-[N;+;D3;M](=[O;M])-[O;-;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccccc1[N+](=O)[O-])C(F)(F)F	O=S(=O)(Oc1cccc(c1)[N+](=O)[O-])C(F)(F)F		ArOSO2R ortho to a nitro group
+304	activated_nitro_para_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1]1:[C;a;M]:[C;a;M]:[C;a;M](-[N;+;D3;M](=[O;M])-[O;-;M]):[C;a;M]:[C;a;M]:1)-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccc(cc1)[N+](=O)[O-])C(F)(F)F	O=S(=O)(Oc1cccc(c1)[N+](=O)[O-])C(F)(F)F		ArOSO2R para to a nitro group
+305	activated_azole_halide	[Cl,Br,I;D1]-[C;a;r5:1](:[N;a;D2;h0;r5;M]):[N,O,S;a;r5;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Clc1nc2ccccc2s1	Brc1cnn(C)c1,Brc1cccs1,Brc1cn(C)cn1,Brc1ccn(C)n1,Fc1nccs1		Ar-X (Cl, Br, I) on a five-ring carbon between two ring heteroatoms, one an aza N: 2-haloazoles and benzazoles, C8 of purine
+306	activated_azole_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a;r5:1](:[N;a;D2;h0;r5;M]):[N,O,S;a;r5;M])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1nc2ccccc2s1)C(F)(F)F	O=S(=O)(Oc1cccs1)C(F)(F)F		ArOSO2R on a five-ring carbon between two ring heteroatoms, one an aza N
+307	aryl_ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0]-[C;a]	[O:1]=[C:2]-[O]-[C]1=[C]-[C]=[C]-[C]=[C]-1	CC(=O)Oc1c(F)c(F)c(F)c(F)c1F	CC(=O)OC,CC(=O)ON1C(=O)CCC1=O		R-CO-OAr -- pentafluorophenyl, 4-nitrophenyl, phenyl -- the acylating agent; `ester` also matches
 # --- enolate, Knoevenagel, C-H functionalization, imine, Pinner and dehydration partners --
-308	enolizable_ch	[C;z1;h1,h2,h3:1]-[C;z2,z3;M]=,#[O,N;M]	[C:1]	CC(=O)CC	Cc1ccccc1,CC=C,CCO	an sp3 C-H beside a C=O, C=N or C#N carbon, the enolate nucleophile; the activating group is context
-309	active_ch	[C;z1;h1,h2:1](-[C,S,N;*;M]=,#[O,N;M])-[C,S,N;*;M]=,#[O,N;M]	[C:1]	CCOC(=O)CC(=O)OCC	CC(=O)CC,CCS(C)(=O)=O	a C-H between two C=O, C#N, S=O or N=O groups, alkylated under carbonate or hydride base
-310	enolizable_ch2	[C;z1;h2,h3:1]-[C;z2,z3;M]=,#[O,N;M]	[C:1]	CC(=O)CC	CC(C)C(=O)C(C)C,Cc1ccccc1	`enolizable_ch` with two hydrogens to give: the gem-dialkylation, condensation and olefination substrate
-311	1_2_dihaloethane	[Cl,Br,I;D1]-[C;z1;x1;D2:1]-[C;z1;x1;D2:2]-[Cl,Br,I;D1]	[Br]-[C:1]-[C:2]-[Br]	BrCCBr	BrCCCBr,CCBr	X-CH2-CH2-X, the cyclopropanating bis-electrophile
-312	nitroarene_ortho_methyl	[C;D1;z1:1]-[C;a;M]:[C;a;M]-[N;+;M](=[O;M])-[O;-;M]	[C:1]	Cc1ccccc1[N+](=O)[O-]	Cc1ccc(cc1)[N+](=O)[O-],Cc1ccccc1	an aryl methyl ortho to NO2, the Leimgruber-Batcho substrate
-313	thiazolidinone_ch2	[C;z1;h2;r5:1](-[S;r5;M])-[C;r5;M]=[O;M]	[C:1]	O=C1CSC(=S)N1	O=C1CCCN1,CSCC(C)=O	the ring CH2 between S and C=O of a thiazolidinone, rhodanine or thiazolone
-314	oxindole_ch2	[C;z1;h2;r5:1](-[C;a;M])-[C;r5;M](=[O;M])-[N;M]	[C:1]	O=C1Cc2ccccc2N1	O=C1CCCN1,CC(=O)N	the C3 methylene of an oxindole
-315	formaldehyde	[O;z2;x0:1]=[C;D1:2]	[O:1]=[C:2]	C=O	CC=O	CH2=O
-316	hydroxylamine	[N;D1;z1;x1:1]-[O;D1;z1;x1:2]	[N:1]-[O:2]	NO	CON,CNO	H2N-OH
-317	nh2_hydrazine	[N;D1;z1;x1:1]-[N;D2,D3;z1:2]	[N:1]-[N:2]	NNc1ccccc1	NN,CC(N)=O,CC=NN	a substituted hydrazine, hydrazide, carbazate or sulfonylhydrazide NH2
-318	azole_ch	[C;a;D2;r5:1]:[N,O,S;a;M]	[C:1]	c1cscn1	c1ccccc1,c1ccncc1	an aromatic five-ring C-H beside a ring heteroatom
-319	azine_n_oxide_ch	[C;a;D2:1]:[N;a;D3;+;M]-[O;D1;-;M]	[C:1]	[O-][n+]1ccccc1	c1ccncc1	the C-H beside the nitrogen of an azine N-oxide
-320	azine_ch_ortho	[C;a;D2;r6:1]:[N;a;D2;h0;r6;M]	[C:1]	c1ccncc1	c1ccccc1,[O-][n+]1ccccc1	a six-ring aromatic C-H beside a pyridine-type N
-321	azine_ch_para	[C;a;D2;r6:1]:[C;a;r6;M]:[C;a;r6;M]:[N;a;D2;h0;r6;M]	[C:1]	c1ccncc1	c1ccccc1,Cc1ccncc1	a six-ring aromatic C-H para to a pyridine-type N
-322	carbamate_alpha_ch	[C;z1;h1,h2,h3:1]-[N;D3;z1;M]-[C;z2;M](=[O;M])-[O;D2;M]	[C:1]	CN(C)C(=O)OC(C)(C)C	CNC(=O)OC(C)(C)C,CCOC(C)=O	a C-H on the nitrogen of an N,N-disubstituted carbamate, the HAT radical source
-323	formamide	[N;D1;z1;x0:1]-[C;D2;x2;z2;h1:2]=[O:3]	[N:1]-[C:2]=[O:3]	NC=O	CC(N)=O,CN(C)C=O	H2N-CHO, the carbamoyl radical source
-324	malonic_half_ester	[O;D1;*]-[C;z2;x2](=[O])-[C;z1;h1,h2:1]-[C;z2;x2;M](=[O;M])-[O;D2;M]	[O]-[C](=[O])-[C:1]	CCOC(=O)CC(=O)O	CCOC(=O)CC(=O)OCC,CC(=O)O	HOOC-CH2-COOR or its salt, the decarboxylative Claisen nucleophile
-325	o_amidoaniline	[C;z2;x2;D2,D3:1](=[O])-[N;D2;z1;x0:2]-[C;a:3]:[C;a:4]-[N;D1,D2;z1;x0:5]	[C:1](=[O])-[N:2]-[C:3]:[C:4]-[N:5]	CC(=O)Nc1ccccc1N	CC(=O)Nc1ccccc1,CC(=O)Nc1ccc(N)cc1	an anilide with an ortho NH or NH2, the cyclodehydration substrate
-326	tertiary_carbinol_alpha_ch	[O;D1;z1;x0:1]-[C;D4;x1;z1:2]-[C;z1;h1,h2,h3:3]	[O:1]-[C:2]-[C:3]	CCC(C)(C)O	CC(C)O,CC(C)(C)CO	R3C-OH with an sp3 C-H beside the carbinol
-327	secondary_carbinol_alpha_ch	[O;D1;z1;x0:1]-[C;D3;x1;z1:2]-[C;z1;h1,h2,h3:3]	[O:1]-[C:2]-[C:3]	CC(C)O	CC(C)(C)O,OC(c1ccccc1)c1ccccc1	R2CH-OH with an sp3 C-H beside the carbinol
-328	primary_carbinol_alpha_ch	[O;D1;z1;x0:1]-[C;D2;x1;z1:2]-[C;z1;h1,h2:3]	[O:1]-[C:2]-[C:3]	CCCO	CO,CCO,CC(C)(C)CO	RCH2-OH with an sp3 CH or CH2 beside the carbinol
-329	propenyl	[C;D1;z1]-[C;z2;x0;D2:1]=[C;z2;x0;D2:2]	[C]-[C:1]=[C:2]	CC=CCC	C=CCC,CC(C)=CC	CH3-CH=CH-R, the internal alkene that metathesis cleaves to propene
-330	dimethyl_sulfate	[C;D1:1]-[O;D2]-[S;D4](=[O])(=[O])-[O;D2]-[C;D1]	[C:1]-[O]-[S](=[O])(=[O])-[O]-[C]	COS(=O)(=O)OC	CCOS(=O)(=O)OCC,CS(=O)(=O)OC	(MeO)2SO2, the methylating agent; one methyl transfers
-331	nitroalkene_methyl	[C;D1;z1:1]-[C;z2;M]=[C;z2;M]-[N;+;M](=[O;M])-[O;-;M]	[C:1]	CC(C)=C[N+](=O)[O-]	CC=CC,C[N+](=O)[O-]	a methyl on the far carbon of a nitroalkene, vinylogously acidic
+308	enolizable_ch	[C;z1;h1,h2,h3:1]-[C;z2,z3;M]=,#[O,N;M]	[C:1]	CC(=O)CC	Cc1ccccc1,CC=C,CCO		an sp3 C-H beside a C=O, C=N or C#N carbon, the enolate nucleophile; the activating group is context
+309	active_ch	[C;z1;h1,h2:1](-[C,S,N;*;M]=,#[O,N;M])-[C,S,N;*;M]=,#[O,N;M]	[C:1]	CCOC(=O)CC(=O)OCC	CC(=O)CC,CCS(C)(=O)=O		a C-H between two C=O, C#N, S=O or N=O groups, alkylated under carbonate or hydride base
+310	enolizable_ch2	[C;z1;h2,h3:1]-[C;z2,z3;M]=,#[O,N;M]	[C:1]	CC(=O)CC	CC(C)C(=O)C(C)C,Cc1ccccc1		`enolizable_ch` with two hydrogens to give: the gem-dialkylation, condensation and olefination substrate
+311	1_2_dihaloethane	[Cl,Br,I;D1]-[C;z1;x1;D2:1]-[C;z1;x1;D2:2]-[Cl,Br,I;D1]	[Br]-[C:1]-[C:2]-[Br]	BrCCBr	BrCCCBr,CCBr		X-CH2-CH2-X, the cyclopropanating bis-electrophile
+312	nitroarene_ortho_methyl	[C;D1;z1:1]-[C;a;M]:[C;a;M]-[N;+;M](=[O;M])-[O;-;M]	[C:1]	Cc1ccccc1[N+](=O)[O-]	Cc1ccc(cc1)[N+](=O)[O-],Cc1ccccc1		an aryl methyl ortho to NO2, the Leimgruber-Batcho substrate
+313	thiazolidinone_ch2	[C;z1;h2;r5:1](-[S;r5;M])-[C;r5;M]=[O;M]	[C:1]	O=C1CSC(=S)N1	O=C1CCCN1,CSCC(C)=O		the ring CH2 between S and C=O of a thiazolidinone, rhodanine or thiazolone
+314	oxindole_ch2	[C;z1;h2;r5:1](-[C;a;M])-[C;r5;M](=[O;M])-[N;M]	[C:1]	O=C1Cc2ccccc2N1	O=C1CCCN1,CC(=O)N		the C3 methylene of an oxindole
+315	formaldehyde	[O;z2;x0:1]=[C;D1:2]	[O:1]=[C:2]	C=O	CC=O		CH2=O
+316	hydroxylamine	[N;D1;z1;x1:1]-[O;D1;z1;x1:2]	[N:1]-[O:2]	NO	CON,CNO		H2N-OH
+317	nh2_hydrazine	[N;D1;z1;x1:1]-[N;D2,D3;z1:2]	[N:1]-[N:2]	NNc1ccccc1	NN,CC(N)=O,CC=NN		a substituted hydrazine, hydrazide, carbazate or sulfonylhydrazide NH2
+318	azole_ch	[C;a;D2;r5:1]:[N,O,S;a;M]	[C:1]	c1cscn1	c1ccccc1,c1ccncc1		an aromatic five-ring C-H beside a ring heteroatom
+319	azine_n_oxide_ch	[C;a;D2:1]:[N;a;D3;+;M]-[O;D1;-;M]	[C:1]	[O-][n+]1ccccc1	c1ccncc1		the C-H beside the nitrogen of an azine N-oxide
+320	azine_ch_ortho	[C;a;D2;r6:1]:[N;a;D2;h0;r6;M]	[C:1]	c1ccncc1	c1ccccc1,[O-][n+]1ccccc1		a six-ring aromatic C-H beside a pyridine-type N
+321	azine_ch_para	[C;a;D2;r6:1]:[C;a;r6;M]:[C;a;r6;M]:[N;a;D2;h0;r6;M]	[C:1]	c1ccncc1	c1ccccc1,Cc1ccncc1		a six-ring aromatic C-H para to a pyridine-type N
+322	carbamate_alpha_ch	[C;z1;h1,h2,h3:1]-[N;D3;z1;M]-[C;z2;M](=[O;M])-[O;D2;M]	[C:1]	CN(C)C(=O)OC(C)(C)C	CNC(=O)OC(C)(C)C,CCOC(C)=O		a C-H on the nitrogen of an N,N-disubstituted carbamate, the HAT radical source
+323	formamide	[N;D1;z1;x0:1]-[C;D2;x2;z2;h1:2]=[O:3]	[N:1]-[C:2]=[O:3]	NC=O	CC(N)=O,CN(C)C=O		H2N-CHO, the carbamoyl radical source
+324	malonic_half_ester	[O;D1;*]-[C;z2;x2](=[O])-[C;z1;h1,h2:1]-[C;z2;x2;M](=[O;M])-[O;D2;M]	[O]-[C](=[O])-[C:1]	CCOC(=O)CC(=O)O	CCOC(=O)CC(=O)OCC,CC(=O)O		HOOC-CH2-COOR or its salt, the decarboxylative Claisen nucleophile
+325	o_amidoaniline	[C;z2;x2;D2,D3:1](=[O])-[N;D2;z1;x0:2]-[C;a:3]:[C;a:4]-[N;D1,D2;z1;x0:5]	[C:1](=[O])-[N:2]-[C:3]:[C:4]-[N:5]	CC(=O)Nc1ccccc1N	CC(=O)Nc1ccccc1,CC(=O)Nc1ccc(N)cc1		an anilide with an ortho NH or NH2, the cyclodehydration substrate
+326	tertiary_carbinol_alpha_ch	[O;D1;z1;x0:1]-[C;D4;x1;z1:2]-[C;z1;h1,h2,h3:3]	[O:1]-[C:2]-[C:3]	CCC(C)(C)O	CC(C)O,CC(C)(C)CO		R3C-OH with an sp3 C-H beside the carbinol
+327	secondary_carbinol_alpha_ch	[O;D1;z1;x0:1]-[C;D3;x1;z1:2]-[C;z1;h1,h2,h3:3]	[O:1]-[C:2]-[C:3]	CC(C)O	CC(C)(C)O,OC(c1ccccc1)c1ccccc1		R2CH-OH with an sp3 C-H beside the carbinol
+328	primary_carbinol_alpha_ch	[O;D1;z1;x0:1]-[C;D2;x1;z1:2]-[C;z1;h1,h2:3]	[O:1]-[C:2]-[C:3]	CCCO	CO,CCO,CC(C)(C)CO		RCH2-OH with an sp3 CH or CH2 beside the carbinol
+329	propenyl	[C;D1;z1]-[C;z2;x0;D2:1]=[C;z2;x0;D2:2]	[C]-[C:1]=[C:2]	CC=CCC	C=CCC,CC(C)=CC		CH3-CH=CH-R, the internal alkene that metathesis cleaves to propene
+330	dimethyl_sulfate	[C;D1:1]-[O;D2]-[S;D4](=[O])(=[O])-[O;D2]-[C;D1]	[C:1]-[O]-[S](=[O])(=[O])-[O]-[C]	COS(=O)(=O)OC	CCOS(=O)(=O)OCC,CS(=O)(=O)OC		(MeO)2SO2, the methylating agent; one methyl transfers
+331	nitroalkene_methyl	[C;D1;z1:1]-[C;z2;M]=[C;z2;M]-[N;+;M](=[O;M])-[O;-;M]	[C:1]	CC(C)=C[N+](=O)[O-]	CC=CC,C[N+](=O)[O-]		a methyl on the far carbon of a nitroalkene, vinylogously acidic
 # --- halogen interconversion, fluorination, hydrolysis and Curtius substrates -------------
-332	azinone_aza	[O;z2;x0:1]=[C;z2;x3;D3;r6:2](-[N;z2,z4;r6:3])-[N;z1;D2;r6:4]	[O:1]=[C:2](-[N:3])-[N:4]	O=C1N=CC=CN1	O=C1NC=CC=C1,O=C1NCCCN1,O=C1NC(=O)C=CN1	2-pyrimidinone class: a ring urea carbonyl flanked by an imine N and an N-H; `azinone` (`x2`) leaves it out
-333	vinylogous_azinone	[O;z2;x0:1]=[C;z2;x1,x2;D3;r6:2]1-[C;z2;r6:3]=[C;z2;r6:4]-[N;z1;D2;r6:5]-[A;M]~[A;M]1	[O:1]=[C:2]-[C:3]=[C:4]-[N:5]	O=C1C=CNC=C1	O=C1C=CCC=C1,O=C1C=CN(C)C=C1,O=C1C=CC(=O)C=C1	4-pyridone class: C=O and N-H across a ring C=C, the six-ring lactam `azinone` does not name
-334	azine_dione	[O;z2;x0]=[C;z2;x2;D3;r6:1]1-[N;z1;D2;r6:2]-[C;z2;x3;D3;r6:3](=[O;z2;x0])-[N;z1;D2;r6:4]-[C;z2,z4;M]=,:[C;z2,z4;M]1	[O]=[C:1]-[N:2]-[C:3](=[O])-[N:4]	O=C1NC(=O)C=CN1	O=C1NC(=O)N(C)C=C1,O=C1CC(=O)NC(=O)N1	uracil class, 2,4-dione with both N-H: the double deoxychlorination substrate
-335	pyridazine_dione	[O;z2;x0]=[C;z2;x2;D3;r6:1]1-[N;z1;D2;r6:2]-[N;z1;D2;r6:3]-[C;z2;x2;D3;r6:4](=[O;z2;x0])-[C;z2,z4;M]=,:[C;z2,z4;M]1	[O]=[C:1]-[N:2]-[N:3]-[C:4]=[O]	O=C1C=CC(=O)NN1	O=C1CCC(=O)NN1,O=C1C=CC(=O)N(C)N1	maleic hydrazide class, 3,6-dione with both N-H: the double deoxychlorination substrate
-336	alpha_dihalo_ketone	[Cl,Br;D1]-[C;z1;x2;D4:1](-[Cl,Br;D1])-[C;z2;x1:2]=[O;z2;x0:3]	[Cl]-[C:1](-[Cl])-[C:2]=[O:3],[Br]-[C:1](-[Br])-[C:2]=[O:3]	O=C1CCC1(Cl)Cl	O=C1CCC1Cl,ClC(Cl)CC=O,O=C(O)C(Cl)(Cl)C	alpha,alpha-dihaloketone, the dichloroketene [2+2] adduct the Zn reduction strips
-337	hydroxy_azinone	[O;D1;z1;x0]-[C;z2;r6:1]=[C;z2;r6:2]-[C;z2;x2;D3;r6:3](=[O;z2;x0])-[N;z1;D2;r6:4]	[O]-[C:1]=[C:2]-[C:3](=[O])-[N:4]	OC1=CC(=O)NC=C1	O=C1NC=CC=C1,OC1=CCC(=O)NC1,OC(C)=CC(=O)NC	4-hydroxy-2-pyridone class: an enol conjugated to the lactam carbonyl, the double deoxychlorination substrate
-338	aza_ortho_chloride	[Cl;D1]-[C;a;r6:1]:[N;a;D2;h0;r6:2]	[Cl]-[C:1]:[N:2]	Clc1ccccn1	Clc1cccnc1,Clc1ccccc1,Clc1nccs1	2-chloroazine with the ring N numbered, for the row that puts the hydrogen on it; `activated_aza_ortho_halide` masks that N
-339	aza_para_chloride	[Cl;D1]-[C;a;r6:1]1:[C,N;a:2]:[C,N;a:3]:[N;a;D2;h0:4]:[C,N;a:5]:[C,N;a:6]:1	[Cl]-[C:1]1:[C:2]:[C:3]:[N:4]:[C:5]:[C:6]:1	Clc1ccncc1	Clc1cccnc1,Clc1ccccc1	4-chloroazine with the whole ring numbered, for the row that rewrites its bonds to the 4-azinone
-340	ring_vinyl_ch	[C;z2;D2;h1:1]=;@[C,N;z2;M]	[C:1]	O=C1NC=CC=C1	c1ccccc1,CC=CC,O=C1CCCCN1	a C-H on a non-aromatic ring double bond: the azinone, enaminone and uracil C-H `arene_ch` (aromatic only) leaves out
-341	alpha_ch_carbonyl	[C;z1;x0;h1,h2,h3:1]-[C;z2;x1;D2,D3;M]=[O;z2;x0;M]	[C:1]	CC(C)=O	CC(=O)OC,CC(=O)N,CC(C)(C)O,O=Cc1ccccc1	an enolizable C-H beside a ketone or aldehyde carbonyl, the site an alpha-halogenation takes
-342	alpha_ch_acyl	[C;z1;x0;h1,h2:1]-[C;z2;x2;D3;M](=[O;z2;x0;M])-[O,N;z1;D2,D3;M]	[C:1]	CCC(=O)OC	CC(=O)O,CCC(C)=O,CC(=O)OC	a C-H beside an ester, lactone or amide carbonyl, the site of a base-mediated enolate halogenation
-343	silyl_enol_ether	[C;z2;x0;D1,D2:1]=[C;z2;x1;D2,D3:2]-[O;D2:3]-[Si;D4]	[C:1]=[C:2]-[O:3]-[Si](-[C])(-[C])-[C]	C=C(O[Si](C)(C)C)c1ccccc1	C=C(OC)c1ccccc1,CC(=O)c1ccccc1,C[Si](C)(C)Oc1ccccc1	C=C-O-SiR3, the enol equivalent an electrophilic halogen source takes to the alpha-halo ketone
-344	aryl_methyl	[C;z1;D1;x0:1]-[C;a;M]	[C:1]	Cc1ccccc1	CCc1ccccc1,COc1ccccc1,Cn1ccnc1	Ar-CH3, the methyl `benzylic_ch` (`D2,D3`) leaves out
-345	allylic_methyl	[C;z1;D1;x0:1]-[C;z2;M]=[C;z2;M]	[C:1]	CC=CC(=O)OC	CCC=C,Cc1ccccc1,CC(C)=O	CH3-C=C, the allylic Wohl-Ziegler site
-346	curtius_acid	[C:1]-[C;z2;x2;D3:2](=[O;D1;z2:3])-[O;D1;z1]	[C:1]-[C:2](=[O:3])-[O]	CC(=O)O	CC(=O)OC,CC(=O)N,OC(=O)O	R-COOH with R numbered, for the Curtius row that moves R from the carbonyl carbon to the new nitrogen
-347	azolo_pyridine	[N;a;D3;r5;r6:1]1:[C;a;R1;r6:2]:[C;a;R1;r6:3]:[C;a;R1;r6:4]:[C;a;R1;r6:5]:[C;a;D3;r5;r6:6]:1	[N:1]1:[C:2]:[C:3]:[C:4]:[C:5]:[C:6]:1	c1cn2ccccc2n1	c1ccc2ccccc2c1,c1ccncc1,c1ccc2[nH]ccc2c1	the azine ring of an azole fused through its bridgehead N: imidazo-, pyrazolo- and triazolo[1,5-a]pyridine
-348	hydrolysable_amide_nh	[N;D2;z1;x0:1]-[C;z2;x2;D3:2](=[O;z2;x0:3])-[C;D2,D3,D4;x0,x1,x2;M]	[N:1]-[C:2]=[O:3]	CC(C)(C)C(=O)Nc1ccccc1	CC(=O)Nc1ccccc1,O=C(Nc1ccccc1)C(F)(F)F,O=CNc1ccccc1,CC(C)(C)OC(=O)Nc1ccccc1	R-CO-NH-R' with R not methyl or CF3: the hydrolysis substrate the named `amine_acyl` and `amine_tfa` deprotections leave to `protective.tsv`
-349	hydrolysable_amide_n	[N;D3;z1,z4;x0:1]-[C;z2;x2;D3:2](=[O;z2;x0:3])-[C;D2,D3,D4;x0,x1,x2;M]	[N:1]-[C:2]=[O:3]	CCC(=O)N1CCCCC1	CC(=O)N1CCCCC1,CN(C)C(=O)OC,CN(C)C(=O)N(C)C,CCC(=O)NC	R-CO-NR'2 and the N-acyl azole, R not methyl or CF3; the N-substituted lactam included
+332	azinone_aza	[O;z2;x0:1]=[C;z2;x3;D3;r6:2](-[N;z2,z4;r6:3])-[N;z1;D2;r6:4]	[O:1]=[C:2](-[N:3])-[N:4]	O=C1N=CC=CN1	O=C1NC=CC=C1,O=C1NCCCN1,O=C1NC(=O)C=CN1	amide:4	2-pyrimidinone class: a ring urea carbonyl flanked by an imine N and an N-H; `azinone` (`x2`) leaves it out
+333	vinylogous_azinone	[O;z2;x0:1]=[C;z2;x1,x2;D3;r6:2]1-[C;z2;r6:3]=[C;z2;r6:4]-[N;z1;D2;r6:5]-[A;M]~[A;M]1	[O:1]=[C:2]-[C:3]=[C:4]-[N:5]	O=C1C=CNC=C1	O=C1C=CCC=C1,O=C1C=CN(C)C=C1,O=C1C=CC(=O)C=C1		4-pyridone class: C=O and N-H across a ring C=C, the six-ring lactam `azinone` does not name
+334	azine_dione	[O;z2;x0]=[C;z2;x2;D3;r6:1]1-[N;z1;D2;r6:2]-[C;z2;x3;D3;r6:3](=[O;z2;x0])-[N;z1;D2;r6:4]-[C;z2,z4;M]=,:[C;z2,z4;M]1	[O]=[C:1]-[N:2]-[C:3](=[O])-[N:4]	O=C1NC(=O)C=CN1	O=C1NC(=O)N(C)C=C1,O=C1CC(=O)NC(=O)N1		uracil class, 2,4-dione with both N-H: the double deoxychlorination substrate
+335	pyridazine_dione	[O;z2;x0]=[C;z2;x2;D3;r6:1]1-[N;z1;D2;r6:2]-[N;z1;D2;r6:3]-[C;z2;x2;D3;r6:4](=[O;z2;x0])-[C;z2,z4;M]=,:[C;z2,z4;M]1	[O]=[C:1]-[N:2]-[N:3]-[C:4]=[O]	O=C1C=CC(=O)NN1	O=C1CCC(=O)NN1,O=C1C=CC(=O)N(C)N1		maleic hydrazide class, 3,6-dione with both N-H: the double deoxychlorination substrate
+336	alpha_dihalo_ketone	[Cl,Br;D1]-[C;z1;x2;D4:1](-[Cl,Br;D1])-[C;z2;x1:2]=[O;z2;x0:3]	[Cl]-[C:1](-[Cl])-[C:2]=[O:3],[Br]-[C:1](-[Br])-[C:2]=[O:3]	O=C1CCC1(Cl)Cl	O=C1CCC1Cl,ClC(Cl)CC=O,O=C(O)C(Cl)(Cl)C		alpha,alpha-dihaloketone, the dichloroketene [2+2] adduct the Zn reduction strips
+337	hydroxy_azinone	[O;D1;z1;x0]-[C;z2;r6:1]=[C;z2;r6:2]-[C;z2;x2;D3;r6:3](=[O;z2;x0])-[N;z1;D2;r6:4]	[O]-[C:1]=[C:2]-[C:3](=[O])-[N:4]	OC1=CC(=O)NC=C1	O=C1NC=CC=C1,OC1=CCC(=O)NC1,OC(C)=CC(=O)NC		4-hydroxy-2-pyridone class: an enol conjugated to the lactam carbonyl, the double deoxychlorination substrate
+338	aza_ortho_chloride	[Cl;D1]-[C;a;r6:1]:[N;a;D2;h0;r6:2]	[Cl]-[C:1]:[N:2]	Clc1ccccn1	Clc1cccnc1,Clc1ccccc1,Clc1nccs1		2-chloroazine with the ring N numbered, for the row that puts the hydrogen on it; `activated_aza_ortho_halide` masks that N
+339	aza_para_chloride	[Cl;D1]-[C;a;r6:1]1:[C,N;a:2]:[C,N;a:3]:[N;a;D2;h0:4]:[C,N;a:5]:[C,N;a:6]:1	[Cl]-[C:1]1:[C:2]:[C:3]:[N:4]:[C:5]:[C:6]:1	Clc1ccncc1	Clc1cccnc1,Clc1ccccc1		4-chloroazine with the whole ring numbered, for the row that rewrites its bonds to the 4-azinone
+340	ring_vinyl_ch	[C;z2;D2;h1:1]=;@[C,N;z2;M]	[C:1]	O=C1NC=CC=C1	c1ccccc1,CC=CC,O=C1CCCCN1		a C-H on a non-aromatic ring double bond: the azinone, enaminone and uracil C-H `arene_ch` (aromatic only) leaves out
+341	alpha_ch_carbonyl	[C;z1;x0;h1,h2,h3:1]-[C;z2;x1;D2,D3;M]=[O;z2;x0;M]	[C:1]	CC(C)=O	CC(=O)OC,CC(=O)N,CC(C)(C)O,O=Cc1ccccc1		an enolizable C-H beside a ketone or aldehyde carbonyl, the site an alpha-halogenation takes
+342	alpha_ch_acyl	[C;z1;x0;h1,h2:1]-[C;z2;x2;D3;M](=[O;z2;x0;M])-[O,N;z1;D2,D3;M]	[C:1]	CCC(=O)OC	CC(=O)O,CCC(C)=O,CC(=O)OC		a C-H beside an ester, lactone or amide carbonyl, the site of a base-mediated enolate halogenation
+343	silyl_enol_ether	[C;z2;x0;D1,D2:1]=[C;z2;x1;D2,D3:2]-[O;D2:3]-[Si;D4]	[C:1]=[C:2]-[O:3]-[Si](-[C])(-[C])-[C]	C=C(O[Si](C)(C)C)c1ccccc1	C=C(OC)c1ccccc1,CC(=O)c1ccccc1,C[Si](C)(C)Oc1ccccc1		C=C-O-SiR3, the enol equivalent an electrophilic halogen source takes to the alpha-halo ketone
+344	aryl_methyl	[C;z1;D1;x0:1]-[C;a;M]	[C:1]	Cc1ccccc1	CCc1ccccc1,COc1ccccc1,Cn1ccnc1		Ar-CH3, the methyl `benzylic_ch` (`D2,D3`) leaves out
+345	allylic_methyl	[C;z1;D1;x0:1]-[C;z2;M]=[C;z2;M]	[C:1]	CC=CC(=O)OC	CCC=C,Cc1ccccc1,CC(C)=O		CH3-C=C, the allylic Wohl-Ziegler site
+346	curtius_acid	[C:1]-[C;z2;x2;D3:2](=[O;D1;z2:3])-[O;D1;z1]	[C:1]-[C:2](=[O:3])-[O]	CC(=O)O	CC(=O)OC,CC(=O)N,OC(=O)O		R-COOH with R numbered, for the Curtius row that moves R from the carbonyl carbon to the new nitrogen
+347	azolo_pyridine	[N;a;D3;r5;r6:1]1:[C;a;R1;r6:2]:[C;a;R1;r6:3]:[C;a;R1;r6:4]:[C;a;R1;r6:5]:[C;a;D3;r5;r6:6]:1	[N:1]1:[C:2]:[C:3]:[C:4]:[C:5]:[C:6]:1	c1cn2ccccc2n1	c1ccc2ccccc2c1,c1ccncc1,c1ccc2[nH]ccc2c1		the azine ring of an azole fused through its bridgehead N: imidazo-, pyrazolo- and triazolo[1,5-a]pyridine
+348	hydrolysable_amide_nh	[N;D2;z1;x0:1]-[C;z2;x2;D3:2](=[O;z2;x0:3])-[C;D2,D3,D4;x0,x1,x2;M]	[N:1]-[C:2]=[O:3]	CC(C)(C)C(=O)Nc1ccccc1	CC(=O)Nc1ccccc1,O=C(Nc1ccccc1)C(F)(F)F,O=CNc1ccccc1,CC(C)(C)OC(=O)Nc1ccccc1		R-CO-NH-R' with R not methyl or CF3: the hydrolysis substrate the named `amine_acyl` and `amine_tfa` deprotections leave to `protective.tsv`
+349	hydrolysable_amide_n	[N;D3;z1,z4;x0:1]-[C;z2;x2;D3:2](=[O;z2;x0:3])-[C;D2,D3,D4;x0,x1,x2;M]	[N:1]-[C:2]=[O:3]	CCC(=O)N1CCCCC1	CC(=O)N1CCCCC1,CN(C)C(=O)OC,CN(C)C(=O)N(C)C,CCC(=O)NC		R-CO-NR'2 and the N-acyl azole, R not methyl or CF3; the N-substituted lactam included
 # --- ammonia, thioether, epoxide, carbamate, sulfone and heterocycle-forming partners -----
-350	ammonia	[N;D0;h3:1]	[N;h3:1]	N	CN,[NH4+],NN,NO	NH3, neutral; an ammonium salt drawn as NH3 plus an acid matches, a drawn [NH4+] does not
-351	hexamethyldisilazane	[N;D2;x2;*:1](-[Si;D4](-[C;D1])(-[C;D1])-[C;D1])-[Si;D4](-[C;D1])(-[C;D1])-[C;D1]	[N:1](-[Si](-[C])(-[C])-[C])-[Si](-[C])(-[C])-[C]	C[Si](C)(C)N[Si](C)(C)C	C[Si](C)(C)NC,C[Si](C)(C)N(C)[Si](C)(C)C,N	(Me3Si)2NH or its anion (LiHMDS): an ammonia equivalent, both silyls leave
-352	nh_thiocarbonyl	[S;D1;z2;x0:1]=[C;D3;z2;x2,x3:2]-[N;D2;h1:3]	[S:1]=[C:2]-[N;h1:3]	S=C1NC=CC(=O)N1	CC(=O)NC,CN(C)C(C)=S,NC(N)=S,S=C1CCCCC1	a thioamide or thiourea N-H, drawn as the thione: S-alkylation gives the thioimidate or isothiourea
-353	alkenyl_thiol	[S;x0;D1;z1:1]-[C;z2:2]=[C;M]	[S:1]-[C:2]	SC1=C(C#N)C=CC(=O)N1	Sc1ccccn1,CCS,S=C1CCCCC1	ene-thiol, the drawn tautomer of a non-aromatic ring thioamide such as a 2-mercaptopyridinone
-354	aza_ortho_thioether	[S;D2;z1;x0;!R](-[C;z1])-[C;a:1]:[N;a;D2;h0;M]	[S](-[C])-[C:1]	CSc1ncccn1	CSc1ccccc1,CSc1cccnc1,CSCc1ncccn1	alkylthio on an aromatic carbon beside an aza N, the leaving group of a chlorinolysis
-355	oriented_epoxide	[O;D2;r3:1]1-[C;r3:2]-[C;r3;z1:3]-1	[O:1]1-[C:2]-[C:3]-1	CC1CO1	C1CCO1,C1CN1	an oxirane whose :3 is the carbon a nucleophile takes.  `z1` on :3 alone holds for every oxirane carbon and breaks the pattern symmetry, so a template yields both regioisomers rather than one orientation
-356	aryl_carbamate	[N;z1:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2;x0]-[C;a]	[N:1]-[C:2](=[O:3])-[O]-[C]1=[C]-[C]=[C]-[C]=[C]-1	CNC(=O)Oc1ccccc1	CNC(=O)OC,COC(=O)Oc1ccccc1,CNC(=O)Nc1ccccc1	N-CO-OAr -- phenyl, 4-nitrophenyl, 4-fluorophenyl: the aryloxide leaves and an amine takes the carbonyl
-357	succinimidyl_carbamate	[N;z1:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2;x1]-[N;D3;x1;r5](-[C;z2;r5]=[O])-[C;z2;r5]=[O]	[N:1]-[C:2](=[O:3])-[O]-[N]1-[C](=[O])-[C]-[C]-[C]-1=[O]	CNC(=O)ON1C(=O)CCC1=O	CCOC(=O)ON1C(=O)CCC1=O,CNC(=O)Oc1ccccc1	N-CO-O-NSu, the bench-stable isocyanate equivalent; the N-hydroxysuccinimide leaves
-358	alkyl_carbamate	[N;z1,a:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2;x0]-[C;z1]	[N:1]-[C:2](=[O:3])-[O]-[C]	CNC(=O)OC	CNC(=O)Oc1ccccc1,COC(=O)OC,CC(=O)OC	N-CO-OR on sp3 R, Boc, Cbz and methyl/ethyl carbamates included; the alkoxide leaves only in a ring closure
-359	activated_aza_ortho_sulfone	[C;z1]-[S;D4](=[O;D1])(=[O;D1])-[C;a;r6:1]:[N;a;D2;h0;r6;M]	[C]-[S](=[O])(=[O])-[C:1]	CS(=O)(=O)c1ncccn1	CS(=O)(=O)c1cccnc1,CS(=O)(=O)c1ccccc1,CS(=O)(=O)Nc1ncccn1	Ar-SO2R beside a six-ring aza N: the alkylsulfonyl is the SNAr leaving group
-360	activated_aza_para_sulfone	[C;z1]-[S;D4](=[O;D1])(=[O;D1])-[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1	[C]-[S](=[O])(=[O])-[C:1]	CS(=O)(=O)c1ccncc1	CS(=O)(=O)c1cccnc1,CS(=O)(=O)c1ccccc1	Ar-SO2R para to a six-ring aza N
-361	activated_azole_sulfone	[C;z1]-[S;D4](=[O;D1])(=[O;D1])-[C;a;r5:1](:[N;a;D2;h0;r5;M]):[N,O,S;a;r5;M]	[C]-[S](=[O])(=[O])-[C:1]	CS(=O)(=O)c1nnc(C)o1	CS(=O)(=O)c1cccs1,CS(=O)(=O)c1cn(C)cn1	Ar-SO2R on a five-ring carbon between two ring heteroatoms, one an aza N: 2-sulfonyl oxadiazoles, thiazoles, benzazoles
-362	o_aminoanilide	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[N;D2,D3;z1:4]-[C;D3;z2;x2:5]=[O;D1]	[N:1]-[C:2]:[C:3]-[N:4]-[C:5]=[O]	CC(=O)Nc1ccccc1N	CC(=O)Nc1cccc(N)c1,CC(C)(C)OC(=O)Nc1ccccc1N,CC(=O)Nc1ccccc1NC(C)=O	an anilide with a free ortho amine N-H: cyclodehydration closes the benzimidazole, the amide O leaving as water
-363	orthoester	[C;D3,D4;x3;z1:1](-[O;D2]-[C;z1])(-[O;D2]-[C;z1])-[O;D2]-[C;z1]	[C:1](-[O]-[C])(-[O]-[C])-[O]-[C]	COC(OC)OC	COC(C)OC,COC(=O)OC	RC(OR')3, trimethyl orthoformate and kin; all three alkoxides leave
-364	imidate	[N;D1;z2;x0]=[C;D3;z2;x2:1]-[O;D2]-[C;z1]	[N]=[C:1]-[O]-[C]	CCOC(C)=N	CCOC(C)=O,CC(N)=N,CCOC(C)=NC	R-C(=NH)-OR', the Pinner salt; ammonia and the alkoxide leave
-365	cyanogen_halide	[Cl,Br;D1]-[C;D2:1]#[N;D1:2]	[Br]-[C:1]#[N:2],[Cl]-[C:1]#[N:2]	BrC#N	CC#N,ClCC#N	BrCN or ClCN, the 2-aminoazole carbon
-366	o_nitroaniline	[N;D1,D2;z1;x0:1]-[C;a:2]:[C;a:3]-[N;+;D3:4](=[O;D1])-[O;D1;-]	[N:1]-[C:2]:[C:3]-[N;+:4](=[O])-[O;-]	Nc1ccccc1[N+](=O)[O-]	Nc1cccc(c1)[N+](=O)[O-],CN(C)c1ccccc1[N+](=O)[O-]	an o-nitroaniline N-H: reduced in situ, its nitro N becomes a benzimidazole ring N
-367	hydrazine_nh2nh2	[N;D1;z1:1]-[N;D1;z1;x1:2]	[N:1]-[N:2]	NN	CNN,NC=O	H2N-NH2 itself.  `x1` on :2 alone holds for either N and breaks the pattern symmetry, so both N-H tautomers of a ring it closes are enumerated
-368	knorr_dicarbonyl	[O;D1;z2]=[C;z2;x1:1]-[C;z1;D2,D3:2]-[C;z2;x1;D2,D3:3]=[O;D1;z2]	[O]=[C:1]-[C:2]-[C:3]=[O]	CC(=O)CC(C)=O	CC(=O)CC(=O)OC,CC(=O)C(C)(C)C(C)=O,CC(=O)CCC(C)=O	a 1,3-diketone or 2-acyl aldehyde whose central carbon can aromatize; both oxygens leave.  `D2,D3` on :3 alone restates what every carbonyl carbon is and breaks the pattern symmetry, so both condensation orientations are enumerated
-369	vinylogous_dielectrophile	[O;D1;z2]=[C;z2;x1:1]-[C;z2:2]=[C;z2;x1:3]-[ND3,OD1,OD2;z1]	[O]=[C:1]-[C:2]=[C:3]-[N](-[C])-[C]	CN(C)C=CC(C)=O	CN(C)C=CC(=O)OC,CC(=O)C=CC,CN(C)C=C(C)N	an enaminone, alkoxymethylene ketone or acyl enol: a 1,3-dielectrophile whose C=C end carries the leaving NR2, OR or OH
-370	knorr_ketoester	[O;D1;z2]=[C;z2;x1:1]-[C;z1;D2,D3:2]-[C;z2;x2:3](=[O;D1:4])-[O;D2]-[C]	[O]=[C:1]-[C:2]-[C:3](=[O:4])-[O]-[C]	CCOC(=O)CC(C)=O	CC(=O)CC(C)=O,CCOC(=O)CC(=O)OCC	a beta-ketoester or 2-formyl ester: the carbonyl condenses, the ester acylates, giving the pyrazolone
-371	carbazate	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;D3;z2;x3:3](=[O;D1;M])-[O;D2;M]	[N:1]-[N:2]-[C:3]	CCOC(=O)NN	CC(=O)NN,NNC(=O)N	H2N-NH-CO2R, Boc- or ethoxycarbonyl hydrazine; the carbamate stays on the N it was on
-372	dmf_dma	[C;D3;x3:1](-[O;D2]-[C;D1])(-[O;D2]-[C;D1])-[N;D3](-[C;D1])-[C;D1]	[C:1](-[O]-[C])(-[O]-[C])-[N](-[C])-[C]	CN(C)C(OC)OC	COC(OC)OC,CN(C)C=O	Me2N-CH(OMe)2 (DMF-DMA): the one-carbon unit that turns a methyl or methylene ketone into its enaminone; NMe2 and both methoxides leave
-373	enolizable_ketone	[O;D1;z2]=[C;z2;x1;D3:1]-[C;z1;D1,D2:2]	[O]=[C:1]-[C:2]	CC(=O)c1ccccc1	CC(=O)O,CC(C)(C)C(=O)C(C)(C)C,O=C(c1ccccc1)c1ccccc1	a ketone with an alpha CH2 or CH3, the site DMF-DMA formylates
+350	ammonia	[N;D0;h3:1]	[N;h3:1]	N	CN,[NH4+],NN,NO		NH3, neutral; an ammonium salt drawn as NH3 plus an acid matches, a drawn [NH4+] does not
+351	hexamethyldisilazane	[N;D2;x2;*:1](-[Si;D4](-[C;D1])(-[C;D1])-[C;D1])-[Si;D4](-[C;D1])(-[C;D1])-[C;D1]	[N:1](-[Si](-[C])(-[C])-[C])-[Si](-[C])(-[C])-[C]	C[Si](C)(C)N[Si](C)(C)C	C[Si](C)(C)NC,C[Si](C)(C)N(C)[Si](C)(C)C,N		(Me3Si)2NH or its anion (LiHMDS): an ammonia equivalent, both silyls leave
+352	nh_thiocarbonyl	[S;D1;z2;x0:1]=[C;D3;z2;x2,x3:2]-[N;D2;h1:3]	[S:1]=[C:2]-[N;h1:3]	S=C1NC=CC(=O)N1	CC(=O)NC,CN(C)C(C)=S,NC(N)=S,S=C1CCCCC1		a thioamide or thiourea N-H, drawn as the thione: S-alkylation gives the thioimidate or isothiourea
+353	alkenyl_thiol	[S;x0;D1;z1:1]-[C;z2:2]=[C;M]	[S:1]-[C:2]	SC1=C(C#N)C=CC(=O)N1	Sc1ccccn1,CCS,S=C1CCCCC1		ene-thiol, the drawn tautomer of a non-aromatic ring thioamide such as a 2-mercaptopyridinone
+354	aza_ortho_thioether	[S;D2;z1;x0;!R](-[C;z1])-[C;a:1]:[N;a;D2;h0;M]	[S](-[C])-[C:1]	CSc1ncccn1	CSc1ccccc1,CSc1cccnc1,CSCc1ncccn1		alkylthio on an aromatic carbon beside an aza N, the leaving group of a chlorinolysis
+355	oriented_epoxide	[O;D2;r3:1]1-[C;r3:2]-[C;r3;z1:3]-1	[O:1]1-[C:2]-[C:3]-1	CC1CO1	C1CCO1,C1CN1		an oxirane whose :3 is the carbon a nucleophile takes.  `z1` on :3 alone holds for every oxirane carbon and breaks the pattern symmetry, so a template yields both regioisomers rather than one orientation
+356	aryl_carbamate	[N;z1:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2;x0]-[C;a]	[N:1]-[C:2](=[O:3])-[O]-[C]1=[C]-[C]=[C]-[C]=[C]-1	CNC(=O)Oc1ccccc1	CNC(=O)OC,COC(=O)Oc1ccccc1,CNC(=O)Nc1ccccc1		N-CO-OAr -- phenyl, 4-nitrophenyl, 4-fluorophenyl: the aryloxide leaves and an amine takes the carbonyl
+357	succinimidyl_carbamate	[N;z1:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2;x1]-[N;D3;x1;r5](-[C;z2;r5]=[O])-[C;z2;r5]=[O]	[N:1]-[C:2](=[O:3])-[O]-[N]1-[C](=[O])-[C]-[C]-[C]-1=[O]	CNC(=O)ON1C(=O)CCC1=O	CCOC(=O)ON1C(=O)CCC1=O,CNC(=O)Oc1ccccc1		N-CO-O-NSu, the bench-stable isocyanate equivalent; the N-hydroxysuccinimide leaves
+358	alkyl_carbamate	[N;z1,a:1]-[C;D3;z2;x3:2](=[O;D1:3])-[O;D2;x0]-[C;z1]	[N:1]-[C:2](=[O:3])-[O]-[C]	CNC(=O)OC	CNC(=O)Oc1ccccc1,COC(=O)OC,CC(=O)OC		N-CO-OR on sp3 R, Boc, Cbz and methyl/ethyl carbamates included; the alkoxide leaves only in a ring closure
+359	activated_aza_ortho_sulfone	[C;z1]-[S;D4](=[O;D1])(=[O;D1])-[C;a;r6:1]:[N;a;D2;h0;r6;M]	[C]-[S](=[O])(=[O])-[C:1]	CS(=O)(=O)c1ncccn1	CS(=O)(=O)c1cccnc1,CS(=O)(=O)c1ccccc1,CS(=O)(=O)Nc1ncccn1		Ar-SO2R beside a six-ring aza N: the alkylsulfonyl is the SNAr leaving group
+360	activated_aza_para_sulfone	[C;z1]-[S;D4](=[O;D1])(=[O;D1])-[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1	[C]-[S](=[O])(=[O])-[C:1]	CS(=O)(=O)c1ccncc1	CS(=O)(=O)c1cccnc1,CS(=O)(=O)c1ccccc1		Ar-SO2R para to a six-ring aza N
+361	activated_azole_sulfone	[C;z1]-[S;D4](=[O;D1])(=[O;D1])-[C;a;r5:1](:[N;a;D2;h0;r5;M]):[N,O,S;a;r5;M]	[C]-[S](=[O])(=[O])-[C:1]	CS(=O)(=O)c1nnc(C)o1	CS(=O)(=O)c1cccs1,CS(=O)(=O)c1cn(C)cn1		Ar-SO2R on a five-ring carbon between two ring heteroatoms, one an aza N: 2-sulfonyl oxadiazoles, thiazoles, benzazoles
+362	o_aminoanilide	[N;D1;z1;x0:1]-[C;a:2]:[C;a:3]-[N;D2,D3;z1:4]-[C;D3;z2;x2:5]=[O;D1]	[N:1]-[C:2]:[C:3]-[N:4]-[C:5]=[O]	CC(=O)Nc1ccccc1N	CC(=O)Nc1cccc(N)c1,CC(C)(C)OC(=O)Nc1ccccc1N,CC(=O)Nc1ccccc1NC(C)=O		an anilide with a free ortho amine N-H: cyclodehydration closes the benzimidazole, the amide O leaving as water
+363	orthoester	[C;D3,D4;x3;z1:1](-[O;D2]-[C;z1])(-[O;D2]-[C;z1])-[O;D2]-[C;z1]	[C:1](-[O]-[C])(-[O]-[C])-[O]-[C]	COC(OC)OC	COC(C)OC,COC(=O)OC		RC(OR')3, trimethyl orthoformate and kin; all three alkoxides leave
+364	imidate	[N;D1;z2;x0]=[C;D3;z2;x2:1]-[O;D2]-[C;z1]	[N]=[C:1]-[O]-[C]	CCOC(C)=N	CCOC(C)=O,CC(N)=N,CCOC(C)=NC		R-C(=NH)-OR', the Pinner salt; ammonia and the alkoxide leave
+365	cyanogen_halide	[Cl,Br;D1]-[C;D2:1]#[N;D1:2]	[Br]-[C:1]#[N:2],[Cl]-[C:1]#[N:2]	BrC#N	CC#N,ClCC#N		BrCN or ClCN, the 2-aminoazole carbon
+366	o_nitroaniline	[N;D1,D2;z1;x0:1]-[C;a:2]:[C;a:3]-[N;+;D3:4](=[O;D1])-[O;D1;-]	[N:1]-[C:2]:[C:3]-[N;+:4](=[O])-[O;-]	Nc1ccccc1[N+](=O)[O-]	Nc1cccc(c1)[N+](=O)[O-],CN(C)c1ccccc1[N+](=O)[O-]		an o-nitroaniline N-H: reduced in situ, its nitro N becomes a benzimidazole ring N
+367	hydrazine_nh2nh2	[N;D1;z1:1]-[N;D1;z1;x1:2]	[N:1]-[N:2]	NN	CNN,NC=O		H2N-NH2 itself.  `x1` on :2 alone holds for either N and breaks the pattern symmetry, so both N-H tautomers of a ring it closes are enumerated
+368	knorr_dicarbonyl	[O;D1;z2]=[C;z2;x1:1]-[C;z1;D2,D3:2]-[C;z2;x1;D2,D3:3]=[O;D1;z2]	[O]=[C:1]-[C:2]-[C:3]=[O]	CC(=O)CC(C)=O	CC(=O)CC(=O)OC,CC(=O)C(C)(C)C(C)=O,CC(=O)CCC(C)=O		a 1,3-diketone or 2-acyl aldehyde whose central carbon can aromatize; both oxygens leave.  `D2,D3` on :3 alone restates what every carbonyl carbon is and breaks the pattern symmetry, so both condensation orientations are enumerated
+369	vinylogous_dielectrophile	[O;D1;z2]=[C;z2;x1:1]-[C;z2:2]=[C;z2;x1:3]-[ND3,OD1,OD2;z1]	[O]=[C:1]-[C:2]=[C:3]-[N](-[C])-[C]	CN(C)C=CC(C)=O	CN(C)C=CC(=O)OC,CC(=O)C=CC,CN(C)C=C(C)N		an enaminone, alkoxymethylene ketone or acyl enol: a 1,3-dielectrophile whose C=C end carries the leaving NR2, OR or OH
+370	knorr_ketoester	[O;D1;z2]=[C;z2;x1:1]-[C;z1;D2,D3:2]-[C;z2;x2:3](=[O;D1:4])-[O;D2]-[C]	[O]=[C:1]-[C:2]-[C:3](=[O:4])-[O]-[C]	CCOC(=O)CC(C)=O	CC(=O)CC(C)=O,CCOC(=O)CC(=O)OCC		a beta-ketoester or 2-formyl ester: the carbonyl condenses, the ester acylates, giving the pyrazolone
+371	carbazate	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;D3;z2;x3:3](=[O;D1;M])-[O;D2;M]	[N:1]-[N:2]-[C:3]	CCOC(=O)NN	CC(=O)NN,NNC(=O)N		H2N-NH-CO2R, Boc- or ethoxycarbonyl hydrazine; the carbamate stays on the N it was on
+372	dmf_dma	[C;D3;x3:1](-[O;D2]-[C;D1])(-[O;D2]-[C;D1])-[N;D3](-[C;D1])-[C;D1]	[C:1](-[O]-[C])(-[O]-[C])-[N](-[C])-[C]	CN(C)C(OC)OC	COC(OC)OC,CN(C)C=O		Me2N-CH(OMe)2 (DMF-DMA): the one-carbon unit that turns a methyl or methylene ketone into its enaminone; NMe2 and both methoxides leave
+373	enolizable_ketone	[O;D1;z2]=[C;z2;x1;D3:1]-[C;z1;D1,D2:2]	[O]=[C:1]-[C:2]	CC(=O)c1ccccc1	CC(=O)O,CC(C)(C)C(=O)C(C)(C)C,O=C(c1ccccc1)c1ccccc1		a ketone with an alpha CH2 or CH3, the site DMF-DMA formylates
 # --- nitro, azolone, lactone, CDI, formaldehyde and borane partners of the shipped families ---
-374	azolone	[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[C;z2;r5:3]=[C;z2;r5;M]-[N,O,S;r5;M]-[N;z1;D2;h1;r5:4]1	[O:1]=[C:2](-[C:3])-[N:4]	O=C1C=C(C)ON1	O=C1CCCN1,O=C1C=CC(=O)N1,O=C1C=CC=CN1,O=C1OC=CN1	five-ring lactam whose O-substituted form is aromatic: isoxazol-3-one, pyrazol-3-one; `azinone` is the six-ring class
-375	azolone_aza	[O;z2;x0:1]=[C;z2;x3;D3;r5:2](-[N;z2;r5:3])-[N;z1;D2;h1;r5:4]	[O:1]=[C:2](-[N:3])-[N:4]	O=C1NN(C)C(C)=N1	O=C1NCCN1,O=C1N=CC=CN1,O=C1C=C(C)ON1	five-ring cyclic urea flanked by an imine N and an N-H, the 1,2,4-triazol-3-one; `azinone_aza` is the six-ring class
-376	activated_aza_ortho_nitro	[O;-;D1]-[N;+;D3](=[O;D1])-[C;a;r6:1]:[N;a;D2;h0;r6;M]	[O;-]-[N;+](=[O])-[C:1]	[O-][N+](=O)c1ccccn1	[O-][N+](=O)c1cccnc1,[O-][N+](=O)c1ccccc1	Ar-NO2 beside a six-ring aza N: nitrite is the SNAr leaving group
-377	activated_aza_para_nitro	[O;-;D1]-[N;+;D3](=[O;D1])-[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1	[O;-]-[N;+](=[O])-[C:1]	[O-][N+](=O)c1ccncc1	[O-][N+](=O)c1cccnc1,[O-][N+](=O)c1ccccc1	Ar-NO2 para to a six-ring aza N: nitrite is the SNAr leaving group
-378	formate	[O;D1;z1;x0;-:1]-[C;D2;z2:2]=[O;D1;z2;x0:3]	[O;-:1]-[C:2]=[O:3]	O=C[O-].[Na+]	CC(=O)[O-].[Na+],OC=O	HCOO-, which `carboxylate` (`D3`) leaves out
-379	hetero_methyl_halide	[Cl,Br,I;D1]-[C;z1;x2;D2:1]-[S,P,F;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	CS(=O)(=O)CCl	ClCCS(C)(=O)=O,ClCOC,ClCOC(C)=O,ClC(Cl)S(C)(=O)=O	X-CH2 on S, P or F: a halomethyl sulfide, sulfone, sulfonamide or phosphonate, or FCH2X.  `alkyl_halide` (`x1`) leaves it out; the O-bonded halomethyls are `alpha_hetero_alkyl_halide` or protecting groups
-380	aryloxymethyl_halide	[Cl,Br,I;D1]-[C;z1;x2;D2:1]-[O;D2;M]-[C;a;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	ClCOc1ccccc1	ClCOC,ClCCOc1ccccc1	ArO-CH2-X, the aryloxymethylating agent
-381	nitroalkane_ch	[C;z1;x1;h2,h3:1]-[N;+;D3;M](=[O;D1;M])-[O;-;D1;M]	[C:1]	C[N+](=O)[O-]	CC(C)(C)[N+](=O)[O-],CC(C)[N+](=O)[O-],[O-][N+](=O)c1ccccc1	MeNO2 or RCH2NO2: the carbon that condenses to the nitroalkene
-382	malonic_acid	[O;D1;z1;x0]-[C;z2;x2;D3](=[O;D1])-[C;z1;x0;h1,h2:1]-[C;z2;x2;D3:2](=[O;D1:3])-[O;D1;z1:4]	[O]-[C](=[O])-[C:1]-[C:2](=[O:3])-[O:4]	OC(=O)CC(=O)O	CCOC(=O)CC(=O)OCC,OC(=O)CCC(=O)O,CCOC(=O)CC(=O)O	HOOC-CH2-COOH; one carboxyl is lost as CO2
-383	cdi	[O;D1;z2:1]=[C;D3;x3:2](-[N;a;r5:3]1:[C;a;M]:[N;a;M]:[C;a;M]:[C;a;M]:1)-[N;a;r5]1:[C;a]:[N;a]:[C;a]:[C;a]:1	[O:1]=[C:2](-[N:3])-[N]1-[C]=[N]-[C]=[C]-1	O=C(n1ccnc1)n1ccnc1	O=C(Nc1ccccc1)n1ccnc1,O=C(Cl)n1ccnc1,O=C(n1cccc1)n1cccc1	carbonyldiimidazole as the reagent that keeps one imidazole: the carbamoyl imidazole
-384	nh2_hydrazone	[N;D1;z1;x1:1]-[N;D2;z2;x1:2]=[C;z2:3]	[N:1]-[N:2]=[C:3]	NN=C(c1ccccc1)c1ccccc1	CNN=C(C)C,NNC(C)=O,NN	R2C=N-NH2; `hydrazone` (`D2`) is the N-substituted one
-385	trialkylborane	[C;z1:1]-;!@[B;D3;x0](-[C;z1])-[C;z1]	[C:1]-[B](-[C])-[C]	CCB(CC)CC	CCB(O)O,CCB1OC(C)(C)C(C)(C)O1	R3B: Et3B, or a B-alkyl-9-BBN whose exocyclic alkyl transfers
-386	isopropylamine	[N;D1;z1;x0:1]-[C;D3;x1]([C;D1;x0])[C;D1;x0]	[N:1]-[C](-[C])-[C]	CC(C)N	CCN,CC(C)(C)N,CC(C)NC,CC(N)C(=O)O	iPrNH2, the transaminase amine donor; acetone leaves
-387	nh_sulfoximine	[N;D1;h1:1]=[S;D4:2](=[O;D1:3])(-[C:4])-[C:5]	[N:1]=[S:2](=[O:3])(-[C:4])-[C:5]	CS(C)(=N)=O	CS(C)(=NC)=O,CS(C)(=O)=O	an N-H sulfoximine
-388	azolone_vinylogous	[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[C;z2;r5:3]=[C;z2;r5:4]-[N;z1;D2;h1;r5:5]-[N,O,S;r5;M]1	[O:1]=[C:2]-[C:3]=[C:4]-[N:5]	O=C1C=C(C)NN1C	O=C1C=CNC=C1,O=C1C=C(C)ON1,O=C1C=CCN1C	five-ring lactam with C=O and N-H across a ring C=C, the 1-substituted pyrazol-5-one; its O-substituted form is the aromatic 5-alkoxypyrazole
-389	lactone	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0;R:3]	[O:1]=[C:2]-[O:3]	O=C1CCCO1	CC(=O)OC,O=C1CCCN1,O=C1OCCO1	a ring ester whose ring oxygen stays on the product: opening it by a nucleophile gives the hydroxy acyl compound, which `ester` (alkoxy unnumbered) deletes
-390	activated_alkyl_halide	[Cl,Br,I;D1]-[C;z1;x1;h1,h2:1]-[C;z2,z4;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	ClCc1ccccc1	ClCCc1ccccc1,ClCC,ClC(Cl)c1ccccc1	X-CH or X-CH2 on an aromatic or sp2 carbon: benzylic, allylic, beside C=N or C=O.  The halide is the leaving group, unlike `benzyl_halide` and `allyl_halide`, which number it
+374	azolone	[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[C;z2;r5:3]=[C;z2;r5;M]-[N,O,S;r5;M]-[N;z1;D2;h1;r5:4]1	[O:1]=[C:2](-[C:3])-[N:4]	O=C1C=C(C)ON1	O=C1CCCN1,O=C1C=CC(=O)N1,O=C1C=CC=CN1,O=C1OC=CN1	amide:4	five-ring lactam whose O-substituted form is aromatic: isoxazol-3-one, pyrazol-3-one; `azinone` is the six-ring class
+375	azolone_aza	[O;z2;x0:1]=[C;z2;x3;D3;r5:2](-[N;z2;r5:3])-[N;z1;D2;h1;r5:4]	[O:1]=[C:2](-[N:3])-[N:4]	O=C1NN(C)C(C)=N1	O=C1NCCN1,O=C1N=CC=CN1,O=C1C=C(C)ON1	amide:4	five-ring cyclic urea flanked by an imine N and an N-H, the 1,2,4-triazol-3-one; `azinone_aza` is the six-ring class
+376	activated_aza_ortho_nitro	[O;-;D1]-[N;+;D3](=[O;D1])-[C;a;r6:1]:[N;a;D2;h0;r6;M]	[O;-]-[N;+](=[O])-[C:1]	[O-][N+](=O)c1ccccn1	[O-][N+](=O)c1cccnc1,[O-][N+](=O)c1ccccc1		Ar-NO2 beside a six-ring aza N: nitrite is the SNAr leaving group
+377	activated_aza_para_nitro	[O;-;D1]-[N;+;D3](=[O;D1])-[C;a:1]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1	[O;-]-[N;+](=[O])-[C:1]	[O-][N+](=O)c1ccncc1	[O-][N+](=O)c1cccnc1,[O-][N+](=O)c1ccccc1		Ar-NO2 para to a six-ring aza N: nitrite is the SNAr leaving group
+378	formate	[O;D1;z1;x0;-:1]-[C;D2;z2:2]=[O;D1;z2;x0:3]	[O;-:1]-[C:2]=[O:3]	O=C[O-].[Na+]	CC(=O)[O-].[Na+],OC=O		HCOO-, which `carboxylate` (`D3`) leaves out
+379	hetero_methyl_halide	[Cl,Br,I;D1]-[C;z1;x2;D2:1]-[S,P,F;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	CS(=O)(=O)CCl	ClCCS(C)(=O)=O,ClCOC,ClCOC(C)=O,ClC(Cl)S(C)(=O)=O		X-CH2 on S, P or F: a halomethyl sulfide, sulfone, sulfonamide or phosphonate, or FCH2X.  `alkyl_halide` (`x1`) leaves it out; the O-bonded halomethyls are `alpha_hetero_alkyl_halide` or protecting groups
+380	aryloxymethyl_halide	[Cl,Br,I;D1]-[C;z1;x2;D2:1]-[O;D2;M]-[C;a;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	ClCOc1ccccc1	ClCOC,ClCCOc1ccccc1		ArO-CH2-X, the aryloxymethylating agent
+381	nitroalkane_ch	[C;z1;x1;h2,h3:1]-[N;+;D3;M](=[O;D1;M])-[O;-;D1;M]	[C:1]	C[N+](=O)[O-]	CC(C)(C)[N+](=O)[O-],CC(C)[N+](=O)[O-],[O-][N+](=O)c1ccccc1		MeNO2 or RCH2NO2: the carbon that condenses to the nitroalkene
+382	malonic_acid	[O;D1;z1;x0]-[C;z2;x2;D3](=[O;D1])-[C;z1;x0;h1,h2:1]-[C;z2;x2;D3:2](=[O;D1:3])-[O;D1;z1:4]	[O]-[C](=[O])-[C:1]-[C:2](=[O:3])-[O:4]	OC(=O)CC(=O)O	CCOC(=O)CC(=O)OCC,OC(=O)CCC(=O)O,CCOC(=O)CC(=O)O		HOOC-CH2-COOH; one carboxyl is lost as CO2
+383	cdi	[O;D1;z2:1]=[C;D3;x3:2](-[N;a;r5:3]1:[C;a;M]:[N;a;M]:[C;a;M]:[C;a;M]:1)-[N;a;r5]1:[C;a]:[N;a]:[C;a]:[C;a]:1	[O:1]=[C:2](-[N:3])-[N]1-[C]=[N]-[C]=[C]-1	O=C(n1ccnc1)n1ccnc1	O=C(Nc1ccccc1)n1ccnc1,O=C(Cl)n1ccnc1,O=C(n1cccc1)n1cccc1		carbonyldiimidazole as the reagent that keeps one imidazole: the carbamoyl imidazole
+384	nh2_hydrazone	[N;D1;z1;x1:1]-[N;D2;z2;x1:2]=[C;z2:3]	[N:1]-[N:2]=[C:3]	NN=C(c1ccccc1)c1ccccc1	CNN=C(C)C,NNC(C)=O,NN		R2C=N-NH2; `hydrazone` (`D2`) is the N-substituted one
+385	trialkylborane	[C;z1:1]-;!@[B;D3;x0](-[C;z1])-[C;z1]	[C:1]-[B](-[C])-[C]	CCB(CC)CC	CCB(O)O,CCB1OC(C)(C)C(C)(C)O1		R3B: Et3B, or a B-alkyl-9-BBN whose exocyclic alkyl transfers
+386	isopropylamine	[N;D1;z1;x0:1]-[C;D3;x1]([C;D1;x0])[C;D1;x0]	[N:1]-[C](-[C])-[C]	CC(C)N	CCN,CC(C)(C)N,CC(C)NC,CC(N)C(=O)O		iPrNH2, the transaminase amine donor; acetone leaves
+387	nh_sulfoximine	[N;D1;h1:1]=[S;D4:2](=[O;D1:3])(-[C:4])-[C:5]	[N:1]=[S:2](=[O:3])(-[C:4])-[C:5]	CS(C)(=N)=O	CS(C)(=NC)=O,CS(C)(=O)=O	amide:1	an N-H sulfoximine
+388	azolone_vinylogous	[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[C;z2;r5:3]=[C;z2;r5:4]-[N;z1;D2;h1;r5:5]-[N,O,S;r5;M]1	[O:1]=[C:2]-[C:3]=[C:4]-[N:5]	O=C1C=C(C)NN1C	O=C1C=CNC=C1,O=C1C=C(C)ON1,O=C1C=CCN1C		five-ring lactam with C=O and N-H across a ring C=C, the 1-substituted pyrazol-5-one; its O-substituted form is the aromatic 5-alkoxypyrazole
+389	lactone	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0;R:3]	[O:1]=[C:2]-[O:3]	O=C1CCCO1	CC(=O)OC,O=C1CCCN1,O=C1OCCO1		a ring ester whose ring oxygen stays on the product: opening it by a nucleophile gives the hydroxy acyl compound, which `ester` (alkoxy unnumbered) deletes
+390	activated_alkyl_halide	[Cl,Br,I;D1]-[C;z1;x1;h1,h2:1]-[C;z2,z4;M]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	ClCc1ccccc1	ClCCc1ccccc1,ClCC,ClC(Cl)c1ccccc1		X-CH or X-CH2 on an aromatic or sp2 carbon: benzylic, allylic, beside C=N or C=O.  The halide is the leaving group, unlike `benzyl_halide` and `allyl_halide`, which number it
 # --- ketone enolate, imine, benzylic, ring C-H and beta-carbonyl substrates ---------------
-391	ketone_alpha_ch	[O;z2;x0:1]=[C;D3;x1;z2:2]-[C;z1;h1,h2,h3:3]	[O:1]=[C:2]-[C:3]	CC(=O)CC	O=C(c1ccccc1)c1ccccc1,CC(=O)OC,CC(C)(C)C(=O)C(C)(C)C	a ketone with its carbonyl oxygen and an alpha C-H numbered, the enol triflate and silyl enol ether site
-392	beta_dicarbonyl_ketone	[O;z2;x0:1]=[C;D3;x1;z2:2]-[C;z1;h1,h2:3]-[C;z2;x1,x2;M]=[O;z2;x0;M]	[O:1]=[C:2]-[C:3]	CC(=O)CC(=O)OC	CC(=O)CC,CC(=O)C(C)(C)C(=O)OC	a ketone whose alpha C-H is flanked by a second carbonyl (1,3-dione, beta-keto ester or amide), enolized by an amine base
-393	pyrazol_5_one	[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[N;z1;D3;r5;M]-[N;z1;D2;h1;r5:3]-[C;z2;r5:4]=[C;z2;r5:5]-1	[O:1]=[C:2]-[C:5]=[C:4]-[N:3]	O=C1C=CNN1C	O=C1C=CNN1,O=C1CCNN1C	an N1-substituted 1,2-dihydropyrazol-3-one drawn as its NH tautomer, the 5-hydroxypyrazole in disguise
-394	pyrazol_3_one	[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[N;z1;D2;h1;r5:3]-[N;z1;D3;r5;M]-[C;z2;r5;M]=[C;z2;r5;M]-1	[O:1]=[C:2]-[N:3]	O=C1C=CN(C)N1	O=C1C=CNN1C,O=C1CCN(C)N1	an N1-substituted 1,2-dihydropyrazol-3-one drawn as its NH tautomer, the 3-hydroxypyrazole in disguise
-395	sulfinyl_ketimine	[N;D2;z2;x1:1](=[C;z2;D3;x1:2])-[S;D3:3]=[O;D1:4]	[N:1](=[C:2])-[S:3]=[O:4]	CC(C)=NS(=O)C(C)(C)C	CC=NS(=O)C(C)(C)C,CC(C)=NS(=O)(=O)C,CC(C)=NC	a ketone-derived N-sulfinyl imine (Ellman), the auxiliary S kept and numbered
-396	ketimine	[N;D2;z2;x0:1]=[C;z2;D3;x1:2]	[N:1]=[C:2]	CN=C(C)C	CN=CC,CC(N)=NC,c1ccncc1,CC(C)=NO	R2C=NR, a ketone-derived imine, cyclic 1-pyrroline included; `x1` on the carbon excludes the amidine
-397	benzylic_alcohol	[O;D1;z1;x0:1]-[C;z1;x1:2]-[C;a,z3;M]	[O:1]-[C:2]	CC(O)c1ccccc1	CCO,Oc1ccccc1,OC(c1ccccc1)OC	an alcohol on a carbon beside an arene or an alkyne, the stabilized carbocation silane reduction needs
-398	acyl_hemiaminal	[O;D1;z1;x0:1]-[C;z1;x2:2]-[N;z1;D3;M]-[C;z2;M]=[O;M]	[O:1]-[C:2]	OC1CCC(=O)N1C	OC1CCCN1C,OC(C)OC(C)=O	HO-C-N(acyl), the N-acyliminium precursor
-399	n_methyl_amine	[C;D1;z1;x1]-[N;D3;z1;x0:1](-[C;z1:2])-[C;z1:3]	[C]-[N:1](-[C:2])-[C:3]	CN1CCCCC1	CN(C)C(C)=O,CN(C)c1ccccc1,CNC	R2N-CH3 on an sp3 amine; the methyl is the leaving carbon
-400	aldoxime_ch	[O;D1,D2;z1;x1:1]-[N;D2;z2;x1:2]=[C;D2;h1:3]	[O:1]-[N:2]=[C:3]	ON=Cc1ccccc1	ON=C(C)c1ccccc1,CN=Cc1ccccc1	an aldoxime or its O-alkyl ether with the C-H numbered, the hydroximoyl halide precursor
-401	methyl_aryl_thioether	[C;z1;D1:1]-[S;D2;z1;x0;M]-[C;a;M]	[C:1]	CSc1ccccc1	CCSc1ccccc1,CSC	the S-methyl of a thioanisole, chlorinated by NCS through the sulfonium
-402	beta_carbonyl_ester	[O;z2;x0]=[C;z2;x2;D3](-[O;D2;x0]-[C;z1;D1,D2,D3])-[C;z1:1]-[C,S,N;z2,z3,z5;M]=,#[O,N;M]	[O]=[C](-[O]-[C])-[C:1]	CCOC(=O)CC(C)=O	CC(C)(C)OC(=O)CC(C)=O,CCOC(=O)CCC	an alkyl ester on a carbon beside a second carbonyl, nitrile or sulfonyl, the ester unnumbered so it leaves whole; a tert-butyl ester is left to `carboxyl_tbu`
-403	beta_carbonyl_acid	[O;D1;z1;x0]-[C;z2;x2;D3](=[O;z2;x0])-[C;z1:1]-[C,S,N;z2,z3,z5;M]=,#[O,N;M]	[O]-[C](=[O])-[C:1]	OC(=O)CC(C)=O	OC(=O)CCC,CCOC(=O)CC(C)=O	a carboxylic acid beside a second carbonyl, nitrile or sulfonyl: malonic, beta-keto and cyanoacetic acids
-404	ring_ch_ch	[C;z1;h1,h2;R:1](-;@[C;z1;h1,h2;R:2])-[A;z2,z4;M]	[C:1]-[C:2]	C1CC(=O)NN=C1C	C1CCCCC1,CC(C)C=O	two adjacent ring sp3 C-H carbons, one of them beside an sp2 or aromatic atom: the desaturation site that conjugates or aromatizes
-405	pyridine_ring	[N;a;D2;h0;R1:1]1:[C;a;R1:2]:[C;a;R1:3]:[C;a;R1:4]:[C;a;R1:5]:[C;a;R1:6]:1	[N:1]1:[C:2]:[C:3]:[C:4]:[C:5]:[C:6]:1	Cc1ccccn1	c1ccc2ncccc2c1,c1cncnc1	an unfused pyridine ring, all six atoms numbered for the full hydrogenation
-406	benzo_pyridine_ring	[N;a;D2;h0;R1:1]1:[C;a;R1:2]:[C;a;R1:3]:[C;a;R1:4]:[C;a;R2:5]:[C;a;R2:6]:1	[N:1]1:[C:2]:[C:3]:[C:4]:[C:5]:[C:6]:1	c1ccc2ncccc2c1	Cc1ccccn1,c1ccc2cnccc2c1	the pyridine ring of a quinoline, 7-azaindole or naphthyridine, nitrogen beside the fusion carbon
+391	ketone_alpha_ch	[O;z2;x0:1]=[C;D3;x1;z2:2]-[C;z1;h1,h2,h3:3]	[O:1]=[C:2]-[C:3]	CC(=O)CC	O=C(c1ccccc1)c1ccccc1,CC(=O)OC,CC(C)(C)C(=O)C(C)(C)C		a ketone with its carbonyl oxygen and an alpha C-H numbered, the enol triflate and silyl enol ether site
+392	beta_dicarbonyl_ketone	[O;z2;x0:1]=[C;D3;x1;z2:2]-[C;z1;h1,h2:3]-[C;z2;x1,x2;M]=[O;z2;x0;M]	[O:1]=[C:2]-[C:3]	CC(=O)CC(=O)OC	CC(=O)CC,CC(=O)C(C)(C)C(=O)OC		a ketone whose alpha C-H is flanked by a second carbonyl (1,3-dione, beta-keto ester or amide), enolized by an amine base
+393	pyrazol_5_one	[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[N;z1;D3;r5;M]-[N;z1;D2;h1;r5:3]-[C;z2;r5:4]=[C;z2;r5:5]-1	[O:1]=[C:2]-[C:5]=[C:4]-[N:3]	O=C1C=CNN1C	O=C1C=CNN1,O=C1CCNN1C		an N1-substituted 1,2-dihydropyrazol-3-one drawn as its NH tautomer, the 5-hydroxypyrazole in disguise
+394	pyrazol_3_one	[O;z2;x0:1]=[C;z2;x2;D3;r5:2]1-[N;z1;D2;h1;r5:3]-[N;z1;D3;r5;M]-[C;z2;r5;M]=[C;z2;r5;M]-1	[O:1]=[C:2]-[N:3]	O=C1C=CN(C)N1	O=C1C=CNN1C,O=C1CCN(C)N1	amide:3	an N1-substituted 1,2-dihydropyrazol-3-one drawn as its NH tautomer, the 3-hydroxypyrazole in disguise
+395	sulfinyl_ketimine	[N;D2;z2;x1:1](=[C;z2;D3;x1:2])-[S;D3:3]=[O;D1:4]	[N:1](=[C:2])-[S:3]=[O:4]	CC(C)=NS(=O)C(C)(C)C	CC=NS(=O)C(C)(C)C,CC(C)=NS(=O)(=O)C,CC(C)=NC		a ketone-derived N-sulfinyl imine (Ellman), the auxiliary S kept and numbered
+396	ketimine	[N;D2;z2;x0:1]=[C;z2;D3;x1:2]	[N:1]=[C:2]	CN=C(C)C	CN=CC,CC(N)=NC,c1ccncc1,CC(C)=NO		R2C=NR, a ketone-derived imine, cyclic 1-pyrroline included; `x1` on the carbon excludes the amidine
+397	benzylic_alcohol	[O;D1;z1;x0:1]-[C;z1;x1:2]-[C;a,z3;M]	[O:1]-[C:2]	CC(O)c1ccccc1	CCO,Oc1ccccc1,OC(c1ccccc1)OC		an alcohol on a carbon beside an arene or an alkyne, the stabilized carbocation silane reduction needs
+398	acyl_hemiaminal	[O;D1;z1;x0:1]-[C;z1;x2:2]-[N;z1;D3;M]-[C;z2;M]=[O;M]	[O:1]-[C:2]	OC1CCC(=O)N1C	OC1CCCN1C,OC(C)OC(C)=O		HO-C-N(acyl), the N-acyliminium precursor
+399	n_methyl_amine	[C;D1;z1;x1]-[N;D3;z1;x0:1](-[C;z1:2])-[C;z1:3]	[C]-[N:1](-[C:2])-[C:3]	CN1CCCCC1	CN(C)C(C)=O,CN(C)c1ccccc1,CNC		R2N-CH3 on an sp3 amine; the methyl is the leaving carbon
+400	aldoxime_ch	[O;D1,D2;z1;x1:1]-[N;D2;z2;x1:2]=[C;D2;h1:3]	[O:1]-[N:2]=[C:3]	ON=Cc1ccccc1	ON=C(C)c1ccccc1,CN=Cc1ccccc1		an aldoxime or its O-alkyl ether with the C-H numbered, the hydroximoyl halide precursor
+401	methyl_aryl_thioether	[C;z1;D1:1]-[S;D2;z1;x0;M]-[C;a;M]	[C:1]	CSc1ccccc1	CCSc1ccccc1,CSC		the S-methyl of a thioanisole, chlorinated by NCS through the sulfonium
+402	beta_carbonyl_ester	[O;z2;x0]=[C;z2;x2;D3](-[O;D2;x0]-[C;z1;D1,D2,D3])-[C;z1:1]-[C,S,N;z2,z3,z5;M]=,#[O,N;M]	[O]=[C](-[O]-[C])-[C:1]	CCOC(=O)CC(C)=O	CC(C)(C)OC(=O)CC(C)=O,CCOC(=O)CCC		an alkyl ester on a carbon beside a second carbonyl, nitrile or sulfonyl, the ester unnumbered so it leaves whole; a tert-butyl ester is left to `carboxyl_tbu`
+403	beta_carbonyl_acid	[O;D1;z1;x0]-[C;z2;x2;D3](=[O;z2;x0])-[C;z1:1]-[C,S,N;z2,z3,z5;M]=,#[O,N;M]	[O]-[C](=[O])-[C:1]	OC(=O)CC(C)=O	OC(=O)CCC,CCOC(=O)CC(C)=O		a carboxylic acid beside a second carbonyl, nitrile or sulfonyl: malonic, beta-keto and cyanoacetic acids
+404	ring_ch_ch	[C;z1;h1,h2;R:1](-;@[C;z1;h1,h2;R:2])-[A;z2,z4;M]	[C:1]-[C:2]	C1CC(=O)NN=C1C	C1CCCCC1,CC(C)C=O		two adjacent ring sp3 C-H carbons, one of them beside an sp2 or aromatic atom: the desaturation site that conjugates or aromatizes
+405	pyridine_ring	[N;a;D2;h0;R1:1]1:[C;a;R1:2]:[C;a;R1:3]:[C;a;R1:4]:[C;a;R1:5]:[C;a;R1:6]:1	[N:1]1:[C:2]:[C:3]:[C:4]:[C:5]:[C:6]:1	Cc1ccccn1	c1ccc2ncccc2c1,c1cncnc1		an unfused pyridine ring, all six atoms numbered for the full hydrogenation
+406	benzo_pyridine_ring	[N;a;D2;h0;R1:1]1:[C;a;R1:2]:[C;a;R1:3]:[C;a;R1:4]:[C;a;R2:5]:[C;a;R2:6]:1	[N:1]1:[C:2]:[C:3]:[C:4]:[C:5]:[C:6]:1	c1ccc2ncccc2c1	Cc1ccccn1,c1ccc2cnccc2c1		the pyridine ring of a quinoline, 7-azaindole or naphthyridine, nitrogen beside the fusion carbon
 # --- Michael acceptors, sulfinamides, amidines and lactim ethers --------------------------
-407	enoyl	[C;z2;x0:1]=[C;z2:2]-[C;D3;z2;x1,x2:3]=[O;D1;x0:4]	[C:1]=[C:2]-[C:3]=[O:4]	COC(=O)C=CC	CCC(=O)OC,CN(C)C=CC(=O)OC,C=CC=O,OC=CC(C)=O	C=C-C(=O)R for R = C, O or N -- enone, unsaturated ester, acid, amide, lactone -- numbered from a beta carbon with no heteroatom
-408	alkenyl_nitrile	[C;z2;x0:1]=[C;z2:2]-[C;D2;z3:3]#[N;D1:4]	[C:1]=[C:2]-[C:3]#[N:4]	C=CC#N	CCC#N,N#Cc1ccccc1	C=C-C#N, the unsaturated nitrile Michael acceptor
-409	vinyl_sulfonyl	[C;z2;x0:1]=[C;z2:2]-[S;D4:3](=[O;D1:4])=[O;D1:5]	[C:1]=[C:2]-[S:3](=[O:4])=[O:5]	C=CS(C)(=O)=O	CCS(C)(=O)=O,CS(=O)(=O)c1ccccc1	C=C-SO2X for any X -- sulfone, sulfonamide, sulfonate, sulfonyl fluoride -- numbered from the beta carbon
-410	vinyl_azine_ortho	[C;z2;x0;D1:1]=[C;z2;D2:2]-[C;a;r6:3]:[N;a;D2;h0;r6;M]	[C:1]=[C:2]-[C:3]	C=Cc1ccccn1	C=Cc1cccnc1,C=Cc1ccccc1	CH2=CH- beside a six-ring aza N, the 2-vinylazine Michael acceptor
-411	vinyl_azine_para	[C;z2;x0;D1:1]=[C;z2;D2:2]-[C;a:3]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1	[C:1]=[C:2]-[C:3]	C=Cc1ccncc1	C=Cc1cccnc1,C=Cc1ccccc1	CH2=CH- para to a six-ring aza N, the 4-vinylazine Michael acceptor
-412	nitroalkene	[C;z2;x0:1]=[C;z2:2]-[N;+;D3:3](=[O;D1:4])-[O;-;D1:5]	[C:1]=[C:2]-[N;+:3](=[O:4])-[O;-:5]	CC=C[N+](=O)[O-]	CC[N+](=O)[O-],[O-][N+](=O)c1ccccc1	C=C-NO2, numbered from the beta carbon
-413	alkenyl_sulfonium	[C;z2;x0:1]=[C;z2;D2:2]-[S;+;D3:3]	[C:1]=[C:2]-[S;+:3]	CC=C[S+](C)C	CC[S+](C)C,C[S+](C)c1ccccc1	C=C-S+R2, the alkenyl sulfonium (thianthrenium) acceptor
-414	primary_sulfinamide	[N;D1;z1:1]-[S;D3;z2:2](=[O;D1:3])-[C:4]	[N:1]-[S:2](=[O:3])-[C:4]	CC(C)(C)S(N)=O	CC(C)(C)S(=O)NC,CS(N)(=O)=O	R-S(=O)-NH2, the Ellman or Davis auxiliary
-415	sulfinimine	[C;z2:1]=[N;D2;z2:2]-[S;D3:3](=[O;D1:4])-[C:5]	[C:1]=[N:2]-[S:3](=[O:4])-[C:5]	CC(C)(C)S(=O)N=Cc1ccccc1	CC(C)(C)S(=O)NCc1ccccc1,CC(C)(C)S(=O)(=O)N=Cc1ccccc1	R-S(=O)-N=CR2, the N-sulfinyl imine
-416	amidine_nh	[N;D1;z1;x0:1]-[C;D3;z2:2]=[N;D1;x0:3]	[N:1]-[C:2]=[N:3]	CC(N)=N	CC(N)=O,CC(=N)NO,CNC(C)=N	H2N-C(=NH)-R for R = C, N or S: the free amidine, guanidine or isothiourea
-417	alkynyl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;z3:1]#[C:2]	[Cl]-[Mg]-[C:1]#[C:2],[Br]-[Mg]-[C:1]#[C:2],[I]-[Mg]-[C:1]#[C:2]	Cl[Mg]C#C	CC[Mg]Br,Br[Mg]C=C	alkynyl Grignard
-418	lactim_ether	[N;D2;z2;x0:1]=[C;D3;z2;x2:2]-[O;D2]-[C;z1]	[N:1]=[C:2]-[O]-[C]	COC1=NCCCC1	CCOC(C)=N,COC(C)=O,CON=C(C)C	R-C(=NR)-OR', the N-substituted imidate or lactim ether; the alkoxide leaves
-419	aminopyrazole_nh	[N;D1;z1;x0:1]-[C;a;r5:2]:[N;a;D2;r5:3]:[N;a;D2;r5:4]	[N:1]-[C:2]:[N:3]:[N;h1:4]	Nc1cc[nH]n1	Nc1ccccn1,Cn1nccc1N,Nc1ncc[nH]1	NH2 on an azole carbon beside an N-N pair with no N-substituent: 3(5)-aminopyrazole and aminotriazole in either drawing
-420	xec_aryl_halide	[Cl,Br,I;D1]-[C;a:1]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Brc1ccccc1	Fc1ccccc1	`aryl_halide` under a second name, for the second electrophile of a biaryl XEC: slots naming two groups never read one aryl halide as both
+407	enoyl	[C;z2;x0:1]=[C;z2:2]-[C;D3;z2;x1,x2:3]=[O;D1;x0:4]	[C:1]=[C:2]-[C:3]=[O:4]	COC(=O)C=CC	CCC(=O)OC,CN(C)C=CC(=O)OC,C=CC=O,OC=CC(C)=O		C=C-C(=O)R for R = C, O or N -- enone, unsaturated ester, acid, amide, lactone -- numbered from a beta carbon with no heteroatom
+408	alkenyl_nitrile	[C;z2;x0:1]=[C;z2:2]-[C;D2;z3:3]#[N;D1:4]	[C:1]=[C:2]-[C:3]#[N:4]	C=CC#N	CCC#N,N#Cc1ccccc1		C=C-C#N, the unsaturated nitrile Michael acceptor
+409	vinyl_sulfonyl	[C;z2;x0:1]=[C;z2:2]-[S;D4:3](=[O;D1:4])=[O;D1:5]	[C:1]=[C:2]-[S:3](=[O:4])=[O:5]	C=CS(C)(=O)=O	CCS(C)(=O)=O,CS(=O)(=O)c1ccccc1		C=C-SO2X for any X -- sulfone, sulfonamide, sulfonate, sulfonyl fluoride -- numbered from the beta carbon
+410	vinyl_azine_ortho	[C;z2;x0;D1:1]=[C;z2;D2:2]-[C;a;r6:3]:[N;a;D2;h0;r6;M]	[C:1]=[C:2]-[C:3]	C=Cc1ccccn1	C=Cc1cccnc1,C=Cc1ccccc1		CH2=CH- beside a six-ring aza N, the 2-vinylazine Michael acceptor
+411	vinyl_azine_para	[C;z2;x0;D1:1]=[C;z2;D2:2]-[C;a:3]1:[C,N;a;M]:[C,N;a;M]:[N;a;D2;h0;M]:[C,N;a;M]:[C,N;a;M]:1	[C:1]=[C:2]-[C:3]	C=Cc1ccncc1	C=Cc1cccnc1,C=Cc1ccccc1		CH2=CH- para to a six-ring aza N, the 4-vinylazine Michael acceptor
+412	nitroalkene	[C;z2;x0:1]=[C;z2:2]-[N;+;D3:3](=[O;D1:4])-[O;-;D1:5]	[C:1]=[C:2]-[N;+:3](=[O:4])-[O;-:5]	CC=C[N+](=O)[O-]	CC[N+](=O)[O-],[O-][N+](=O)c1ccccc1		C=C-NO2, numbered from the beta carbon
+413	alkenyl_sulfonium	[C;z2;x0:1]=[C;z2;D2:2]-[S;+;D3:3]	[C:1]=[C:2]-[S;+:3]	CC=C[S+](C)C	CC[S+](C)C,C[S+](C)c1ccccc1		C=C-S+R2, the alkenyl sulfonium (thianthrenium) acceptor
+414	primary_sulfinamide	[N;D1;z1:1]-[S;D3;z2:2](=[O;D1:3])-[C:4]	[N:1]-[S:2](=[O:3])-[C:4]	CC(C)(C)S(N)=O	CC(C)(C)S(=O)NC,CS(N)(=O)=O	amide:1	R-S(=O)-NH2, the Ellman or Davis auxiliary
+415	sulfinimine	[C;z2:1]=[N;D2;z2:2]-[S;D3:3](=[O;D1:4])-[C:5]	[C:1]=[N:2]-[S:3](=[O:4])-[C:5]	CC(C)(C)S(=O)N=Cc1ccccc1	CC(C)(C)S(=O)NCc1ccccc1,CC(C)(C)S(=O)(=O)N=Cc1ccccc1		R-S(=O)-N=CR2, the N-sulfinyl imine
+416	amidine_nh	[N;D1;z1;x0:1]-[C;D3;z2:2]=[N;D1;x0:3]	[N:1]-[C:2]=[N:3]	CC(N)=N	CC(N)=O,CC(=N)NO,CNC(C)=N		H2N-C(=NH)-R for R = C, N or S: the free amidine, guanidine or isothiourea
+417	alkynyl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;z3:1]#[C:2]	[Cl]-[Mg]-[C:1]#[C:2],[Br]-[Mg]-[C:1]#[C:2],[I]-[Mg]-[C:1]#[C:2]	Cl[Mg]C#C	CC[Mg]Br,Br[Mg]C=C		alkynyl Grignard
+418	lactim_ether	[N;D2;z2;x0:1]=[C;D3;z2;x2:2]-[O;D2]-[C;z1]	[N:1]=[C:2]-[O]-[C]	COC1=NCCCC1	CCOC(C)=N,COC(C)=O,CON=C(C)C		R-C(=NR)-OR', the N-substituted imidate or lactim ether; the alkoxide leaves
+419	aminopyrazole_nh	[N;D1;z1;x0:1]-[C;a;r5:2]:[N;a;D2;r5:3]:[N;a;D2;r5:4]	[N:1]-[C:2]:[N:3]:[N;h1:4]	Nc1cc[nH]n1	Nc1ccccn1,Cn1nccc1N,Nc1ncc[nH]1	aniline:1	NH2 on an azole carbon beside an N-N pair with no N-substituent: 3(5)-aminopyrazole and aminotriazole in either drawing
+420	xec_aryl_halide	[Cl,Br,I;D1]-[C;a:1]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Brc1ccccc1	Fc1ccccc1		`aryl_halide` under a second name, for the second electrophile of a biaryl XEC: slots naming two groups never read one aryl halide as both
+421	acyl_hydrazine_nh	[N;D2;z1;x1;h1:1](-[C;z2;x2:2]=[O:3])-[N:4]		CC(=O)NN(C)C	CNN(C)C,CC(=O)NC	amide:1	the N-H of an acyl hydrazide, N(C=O)-N: the amide site `secondary_amide` (`x0`) leaves out

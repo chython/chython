@@ -29,8 +29,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from itertools import chain, combinations, product as cartesian
 from typing import NamedTuple
 from ._tables import (PROTECTS_ELEMENTS, ProtectiveGroup, ReactionRule,
-                      functional_rules as _group_table, protective_rules, protective_sites, reaction_rules,
-                      retro_templates)
+                      functional_rules as _group_table, protective_rules, reaction_rules, retro_templates)
 from ..core import MoleculeContainer, ReactionContainer, ReactionTemplate
 from ..core._core import valence_report
 
@@ -367,8 +366,8 @@ class EnumeratedDeprotection(NamedTuple):
     `labels` is the mechanism per strip: `ester_hydrolysis` where the strip cuts a carboxylic ester, on
     either side and whichever row claimed it (`carboxyl_tbu`, `hydroxyl_methyl` on a methyl ester,
     `hydroxyl_acyl` on an acetate), and otherwise the row's name for the atom it sits on (`_sited`):
-    `aniline_boc`, `phenol_methyl`.  `sites` is that prefix per strip, from the SITE rows of
-    `protective.tsv`, `''` where none renames the row.
+    `aniline_boc`, `phenol_methyl`.  `sites` is that prefix per strip, from the `site` column of
+    `functional.tsv`, `''` where no group renames the row.
     """
     names: tuple[str, ...]
     reaction: ReactionContainer
@@ -412,20 +411,36 @@ def _revealed(molecule: MoleculeContainer, claim: _Claim) -> int | None:
     return None
 
 
-def _site(stripped: MoleculeContainer, atom: int | None, name: str) -> str:
-    """The prefix `name` is reported under: the first SITE row of its family matching `atom` of `stripped`.
+_SITES_CACHE: list | None = None
 
-    `''` for a row outside the `amine`/`hydroxyl` families, and where no site row of the family matches.
-    The site rows live in `protective.tsv`; this only matches them.
+
+def _sites() -> list:
+    """The groups of `functional.tsv` that name a site, largest first: `[(query, site atom, prefix)]`."""
+    global _SITES_CACHE
+    if _SITES_CACHE is None:
+        groups = [group for group in _group_table().values() if group.site is not None]
+        groups.sort(key=lambda group: -len(group.query))           # stable: table order breaks ties
+        _SITES_CACHE = [(group.query, group.site[1], group.site[0]) for group in groups]
+    return _SITES_CACHE
+
+
+def _site(stripped: MoleculeContainer, atom: int | None, name: str) -> str:
+    """The prefix `name` is reported under: the `site` of the largest functional group whose site atom is
+    `atom` of the stripped substrate.
+
+    Only an `amine_`/`hydroxyl_` row is renamed, and `''` where no group claims the atom -- the row then
+    keeps its own name.  The sites live in `functional.tsv`; this only matches them.
     """
-    family = name.partition('_')[0]
-    if atom is None or atom not in stripped.atom_numbers:
+    if name.partition('_')[0] not in ('amine', 'hydroxyl') or atom is None or atom not in stripped.atom_numbers:
         return ''
-    for site in protective_sites():
-        if site.protects != family:
-            continue
-        if any(mapping[site.atom] == atom for mapping in site.query.get_mapping(stripped)):
-            return site.prefix
+    # A strip leaves an unmasked azole N at `H_UNKNOWN`, which an `h1` site cannot match: settle a copy,
+    # as the composed rung settles every stripped form.  Stable ids survive, so `atom` is still itself.
+    stripped = stripped.copy()
+    stripped.kekule()
+    stripped.thiele()
+    for query, site_atom, prefix in _sites():
+        if any(mapping[site_atom] == atom for mapping in query.get_mapping(stripped)):
+            return prefix
     return ''
 
 

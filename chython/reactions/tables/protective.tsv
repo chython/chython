@@ -20,17 +20,10 @@
 #   cleaved     what it must turn `protected` into.  The pair is an acceptance test, not a comment.
 #   decoys      SMILES this row must NOT match, comma-joined.  Where a pattern was widened once and
 #               went too far, the thing it wrongly caught lives here.
-#   role        empty for a protecting group; `leaving` for one a corpus row may also consume as its
-#               leaving group (the O-sulfonyl pseudohalides), which the composed deprotect+react rung keeps
-#               on first; `site` for a SITE row, below.
-#
-# SITE ROWS NAME THE ATOM A GROUP SITS ON.  One group is installed and removed under other conditions on an
-# aniline, an amide N-H, an azole or a phenol than on an alkylamine or an alcohol, so `protect:` and
-# `deprotect:` report an `amine_`/`hydroxyl_` row under the prefix of its site: `amine_boc` on an aniline
-# is `aniline_boc`.  A site row's `name` is that prefix, `protects` the family it renames, and `smarts`
-# matches the STRIPPED substrate with `:1` on the revealed atom; the first site row of the family that
-# matches wins, in table order.  `protected` is an example it must match and `decoys` ones it must not;
-# `product` and `cleaved` are empty.  Site rows are not protecting groups and `deprotect()` never sees them.
+#   role        empty, or `leaving` for a group a corpus row may also consume as its leaving group (the
+#               O-sulfonyl pseudohalides), which the composed deprotect+react rung keeps on first.  The name a
+#               group is REPORTED under follows the atom it sits on, by the `site` column of functional.tsv:
+#               `amine_boc` on an aniline is `aniline_boc`.
 #
 # THE EXAMPLES ARE WRITTEN AROMATIZED AND STANDARDIZED, because the queries are: a pattern saying
 # `[C;a]:[C;a]` does not match a ring spelled `C1=CC=C...`, and one saying `[N+](=O)[O-]` does not match a
@@ -168,12 +161,3 @@ id	name	protects	smarts	product	protected	cleaved	decoys	role	description
 120	amine_triflyl	amine	[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;D4]([F;D1])([F;D1])[F;D1]	[A:1]	O=S(=O)(NCCc1ccccc1)C(F)(F)F	NCCc1ccccc1	O=S(=O)(OCCc1ccccc1)C(F)(F)F		trifluoromethanesulfonyl (Tf), revealing an amine
 121	hydroxyl_phenylsulfonyl	hydroxyl	[O;D2:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	O=S(=O)(OCCc1ccccc1)c1ccccc1	OCCc1ccccc1	O=S(=O)(NCCc1ccccc1)c1ccccc1	leaving	benzenesulfonyl (besylate), the pseudohalide, revealing an alcohol or phenol
 122	hydroxyl_nosyl	hydroxyl	[O;D2:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1	[A:1]	O=S(=O)(OCCc1ccccc1)c1ccccc1[N+](=O)[O-]	OCCc1ccccc1	O=S(=O)(NCCc1ccccc1)c1ccccc1[N+](=O)[O-]	leaving	nitrobenzenesulfonyl (nosylate), the pseudohalide, revealing an alcohol or phenol
-# --- SITE rows: the prefix a group is reported under, by the atom it sits on ----------------------
-123	azole	amine	[N;a:1]		c1cc[nH]c1		NCc1ccccc1,Nc1ccccc1	site	an aromatic N: azoles, pyridones
-124	amide	amine	[N:1]-[C,S]=[O]		CC(N)=O		NCc1ccccc1,Nc1ccccc1,c1cc[nH]c1	site	an N beside C=O or S=O: amides, lactams, carbamates, ureas, sulfonamides
-125	aniline	amine	[N:1]-[C;a]		Nc1ccccc1		NCc1ccccc1,CC(N)=O	site	an N beside an aromatic carbon
-126	amine	amine	[N:1]		NCc1ccccc1			site	any other N: an alkyl amine
-127	carboxyl	hydroxyl	[O:1]-[C]=[O]		OC(=O)c1ccccc1		OCc1ccccc1,Oc1ccccc1	site	an acid O: the ester the group makes is on the acid
-128	phenol	hydroxyl	[O:1]-[A;a]		Oc1ccccc1		OCc1ccccc1,OC(=O)c1ccccc1	site	an O beside an aromatic atom: phenols, heteroaryl O
-129	enol	hydroxyl	[O:1]-[A;z2]		ON=C1CCCCC1		OCc1ccccc1,Oc1ccccc1	site	an O beside an sp2 atom: enols, oximes
-130	hydroxyl	hydroxyl	[O:1]		OCc1ccccc1			site	any other O: an alcohol

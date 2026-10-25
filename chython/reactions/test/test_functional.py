@@ -53,3 +53,13 @@ def test_every_row_has_an_example():
     """The column is not optional, which is what makes the gate above a ratchet rather than a sample."""
     missing = [row['name'] for row in read_table('functional.tsv') if not row['example']]
     assert not missing, f'functional.tsv rows with no example: {missing}'
+
+
+@pytest.mark.parametrize('group', [g for g in GROUPS if g.site], ids=lambda group: group.name)
+def test_a_site_names_an_n_or_o_its_example_carries(group):
+    """A `site` is the atom a protecting group sits on, so it is an N or an O, and the group's own example
+    must match with that atom present."""
+    prefix, atom = group.site
+    example = read_smiles(group.example)
+    elements = {example.atom(mapping[atom]).atomic_symbol for mapping in group.query.get_mapping(example)}
+    assert elements and elements <= {'N', 'O'}, group.id

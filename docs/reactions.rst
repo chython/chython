@@ -1489,7 +1489,7 @@ there is to carry:
 
 .. testoutput::
 
-    420 122
+    421 122
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']
@@ -1499,9 +1499,6 @@ there is to carry:
 ``protective_rules()``' insertion order is the **specificity order** -- reactant atom count descending --
 so ``.values()`` needs no re-sorting: ``hydroxyl_tbu`` offered a Boc-protected alcohol would yield a
 carbonate, and serving the bigger pattern first is what stops it.
-
-:doc:`glossary` lists every row of both corpora by name, with its SMARTS and what it matches. That page
-is generated from the same two TSVs, so it states the shipped corpus rather than a snapshot of it.
 
 
 Reconstruct Mapping
@@ -1532,8 +1529,9 @@ on either side, is ``ester_hydrolysis`` whichever row claimed it, so a Boc amine
 both reads ``deprotect:amine_boc+ester_hydrolysis``.  Any other strip, and every ``protect:``, is the row's
 name **for the atom the group sits on**, because one group is installed and removed under other conditions
 on each: an ``amine_`` or ``hydroxyl_`` row reports the prefix of its site -- ``amine``, ``aniline``,
-``amide``, ``azole``; ``hydroxyl``, ``phenol``, ``enol``, ``carboxyl``.  The site rows are the last section of
-``protective.tsv`` and are listed with their SMARTS in :doc:`glossary`.
+``amide``, ``azole``; ``hydroxyl``, ``phenol``, ``enol``, ``carboxyl``.  The group is stripped first and the
+revealed atom then named by the ``site`` column of ``functional.tsv``: the largest functional group whose
+site atom it is decides, and an atom no group claims keeps the row's own name.
 
 Methyl benzoate from benzoic acid is ``protect:carboxyl_methyl`` and anisole from phenol
 ``protect:phenol_methyl``.  Where two rows claim the two halves of one ester, the smaller half is the

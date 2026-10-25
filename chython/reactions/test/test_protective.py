@@ -623,24 +623,3 @@ def test_a_strip_cutting_a_carboxylic_ester_is_labelled_ester_hydrolysis(smiles,
     outcome = next(deprotect(molecule))
     assert outcome.names == names
     assert outcome.labels == labels
-
-
-from .._tables import protective_sites
-
-
-@pytest.mark.parametrize('site', protective_sites(), ids=lambda site: site.prefix)
-def test_a_site_row_matches_its_example_at_its_marked_atom_and_none_of_its_decoys(site):
-    example = read_smiles(site.example)
-    example.canonicalize()
-    assert any(True for _ in site.query.get_mapping(example)), f'{site.id} misses its example'
-    for decoy in site.decoys:
-        molecule = read_smiles(decoy)
-        molecule.canonicalize()
-        assert not any(True for _ in site.query.get_mapping(molecule)), f'{site.id} matches decoy {decoy}'
-
-
-def test_each_family_ends_in_a_site_that_takes_any_atom():
-    """The last site of a family is the fallback, so every revealed N or O gets a prefix."""
-    for family, element in (('amine', 'N'), ('hydroxyl', 'O')):
-        last = [site for site in protective_sites() if site.protects == family][-1]
-        assert last.smarts == '[%s:1]' % element and last.prefix == family

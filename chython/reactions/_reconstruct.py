@@ -398,7 +398,7 @@ def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     in each case, and no corpus row mapping the reagent claims it first.  Every named group of
     `protective.tsv` reads this way -- a methyl ether, a benzylamine and a tosylamide included.
 
-    Each group is named for the atom it sits on by the SITE rows of `protective.tsv` (`aniline_boc`,
+    Each group is named for the atom it sits on by the `site` column of `functional.tsv` (`aniline_boc`,
     `carboxyl_methyl` for an ester made on the acid).  The table's own claims and every group read alone
     (`_single_group_strips`) are both offered, smallest group first: where both halves of an ester are
     named groups, the smaller half is the protecting group.  Only a strip that gives back a recorded
