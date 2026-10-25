@@ -1551,8 +1551,8 @@ group is one family of them whatever supplies the group, so the group's source i
 mapped: an acetate from Ac\ :sub:`2`\ O, AcCl or AcOH is ``protect:hydroxyl_acyl`` each time.  Every named
 group of ``protective.tsv`` reads this way, a methyl ether, a benzylamine and a tosylamide included, and so
 do the triflate, mesylate and tosylate pseudohalides of an OH, which are set by many reagents
-(``protect:hydroxyl_triflyl``); an acylation by an acid no row names is a reaction, and so is the enol
-triflate of a ketone, which needs an enolate.
+(``protect:hydroxyl_triflyl``), and the enol triflate of a ketone, on its own site
+(``protect:enol_triflyl``); an acylation by an acid no row names is a reaction.
 
 .. testcode::
 

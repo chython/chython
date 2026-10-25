@@ -970,13 +970,13 @@ TF2O, PHNTF2 = 'O=S(=O)(OS(=O)(=O)C(F)(F)F)C(F)(F)F', 'O=S(=O)(N(c1ccccc1)S(=O)(
     ('OCCc1ccccc1.CS(=O)(=O)Cl>>CS(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_mesyl'),
     ('OCCc1ccccc1.CS(=O)(=O)OS(C)(=O)=O>>CS(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_mesyl'),
     ('OCCc1ccccc1.Cc1ccc(cc1)S(=O)(=O)Cl>>Cc1ccc(cc1)S(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_tosyl'),
-    (f'O=C1CCCCC1.{PHNTF2}>>O=S(=O)(OC1=CCCCC1)C(F)(F)F', 'react:enol_triflation'),
+    (f'O=C1CCCCC1.{PHNTF2}>>O=S(=O)(OC1=CCCCC1)C(F)(F)F', 'protect:enol_triflyl'),
     ('O=S(=O)(Oc1ccccc1)C(F)(F)F.OB(O)c1ccccc1>>c1ccc(-c2ccccc2)cc1', 'react:suzuki'),
     ('CS(=O)(=O)OCCc1ccccc1.N1CCCCC1>>C(CN1CCCCC1)c1ccccc1', 'react:n_alkylation'),
 ])
 def test_an_o_sulfonyl_pseudohalide_is_installed_as_a_group(record, label):
     """Tf, Ms and Ts on an OH are set by many reagents, so they are groups and the reagent an agent; the
-    enol triflate of a ketone needs an enolate and stays a reaction, and using the pseudohalide is one."""
+    enol triflate of a ketone is the same group on the `enol` site, and using the pseudohalide is a reaction."""
     assert smiles(record).reconstruct_mapping() == (label,)
 
 
@@ -1011,6 +1011,7 @@ BOC2O = 'CC(C)(C)OC(=O)OC(=O)OC(C)(C)C'
     ('COC1=NCCCC1>>O=C1CCCCN1', 'deprotect:enol_methyl'),               # a lactim ether: the O sits on C=N
     ('CCOC=Cc1ccccc1>>O=CCc1ccccc1', 'deprotect:enol_ethyl'),           # an enol ether: the O sits on C=C
     ('COc1ccccn1>>O=c1cccc[nH]1', 'deprotect:phenol_methyl'),           # an alkoxyazine, the pyridone back
+    ('CC(C)(C)[Si](C)(C)OC1=CCCCC1>>O=C1CCCCC1', 'deprotect:enol_tbs'),  # a ring enol, the ketone back
 ])
 def test_a_group_is_named_for_the_atom_it_sits_on(record, label):
     """One group on an aniline, an amide N-H, an azole or a phenol is installed and removed under other

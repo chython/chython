@@ -94,11 +94,12 @@ def test_check_mode_passes():
 
 
 def test_row_counts():
-    """85 and 19.  A silent gain or loss of a rule is a behaviour change.  `gen_standardize_rules.MERGES`
+    """88 and 19.  A silent gain or loss of a rule is a behaviour change.  `gen_standardize_rules.MERGES`
     and `DELETED` say which rows collapsed into which, and the three rows past the port -- `groups:82` to
     `groups:84`, the neutral over-valent nitrogen written Kekule -- are gated by
-    `test_standardize_overvalent_nitrogen.py`."""
-    assert len(GROUPS) == 86
+    `test_standardize_overvalent_nitrogen.py`; `groups:86`/`87`, the isolated ring enol, by
+    `test_the_isolated_ring_enol_rows_leave_a_stable_enol_alone`."""
+    assert len(GROUPS) == 88
     assert len(METALS) == 19
 
 
@@ -173,7 +174,7 @@ def test_no_metal_rule_is_a_tautomer_fix():
     assert not any(rule.tautomer for rule in METALS)
 
 
-# The 26 rows whose repair moves a hydrogen from one heavy atom to another, which is what the column
+# The 28 rows whose repair moves a hydrogen from one heavy atom to another, which is what the column
 # means -- see the TSV header.  Listed rather than counted because the flag is consumed:
 # `standardize(fix_tautomers=False)` withholds exactly these, so a row joining or leaving the set is a
 # behaviour change for every caller who passes the flag.
@@ -181,7 +182,7 @@ TAUTOMER_ROWS = frozenset((
     'groups:11', 'groups:13', 'groups:27', 'groups:30', 'groups:32', 'groups:39', 'groups:42',
     'groups:45', 'groups:46', 'groups:47', 'groups:48', 'groups:49', 'groups:50', 'groups:51',
     'groups:52', 'groups:53', 'groups:54', 'groups:55', 'groups:56', 'groups:57', 'groups:62',
-    'groups:64', 'groups:70', 'groups:71', 'groups:72', 'groups:73',
+    'groups:64', 'groups:70', 'groups:71', 'groups:72', 'groups:73', 'groups:86', 'groups:87',
 ))
 
 # The two rows the port flags differently from V2, deliberately: both are diazo repairs that move a
@@ -198,9 +199,10 @@ def test_the_tautomer_column_is_the_documented_set():
         'hydrogen between heavy atoms" and `standardize(fix_tautomers=False)` withholds exactly '
         'these rows, so this is a behaviour change and not a documentation edit.')
     assert DISAGREES_WITH_V2 <= carried
-    assert len(carried) == 26, (
+    assert len(carried - {'groups:86', 'groups:87'}) == 26, (
         'V2 flags 26 of its 94: the two diazo rows in DISAGREES_WITH_V2 are extra, and two merges '
-        'each collapsed a flagged PAIR into one flagged row, so the two counts coincide by accident')
+        'each collapsed a flagged PAIR into one flagged row, so the two counts coincide by accident; '
+        'groups:86/87, the isolated ring enol, are V3 rows')
 
 
 def test_the_documented_duplicate_is_a_duplicate():
@@ -265,3 +267,21 @@ def test_every_row_says_why_in_prose():
         assert ' / ' not in rule.why, (
             f'{rule.id}: `why` holds a ` / `, the separator V2\'s collapsed comment blocks used.  '
             'This column is prose about the chemistry, not transcribed ASCII art')
+
+
+@pytest.mark.parametrize('name, enol', [
+    ('ascorbic acid', 'OC[C@H](O)[C@H]1OC(=O)C(O)=C1O'), ('tetronic acid', 'OC1=CC(=O)OC1'),
+    ('1,3-dione enol', 'OC1=CC(=O)CCC1'), ('diosphenol', 'OC1=CCCCC1=O'), ('reductic acid', 'OC1=C(O)C(=O)CC1'),
+    ('maltol', 'Cc1occc(=O)c1O'), ('kojic acid', 'OCc1cc(=O)c(O)co1'), ('4-hydroxycoumarin', 'Oc1cc(=O)oc2ccccc12'),
+    ('tropolone', 'O=c1cccccc1O'), ('squaric acid', 'OC1=C(O)C(=O)C1=O'), ('aryl ring enol', 'OC1=C(c2ccccc2)CCCC1'),
+    ('dienol', 'OC1=CC=CCC1'), ('enamine-enol', 'OC1=C(N)CCCC1'),
+])
+def test_the_isolated_ring_enol_rows_leave_a_stable_enol_alone(name, enol):
+    """groups:86/87 fire only where both C=C carbons have nothing but sp3 carbon around them: a stable enol
+    -- an enediol, one conjugated to C=O or C=C, one beside an aryl or a heteroatom -- is not theirs."""
+    from ...core import read_smiles
+    from .._tables import groups_rules
+    rows = [rule for rule in groups_rules() if rule.id in ('groups:86', 'groups:87')]
+    molecule = read_smiles(enol)
+    molecule.canonicalize()
+    assert not any(rule.query <= molecule for rule in rows), name

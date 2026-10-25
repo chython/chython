@@ -172,15 +172,15 @@ def test_no_merged_row_reintroduces_a_z3_the_port_ruled_out():
 
 
 def test_the_merged_table_is_the_size_the_record_says():
-    """104 rows, and the arithmetic from 116 checks out against `MERGES`, `DELETED` and `ADDED`.
+    """107 rows, and the arithmetic from 116 checks out against `MERGES`, `DELETED` and `ADDED`.
 
     Catches a row added or dropped without a record: the record must explain the whole difference.
     `ADDED` is the only term that is not port arithmetic -- rows written since, each named there and
     each gated by a test of its own.
     """
     absorbed = sum(len(members) - 1 for members in gen.MERGES.values())
-    assert len(GROUPS) + len(METALS) == 116 - absorbed - len(gen.DELETED) + len(gen.ADDED) == 105
-    assert len(GROUPS) == 86
+    assert len(GROUPS) + len(METALS) == 116 - absorbed - len(gen.DELETED) + len(gen.ADDED) == 107
+    assert len(GROUPS) == 88
     assert len(METALS) == 19
     assert set(gen.ADDED) <= {rule.id for rule in GROUPS}, (
         'a row `ADDED` names is not in the table; the record is of rows that were added, so a removal '

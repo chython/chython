@@ -36,7 +36,7 @@
 # `tautomer` = 0/1, AND THE DEFINITION IS MECHANICAL: 1 when the repair moves a hydrogen from one heavy atom to
 # another.  Since no row writes a hydrogen count, a displacement is a CONSEQUENCE of the bond and charge edits
 # and cannot be read off the patch columns -- which is why it is a column and not something the engine infers.
-# 26 rows carry it and `standardize(fix_tautomers=False)` withholds exactly those 26.
+# 28 rows carry it and `standardize(fix_tautomers=False)` withholds exactly those 28.
 #
 # WITHHOLDING A FLAGGED ROW CAN LEAVE AN ILLEGAL VALENCE.  Measured: the hypervalent sulfur of `OS(=N)(=N)O` and
 # `OS(=N)(=N)C` is repaired by `groups:71` and by no other row, so with the flag off nothing fires and the
@@ -164,3 +164,5 @@ groups:82	[O;D1;h1;z1][N;D3;z2]	1:-1:-;2:1:-	-	0	-	ON1=CC=CC=C1>>[O-][N+]1=CC=CC
 groups:83	[O;D1;z1;-][N;D3;z2]	2:1:-	-	0	-	[O-]N1=CC=CC=C1>>[O-][N+]1=CC=CC=C1	An N-oxide half charge-separated: the oxygen kept its minus and the nitrogen lost its plus, so only the nitrogen is charged here.  The neutral-oxygen spelling of the same defect is `groups:82`
 groups:84	[N;D3;z2]	1:1:-	-	0	groups:82	CN1=CC=CC=C1>>C[N+]1=CC=CC=C1	Three substituents and a double bond, therefore a formal charge -- `groups:10` for a nitrogen that is sp2 rather than sp3, and the last word on a neutral nitrogen holding four bonds' worth of valence.  It is an azinium or an iminium whose plus the drawing dropped, and the alternative reading needs a bond order changed and hydrogens added, which is not a repair a charge can make.  It runs after `groups:82` on purpose: where a terminal heteroatom can take the counter-charge the compound is neutral overall and separating is the answer, so the general claim must not reach the site first.  `groups:83` needs no such obligation: its patch is this row's patch, the oxygen already carrying the minus.  Only oxygen takes a counter-charge -- a terminal amino group is a substituent like any other and the aromatic reader promotes 1-aminopyridinium to a cation rather than separating it into an aminide, which is measured in `test_standardize_overvalent_nitrogen.py`
 groups:85	[N;D2;z3](#[N;D1])[#6]	1:1:-	-	0	-	CN#N>>C[N+]#N	A diazonium drawn neutral as C-N#N, which leaves the inner nitrogen with four bonds; it takes the positive charge, and the counterion the record omitted is not invented
+groups:86	[O;D1;z1;x0][C;D3;z2;x1;R](-[C;z1])=[C;D2;z2;x0;R]-[C;z1]	-	1:2:2;2:4:1	1	-	OC1=CCCCC1>>O=C1CCCCC1	An isolated ring enol, the far carbon unsubstituted: the hydrogen moves to it and the C=C becomes the C=O. Every other neighbour of the two carbons is sp3, so an enediol (ascorbic acid), an enol conjugated to C=O (tetronic acid, a 1,3-dione or diosphenol enol) and an aromatic OH stay as drawn
+groups:87	[O;D1;z1;x0][C;D3;z2;x1;R](-[C;z1])=[C;D3;z2;x0;R](-[C;z1])-[C;z1]	-	1:2:2;2:4:1	1	-	OC1=C(C)CCCC1>>O=C1CCCCC1C	groups:86 with the far carbon carrying an sp3 carbon substituent

@@ -199,6 +199,8 @@ ADDED = {
     'groups:83': 'the same, half separated already, the oxygen holding the minus',
     'groups:84': 'a three-coordinate sp2 nitrogen with nothing to take a counter-charge: a cation',
     'groups:85': 'a diazonium drawn neutral, the inner nitrogen four-bonded: a cation',
+    'groups:86': 'an isolated ring enol, every other neighbour of its C=C sp3: the ketone',
+    'groups:87': 'the same with a carbon substituent on the far carbon',
 }
 
 
