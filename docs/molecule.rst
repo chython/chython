@@ -960,8 +960,8 @@ Pyramidal atom     A centre when
 =================  ===================================================================================
 S, Se, Te          a pair is left: sulfoxide, selenoxide, sulfonium, sulfilimine -- not a sulfone
 P, As, Sb          a pair is left: phosphine, arsine -- a phosphine oxide is a centre by its four bonds
-N                  at a short-bridged bridgehead only: quinuclidine, Tröger's base -- never an amine,
-                   an aziridine's included
+N                  at a short-bridged bridgehead or in an oxaziridine only: quinuclidine, Tröger's base --
+                   never an amine, an aziridine's included
 =================  ===================================================================================
 
 .. testcode::

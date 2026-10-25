@@ -288,13 +288,15 @@ def test_a_sulfoxide_is_stereogenic_and_uses_the_same_lone_pair_slot():
 
 # A pyramidal centre whose lone pair is its fourth direction: P, As, Sb and S, Se, Te by the same
 # electron budget.  A nitrogen inverts, a three-membered ring's included (an aziridine is labile); only a
-# short-bridged bridgehead keeps it.  Public compounds: PAMP (the DIPAMP monomer), ethylmethylphenylarsine,
-# methyl phenyl selenoxide.
+# short-bridged bridgehead and an oxaziridine, whose ring O raises the barrier, keep it.  Public compounds:
+# PAMP (the DIPAMP monomer), ethylmethylphenylarsine, methyl phenyl selenoxide, the Davis-type oxaziridine
+# 2-tert-butyl-3-phenyloxaziridine.
 LONE_PAIR_CENTRES = [
     ('PAMP',                         'COc1ccccc1[P@](C)c1ccccc1',  'P'),
     ('ethylmethylphenylarsine',      'CC[As@](C)c1ccccc1',         'As'),
     ('methyl phenyl selenoxide',     'C[Se@](=O)c1ccccc1',         'Se'),
     ('ethyl methyl selenonium',      'CC[Se@+](C)c1ccccc1',        'Se'),
+    ('2-tert-butyl-3-phenyloxaziridine', 'CC(C)(C)[N@]1O[C@@H]1c1ccccc1', 'N'),
 ]
 
 

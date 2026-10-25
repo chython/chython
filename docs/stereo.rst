@@ -86,8 +86,8 @@ Kind            ``kind``  Perceived on
 tetrahedral     0         an atom with four directions, a lone pair counting as one: C, Si, Ge,
                           B⁻, N⁺, a tetrahedral metal; S, Se, Te, P, As and Sb with a pair left;
                           a four-coordinate P(V), a hydrogen among its four; N with a pair only
-                          at a bridgehead of a short-bridged bicycle.  Never an N-H, a P(III)-H,
-                          any other amine (an aziridine's included), O or Bi
+                          at a bridgehead of a short-bridged bicycle or in an oxaziridine.  Never
+                          an N-H, a P(III)-H, any other amine (an aziridine's included), O or Bi
 cis/trans       1         a double bond or an even cumulated chain, outside rings smaller than 8;
                           never a bond an alternating cycle can move, and never a labile one: a
                           C=N with no O or N on the nitrogen, an N=N holding a hydrogen, or a C=C

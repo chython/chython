@@ -1300,6 +1300,22 @@ cdef bint _bh_nitrogen_constrained(uint32_t *ptr, halfedge_t *edges, uint32_t a)
     return False
 
 
+cdef bint _oxaziridine_nitrogen(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t a) noexcept nogil:
+    """Is `a` the nitrogen of a three-membered ring whose third member is an oxygen, an oxaziridine?
+
+    Its invertomers are isolable, the ring O raising the inversion barrier; an aziridine's are not.
+    """
+    cdef uint32_t k, j, o
+    for k in range(ptr[a], ptr[a + 1]):
+        o = edges[k].to
+        if atoms[o].element != 8:
+            continue
+        for j in range(ptr[o], ptr[o + 1]):
+            if edges[j].to != a and csr_find_at(ptr, edges, a, edges[j].to) is not NULL:
+                return True
+    return False
+
+
 cdef inline bint _is_ring_fusion_atom(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
                                       uint32_t o) noexcept nogil:
     """Is `o` a ring-fusion atom -- degree three or more with every one of its bonds in a ring?
@@ -2176,9 +2192,10 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, su_scratch_t *scratc
         # At most one pair; two are the same direction twice.  A pair beside four named directions
         # makes five and refuses the atom, as for SF4.  Nitrogen inverts through its pair -- an aziridine
         # nitrogen included -- except at the bridgehead of a short-bridged bicycle (Tröger's base,
-        # quinuclidine); an aromatic nitrogen has spent its pair on the ring.
+        # quinuclidine) and in an oxaziridine; an aromatic nitrogen has spent its pair on the ring.
         if _lone_pair(a, spent) and (a.element != 7
-                                     or (not any_aromatic and _bh_nitrogen_constrained(ptr, edges, i))):
+                                     or (not any_aromatic and (_bh_nitrogen_constrained(ptr, edges, i)
+                                                               or _oxaziridine_nitrogen(atoms, ptr, edges, i)))):
             n_unnamed += 1
 
         if n_ref + n_h + n_unnamed != 4:
