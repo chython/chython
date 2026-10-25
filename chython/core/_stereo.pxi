@@ -72,8 +72,8 @@
 #     not somewhere a substituent can sit
 #   * an explicit hydrogen is one direction, NAMED by its atom slot like any other neighbour
 #   * each implicit hydrogen is one direction with no atom of its own
-#   * a lone pair is one direction with no atom of its own, on S/Se/Te, P/As/Sb, and N in a
-#     three-membered ring (`_lone_pair_valence`)
+#   * a lone pair is one direction with no atom of its own, on S/Se/Te, P/As/Sb, and N at the
+#     bridgehead of a short-bridged bicycle (`_lone_pair_valence`)
 #   * a triple or an order-8 bond refuses the atom outright: see `_perceive_stereo_units`
 #
 # WHERE A HYDROGEN DIRECTION SORTS, AND WHY THAT IS THE WHOLE OF THE RULE (ruling F26). A `refs`
@@ -575,7 +575,7 @@ cdef inline int _lone_pair_valence(uint8_t element) noexcept nogil:
     | -------------- | ------- | ------------------------------------------------- |
     | S, Se, Te      | 6       | always                                            |
     | P, As, Sb      | 5       | always                                            |
-    | N              | 5       | in a three-membered ring only (`_perceive_stereo_units`) |
+    | N              | 5       | at a short-bridged bridgehead only (`_perceive_stereo_units`) |
 
     Oxygen, bismuth and polonium are absent: an oxonium inverts fast, and the heavier two have no
     resolved pyramidal centre to name.
@@ -1020,6 +1020,9 @@ cdef inline bint _terminal_pair(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
             return False
         n_imp = 0
     spent += n_imp
+    # a drawn protium beside an implicit one is =CH2 whichever way it is drawn: no isomer
+    if n_imp and ((n_h > 0 and _protium(&atoms[hydro[0]])) or (n_h > 1 and _protium(&atoms[hydro[1]]))):
+        return False
     if any_aromatic:
         spent += 1                        # the one delocalised pi electron; see `_bond_electrons`
     if _lone_pair(&atoms[t], spent) and (_lone_pair_valence(atoms[t].element) == 6
@@ -1902,6 +1905,11 @@ cdef Py_ssize_t _twisted_units(Structure structure, atom_t *atoms, uint32_t *ptr
     return count
 
 
+cdef inline bint _protium(atom_t *a) noexcept nogil:
+    """A hydrogen atom with no stated isotope or mass 1: the same ligand as an implicit hydrogen."""
+    return a.element == 1 and a.isotope <= 1
+
+
 cdef inline bint _holds_h(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t x) noexcept nogil:
     """Does `x` hold a hydrogen, counted or drawn as an atom?  An unknown count is no hydrogen, so a drawing
     that never said keeps its geometry."""
@@ -2154,16 +2162,23 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, su_scratch_t *scratc
         else:
             spent += at_implicit_h(a)
             n_unnamed += at_implicit_h(a)
+            # A DRAWN PROTIUM BESIDE AN IMPLICIT ONE is one ligand twice: `[H]C(O)C` is ethanol.  No
+            # automorphism can swap an atom with a count, so the search would never find it.
+            if at_implicit_h(a):
+                for k in range(<uint32_t> (n_h if n_h < 4 else 4)):
+                    if _protium(&atoms[h_refs[k]]):
+                        refused = True
+                        break
+                if refused:
+                    continue
         if any_aromatic:
             spent += 1                    # the one delocalised pi electron; see `_bond_electrons`
         # At most one pair; two are the same direction twice.  A pair beside four named directions
-        # makes five and refuses the atom, as for SF4.  Nitrogen inverts through its pair except in a
-        # three-membered ring, where the invertomers of an N-haloaziridine or an oxaziridine are
-        # isolable, and at the bridgehead of a short-bridged bicycle (Tröger's base, quinuclidine);
-        # an aromatic nitrogen has spent its pair on the ring.
+        # makes five and refuses the atom, as for SF4.  Nitrogen inverts through its pair -- an aziridine
+        # nitrogen included -- except at the bridgehead of a short-bridged bicycle (Tröger's base,
+        # quinuclidine); an aromatic nitrogen has spent its pair on the ring.
         if _lone_pair(a, spent) and (a.element != 7
-                                     or (not any_aromatic and ((a.ring_sizes & (1u << 3)) != 0
-                                                               or _bh_nitrogen_constrained(ptr, edges, i)))):
+                                     or (not any_aromatic and _bh_nitrogen_constrained(ptr, edges, i))):
             n_unnamed += 1
 
         if n_ref + n_h + n_unnamed != 4:
@@ -3130,6 +3145,94 @@ cdef inline bint _bh_candidate(uint32_t *ptr, halfedge_t *edges, stereo_unit_t *
     return verdict == SG_YES and u.kind == SU_TETRA and _ring_degree(ptr, edges, u.anchor) >= 3
 
 
+cdef void _bfs_from(uint32_t *ptr, halfedge_t *edges, uint32_t root, uint32_t pivot, uint32_t other,
+                    uint32_t *dist, uint32_t *queue, uint32_t n) noexcept nogil:
+    """Distances from `root` over the graph without `pivot` and `other`; SU_NO_REF where unreached."""
+    cdef uint32_t head = 0, tail = 1, a, r, t, i
+    for i in range(n):
+        dist[i] = SU_NO_REF
+    dist[root] = 0
+    queue[0] = root
+    while head < tail:
+        a = queue[head]
+        head += 1
+        for r in range(ptr[a], ptr[a + 1]):
+            t = edges[r].to
+            if t != pivot and t != other and dist[t] == SU_NO_REF:
+                dist[t] = dist[a] + 1
+                queue[tail] = t
+                tail += 1
+
+
+cdef bint _branches_free(uint32_t *ptr, halfedge_t *edges, uint32_t pivot, uint32_t other, uint32_t x, uint32_t y,
+                         uint32_t k, uint32_t *anchor_of, uint32_t *partner_of, uint8_t *live, uint32_t *dx,
+                         uint32_t *dy, uint32_t *queue, uint32_t n) noexcept nogil:
+    """Can exchanging the branches through `x` and `y` (entered from `pivot`, never crossing `other`) move no live
+    unit but `k`?  The exchange moves an atom whose distances from `x` and `y` differ; an atom at equal distances
+    stays, and a unit there is moved only through a neighbour that does not: a piperidine's nitrogen substituent
+    is fixed while the two halves of the ring trade places."""
+    cdef uint32_t a, j, r
+    cdef bint moved
+    _bfs_from(ptr, edges, x, pivot, other, dx, queue, n)
+    _bfs_from(ptr, edges, y, pivot, other, dy, queue, n)
+    for a in range(n):
+        if dx[a] == SU_NO_REF and dy[a] == SU_NO_REF:
+            continue
+        j = anchor_of[a]
+        if j == SU_NO_REF or j == k or not live[j]:
+            j = partner_of[a]
+            if j == SU_NO_REF or j == k or not live[j]:
+                continue
+        moved = dx[a] != dy[a]
+        if not moved:
+            for r in range(ptr[a], ptr[a + 1]):
+                if edges[r].to != pivot and edges[r].to != other and dx[edges[r].to] != dy[edges[r].to]:
+                    moved = True
+                    break
+        if moved:
+            return False
+    return True
+
+
+cdef bint _two_equal_terminals(stereo_unit_t *u, uint32_t *cls, uint32_t *ptr) noexcept nogil:
+    """Two directions are atoms of one class with no other bond -- two drawn hydrogens, a CF2: no configuration."""
+    cdef uint32_t i, j, x, y
+    for i in range(4):
+        x = u.refs[i]
+        if x == SU_NO_REF or ptr[x + 1] - ptr[x] != 1:
+            continue
+        for j in range(i + 1, 4):
+            y = u.refs[j]
+            if y != SU_NO_REF and ptr[y + 1] - ptr[y] == 1 and cls[x] == cls[y]:
+                return True
+    return False
+
+
+cdef uint8_t _refusable(stereo_unit_t *u, uint32_t k, uint32_t part, uint32_t *cls, uint32_t *ptr, halfedge_t *edges,
+                        uint32_t *anchor_of, uint32_t *partner_of, uint8_t *live, uint32_t *dx, uint32_t *dy,
+                        uint32_t *queue, uint32_t n) noexcept nogil:
+    """1 when two of the unit's named directions are constitutionally equivalent and their branches hold no other
+    unit: nothing can ever tell them apart, however far a search gets, so a truncated search may refuse it."""
+    cdef uint32_t i, j
+    if u.kind == SU_TETRA:
+        for i in range(4):
+            for j in range(i + 1, 4):
+                if (u.refs[i] != SU_NO_REF and u.refs[j] != SU_NO_REF and cls[u.refs[i]] == cls[u.refs[j]]
+                        and _branches_free(ptr, edges, u.anchor, SU_NO_REF, u.refs[i], u.refs[j], k, anchor_of,
+                                           partner_of, live, dx, dy, queue, n)):
+                    return 1
+    elif u.kind == SU_CIS_TRANS and part != SU_NO_REF:
+        if (u.refs[0] != SU_NO_REF and u.refs[1] != SU_NO_REF and cls[u.refs[0]] == cls[u.refs[1]]
+                and _branches_free(ptr, edges, u.anchor, part, u.refs[0], u.refs[1], k, anchor_of, partner_of,
+                                   live, dx, dy, queue, n)):
+            return 1
+        if (u.refs[2] != SU_NO_REF and u.refs[3] != SU_NO_REF and cls[u.refs[2]] == cls[u.refs[3]]
+                and _branches_free(ptr, edges, part, u.anchor, u.refs[2], u.refs[3], k, anchor_of, partner_of,
+                                   live, dx, dy, queue, n)):
+            return 1
+    return 0
+
+
 cdef int mark_stereogenic(Structure structure) except -1:
     """Set SU_STEREOGENIC on every candidate unit that really is one.  Returns 1 when some unit's
     answer had to be taken conservatively because a search was truncated, 0 otherwise.
@@ -3232,6 +3335,11 @@ cdef int mark_stereogenic(Structure structure) except -1:
     cdef uint32_t npairs = 0, lead, top, low
     cdef int pa, pb
     cdef bint free
+    cdef uint8_t *refuse = NULL     # per unit: `_refusable`, read where a truncated search would mark it
+    cdef uint32_t *dist2 = NULL     # two distance rows for `_branches_free`
+    cdef uint8_t *live = NULL       # per unit: may carry a configuration, for `_refusable`'s branch test
+    cdef bint changed
+    cdef uint32_t *bfsq = NULL
     try:
         cls = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
         orbits = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
@@ -3336,6 +3444,32 @@ cdef int mark_stereogenic(Structure structure) except -1:
                 classes = compute_atoms_order(view, cls, NULL)
             if classes < 0:
                 raise MemoryError('stereogenicity refinement failed to allocate')
+            # A UNIT NOTHING CAN DESYMMETRISE IS REFUSED EVEN WHEN A SEARCH IS CUT: two equivalent directions
+            # whose branches hold no other unit (a 4,4-difluorocyclohexyl's C1) stay equivalent however far
+            # the search gets, so the conservative mark of a truncated search does not reach it.
+            refuse = <uint8_t *> PyMem_Malloc(<size_t> (count if count else 1))
+            dist2 = <uint32_t *> PyMem_Malloc(<size_t> 2 * (n if n else 1) * sizeof(uint32_t))
+            bfsq = <uint32_t *> PyMem_Malloc(<size_t> (n if n else 1) * sizeof(uint32_t))
+            if refuse is NULL or dist2 is NULL or bfsq is NULL:
+                raise MemoryError('stereogenicity scratch allocation failed')
+            memset(refuse, 0, <size_t> (count if count else 1))
+            live = <uint8_t *> PyMem_Malloc(<size_t> (count if count else 1))
+            if live is NULL:
+                raise MemoryError('stereogenicity scratch allocation failed')
+            for k in range(count):
+                live[k] = constrains[k] and not _two_equal_terminals(&units[k], cls, ptr)
+            # TO A FIXPOINT: a unit whose equivalent branches hold only refused units is refused too, so a
+            # spiro axis ending in a symmetric ring (an azetidine nitrogen) drops centre by centre.
+            changed = True
+            while changed:
+                changed = False
+                for k in range(count):
+                    if verdict[k] == SG_UNDECIDED and not refuse[k] and _refusable(
+                            &units[k], k, partner_atom[k], cls, ptr, gedges, anchor_of, partner_of, live, dist2,
+                            dist2 + n, bfsq, n):
+                        refuse[k] = 1
+                        live[k] = 0
+                        changed = True
             # AN AXIS NEEDS BOTH ENDS UNSYMMETRIC ON THEIR OWN: each pivot's two ortho directions must be
             # constitutionally distinct.  An end the constitution maps onto itself with its ortho pair
             # exchanged (an N-aryl imide's two C=O, a 2,6-dimethyl-1,4-dihydropyridine) is no axis, and it
@@ -3371,7 +3505,7 @@ cdef int mark_stereogenic(Structure structure) except -1:
                     truncated = True
                 for k in range(count):
                     if verdict[k] == SG_UNDECIDED:
-                        verdict[k] = SG_YES
+                        verdict[k] = SG_NO if refuse is not NULL and refuse[k] else SG_YES
                 undecided = 0
             else:
                 for k in range(count):
@@ -3477,7 +3611,7 @@ cdef int mark_stereogenic(Structure structure) except -1:
                         continue
                     if spent >= CANON_MAX_NODES_CALL:
                         truncated = True
-                        verdict[k] = SG_YES
+                        verdict[k] = SG_NO if refuse is not NULL and refuse[k] else SG_YES
                         continue
                     u = &units[k]
                     part = partner_atom[k]
@@ -3611,7 +3745,7 @@ cdef int mark_stereogenic(Structure structure) except -1:
                         for i in range(n):
                             if comp[i] != home:
                                 pin[i] = CANON_NO_SLOT
-                    verdict[k] = SG_NO if witness else SG_YES
+                    verdict[k] = SG_NO if witness or (cut and refuse is not NULL and refuse[k]) else SG_YES
 
         # --- coupled bridgehead sets: the phase of a cage that is its own mirror image states nothing ---
         #
@@ -3727,6 +3861,10 @@ cdef int mark_stereogenic(Structure structure) except -1:
         PyMem_Free(stamp)
         PyMem_Free(bfs)
         PyMem_Free(setof)
+        PyMem_Free(refuse)
+        PyMem_Free(dist2)
+        PyMem_Free(bfsq)
+        PyMem_Free(live)
         PyMem_Free(bh_pairs)
     return 1 if truncated else 0
 

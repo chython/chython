@@ -1611,7 +1611,7 @@ def test_an_explicit_hydrogen_is_the_preferred_wide_end():
     drawing.  An *implicit* hydrogen is no candidate at all: it appears in the core's frame as a hole and
     a CTfile wedge is a pair of atom-block entries, so there is nothing to draw the wide end to.
     """
-    mol, _ = _undrawn(_TETRA_WITH_H, '  1  3  1  1  0  0  0')
+    mol, _ = _undrawn(_TETRA_WITH_H, '  1  3  1  1  0  0  0', index=10)     # the C-H bond: line 8 is an atom here
     anchor = next(u['anchor'] for u in _tetra(mol))
     wide, _ = _wedge_at(mol, anchor)
     assert mol.element_of(wide) == 1, f'chose atom {wide}, element {mol.element_of(wide)}'

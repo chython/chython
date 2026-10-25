@@ -287,16 +287,14 @@ def test_a_sulfoxide_is_stereogenic_and_uses_the_same_lone_pair_slot():
 
 
 # A pyramidal centre whose lone pair is its fourth direction: P, As, Sb and S, Se, Te by the same
-# electron budget, and nitrogen only in a three-membered ring, where inversion is slow enough to
-# isolate the invertomers.  Public compounds: PAMP (the DIPAMP monomer), ethylmethylphenylarsine,
-# methyl phenyl selenoxide, 1-chloro-2-methylaziridine and 2-methyl-3-phenyloxaziridine.
+# electron budget.  A nitrogen inverts, a three-membered ring's included (an aziridine is labile); only a
+# short-bridged bridgehead keeps it.  Public compounds: PAMP (the DIPAMP monomer), ethylmethylphenylarsine,
+# methyl phenyl selenoxide.
 LONE_PAIR_CENTRES = [
     ('PAMP',                         'COc1ccccc1[P@](C)c1ccccc1',  'P'),
     ('ethylmethylphenylarsine',      'CC[As@](C)c1ccccc1',         'As'),
     ('methyl phenyl selenoxide',     'C[Se@](=O)c1ccccc1',         'Se'),
     ('ethyl methyl selenonium',      'CC[Se@+](C)c1ccccc1',        'Se'),
-    ('1-chloro-2-methylaziridine',   'Cl[N@]1C[C@@H]1C',           'N'),
-    ('2-methyl-3-phenyloxaziridine', 'C[N@]1O[C@@H]1c1ccccc1',     'N'),
 ]
 
 
@@ -319,9 +317,12 @@ def test_a_lone_pair_is_the_fourth_direction_of_a_pyramidal_centre(name, smi, el
         assert read_smiles(spelling) == mol, spelling
 
 
-def test_an_aziridine_nitrogen_is_its_own_centre():
-    """Inverting only the nitrogen of 1-chloro-2-methylaziridine gives the other diastereomer."""
-    assert read_smiles('Cl[N@]1C[C@@H]1C') != read_smiles('Cl[N@@]1C[C@@H]1C')
+def test_an_aziridine_nitrogen_is_no_centre():
+    """An aziridine nitrogen inverts: 1-chloro-2-methylaziridine's two nitrogen spellings are one compound, and
+    its carbon keeps its configuration."""
+    a, b = read_smiles('Cl[N@]1C[C@@H]1C'), read_smiles('Cl[N@@]1C[C@@H]1C')
+    assert a == b and str(a) == str(b) and '@' in str(a)
+    assert a != read_smiles('Cl[N@]1C[C@H]1C')
 
 
 @pytest.mark.skipif(not inchi_library_loaded(), reason='libinchi is not loaded')
@@ -334,20 +335,19 @@ def test_the_inchi_carries_a_lone_pair_centre(name, smi, element):
 
 
 @pytest.mark.skipif(not inchi_library_loaded(), reason='libinchi is not loaded')
-def test_a_ring_closure_on_a_lone_pair_centre_reads_by_the_implicit_hydrogen_rule():
-    """The lone pair holds the implicit hydrogen's written position, so the closure digit follows it.
-
-    Open Babel 3.1.0 gives this InChI for the same string; RDKit 2026.03.4 gives `/t3-,5+`, the
-    other nitrogen invertomer.
-    """
-    inchi = molecule_to_inchi(read_smiles('Cl[N@]1C[C@@H]1C'))
-    assert inchi == 'InChI=1S/C3H6ClN/c1-3-2-5(3)4/h3H,2H2,1H3/t3-,5-/m0/s1'
+def test_an_aziridine_nitrogen_reaches_the_inchi_unconfigured():
+    """The carbon's configuration is written; the nitrogen, labile, is written undefined (`5?`) whichever
+    sign the string drew."""
+    for text in ('Cl[N@]1C[C@@H]1C', 'Cl[N@@]1C[C@@H]1C'):
+        assert molecule_to_inchi(read_smiles(text)) == 'InChI=1S/C3H6ClN/c1-3-2-5(3)4/h3H,2H2,1H3/t3-,5?/m0/s1'
 
 
 @pytest.mark.parametrize('name,smi', [
     ('triethylamine',                 'CCN(CC)CC'),
     ('azetidine N',                   'CC(C)N1CCC1C'),
     ('aziridine N-H',                 'N1CC1C'),
+    ('1-chloro-2-methylaziridine N',  'ClN1CC1C'),
+    ('1-methyl-2-phenylaziridine N',  'CN1CC1c1ccccc1'),
     ('methylphenylphosphine P-H',     'C[PH]c1ccccc1'),
     ('triphenylphosphine',            'P(c1ccccc1)(c1ccccc1)c1ccccc1'),
     ('dimethyl selenide',             'C[Se]C'),
@@ -355,7 +355,7 @@ def test_a_ring_closure_on_a_lone_pair_centre_reads_by_the_implicit_hydrogen_rul
     ('selenophene',                   'c1cc[se]c1'),
 ])
 def test_no_lone_pair_centre_without_three_distinct_named_directions(name, smi):
-    """Inversion through an N-H or P(III)-H, an amine outside a three-membered ring, a repeated group or
+    """Inversion through an N-H or P(III)-H, any amine nitrogen (an aziridine's included), a repeated group or
     too few directions: no tetrahedral unit on the heteroatom."""
     mol = read_smiles(smi)
     assert not [u for u in mol.stereogenic_units()

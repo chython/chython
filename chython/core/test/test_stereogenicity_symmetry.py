@@ -126,3 +126,44 @@ def test_two_cages_in_singleton_and_groups_do_not_recurse():
     run = subprocess.run([sys.executable, '-c', _TWO_CAGES, root], capture_output=True, text=True, timeout=120)
     assert run.returncode == 0, run.stderr[-500:]
     assert run.stdout.strip() == 'C1CC2CN(C[C@H]3CC4CCC(C4)C3)CC1N2 |&1:6|'
+
+
+@pytest.mark.parametrize('name,text', [
+    ('ethanol, one hydrogen drawn', '[H]C(O)C'),
+    ('ethanol, one hydrogen drawn, a stated sign', '[H][C@@H](O)C'),
+    ('bromochloromethane, one hydrogen drawn', 'C([H])(Cl)Br'),
+    ('bromochloromethane, a drawn 1H', '[1H]C(Cl)Br'),
+    ('propene, both terminal hydrogens drawn', '[H]/C([H])=C/C'),
+])
+def test_a_drawn_protium_beside_an_implicit_one_is_one_ligand_twice(name, text):
+    """A drawn hydrogen and a counted one are the same ligand: no centre, no E/Z."""
+    assert _units(text) == [], name
+
+
+@pytest.mark.parametrize('text', ['C[C@H]([2H])O', '[2H]C(O)C', '[H][C@](C)(O)CC', '[H]/C(F)=C/F'])
+def test_a_drawn_isotope_or_a_single_drawn_hydrogen_keeps_its_unit(text):
+    """Deuterium is another ligand; a centre whose only hydrogen is drawn is still a centre."""
+    assert _units(text), text
+
+
+_RING_UNIT = '[C]([H])([H])[C]([H])(C([H])([H])[H])'
+
+
+def _truncating_ring_with(substituent):
+    """1,3,5,7,9,11-hexamethylcyclododecane with every hydrogen drawn (its search truncates) and one methyl
+    replaced by `substituent`."""
+    return read_smiles('[C]1([H])(' + substituent + ')' + _RING_UNIT * 5 + '[C]([H])([H])1')
+
+
+@pytest.mark.parametrize('name,substituent', [
+    ('4,4-difluorocyclohexyl', 'C2CCC(F)(F)CC2'),
+    ('7-azaspiro[3.5]nonan-2-yl ether', 'OC2CC3(C2)CCNCC3'),
+])
+def test_a_truncated_search_refuses_what_nothing_can_desymmetrise(name, substituent):
+    """A carbon whose two ring branches are equivalent and can move no other unit is refused even when the
+    search runs out of budget; the six CH of the ring keep the conservative mark."""
+    m = _truncating_ring_with(substituent)
+    assert m.stereo_truncated, 'the record must still truncate for the test to mean anything'
+    marked = [u['anchor'] for u in m.stereo_units() if u['stereogenic']]
+    [ring] = [r for r in m.sssr if len(r) == 12]
+    assert len(marked) == 6 and set(marked) <= set(ring), (name, marked)

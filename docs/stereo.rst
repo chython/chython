@@ -86,8 +86,8 @@ Kind            ``kind``  Perceived on
 tetrahedral     0         an atom with four directions, a lone pair counting as one: C, Si, Ge,
                           B⁻, N⁺, a tetrahedral metal; S, Se, Te, P, As and Sb with a pair left;
                           a four-coordinate P(V), a hydrogen among its four; N with a pair only
-                          in a three-membered ring or at a bridgehead of a short-bridged bicycle.
-                          Never an N-H, a P(III)-H, any other amine, O or Bi
+                          at a bridgehead of a short-bridged bicycle.  Never an N-H, a P(III)-H,
+                          any other amine (an aziridine's included), O or Bi
 cis/trans       1         a double bond or an even cumulated chain, outside rings smaller than 8;
                           never a bond an alternating cycle can move, and never a labile one: a
                           C=N with no O or N on the nitrogen, an N=N holding a hydrogen, or a C=C
@@ -158,7 +158,7 @@ InChI has no layer for a helix or a planar unit and logs ``inchi:stereo-kind-not
 wedge rules per kind are in `Format support`_.  ``@SP``, ``@TB`` and ``@OH``
 are read as unconfigured and logged LOST ``smiles:chiral-class-unsupported``.  The sample is
 (+)-butan-2-ol (CID 444683), 2-methoxyphenyl(methyl)phenylphosphine (CID 4643316),
-1-chloro-2-methylaziridine (CID 533497), trans-but-2-ene (CID 62695), penta-2,3-diene (CID 136378),
+trans-but-2-ene (CID 62695), penta-2,3-diene (CID 136378),
 6,6'-dimethylbiphenyl-2,2'-diol (CID 10198261), [6]helicene (CID 98863) and
 [2.2]paracyclophane-4-carboxylic acid (CID 4614666), each configured and laid out:
 
@@ -167,7 +167,7 @@ are read as unconfigured and logged LOST ``smiles:chiral-class-unsupported``.  T
     from chython.core._core import write_smiles
 
     KINDS = [('tetrahedral C', 'C[C@H](O)CC'), ('tetrahedral P', 'COc1ccccc1[P@](C)c1ccccc1'),
-             ('tetrahedral N', 'C[C@H]1C[N@]1Cl'), ('cis/trans', 'C/C=C/C'), ('allene', 'CC=[C@]=CC'),
+             ('cis/trans', 'C/C=C/C'), ('allene', 'CC=[C@]=CC'),
              ('atropisomer', 'Cc1cccc(O)c1-c1c(C)cccc1O'), ('helical', 'c1ccc2c(c1)ccc1ccc3ccc4ccc5ccccc5c4c3c12'),
              ('planar', 'OC(=O)c1cc2ccc1CCc1ccc(cc1)CC2')]
     print(f"{'kind':14} {'CXSMILES':9} {'SMILES':7} {'MOL':6} InChI")
@@ -187,7 +187,6 @@ are read as unconfigured and logged LOST ``smiles:chiral-class-unsupported``.  T
     kind           CXSMILES  SMILES  MOL    InChI
     tetrahedral C  True      True    True   mst []
     tetrahedral P  True      True    True   mst []
-    tetrahedral N  True      True    True   mst []
     cis/trans      True      True    True   b []
     allene         True      True    True   mst []
     atropisomer    True      False   True   - []
@@ -1599,7 +1598,9 @@ Limit                       Behaviour
 ``stereo_truncated``        True when the symmetry search ran out of budget; the stereogenic flags are then
                             an over-approximation.  Per molecule; explicit hydrogens on a large symmetric
                             ring reach it, ``test_a_connected_record_can_still_exhaust_the_budget`` in
-                            ``chython/core/test/test_stereo_perception.py`` is the case
+                            ``chython/core/test/test_stereo_perception.py`` is the case.  A unit with two
+                            equivalent branches that can move no other unit (a 4,4-difluorocyclohexyl's
+                            C1) is refused even then
 ``identity_approximate``    True when a block of groups holds more than five units or the molecule more
                             than 1000 atoms; only AND phases are searched and one meaning can have two
                             identities (`Labelled drawings`_)
@@ -1638,7 +1639,7 @@ plain SMILES                atropisomer, helix and planar units are not written,
     C[P@H](CC)C          []
     C[Bi](CC)c1ccccc1    []
     C1CCC=CCC1           []
-    CC1CN1C              [0, 0]
+    CC1CN1C              [0]
     C[P@](CC)CCC         [0]
     C1CCCC=CCC1          [1]
     C[Pt](F)(Cl)Br ['smiles:chiral-class-unsupported']
@@ -1666,7 +1667,10 @@ fixes     ``Fix(action, atoms, args, preserves_meaning, result)``; ``result`` is
 ===========================================  ========  ===============================================================
 Code                                         Severity  Condition
 ===========================================  ========  ===============================================================
-``stereo-audit:unknown-unit``                info      a stereogenic unit is unsigned and signing it moves the meaning
+``stereo-audit:unknown-unit``                info      a stereogenic unit is unsigned and signing it moves the meaning;
+                                                       units that state a configuration only together (a spiro
+                                                       atom and its ring centres, an exocyclic C=C and its ring
+                                                       centre) are one finding naming every member
 ``stereo-audit:unlabelled-sign``             warning   a sign has no group beside AND or OR groups in its component
 ``stereo-audit:dead-unconfigured``           warning   a group member has no sign
 ``stereo-audit:dead-not-stereogenic``        warning   a signed group member has one configuration

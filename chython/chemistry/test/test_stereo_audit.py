@@ -606,3 +606,21 @@ def test_a_strained_fusion_keeps_its_signs_and_offers_the_cis_fusion():
     assert all(mol.stereo_is_live(a) for a in (1, 3)) and '@' in str(mol)
     for fix in finding.fixes:
         assert not audit_stereo(read_smiles(fix.result)).findings
+
+
+@mark.parametrize('name,text,count', [
+    ('4-methylcyclohexylideneacetic acid', 'CC1CCC(=CC(=O)O)CC1', 2),
+    ('spiro[3.3]heptane-2,6-dicarboxylic acid', 'OC(=O)C1CC2(C1)CC(C2)C(=O)O', 3),
+    ('cis/trans-1,4-dimethylcyclohexane', 'CC1CCC(C)CC1', 2),
+])
+def test_units_stating_a_configuration_only_together_are_one_unknown_unit(name, text, count):
+    """An exocyclic C=C and its ring centre, a spiro atom and the ring centres beside it: one sign alone
+    restates the molecule, so the set is one finding naming every member."""
+    findings = [f for f in audit_stereo(read_smiles(text)).findings if f.code == 'stereo-audit:unknown-unit']
+    assert len(findings) == 1 and len(findings[0].atoms) == count, (name, findings)
+
+
+def test_a_partly_signed_axial_set_waits_for_its_missing_member():
+    """C4 signed and the C=C open: the sign states nothing until the double bond is signed."""
+    [f] = audit_stereo(read_smiles('C[C@H]1CCC(=CC(=O)O)CC1')).findings
+    assert f.code == 'stereo-audit:dead-waits-for' and f.because == ((5, 6),)

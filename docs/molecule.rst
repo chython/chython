@@ -952,15 +952,16 @@ configured" is a filter on this list and not a second accessor:
     [u for u in mol.stereogenic_units() if not u['parity']]    # stereogenic but unsigned
 
 A lone pair is a direction with no atom of its own, so a pyramidal atom with three substituents and a
-pair is a tetrahedral unit. An N-H or P-H inverts through its hydrogen and is never a centre; at a double
-bond the same N-H is an ordinary cis/trans direction.
+pair is a tetrahedral unit. An N-H or P(III)-H inverts through its hydrogen and is never a centre; at a
+double bond the same N-H is an ordinary cis/trans direction.
 
 =================  ===================================================================================
 Pyramidal atom     A centre when
 =================  ===================================================================================
 S, Se, Te          a pair is left: sulfoxide, selenoxide, sulfonium, sulfilimine -- not a sulfone
 P, As, Sb          a pair is left: phosphine, arsine -- a phosphine oxide is a centre by its four bonds
-N                  in a three-membered ring only: N-chloroaziridine, oxaziridine -- never an amine
+N                  at a short-bridged bridgehead only: quinuclidine, Tröger's base -- never an amine,
+                   an aziridine's included
 =================  ===================================================================================
 
 .. testcode::
@@ -972,7 +973,7 @@ N                  in a three-membered ring only: N-chloroaziridine, oxaziridine
 .. testoutput::
 
     True False
-    True False
+    False False
 
 A candidate on a double bond an **alternating cycle** can move is never stereogenic: another Kekule form
 of the same compound writes that bond single, so a configuration there would be the drawing's and not the

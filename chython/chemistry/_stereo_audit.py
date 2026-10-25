@@ -300,6 +300,32 @@ def _dead(ctx, code, atoms, group):
         return _finding(code, atoms, group=group, fixes=(fix,))
 
 
+def _joint_unknown(ctx, silent):
+    """One `unknown-unit` per ring system whose unsigned units state a configuration only together.
+
+    An exocyclic C=C and the ring centre it desymmetrises (4-methylcyclohexylideneacetic acid), or a spiro
+    atom and the ring centres on either side (spiro[3.3]heptane-2,6-dicarboxylic acid): signing one member
+    alone restates the molecule, signing all of them does not.  The finding names every member.
+    """
+    out = []
+    system = _ring_systems(ctx.molecule)
+    groups = {}
+    for u in silent:
+        here = {system[a] for a in _unit_atoms(u) if a in system}
+        if len(here) == 1:
+            groups.setdefault(here.pop(), []).append(u)
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        signed = ctx.molecule
+        for u in members:
+            signed = ctx.apply('set-sign', (u['owners'],), (1,), molecule=signed)
+        if not ctx.same(signed, ctx.baseline):
+            atoms = tuple(sorted((u['owners'] for u in members), key=_member_key))
+            out.append(_finding('unknown-unit', atoms))
+    return out
+
+
 def _units(ctx):
     """Per-unit findings: unknown signs and dead labels."""
     out = []
@@ -311,6 +337,7 @@ def _units(ctx):
     # An unsigned coupled bridgehead set is one choice: one finding on its lowest member, the rest `because`.
     stereogenic = [u for u in ctx.units if u['stereogenic']]
     unsigned = {u['anchor'] for u in stereogenic if u['parity'] == 0 and not u['coupled_implied']}
+    silent = []                         # unsigned units one sign alone does not state: `_joint_unknown`
     for u in stereogenic:
         if u['anchor'] not in unsigned:
             continue
@@ -321,6 +348,9 @@ def _units(ctx):
         fixes = tuple(ctx.fix('set-sign', atoms, (p,)) for p in (1, 2))
         if not all(x.preserves_meaning for x in fixes):
             out.append(_finding('unknown-unit', atoms, because=partners, fixes=fixes))
+        else:
+            silent.append(u)
+    out.extend(_joint_unknown(ctx, silent))
 
     # dead group members
     for (kind, gid), members in molecule.dead_stereo_groups().items():
