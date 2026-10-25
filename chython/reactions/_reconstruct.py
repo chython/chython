@@ -438,20 +438,27 @@ _ACID = ('carboxylic_acid', 'carboxylate')
 
 
 def _installed(recorded, outcome, stripped) -> tuple[str, ...]:
-    """The names `protect:` reports: the rows', except an ester made on the ACID's oxygen.
+    """The names `protect:` reports: each row's for the atom it sits on (`aniline_boc`, `phenol_triflyl`).
 
-    One `hydroxyl_*` row reads both an ether and the ester the same alkyl makes, and the two are
-    installed under different conditions: a methyl ester (TMSCHN2, MeOH/H+) is `carboxyl_methyl`, a methyl
-    ether (MeI, base) `hydroxyl_methyl`.  The ester is told apart as the deprotection side tells it, by
-    the strip's `ester_hydrolysis` label, and the side by the input: it is the acid the strip gave back.
+    An ester is the one strip `labels` does not name, being `ester_hydrolysis` either way it is cut.  Made
+    on the ACID's oxygen it is `carboxyl_*`, since a methyl ester (TMSCHN2, MeOH/H+) is installed under
+    other conditions than the methyl ether the same `hydroxyl_*` row reads; the acid side is told by the
+    input, which the strip gave back with one more acid.  Made on the alcohol's it is the row's for its
+    site, as `labels` would name it.
     """
-    if len(outcome.names) != 1 or outcome.labels[0] != 'ester_hydrolysis' \
-            or not outcome.names[0].startswith('hydroxyl_'):
-        return outcome.names
-    acids = sum(n for part in stripped for name, n in functional_groups(part).items() if name in _ACID)
-    if acids <= sum(n for name, n in functional_groups(recorded).items() if name in _ACID):
-        return outcome.names
-    return ('carboxyl_' + outcome.names[0][len('hydroxyl_'):],)
+    from ._enumerate import _sited
+    acid = None
+    out = []
+    for name, label, site in zip(outcome.names, outcome.labels, outcome.sites or ('',) * len(outcome.names)):
+        if label != 'ester_hydrolysis':
+            out.append(label)
+            continue
+        if acid is None:
+            acid = (sum(n for part in stripped for g, n in functional_groups(part).items() if g in _ACID)
+                    > sum(n for g, n in functional_groups(recorded).items() if g in _ACID))
+        head, _, tail = name.partition('_')
+        out.append('carboxyl_' + tail if acid and head == 'hydroxyl' else _sited(name, site))
+    return tuple(out)
 
 
 _PHASES: tuple[Callable[..., Iterator[_Explanation]], ...] = (_purification, _protect, _react, _deprotect,

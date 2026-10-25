@@ -613,7 +613,7 @@ def test_a_counter_ion_keeps_its_number_across_a_deprotection():
     ('c1ccccc1C(=O)OC', ('hydroxyl_methyl',), ('ester_hydrolysis',)),
     ('c1ccccc1CCOC(=O)OC(C)(C)C', ('hydroxyl_boc',), ('hydroxyl_boc',)),
     ('c1ccccc1CCOC', ('hydroxyl_methyl',), ('hydroxyl_methyl',)),
-    ('c1ccccc1NC(=O)OC(C)(C)C', ('amine_boc',), ('amine_boc',)),
+    ('c1ccccc1NC(=O)OC(C)(C)C', ('amine_boc',), ('aniline_boc',)),     # the label names the site
 ])
 def test_a_strip_cutting_a_carboxylic_ester_is_labelled_ester_hydrolysis(smiles, names, labels):
     """`labels` names the mechanism and `names` the row: either side of an ester is one label, a carbonate

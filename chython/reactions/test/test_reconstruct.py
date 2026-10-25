@@ -286,13 +286,13 @@ def test_a_reactor_outcome_is_compared_in_its_canonical_form():
 def test_an_unmasked_azole_nitrogen_is_settled_before_comparison():
     # `deprotect()` leaves the revealed pyrrole-type N at H_UNKNOWN; `kekule()` is what closes it
     rxn = ReactionContainer([smiles('CC(C)(C)OC(=O)n1ccc2ccccc21')], [smiles('c1ccc2[nH]ccc2c1')])
-    assert rxn.reconstruct_mapping() == ('deprotect:amine_boc',)
+    assert rxn.reconstruct_mapping() == ('deprotect:azole_boc',)
 
 
 def test_a_stripped_azole_is_settled_before_the_corpus_fires():
     rxn = ReactionContainer([smiles('CC(C)(C)OC(=O)n1ccc2cc(Br)ccc21'), smiles('OB(O)c1ccccc1')],
                             [smiles('c1ccc(-c2ccc3[nH]ccc3c2)cc1')])
-    assert rxn.reconstruct_mapping() == ('deprotect:amine_boc+react:suzuki',)
+    assert rxn.reconstruct_mapping() == ('deprotect:azole_boc+react:suzuki',)
 
 
 def test_a_direct_reaction_outranks_the_composed_rung():
@@ -926,9 +926,9 @@ def test_a_counterion_carried_through_a_row_is_not_an_explanation():
 def test_a_protected_azole_pairs_with_its_input_tautomer():
     # The strip leaves the unmasked pyrazole nitrogen where the patch put it; settled, it is the input.
     for inputs, product, label in ((('Cc1cc[nH]n1', 'C1CCOC=C1', 'Cc1ccc(cc1)S(=O)(=O)O'),
-                                    'Cc1ccn(n1)C1CCCCO1', 'protect:amine_thp'),
+                                    'Cc1ccn(n1)C1CCCCO1', 'protect:azole_thp'),
                                    (('Cc1cc[nH]n1', 'ClCOCC[Si](C)(C)C', '[Na+].[H-]'),
-                                    'Cc1ccn(COCC[Si](C)(C)C)n1', 'protect:amine_sem')):
+                                    'Cc1ccn(COCC[Si](C)(C)C)n1', 'protect:azole_sem')):
         rxn = ReactionContainer([smiles(x) for x in inputs], [smiles(product)])
         assert rxn.reconstruct_mapping() == (label,)
         assert rxn.remove_reagents(keep_reagents=True) is True
@@ -939,9 +939,9 @@ def test_a_protected_azole_pairs_with_its_input_tautomer():
     ('OC(=O)CCCC(C(=O)OC)NC(=O)OC(C)(C)C>>O=C1CCCC(C(=O)OC)N1', 'deprotect:amine_boc+react:amidation'),
     ('COC(=O)CCC(=O)CCCCNC(=O)OC(C)(C)C>>COC(=O)CCC1=NCCCC1', 'deprotect:amine_boc+react:imine_condensation'),
     ('CC(C)(C)OC(=O)N1CCC(CC1)C=Cc1ccc(OCc2ccccc2)cc1>>CC(C)(C)OC(=O)N1CCC(CC1)CCc1ccc(O)cc1',
-     'deprotect:hydroxyl_benzyl+react:alkene_to_alkane'),
+     'deprotect:phenol_benzyl+react:alkene_to_alkane'),
     ('CS(=O)(=O)OCCc1ccccc1.Oc1ccc(NC(=O)OC(C)(C)C)cc1>>Nc1ccc(OCCc2ccccc2)cc1',
-     'deprotect:amine_boc+react:williamson'),       # the mesylate is the leaving group, not a strip
+     'deprotect:aniline_boc+react:williamson'),     # the mesylate is the leaving group, not a strip
 ])
 def test_a_group_the_product_keeps_is_not_stripped(record, label):
     """The composed rung strips the groups the product lost, not every group it could: the ester or the Boc
@@ -951,7 +951,7 @@ def test_a_group_the_product_keeps_is_not_stripped(record, label):
 
 @pytest.mark.parametrize('record, label', [
     ('OC(=O)c1ccccc1.CO>>COC(=O)c1ccccc1', 'protect:carboxyl_methyl'),
-    ('Oc1ccccc1.CI>>COc1ccccc1', 'protect:hydroxyl_methyl'),
+    ('Oc1ccccc1.CI>>COc1ccccc1', 'protect:phenol_methyl'),
     ('OC(=O)c1ccccc1.BrCc1ccccc1>>O=C(OCc1ccccc1)c1ccccc1', 'protect:carboxyl_benzyl'),
     ('OCc1ccccc1.CC(=O)OC(C)=O>>CC(=O)OCc1ccccc1', 'protect:hydroxyl_acyl'),
 ])
@@ -965,8 +965,8 @@ TF2O, PHNTF2 = 'O=S(=O)(OS(=O)(=O)C(F)(F)F)C(F)(F)F', 'O=S(=O)(N(c1ccccc1)S(=O)(
 
 
 @pytest.mark.parametrize('record, label', [
-    (f'Oc1ccccc1.{TF2O}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:hydroxyl_triflyl'),
-    (f'Oc1ccccc1.{PHNTF2}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:hydroxyl_triflyl'),
+    (f'Oc1ccccc1.{TF2O}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:phenol_triflyl'),
+    (f'Oc1ccccc1.{PHNTF2}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:phenol_triflyl'),
     ('OCCc1ccccc1.CS(=O)(=O)Cl>>CS(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_mesyl'),
     ('OCCc1ccccc1.CS(=O)(=O)OS(C)(=O)=O>>CS(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_mesyl'),
     ('OCCc1ccccc1.Cc1ccc(cc1)S(=O)(=O)Cl>>Cc1ccc(cc1)S(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_tosyl'),
@@ -991,4 +991,25 @@ def test_an_o_sulfonyl_pseudohalide_is_installed_as_a_group(record, label):
 ])
 def test_the_named_sulfonyl_groups_are_the_same_on_oxygen_and_nitrogen(record, label):
     """Ms, Tf, Ts, Ns and PhSO2 are groups on O and on N alike; a sulfonyl no row names is a reaction."""
+    assert smiles(record).reconstruct_mapping() == (label,)
+
+
+BOC2O = 'CC(C)(C)OC(=O)OC(=O)OC(C)(C)C'
+
+
+@pytest.mark.parametrize('record, label', [
+    (f'NCCc1ccccc1.{BOC2O}>>CC(C)(C)OC(=O)NCCc1ccccc1', 'protect:amine_boc'),
+    (f'Nc1ccccc1.{BOC2O}>>CC(C)(C)OC(=O)Nc1ccccc1', 'protect:aniline_boc'),
+    (f'O=C1CCCN1.{BOC2O}>>CC(C)(C)OC(=O)N1CCCC1=O', 'protect:amide_boc'),
+    ('c1cn[nH]c1.C[Si](C)(C)CCOCCl>>C[Si](C)(C)CCOCn1cccn1', 'protect:azole_sem'),
+    (f'Oc1ccccc1.{TF2O}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:phenol_triflyl'),
+    (f'OCCc1ccccc1.{TF2O}>>O=S(=O)(OCCc1ccccc1)C(F)(F)F', 'protect:hydroxyl_triflyl'),
+    ('OC(=O)c1ccccc1.CO>>COC(=O)c1ccccc1', 'protect:carboxyl_methyl'),
+    ('COc1ccccc1>>Oc1ccccc1', 'deprotect:phenol_methyl'),
+    ('CC(C)(C)OC(=O)Nc1ccccc1>>Nc1ccccc1', 'deprotect:aniline_boc'),
+    ('CC(C)(C)OC(=O)NCCc1ccccc1>>NCCc1ccccc1', 'deprotect:amine_boc'),
+])
+def test_a_group_is_named_for_the_atom_it_sits_on(record, label):
+    """One group on an aniline, an amide N-H, an azole or a phenol is installed and removed under other
+    conditions than on an alkylamine or an alcohol, so the label names the site: `aniline_boc`."""
     assert smiles(record).reconstruct_mapping() == (label,)

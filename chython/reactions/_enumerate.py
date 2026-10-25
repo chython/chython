@@ -365,12 +365,14 @@ class EnumeratedDeprotection(NamedTuple):
 
     `labels` is the mechanism per strip: `ester_hydrolysis` where the strip cuts a carboxylic ester, on
     either side and whichever row claimed it (`carboxyl_tbu`, `hydroxyl_methyl` on a methyl ester,
-    `hydroxyl_acyl` on an acetate), and the row's name otherwise.
+    `hydroxyl_acyl` on an acetate), and otherwise the row's name for the atom it sits on (`_sited`):
+    `aniline_boc`, `phenol_methyl`.  `sites` is that atom's class per strip, `_site`.
     """
     names: tuple[str, ...]
     reaction: ReactionContainer
     rule_ids: tuple[str, ...]
     labels: tuple[str, ...]
+    sites: tuple[str, ...] = ()
 
 
 class _Claim(NamedTuple):
@@ -400,8 +402,55 @@ def _carboxyl(molecule: MoleculeContainer, carbon: int, oxygen: int) -> bool:
     return oxo
 
 
+#: What the revealed atom is, and the name prefix it gives an `amine_` or `hydroxyl_` row.
+_SITE_PREFIX = {'amine': 'amine', 'aniline': 'aniline', 'amide': 'amide', 'azole': 'azole',
+                'hydroxyl': 'hydroxyl', 'phenol': 'phenol', 'enol': 'enol', 'carboxyl': 'carboxyl'}
+
+
+def _site(molecule: MoleculeContainer, claim: _Claim) -> str:
+    """The class of the atom a claim reveals, read on the substrate side: its neighbours outside the group.
+
+    N: `azole` (aromatic: azoles, pyridones), `amide` (beside C=O or S(=O)2: amides, lactams, carbamates,
+    ureas, sulfonamides), `aniline` (beside an aromatic carbon), `amine`.  O: `carboxyl` (beside C=O),
+    `phenol` (beside an aromatic atom), `enol` (beside an sp2 atom: enols, oximes), `hydroxyl`.  `''` for
+    any other revealed atom -- a thiol, a diol pair, a carbonyl.
+    """
+    for atom in claim.atoms - claim.deleted:
+        outside = [n for n in molecule.neighbors_of(atom) if n not in claim.deleted]
+        if len(outside) == len(tuple(molecule.neighbors_of(atom))):
+            continue                        # not touching the group: context, not the revealed atom
+        element = molecule.element_of(atom)
+        oxo = any(molecule.element_of(n) in (6, 16) and any(
+            molecule.element_of(m) == 8 and m not in claim.deleted and molecule.order_of(n, m) == 2
+            for m in molecule.neighbors_of(n)) for n in outside)
+        if element == 7:
+            if molecule.hybridization_of(atom) == 4:
+                return 'azole'
+            if oxo:
+                return 'amide'
+            return 'aniline' if any(molecule.hybridization_of(n) == 4 for n in outside) else 'amine'
+        if element == 8:
+            if oxo:
+                return 'carboxyl'
+            if any(molecule.hybridization_of(n) == 4 for n in outside):
+                return 'phenol'
+            return 'enol' if any(molecule.hybridization_of(n) == 2 for n in outside) else 'hydroxyl'
+        return ''
+    return ''
+
+
+def _sited(name: str, site: str) -> str:
+    """`name` with its `amine_`/`hydroxyl_` prefix replaced by the site's: `amine_boc` on an aniline is
+    `aniline_boc`.  Any other row keeps its name."""
+    head, _, tail = name.partition('_')
+    if head in ('amine', 'hydroxyl') and site in _SITE_PREFIX and tail:
+        return '%s_%s' % (_SITE_PREFIX[site], tail)
+    return name
+
+
 def _label(molecule: MoleculeContainer, claim: _Claim) -> str:
-    """`ester_hydrolysis` when the claim cuts either O-C bond of a carboxylic ester, else the row's name.
+    """`ester_hydrolysis` when the claim cuts either O-C bond of a carboxylic ester, else the row's name for
+    its site (`_sited`).
 
     The revealed oxygen lost a bond to the deleted atoms and is single-bonded to a carboxyl carbon: kept on
     the acyl side (`carboxyl_tbu`, `hydroxyl_methyl` on a methyl ester) or deleted with it
@@ -415,7 +464,7 @@ def _label(molecule: MoleculeContainer, claim: _Claim) -> str:
             continue
         if any(_carboxyl(molecule, carbon, atom) for carbon in neighbors):
             return 'ester_hydrolysis'
-    return claim.rule.name
+    return _sited(claim.rule.name, _site(molecule, claim))
 
 
 def _claims(molecule: MoleculeContainer, rules: Iterable[ProtectiveGroup]) -> list[_Claim]:
@@ -622,21 +671,21 @@ def _strip_sites(molecule: MoleculeContainer, chosen: Sequence[int],
     if not all(0 <= index < len(claims) for index in chosen):
         return None
     working = molecule.copy()
-    acted: list[tuple[_Claim, str]] = []
+    acted: list[tuple[_Claim, str, str]] = []
     for index in sorted(chosen, reverse=True):
         claim = _claims(working, rules)[index]
         patched = _patch_within(claim.rule.template, working, claim.deleted)
         if patched is None:                 # the claim stood but no outcome stayed inside it
             continue
-        acted.append((claim, _label(working, claim)))
+        acted.append((claim, _label(working, claim), _site(working, claim)))
         working = patched
     if not acted:
         return None
     acted.reverse()                         # report in claim order, which is most-specific-first
-    return EnumeratedDeprotection(tuple(claim.rule.name for claim, _ in acted),
+    return EnumeratedDeprotection(tuple(claim.rule.name for claim, _, _ in acted),
                                   _numbered(molecule, tuple(working.split())),
-                                  tuple(claim.rule.id for claim, _ in acted),
-                                  tuple(label for _, label in acted))
+                                  tuple(claim.rule.id for claim, _, _ in acted),
+                                  tuple(label for _, label, _ in acted), tuple(site for _, _, site in acted))
 
 
 def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
@@ -658,6 +707,7 @@ def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
     names: list[str] = []
     ids: list[str] = []
     labels: list[str] = []
+    sites: list[str] = []
     for _ in range(len(molecule)):
         claim = next((c for c in _claims(working, rules) if c.rule.name in chosen), None)
         if claim is None:
@@ -666,13 +716,14 @@ def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
         if patched is None:                 # the claim stood but no outcome stayed inside it
             break
         labels.append(_label(working, claim))
+        sites.append(_site(working, claim))
         working = patched
         names.append(claim.rule.name)
         ids.append(claim.rule.id)
     if not names:
         return None
     return EnumeratedDeprotection(tuple(names), _numbered(molecule, tuple(working.split())),
-                                  tuple(ids), tuple(labels))
+                                  tuple(ids), tuple(labels), tuple(sites))
 
 
 def _heavy_formula(molecule: MoleculeContainer) -> Counter:

@@ -1529,10 +1529,26 @@ label                                the claim it makes about the record
 
 A strip is named by its mechanism, the ``labels`` of the deprotection: one that cuts a carboxylic ester,
 on either side, is ``ester_hydrolysis`` whichever row claimed it, so a Boc amine methyl ester stripped of
-both reads ``deprotect:amine_boc+ester_hydrolysis``.  ``protect:`` keeps the row names, except an ester
-made on an acid's oxygen, which is named by the acid -- methyl benzoate from benzoic acid is
-``protect:carboxyl_methyl``, anisole from phenol ``protect:hydroxyl_methyl``, since the two are installed
-under different conditions.  Where two rows claim the two halves of one ester, the smaller half is the
+both reads ``deprotect:amine_boc+ester_hydrolysis``.  Any other strip, and every ``protect:``, is the row's
+name **for the atom the group sits on**, because one group is installed and removed under other conditions
+on each: an ``amine_`` or ``hydroxyl_`` row reports the site's prefix instead.
+
+=============  ====================================================  =====================
+prefix         the atom the group sits on                            example
+=============  ====================================================  =====================
+``amine_``     an alkyl amine N                                      ``amine_boc``
+``aniline_``   an N beside an aromatic carbon                        ``aniline_boc``
+``amide_``     an N beside C=O or S(=O)2: amide, lactam, carbamate,  ``amide_boc``
+               urea, sulfonamide
+``azole_``     an aromatic N: azoles, pyridones                      ``azole_sem``
+``hydroxyl_``  an alcohol O                                          ``hydroxyl_tbs``
+``phenol_``    an O beside an aromatic atom                          ``phenol_triflyl``
+``enol_``      an O beside an sp2 atom: enols, oximes                ``enol_triflyl``
+``carboxyl_``  an acid O: an ester made on the acid                  ``carboxyl_methyl``
+=============  ====================================================  =====================
+
+Methyl benzoate from benzoic acid is ``protect:carboxyl_methyl`` and anisole from phenol
+``protect:phenol_methyl``.  Where two rows claim the two halves of one ester, the smaller half is the
 protecting group: methyl benzoate is a methyl ester of benzoic acid, not a benzoate of methanol.
 
 **Protection comes right after purification.** A label names conditions, and installing a protecting
@@ -1635,13 +1651,13 @@ between them composes: strip every input that can be stripped, then let the corp
 .. testcode::
 
     stripped = smiles('CC(C)(C)OC(=O)Nc1ccccc1>>Nc1ccccc1')
-    assert stripped.reconstruct_mapping() == ('deprotect:amine_boc',)
+    assert stripped.reconstruct_mapping() == ('deprotect:aniline_boc',)
 
     composed = smiles('CC(C)(C)OC(=O)NCCN.CC(=O)O>>CC(=O)NCCN')
     assert composed.reconstruct_mapping() == ('deprotect:amine_boc+react:amidation',)
 
     masked = smiles('Nc1ccccc1.CC(C)(C)OC(=O)OC(=O)OC(C)(C)C>>CC(C)(C)OC(=O)Nc1ccccc1')
-    assert masked.reconstruct_mapping() == ('protect:amine_boc',)
+    assert masked.reconstruct_mapping() == ('protect:aniline_boc',)
 
 The corpus-searching rungs enumerate over **subsets** of the inputs, because a recorded record files its
 base and its solvent among the inputs alongside the things that reacted, and an outcome must account for
