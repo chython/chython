@@ -33,10 +33,10 @@ from collections.abc import Callable, Container, Iterator, Mapping, Sequence
 from itertools import chain, product as cartesian
 from typing import NamedTuple
 
-from ._enumerate import (_deprotect_toward, _needs, _outcomes, deprotect, EnumeratedReaction,
-                         functional_groups, protective_groups)
+from ._enumerate import (_claims, _deprotect_toward, _needs, _outcomes, _strip_sites, deprotect,
+                         EnumeratedDeprotection, EnumeratedReaction, functional_groups, protective_groups)
 from ._numbering import fast_mapping
-from ._tables import functional_rules, reaction_rules
+from ._tables import functional_rules, protective_rules, reaction_rules
 from ..core import (INFO, LOST, LogRecord, MoleculeContainer, REFUSED, ReactionContainer, STEREO_ABS,
                     STEREO_UNSPECIFIED)
 
@@ -368,31 +368,84 @@ def _deprotect_then_react(recorded, inputs, options, memo) -> Iterator[_Explanat
                                outcome.rule_id, _repeats(subset))
 
 
-def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
-    """The recorded product is a recorded input, masked.
+def _single_group_strips(recorded) -> Iterator[EnumeratedDeprotection]:
+    """Each protecting group's sites on `recorded` read ALONE, one site at a time.
 
-    THE WEAKEST RUNG AND SO THE LAST: an amide, an ester and a carbamate are all protecting groups as
-    well as products, so offered first this reads every acylation as a protection.  Only the subsets
-    that can give an input component are stripped, and the strip is settled against the inputs as the
+    `protective_groups()` claims a site for its most specific row only, so an ester is either its acid
+    half or its alcohol half: benzyl acetate claims `carboxyl_benzyl` and never `hydroxyl_acyl`.  The
+    protection rung must offer both, since which half is the group depends on which input the record
+    names.  Claiming with one row at a time is sound here and nowhere else: the strip has to give back a
+    recorded input exactly, which a shadowed reading -- a Boc's tert-butyl half -- never does.
+    """
+    for rule in protective_rules().values():
+        for index in range(len(_claims(recorded, (rule,)))):
+            outcome = _strip_sites(recorded, (index,), (rule,))
+            if outcome is not None:
+                yield outcome
+
+
+def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
+    """The recorded product is a recorded input, masked: `protect:<groups>`, the group's source an agent.
+
+    FIRST AFTER PURIFICATION, because a label names conditions and installing a protecting group is one
+    family of them whatever supplies the group: an acetate from Ac2O, AcCl or AcOH is `protect:hydroxyl_acyl`
+    in each case, and no corpus row mapping the reagent claims it first.  Every named group of
+    `protective.tsv` reads this way -- a methyl ether, a benzylamine and a tosylamide included.
+
+    The table's own claims and every group read alone (`_single_group_strips`) are both offered, smallest
+    group first: where both halves of an ester are named groups, the smaller half is the protecting
+    group.  Only a strip that gives back a recorded input explains, settled against the inputs as the
     other rungs' outcomes are against the record: it leaves an unmasked azole nitrogen at `H_UNKNOWN`.
     """
     parts = [part for molecule in inputs for part in molecule.split()]
     targets = [_heavy(part) for part in parts]
     passengers = set(recorded.split())
-    for outcome, stripped in _once(memo, 'protect',
-                                   lambda: [(outcome, _settle(outcome.reaction.products, targets))
-                                            for outcome in _deprotect_toward(recorded, parts)]):
+
+    def outcomes():
+        seen = set()
+        out = []
+        for outcome in chain(_deprotect_toward(recorded, parts), _single_group_strips(recorded)):
+            stripped = _settle(outcome.reaction.products, targets)
+            key = (outcome.names, tuple(sorted(part.canonical_bytes for part in stripped)))
+            if key in seen:
+                continue
+            seen.add(key)
+            removed = len(recorded) - sum(len(part) for part in stripped)
+            out.append((removed, len(out), outcome, stripped))
+        return [(outcome, stripped) for _, _, outcome, stripped in sorted(out, key=lambda x: x[:2])]
+
+    for outcome, stripped in _once(memo, 'protect', outcomes):
         pairs = _pair_with_inputs(stripped, inputs, options.loose)
-        if all(part in passengers for part, _ in pairs):
+        if not pairs or all(part in passengers for part, _ in pairs):
             # a recorded component the strip left untouched pairs by being an input, not by the strip
             continue
-        yield _Explanation('protect:%s' % '+'.join(outcome.names),
+        yield _Explanation('protect:%s' % '+'.join(_installed(recorded, outcome, stripped)),
                            lambda target, p=pairs, o=options: _number_from_pairs(target, p, o.loose),
                            '+'.join(outcome.rule_ids))
 
 
-_PHASES: tuple[Callable[..., Iterator[_Explanation]], ...] = (_purification, _react, _deprotect,
-                                                              _deprotect_then_react, _protect)
+_ACID = ('carboxylic_acid', 'carboxylate')
+
+
+def _installed(recorded, outcome, stripped) -> tuple[str, ...]:
+    """The names `protect:` reports: the rows', except an ester made on the ACID's oxygen.
+
+    One `hydroxyl_*` row reads both an ether and the ester the same alkyl makes, and the two are
+    installed under different conditions: a methyl ester (TMSCHN2, MeOH/H+) is `carboxyl_methyl`, a methyl
+    ether (MeI, base) `hydroxyl_methyl`.  The ester is told apart as the deprotection side tells it, by
+    the strip's `ester_hydrolysis` label, and the side by the input: it is the acid the strip gave back.
+    """
+    if len(outcome.names) != 1 or outcome.labels[0] != 'ester_hydrolysis' \
+            or not outcome.names[0].startswith('hydroxyl_'):
+        return outcome.names
+    acids = sum(n for part in stripped for name, n in functional_groups(part).items() if name in _ACID)
+    if acids <= sum(n for name, n in functional_groups(recorded).items() if name in _ACID):
+        return outcome.names
+    return ('carboxyl_' + outcome.names[0][len('hydroxyl_'):],)
+
+
+_PHASES: tuple[Callable[..., Iterator[_Explanation]], ...] = (_purification, _protect, _react, _deprotect,
+                                                              _deprotect_then_react)
 _FILTER_EXEMPT = frozenset((_purification, _protect))
 
 

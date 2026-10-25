@@ -58,7 +58,7 @@ def test_purification_is_the_identity_mapping():
 
 def test_a_multiproduct_record_is_refused():
     from ...core import Log                     # severities are `INFO`/`REFUSED` constants, not an enum
-    rxn = ReactionContainer([smiles('CCOC(C)=O'), smiles('O')], [smiles('CCO'), smiles('CC(=O)O')])
+    rxn = ReactionContainer([smiles('CCOC(=O)CC'), smiles('O')], [smiles('CCO'), smiles('CCC(=O)O')])
     assert rxn.reconstruct_mapping() == ()
     log = rxn.log
     refused = log.refused()
@@ -137,7 +137,7 @@ def test_translate_carries_the_inputs_numbering_onto_a_reactor_product():
     from .._reconstruct import _number_inputs, _translate
     from .._tables import reaction_rules
 
-    acid, amine = smiles('CC(=O)O'), smiles('CCN')
+    acid, amine = smiles('CCC(=O)O'), smiles('CCN')
     acid.canonicalize()
     amine.canonicalize()
     _number_inputs([acid, amine])
@@ -156,7 +156,7 @@ def test_translate_carries_the_inputs_numbering_onto_a_reactor_product():
 
 
 def test_a_direct_reaction_is_found_and_mapped():
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CCN')], [smiles('CC(=O)NCC')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CCN')], [smiles('CCC(=O)NCC')])
     assert rxn.reconstruct_mapping() == ('react:amidation',)
     product = rxn.products[0]
     assert all(product.map_number_of(n) for n in product.atom_numbers
@@ -180,15 +180,15 @@ def test_a_direct_reaction_is_found_and_mapped():
 def test_a_spectator_input_does_not_block_the_match():
     # toluene is a solvent no row touches.  This is the subset enumeration: without it `_run` refuses
     # the whole list, every input having to be touched, and nothing is found.
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CCN'), smiles('Cc1ccccc1')],
-                            [smiles('CC(=O)NCC')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CCN'), smiles('Cc1ccccc1')],
+                            [smiles('CCC(=O)NCC')])
     assert rxn.reconstruct_mapping() == ('react:amidation',)
 
 
 def test_an_untouched_salt_component_survives_and_is_numbered():
     # the recorded product carries a chloride the template never sees; it must come back numbered
     # from the input it arrived in, not dropped and not left at zero
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CCN.Cl')], [smiles('CC(=O)NCC.Cl')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CCN.Cl')], [smiles('CCC(=O)NCC.Cl')])
     assert rxn.reconstruct_mapping() == ('react:amidation',)
     amine_input = rxn.reactants[1]
     product = rxn.products[0]
@@ -200,7 +200,7 @@ def test_an_untouched_salt_component_survives_and_is_numbered():
 
 def test_the_winning_rule_id_is_logged():
     from ...core import Log
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CCN')], [smiles('CC(=O)NCC')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CCN')], [smiles('CCC(=O)NCC')])
     assert rxn.reconstruct_mapping()
     log = rxn.log
     ids = [r.message for r in log if r.rule == 'reconstruct:rules']
@@ -212,7 +212,7 @@ def test_a_partial_product_emits_the_partial_log_line():
     from ...core import Log, INFO
     # the water in the recorded product came from nowhere, so `_number_product` cannot account for that
     # component and the orchestrator emits `reconstruct:partial`
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CCN')], [smiles('CC(=O)NCC.O')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CCN')], [smiles('CCC(=O)NCC.O')])
     result = rxn.reconstruct_mapping()
     log = rxn.log
     assert result == ('react:amidation',)                     # rung fires despite the unaccounted component
@@ -271,8 +271,8 @@ def test_partial_deprotection_strips_only_the_subsets_that_fit_the_product():
 
 def test_deprotect_then_react_composes():
     # the amine arrives Boc-protected; strip it, then amidate.  Neither rung alone explains this.
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CC(C)(C)OC(=O)NCC')],
-                            [smiles('CC(=O)NCC')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CC(C)(C)OC(=O)NCC')],
+                            [smiles('CCC(=O)NCC')])
     assert rxn.reconstruct_mapping() == ('deprotect:amine_boc+react:amidation',)
 
 
@@ -298,17 +298,17 @@ def test_a_stripped_azole_is_settled_before_the_corpus_fires():
 def test_a_direct_reaction_outranks_the_composed_rung():
     # NOT an ordering pin: CCN carries no protecting group, so `_deprotect_then_react` returns at once
     # whatever its position in `_PHASES`.  `test_phases_ladder_order_is_pinned` is the ordering pin.
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CCN')], [smiles('CC(=O)NCC')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CCN')], [smiles('CCC(=O)NCC')])
     assert rxn.reconstruct_mapping() == ('react:amidation',)
 
 
 def test_phases_ladder_order_is_pinned():
-    # The ladder is ordered by STRENGTH OF EVIDENCE, and protection is last because an amide, an ester
-    # and a carbamate are products as well as protecting groups.  Behavioural counterpart:
-    # `test_an_acylation_is_a_reaction_and_not_a_protection`.
+    # Protection right after purification: a label names conditions, and installing a named protecting
+    # group is one family of them whatever supplies the group.  Behavioural counterpart:
+    # `test_a_named_group_installed_is_a_protection_and_any_other_acylation_a_reaction`.
     from .._reconstruct import _PHASES
-    assert [f.__name__ for f in _PHASES] == ['_purification', '_react', '_deprotect',
-                                             '_deprotect_then_react', '_protect']
+    assert [f.__name__ for f in _PHASES] == ['_purification', '_protect', '_react', '_deprotect',
+                                             '_deprotect_then_react']
 
 
 def test_two_surviving_candidates_yield_one_label():
@@ -358,20 +358,27 @@ def test_a_protection_is_explained():
                    (amine.atom(m).element, amine.degree_of(m), amine.atom(m).implicit_h)
 
 
-def test_an_acylation_is_a_reaction_and_not_a_protection():
-    # Why protection is the LAST rung: offered first, this reads as `protect:amine_benzoate`.
-    rxn = ReactionContainer([smiles('OC(=O)c1ccccc1'), smiles('CCN')],
-                            [smiles('CCNC(=O)c1ccccc1')])
-    labels = rxn.reconstruct_mapping()
-    assert labels
-    assert not any(label.startswith('protect:') for label in labels)
+@pytest.mark.parametrize('source', ['CC(=O)OC(C)=O', 'CC(=O)Cl', 'CC(=O)O'])
+def test_a_named_group_installed_is_a_protection_whatever_supplies_it(source):
+    """An acetate from Ac2O, AcCl or AcOH is one label, and the group's source is an agent: unmapped."""
+    rxn = smiles(f'OCc1ccccc1.{source}>>CC(=O)OCc1ccccc1')
+    assert rxn.reconstruct_mapping() == ('protect:hydroxyl_acyl',)
+    acyl = next(m for m in rxn.reactants if 'O' in m and len(m) < 8)
+    assert all(not acyl.map_number_of(n) for n in acyl.atom_numbers)
+
+
+def test_a_named_group_installed_is_a_protection_and_any_other_acylation_a_reaction():
+    benzoyl = ReactionContainer([smiles('OC(=O)c1ccccc1'), smiles('CCN')], [smiles('CCNC(=O)c1ccccc1')])
+    assert benzoyl.reconstruct_mapping() == ('protect:amine_benzoate',)
+    other = ReactionContainer([smiles('OC(=O)C1CCCCC1'), smiles('CCN')], [smiles('CCNC(=O)C1CCCCC1')])
+    assert other.reconstruct_mapping() == ('react:amidation',)
 
 
 def test_canonicalize_does_not_reconstruct():
     # NEVER IMPLICITLY COMPOSED: a caller asking for a canonical representation has not asked for a
     # mapping to be invented.  This would fail if `canonicalize()` called `reconstruct_mapping`, the
     # amidation row firing and writing nonzero numbers onto the product.
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CCN')], [smiles('CC(=O)NCC')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CCN')], [smiles('CCC(=O)NCC')])
     rxn.canonicalize()
     product = rxn.products[0]
     assert not any(product.map_number_of(n) for n in product.atom_numbers)
@@ -452,8 +459,8 @@ def _reference_records():
     a reference naming one would state a convention rather than a fact.
     """
     return [
-        ReactionContainer([smiles('[CH3:1][C:2](=[O:3])[OH:4]'), smiles('[CH3:5][CH2:6][NH2:7]')],
-                          [smiles('[CH3:1][C:2](=[O:3])[NH:7][CH2:6][CH3:5]')]),
+        ReactionContainer([smiles('[CH3:1][CH2:2][C:3](=[O:4])[OH:5]'), smiles('[CH3:6][CH2:7][NH2:8]')],
+                          [smiles('[CH3:1][CH2:2][C:3](=[O:4])[NH:8][CH2:7][CH3:6]')]),
         ReactionContainer([smiles('[CH3:1][C:2]([CH3:3])([CH3:4])[O:5][C:6](=[O:7])'
                                   '[NH:8][CH2:9][c:10]1[cH:11][cH:12][cH:13][cH:14][cH:15]1')],
                           [smiles('[NH2:8][CH2:9][c:10]1[cH:11][cH:12][cH:13][cH:14][cH:15]1')]),
@@ -465,7 +472,7 @@ def _reference_records():
 
 
 def test_the_reconstructed_mapping_is_1_1_and_starts_at_one():
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CCN')], [smiles('CC(=O)NCC')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CCN')], [smiles('CCC(=O)NCC')])
     assert rxn.reconstruct_mapping() == ('react:amidation',)
     product = rxn.products[0]
     numbers = sorted(product.map_number_of(n) for n in product.atom_numbers)
@@ -479,8 +486,8 @@ def test_the_reconstructed_mapping_is_1_1_and_starts_at_one():
 def test_a_spectator_input_comes_back_unmapped():
     # A number on an atom the product never received is not part of a 1-1 mapping, and leaving it there
     # invites a reader to treat the toluene as a reagent that contributed atoms.
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CCN'), smiles('Cc1ccccc1')],
-                            [smiles('CC(=O)NCC')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CCN'), smiles('Cc1ccccc1')],
+                            [smiles('CCC(=O)NCC')])
     assert rxn.reconstruct_mapping() == ('react:amidation',)
     toluene = rxn.reactants[2]
     assert all(toluene.map_number_of(n) == 0 for n in toluene.atom_numbers)
@@ -495,8 +502,8 @@ _UNREACHABLE = ('ClCCl', 'C1CCOC1', 'O', 'CN(C)C=O', 'C1COCCO1', 'CCCCCC')
 
 
 def _amidation(extra=()):
-    return ReactionContainer([smiles('CC(=O)O'), smiles('CCN'), *(smiles(s) for s in extra)],
-                             [smiles('CC(=O)NCC')])
+    return ReactionContainer([smiles('CCC(=O)O'), smiles('CCN'), *(smiles(s) for s in extra)],
+                             [smiles('CCC(=O)NCC')])
 
 
 def _pools(reaction):
@@ -555,7 +562,7 @@ def test_a_plate_record_offers_each_row_one_pool_per_slot_choice():
         return kept(rule, molecules)
 
     amines = [smiles('C' * k + 'N') for k in range(2, 12)]
-    rxn = ReactionContainer([smiles('CC(=O)O'), *amines], [smiles('CC(=O)NCC')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), *amines], [smiles('CCC(=O)NCC')])
     _reconstruct._outcomes = counting
     try:
         assert rxn.reconstruct_mapping() == ('react:amidation',)
@@ -590,10 +597,10 @@ def test_the_composed_rung_only_walks_what_the_stripping_reached():
     # the isobutylene the Boc left behind.  Both rungs walk, so the count is per rung.
     from .._reconstruct import _applications
 
-    rxn = ReactionContainer([smiles('CC(=O)O'), smiles('CC(C)(C)OC(=O)NCC')], [smiles('CC(=O)NCC')])
+    rxn = ReactionContainer([smiles('CCC(=O)O'), smiles('CC(C)(C)OC(=O)NCC')], [smiles('CCC(=O)NCC')])
     stripped, unstripped = [], []
     for store, required in ((stripped, {1}), (unstripped, None)):
-        pool = [smiles('CC(=O)O'), smiles('CCN'), smiles('CC(C)=C')]
+        pool = [smiles('CCC(=O)O'), smiles('CCN'), smiles('CC(C)=C')]
         store.extend(subset for subset, _ in _applications(rxn.products[0], pool, required=required))
     assert rxn.reconstruct_mapping() == ('deprotect:amine_boc+react:amidation',)
     assert len(stripped) < len(unstripped), 'a pool the stripping never reached must not be re-walked'
@@ -624,7 +631,7 @@ def test_the_corpus_is_walked_once_for_both_strictnesses():
     # is a question about the inputs and the corpus, not about strictness, so it is asked once.
     from .. import _reconstruct
 
-    rxn = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CC(=O)O')], [smiles('CC(CC)OC(C)=O')])
+    rxn = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CCC(=O)O')], [smiles('CC(CC)OC(=O)CC')])
     walks = []
     kept = _reconstruct._applications
 
@@ -671,7 +678,7 @@ def test_a_flat_product_is_explained_loosely():
     # THE SAD RECORD: a configured reactant and a product drawn flat.  Constitutionally the ester is
     # there, so the mapping is there, and the configuration the record failed to state is a log line.
     from ...core import INFO
-    rxn = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CC(=O)O')], [smiles('CC(CC)OC(C)=O')])
+    rxn = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CCC(=O)O')], [smiles('CC(CC)OC(=O)CC')])
     assert rxn.reconstruct_mapping() == ('react:esterification',)
     mismatch = [r for r in rxn.log if r.rule == 'reconstruct:stereo-mismatch']
     assert len(mismatch) == 1 and mismatch[0].severity == INFO
@@ -682,7 +689,7 @@ def test_a_flat_product_is_explained_loosely():
 
 def test_strict_refuses_what_loose_explains():
     from ...core import LOST
-    rxn = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CC(=O)O')], [smiles('CC(CC)OC(C)=O')])
+    rxn = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CCC(=O)O')], [smiles('CC(CC)OC(=O)CC')])
     assert rxn.reconstruct_mapping(stereo='strict') == ()
     assert [r.rule for r in rxn.log if r.severity == LOST] == ['reconstruct:unexplained']
 
@@ -691,11 +698,11 @@ def test_the_strict_pass_runs_first_so_stereo_still_picks_the_row():
     # THE WHOLE REASON THE LOOSE PASS IS SECOND.  The corpus discriminates by configuration: one row
     # carries the centre through and another turns it over, and a record that states its product
     # configuration is entitled to the row that actually explains it.  Run blind, both rows fit.
-    retention = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CC(=O)O')],
-                                  [smiles('C[C@@H](CC)OC(C)=O')])
+    retention = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CCC(=O)O')],
+                                  [smiles('C[C@@H](CC)OC(=O)CC')])
     assert retention.reconstruct_mapping() == ('react:esterification',)
-    inversion = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CC(=O)O')],
-                                  [smiles('C[C@H](CC)OC(C)=O')])
+    inversion = ReactionContainer([smiles('C[C@H](O)CC'), smiles('CCC(=O)O')],
+                                  [smiles('C[C@H](CC)OC(=O)CC')])
     assert inversion.reconstruct_mapping() == ('react:mitsunobu',)
     # and neither is a loose hit
     for rxn in (retention, inversion):
@@ -759,7 +766,7 @@ def _healed(record: str, **kwargs):
 
 
 def test_heal_is_off_by_default():
-    rxn, label, strict = _healed('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O')
+    rxn, label, strict = _healed('CC(O)CC.CCC(=O)O>>C[C@H](CC)OC(=O)CC')
     assert label == ('react:esterification',)
     assert not [r for r in rxn.log if r.stage == 'heal']
     assert strict == ()                                   # the record is as inconsistent as it arrived
@@ -770,7 +777,7 @@ def test_the_product_configuration_fills_a_flat_input():
     # product was copied from a catalogue with its configuration and the starting material drawn by hand
     # without one.  Fischer esterification never touches the carbinol bond, so the record's own centre is
     # the input's.
-    rxn, label, strict = _healed('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O', heal_stereo='product')
+    rxn, label, strict = _healed('CC(O)CC.CCC(=O)O>>C[C@H](CC)OC(=O)CC', heal_stereo='product')
     assert label == ('react:esterification',) and strict == ('react:esterification',)
     alcohol = next(m for m in rxn.reactants if len(m) == 5)
     assert _cip(alcohol, 2) == _cip(rxn.products[0], 2) == 'R'
@@ -779,7 +786,7 @@ def test_the_product_configuration_fills_a_flat_input():
 
 def test_the_other_enantiomer_fills_it_the_other_way():
     # The same record drawn S, to pin that the repair reads the record rather than a default.
-    rxn, label, strict = _healed('CC(O)CC.CC(=O)O>>C[C@@H](CC)OC(C)=O', heal_stereo='product')
+    rxn, label, strict = _healed('CC(O)CC.CCC(=O)O>>C[C@@H](CC)OC(=O)CC', heal_stereo='product')
     assert strict == label == ('react:esterification',)
     alcohol = next(m for m in rxn.reactants if len(m) == 5)
     assert _cip(alcohol, 2) == _cip(rxn.products[0], 2) == 'S'
@@ -798,7 +805,7 @@ def test_the_product_configuration_turns_an_input_over():
 def test_the_input_configuration_fills_a_flat_product():
     # `'reactant'`: the other direction, and the one that STATES a configuration where the record holds
     # none rather than turning one over.
-    rxn, label, strict = _healed('C[C@H](O)CC.CC(=O)O>>CC(CC)OC(C)=O', heal_stereo='reactant')
+    rxn, label, strict = _healed('C[C@H](O)CC.CCC(=O)O>>CC(CC)OC(=O)CC', heal_stereo='reactant')
     assert label == ('react:esterification',) and strict == ('react:esterification',)
     alcohol = next(m for m in rxn.reactants if len(m) == 5)
     assert _cip(rxn.products[0], 2) == _cip(alcohol, 2) == 'S'
@@ -807,7 +814,7 @@ def test_the_input_configuration_fills_a_flat_product():
 def test_the_two_directions_repair_opposite_sides():
     # One record, both directions, and the answers differ: the geometry the record states in its product
     # against the geometry it states in its reactant.  Either way the record ends up consistent.
-    record = r'C/C=C/CO.CC(=O)O>>C/C=C\COC(C)=O'
+    record = r'C/C=C/CO.CCC(=O)O>>C/C=C\COC(=O)CC'
     from_product, label, strict = _healed(record, heal_stereo='product')
     assert label == ('react:esterification',) and strict == ('react:esterification',)
     from_reactant, label, strict = _healed(record, heal_stereo='reactant')
@@ -818,7 +825,7 @@ def test_the_two_directions_repair_opposite_sides():
 def test_nothing_is_healed_where_the_record_states_nothing():
     # `'product'` onto a flat product asks for a configuration the record does not hold.  Silence and no
     # log line: there is no disagreement here, only an absence on the side that was named the truth.
-    rxn, label, strict = _healed('C[C@H](O)CC.CC(=O)O>>CC(CC)OC(C)=O', heal_stereo='product')
+    rxn, label, strict = _healed('C[C@H](O)CC.CCC(=O)O>>CC(CC)OC(=O)CC', heal_stereo='product')
     assert label == ('react:esterification',)
     assert not [r for r in rxn.log if r.stage == 'heal']
     assert strict == ()
@@ -840,8 +847,8 @@ def test_healing_is_frame_order_independent():
     # ONE RECORD, TWO ATOM ORDERS, one answer.  The parity integer differs between the two spellings and
     # the map numbers land on different atoms, so neither is the assertion: the healed alcohol is the
     # same molecule, `__eq__` being the canonical form and carrying the parity.
-    one = _healed('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O', heal_stereo='product')[0]
-    two = _healed('CCC(O)C.OC(=O)C>>CC[C@@H](C)OC(C)=O', heal_stereo='product')[0]
+    one = _healed('CC(O)CC.CCC(=O)O>>C[C@H](CC)OC(=O)CC', heal_stereo='product')[0]
+    two = _healed('CCC(O)C.OC(=O)CC>>CC[C@@H](C)OC(=O)CC', heal_stereo='product')[0]
     alcohols = [next(m for m in rxn.reactants if len(m) == 5) for rxn in (one, two)]
     assert alcohols[0] == alcohols[1]
     for alcohol in alcohols:
@@ -850,14 +857,14 @@ def test_healing_is_frame_order_independent():
 
 
 def test_every_heal_line_is_stage_heal():
-    rxn = _healed('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O', heal_stereo='product')[0]
+    rxn = _healed('CC(O)CC.CCC(=O)O>>C[C@H](CC)OC(=O)CC', heal_stereo='product')[0]
     healed = [r for r in rxn.log if r.rule.startswith('heal:')]
     assert healed and all(r.stage == 'heal' for r in healed)
     assert all(r.stage == 'reconstruct' for r in rxn.log if not r.rule.startswith('heal:'))
 
 
 def test_the_heal_line_names_the_atoms_of_the_molecule_it_wrote():
-    rxn = _healed('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O', heal_stereo='product')[0]
+    rxn = _healed('CC(O)CC.CCC(=O)O>>C[C@H](CC)OC(=O)CC', heal_stereo='product')[0]
     line = next(r for r in rxn.log if r.rule == 'heal:parity')
     alcohol = next(m for m in rxn.reactants if len(m) == 5)
     assert line.atoms == tuple(n for n in alcohol.atom_numbers if alcohol.parity_of(n))
@@ -873,7 +880,7 @@ def test_a_collection_crosses_under_a_fresh_id():
     # A racemate is a statement about a configured unit, so it travels with the configuration.  The KIND
     # crosses and the NUMBER does not: two records numbering their `&1` differently must not have their
     # racemates merged by a heal.
-    rxn, label, _ = _healed('C[C@H](O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O |&1:1|', heal_stereo='reactant')
+    rxn, label, _ = _healed('C[C@H](O)CC.CCC(=O)O>>C[C@H](CC)OC(=O)CC |&1:1|', heal_stereo='reactant')
     assert label == ('react:mitsunobu',)
     product = rxn.products[0]
     assert [kind for kind, _ in product.stereo_groups()] \
@@ -885,7 +892,7 @@ def test_an_absolute_source_drops_a_collection():
     # The other way round, and the policy the argument states: the side the caller named wins outright.
     # A racemic input against a single-enantiomer product, read from the product, is absolute -- and the
     # line is there to be read, because this is the direction that discards a statement.
-    rxn, label, _ = _healed('C[C@H](O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O |&1:1|', heal_stereo='product')
+    rxn, label, _ = _healed('C[C@H](O)CC.CCC(=O)O>>C[C@H](CC)OC(=O)CC |&1:1|', heal_stereo='product')
     assert label == ('react:mitsunobu',)
     assert rxn.reactants[0].stereo_groups() == {}
     line = next(r for r in rxn.log if r.rule == 'heal:group')
@@ -937,4 +944,16 @@ def test_a_protected_azole_pairs_with_its_input_tautomer():
 def test_a_group_the_product_keeps_is_not_stripped(record, label):
     """The composed rung strips the groups the product lost, not every group it could: the ester or the Boc
     the product still carries stays on."""
+    assert smiles(record).reconstruct_mapping() == (label,)
+
+
+@pytest.mark.parametrize('record, label', [
+    ('OC(=O)c1ccccc1.CO>>COC(=O)c1ccccc1', 'protect:carboxyl_methyl'),
+    ('Oc1ccccc1.CI>>COc1ccccc1', 'protect:hydroxyl_methyl'),
+    ('OC(=O)c1ccccc1.BrCc1ccccc1>>O=C(OCc1ccccc1)c1ccccc1', 'protect:carboxyl_benzyl'),
+    ('OCc1ccccc1.CC(=O)OC(C)=O>>CC(=O)OCc1ccccc1', 'protect:hydroxyl_acyl'),
+])
+def test_an_ester_installed_on_the_acid_is_named_by_the_acid(record, label):
+    """One `hydroxyl_*` row reads an ether and an ester alike; the installs run under different conditions,
+    so the ester made on the acid's oxygen is `carboxyl_*`."""
     assert smiles(record).reconstruct_mapping() == (label,)

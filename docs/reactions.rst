@@ -1512,8 +1512,7 @@ recorded inputs, and returns the label of every explanation it found.  It canoni
 place** first, so the record comes back normalized as well as mapped: a mapping written over a structure
 the caller is about to normalize is a mapping of something else.
 
-It offers five kinds of explanation, as an **evidence-ordered ladder**: the rungs are tried in order of
-how certain their mapping is, not of how cheap they are to try, and the first rung that reproduces the
+It offers five kinds of explanation, as an **ordered ladder**, and the first rung that reproduces the
 recorded product is the one applied.  Like the reactor, it hands back a 1-1 mapping numbered from 1 --
 an input atom the product never received, and a component of the record it could not reproduce, is left
 at 0.
@@ -1522,21 +1521,32 @@ at 0.
 label                                the claim it makes about the record
 ===================================  =====================================================================
 ``purification``                     the product went in and came out
+``protect:<names>``                  the product is an input with a protecting group added
 ``react:<name>``                     a corpus row, applied to the inputs as they arrived, makes this
 ``deprotect:<labels>``               the product is an input with a protecting group removed
 ``deprotect:<labels>+react:<name>``  strip what can be stripped, then a corpus row fires on what is left
-``protect:<names>``                  the product is an input with a protecting group added
 ===================================  =====================================================================
 
 A strip is named by its mechanism, the ``labels`` of the deprotection: one that cuts a carboxylic ester,
 on either side, is ``ester_hydrolysis`` whichever row claimed it, so a Boc amine methyl ester stripped of
-both reads ``deprotect:amine_boc+ester_hydrolysis``.  ``protect:`` keeps the row names.  Where two rows
-claim the two halves of one ester, the smaller half is the protecting group: methyl benzoate is a methyl
-ester of benzoic acid, not a benzoate of methanol.
+both reads ``deprotect:amine_boc+ester_hydrolysis``.  ``protect:`` keeps the row names, except an ester
+made on an acid's oxygen, which is named by the acid -- methyl benzoate from benzoic acid is
+``protect:carboxyl_methyl``, anisole from phenol ``protect:hydroxyl_methyl``, since the two are installed
+under different conditions.  Where two rows claim the two halves of one ester, the smaller half is the
+protecting group: methyl benzoate is a methyl ester of benzoic acid, not a benzoate of methanol.
 
-**Protection is last on purpose.** Every rung above it says what was *made*; that one says only that
-something was covered up, and an amide, an ester and a carbamate are all protecting groups as well as
-products.  Offered first, it reads every amide-forming acylation as a protection.
+**Protection comes right after purification.** A label names conditions, and installing a protecting
+group is one family of them whatever supplies the group, so the group's source is an agent and is never
+mapped: an acetate from Ac\ :sub:`2`\ O, AcCl or AcOH is ``protect:hydroxyl_acyl`` each time.  Every named
+group of ``protective.tsv`` reads this way, a methyl ether, a benzylamine and a tosylamide included; an
+acylation by an acid no row names is a reaction.
+
+.. testcode::
+
+    for source in ('CC(=O)OC(C)=O', 'CC(=O)Cl', 'CC(=O)O'):
+        assert smiles(f'OCc1ccccc1.{source}>>CC(=O)OCc1ccccc1').reconstruct_mapping() == ('protect:hydroxyl_acyl',)
+
+    assert smiles('OC(=O)C1CCCCC1.CCN>>CCNC(=O)C1CCCCC1').reconstruct_mapping() == ('react:amidation',)
 
 ``purification`` is the first rung: the product went in and came out, so the mapping it implies is the
 identity.  It carries no namespace, because no rule and no table produced it.
@@ -1554,13 +1564,13 @@ The water is on one side only, so it comes back unmapped: the numbering is 1-1 o
 
     O.[CH2:2]([CH3:1])[OH:3]>>[CH2:2]([CH3:1])[OH:3]
 
-``react:<name>`` is the second: a row of the reaction corpus, applied to the inputs as they arrived and
+``react:<name>`` is the third: a row of the reaction corpus, applied to the inputs as they arrived and
 found to reproduce the recorded product.  That is the strongest evidence available -- the record says
 these things reacted, and a row says this is what they make.
 
 .. testcode::
 
-    rxn = smiles('CCO.CC(=O)O>>CCOC(C)=O')
+    rxn = smiles('CCCO.CCC(=O)O>>CCCOC(=O)CC')
 
     assert rxn.reconstruct_mapping() == ('react:esterification',)
 
@@ -1637,7 +1647,7 @@ every molecule it is handed:
 
 .. testcode::
 
-    with_base = smiles('CCO.CC(=O)O.c1ccncc1>>CCOC(C)=O')     # pyridine is along for the ride
+    with_base = smiles('CCCO.CCC(=O)O.c1ccncc1>>CCCOC(=O)CC')     # pyridine is along for the ride
     assert with_base.reconstruct_mapping() == ('react:esterification',)
 
 A reagent the record files once may fill two slots of one row, as the excess it was in the flask: an ester
@@ -1705,8 +1715,8 @@ it, and the loose walk reaches only records that would otherwise have come back 
 
 .. testcode::
 
-    retention = smiles('C[C@H](O)CC.CC(=O)O>>C[C@@H](CC)OC(C)=O')
-    inversion = smiles('C[C@H](O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O')
+    retention = smiles('C[C@H](O)CC.CCC(=O)O>>C[C@@H](CC)OC(=O)CC')
+    inversion = smiles('C[C@H](O)CC.CCC(=O)O>>C[C@H](CC)OC(=O)CC')
 
     assert retention.reconstruct_mapping() == ('react:esterification',)
     assert inversion.reconstruct_mapping() == ('react:mitsunobu',)
@@ -1719,12 +1729,12 @@ there for the caller who would rather have nothing than a mapping over a configu
 
 .. testcode::
 
-    flat = smiles('C[C@H](O)CC.CC(=O)O>>CC(CC)OC(C)=O')
+    flat = smiles('C[C@H](O)CC.CCC(=O)O>>CC(CC)OC(=O)CC')
     assert flat.reconstruct_mapping() == ('react:esterification',)
     assert [r.rule for r in flat.log if r.rule.startswith('reconstruct:stereo')] \
         == ['reconstruct:stereo-mismatch']
 
-    assert smiles('C[C@H](O)CC.CC(=O)O>>CC(CC)OC(C)=O').reconstruct_mapping(stereo='strict') == ()
+    assert smiles('C[C@H](O)CC.CCC(=O)O>>CC(CC)OC(=O)CC').reconstruct_mapping(stereo='strict') == ()
 
 Loose relaxes the configuration and **nothing else**.  The hydrogen counts, the charges, the isotopes and
 every bond order are still what a component has to reproduce, so a constitutional mismatch comes back
@@ -1746,7 +1756,7 @@ decides and the inputs are repaired -- and ``'reactant'``.  Every line it writes
 
 .. testcode::
 
-    rxn = smiles('CC(O)CC.CC(=O)O>>C[C@H](CC)OC(C)=O')     # the product knows, the alcohol does not
+    rxn = smiles('CC(O)CC.CCC(=O)O>>C[C@H](CC)OC(=O)CC')     # the product knows, the alcohol does not
     assert rxn.reconstruct_mapping(heal_stereo='product') == ('react:esterification',)
 
     alcohol = rxn.reactants[0]
@@ -1801,7 +1811,7 @@ A healed record is one the strict walk accepts, which is the way to check a repa
 
 .. testcode::
 
-    rxn = smiles(r'C/C=C/CO.CC(=O)O>>C/C=C\COC(C)=O')       # the geometry disagrees
+    rxn = smiles(r'C/C=C/CO.CCC(=O)O>>C/C=C\COC(=O)CC')       # the geometry disagrees
     assert rxn.reconstruct_mapping(heal_stereo='product') == ('react:esterification',)
 
     healed = smiles(format(rxn, 'm'))
