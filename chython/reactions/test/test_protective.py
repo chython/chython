@@ -115,7 +115,7 @@ def test_the_table_reads_and_ids_are_one_space():
     """111 rows numbered 1..111, which is what a positional id in a ported table has to be."""
     rows = read_table('protective.tsv')
     assert [int(row['id']) for row in rows] == list(range(1, len(rows) + 1))
-    assert len(RULES) == len(rows) == 122
+    assert len(RULES) == sum(row['role'] != 'site' for row in rows) == 122
 
 
 def test_a_protecting_group_is_named_once():
@@ -483,7 +483,7 @@ def test_protective_rules_is_keyed_by_the_name_deprotect_selects_by():
     rules = protective_rules()
     assert isinstance(rules, dict)
     assert all(name == rule.name for name, rule in rules.items())
-    assert len(rules) == len(read_table('protective.tsv'))
+    assert len(rules) == sum(row['role'] != 'site' for row in read_table('protective.tsv'))
 
 
 def test_the_specificity_order_survives_the_key():
@@ -623,3 +623,24 @@ def test_a_strip_cutting_a_carboxylic_ester_is_labelled_ester_hydrolysis(smiles,
     outcome = next(deprotect(molecule))
     assert outcome.names == names
     assert outcome.labels == labels
+
+
+from .._tables import protective_sites
+
+
+@pytest.mark.parametrize('site', protective_sites(), ids=lambda site: site.prefix)
+def test_a_site_row_matches_its_example_at_its_marked_atom_and_none_of_its_decoys(site):
+    example = read_smiles(site.example)
+    example.canonicalize()
+    assert any(True for _ in site.query.get_mapping(example)), f'{site.id} misses its example'
+    for decoy in site.decoys:
+        molecule = read_smiles(decoy)
+        molecule.canonicalize()
+        assert not any(True for _ in site.query.get_mapping(molecule)), f'{site.id} matches decoy {decoy}'
+
+
+def test_each_family_ends_in_a_site_that_takes_any_atom():
+    """The last site of a family is the fallback, so every revealed N or O gets a prefix."""
+    for family, element in (('amine', 'N'), ('hydroxyl', 'O')):
+        last = [site for site in protective_sites() if site.protects == family][-1]
+        assert last.smarts == '[%s:1]' % element and last.prefix == family

@@ -33,7 +33,7 @@ from collections.abc import Callable, Container, Iterator, Mapping, Sequence
 from itertools import chain, product as cartesian
 from typing import NamedTuple
 
-from ._enumerate import (_claims, _deprotect_toward, _needs, _outcomes, _strip_sites, deprotect,
+from ._enumerate import (_claims, _deprotect_toward, _needs, _outcomes, _sited, _strip_sites, deprotect,
                          EnumeratedDeprotection, EnumeratedReaction, functional_groups, protective_groups)
 from ._numbering import fast_mapping
 from ._tables import functional_rules, protective_rules, reaction_rules
@@ -322,11 +322,6 @@ def _lost(recorded, inputs) -> tuple[str, ...]:
     return tuple(sorted(name for name, n in carried.items() if n > 0))
 
 
-#: The O-sulfonyl pseudohalides: groups a corpus row may also consume as its leaving group.
-_LEAVING = frozenset(('hydroxyl_triflyl', 'hydroxyl_mesyl', 'hydroxyl_tosyl', 'hydroxyl_phenylsulfonyl',
-                      'hydroxyl_nosyl'))
-
-
 def _pools(recorded, inputs) -> list:
     """The stripped pools `_deprotect_then_react` walks: the groups the product lost, then every group.
 
@@ -339,7 +334,8 @@ def _pools(recorded, inputs) -> list:
     """
     out, seen = [], set()
     lost = _lost(recorded, inputs)
-    kept = tuple(name for name in lost if name not in _LEAVING)
+    rules = protective_rules()
+    kept = tuple(name for name in lost if not rules[name].leaving)
     first = (kept,) if kept and len(kept) < len(lost) else ()
     for names in (*first, *((lost, ()) if lost else ((),))):
         pool, stripped = _strip(inputs, names)
@@ -402,10 +398,12 @@ def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     in each case, and no corpus row mapping the reagent claims it first.  Every named group of
     `protective.tsv` reads this way -- a methyl ether, a benzylamine and a tosylamide included.
 
-    The table's own claims and every group read alone (`_single_group_strips`) are both offered, smallest
-    group first: where both halves of an ester are named groups, the smaller half is the protecting
-    group.  Only a strip that gives back a recorded input explains, settled against the inputs as the
-    other rungs' outcomes are against the record: it leaves an unmasked azole nitrogen at `H_UNKNOWN`.
+    Each group is named for the atom it sits on by the SITE rows of `protective.tsv` (`aniline_boc`,
+    `carboxyl_methyl` for an ester made on the acid).  The table's own claims and every group read alone
+    (`_single_group_strips`) are both offered, smallest group first: where both halves of an ester are
+    named groups, the smaller half is the protecting group.  Only a strip that gives back a recorded
+    input explains, settled against the inputs as the other rungs' outcomes are against the record: it
+    leaves an unmasked azole nitrogen at `H_UNKNOWN`.
     """
     parts = [part for molecule in inputs for part in molecule.split()]
     targets = [_heavy(part) for part in parts]
@@ -429,36 +427,10 @@ def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
         if not pairs or all(part in passengers for part, _ in pairs):
             # a recorded component the strip left untouched pairs by being an input, not by the strip
             continue
-        yield _Explanation('protect:%s' % '+'.join(_installed(recorded, outcome, stripped)),
+        names = (_sited(name, site) for name, site in zip(outcome.names, outcome.sites))
+        yield _Explanation('protect:%s' % '+'.join(names),
                            lambda target, p=pairs, o=options: _number_from_pairs(target, p, o.loose),
                            '+'.join(outcome.rule_ids))
-
-
-_ACID = ('carboxylic_acid', 'carboxylate')
-
-
-def _installed(recorded, outcome, stripped) -> tuple[str, ...]:
-    """The names `protect:` reports: each row's for the atom it sits on (`aniline_boc`, `phenol_triflyl`).
-
-    An ester is the one strip `labels` does not name, being `ester_hydrolysis` either way it is cut.  Made
-    on the ACID's oxygen it is `carboxyl_*`, since a methyl ester (TMSCHN2, MeOH/H+) is installed under
-    other conditions than the methyl ether the same `hydroxyl_*` row reads; the acid side is told by the
-    input, which the strip gave back with one more acid.  Made on the alcohol's it is the row's for its
-    site, as `labels` would name it.
-    """
-    from ._enumerate import _sited
-    acid = None
-    out = []
-    for name, label, site in zip(outcome.names, outcome.labels, outcome.sites or ('',) * len(outcome.names)):
-        if label != 'ester_hydrolysis':
-            out.append(label)
-            continue
-        if acid is None:
-            acid = (sum(n for part in stripped for g, n in functional_groups(part).items() if g in _ACID)
-                    > sum(n for g, n in functional_groups(recorded).items() if g in _ACID))
-        head, _, tail = name.partition('_')
-        out.append('carboxyl_' + tail if acid and head == 'hydroxyl' else _sited(name, site))
-    return tuple(out)
 
 
 _PHASES: tuple[Callable[..., Iterator[_Explanation]], ...] = (_purification, _protect, _react, _deprotect,

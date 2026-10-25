@@ -30,8 +30,9 @@ from typing import NamedTuple
 from ..core import QueryContainer, ReactionTemplate, read_smarts, read_smirks
 
 
-__all__ = ['FunctionalGroup', 'ProtectiveGroup', 'ReactionRule', 'RetroTemplate', 'Role', 'SLOT_STRIDE',
-           'compose_retro', 'compose_smirks', 'functional_rules', 'protective_rules', 'read_table',
+__all__ = ['FunctionalGroup', 'ProtectiveGroup', 'ProtectiveSite', 'ReactionRule', 'RetroTemplate', 'Role',
+           'SLOT_STRIDE', 'compose_retro', 'compose_smirks', 'functional_rules', 'protective_rules',
+           'protective_sites', 'read_table',
            'reaction_rules', 'retro_templates', 'roles']
 
 
@@ -106,6 +107,8 @@ class ProtectiveGroup(NamedTuple):
     protecting group is single-use and does not belong in a table of shared patterns.  Otherwise it is
     a reaction row: one `read_smirks` call, a table-qualified `rule_id`, deletion by absence.
 
+    `leaving` is the `role` column's `leaving`: a group a corpus row may also consume as its leaving group.
+
     `size` is the specificity, which is why it is a field the TSV does not carry.  Rows are served
     largest-first, so `hydroxyl_boc` (11 atoms) claims a Boc before `hydroxyl_tbu` (5) can take its
     tert-butyl half and leave a carbonate behind.  Computing it means a row can be added anywhere.
@@ -120,11 +123,29 @@ class ProtectiveGroup(NamedTuple):
     cleaved: str
     decoys: tuple[str, ...]
     description: str
+    leaving: bool = False
 
     @property
     def size(self) -> int:
         """How many atoms the reactant side matches.  See the class docstring."""
         return len(self.template.reactants)
+
+
+class ProtectiveSite(NamedTuple):
+    """One SITE row of `protective.tsv`: the prefix a group is reported under for the atom it sits on.
+
+    `query` matches the STRIPPED substrate with `:1`, query atom `atom`, on the revealed atom; `protects`
+    is the family whose `<family>_<group>` names it renames.  Read in table order, first match wins.
+    """
+    id: str
+    prefix: str
+    protects: str
+    smarts: str
+    query: QueryContainer
+    atom: int
+    example: str
+    decoys: tuple[str, ...]
+    description: str
 
 
 class Role(NamedTuple):
@@ -614,6 +635,11 @@ def protective_rules() -> dict[str, ProtectiveGroup]:
     out = []
     seen = set()
     for row in read_table('protective.tsv'):
+        if row['role'] not in _PROTECTIVE_ROLES:
+            raise ValueError(f'protective:{row["id"]} has role {row["role"]!r}; the column takes '
+                             f'{"|".join(sorted(filter(None, _PROTECTIVE_ROLES)))} or nothing')
+        if row['role'] == 'site':
+            continue
         row_id = 'protective:%s' % row['id']
         name = row['name']
         if name in seen:
@@ -631,11 +657,39 @@ def protective_rules() -> dict[str, ProtectiveGroup]:
                              'protecting group leaves by being absent from the product side.')
         out.append(ProtectiveGroup(row_id, name, protects, row['smarts'], row['product'], template,
                                    row['protected'], row['cleaved'],
-                                   tuple(filter(None, row['decoys'].split(','))), row['description']))
+                                   tuple(filter(None, row['decoys'].split(','))), row['description'],
+                                   row['role'] == 'leaving'))
     # `sorted` is stable, so table order IS the tiebreak and no row needs to carry its own index; dict
     # insertion order then carries the sort, which is why `.values()` needs no re-sorting.
     _PROTECTIVE_CACHE = {rule.name: rule for rule in sorted(out, key=lambda rule: -rule.size)}
     return _PROTECTIVE_CACHE
+
+
+_PROTECTIVE_ROLES = frozenset(('', 'leaving', 'site'))
+_SITES_CACHE: tuple[ProtectiveSite, ...] | None = None
+
+
+def protective_sites() -> tuple[ProtectiveSite, ...]:
+    """The SITE rows of `protective.tsv`, in table order: first match of a family wins."""
+    global _SITES_CACHE
+    if _SITES_CACHE is not None:
+        return _SITES_CACHE
+    out = []
+    for row in read_table('protective.tsv'):
+        if row['role'] != 'site':
+            continue
+        row_id = 'protective:%s' % row['id']
+        if row['protects'] not in ('amine', 'hydroxyl'):
+            raise ValueError(f'{row_id}: a site row renames the amine or hydroxyl family, not {row["protects"]!r}')
+        query = read_smarts(row['smarts'])
+        marked = [n for n, number in query.map_numbers().items() if number == 1]
+        if len(marked) != 1:
+            raise ValueError(f'{row_id}: a site row marks exactly one atom `:1`, the revealed one')
+        out.append(ProtectiveSite(row_id, row['name'], row['protects'], row['smarts'], query, marked[0],
+                                  row['protected'], tuple(filter(None, row['decoys'].split(','))),
+                                  row['description']))
+    _SITES_CACHE = tuple(out)
+    return _SITES_CACHE
 
 
 def _read(smirks: str, row_id: str, name: str) -> ReactionTemplate:

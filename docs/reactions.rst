@@ -1531,21 +1531,9 @@ A strip is named by its mechanism, the ``labels`` of the deprotection: one that 
 on either side, is ``ester_hydrolysis`` whichever row claimed it, so a Boc amine methyl ester stripped of
 both reads ``deprotect:amine_boc+ester_hydrolysis``.  Any other strip, and every ``protect:``, is the row's
 name **for the atom the group sits on**, because one group is installed and removed under other conditions
-on each: an ``amine_`` or ``hydroxyl_`` row reports the site's prefix instead.
-
-=============  ====================================================  =====================
-prefix         the atom the group sits on                            example
-=============  ====================================================  =====================
-``amine_``     an alkyl amine N                                      ``amine_boc``
-``aniline_``   an N beside an aromatic carbon                        ``aniline_boc``
-``amide_``     an N beside C=O or S(=O)2: amide, lactam, carbamate,  ``amide_boc``
-               urea, sulfonamide
-``azole_``     an aromatic N: azoles, pyridones                      ``azole_sem``
-``hydroxyl_``  an alcohol O                                          ``hydroxyl_tbs``
-``phenol_``    an O beside an aromatic atom                          ``phenol_triflyl``
-``enol_``      an O beside an sp2 atom: enols, oximes                ``enol_triflyl``
-``carboxyl_``  an acid O: an ester made on the acid                  ``carboxyl_methyl``
-=============  ====================================================  =====================
+on each: an ``amine_`` or ``hydroxyl_`` row reports the prefix of its site -- ``amine``, ``aniline``,
+``amide``, ``azole``; ``hydroxyl``, ``phenol``, ``enol``, ``carboxyl``.  The site rows are the last section of
+``protective.tsv`` and are listed with their SMARTS in :doc:`glossary`.
 
 Methyl benzoate from benzoic acid is ``protect:carboxyl_methyl`` and anisole from phenol
 ``protect:phenol_methyl``.  Where two rows claim the two halves of one ester, the smaller half is the

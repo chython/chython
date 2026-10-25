@@ -2349,4 +2349,66 @@ every group that could.
      - ``[S;D2;x0;z1:1]-;!@[C;D4;z1;x1](-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)(-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1``
      - triphenylmethyl (trityl), revealing a thiol
 
+
+Leaving groups -- a corpus row may also consume them, so the composed rung keeps them on
+first: ``hydroxyl_mesyl``, ``hydroxyl_nosyl``, ``hydroxyl_phenylsulfonyl``, ``hydroxyl_tosyl``, ``hydroxyl_triflyl``.
+
+Sites
+-----
+
+8 site rows, in table order.  ``protect:`` and ``deprotect:`` report an ``amine_`` or
+``hydroxyl_`` group under the prefix of the first site row of its family whose SMARTS matches
+the stripped substrate at ``:1``, the revealed atom: ``amine_boc`` on an aniline is
+``aniline_boc``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 12 16 11 22 36
+
+   * - Prefix
+     - Id
+     - Renames
+     - SMARTS
+     - The atom it names
+   * - ``azole``
+     - ``protective:123``
+     - ``amine``
+     - ``[N;a:1]``
+     - an aromatic N: azoles, pyridones
+   * - ``amide``
+     - ``protective:124``
+     - ``amine``
+     - ``[N:1]-[C,S]=[O]``
+     - an N beside C=O or S=O: amides, lactams, carbamates, ureas, sulfonamides
+   * - ``aniline``
+     - ``protective:125``
+     - ``amine``
+     - ``[N:1]-[C;a]``
+     - an N beside an aromatic carbon
+   * - ``amine``
+     - ``protective:126``
+     - ``amine``
+     - ``[N:1]``
+     - any other N: an alkyl amine
+   * - ``carboxyl``
+     - ``protective:127``
+     - ``hydroxyl``
+     - ``[O:1]-[C]=[O]``
+     - an acid O: the ester the group makes is on the acid
+   * - ``phenol``
+     - ``protective:128``
+     - ``hydroxyl``
+     - ``[O:1]-[A;a]``
+     - an O beside an aromatic atom: phenols, heteroaryl O
+   * - ``enol``
+     - ``protective:129``
+     - ``hydroxyl``
+     - ``[O:1]-[A;z2]``
+     - an O beside an sp2 atom: enols, oximes
+   * - ``hydroxyl``
+     - ``protective:130``
+     - ``hydroxyl``
+     - ``[O:1]``
+     - any other O: an alcohol
+
 .. END GENERATED GLOSSARY

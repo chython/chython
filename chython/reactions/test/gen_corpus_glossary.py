@@ -28,7 +28,7 @@ import re
 import sys
 from pathlib import Path
 
-from .._tables import functional_rules, protective_rules
+from .._tables import functional_rules, protective_rules, protective_sites
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -116,6 +116,22 @@ def compile_glossary():
                     [(f'``{name}``', f'``{rule.id}``', _literals(rule.protects), f'``{rule.smarts}``',
                       rst_text(rule.description))
                      for name, rule in sorted(protective.items())])
+    leaving = sorted(name for name, rule in protective.items() if rule.leaving)
+    lines += ['', 'Leaving groups -- a corpus row may also consume them, so the composed rung keeps them on',
+              'first: ' + ', '.join(f'``{name}``' for name in leaving) + '.', '']
+
+    sites = protective_sites()
+    lines += ['Sites',
+              '-----',
+              '',
+              f'{len(sites)} site rows, in table order.  ``protect:`` and ``deprotect:`` report an ``amine_`` or',
+              '``hydroxyl_`` group under the prefix of the first site row of its family whose SMARTS matches',
+              'the stripped substrate at ``:1``, the revealed atom: ``amine_boc`` on an aniline is',
+              '``aniline_boc``.',
+              '']
+    lines += _table((12, 16, 11, 22, 36), ('Prefix', 'Id', 'Renames', 'SMARTS', 'The atom it names'),
+                    [(f'``{site.prefix}``', f'``{site.id}``', f'``{site.protects}``', f'``{site.smarts}``',
+                      rst_text(site.description)) for site in sites])
 
     lines.append(END)
     return '\n'.join(lines)
