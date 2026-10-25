@@ -510,3 +510,4 @@ id	name	smarts	precursor	example	decoys	site	description
 419	aminopyrazole_nh	[N;D1;z1;x0:1]-[C;a;r5:2]:[N;a;D2;r5:3]:[N;a;D2;r5:4]	[N:1]-[C:2]:[N:3]:[N;h1:4]	Nc1cc[nH]n1	Nc1ccccn1,Cn1nccc1N,Nc1ncc[nH]1	aniline:1	NH2 on an azole carbon beside an N-N pair with no N-substituent: 3(5)-aminopyrazole and aminotriazole in either drawing
 420	xec_aryl_halide	[Cl,Br,I;D1]-[C;a:1]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Brc1ccccc1	Fc1ccccc1		`aryl_halide` under a second name, for the second electrophile of a biaryl XEC: slots naming two groups never read one aryl halide as both
 421	acyl_hydrazine_nh	[N;D2;z1;x1;h1:1](-[C;z2;x2:2]=[O:3])-[N:4]		CC(=O)NN(C)C	CNN(C)C,CC(=O)NC	amide:1	the N-H of an acyl hydrazide, N(C=O)-N: the amide site `secondary_amide` (`x0`) leaves out
+422	lactim_oh	[O;D1;z1;x0;h1:1]-[C;z2:2]=[N;z2:3]		OC1=NCCCC1	O=C1CCCCN1,OCC=N	enol:1	the OH of a lactim or imidic acid, O-C=N: the tautomer an O-alkyl lactim reveals

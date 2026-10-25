@@ -1008,6 +1008,9 @@ BOC2O = 'CC(C)(C)OC(=O)OC(=O)OC(C)(C)C'
     ('COc1ccccc1>>Oc1ccccc1', 'deprotect:phenol_methyl'),
     ('CC(C)(C)OC(=O)Nc1ccccc1>>Nc1ccccc1', 'deprotect:aniline_boc'),
     ('CC(C)(C)OC(=O)NCCc1ccccc1>>NCCc1ccccc1', 'deprotect:amine_boc'),
+    ('COC1=NCCCC1>>O=C1CCCCN1', 'deprotect:enol_methyl'),               # a lactim ether: the O sits on C=N
+    ('CCOC=Cc1ccccc1>>O=CCc1ccccc1', 'deprotect:enol_ethyl'),           # an enol ether: the O sits on C=C
+    ('COc1ccccn1>>O=c1cccc[nH]1', 'deprotect:phenol_methyl'),           # an alkoxyazine, the pyridone back
 ])
 def test_a_group_is_named_for_the_atom_it_sits_on(record, label):
     """One group on an aniline, an amide N-H, an azole or a phenol is installed and removed under other
