@@ -1720,7 +1720,7 @@ Functional groups
 Protecting groups
 -----------------
 
-118 protecting groups, alphabetically.  *Protects* names the functional
+122 protecting groups, alphabetically.  *Protects* names the functional
 group the row reveals, which is a row of the table above.
 :meth:`chython.MoleculeContainer.protective_groups` reports a match and
 :meth:`chython.MoleculeContainer.deprotect` applies the patch.
@@ -1848,6 +1848,11 @@ every group that could.
      - ``amine``
      - ``[N;D2,D3:1]-;!@[C;D2;x2;z1][O;D2;x0][C;D2;z1;x1][C;D2;z1;x1][O;D2;x0][C;D1]``
      - 2-methoxyethoxymethyl (MEM), revealing an amine or azole N-H
+   * - ``amine_mesyl``
+     - ``protective:119``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;D1]``
+     - methanesulfonyl (Ms), revealing an amine
    * - ``amine_methoxy_benzyl``
      - ``protective:76``
      - ``amine``
@@ -1933,6 +1938,11 @@ every group that could.
      - ``amine``
      - ``[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D3;x0]([C;D1]):[C;D2]:[C;D2]:1``
      - 4-toluenesulfonyl (Ts), revealing an amine
+   * - ``amine_triflyl``
+     - ``protective:120``
+     - ``amine``
+     - ``[N;D2,D3:1]-;!@[S;D4;x3](=O)(=O)-[C;D4]([F;D1])([F;D1])[F;D1]``
+     - trifluoromethanesulfonyl (Tf), revealing an amine
    * - ``amine_trimethoxybenzyl``
      - ``protective:110``
      - ``amine``
@@ -2193,11 +2203,21 @@ every group that could.
      - ``hydroxyl``
      - ``[O;D2:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D2]:[C;D3]:2:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D3]:2:[C;D2]:[C;D2]:1``
      - 2-naphthylmethyl, revealing an alcohol
+   * - ``hydroxyl_nosyl``
+     - ``protective:122``
+     - ``hydroxyl``
+     - ``[O;D2:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1``
+     - nitrobenzenesulfonyl (nosylate), the pseudohalide, revealing an alcohol or phenol
    * - ``hydroxyl_o_nitrobenzyl``
      - ``protective:11``
      - ``hydroxyl``
      - ``[O;D2:1]-;!@[C;D2;z1;x1]-[C;a;r6]:1:[C;D3;x1]([N+](=O)[O-]):[C;D2]:[C;D2]:[C;D2]:[C;D2]:1``
      - ortho-nitrobenzyl, revealing an alcohol
+   * - ``hydroxyl_phenylsulfonyl``
+     - ``protective:121``
+     - ``hydroxyl``
+     - ``[O;D2:1]-;!@[S;D4;x3](=O)(=O)-[C;a;r6]:1:[C;D2]:[C;D2]:[C;D2]:[C;D2]:[C;D2]:1``
+     - benzenesulfonyl (besylate), the pseudohalide, revealing an alcohol or phenol
    * - ``hydroxyl_piv``
      - ``protective:16``
      - ``hydroxyl``

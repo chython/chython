@@ -450,7 +450,7 @@ FUNCTIONAL = {
     'functional:420': 'xec_aryl_halide',
 }
 
-#: `protective.tsv`: 118 rows, id -> the row it names.
+#: `protective.tsv`: 122 rows, id -> the row it names.
 PROTECTIVE = {
     'protective:1': 'hydroxyl_thiocarbamate',
     'protective:2': 'hydroxyl_fmoc',
@@ -570,6 +570,10 @@ PROTECTIVE = {
     'protective:116': 'hydroxyl_triflyl',
     'protective:117': 'hydroxyl_mesyl',
     'protective:118': 'hydroxyl_tosyl',
+    'protective:119': 'amine_mesyl',
+    'protective:120': 'amine_triflyl',
+    'protective:121': 'hydroxyl_phenylsulfonyl',
+    'protective:122': 'hydroxyl_nosyl',
 }
 
 #: `roles.tsv`: 89 rows, id -> the row it names.

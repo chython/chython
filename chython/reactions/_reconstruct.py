@@ -323,7 +323,8 @@ def _lost(recorded, inputs) -> tuple[str, ...]:
 
 
 #: The O-sulfonyl pseudohalides: groups a corpus row may also consume as its leaving group.
-_LEAVING = frozenset(('hydroxyl_triflyl', 'hydroxyl_mesyl', 'hydroxyl_tosyl'))
+_LEAVING = frozenset(('hydroxyl_triflyl', 'hydroxyl_mesyl', 'hydroxyl_tosyl', 'hydroxyl_phenylsulfonyl',
+                      'hydroxyl_nosyl'))
 
 
 def _pools(recorded, inputs) -> list:

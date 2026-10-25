@@ -978,3 +978,17 @@ def test_an_o_sulfonyl_pseudohalide_is_installed_as_a_group(record, label):
     """Tf, Ms and Ts on an OH are set by many reagents, so they are groups and the reagent an agent; the
     enol triflate of a ketone needs an enolate and stays a reaction, and using the pseudohalide is one."""
     assert smiles(record).reconstruct_mapping() == (label,)
+
+
+@pytest.mark.parametrize('record, label', [
+    ('NCCc1ccccc1.CS(=O)(=O)Cl>>CS(=O)(=O)NCCc1ccccc1', 'protect:amine_mesyl'),
+    (f'NCCc1ccccc1.{TF2O}>>O=S(=O)(NCCc1ccccc1)C(F)(F)F', 'protect:amine_triflyl'),
+    ('NCCc1ccccc1.Cc1ccc(cc1)S(=O)(=O)Cl>>Cc1ccc(cc1)S(=O)(=O)NCCc1ccccc1', 'protect:amine_tosyl'),
+    ('OCCc1ccccc1.O=S(=O)(Cl)c1ccccc1>>O=S(=O)(OCCc1ccccc1)c1ccccc1', 'protect:hydroxyl_phenylsulfonyl'),
+    ('OCCc1ccccc1.O=S(=O)(Cl)c1ccccc1[N+](=O)[O-]>>O=S(=O)(OCCc1ccccc1)c1ccccc1[N+](=O)[O-]',
+     'protect:hydroxyl_nosyl'),
+    ('NCCc1ccccc1.O=S(=O)(Cl)c1ccc(F)cc1>>O=S(=O)(NCCc1ccccc1)c1ccc(F)cc1', 'react:sulfonamide_formation'),
+])
+def test_the_named_sulfonyl_groups_are_the_same_on_oxygen_and_nitrogen(record, label):
+    """Ms, Tf, Ts, Ns and PhSO2 are groups on O and on N alike; a sulfonyl no row names is a reaction."""
+    assert smiles(record).reconstruct_mapping() == (label,)
