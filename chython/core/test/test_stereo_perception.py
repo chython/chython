@@ -1063,20 +1063,14 @@ def test_an_apply_that_re_bases_a_parity_leaves_the_marking_to_the_next_reader()
 # what this predicate does NOT reach
 # ----------------------------------------------------------------------------------------------
 
-def test_a_symmetric_ortho_biaryl_is_still_marked_on_a_kekule_record():
-    """2,6-dichloro-2'-chlorobiphenyl: not an atropisomer, and this branch cannot see that.
+def test_a_symmetric_ortho_biaryl_is_not_marked_on_a_kekule_record():
+    """2,6-dichloro-2'-chlorobiphenyl: not an atropisomer, and refused however its rings are drawn.
 
     Both ortho positions of the left ring carry a chlorine, so turning that ring over reproduces the
-    molecule and the axis has no second configuration. The refutation needs the ring turn to BE an
-    automorphism -- and on a Kekule record it is not one, because the pivot's two ring bonds have
-    different orders. The two ortho chlorines come out in different orbits, so no witness exists and
-    the axis is marked.
-
-    Nothing in this task can fix that: the arena stores Kekule orders only (an order-4 apply raises),
-    so the symmetry simply is not in the graph. When aromatic bonds or a resonance-invariant
-    refinement arrive, this test flips -- which is exactly what it is here to announce.
-    `test_stereo_units.test_a_symmetric_ortho_pair_is_still_a_candidate_here` predicted
-    `mark_stereogenic` would remove this candidate; it does not.
+    molecule and the axis has no second configuration.  On the stored Kekule record the ring turn is not
+    an automorphism -- the pivot's two ring bonds have different orders, as `automorphism_orbits()` shows --
+    but stereogenicity reads the graph with every alternating cycle aromatic, where it is one, and an axis
+    needs both ends unsymmetric.
     """
     bonds = [(0, 1, 2), (1, 2, 1), (2, 3, 2), (3, 4, 1), (4, 5, 2), (5, 0, 1),
              (6, 7, 2), (7, 8, 1), (8, 9, 2), (9, 10, 1), (10, 11, 2), (11, 6, 1), (0, 6, 1)]
@@ -1084,8 +1078,8 @@ def test_a_symmetric_ortho_biaryl_is_still_marked_on_a_kekule_record():
                    hydrogens=[0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
                    bonds=bonds + [(1, 12, 1), (5, 13, 1), (7, 14, 1)])
     orbits = m.automorphism_orbits()
-    assert orbits[sids[1]] != orbits[sids[5]], 'the Kekule record breaks the ring turn'
-    assert list(m.chiral_bonds()) == [tuple(sorted((sids[0], sids[6])))]
+    assert orbits[sids[1]] != orbits[sids[5]], 'the stored Kekule record breaks the ring turn'
+    assert list(m.chiral_bonds()) == []
 
     # the genuine atropisomer, for contrast: 2-chloro-2'-fluorobiphenyl has no such symmetry to lose
     real, s = _mol(atoms='C' * 12 + 'ClF', hydrogens=[0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0],

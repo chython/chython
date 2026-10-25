@@ -3073,6 +3073,63 @@ cdef inline int _stereo_consistent(stereo_unit_t *units, uint32_t count,
     return 1
 
 
+cdef inline int _set_phase_free(stereo_unit_t *units, uint32_t count, uint32_t *anchor_of,
+                                uint32_t *partner_of, uint32_t *sigma, uint32_t *setof, uint32_t lead,
+                                uint32_t *pairs, uint32_t npairs, uint32_t *parent, uint8_t *par,
+                                uint8_t *constrains, uint8_t *parities) noexcept nogil:
+    """Does `sigma` carry the coupled bridgehead set `lead` onto its own inverse?  1 yes, 0 no.
+
+    `_stereo_consistent`'s system with the set's members unpinned and bound to each other by their out,out
+    relations (`pairs`: unit index, unit index, xor), and each member landing on its image INVERTED -- the
+    induced parity plus one.  Every other constraining unit keeps its stored parity and its plain clause.
+    The identity never passes: it would need a member to equal its own inverse.
+    """
+    cdef uint32_t ground = count
+    cdef uint32_t k, img, w_index, cand
+    cdef uint32_t perm[4]
+    cdef stereo_unit_t *v
+    cdef uint8_t p
+    cdef bint swapped, member
+    for k in range(count + 1):
+        parent[k] = k
+        par[k] = 0
+    for k in range(npairs):
+        if not _pf_union(parent, par, pairs[3 * k], pairs[3 * k + 1], <uint8_t> pairs[3 * k + 2]):
+            return 0
+    for k in range(count):
+        if not constrains[k]:
+            continue
+        v = &units[k]
+        member = setof[k] == lead
+        if not member:
+            p = parities[v.anchor] if parities is not NULL else 0
+            if p and not _pf_union(parent, par, k, ground, 1 if p == 2 else 0):
+                return 0
+        w_index = SU_NO_REF
+        swapped = False
+        img = sigma[v.anchor]
+        cand = anchor_of[img]
+        if cand != SU_NO_REF and units[cand].kind == v.kind:
+            w_index = cand
+        else:
+            cand = partner_of[img]
+            if cand != SU_NO_REF and units[cand].kind == v.kind:
+                w_index = cand
+                swapped = True
+        if w_index == SU_NO_REF or (setof[w_index] == lead) != member:
+            return 0
+        if _induced_permutation(sigma, v, &units[w_index], swapped, v.kind != SU_ALLENE, perm):
+            return 0
+        if not _pf_union(parent, par, k, w_index, permutation_parity_of(perm) ^ (1 if member else 0)):
+            return 0
+    return 1
+
+
+cdef inline bint _bh_candidate(uint32_t *ptr, halfedge_t *edges, stereo_unit_t *u, uint8_t verdict) noexcept nogil:
+    """A tetrahedral unit `mark_stereogenic` kept, at an atom in three ring bonds: a bridgehead to pair."""
+    return verdict == SG_YES and u.kind == SU_TETRA and _ring_degree(ptr, edges, u.anchor) >= 3
+
+
 cdef int mark_stereogenic(Structure structure) except -1:
     """Set SU_STEREOGENIC on every candidate unit that really is one.  Returns 1 when some unit's
     answer had to be taken conservatively because a search was truncated, 0 otherwise.
@@ -3156,6 +3213,25 @@ cdef int mark_stereogenic(Structure structure) except -1:
     cdef Py_ssize_t classes
     cdef pinned_search_t st
     cdef bint witness, cut, truncated = False
+    # THE GRAPH THE SYMMETRY IS READ FROM, which is the stored one with every bond of an alternating
+    # cycle marked aromatic: two Kekule phases of one benzenoid system are one constitution, and a
+    # refinement or an automorphism reading the stored orders would tell fluorene's two benzo rings
+    # apart by which phase the file drew.  Units, parities and the chemistry of decision 0 keep the
+    # stored bonds; only the refinement, the group and the search read `view` (`gedges`).
+    cdef Structure view = structure
+    cdef halfedge_t *gedges = edges
+    cdef uint8_t *shift = NULL
+    cdef uint32_t *stamp = NULL
+    cdef uint32_t *bfs = NULL
+    cdef uint32_t mark = 0
+    cdef bint any_shift = False, symmetric_end = False, orbits_known = False
+    cdef uint32_t *setof = NULL
+    cdef uint32_t *bh_pairs = NULL
+    cdef uint32_t bh_first[3]
+    cdef uint32_t bh_last[3]
+    cdef uint32_t npairs = 0, lead, top, low
+    cdef int pa, pb
+    cdef bint free
     try:
         cls = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
         orbits = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
@@ -3224,18 +3300,69 @@ cdef int mark_stereogenic(Structure structure) except -1:
                 if j != SU_NO_REF and partner_of[j] == SU_NO_REF:
                     partner_of[j] = k
 
+        # --- the Kekule-free view: both ends of every double bond an alternating cycle moves ---
+        if undecided:
+            shift = <uint8_t *> PyMem_Malloc(<size_t> n)
+            stamp = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
+            bfs = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
+            if shift is NULL or stamp is NULL or bfs is NULL:
+                raise MemoryError('stereogenicity scratch allocation failed')
+            memset(shift, 0, n)
+            memset(stamp, 0, <size_t> n * sizeof(uint32_t))
+            for i in range(n):
+                for r in range(ptr[i], ptr[i + 1]):
+                    j = edges[r].to
+                    if j > i and (edges[r].flags & HE_IN_RING) and _is_chain_bond(&edges[r]):
+                        mark += 1
+                        if _double_bond_shifts(ptr, edges, i, j, stamp, bfs, mark):
+                            shift[i] = 1
+                            shift[j] = 1
+                            any_shift = True
+            if any_shift:
+                view = structure_clone(structure)
+                gedges = csr_edges(view)
+                for i in range(n):
+                    if not shift[i]:
+                        continue
+                    for r in range(ptr[i], ptr[i + 1]):
+                        if (shift[gedges[r].to] and (gedges[r].flags & HE_IN_RING)
+                                and (gedges[r].order == 1 or gedges[r].order == 2)):
+                            gedges[r].order = 4
+                            gedges[r].flags |= HE_AROMATIC
+
         # --- 1./2. the refinement, then the group ---
         if undecided:
             with nogil:
-                classes = compute_atoms_order(structure, cls, NULL)
+                classes = compute_atoms_order(view, cls, NULL)
             if classes < 0:
                 raise MemoryError('stereogenicity refinement failed to allocate')
+            # AN AXIS NEEDS BOTH ENDS UNSYMMETRIC ON THEIR OWN: each pivot's two ortho directions must be
+            # constitutionally distinct.  An end the constitution maps onto itself with its ortho pair
+            # exchanged (an N-aryl imide's two C=O, a 2,6-dimethyl-1,4-dihydropyridine) is no axis, and it
+            # must not constrain either: otherwise a centre or a double bond on the same symmetric ring
+            # "breaks" the symmetry by pairing with it, and both are marked.  The refinement settles the
+            # unequal pairs; an equal pair is decided against the automorphism orbits below.
+            for k in range(count):
+                u = &units[k]
+                if (u.kind == SU_ATROPISOMER and verdict[k] == SG_UNDECIDED
+                        and (cls[u.refs[0]] == cls[u.refs[1]] or cls[u.refs[2]] == cls[u.refs[3]])):
+                    symmetric_end = True
             for k in range(count):
                 if verdict[k] == SG_UNDECIDED and _directions_separated(&units[k], cls):
                     verdict[k] = SG_YES
                     undecided -= 1
+        if undecided or symmetric_end:
+            mol_automorphisms(view, NULL, orbits, &flags)
+            orbits_known = not (flags & (CANON_ASYMMETRIC | CANON_BUDGET_EXCEEDED))
+            if orbits_known and symmetric_end:
+                for k in range(count):
+                    u = &units[k]
+                    if (u.kind == SU_ATROPISOMER and verdict[k] == SG_UNDECIDED
+                            and (orbits[u.refs[0]] == orbits[u.refs[1]] or orbits[u.refs[2]] == orbits[u.refs[3]])):
+                        verdict[k] = SG_NO
+                        constrains[k] = 0
+                        undecided -= 1
         if undecided:
-            mol_automorphisms(structure, NULL, orbits, &flags)
             if flags & (CANON_ASYMMETRIC | CANON_BUDGET_EXCEEDED):
                 # ASYMMETRIC: no automorphism exists, so no witness can.  BUDGET_EXCEEDED: the
                 # orbits may be finer than the truth, so neither shortcut 3 nor a search pruning on
@@ -3401,7 +3528,7 @@ cdef int mark_stereogenic(Structure structure) except -1:
                         for i in range(n):
                             if comp[i] != home:
                                 pin[i] = i
-                    _canon_search_order(n, ptr, edges, pin, order, anchor, taken, walk, False)
+                    _canon_search_order(n, ptr, gedges, pin, order, anchor, taken, walk, False)
                     witness = False
                     cut = False
                     # SET A is the identity on the axis, SET B exchanges the two terminals.  A unit
@@ -3438,7 +3565,7 @@ cdef int mark_stereogenic(Structure structure) except -1:
                                 continue    # a named direction onto a nameless one: see the helper
                             budget = CANON_MAX_NODES_SEARCH
                             mol_find_pinned_begin(&st)
-                            while mol_find_pinned_next(ptr, edges, atoms, &st, &budget):
+                            while mol_find_pinned_next(ptr, gedges, atoms, &st, &budget):
                                 # A candidate that fails the consistency test proves NOTHING -- only
                                 # an exhausted enumeration is a decision, which is why this loop
                                 # resumes the search rather than restarting it.
@@ -3486,6 +3613,92 @@ cdef int mark_stereogenic(Structure structure) except -1:
                                 pin[i] = CANON_NO_SLOT
                     verdict[k] = SG_NO if witness else SG_YES
 
+        # --- coupled bridgehead sets: the phase of a cage that is its own mirror image states nothing ---
+        #
+        # A coupled set is stereogenic member by member -- inverting one bridgehead alone is another
+        # configuration, as one centre of 1,4-dimethylcyclohexane is -- but the bicycle realises its
+        # out,out configuration only (`_bh_pair`), so the set's one freedom is its phase, and that states
+        # something only when no automorphism carries the configuration onto its inverse
+        # (`_set_phase_free`).  Norbornane's, bicyclo[2.2.2]octane's and tropinone's bridgeheads go;
+        # camphor's and 2-norbornanol's stay.  An enumeration that runs out of budget keeps the set.
+        top = 0
+        for k in range(count):
+            if _bh_candidate(ptr, edges, &units[k], verdict[k]):
+                top += 1
+        setof = <uint32_t *> PyMem_Malloc(<size_t> count * sizeof(uint32_t))
+        # every pair of candidates fits: sized by the bridgeheads, never by the whole unit table
+        bh_pairs = <uint32_t *> PyMem_Malloc(<size_t> (3 * top * top + 3) * sizeof(uint32_t))
+        if setof is NULL or bh_pairs is NULL:
+            raise MemoryError('stereogenicity scratch allocation failed')
+        for k in range(count):
+            setof[k] = SU_NO_REF
+        for i in range(count):
+            if not _bh_candidate(ptr, edges, &units[i], verdict[i]):
+                continue
+            for j in range(i + 1, count):
+                if not _bh_candidate(ptr, edges, &units[j], verdict[j]):
+                    continue
+                low, top = (i, j) if units[i].anchor < units[j].anchor else (j, i)
+                if not _bh_pair(ptr, edges, units[low].anchor, units[top].anchor,
+                                atoms[units[low].anchor].element == 7 or atoms[units[top].anchor].element == 7,
+                                bh_first, bh_last):
+                    continue
+                pa = _bh_frame_parity(&units[low], bh_first)
+                pb = _bh_frame_parity(&units[top], bh_last)
+                if pa < 0 or pb < 0:
+                    continue
+                bh_pairs[3 * npairs] = low
+                bh_pairs[3 * npairs + 1] = top
+                bh_pairs[3 * npairs + 2] = <uint32_t> (OUT_OUT_XOR ^ pa ^ pb)
+                npairs += 1
+                # one set per connected group, labelled by its lowest unit index
+                lead = setof[i] if setof[i] != SU_NO_REF else i
+                r = setof[j] if setof[j] != SU_NO_REF else j
+                if r < lead:
+                    lead, r = r, lead
+                for k in range(count):
+                    if k == i or k == j or setof[k] == r or setof[k] == lead:
+                        setof[k] = lead
+        if npairs:
+            for i in range(n):
+                if comp[i] != comp[0]:
+                    multi = True
+                    break
+            st.n = n
+            st.cls = cls
+            st.pin = pin
+            st.order = order
+            st.anchor = anchor
+            st.sigma = sigma
+            st.cursor = cursor
+            st.taken = taken
+            for lead in range(count):
+                if setof[lead] != lead:
+                    continue
+                if multi:
+                    home = comp[units[lead].anchor]
+                    for i in range(n):
+                        if comp[i] != home:
+                            pin[i] = i
+                _canon_search_order(n, ptr, gedges, pin, order, anchor, taken, walk, False)
+                free = False
+                budget = CANON_MAX_NODES_SEARCH
+                mol_find_pinned_begin(&st)
+                while mol_find_pinned_next(ptr, gedges, atoms, &st, &budget):
+                    if _set_phase_free(units, count, anchor_of, partner_of, sigma, setof, lead,
+                                       bh_pairs, npairs, parent, par, constrains, parities):
+                        free = True
+                        break
+                if st.truncated and not free:
+                    truncated = True
+                if free:
+                    for k in range(count):
+                        if setof[k] == lead:
+                            verdict[k] = SG_NO
+                if multi:
+                    for i in range(n):
+                        pin[i] = CANON_NO_SLOT
+
         for k in range(count):
             if verdict[k] == SG_YES:
                 # READ-MODIFY-WRITE ON THE FLAG NIBBLE, never an assignment.  `spare` also carries
@@ -3510,6 +3723,11 @@ cdef int mark_stereogenic(Structure structure) except -1:
         PyMem_Free(constrains)
         PyMem_Free(parent)
         PyMem_Free(par)
+        PyMem_Free(shift)
+        PyMem_Free(stamp)
+        PyMem_Free(bfs)
+        PyMem_Free(setof)
+        PyMem_Free(bh_pairs)
     return 1 if truncated else 0
 
 

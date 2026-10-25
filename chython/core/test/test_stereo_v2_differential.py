@@ -96,7 +96,7 @@ _TETRAHEDRAL = [
     'C1CCC(O)CC1', 'CC1CCC(C)CC1', 'OC1CCCCC1O', 'CC(Cl)Br', 'CC(O)C(N)C',
 ]
 
-_FUSED = ['C1CC2CCC1CC2', 'C1CC2CCCC(C1)C2', 'C12CCCCC1CCCC2']
+_FUSED = ['C12CCCCC1CCCC2']
 
 PRESERVE = (_ALLENES_AND_CUMULENES + _SPIRO + _AMIDES_AND_CARBONYLS + _IMINES + _RINGS
             + _TETRAHEDRAL + _FUSED)
@@ -116,6 +116,12 @@ DIVERGENT = [
     ('CC=NC',
      'N-methyl imine: V2 reads its C=N as a cis/trans unit.  E and Z interconvert through nitrogen '
      'inversion, so V3 refuses every C=N with no O or N on its nitrogen.'),
+    ('C1CC2CCC1CC2',
+     'bicyclo[2.2.2]octane: V2 perceives both bridgeheads.  The cage realises one relative configuration '
+     'and is its own mirror image, so the set has no second state and V3 perceives none.'),
+    ('C1CC2CCCC(C1)C2',
+     'bicyclo[3.3.1]nonane: V2 perceives both bridgeheads; as bicyclo[2.2.2]octane, an achiral cage '
+     'whose bridgeheads V3 does not perceive.'),
     ('CC[S](C)=NC',
      'sulfilimine: V2 perceives no tetrahedral centre and reads the S=N as a CIS/TRANS axis -- both '
      'S and N form double bonds and the order is 2, so its cumulene walk accepts them.  The sulfur '

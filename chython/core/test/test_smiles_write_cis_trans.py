@@ -374,7 +374,7 @@ def test_an_atropisomer_is_reported_lost_every_time():
     m.add_bond(rings[0][0], rings[1][0], 1)
     for a in rings:
         m.add_bond(a[1], m.add_atom(6, implicit_h=3), 1)
-        m.add_bond(a[5], m.add_atom(6, implicit_h=3), 1)
+        m.add_bond(a[5], m.add_atom(17, implicit_h=0), 1)     # 6,6'-dichloro-2,2'-dimethyl: both ends unsymmetric
         for i in (2, 3, 4):
             m.set_hydrogens(a[i], 1)
         # The pivot and the two ortho carbons carry no hydrogen -- three heavy neighbours each -- and

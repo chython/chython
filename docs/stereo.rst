@@ -94,12 +94,19 @@ cis/trans       1         a double bond or an even cumulated chain, outside ring
                           with an O-H or an N-H not acylated
 allene          2         the middle atom of an odd cumulated chain: ``C=C=C``, ``C=C=C=C=C``
 atropisomer     3         an acyclic single bond between two hydrogen-free ring atoms, each with an
-                          ortho substituent or a ring fusion, the two ortho pairs distinguishable
+                          ortho substituent or a ring fusion; stereogenic only when at each end the
+                          two ortho atoms are constitutionally distinct
 helical         4         an [n]helicene, n >= 5, of angularly fused six-rings
 planar          5         a substituted atom of an η5 ring under a metal, a substituted
                           [2.2]paracyclophane deck atom, or a C=C terminal of a trans-cycloalkene
                           of 8 or 9 ring atoms; the last is dead while the bond is Z
 ==============  ========  ========================================================================
+
+``stereogenic_units()`` reads the constitution, never the drawing: a benzenoid ring's two Kekulé phases are
+one constitution, so fluoren-9-one oxime has no E/Z however its benzo rings are drawn.  A coupled bridgehead
+set realises one relative configuration, so its one freedom is its phase, and that states nothing on a cage
+that is its own mirror image: norbornane, tropinone and adamantane have no stereogenic bridgehead, camphor
+keeps its pair.
 
 A labile double bond has a geometry the compound does not keep: E and Z interconvert through nitrogen
 inversion or tautomerism, so a sign on an imine, an amidine, a diazene, an enol or a secondary enamine

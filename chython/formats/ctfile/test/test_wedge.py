@@ -92,8 +92,9 @@ def test_every_configuration_agrees_with_chython2_or_the_record_contradicts_itse
 
 def test_no_centre_that_chython2_configures_is_left_unset(corpus, v2_molecules):
     """The half of the oracle that catches dropped stereo rather than inverted stereo.  One gap is
-    admitted: 4 ring-constrained centres the core calls non-stereogenic -- a configuration stored there is
-    one the core will not translate.
+    admitted: 30 centres chython 2 configures and the core calls non-stereogenic -- bridgeheads of cages that
+    are their own mirror image, a carbinol between two aryls told apart only by their Kekule phases, and
+    ring-constrained centres.  A configuration stored there is one the core will not translate.
     """
     missing = []
     not_stereogenic = 0
@@ -120,7 +121,7 @@ def test_no_centre_that_chython2_configures_is_left_unset(corpus, v2_molecules):
                 else:
                     missing.append(f'{name} record {n} atom {num}')
     assert not missing, f'{len(missing)} centres configured by chython 2 and unset here: {missing[:5]}'
-    assert not_stereogenic == 4, (f'{not_stereogenic} centres the core calls non-stereogenic and '
+    assert not_stereogenic == 30, (f'{not_stereogenic} centres the core calls non-stereogenic and '
                                   f'chython 2 configures; the perception gap moved')
 
 
@@ -1798,11 +1799,12 @@ def test_every_shared_atom_that_remains_is_one_the_rules_could_not_avoid(drawing
 
 
 def test_a_bridgehead_takes_a_ring_wedge_rather_than_losing_its_configuration(drawings):
-    """A norbornane bridgehead's three heavy neighbours are all ring bonds and its fourth direction is an
-    implicit hydrogen, which cannot be a wide end.  So the preference gives way, a ring bond is used and
+    """A 2-aminonorbornane bridgehead's three heavy neighbours are all ring bonds and its fourth direction is
+    an implicit hydrogen, which cannot be a wide end.  So the preference gives way, a ring bond is used and
     the fact is logged; refusing would write a molfile stating less stereochemistry than the molecule has.
+    (The `norbornanol` drawing is bicyclo[2.2.2]octan-2-ol, whose bridgeheads its C2 already decides.)
     """
-    mol = _undrawn_molecule(drawings['norbornanol'])
+    mol = _undrawn_molecule(drawings['bicyclo221-amine'])
     bridgeheads = [u['anchor'] for u in _configured(mol)
                    if all(r is None or mol.bond_in_ring(u['anchor'], r) for r in u['refs'])]
     assert len(bridgeheads) == 2, bridgeheads
@@ -1814,7 +1816,7 @@ def test_a_bridgehead_takes_a_ring_wedge_rather_than_losing_its_configuration(dr
         assert mol.bond_in_ring(anchor, chosen[anchor])
     assert any('ring bond' in x for x in log), log
     # and the configuration really is expressed, not merely drawn
-    assert _quality([drawings['norbornanol']])['round_trip_failures'] == 0
+    assert _quality([drawings['bicyclo221-amine']])['round_trip_failures'] == 0
 
 
 def test_the_choice_is_deterministic_across_repeated_calls(drawings):
@@ -1838,7 +1840,7 @@ def test_the_choice_is_deterministic_across_repeated_calls(drawings):
 #: inverts.  One of the 7 `adjacent_pairs` is bought deliberately -- morphine's centre 20 can offer only
 #: a collinear bond or a shared atom, and ambiguity is the worse failure -- which is what takes
 #: `near_collinear` to 0.
-_EXPECTED_QUALITY = dict(molecules=92, centres=284, wedges=284, ring_wedges=87,
+_EXPECTED_QUALITY = dict(molecules=91, centres=280, wedges=280, ring_wedges=83,
                          adjacent_pairs=7, near_collinear=0, unencoded=0, round_trip_failures=0)
 
 #: Centres whose one acyclic bond is the stem of a near-T, so the wedge goes on a ring bond instead.
@@ -1847,7 +1849,7 @@ _T_STEM_RING_WEDGES = 2
 #: Centres whose every heavy neighbour is a ring neighbour -- bridgeheads and ring-fusion carbons --
 #: counted from the corpus rather than asserted, below.  Two of them are bridgeheads whose sign only the
 #: partner states, wedged from the sign the cage implies (`implied_parities`).
-_RING_WEDGE_FLOOR = 85
+_RING_WEDGE_FLOOR = 81
 
 
 def test_the_corpus_quality_does_not_regress(drawings):

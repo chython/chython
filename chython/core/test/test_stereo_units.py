@@ -943,8 +943,8 @@ def test_a_symmetric_ortho_pair_is_still_a_candidate_here():
     ring neighbours have degree two or more. Deciding the two ortho directions apart needs the rings
     walked, which is stereogenicity -- the automorphism filter's job.  So this asserts that
     perception emits the candidate without deciding it; `mark_stereogenic` decides stereogenicity,
-    and for this molecule it finds the unit stereogenic (the right ring's asymmetry breaks the
-    symmetry of the left ring's ortho pair).
+    and refuses this one: an axis needs both ends unsymmetric, and the left ring's ortho pair is one
+    automorphism orbit.
     """
     hydrogens = list(_BIPHENYL_H)
     hydrogens[5] = 0
