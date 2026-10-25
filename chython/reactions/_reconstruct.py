@@ -277,7 +277,7 @@ def _deprotect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
         if not _reproduces(recorded, products, [molecule], options.loose):
             continue
         sources = [*_translate(outcome.reaction, [molecule], products), *inputs]
-        yield _Explanation('deprotect:%s' % '+'.join(outcome.labels),
+        yield _Explanation('deprotect:%s' % '+'.join(sorted(outcome.labels)),
                            lambda target, s=sources, o=options: _number_product(target, s, o.loose),
                            '+'.join(outcome.rule_ids))
 
@@ -313,12 +313,13 @@ def _lost(recorded, inputs) -> tuple[str, ...]:
     """The protective rows the inputs carry more sites of than the recorded product: what came off.
 
     A row whose sites the product kept is not stripped, so a Cbz removed beside a methyl ester the product
-    keeps leaves the ester on.  Counted per row name, not per site.
+    keeps leaves the ester on.  Counted per row, not per site.
     """
+    rules = tuple(protective_rules().values())
     carried = Counter()
     for molecule in inputs:
-        carried.update(protective_groups(molecule))
-    carried.subtract(protective_groups(recorded))
+        carried.update(claim.rule.name for claim in _claims(molecule, rules))
+    carried.subtract(claim.rule.name for claim in _claims(recorded, rules))
     return tuple(sorted(name for name, n in carried.items() if n > 0))
 
 
@@ -352,8 +353,9 @@ def _pools(recorded, inputs) -> list:
 def _deprotect_then_react(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """Strip what can be stripped, then let the corpus fire on what is left.
 
-    Labelled `deprotect:<strips>+react:<row>`, the strips being those of the inputs the row consumed, in
-    input order: `deprotect:amine_boc+react:amidation`.
+    Labelled `deprotect:<strips>+react:<row>`, the strips being those of the inputs the row consumed,
+    sorted -- a label names what came off, not the order the claims were walked in:
+    `deprotect:amine_boc+react:amidation`.
 
     Two stripped pools at most, by `_pools`: the groups the product lost, then every group.  Only the pools
     a stripping reached are walked -- `stripped`, handed on as `_applications`' `required`.  A pool of
@@ -368,7 +370,7 @@ def _deprotect_then_react(recorded, inputs, options, memo) -> Iterator[_Explanat
             sources = [*_translate(outcome.reaction, subset, products), *pool, *inputs]
             consumed = {id(molecule) for molecule in subset}
             strips = dict(stripped[i] for i in sorted(stripped) if id(pool[i]) in consumed)
-            yield _Explanation('deprotect:%s+react:%s' % ('+'.join(chain.from_iterable(strips.values())),
+            yield _Explanation('deprotect:%s+react:%s' % ('+'.join(sorted(chain.from_iterable(strips.values()))),
                                                           outcome.name),
                                lambda target, s=sources, o=options: _number_product(target, s, o.loose),
                                outcome.rule_id, _repeats(subset))
@@ -427,7 +429,7 @@ def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
         if not pairs or all(part in passengers for part, _ in pairs):
             # a recorded component the strip left untouched pairs by being an input, not by the strip
             continue
-        names = (_sited(name, site) for name, site in zip(outcome.names, outcome.sites))
+        names = sorted(_sited(name, site) for name, site in zip(outcome.names, outcome.sites))
         yield _Explanation('protect:%s' % '+'.join(names),
                            lambda target, p=pairs, o=options: _number_from_pairs(target, p, o.loose),
                            '+'.join(outcome.rule_ids))

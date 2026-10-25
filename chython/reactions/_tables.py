@@ -129,6 +129,15 @@ class ProtectiveGroup(NamedTuple):
     leaving: bool = False
 
     @property
+    def sited(self) -> bool:
+        """Does this row sit on ONE O, N or S, and so report its name under that atom's site prefix?
+
+        `boc` is `amine_boc`, `aniline_boc` or `hydroxyl_boc` by where it sits; a row that reveals a carbon
+        or two atoms (an acetal, `carbonyl_dioxolane`) keeps its own name.
+        """
+        return len(self.template.mapped_pairs) == 1 and set(self.protects) <= _SITED_FAMILIES
+
+    @property
     def size(self) -> int:
         """How many atoms the reactant side matches.  See the class docstring."""
         return len(self.template.reactants)
@@ -663,6 +672,8 @@ def protective_rules() -> dict[str, ProtectiveGroup]:
 
 
 _PROTECTIVE_ROLES = frozenset(('', 'leaving'))
+#: The families a single-atom row reveals; its reported name takes the site prefix of the atom.
+_SITED_FAMILIES = frozenset(('hydroxyl', 'amine', 'thiol'))
 
 
 def _read(smirks: str, row_id: str, name: str) -> ReactionTemplate:

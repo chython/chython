@@ -7980,7 +7980,7 @@ cdef class MoleculeContainer:
         subsets giving the same products are one outcome, so a symmetry answers once.  Generated lazily, so
         taking the first few costs the first few.
 
-        `*names` selects rules by name (`mol.deprotect('amine_boc')`) and `protects=` by what they reveal
+        `*names` selects rules by name (`mol.deprotect('boc')`) and `protects=` by what they reveal
         (`'amine'`, or several).  Neither changes what SHADOWS what -- specificity is computed over the
         whole table on every pass -- so asking for tert-butyl ethers on a Boc-protected alcohol yields
         nothing rather than cleaving the Boc down to a carbonate.

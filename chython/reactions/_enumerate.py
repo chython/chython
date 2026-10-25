@@ -424,31 +424,39 @@ def _sites() -> list:
     return _SITES_CACHE
 
 
-def _site(stripped: MoleculeContainer, atom: int | None, name: str) -> str:
-    """The prefix `name` is reported under: the `site` of the largest functional group whose site atom is
-    `atom` of the stripped substrate.
+#: The family a revealed atom belongs to when no functional group names its site.
+_ELEMENT_FAMILY = {7: 'amine', 8: 'hydroxyl', 16: 'thiol'}
 
-    Only an `amine_`/`hydroxyl_` row is renamed, and `''` where no group claims the atom -- the row then
-    keeps its own name.  The sites live in `functional.tsv`; this only matches them.
+
+def _site(stripped: MoleculeContainer, atom: int | None, rule: ProtectiveGroup) -> str:
+    """The prefix `rule` is reported under where it sits on `atom` of the stripped substrate.
+
+    The `site` of the largest functional group whose site atom is `atom`, else the atom's own family
+    (`amine`, `hydroxyl`, `thiol`); `''` for a row that is not `sited`, which keeps its own name.  The sites
+    live in `functional.tsv`; this only matches them.
     """
-    if name.partition('_')[0] not in ('amine', 'hydroxyl') or atom is None or atom not in stripped.atom_numbers:
+    if not rule.sited or atom is None or atom not in stripped.atom_numbers:
         return ''
     # A strip leaves an unmasked azole N at `H_UNKNOWN`, which an `h1` site cannot match: settle a copy,
     # as the composed rung settles every stripped form.  Stable ids survive, so `atom` is still itself.
-    stripped = stripped.copy()
-    stripped.kekule()
-    stripped.thiele()
+    settled = stripped.copy()
+    settled.kekule()
+    settled.thiele()
     for query, site_atom, prefix in _sites():
-        if any(mapping[site_atom] == atom for mapping in query.get_mapping(stripped)):
+        if any(mapping[site_atom] == atom for mapping in query.get_mapping(settled)):
             return prefix
-    return ''
+    return _ELEMENT_FAMILY.get(stripped.element_of(atom), '')
+
+
+def _family(site: str, atom_element: int) -> str:
+    """The `protects` family a site belongs to: an ester on the acid's O is `carboxyl`, else the element's."""
+    return 'carboxyl' if site == 'carboxyl' else _ELEMENT_FAMILY.get(atom_element, '')
 
 
 def _sited(name: str, site: str) -> str:
-    """`name` with its family prefix replaced by the site's: `amine_boc` on an aniline is `aniline_boc`.
-    A row no site row renames keeps its name."""
-    head, _, tail = name.partition('_')
-    return '%s_%s' % (site, tail) if site and tail else name
+    """The reported name: the row's under its site's prefix, `boc` on an aniline being `aniline_boc`; a row
+    with no site keeps its own name."""
+    return '%s_%s' % (site, name) if site else name
 
 
 def _label(molecule: MoleculeContainer, claim: _Claim, site: str = '') -> str:
@@ -511,13 +519,13 @@ def _acyl_rival(molecule: MoleculeContainer, claims: list[_Claim], bare: list[in
     """The acyl-side claim a smaller alkyl-side one displaces from an ester, or `None`.
 
     One standing claim must be what leaves `bare` bare, it must have deleted the carboxyl carbon of a bare
-    ester oxygen, and the new claim must delete fewer atoms.  Then the ester is a protected acid: methyl
-    benzoate is `hydroxyl_methyl` and not `hydroxyl_benzoate`.  The other direction never displaces, so a
-    tert-butyl acetate stays `carboxyl_tbu`.
+    ester oxygen, and the new claim must delete no more atoms.  Then the ester is a protected acid: methyl
+    benzoate is a `methyl` claim and not a `benzoate` one, allyl acetate an `allyl` one.  The other direction
+    never displaces, so a tert-butyl acetate stays `tbu`.
     """
     touching = {n for atom in bare for n in (atom, *molecule.neighbors_of(atom))}
     rivals = [claim for claim in claims if not claim.deleted.isdisjoint(touching)]
-    if len(rivals) != 1 or len(deleted) >= len(rivals[0].deleted):
+    if len(rivals) != 1 or len(deleted) > len(rivals[0].deleted):
         return None
     rival = rivals[0]
     if any(molecule.element_of(atom) == 8 and atom not in rival.deleted
@@ -537,15 +545,21 @@ def protective_group_hits(molecule: MoleculeContainer) -> tuple[GroupHit, ...]:
     """Every protecting group this molecule carries, MOST SPECIFIC FIRST -- the accessor's own order.
 
     The count is CLAIMS and not matches, so a Boc-protected alcohol reports one `hydroxyl_boc` and no
-    `hydroxyl_tbu`, and both a bis-Boc diamine and an N,N-di-Boc amine report two.
+    `hydroxyl_tbu`, and both a bis-Boc diamine and an N,N-di-Boc amine report two.  A sited row is
+    reported under the site it sits on (`_sited`): the `boc` row on an aniline is `aniline_boc`.
 
     `protective_groups()` is this folded to `{name: count}`.
     """
     counted = Counter()
     rows = {}
     for claim in _claims(molecule, protective_rules().values()):
-        counted[claim.rule.name] += 1
-        rows[claim.rule.name] = claim.rule.id
+        name = claim.rule.name
+        if claim.rule.sited:
+            patched = _patch_within(claim.rule.template, molecule, claim.deleted)
+            if patched is not None:
+                name = _sited(name, _site(patched, _revealed(molecule, claim), claim.rule))
+        counted[name] += 1
+        rows[name] = claim.rule.id
     return tuple(GroupHit(rows[name], name, count) for name, count in counted.items())
 
 
@@ -589,8 +603,21 @@ def _selected_protective(rules: tuple[ProtectiveGroup, ...], names: Sequence[str
             raise ValueError('unknown protects %s; the column takes %s'
                              % (', '.join(repr(p) for p in unknown),
                                 ', '.join(sorted(PROTECTS_ELEMENTS))))
-        out = tuple(rule for rule in out if wanted & set(rule.protects))
+        # a sited row's family is its site's: a `hydroxyl` row on an acid's O is `carboxyl` (`_family`)
+        reach = {'carboxyl'} if 'carboxyl' in wanted else set()
+        out = tuple(rule for rule in out if wanted & set(rule.protects) or rule.sited and reach)
     return out
+
+
+def _claim_families(molecule: MoleculeContainer, claim: _Claim) -> set[str]:
+    """What this claim reveals, as `protects` families: a sited row's by the site it sits on."""
+    if not claim.rule.sited:
+        return set(claim.rule.protects)
+    patched = _patch_within(claim.rule.template, molecule, claim.deleted)
+    atom = _revealed(molecule, claim)
+    if patched is None or atom is None:
+        return set(claim.rule.protects)
+    return {_family(_site(patched, atom, claim.rule), molecule.element_of(atom))}
 
 
 def _patch_within(template: ReactionTemplate, molecule: MoleculeContainer,
@@ -607,7 +634,8 @@ def _patch_within(template: ReactionTemplate, molecule: MoleculeContainer,
     keeps every atom number -- which is what the reaction's mapping is paired on.
     """
     before = set(molecule.atom_numbers)
-    for rxn in template(molecule):
+    # every embedding: two symmetry-equivalent sites build one structure, and the claim names which site
+    for rxn in template(molecule, dedupe=False):
         after = set()
         for product in rxn.products:
             after |= set(product.atom_numbers)
@@ -680,7 +708,7 @@ def _strip_sites(molecule: MoleculeContainer, chosen: Sequence[int],
         patched = _patch_within(claim.rule.template, working, claim.deleted)
         if patched is None:                 # the claim stood but no outcome stayed inside it
             continue
-        site = _site(patched, _revealed(working, claim), claim.rule.name)
+        site = _site(patched, _revealed(working, claim), claim.rule)
         acted.append((claim, _label(working, claim, site), site))
         working = patched
     if not acted:
@@ -693,7 +721,8 @@ def _strip_sites(molecule: MoleculeContainer, chosen: Sequence[int],
 
 
 def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
-           rules: tuple[ProtectiveGroup, ...]) -> EnumeratedDeprotection | None:
+           rules: tuple[ProtectiveGroup, ...], families: set[str] | None = None
+           ) -> EnumeratedDeprotection | None:
     """Apply the rules named in `chosen` at every site they claim, until none claims anything.
 
     `rules` is the WHOLE TABLE and `chosen` the subset, and keeping them separate is the correctness
@@ -705,6 +734,9 @@ def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
     previous cleavage exposed can be.  The atom-count bound is unreachable (every row deletes at least
     one atom, so the molecule strictly shrinks); it guards a future row that regenerates its own site.
 
+    `families` restricts it further to the claims revealing one of those `protects` families, read per
+    site: a merged `benzyl` row asked for `amine` acts on an N-benzyl and leaves an O-benzyl.
+
     Returns `None` when nothing was claimed at all.
     """
     working = molecule.copy()
@@ -713,13 +745,14 @@ def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
     labels: list[str] = []
     sites: list[str] = []
     for _ in range(len(molecule)):
-        claim = next((c for c in _claims(working, rules) if c.rule.name in chosen), None)
+        claim = next((c for c in _claims(working, rules) if c.rule.name in chosen
+                      and (families is None or families & _claim_families(working, c))), None)
         if claim is None:
             break
         patched = _patch_within(claim.rule.template, working, claim.deleted)
         if patched is None:                 # the claim stood but no outcome stayed inside it
             break
-        site = _site(patched, _revealed(working, claim), claim.rule.name)
+        site = _site(patched, _revealed(working, claim), claim.rule)
         labels.append(_label(working, claim, site))
         sites.append(site)
         working = patched
@@ -830,18 +863,20 @@ def deprotect(molecule: MoleculeContainer, names: Sequence[str] = (), *,
 
     `names` selects rows by name and `protects` by what they reveal (`'amine'`, `('hydroxyl', 'thiol')`).
     Neither narrows what CLAIMS a site -- claims come from the whole table on every pass -- so
-    `deprotect(names=['hydroxyl_tbu'])` on a Boc-protected alcohol yields nothing rather than a
+    `deprotect(names=['tbu'])` on a Boc-protected alcohol yields nothing rather than a
     carbonate.  An unknown name or `protects` value raises.
     """
     rules = tuple(protective_rules().values())
     actionable = {rule.name for rule in _selected_protective(rules, names, protects)}
+    families = None if protects is None else {protects} if isinstance(protects, str) else set(protects)
     sites = [index for index, claim in enumerate(_claims(molecule, rules))
-             if claim.rule.name in actionable]
+             if claim.rule.name in actionable
+             and (families is None or families & _claim_families(molecule, claim))]
     if not sites:
         return
     # `actionable` and not the names claimed on this pass: a group masked by the one above it is still
     # one the caller asked for, and the alternative would read as a policy about nesting.
-    full = _strip(molecule, frozenset(actionable), rules)
+    full = _strip(molecule, frozenset(actionable), rules, families)
     if full is None:
         return
     yield full

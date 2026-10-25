@@ -264,7 +264,7 @@ def test_partial_deprotection_strips_only_the_subsets_that_fit_the_product():
     # one Boc among twelve acetates: 2^13 site subsets, and one of them has the recorded formula
     protected = smiles('CC(C)(C)OC(=O)NC' + 'C(OC(C)=O)' * 12 + 'C')
     product = smiles('NC' + 'C(OC(C)=O)' * 12 + 'C')
-    assert [o.names for o in _deprotect_toward(protected, [product])][1:] == [('amine_boc',)]
+    assert [o.names for o in _deprotect_toward(protected, [product])][1:] == [('boc',)]
     rxn = ReactionContainer([protected], [product])
     assert rxn.reconstruct_mapping() == ('deprotect:amine_boc',)
 

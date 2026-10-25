@@ -1341,7 +1341,11 @@ all four corpora.
     functional:310 enolizable_ch2 1
 
 Protective groups come from a different table, ``protective.tsv``, and answer a different question --
-what is masked here, and what does the molecule look like unmasked:
+what is masked here, and what does the molecule look like unmasked.  **A row is one group on whatever O,
+N or S it sits on** -- ``boc``, ``benzyl``, ``tosyl`` -- and every report names it **for the atom it sits
+on**, by the ``site`` column of ``functional.tsv``: ``amine_boc`` on an alkyl amine, ``aniline_boc`` on an
+aniline, ``carboxyl_tbu`` on an acid.  Rows that reveal a carbon or two atoms, the acetals and
+``hydroxyl_amine_acetone``, keep their own names:
 
 .. testcode::
 
@@ -1352,8 +1356,8 @@ what is masked here, and what does the molecule look like unmasked:
     # {'amine_boc': 2}
 
 **The count is claims, not matches.**  Rules are walked most-specific-first and each site goes to the
-first rule that reaches it, so a Boc-protected alcohol reports one ``hydroxyl_boc`` and *not* the
-``hydroxyl_tbu`` whose pattern also fits inside it.  The two above are two sites on two different
+first rule that reaches it, so a Boc-protected alcohol reports one ``hydroxyl_boc`` and *not* a
+``hydroxyl_tbu``, whose pattern also fits inside it.  The two above are two sites on two different
 nitrogens; the claim is over the atoms a rule **deletes** rather than over its whole match, which is why
 an *N,N*-di-Boc amine is also two groups and not one -- both rules match with the same nitrogen and
 share nothing else.
@@ -1366,10 +1370,11 @@ share nothing else.
 
 .. testoutput::
 
-    (GroupHit(id='protective:65', name='amine_boc', count=2),)
+    (GroupHit(id='protective:61', name='amine_boc', count=2),)
 
 ``mol.deprotect(*names, protects=None, partial=False)`` is the action, and it is an **iterator** of
-``EnumeratedDeprotection(names, reaction, rule_ids, labels)``.  It does not mutate the molecule -- a
+``EnumeratedDeprotection(names, reaction, rule_ids, labels, sites)`` -- ``names`` the rows, ``labels`` the
+names a report and a ``deprotect:`` label use, ``sites`` the prefix of each.  It does not mutate the molecule -- a
 deprotection is a reaction, so it is reported as one, from the untouched input to the unmasked products.
 ``next(mol.deprotect(), None)`` is the one-shot spelling, and ``None`` means nothing was protected:
 
@@ -1379,18 +1384,19 @@ deprotection is a reaction, so it is reported as one, from the untouched input t
     mol.canonicalize()
 
     out = next(mol.deprotect(), None)
-    print(out.names, out.rule_ids)
+    print(out.names, out.rule_ids, out.labels)
     print(out.reaction)
     print(str(mol))          # the input is untouched
 
 .. testoutput::
 
-    ('amine_boc',) ('protective:65',)
+    ('boc',) ('protective:61',) ('aniline_boc',)
     C(OC(C)(C)C)(Nc1ccccc1)=O>>c1c(N)cccc1
     C(OC(C)(C)C)(Nc1ccccc1)=O
 
-``*names`` selects rules by name and ``protects=`` by what they reveal (``'hydroxyl'``, ``'diol'``,
-``'amine'``, ``'thiol'``, ``'carbonyl'``, ``'carboxyl'``).  Neither narrows what *claims* a site --
+``*names`` selects rows by name and ``protects=`` by what a site reveals (``'hydroxyl'``, ``'diol'``,
+``'amine'``, ``'thiol'``, ``'carbonyl'``, ``'carboxyl'``), read per site: ``benzyl`` asked for ``'amine'``
+cuts an N-benzyl and keeps an O-benzyl.  Neither narrows what *claims* a site --
 claims are computed over the whole table on every pass -- so a selection only decides which claims to
 act on, and asking for a group that is not there yields nothing rather than cleaving half of the group
 that is:
@@ -1401,20 +1407,20 @@ that is:
     mol.canonicalize()
     print(mol.protective_groups())
 
-    only_boc = next(mol.deprotect('amine_boc'), None)
+    only_boc = next(mol.deprotect('boc'), None)
     print(only_boc.reaction.products[0])    # the tBu ether is kept
 
 .. testoutput::
 
-    {'amine_boc': 1, 'hydroxyl_tbu': 1}
+    {'aniline_boc': 1, 'phenol_tbu': 1}
     C(C)(Oc1ccc(cc1)N)(C)C
 
 An unknown name raises ``ValueError`` listing every name ``protective.tsv`` has.
 
 An ester reports its alcohol half as a ``carboxyl_*`` group -- ``CC(=O)OC(C)(C)C`` is ``carboxyl_tbu``,
-revealing acetic acid -- and the ether of the same group stays ``hydroxyl_*``.  Where the acyl half is
+revealing acetic acid -- and the ether of the same group is ``hydroxyl_*``.  Where the acyl half is
 itself a protecting group the alkyl half still claims the ester, which reads as a protected acid:
-tert-butyl benzoate is ``carboxyl_tbu``, methyl pivalate ``hydroxyl_methyl``, benzyl acetate
+tert-butyl benzoate is ``carboxyl_tbu``, methyl pivalate ``carboxyl_methyl``, benzyl acetate
 ``carboxyl_benzyl``.
 
 **The enumeration unit is the site, not the rule**, because chemistry is not deterministic: a reagent
@@ -1430,13 +1436,16 @@ the sites, largest first, deduplicated by product -- so two symmetry-equivalent 
     print(mol.protective_groups())
 
     for out in mol.deprotect(partial=True):
-        print(out.names, out.reaction.products[0])
+        print(out.names, out.labels, out.reaction.products[0])
 
 .. testoutput::
 
-    {'amine_boc': 2}
-    ('amine_boc', 'amine_boc') C(C)N
-    ('amine_boc',) O=C(NCC)OC(C)(C)C
+    {'amide_boc': 2}
+    ('boc', 'boc') ('amide_boc', 'amine_boc') C(C)N
+    ('boc',) ('amide_boc',) O=C(NCC)OC(C)(C)C
+
+Each Boc of the pair sits on a nitrogen that carries the other one, a carbamate, so each is reported
+``amide_boc``; the full strip names the second ``amine_boc``, since it comes off an amine.
 
 ``R-N(Boc)2 -> R-NHBoc`` is reachable this way, which is the case a rule-level unit cannot express.  The
 deduplication is by product multiset, compared as canonical structures and never as strings, so a bis-Boc
@@ -1484,20 +1493,20 @@ there is to carry:
     print(functional_rules()['carboxylic_acid'].id)
     print(functional_rules()['carboxylic_acid'].smarts)
     print([role.group for role in roles()['aryl_halide']])
-    print(protective_rules()['amine_boc'].id)
-    print(sorted(protective_rules()['amine_boc'].protects))
+    print(protective_rules()['boc'].id)
+    print(sorted(protective_rules()['boc'].protects))
 
 .. testoutput::
 
-    421 122
+    421 89
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']
-    protective:65
-    ['amine']
+    protective:61
+    ['amine', 'hydroxyl']
 
 ``protective_rules()``' insertion order is the **specificity order** -- reactant atom count descending --
-so ``.values()`` needs no re-sorting: ``hydroxyl_tbu`` offered a Boc-protected alcohol would yield a
+so ``.values()`` needs no re-sorting: ``tbu`` offered a Boc-protected alcohol would yield a
 carbonate, and serving the bigger pattern first is what stops it.
 
 

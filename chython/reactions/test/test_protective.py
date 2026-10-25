@@ -102,6 +102,10 @@ def test_a_row_reveals_the_element_it_says_it_does(rule):
     kept = {numbers[index]: molecule.atom(atom).atomic_symbol
             for index, atom in mapping.items() if index in numbers}
 
+    if rule.sited:          # one atom, any of the families: the example shows one of them
+        assert kept[1] in {PROTECTS_ELEMENTS[what] for what in rule.protects}, (
+            f'{rule.id} protects {rule.protects} but its :1 atom is {kept[1]}')
+        return
     assert kept[1] == PROTECTS_ELEMENTS[rule.protects[0]], (
         f'{rule.id} protects {rule.protects[0]!r} but its :1 atom is {kept[1]}')
     for what in rule.protects[1:]:
@@ -115,7 +119,7 @@ def test_the_table_reads_and_ids_are_one_space():
     """111 rows numbered 1..111, which is what a positional id in a ported table has to be."""
     rows = read_table('protective.tsv')
     assert [int(row['id']) for row in rows] == list(range(1, len(rows) + 1))
-    assert len(RULES) == sum(row['role'] != 'site' for row in rows) == 122
+    assert len(RULES) == len(rows) == 89
 
 
 def test_a_protecting_group_is_named_once():
@@ -139,10 +143,13 @@ def test_every_row_deletes_something():
 
 
 def test_a_name_says_what_it_protects():
-    """The name prefix and the `protects` cell are the same claim, so they must agree -- which catches the
-    copy-paste that gives a new thiol row a hydroxyl's `protects`."""
+    """A row on one O, N or S is named by its group alone (`boc`) and REPORTED under the site it sits on;
+    a row revealing a carbon or two atoms keeps a name that says what it protects (`carbonyl_dioxolane`)."""
     for rule in RULES:
-        assert rule.name.startswith(rule.protects[0] + '_'), rule.id
+        if rule.sited:
+            assert not rule.name.startswith(('hydroxyl_', 'amine_', 'thiol_', 'carboxyl_')), rule.id
+        else:
+            assert rule.name.startswith(rule.protects[0] + '_'), rule.id
 
 
 # --- specificity ----------------------------------------------------------------------------------
@@ -156,9 +163,9 @@ def test_the_general_patterns_land_last():
     """The general patterns, named explicitly: each is a subset of a dozen others, so each is what a lost
     sort breaks first."""
     tail = {rule.name for rule in RULES[-6:]}
-    for name in ('hydroxyl_methyl', 'hydroxyl_ethyl', 'hydroxyl_acyl', 'hydroxyl_allyl'):
+    for name in ('methyl', 'ethyl', 'acyl', 'allyl'):
         assert name in tail, f'{name} is a general pattern and should sort to the end'
-    assert BY_NAME['hydroxyl_tbu'].size < BY_NAME['hydroxyl_boc'].size
+    assert BY_NAME['tbu'].size < BY_NAME['boc'].size
 
 
 def test_reversing_the_table_does_not_change_the_answer():
@@ -168,7 +175,7 @@ def test_reversing_the_table_does_not_change_the_answer():
     forward = [(claim.rule.name, claim.atoms) for claim in _claims(molecule, RULES)]
     shuffled = tuple(sorted(reversed(RULES), key=lambda rule: -rule.size))
     assert [(claim.rule.name, claim.atoms) for claim in _claims(molecule, shuffled)] == forward
-    assert [name for name, _ in forward] == ['hydroxyl_boc']
+    assert [name for name, _ in forward] == ['boc']
 
 
 def test_without_the_sort_a_boc_becomes_a_carbonate():
@@ -178,7 +185,7 @@ def test_without_the_sort_a_boc_becomes_a_carbonate():
     the tert-butyl off the carbamate and leaves a carbonate -- not a deprotection of anything.
     """
     molecule = read_smiles('CC(C)OC(=O)OC(C)(C)C')
-    wrong = {skeleton(p) for rxn in BY_NAME['hydroxyl_tbu'].template(molecule)
+    wrong = {skeleton(p) for rxn in BY_NAME['tbu'].template(molecule)
              for p in rxn.products}
     assert skeleton(read_smiles('C(O)(OC(C)C)=O')) in wrong
     # and the sorted walk never offers it that site
@@ -193,10 +200,11 @@ def test_without_the_sort_a_boc_becomes_a_carbonate():
     ('CC(=O)OCC=C', 'allyl'),
 ])
 def test_an_ester_is_a_protected_acid(ester, name):
-    """A tBu, benzyl or allyl ester reveals the acid, so the hydroxyl row of the same group has no site."""
+    """A tBu, benzyl or allyl ester reveals the acid: reported `carboxyl_*`, and `protects` reads it so."""
     molecule = read_smiles(ester)
     assert protective_groups(molecule) == {f'carboxyl_{name}': 1}
-    assert next(deprotect(molecule, (f'hydroxyl_{name}',)), None) is None
+    assert next(deprotect(molecule, protects='hydroxyl'), None) is None
+    assert next(deprotect(molecule, protects='carboxyl')).names == (name,)
     assert next(deprotect(molecule)).reaction.products[0] == read_smiles('CC(=O)O')
 
 
@@ -206,16 +214,17 @@ def test_an_ester_is_a_protected_acid(ester, name):
     ('CCOCC=C', 'allyl'),
 ])
 def test_an_ether_is_not_a_protected_acid(ether, name):
-    assert next(deprotect(read_smiles(ether), (f'carboxyl_{name}',)), None) is None
+    assert next(deprotect(read_smiles(ether), protects='carboxyl'), None) is None
+    assert protective_groups(read_smiles(ether)) == {f'hydroxyl_{name}': 1}
 
 
 @pytest.mark.parametrize('ester, name', [
-    ('CC(=O)OC(C)(C)C', 'carboxyl_tbu'),                  # 7 > hydroxyl_acyl 4
-    ('CC(=O)OCC=C', 'carboxyl_allyl'),                    # 6 > 4
-    ('O=C(OCc1ccccc1)c1ccccc1', 'carboxyl_benzyl'),       # 10 > hydroxyl_benzoate 9
+    ('CC(=O)OC(C)(C)C', 'carboxyl_tbu'),                  # tbu claims before acyl
+    ('CC(=O)OCC=C', 'carboxyl_allyl'),                    # allyl ties acyl and takes it: no more deleted
+    ('O=C(OCc1ccccc1)c1ccccc1', 'carboxyl_benzyl'),       # benzyl deletes no more than benzoyl
     ('CC(C)(C)OC(=O)c1ccccc1', 'carboxyl_tbu'),           # benzoate first, tBu 4 deleted < benzoyl 7
     ('C=CCOC(=O)c1ccccc1', 'carboxyl_allyl'),             # allyl 3 < benzoyl 7
-    ('COC(=O)c1ccccc1', 'hydroxyl_methyl'),               # methyl 1 < benzoyl 7
+    ('COC(=O)c1ccccc1', 'carboxyl_methyl'),               # methyl 1 < benzoyl 7
     ('CC(C)(C)OC(=O)C(C)(C)C', 'carboxyl_tbu'),           # tBu 4 < pivaloyl 6
     ('CC(C)(C)OC(=O)C(F)(F)F', 'carboxyl_tbu'),           # tBu 4 < trifluoroacetyl 6
     ('CC(=O)OCc1ccccc1', 'carboxyl_benzyl'),              # the alkyl claim came first and stands
@@ -228,7 +237,7 @@ def test_an_ester_goes_to_the_larger_claim_unless_its_alkyl_half_is_smaller(este
 
 def test_a_tbu_ester_and_a_methyl_ester_are_two_claims():
     assert protective_groups(read_smiles('CC(C)(C)OC(=O)CCC(N)C(=O)OC')) == {
-        'carboxyl_tbu': 1, 'hydroxyl_methyl': 1}
+        'carboxyl_tbu': 1, 'carboxyl_methyl': 1}
 
 
 # --- the report -----------------------------------------------------------------------------------
@@ -252,9 +261,9 @@ def test_two_groups_on_one_atom_are_two():
     """
     molecule = read_smiles('c1ccccc1CN(C(=O)OC(C)(C)C)C(=O)OC(C)(C)C')
     molecule.thiele()
-    assert protective_groups(molecule) == {'amine_boc': 2}
+    assert protective_groups(molecule) == {'amide_boc': 2}       # each sits beside the other's carbamate
     outcome = next(deprotect(molecule))
-    assert outcome.names == ('amine_boc', 'amine_boc')
+    assert outcome.names == ('boc', 'boc')
     assert {skeleton(p) for p in outcome.reaction.products} == {skeleton(read_smiles('c1ccccc1CN'))}
 
 
@@ -267,7 +276,7 @@ def test_two_rows_sharing_a_revealed_atom_both_claim_and_both_come_off():
     """
     molecule = read_smiles('N1(C(C)=O)C(C)(OC(C1)C)C')
     outcome = next(deprotect(molecule))
-    assert outcome.names == ('hydroxyl_amine_acetone', 'amine_acyl')
+    assert outcome.names == ('hydroxyl_amine_acetone', 'acyl')
     assert {skeleton(p) for p in outcome.reaction.products} == {skeleton(read_smiles('OC(C)CN'))}
 
 
@@ -281,7 +290,7 @@ def test_a_revealed_atom_must_keep_a_substituent():
     benzyl is, and exactly one can be true.
     """
     dmab = read_smiles('C(C)(C)CC(Nc1ccc(cc1)COC(C)=O)=C1C(=O)CC(CC1=O)(C)C')
-    assert protective_groups(dmab) == {'hydroxyl_dmab_enamine': 1}
+    assert protective_groups(dmab) == {'carboxyl_dmab_enamine': 1}      # Dmab masks the acid
     assert stripped(dmab) == {skeleton(read_smiles('CC(=O)O'))}, 'stripped past acetic acid to water'
 
     ether = read_smiles('CCOC(C)(C)C')                                   # tert-butyl ethyl ether
@@ -306,7 +315,7 @@ def test_a_protective_hit_carries_its_row_id():
     molecule = read_smiles('O=C(OC(C)(C)C)NCCCNC(=O)OC(C)(C)C')
     hits = protective_group_hits(molecule)
     assert [(hit.name, hit.count) for hit in hits] == [('amine_boc', 2)]
-    assert hits[0].id == BY_NAME['amine_boc'].id
+    assert hits[0].id == BY_NAME['boc'].id
     assert hits[0].id.startswith('protective:')
     assert protective_groups(molecule) == {hit.name: hit.count for hit in hits}
 
@@ -316,7 +325,8 @@ def test_the_report_and_the_strip_name_the_same_groups():
     from collections import Counter
     molecule = read_smiles('O=C(OC(C)(C)C)NCCOC(C)=O')
     outcome = next(deprotect(molecule))
-    assert Counter(outcome.names) == Counter(protective_groups(molecule))
+    reported = Counter(f'{site}_{name}' if site else name for name, site in zip(outcome.names, outcome.sites))
+    assert reported == Counter(protective_groups(molecule))
 
 
 # --- the strip ------------------------------------------------------------------------------------
@@ -325,7 +335,7 @@ def test_the_default_is_one_outcome_and_it_is_the_full_strip():
     molecule = read_smiles('O=C(OC(C)(C)C)NCCOC(C)=O')      # Boc-amine plus an acetate
     outcomes = list(deprotect(molecule))
     assert len(outcomes) == 1
-    assert outcomes[0].names == ('amine_boc', 'hydroxyl_acyl')
+    assert outcomes[0].names == ('boc', 'acyl')
     assert {skeleton(p) for p in outcomes[0].reaction.products} == {skeleton(read_smiles('NCCO'))}
 
 
@@ -358,8 +368,8 @@ def test_the_full_strip_takes_every_site_of_a_rule():
     That is what "full" means and not a law about reagents -- `partial=True` offers the mono-Boc too.
     """
     outcome = next(deprotect(read_smiles('O=C(OC(C)(C)C)NCCCNC(=O)OC(C)(C)C')))
-    assert outcome.names == ('amine_boc', 'amine_boc')
-    assert outcome.rule_ids == (BY_NAME['amine_boc'].id,) * 2
+    assert outcome.names == ('boc', 'boc')
+    assert outcome.rule_ids == (BY_NAME['boc'].id,) * 2
     assert {skeleton(p) for p in outcome.reaction.products} == {skeleton(read_smiles('NCCCN'))}
 
 
@@ -380,7 +390,7 @@ def test_partial_yields_every_subset_largest_first():
     assert len(outcomes) == 3 == 2 ** 2 - 1
     assert [len(o.names) for o in outcomes] == [2, 1, 1]
     assert outcomes[0].names == next(deprotect(molecule)).names
-    assert {o.names for o in outcomes[1:]} == {('amine_boc',), ('hydroxyl_acyl',)}
+    assert {o.names for o in outcomes[1:]} == {('boc',), ('acyl',)}
 
 
 def test_partial_over_one_rule_with_two_sites_offers_the_mono():
@@ -390,7 +400,7 @@ def test_partial_over_one_rule_with_two_sites_offers_the_mono():
     product multiset -- two outcomes, not three.
     """
     outcomes = list(deprotect(read_smiles('O=C(OC(C)(C)C)NCCCNC(=O)OC(C)(C)C'), partial=True))
-    assert [o.names for o in outcomes] == [('amine_boc', 'amine_boc'), ('amine_boc',)]
+    assert [o.names for o in outcomes] == [('boc', 'boc'), ('boc',)]
     assert {skeleton(p) for p in outcomes[1].reaction.products} == \
            {skeleton(read_smiles('O=C(OC(C)(C)C)NCCCN'))}
 
@@ -401,7 +411,7 @@ def test_a_di_boc_amine_can_give_up_one_boc():
     molecule = read_smiles('c1ccccc1CN(C(=O)OC(C)(C)C)C(=O)OC(C)(C)C')
     molecule.thiele()
     outcomes = list(deprotect(molecule, partial=True))
-    assert [o.names for o in outcomes] == [('amine_boc', 'amine_boc'), ('amine_boc',)]
+    assert [o.names for o in outcomes] == [('boc', 'boc'), ('boc',)]
     assert {skeleton(p) for p in outcomes[1].reaction.products} == \
            {skeleton(read_smiles('O=C(OC(C)(C)C)NCc1ccccc1'))}
 
@@ -410,7 +420,7 @@ def test_partial_is_lazy():
     """The subsets are generated and not enumerated, which is what makes 2^k safe to offer with no cap."""
     molecule = read_smiles('O=C(OC(C)(C)C)NCCOC(C)=O')
     walker = deprotect(molecule, partial=True)
-    assert next(walker).names == ('amine_boc', 'hydroxyl_acyl')     # and the rest is never built
+    assert next(walker).names == ('boc', 'acyl')     # and the rest is never built
 
 
 def test_a_partial_subset_does_not_reopen_a_shadow():
@@ -423,8 +433,8 @@ def test_a_partial_subset_does_not_reopen_a_shadow():
     molecule = read_smiles('CC(C)OC(=O)OC(C)(C)C.CCOC(C)(C)C')
     outcomes = {o.names: {skeleton(p) for p in o.reaction.products}
                 for o in deprotect(molecule, partial=True)}
-    assert set(outcomes) == {('hydroxyl_boc', 'hydroxyl_tbu'), ('hydroxyl_boc',), ('hydroxyl_tbu',)}
-    only_tbu = outcomes[('hydroxyl_tbu',)]
+    assert set(outcomes) == {('boc', 'tbu'), ('boc',), ('tbu',)}
+    only_tbu = outcomes[('tbu',)]
     assert skeleton(read_smiles('CCO')) in only_tbu
     assert skeleton(read_smiles('CC(C)OC(=O)OC(C)(C)C')) in only_tbu, 'the Boc was not left whole'
     assert skeleton(read_smiles('C(O)(OC(C)C)=O')) not in only_tbu, 'the Boc became a carbonate'
@@ -432,31 +442,30 @@ def test_a_partial_subset_does_not_reopen_a_shadow():
 
 def test_asking_for_a_group_that_is_only_a_shadow_yields_nothing():
     """There is no tert-butyl ether in a Boc: nothing, rather than a wrong answer or a refusal."""
-    assert next(deprotect(read_smiles('CC(C)OC(=O)OC(C)(C)C'), ('hydroxyl_tbu',)), None) is None
+    assert next(deprotect(read_smiles('CC(C)OC(=O)OC(C)(C)C'), ('tbu',)), None) is None
 
 
 # --- selection ------------------------------------------------------------------------------------
 
 def test_names_selects_rows():
     molecule = read_smiles('O=C(OC(C)(C)C)NCCOC(C)=O')
-    assert stripped(molecule, 'amine_boc') == {skeleton(read_smiles('NCCOC(C)=O'))}
-    assert stripped(molecule, 'hydroxyl_acyl') == {skeleton(read_smiles('OCCNC(=O)OC(C)(C)C'))}
+    assert stripped(molecule, 'boc') == {skeleton(read_smiles('NCCOC(C)=O'))}
+    assert stripped(molecule, 'acyl') == {skeleton(read_smiles('OCCNC(=O)OC(C)(C)C'))}
 
 
 def test_protects_selects_by_what_comes_off():
     """An orthogonal question to `names`, because a reagent class cuts across the six categories."""
     molecule = read_smiles('O=C(OC(C)(C)C)NCCOC(C)=O')
-    assert next(deprotect(molecule, protects='amine')).names == ('amine_boc',)
-    assert next(deprotect(molecule, protects=('hydroxyl',))).names == ('hydroxyl_acyl',)
-    assert next(deprotect(molecule, protects=('amine', 'hydroxyl'))).names == \
-        ('amine_boc', 'hydroxyl_acyl')
+    assert next(deprotect(molecule, protects='amine')).names == ('boc',)
+    assert next(deprotect(molecule, protects=('hydroxyl',))).names == ('acyl',)
+    assert next(deprotect(molecule, protects=('amine', 'hydroxyl'))).names == ('boc', 'acyl')
 
 
 def test_an_unknown_name_says_so_and_lists_the_alternatives():
     """Rather than yielding nothing, which is what a typo and an absent group look like together."""
     with pytest.raises(ValueError) as exc:
-        list(deprotect(read_smiles('CCO'), ('amine_bok',)))
-    assert 'amine_bok' in str(exc.value) and 'amine_boc' in str(exc.value)
+        list(deprotect(read_smiles('CCO'), ('bok',)))
+    assert "'bok'" in str(exc.value) and 'boc' in str(exc.value)
 
 
 def test_an_unknown_protects_says_so():
@@ -491,7 +500,7 @@ def test_the_specificity_order_survives_the_key():
     is the values' order, not something a caller has to re-sort."""
     sizes = [rule.size for rule in protective_rules().values()]
     assert sizes == sorted(sizes, reverse=True)
-    assert protective_rules()['hydroxyl_boc'].size > protective_rules()['hydroxyl_tbu'].size
+    assert protective_rules()['boc'].size > protective_rules()['tbu'].size
 
 
 # --- caching and laziness -------------------------------------------------------------------------
@@ -517,9 +526,9 @@ def test_the_methods_are_on_the_container():
     """Registered by injection, because `MoleculeContainer` is a `cdef class`."""
     molecule = read_smiles('CC(C)OC(=O)OC(C)(C)C')
     assert molecule.protective_groups() == {'hydroxyl_boc': 1}
-    assert next(molecule.deprotect()).names == ('hydroxyl_boc',)
-    assert next(molecule.deprotect('hydroxyl_boc')).names == ('hydroxyl_boc',)
-    assert next(molecule.deprotect(protects='hydroxyl')).names == ('hydroxyl_boc',)
+    assert next(molecule.deprotect()).names == ('boc',)
+    assert next(molecule.deprotect('boc')).names == ('boc',)
+    assert next(molecule.deprotect(protects='hydroxyl')).names == ('boc',)
     assert len(list(molecule.deprotect(partial=True))) == 1
 
 
@@ -539,7 +548,7 @@ def test_every_row_is_reachable_through_the_claim_walk():
     together are what prove a row usable.
     """
     unreachable = [rule.id for rule in RULES
-                   if rule.name not in protective_groups(read_smiles(rule.protected))]
+                   if rule.name not in {claim.rule.name for claim in _claims(read_smiles(rule.protected), RULES)}]
     assert not unreachable, f'{len(unreachable)} rows never claim their own example: {unreachable}'
 
 
@@ -607,13 +616,13 @@ def test_a_counter_ion_keeps_its_number_across_a_deprotection():
 
 
 @pytest.mark.parametrize('smiles, names, labels', [
-    ('CCCC(=O)OC(C)(C)C', ('carboxyl_tbu',), ('ester_hydrolysis',)),
-    ('CCCC(=O)OC', ('hydroxyl_methyl',), ('ester_hydrolysis',)),
-    ('c1ccccc1CCOC(C)=O', ('hydroxyl_acyl',), ('ester_hydrolysis',)),
-    ('c1ccccc1C(=O)OC', ('hydroxyl_methyl',), ('ester_hydrolysis',)),
-    ('c1ccccc1CCOC(=O)OC(C)(C)C', ('hydroxyl_boc',), ('hydroxyl_boc',)),
-    ('c1ccccc1CCOC', ('hydroxyl_methyl',), ('hydroxyl_methyl',)),
-    ('c1ccccc1NC(=O)OC(C)(C)C', ('amine_boc',), ('aniline_boc',)),     # the label names the site
+    ('CCCC(=O)OC(C)(C)C', ('tbu',), ('ester_hydrolysis',)),
+    ('CCCC(=O)OC', ('methyl',), ('ester_hydrolysis',)),
+    ('c1ccccc1CCOC(C)=O', ('acyl',), ('ester_hydrolysis',)),
+    ('c1ccccc1C(=O)OC', ('methyl',), ('ester_hydrolysis',)),
+    ('c1ccccc1CCOC(=O)OC(C)(C)C', ('boc',), ('hydroxyl_boc',)),
+    ('c1ccccc1CCOC', ('methyl',), ('hydroxyl_methyl',)),
+    ('c1ccccc1NC(=O)OC(C)(C)C', ('boc',), ('aniline_boc',)),     # the label names the site
 ])
 def test_a_strip_cutting_a_carboxylic_ester_is_labelled_ester_hydrolysis(smiles, names, labels):
     """`labels` names the mechanism and `names` the row: either side of an ester is one label, a carbonate
