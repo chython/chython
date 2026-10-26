@@ -33,7 +33,7 @@ from collections.abc import Callable, Container, Iterator, Mapping, Sequence
 from itertools import chain, product as cartesian
 from typing import NamedTuple
 
-from ._enumerate import (_claims, _deprotect_toward, _needs, _outcomes, _sited, _strip_sites, deprotect,
+from ._enumerate import (_claims, _deprotect_toward, _needs, _outcomes, _revealed, _sited, _strip_sites, deprotect,
                          EnumeratedDeprotection, EnumeratedReaction, functional_groups, protective_groups)
 from ._numbering import fast_mapping
 from ._tables import functional_rules, protective_rules, reaction_rules
@@ -44,7 +44,12 @@ from ..core import (INFO, LOST, LogRecord, MoleculeContainer, REFUSED, ReactionC
 class _Options(NamedTuple):
     max_size_ratio: float
     min_filter_size: int
-    loose: bool = False     # is the configuration part of the question this pass asks?
+    loose: bool | str = False   # False, True, or TAUTOMER: how much of the structure the pass compares
+
+
+TAUTOMER = 'tautomer'
+"""The last walk: components compared with the configuration and the bond orders dropped and the hydrogens
+free to move as a tautomer moves them (`_skeleton`, `_shifted`)."""
 
 
 class _Link(NamedTuple):
@@ -114,7 +119,7 @@ def reconstruct_mapping(reaction: ReactionContainer, *, max_size_ratio: float = 
     # allow, which is not a question about strictness, so the loose walk reads the strict walk's outcomes
     # back rather than putting the same question again.
     memo = {}
-    for loose in ((False, True) if stereo == 'loose' else (False,)):
+    for loose in ((False, True, TAUTOMER) if stereo == 'loose' else (False,)):
         options = _Options(max_size_ratio, min_filter_size, loose)
         for phase in _PHASES:
             if unbalanced and phase not in _FILTER_EXEMPT:
@@ -131,6 +136,10 @@ def reconstruct_mapping(reaction: ReactionContainer, *, max_size_ratio: float = 
                 _record(log, 'reconstruct:excess', INFO,
                         'one input filled several slots of the row, read as an excess reagent; the atoms '
                         'its extra equivalents gave the product are left unnumbered')
+            if loose == TAUTOMER:
+                _record(log, 'reconstruct:tautomer', INFO,
+                        'explained only with the mobile hydrogens and the bond orders dropped from the '
+                        'comparison: the record draws another tautomer than the one the explanation built')
             if found[0].rule:
                 # The label is the chemistry, the id is the row; only the id says which spelling earned
                 # the hit.  The APPLIED rule only -- logging one merely considered is a false
@@ -216,6 +225,35 @@ def _settled(recorded: MoleculeContainer, found: Iterator) -> list:
     return [(source, outcome, _settle(outcome.reaction.products, targets)) for source, outcome in found]
 
 
+def _ranked(found: list) -> list:
+    """`_settled` outcomes, the claim the record supports best first.
+
+    Fewer inputs first, as `_applications` enumerates.  Then, between pools of one size, the pool of MORE
+    heavy atoms: two pools building one recorded product differ in what they lost, and a C-H coupling is
+    the reading of last resort -- ArBr with BrCH2CONMe2 is a cross-electrophile coupling, not an
+    alpha-arylation of the DMA it was run in.  Then the more specific row (`_specificity`), and last the
+    pool's canonical form, so the order of molecules in the record decides nothing.  Only outcomes that
+    reproduce the record are compared by the caller, so the pool is the whole of the difference.
+    """
+    rules = _rules_by_id()
+
+    def key(item):
+        pool, outcome, _ = item
+        given = sum(sum(_heavy(molecule).values()) for molecule in pool)
+        return (len(pool), -given, -_specificity(rules[outcome.rule_id]),
+                sorted(molecule.canonical_bytes for molecule in pool))
+    return sorted(found, key=key)
+
+
+_RULES_BY_ID: dict = {}
+
+
+def _rules_by_id() -> dict:
+    if not _RULES_BY_ID:
+        _RULES_BY_ID.update((rule.id, rule) for rule in chain.from_iterable(reaction_rules().values()))
+    return _RULES_BY_ID
+
+
 def _translate(reaction, sources: Sequence[MoleculeContainer],
                products: Sequence[MoleculeContainer] | None = None) -> list[MoleculeContainer]:
     """The reaction's products carrying `sources`' map numbers in place of the reactor's own.
@@ -254,7 +292,7 @@ def _translate(reaction, sources: Sequence[MoleculeContainer],
 def _react(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """A corpus row, applied to the inputs as they arrived.  The strongest evidence there is."""
     for pool, outcome, products in _once(memo, 'react',
-                                         lambda: _settled(recorded, _applications(recorded, inputs))):
+                                         lambda: _ranked(_settled(recorded, _applications(recorded, inputs)))):
         if not _reproduces(recorded, products, pool, options.loose):
             continue
         sources = [*_translate(outcome.reaction, pool, products), *inputs]
@@ -266,28 +304,49 @@ def _react(recorded, inputs, options, memo) -> Iterator[_Explanation]:
 def _deprotect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """An input, unmasked.  The recorded product IS the recorded input minus a protecting group.
 
+    AHEAD OF `_react`, as `_protect` is: removing a named group is one family of conditions, so an N-benzoyl
+    cut is `deprotect:amine_benzoate` even though an amide-hydrolysis row builds the same amine.
+
     `partial=True` because incomplete cleavage is ordinary and `R-N(Boc)2 -> R-NHBoc` is a record this
     rung must read.  Largest-first, which is the order the explanations come out in.  Only the subsets
     that can give a recorded component are stripped: `_deprotect_toward`.
     """
     parts = list(recorded.split())
+    found = False
     for molecule, outcome, products in _once(memo, 'deprotect',
                                              lambda: _settled(recorded, ((m, o) for m in inputs
                                                                          for o in _deprotect_toward(m, parts)))):
         if not _reproduces(recorded, products, [molecule], options.loose):
             continue
-        sources = [*_translate(outcome.reaction, [molecule], products), *inputs]
-        yield _Explanation('deprotect:%s' % '+'.join(sorted(outcome.labels)),
-                           lambda target, s=sources, o=options: _number_product(target, s, o.loose),
-                           '+'.join(outcome.rule_ids))
+        found = True
+        yield _deprotected(outcome, molecule, products, inputs, options)
+    if found:
+        return
+    # A GROUP CUT INSIDE: a claim is the most specific row, so a BOM is `azole_bom` and never the benzyl ether
+    # inside it -- yet hydrogenolysis of that benzyl, leaving N-CH2OH, is an ordinary record.  Each row read
+    # alone (`_single_group_strips`) offers the inner group, and only where no whole group explained.
+    for molecule, outcome, products in _once(memo, 'deprotect:inner',
+                                             lambda: _settled(recorded, ((m, o) for m in inputs
+                                                                         for o in _single_group_strips(m)))):
+        if _reproduces(recorded, products, [molecule], options.loose):
+            yield _deprotected(outcome, molecule, products, inputs, options)
 
 
-def _strip(inputs, names: Sequence[str] = ()) -> tuple[list[MoleculeContainer], dict[int, tuple[int, tuple[str, ...]]]]:
+def _deprotected(outcome, molecule, products, inputs, options) -> _Explanation:
+    """The `deprotect:` explanation of one strip of `molecule` that reproduced the record."""
+    sources = [*_translate(outcome.reaction, [molecule], products), *inputs]
+    return _Explanation('deprotect:%s' % '+'.join(sorted(outcome.labels)),
+                        lambda target, s=sources, o=options: _number_product(target, s, o.loose),
+                        '+'.join(outcome.rule_ids))
+
+
+def _strip(inputs, names: Sequence[str] = (), on_nitrogen: Sequence[str] = ()
+           ) -> tuple[list[MoleculeContainer], dict[int, tuple[int, tuple[str, ...]]]]:
     """`inputs` with their protecting groups taken off, and which members of the result a strip produced.
 
-    `names` restricts the strip to those protective rows; empty strips every group.  A stripped member
-    maps to the input it came from and that strip's `labels`, which name the `deprotect:` half of the
-    composed label.
+    `names` restricts the strip to those protective rows; empty strips every group.  `on_nitrogen` names
+    rows stripped only where they reveal an amine, after `names`.  A stripped member maps to the input it
+    came from and that strip's `labels`, which name the `deprotect:` half of the composed label.
 
     ONE pass per name set and not every raw/stripped combination, which would be exponential in the
     number of protected inputs: a deliberate lower bound on what composition buys.  A stripped form
@@ -298,15 +357,32 @@ def _strip(inputs, names: Sequence[str] = ()) -> tuple[list[MoleculeContainer], 
     pool = []
     stripped = {}
     for source, molecule in enumerate(inputs):
-        outcome = next(deprotect(molecule, names), None)
-        if outcome is None:
-            pool.append(molecule)
+        parts, labels = [molecule], ()
+        if names or not on_nitrogen:
+            parts, labels = _strip_one(molecule, names)
+        if on_nitrogen:
+            parts, more = zip(*(_strip_one(part, on_nitrogen, ('amine',)) for part in parts))
+            parts = [piece for pieces in parts for piece in pieces]
+            labels += tuple(chain.from_iterable(more))
+        if labels:
+            for part in parts:
+                stripped[len(pool)] = (source, labels)
+                pool.append(part)
         else:
-            for product in _translate(outcome.reaction, [molecule]):
-                product.canonicalize(stereo_groups=False)      # as `_settle`, the AND phase kept
-                stripped[len(pool)] = (source, outcome.labels)
-                pool.append(product)
+            pool.append(molecule)
     return pool, stripped
+
+
+def _strip_one(molecule, names, protects=None) -> tuple[list[MoleculeContainer], tuple[str, ...]]:
+    """The products of stripping the rows `names` off `molecule`, canonicalized, and the strip's labels;
+    `[molecule]` and `()` when nothing came off."""
+    outcome = next(deprotect(molecule, names, protects=protects), None)
+    if outcome is None:
+        return [molecule], ()
+    products = _translate(outcome.reaction, [molecule])
+    for product in products:
+        product.canonicalize(stereo_groups=False)      # as `_settle`, the AND phase kept
+    return products, outcome.labels
 
 
 def _lost(recorded, inputs) -> tuple[str, ...]:
@@ -330,16 +406,18 @@ def _pools(recorded, inputs) -> list:
     the record whose product makes a group of the row it cleaves -- an acetamide formed while an acetate
     is cleaved counts level.  Ahead of both, where a pseudohalide is among the lost groups beside another,
     the strip that KEEPS it: a mesylate displaced beside a Boc cut is `deprotect:amine_boc+react:williamson`,
-    and stripping the mesylate too reads the same record as a Mitsunobu on the bare alcohol.  A pool equal
-    to an earlier one is not walked twice.
+    and stripping the mesylate too reads the same record as a Mitsunobu on the bare alcohol.  A pseudohalide
+    leaves from O only, so on N it is stripped there too: a nosyl cut beside a mesylate displaced is
+    `deprotect:amine_nosyl+react:n_alkylation`.  A pool equal to an earlier one is not walked twice.
     """
     out, seen = [], set()
     lost = _lost(recorded, inputs)
     rules = protective_rules()
     kept = tuple(name for name in lost if not rules[name].leaving)
-    first = (kept,) if kept and len(kept) < len(lost) else ()
-    for names in (*first, *((lost, ()) if lost else ((),))):
-        pool, stripped = _strip(inputs, names)
+    leaving = tuple(name for name in lost if rules[name].leaving)
+    first = ((kept, leaving),) if leaving else ()
+    for names, on_nitrogen in (*first, *(((lost, ()), ((), ())) if lost else (((), ()),))):
+        pool, stripped = _strip(inputs, names, on_nitrogen)
         if not stripped:
             continue
         key = tuple(sorted(stripped.items()))
@@ -363,9 +441,12 @@ def _deprotect_then_react(recorded, inputs, options, memo) -> Iterator[_Explanat
     """
     for k, (pool, stripped) in enumerate(_once(memo, 'strip', lambda: _pools(recorded, inputs))):
         for subset, outcome, products in _once(memo, f'deprotect+react:{k}',
-                                               lambda: _settled(recorded, _applications(recorded, pool,
-                                                                                        required=stripped))):
+                                               lambda: _ranked(_settled(recorded,
+                                                                        _applications(recorded, pool,
+                                                                                      required=stripped)))):
             if not _reproduces(recorded, products, subset, options.loose):
+                continue
+            if _left(outcome, subset, pool, stripped, inputs):
                 continue
             sources = [*_translate(outcome.reaction, subset, products), *pool, *inputs]
             consumed = {id(molecule) for molecule in subset}
@@ -376,18 +457,53 @@ def _deprotect_then_react(recorded, inputs, options, memo) -> Iterator[_Explanat
                                outcome.rule_id, _repeats(subset))
 
 
+def _left(outcome, subset, pool, stripped, inputs) -> bool:
+    """Did the row delete an oxygen a pseudohalide strip revealed?  Then the pseudohalide was the leaving group.
+
+    A mesylate displaced by an amine is `react:n_alkylation`, and reading it as the mesylate cut to the
+    alcohol and the alcohol aminated is the same record told backwards.  The strip keeps stable ids and the
+    reactor's reactant is a copy of its source at the same atom numbers, so the revealed oxygen is followed
+    into the reactor by its map number.
+    """
+    rules = tuple(protective_rules().values())
+    index = {id(molecule): i for i, molecule in enumerate(pool)}
+    built = {product.map_number_of(n) for product in outcome.reaction.products for n in product.atom_numbers}
+    for reactant, member in zip(outcome.reaction.reactants, subset):
+        i = index.get(id(member))
+        if i not in stripped:
+            continue
+        source = inputs[stripped[i][0]]
+        atoms = set(member.atom_numbers)
+        for claim in _claims(source, rules):
+            if not claim.rule.leaving:
+                continue
+            atom = _revealed(source, claim)
+            if atom is None or atom not in atoms or source.element_of(atom) != 8 \
+                    or not claim.deleted.isdisjoint(member.neighbors_of(atom)):
+                continue                    # not this oxygen, or not stripped off it
+            number = reactant.map_number_of(atom)
+            if not number or number not in built:   # a deleted atom is one the reactor left unnumbered
+                return True
+    return False
+
+
 def _single_group_strips(recorded) -> Iterator[EnumeratedDeprotection]:
-    """Each protecting group's sites on `recorded` read ALONE, one site at a time.
+    """Each protecting group's sites on `recorded` read ALONE: one site at a time, then all of a row's sites.
 
     `protective_groups()` claims a site for its most specific row only, so an ester is either its acid
     half or its alcohol half: benzyl acetate claims `carboxyl_benzyl` and never `hydroxyl_acyl`.  The
     protection rung must offer both, since which half is the group depends on which input the record
-    names.  Claiming with one row at a time is sound here and nowhere else: the strip has to give back a
-    recorded input exactly, which a shadowed reading -- a Boc's tert-butyl half -- never does.
+    names; the deprotection rung reads the group inside a larger one the same way, a BOM's benzyl.  Claiming
+    with one row at a time is sound in these two rungs and nowhere else: the strip has to give back a
+    recorded component exactly, which a shadowed reading -- a Boc's tert-butyl half -- almost never does.
     """
     for rule in protective_rules().values():
-        for index in range(len(_claims(recorded, (rule,)))):
-            outcome = _strip_sites(recorded, (index,), (rule,))
+        sites = len(_claims(recorded, (rule,)))
+        subsets = [(index,) for index in range(sites)]
+        if sites > 1:
+            subsets.append(tuple(range(sites)))
+        for chosen in subsets:
+            outcome = _strip_sites(recorded, chosen, (rule,))
             if outcome is not None:
                 yield outcome
 
@@ -435,14 +551,14 @@ def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
                            '+'.join(outcome.rule_ids))
 
 
-_PHASES: tuple[Callable[..., Iterator[_Explanation]], ...] = (_purification, _protect, _react, _deprotect,
+_PHASES: tuple[Callable[..., Iterator[_Explanation]], ...] = (_purification, _protect, _deprotect, _react,
                                                               _deprotect_then_react)
 _FILTER_EXEMPT = frozenset((_purification, _protect))
 
 
 # --- writing the numbers --------------------------------------------------------------------------
 
-def _same(a: MoleculeContainer, b: MoleculeContainer, loose: bool) -> bool:
+def _same(a: MoleculeContainer, b: MoleculeContainer, loose: bool | str) -> bool:
     """Are these two components the same structure?  `loose` drops the configuration from the question.
 
     `__eq__` is the canonical form and carries every parity and every OR/AND collection.  Strict compares
@@ -450,8 +566,10 @@ def _same(a: MoleculeContainer, b: MoleculeContainer, loose: bool) -> bool:
     `_heal` read per unit, and not a configuration a row carries through or turns over.  `isomorphism()`
     asks the same question with the invariant's stereo term off and still requires the whole
     constitution -- element, charge, isotope, radical, R index, implicit hydrogen count and every bond
-    order -- so loose relaxes the configuration and NOTHING else.
+    order -- so loose relaxes the configuration and NOTHING else.  `TAUTOMER` is the one walk past it.
     """
+    if loose == TAUTOMER:
+        return _pairs_of(a, b, TAUTOMER) is not None
     if loose:
         return a.isomorphism(b) is not None
     return _ungrouped(a) == _ungrouped(b)
@@ -466,10 +584,85 @@ def _ungrouped(molecule: MoleculeContainer) -> MoleculeContainer:
     return molecule
 
 
-def _pairs_of(a: MoleculeContainer, b: MoleculeContainer, loose: bool) -> dict | None:
+def _skeleton(molecule: MoleculeContainer) -> MoleculeContainer:
+    """`molecule` with every bond single, every implicit hydrogen count 0 and no configuration.
+
+    What two tautomers share: the heavy atoms, their bonds and their charges -- not where the hydrogens and
+    the double bonds sit.  A copy keeps every stable id, so a mapping between two skeletons is one between
+    the molecules; `_shifted` then asks whether the hydrogens moved as a tautomer moves them.
+    """
+    skeleton = molecule.copy()
+    skeleton.clean_stereo()
+    bonds = [(bond.n, bond.m) for bond in skeleton.bonds()]
+    atoms = list(skeleton.atom_numbers)
+    with skeleton.edit():
+        for n, m in bonds:
+            skeleton.set_order(n, m, 1)
+        for n in atoms:
+            skeleton.set_hydrogens(n, 0)
+    return skeleton
+
+
+_SHIFTS = frozenset((2, 4, 6))
+"""How far a tautomer moves a hydrogen, in bonds: the 1,3-, 1,5- and 1,7-shifts."""
+
+
+def _shifted(a: MoleculeContainer, b: MoleculeContainer, pairs: dict) -> bool:
+    """Do the hydrogens of `b` sit where a tautomer of `a` puts them, through `pairs` (`{a id: b id}`)?
+
+    Every hydrogen `a` lost at one atom has to arrive at another 2, 4 or 6 bonds away, each arrival used
+    once, and one of the two atoms a heteroatom: keto-enol, lactam-lactim and the annular shifts move a
+    hydrogen onto or off N, O or S.  That is what keeps a regioisomer out: reducing the carbamate rather than
+    the urea carbonyl of one N gives one skeleton and one hydrogen total, but the CH(OH) carbon moves by a
+    carbon-to-carbon step no tautomer takes.
+    """
+    lost, gained = [], []
+    for n, m in pairs.items():
+        h, k = a.implicit_h_of(n), b.implicit_h_of(m)
+        if h is None or k is None:
+            return False
+        lost.extend([n] * (h - k))
+        gained.extend([n] * (k - h))
+    if len(lost) != len(gained):
+        return False
+    if not lost:
+        return True
+    reach = {n: _distances(a, n) for n in set(lost)}
+    taken: dict[int, int] = {}                  # gained index -> lost index
+
+    def assign(i, seen):
+        for j, atom in enumerate(gained):
+            if j in seen or reach[lost[i]].get(atom) not in _SHIFTS \
+                    or a.element_of(atom) == 6 and a.element_of(lost[i]) == 6:
+                continue
+            seen.add(j)
+            if j not in taken or assign(taken[j], seen):
+                taken[j] = i
+                return True
+        return False
+    return all(assign(i, set()) for i in range(len(lost)))
+
+
+def _distances(molecule: MoleculeContainer, start: int, limit: int = max(_SHIFTS)) -> dict[int, int]:
+    """Bond counts from `start` to every atom within `limit` bonds."""
+    out = {start: 0}
+    frontier = [start]
+    for depth in range(1, limit + 1):
+        frontier = [m for n in frontier for m in molecule.neighbors_of(n) if m not in out]
+        for m in frontier:
+            out.setdefault(m, depth)
+        frontier = list(dict.fromkeys(frontier))
+    return out
+
+
+def _pairs_of(a: MoleculeContainer, b: MoleculeContainer, loose: bool | str) -> dict | None:
     """`{a id: b id}` when the two are the same structure under this pass's question, else None.
 
-    Strict maps through `_ungrouped` copies for `_same`'s reason; a copy keeps every stable id."""
+    Strict maps through `_ungrouped` copies for `_same`'s reason; a copy keeps every stable id.  The
+    tautomer walk maps the two `_skeleton`s and asks `_shifted` of the mapping."""
+    if loose == TAUTOMER:
+        pairs = _skeleton(a).isomorphism(_skeleton(b))
+        return pairs if pairs is not None and _shifted(a, b, pairs) else None
     return a.isomorphism(b) if loose else fast_mapping(_ungrouped(a), _ungrouped(b))
 
 
@@ -1122,7 +1315,10 @@ def _reproduces(recorded: MoleculeContainer, products: Sequence[MoleculeContaine
     if not loose:
         want = {_ungrouped(part) for part in parts}
         return any(_ungrouped(candidate) in want for candidate in built)
-    return any(_same(candidate, part, True) for candidate in built for part in parts)
+    if loose == TAUTOMER:
+        built = [candidate for candidate in built if not any(_same(candidate, passenger, TAUTOMER)
+                                                             for passenger in passengers)]
+    return any(_same(candidate, part, loose) for candidate in built for part in parts)
 
 
 # --- housekeeping ---------------------------------------------------------------------------------

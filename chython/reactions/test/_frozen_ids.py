@@ -26,7 +26,7 @@ and read the diff.  A new line is a new row; a CHANGED line is a renumber, which
 means.  Never hand-edit a line to make the ratchet pass.
 """
 
-#: `functional.tsv`: 421 rows, id -> the row it names.
+#: `functional.tsv`: 422 rows, id -> the row it names.
 FUNCTIONAL = {
     'functional:1': 'terminal_alkene',
     'functional:2': 'alkene',
@@ -449,6 +449,7 @@ FUNCTIONAL = {
     'functional:419': 'aminopyrazole_nh',
     'functional:420': 'xec_aryl_halide',
     'functional:421': 'acyl_hydrazine_nh',
+    'functional:422': 'lactim_oh',
 }
 
 #: `protective.tsv`: 89 rows, id -> the row it names.
@@ -637,7 +638,7 @@ ROLES = {
     'roles:89': 'azole_nitrogen/imidazole',
 }
 
-#: `reactions.tsv`: 1539 rows, id -> the row it names.
+#: `reactions.tsv`: 1547 rows, id -> the row it names.
 REACTIONS = {
     'reactions:1': 'amidation/carboxylic_acid+primary_amine',
     'reactions:2': 'amidation/carboxylic_acid+primary_aniline',
@@ -2178,4 +2179,12 @@ REACTIONS = {
     'reactions:1537': 'pinner_amidine/lactim_ether+ammonia',
     'reactions:1538': 'pinner_amidine/lactim_ether+primary_amine',
     'reactions:1539': 'pinner_amidine/lactim_ether+secondary_amine',
+    'reactions:1540': 'miyaura_borylation/aryl_halide',
+    'reactions:1541': 'miyaura_borylation/aryl_sulfonate',
+    'reactions:1542': 'miyaura_borylation/alkenyl_halide',
+    'reactions:1543': 'miyaura_borylation/alkenyl_sulfonate',
+    'reactions:1544': 'miyaura_borylation/aryl_halide',
+    'reactions:1545': 'miyaura_borylation/aryl_sulfonate',
+    'reactions:1546': 'miyaura_borylation/alkenyl_halide',
+    'reactions:1547': 'miyaura_borylation/alkenyl_sulfonate',
 }

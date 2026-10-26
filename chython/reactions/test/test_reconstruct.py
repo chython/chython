@@ -17,6 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 from collections import Counter
+from itertools import permutations
 import pytest
 from pytest import raises
 
@@ -303,12 +304,56 @@ def test_a_direct_reaction_outranks_the_composed_rung():
 
 
 def test_phases_ladder_order_is_pinned():
-    # Protection right after purification: a label names conditions, and installing a named protecting
-    # group is one family of them whatever supplies the group.  Behavioural counterpart:
-    # `test_a_named_group_installed_is_a_protection_and_any_other_acylation_a_reaction`.
+    # Protection right after purification, deprotection next: a label names conditions, and installing or
+    # removing a named protecting group is one family of them.  Behavioural counterparts:
+    # `test_a_named_group_installed_is_a_protection_and_any_other_acylation_a_reaction` and
+    # `test_a_named_n_acyl_group_removed_is_a_deprotection_not_an_amide_hydrolysis`.
     from .._reconstruct import _PHASES
-    assert [f.__name__ for f in _PHASES] == ['_purification', '_protect', '_react', '_deprotect',
+    assert [f.__name__ for f in _PHASES] == ['_purification', '_protect', '_deprotect', '_react',
                                              '_deprotect_then_react']
+
+
+def test_a_named_n_acyl_group_removed_is_a_deprotection_not_an_amide_hydrolysis():
+    rxn = smiles('O=C(Nc1ccccc1)c1ccccc1.[OH-].[Na+]>>Nc1ccccc1')
+    assert rxn.reconstruct_mapping() == ('deprotect:aniline_benzoate',)
+
+
+def test_a_group_cut_inside_a_larger_one_reads_as_the_inner_group():
+    # hydrogenolysis of an N-BOM pyrrole to the N-CH2OH, and an N-POM triazole hydrolysed to the same
+    bom = smiles('c1ccccc1COCn1cccc1C>>OCn1cccc1C')
+    assert bom.reconstruct_mapping() == ('deprotect:hydroxyl_benzyl',)
+    pom = smiles('CC(C)(C)C(=O)OCn1cc(C)nn1>>OCn1cc(C)nn1')
+    assert pom.reconstruct_mapping() == ('deprotect:ester_hydrolysis',)
+
+
+def test_a_sulfonyl_leaves_from_oxygen_and_protects_nitrogen():
+    # the nosyl is cut off N, the mesylate displaced by the amine it revealed: no alcohol amination
+    rxn = smiles('O=S(=O)(c1ccccc1[N+](=O)[O-])N1CCCCC1C.CS(=O)(=O)OCc1ccccn1.Sc1ccccc1'
+                 '>>CC1CCCCN1Cc1ccccn1')
+    assert rxn.reconstruct_mapping() == ('deprotect:amine_nosyl+react:n_alkylation',)
+
+
+def test_the_order_of_molecules_in_a_record_decides_no_label():
+    # ArBr with BrCH2CONMe2 in DMA: both pairs build one product, and the pair that lost more atoms is the
+    # claim -- a cross-electrophile coupling, not an alpha-arylation of the solvent
+    parts = ('CN(C)C(=O)CBr', 'CN(C)C(C)=O', 'Brc1ccc2ncccc2c1')
+    for order in permutations(parts):
+        rxn = smiles('.'.join(order) + '>>CN(C)C(=O)Cc1ccc2ncccc2c1')
+        assert rxn.reconstruct_mapping() == ('react:xec',), order
+
+
+def test_a_tautomer_drawn_otherwise_than_built_is_explained_last():
+    # the demethylation builds the 2-hydroxypyrimidine; the record draws the pyrimidinone tautomer
+    rxn = smiles('COc1ncc2c(n1)CCCC2=O.Br>>O=C1NC2=C(C=N1)C(=O)CCC2')
+    assert rxn.reconstruct_mapping() == ('deprotect:phenol_methyl',)
+    assert [r.rule for r in rxn.log if r.rule == 'reconstruct:tautomer'] == ['reconstruct:tautomer']
+
+
+def test_a_miyaura_borylation_names_any_diol_ester_it_has_a_row_for():
+    for diboron, ester in (('B1(B2OCCCO2)OCCCO1', 'B1(c2ccc(C)cc2)OCCCO1'),
+                           ('B1(B2Oc3ccccc3O2)Oc2ccccc2O1', 'B1(c2ccc(C)cc2)Oc2ccccc2O1')):
+        rxn = smiles(f'Brc1ccc(C)cc1.{diboron}.CC(=O)[O-].[K+]>>{ester}')
+        assert rxn.reconstruct_mapping() == ('react:miyaura_borylation',), diboron
 
 
 def test_two_surviving_candidates_yield_one_label():
@@ -612,8 +657,8 @@ def test_the_composed_rung_only_walks_what_the_stripping_reached():
     (('COC(=O)CCC(=O)OC',), 'OC(=O)CCC(=O)O', 'deprotect:ester_hydrolysis+ester_hydrolysis'),
     (('COC(=O)c1ccc(Br)cc1', 'OB(O)c1ccccc1'), 'OC(=O)c1ccc(-c2ccccc2)cc1',
      'deprotect:ester_hydrolysis+react:suzuki'),
-    (('COC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'react:ester_hydrolysis'),
-    (('CC(C)(C)OC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'react:ester_hydrolysis'),
+    (('COC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'deprotect:ester_hydrolysis'),
+    (('CC(C)(C)OC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'deprotect:ester_hydrolysis'),
     (('COC(=O)c1ccc2cc[nH]c2n1', 'Ic1ccccc1'), 'OC(=O)c1ccc2ccn(-c3ccccc3)c2n1',
      'deprotect:ester_hydrolysis+react:ullmann_pyrrole'),
 ])
@@ -904,7 +949,7 @@ def test_an_ester_hydrolysis_mapping_has_a_reaction_centre():
     # centre is the acyl carbon's unmapped branch changing, and the reagents separate on it.
     rxn = ReactionContainer([smiles(x) for x in ('COC(=O)c1ccccc1', '[Li+]', '[OH-]', 'O')],
                             [smiles('OC(=O)c1ccccc1')])
-    assert rxn.reconstruct_mapping(stereo='loose', heal_stereo='product') == ('react:ester_hydrolysis',)
+    assert rxn.reconstruct_mapping(stereo='loose', heal_stereo='product') == ('deprotect:ester_hydrolysis',)
     assert rxn.remove_reagents(keep_reagents=True) is True
     assert [m.smiles for m in rxn.reactants] == [smiles('COC(=O)c1ccccc1').smiles]
     assert sorted(m.smiles for m in rxn.agents) == sorted(smiles(x).smiles for x in ('[Li+]', '[OH-]', 'O'))
@@ -1017,3 +1062,19 @@ def test_a_group_is_named_for_the_atom_it_sits_on(record, label):
     """One group on an aniline, an amide N-H, an azole or a phenol is installed and removed under other
     conditions than on an alkylamine or an alcohol, so the label names the site: `aniline_boc`."""
     assert smiles(record).reconstruct_mapping() == (label,)
+
+
+def test_the_tautomer_comparison_moves_a_hydrogen_onto_or_off_a_heteroatom_only():
+    from .._reconstruct import TAUTOMER, _same
+    lactim, lactam = smiles('OC1=NC=CC=C1'), smiles('O=C1NC=CC=C1')
+    assert not _same(lactim, lactam, True) and _same(lactim, lactam, TAUTOMER)
+    # one skeleton and one hydrogen total, but the CH(OH) carbon moved by a carbon-to-carbon step
+    hemiaminal, alcohol = smiles('OC(C)N(C)C=O'), smiles('CC(=O)N(C)CO')
+    assert not _same(hemiaminal, alcohol, TAUTOMER)
+
+
+def test_a_pseudohalide_the_row_displaced_is_its_leaving_group_not_a_strip():
+    # the configuration drawn flat keeps the strict walk from the substitution row; the composed reading,
+    # mesylate cut to the alcohol and the alcohol aminated, deletes the very oxygen the strip revealed
+    rxn = smiles('C[C@H](OS(C)(=O)=O)c1ccncc1.C1CCNCC1.O=C([O-])[O-].[K+].[K+]>>CC(N1CCCCC1)c1ccncc1')
+    assert rxn.reconstruct_mapping() == ('react:n_alkylation',)

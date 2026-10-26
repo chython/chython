@@ -1752,3 +1752,11 @@ id	name	groups	product	ring_sizes	probe	description
 1537	pinner_amidine	lactim_ether,ammonia	[A:1]=[A:2]-[A:101]		COC1=NCCCC1.N>>NC1=NCCCC1	Lactim ether or N-substituted imidate and ammonia, giving the amidine
 1538	pinner_amidine	lactim_ether,primary_amine	[A:1]=[A:2]-[A:101]-[A:102]		COC1=NCCCC1.CCN>>CCNC1=NCCCC1	Lactim ether or N-substituted imidate and a primary amine, giving the amidine
 1539	pinner_amidine	lactim_ether,secondary_amine	[A:1]=[A:2]-[A:101](-[A:102])-[A:103]		COC1=NCCCC1.CNC>>CN(C)C1=NCCCC1	Lactim ether or N-substituted imidate and a secondary amine, giving the amidine
+1540	miyaura_borylation	aryl_halide	[A:1]-[B]1-[O]-[C]-[C]-[C]-[O]-1		c1c(Br)cccc1>>B1(c2ccccc2)OCCCO1	Aryl halide -> the 1,3-propanediol boronic ester (Miyaura); the diboron is an agent
+1541	miyaura_borylation	aryl_sulfonate	[A:1]-[B]1-[O]-[C]-[C]-[C]-[O]-1		O=S(C(F)(F)F)(Oc1ccccc1)=O>>B1(c2ccccc2)OCCCO1	Aryl sulfonate -> the 1,3-propanediol boronic ester (Miyaura); the diboron is an agent
+1542	miyaura_borylation	alkenyl_halide	[A@=:1](=[A:2])-[B]1-[O]-[C]-[C]-[C]-[O]-1		C/C=C/Br>>B1(/C=C/C)OCCCO1	Alkenyl halide -> the 1,3-propanediol boronic ester (Miyaura); the diboron is an agent
+1543	miyaura_borylation	alkenyl_sulfonate	[A@=:1](=[A:2])-[B]1-[O]-[C]-[C]-[C]-[O]-1		C/C=C/OS(=O)(=O)C(F)(F)F>>B1(/C=C/C)OCCCO1	Alkenyl sulfonate -> the 1,3-propanediol boronic ester (Miyaura); the diboron is an agent
+1544	miyaura_borylation	aryl_halide	[A:1]-[B]1-[O]-[C]2:[C]:[C]:[C]:[C]:[C]:2-[O]-1		c1c(Br)cccc1>>B1(c2ccccc2)Oc2ccccc2O1	Aryl halide -> the catechol boronic ester (Miyaura); the diboron is an agent
+1545	miyaura_borylation	aryl_sulfonate	[A:1]-[B]1-[O]-[C]2:[C]:[C]:[C]:[C]:[C]:2-[O]-1		O=S(C(F)(F)F)(Oc1ccccc1)=O>>B1(c2ccccc2)Oc2ccccc2O1	Aryl sulfonate -> the catechol boronic ester (Miyaura); the diboron is an agent
+1546	miyaura_borylation	alkenyl_halide	[A@=:1](=[A:2])-[B]1-[O]-[C]2:[C]:[C]:[C]:[C]:[C]:2-[O]-1		C/C=C/Br>>B1(/C=C/C)Oc2ccccc2O1	Alkenyl halide -> the catechol boronic ester (Miyaura); the diboron is an agent
+1547	miyaura_borylation	alkenyl_sulfonate	[A@=:1](=[A:2])-[B]1-[O]-[C]2:[C]:[C]:[C]:[C]:[C]:2-[O]-1		C/C=C/OS(=O)(=O)C(F)(F)F>>B1(/C=C/C)Oc2ccccc2O1	Alkenyl sulfonate -> the catechol boronic ester (Miyaura); the diboron is an agent

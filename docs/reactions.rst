@@ -1528,8 +1528,8 @@ label                                the claim it makes about the record
 ===================================  =====================================================================
 ``purification``                     the product went in and came out
 ``protect:<names>``                  the product is an input with a protecting group added
-``react:<name>``                     a corpus row, applied to the inputs as they arrived, makes this
 ``deprotect:<labels>``               the product is an input with a protecting group removed
+``react:<name>``                     a corpus row, applied to the inputs as they arrived, makes this
 ``deprotect:<labels>+react:<name>``  strip what can be stripped, then a corpus row fires on what is left
 ===================================  =====================================================================
 
@@ -1552,7 +1552,11 @@ mapped: an acetate from Ac\ :sub:`2`\ O, AcCl or AcOH is ``protect:hydroxyl_acyl
 group of ``protective.tsv`` reads this way, a methyl ether, a benzylamine and a tosylamide included, and so
 do the triflate, mesylate and tosylate pseudohalides of an OH, which are set by many reagents
 (``protect:hydroxyl_triflyl``), and the enol triflate of a ketone, on its own site
-(``protect:enol_triflyl``); an acylation by an acid no row names is a reaction.
+(``protect:enol_triflyl``); an acylation by an acid no row names is a reaction.  **Deprotection comes
+next**, for the same reason: removing a named group is ``deprotect:`` even where a corpus row -- an amide
+hydrolysis on an N-benzoyl -- would build the same product.  A group cut inside a larger one reads as the
+inner group where no whole group explains the record: hydrogenolysis of a BOM to the N-CH\ :sub:`2`\ OH is
+``deprotect:hydroxyl_benzyl``.
 
 .. testcode::
 
@@ -1577,7 +1581,7 @@ The water is on one side only, so it comes back unmapped: the numbering is 1-1 o
 
     O.[CH2:2]([CH3:1])[OH:3]>>[CH2:2]([CH3:1])[OH:3]
 
-``react:<name>`` is the third: a row of the reaction corpus, applied to the inputs as they arrived and
+``react:<name>`` is the fourth: a row of the reaction corpus, applied to the inputs as they arrived and
 found to reproduce the recorded product.  That is the strongest evidence available -- the record says
 these things reacted, and a row says this is what they make.
 
@@ -1640,8 +1644,8 @@ alternative.
     assert ([r.message for r in rxn.log if r.rule == 'reconstruct:alternatives']
             == ['alternative explanations not applied: react:buchwald_hartwig'])
 
-The three lower rungs read a record whose product is a masked or unmasked form of an input, and the one
-between them composes: strip every input that can be stripped, then let the corpus fire on what is left.
+``protect:`` and ``deprotect:`` read a record whose product is a masked or unmasked form of an input, and
+the last rung composes: strip every input that can be stripped, then let the corpus fire on what is left.
 
 .. testcode::
 
@@ -1722,6 +1726,7 @@ default**: a record whose constitution the corpus explains gets its mapping even
 disagree about a centre, and the disagreement is a log line rather than a lost answer.
 
 The ladder is walked **twice**: strict first, always, then loose only if nothing explained the record.
+Under ``stereo='loose'`` a third walk follows, for the tautomer question below.
 The corpus discriminates rows by configuration -- one row carries a centre through and another turns it
 over -- so a record that states its product configuration is entitled to the row that actually explains
 it, and the loose walk reaches only records that would otherwise have come back unexplained.
@@ -1752,6 +1757,21 @@ there for the caller who would rather have nothing than a mapping over a configu
 Loose relaxes the configuration and **nothing else**.  The hydrogen counts, the charges, the isotopes and
 every bond order are still what a component has to reproduce, so a constitutional mismatch comes back
 unexplained under either setting.
+
+**The tautomer walk is the last.**  A record draws whichever tautomer its author chose, and ``canonicalize()``
+does not settle every one -- a demethylation builds the 2-hydroxypyrimidine and the record draws the
+pyrimidinone.  The third walk compares components with the bond orders dropped and lets a hydrogen move 2,
+4 or 6 bonds onto or off an N, O or S, the 1,3-, 1,5- and 1,7-shifts; the heavy atoms, their bonds, the
+charges and the hydrogen total still have to agree.  A carbon-to-carbon step is not a tautomer, so reducing
+the carbamate instead of the urea carbonyl on one nitrogen stays a mismatch.  The log says
+``reconstruct:tautomer``.
+
+.. testcode::
+
+    rxn = smiles('COc1ncc2c(n1)CCCC2=O.Br>>O=C1NC2=C(C=N1)C(=O)CCC2')
+
+    assert rxn.reconstruct_mapping() == ('deprotect:phenol_methyl',)
+    assert [r.rule for r in rxn.log if r.rule == 'reconstruct:tautomer'] == ['reconstruct:tautomer']
 
 ``reconstruct:stereo-mismatch`` is one ``INFO`` line naming every site where the two sides disagree, in
 the stable ids of the recorded product.  Three ways to disagree are all reported: the sides state
