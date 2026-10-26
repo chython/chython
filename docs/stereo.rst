@@ -1997,6 +1997,11 @@ Rule                                            Severity          Stage         
 ``smiles:cip-duplicate``                        LOST              read           two descriptors for one atom; the first
                                                                                  is kept
 ``smiles:cip-refused``                          LOST              read           a descriptor the atom cannot store
+``smiles:brace-axis-not-a-unit``                LOST              read           a ``{...}`` ``C<i>,<j>=`` axis configuration on
+                                                                                 a bond that is no atropisomer axis
+``smiles:brace-bond-not-a-bond``                LOST              read           a ``{...}`` ``B<i>,<j>=`` descriptor on atoms
+                                                                                 that share no bond
+``smiles:brace-bad-index``                      LOST              read           a ``{...}`` bond field naming a missing atom
 ``smarts:unresolved-stereo-dropped``            LOST              read           ``@?`` in a query, which no match can
                                                                                  test
 ``smiles:stereo-not-written``                   LOST              write          plain SMILES: an atropisomer, helix or

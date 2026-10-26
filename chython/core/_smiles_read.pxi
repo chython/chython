@@ -267,6 +267,7 @@ cdef struct smi_parse_t:
     uint32_t sg_marks      # enhanced stereo group marks the tail placed, so the apply can be skipped
     uint32_t cip_marks     # CIP descriptors the tail stated, likewise
     uint32_t wedge_marks   # bonds the tail's `wU:`/`wD:` fields name
+    uint32_t brace_axes    # the `{...}` tail's `C<i>,<j>=` axis configurations
     uint32_t open_atom[SMI_CLOSURES]
     uint32_t open_pos[SMI_CLOSURES]
     uint32_t open_at[SMI_CLOSURES]     # byte offset of the opening label, for the error message
@@ -311,6 +312,7 @@ cdef int smi_alloc(smi_parse_t *p, uint32_t n) except -1:
     p.sg_marks = 0
     p.cip_marks = 0
     p.wedge_marks = 0
+    p.brace_axes = 0
     cdef uint32_t i
     for i in range(SMI_CLOSURES):
         p.open_live[i] = 0
@@ -1675,14 +1677,64 @@ cdef int smi_brace_cip(smi_parse_t *p, const char *s, uint32_t i, uint32_t j, by
     return 0
 
 
-cdef int smi_brace(smi_parse_t *p, bytes block, object log) except -1:
+cdef int smi_brace_bond(smi_parse_t *p, const char *s, uint32_t i, uint32_t j, bytes block, object log,
+                        list bonds) except -1:
+    """One `B<i>,<j>=<letter>` or `C<i>,<j>=@`/`@@` field, collected into `bonds` as `(kind, i, j, value)`.
+
+    Collected and not applied: a `C` configures an atropisomer axis, which exists only once the molecule is
+    built and its units perceived (`smi_brace_axes`), and a `B` names a bond the arena owns (`smi_marks`).
+    What is decided here is the field's SHAPE and its indices, so the log names a malformed field rather
+    than an unstorable one.
+    """
+    cdef uint32_t k = i + 1, a, b = 0
+    cdef bytes value
+    a = smi_digits(s, j, &k, 9)
+    if k == i + 1 or k >= j or s[k] != 44:
+        k = j                                        # no `<i>,`: malformed
+    else:
+        k += 1
+        b = smi_digits(s, j, &k, 9)
+    if k >= j or s[k] != 61:                          # no `<j>=`
+        log.append(mc_record('smiles:brace-field-not-applied', (),
+                             'the `{...}` field `%s` is not applied' % smi_cx_name(block, i, j), mc_lost()))
+        return 0
+    value = block[k + 1:j]
+    if a >= p.n_atoms or b >= p.n_atoms or a == b:
+        log.append(mc_record('smiles:brace-bad-index', (),
+                             'the `{...}` field `%s` names no bond of the %d-atom string and was dropped'
+                             % (smi_cx_name(block, i, j), p.n_atoms), mc_lost()))
+        return 0
+    if s[i] == 67 and value not in (b'@', b'@@'):
+        log.append(mc_record('smiles:brace-field-not-applied', (),
+                             'the `{...}` field `%s` is not applied' % smi_cx_name(block, i, j), mc_lost()))
+        return 0
+    if s[i] == 66 and (len(value) != 1 or not smi_islower(value[0]) and not smi_isupper(value[0])):
+        log.append(mc_record('smiles:cip-field-malformed', (),
+                             'the `{...}` bond descriptor field `%s` is malformed and was dropped'
+                             % smi_cx_name(block, i, j), mc_lost()))
+        return 0
+    bonds.append((chr(s[i]), a, b, value.decode('ascii')))
+    if s[i] == 67:
+        p.brace_axes += 1
+    return 0
+
+
+cdef int smi_brace(smi_parse_t *p, bytes block, object log, list bonds=None) except -1:
     """Apply a brace-delimited extension block: enhanced stereo groups and CIP descriptors.
 
     Some tools write the tail in braces instead of pipes.  It is the same idea as CXSMILES and its
     three enhanced-stereo fields are spelled character for character the same -- `a:`, `o<n>:`,
     `&<n>:`, atom indices ZERO-BASED -- so they route into `smi_cx_group` rather than into a second
-    copy of the same scan.  Only the separator differs, `;` for `,`, and one field has no CXSMILES
-    equivalent at all: `A<index>=<letter>`, an atom's CIP descriptor stated by whatever assigned it.
+    copy of the same scan.  Only the separator differs, `;` for `,`, and three fields have no CXSMILES
+    equivalent at all:
+
+    | field               | states                                    | applied by        |
+    | ------------------- | ----------------------------------------- | ----------------- |
+    | `A<i>=<letter>`     | atom i's CIP descriptor                   | `smi_marks`       |
+    | `B<i>,<j>=<letter>` | bond i-j's descriptor: `e`/`z`, `r`/`s`   | `smi_marks`       |
+    | `C<i>,<j>=@`/`@@`   | the configuration of the axis on bond i-j | `smi_brace_axes`  |
+
+    `bonds` collects the last two for the build to apply; None drops them with the generic line.
 
     That descriptor is worth reading rather than dropping because it is NOT derivable from the string
     around it.  Enhanced stereo groups say a centre's configuration is one of a set; a descriptor is
@@ -1710,6 +1762,8 @@ cdef int smi_brace(smi_parse_t *p, bytes block, object log) except -1:
             break
         if c == 65:                                                # `A<index>=<letter>`
             smi_brace_cip(p, s, i, j, block, log)
+        elif (c == 66 or c == 67) and bonds is not None and i + 1 < j and smi_isdigit(s[i + 1]):
+            smi_brace_bond(p, s, i, j, block, log, bonds)          # `B<i>,<j>=` / `C<i>,<j>=`
         elif c == 97 and i + 1 < j and s[i + 1] == 58:             # `a:` absolute
             smi_cx_group(p, 1, s, i + 2, j, SMI_SG_ABS, 0, block, i, log, '`{...}`')
         elif c == 111 or c == 38:                                  # `o<n>:` OR, `&<n>:` AND
@@ -1861,7 +1915,7 @@ cdef MoleculeContainer smi_build(smi_parse_t *p):
     cdef smi_atom_t *a
     cdef smi_bond_t *b
     with mol.edit():
-        if p.chiral_count or p.dir_count or p.wedge_marks:
+        if p.chiral_count or p.dir_count or p.wedge_marks or p.brace_axes:
             # `smi_stereo` writes parities into the SEALED arena -- a parity is read against the frame
             # perception derives, so the frame must exist first -- and a persistent segment is laid out
             # once.  So the segment is asked for HERE, where the layout is still open, on the same
@@ -2007,7 +2061,7 @@ cdef int smi_free_stereo_group(uint64_t taken) noexcept nogil:
     return 0
 
 
-cdef int smi_marks(smi_parse_t *p, MoleculeContainer mol, object log) except -1:
+cdef int smi_marks(smi_parse_t *p, MoleculeContainer mol, object log, list brace=None) except -1:
     """Apply the per-atom marks the tail stated: enhanced stereo groups, and CIP descriptors.
 
     Both in ONE edit scope, and one pass over the atoms, for two reasons.  An atom carrying both a
@@ -2036,6 +2090,8 @@ cdef int smi_marks(smi_parse_t *p, MoleculeContainer mol, object log) except -1:
     cdef smi_atom_t *a
     cdef list refused = []
     cdef object e                        # the except-as target; `warn.undeclared` counts it
+    cdef tuple f                         # a `{...}` bond field
+    cdef object letter
     cdef uint64_t taken[4]               # per kind, bit <id> set when the tail already states that id
     cdef uint16_t remap_from[STEREO_GROUP_MAX]
     cdef uint8_t remap_kind[STEREO_GROUP_MAX], remap_to[STEREO_GROUP_MAX]
@@ -2112,8 +2168,39 @@ cdef int smi_marks(smi_parse_t *p, MoleculeContainer mol, object log) except -1:
                     # refuse ABS: it forces the group to 0 and validates only the stable id.
                     if not a.sg_kind and (a.chiral == SMI_CHIRAL_AT or a.chiral == SMI_CHIRAL_ATAT):
                         mol.set_stereo_group(a.sid, <int> SMI_SG_ABS, 0)
+        # The `{...}` tail's `B<i>,<j>=` bond descriptors.  A statement only, like `A<i>=`: `assign_cip()`
+        # recomputes and overwrites.  Axial `r`/`s` are Ra/Sa, stored as their helicity equivalents M/P.
+        for f in brace or ():
+            if f[0] != 'B':
+                continue
+            if smi_find_bond(p, <uint32_t> f[1], <uint32_t> f[2]) == SMI_NONE:
+                refused.append(mc_record('smiles:brace-bond-not-a-bond', (),
+                                         'the `{...}` field `B%d,%d=%s` names atoms %d and %d, which share no '
+                                         'bond; it was dropped' % (f[1], f[2], f[3], f[1] + 1, f[2] + 1), mc_lost()))
+                continue
+            letter = BRACE_BOND_DESCRIPTOR.get(f[3])
+            if f[3] == 'q':
+                refused.append(mc_record('smiles:cip-undetermined', (),
+                                         'the `{...}` field `B%d,%d=q` states no determination and nothing is '
+                                         'stored' % (f[1], f[2]), mc_info()))
+            elif letter is None:
+                refused.append(mc_record('smiles:cip-field-bad-descriptor', (),
+                                         'the `{...}` field `B%d,%d=%s` does not name a bond descriptor and was '
+                                         'dropped' % (f[1], f[2], f[3]), mc_lost()))
+            else:
+                try:
+                    mol.set_bond_cip(p.atoms[f[1]].sid, p.atoms[f[2]].sid, letter)
+                except ValueError as e:
+                    refused.append(mc_record('smiles:cip-refused', (),
+                                             'bond %d-%d: the descriptor the `{...}` block names cannot be '
+                                             'stored (%s)' % (f[1] + 1, f[2] + 1, e), mc_lost()))
     log.extend(refused)
     return 0
+
+
+# `B<i>,<j>=` letter -> stored bond descriptor.  An axis's Ra is M and its Sa is P; `q` and any letter not
+# here are not stored.
+cdef dict BRACE_BOND_DESCRIPTOR = {'e': 'E', 'z': 'Z', 'E': 'E', 'Z': 'Z', 'r': 'M', 's': 'P', 'M': 'M', 'P': 'P'}
 
 
 cdef str smi_kind_name(uint8_t kind):
@@ -2382,7 +2469,7 @@ cdef uint32_t smi_marked_ref(smi_parse_t *p, dict parse_of, stereo_unit_t *u, ui
     return found
 
 
-cdef int smi_stereo(smi_parse_t *p, MoleculeContainer mol, object log) except -1:
+cdef int smi_stereo(smi_parse_t *p, MoleculeContainer mol, object log, list brace=None) except -1:
     """Apply what the string said about configuration: `@`/`@@` on an atom, `/` and `\\` on a bond.
 
     THE PARITY IS WRITTEN INTO SEG_PARITY rather than through the journal, which is what
@@ -2402,7 +2489,8 @@ cdef int smi_stereo(smi_parse_t *p, MoleculeContainer mol, object log) except -1
     assertions in `test_inchi.py`).  Frame-relative, so the same sentence reads in any frame: parity
     1 means position 0 and position 2 are trans, and a within-pair swap flips it.
 
-    A CXSMILES tail wedge configures an atropisomer axis or a helix (`smi_axis_wedges`).  What is NOT
+    A CXSMILES tail wedge configures an atropisomer axis or a helix (`smi_axis_wedges`), and so does a
+    `{...}` tail's `C<i>,<j>=` field (`smi_brace_axes`).  What is NOT
     applied is named in the log: `@?`, a direction on a bond no unit uses, a wedge on anything else.
     Nothing here raises.
     """
@@ -2572,6 +2660,8 @@ cdef int smi_stereo(smi_parse_t *p, MoleculeContainer mol, object log) except -1
                                 % (total_dirs - <uint32_t> len(consumed)), mc_lost()))
     if p.wedge_marks and smi_axis_wedges(p, structure, parse_of, log):
         wrote = True
+    if brace and smi_brace_axes(p, structure, index_of, parse_of, brace, log):
+        wrote = True
     if wrote:
         refresh_parity_features(structure)
     return 0
@@ -2734,6 +2824,59 @@ cdef bint smi_axis_wedges(smi_parse_t *p, Structure structure, dict parse_of, ob
     return wrote
 
 
+cdef bint smi_brace_axes(smi_parse_t *p, Structure structure, dict index_of, dict parse_of, list brace,
+                         object log) except -1:
+    """Apply the `{...}` tail's `C<i>,<j>=@`/`@@` fields to the atropisomer axes.  True when a parity was stored.
+
+    THE FRAME IS `smi_axis_wedges`': each pivot's two ortho atoms in the order the string writes the atoms,
+    the lower-indexed pivot's pair first -- which is also the order perception stores them in, so the field
+    reads straight into the parity: `@@` is parity 1 and `@` is parity 2 in that frame.  Which pivot is named
+    first does not matter, swapping both pairs being an even permutation.  A field on a bond that is no
+    perceived axis is logged, never guessed onto another unit.
+    """
+    cdef uint32_t count = structure_stereo_unit_count(structure)
+    cdef stereo_unit_t *units = structure_stereo_units(structure)
+    cdef stereo_unit_t *u
+    cdef uint32_t k, base, partner, si, sj
+    cdef uint32_t want[4]
+    cdef uint32_t perm[4]
+    cdef bint wrote = False, found
+    cdef tuple f
+    for f in brace:
+        if f[0] != 'C':
+            continue
+        si = <uint32_t> index_of[p.atoms[f[1]].sid]
+        sj = <uint32_t> index_of[p.atoms[f[2]].sid]
+        found = False
+        for k in range(count):
+            u = &units[k]
+            if u.kind != SU_ATROPISOMER or u.n_refs != 4:
+                continue
+            partner = stereo_unit_partner(structure, u)
+            if not ((u.anchor == si and partner == sj) or (u.anchor == sj and partner == si)):
+                continue
+            for base in range(0, 4, 2):
+                if parse_of[u.refs[base]] < parse_of[u.refs[base + 1]]:
+                    want[base] = u.refs[base]
+                    want[base + 1] = u.refs[base + 1]
+                else:
+                    want[base] = u.refs[base + 1]
+                    want[base + 1] = u.refs[base]
+            if parse_of[partner] < parse_of[u.anchor]:     # the lower-indexed pivot's pair first
+                want[0], want[2] = want[2], want[0]
+                want[1], want[3] = want[3], want[1]
+            smi_pair_perm_of(u, want, perm)
+            structure_set_parity(structure, u.anchor, translate_parity(1 if f[3] == '@@' else 2, perm))
+            wrote = found = True
+            break
+        if not found:
+            log.append(mc_record('smiles:brace-axis-not-a-unit', (),
+                                 'the `{...}` field `C%d,%d=%s` configures the bond between atoms %d and %d, '
+                                 'which is no atropisomer axis here; it was dropped'
+                                 % (f[1], f[2], f[3], f[1] + 1, f[2] + 1), mc_lost()))
+    return wrote
+
+
 def read_smiles(text, log=None):
     """Read a SMILES string into a `MoleculeContainer`, or a reaction SMILES into a `ReactionContainer`.
 
@@ -2828,6 +2971,7 @@ cdef MoleculeContainer smi_one(bytes src, bytes tail, object mylog):
     """
     cdef uint32_t start = <uint32_t> len(mylog)
     cdef MoleculeContainer built
+    cdef list brace = []                 # the `{...}` tail's bond fields, applied by the build
     cdef smi_parse_t p
     smi_alloc(&p, <uint32_t> len(src))
     try:
@@ -2837,7 +2981,7 @@ cdef MoleculeContainer smi_one(bytes src, bytes tail, object mylog):
             if tail.startswith(b'|') and tail.endswith(b'|') and len(tail) > 1:
                 smi_cx(&p, 1, tail, mylog, False)
             elif tail.startswith(b'{') and tail.endswith(b'}') and len(tail) > 1:
-                smi_brace(&p, tail, mylog)
+                smi_brace(&p, tail, mylog, brace)
             elif tail.startswith(b'|') or tail.startswith(b'{'):
                 mylog.append(mc_record('smiles:extension-unterminated', (),
                                       'the extension block after the SMILES is not terminated and was '
@@ -2846,7 +2990,7 @@ cdef MoleculeContainer smi_one(bytes src, bytes tail, object mylog):
                 mylog.append(mc_record('smiles:extension-ignored', (),
                                       'text after the SMILES is not part of it and was ignored: %s'
                                       % tail.decode('ascii', 'replace'), mc_lost()))
-        built = smi_parse_build(&p, src, tail, mylog)
+        built = smi_parse_build(&p, src, tail, mylog, brace)
         # the `if` asks whether there is anything to say, never whether to say it: `mol.log` builds its
         # storage on first touch, 0.2 us against a 5 us parse, and a clean string should not pay for an
         # empty one.  `_ctab.py`'s fold is guarded the same way and for the same reason
@@ -2864,11 +3008,21 @@ cdef int smi_parse_read(smi_parse_t *p, bytes src, object mylog) except -1:
     return 0
 
 
-cdef MoleculeContainer smi_parse_build(smi_parse_t *p, bytes src, bytes tail, object mylog):
+cdef inline bint smi_brace_has(list brace, str kind):
+    """Does the `{...}` tail carry a bond field of `kind` (`'B'` or `'C'`)?"""
+    cdef tuple f
+    if brace:
+        for f in brace:
+            if f[0] == kind:
+                return True
+    return False
+
+
+cdef MoleculeContainer smi_parse_build(smi_parse_t *p, bytes src, bytes tail, object mylog, list brace=None):
     """The second half: hydrogens, build, promotion, marks, stereo, labels.  Runs after the tail.
 
     `src` is this component's own bytes and `tail` the whole string's extension block; the label
-    offsets in the parse graph point into one or the other.
+    offsets in the parse graph point into one or the other.  `brace` is the `{...}` tail's bond fields.
     """
     cdef list hlog
     cdef MoleculeContainer mol
@@ -2886,11 +3040,11 @@ cdef MoleculeContainer smi_parse_build(smi_parse_t *p, bytes src, bytes tail, ob
         mylog.append(mc_record('smiles:dative-arrow-direction-lost', (),
                                '%d dative bond(s) were written as an arrow; order 8 is stored but which '
                                'atom donates is not' % p.dative_arrows, mc_lost()))
-    if p.sg_marks or p.cip_marks:
-        smi_marks(p, mol, mylog)
-    if p.chiral_count or p.dir_count or p.wedge_marks:
+    if p.sg_marks or p.cip_marks or smi_brace_has(brace, 'B'):
+        smi_marks(p, mol, mylog, brace)
+    if p.chiral_count or p.dir_count or p.wedge_marks or p.brace_axes:
         # after the groups, which edit, because this writes into the arena the edit leaves
-        smi_stereo(p, mol, mylog)
+        smi_stereo(p, mol, mylog, brace)
     smi_labels(p, src, tail, mol)
     return mol
 

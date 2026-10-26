@@ -42,7 +42,7 @@ _PASS_THROUGH = frozenset((
     'smiles:stereo-group-empty', 'smiles:stereo-group-bad-index', 'smiles:stereo-group-duplicate',
     'smiles:stereo-group-renumbered', 'smiles:stereo-group-refused', 'smiles:cip-field-malformed',
     'smiles:cip-field-bad-descriptor', 'smiles:cip-undetermined', 'smiles:cip-bad-index', 'smiles:cip-duplicate',
-    'smiles:cip-refused',
+    'smiles:cip-refused', 'smiles:brace-axis-not-a-unit', 'smiles:brace-bond-not-a-bond', 'smiles:brace-bad-index',
     'smarts:unresolved-stereo-dropped',
     'ctab:wedge-dropped', 'ctab:configuration-out-of-range', 'ctab:stereo-out-of-range',
     'ctab:stereo-group-dropped', 'ctab:chiral-flag-ignored', 'ctab:dimensionality-mismatch',
