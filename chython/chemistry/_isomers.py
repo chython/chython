@@ -896,14 +896,18 @@ def standardize_isomers(molecule: MoleculeContainer) -> bool:
     aromatic = molecule.copy()
     aromatic.thiele()
     ringed = {c for c, _ in _amidines(aromatic)}
-    systems = tuple(system for system in systems
-                    if not ringed.intersection(system[0]) or _conjugated_carbon(molecule, system[0]))
+    kept = tuple(system for system in systems
+                 if not ringed.intersection(system[0]) or _conjugated_carbon(molecule, system[0]))
+    # a system handed over is the amidine path's alone: its atoms are spelled aromatic on the working copy,
+    # so the ring path would read them as sites too and the two paths would write one nitrogen twice
+    handed_over = {n for system in systems if system not in kept for n in system[0]}
+    systems = kept
     # a conjugated ring is never the amidine path's, placed by the ring path or by nothing: 2-aminopyridine
     # has one ring nitrogen and no annular choice, and its C=N stays where the handover put it
     conjugated = frozenset(n for atoms, _ in _ring_systems(molecule) if _conjugated_carbon(molecule, atoms)
                            for n in atoms)
     groups = _amidines(molecule, conjugated.union(n for atoms, _ in systems for n in atoms))
-    sites = _sites(target)
+    sites = [n for n in _sites(target) if n not in handed_over]
 
     # ONE frame for both paths, and that is what makes them independent -- their gates do not overlap,
     # an amidine's excluding every ring atom, but their answers would: a ring hydrogen and an amidine's

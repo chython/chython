@@ -675,3 +675,18 @@ def test_the_atom_count_and_the_formula_never_change():
 # Do not add a `chython.standardize_isomers is standardize_isomers` test here:
 # `test_dependency_direction.py` forbids anything under `chython/chemistry/` from importing the facade,
 # tests included.  The facade re-export is checked from `chython/test/`.
+
+
+def test_a_ring_handed_to_the_amidine_path_is_not_placed_by_the_ring_path_too():
+    """A 6-amino-1,2,4-triazin-3-one ring holds an amidine carbon and no C=C, so it is the amidine path's.
+
+    The ring path, reading the working copy where the system was spelled aromatic, would place a hydrogen
+    on the ring nitrogen the amidine path then takes the C=N onto: one nitrogen written twice, left with
+    neither.  Every hydrogen count stays derivable and the pass stays idempotent.
+    """
+    molecule = read_smiles('CNC1=NC(=O)NN=C1')
+    standardize_isomers(molecule)
+    assert all(molecule.implicit_h_of(n) is not None for n in molecule.atom_numbers), str(molecule)
+    assert not check_valence(molecule), str(molecule)
+    again = molecule.copy()
+    assert not standardize_isomers(again) and again.canonical_bytes == molecule.canonical_bytes
