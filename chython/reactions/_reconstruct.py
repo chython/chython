@@ -610,11 +610,12 @@ _SHIFTS = frozenset((2, 4, 6))
 def _shifted(a: MoleculeContainer, b: MoleculeContainer, pairs: dict) -> bool:
     """Do the hydrogens of `b` sit where a tautomer of `a` puts them, through `pairs` (`{a id: b id}`)?
 
-    Every hydrogen `a` lost at one atom has to arrive at another 2, 4 or 6 bonds away, each arrival used
-    once, and one of the two atoms a heteroatom: keto-enol, lactam-lactim and the annular shifts move a
-    hydrogen onto or off N, O or S.  That is what keeps a regioisomer out: reducing the carbamate rather than
-    the urea carbonyl of one N gives one skeleton and one hydrogen total, but the CH(OH) carbon moves by a
-    carbon-to-carbon step no tautomer takes.
+    ONE hydrogen, lost at one atom and arriving at another 2, 4 or 6 bonds away, one of the two a heteroatom:
+    keto-enol, lactam-lactim and the annular shifts move a hydrogen onto or off N, O or S, and a record
+    drawing another tautomer than the one built moves one.  That is what keeps a reduction at another site
+    out: the ester reduced to the hemiacetal and the imine of the same substrate reduced instead give one
+    skeleton and one hydrogen total, but two hydrogens apart; the carbamate rather than the urea carbonyl of
+    one N, a carbon-to-carbon step no tautomer takes.
     """
     lost, gained = [], []
     for n, m in pairs.items():
@@ -623,7 +624,7 @@ def _shifted(a: MoleculeContainer, b: MoleculeContainer, pairs: dict) -> bool:
             return False
         lost.extend([n] * (h - k))
         gained.extend([n] * (k - h))
-    if len(lost) != len(gained):
+    if len(lost) != len(gained) or len(lost) > 1:
         return False
     if not lost:
         return True

@@ -1760,3 +1760,9 @@ id	name	groups	product	ring_sizes	probe	description
 1545	miyaura_borylation	aryl_sulfonate	[A:1]-[B]1-[O]-[C]2:[C]:[C]:[C]:[C]:[C]:2-[O]-1		O=S(C(F)(F)F)(Oc1ccccc1)=O>>B1(c2ccccc2)Oc2ccccc2O1	Aryl sulfonate -> the catechol boronic ester (Miyaura); the diboron is an agent
 1546	miyaura_borylation	alkenyl_halide	[A@=:1](=[A:2])-[B]1-[O]-[C]2:[C]:[C]:[C]:[C]:[C]:2-[O]-1		C/C=C/Br>>B1(/C=C/C)Oc2ccccc2O1	Alkenyl halide -> the catechol boronic ester (Miyaura); the diboron is an agent
 1547	miyaura_borylation	alkenyl_sulfonate	[A@=:1](=[A:2])-[B]1-[O]-[C]2:[C]:[C]:[C]:[C]:[C]:2-[O]-1		C/C=C/OS(=O)(=O)C(F)(F)F>>B1(/C=C/C)Oc2ccccc2O1	Alkenyl sulfonate -> the catechol boronic ester (Miyaura); the diboron is an agent
+1548	xec	aryl_halide,alkyl_sulfonate	[A:1]-[A;&1:101]		c1c(Br)cccc1.CCC(OS(C)(=O)=O)C>>c1cc(ccc1)[C@H](C)CC |&1:6|	Aryl halide and alkyl sulfonate coupled (cross-electrophile; an iodide salt an agent)
+1549	sulfonate_to_halide	alkyl_sulfonate	[I;D1]-[A@~:1]		C[C@@H](CC)OS(C)(=O)=O>>C(C)[C@H](I)C	ROSO2R' -> RI (NaI, KI); the salt is an agent
+1550	sulfonate_to_halide	alkyl_sulfonate	[Br;D1]-[A@~:1]		C[C@@H](CC)OS(C)(=O)=O>>C(C)[C@H](Br)C	ROSO2R' -> RBr (LiBr); the salt is an agent
+1551	sulfonate_to_halide	alkyl_sulfonate	[Cl;D1]-[A@~:1]		C[C@@H](CC)OS(C)(=O)=O>>C(C)[C@H](Cl)C	ROSO2R' -> RCl (LiCl); the salt is an agent
+1552	sulfonate_fluorination	alkyl_sulfonate	[F;D1]-[A@~:1]		C[C@@H](CC)OS(C)(=O)=O>>C(C)[C@H](F)C	ROSO2R' -> RF (KF/K222, CsF, TBAF); the fluoride is an agent
+1553	sulfonate_elimination	alkyl_sulfonate_alpha_ch	[A:1]=[A:2]		CS(=O)(=O)OC1CCCCC1>>C1=CCCCC1	ROSO2R' with a beta C-H -> the alkene (DBU, tBuOK)

@@ -1071,6 +1071,9 @@ def test_the_tautomer_comparison_moves_a_hydrogen_onto_or_off_a_heteroatom_only(
     # one skeleton and one hydrogen total, but the CH(OH) carbon moved by a carbon-to-carbon step
     hemiaminal, alcohol = smiles('OC(C)N(C)C=O'), smiles('CC(=O)N(C)CO')
     assert not _same(hemiaminal, alcohol, TAUTOMER)
+    # the ester reduced to the hemiacetal against the imine reduced: two hydrogens apart, a reaction elsewhere
+    hemiacetal, amine = smiles('CCOC(O)c1ccc(C=NC)cc1'), smiles('CCOC(=O)c1ccc(CNC)cc1')
+    assert not _same(hemiacetal, amine, TAUTOMER)
 
 
 def test_a_pseudohalide_the_row_displaced_is_its_leaving_group_not_a_strip():
@@ -1078,3 +1081,11 @@ def test_a_pseudohalide_the_row_displaced_is_its_leaving_group_not_a_strip():
     # mesylate cut to the alcohol and the alcohol aminated, deletes the very oxygen the strip revealed
     rxn = smiles('C[C@H](OS(C)(=O)=O)c1ccncc1.C1CCNCC1.O=C([O-])[O-].[K+].[K+]>>CC(N1CCCCC1)c1ccncc1')
     assert rxn.reconstruct_mapping() == ('react:n_alkylation',)
+
+
+def test_a_sulfonate_displaced_by_a_salt_is_named_for_the_conditions_not_the_alcohol_route():
+    # the halide or fluoride salt is an agent; read through the stripped alcohol it would be an Appel or DAST
+    for salt, product, label in (('[Li+].[Cl-]', 'ClCCCc1ccccc1', 'react:sulfonate_to_halide'),
+                                 ('[K+].[F-]', 'FCCCc1ccccc1', 'react:sulfonate_fluorination')):
+        rxn = smiles(f'CS(=O)(=O)OCCCc1ccccc1.{salt}>>{product}')
+        assert rxn.reconstruct_mapping() == (label,), salt

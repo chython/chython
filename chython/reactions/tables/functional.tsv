@@ -511,3 +511,4 @@ id	name	smarts	precursor	example	decoys	site	description
 420	xec_aryl_halide	[Cl,Br,I;D1]-[C;a:1]	[Cl]-[C:1],[Br]-[C:1],[I]-[C:1]	Brc1ccccc1	Fc1ccccc1		`aryl_halide` under a second name, for the second electrophile of a biaryl XEC: slots naming two groups never read one aryl halide as both
 421	acyl_hydrazine_nh	[N;D2;z1;x1;h1:1](-[C;z2;x2:2]=[O:3])-[N:4]		CC(=O)NN(C)C	CNN(C)C,CC(=O)NC	amide:1	the N-H of an acyl hydrazide, N(C=O)-N: the amide site `secondary_amide` (`x0`) leaves out
 422	lactim_oh	[O;D1;z1;x0;h1:1]-[C;z2:2]=[N;z2:3]		OC1=NCCCC1	O=C1CCCCN1,OCC=N	enol:1	the OH of a lactim or imidic acid, O-C=N: the tautomer an O-alkyl lactim reveals
+423	alkyl_sulfonate_alpha_ch	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1]-[C;z1;h1,h2,h3:2])-[C]	[S](=[O])(=[O])(-[O]-[C:1]-[C:2])-[C]	CC(OS(C)(=O)=O)CC	CS(=O)(=O)OCc1ccccc1,CS(=O)(=O)OC		an alkyl sulfonate with an sp3 C-H beside the carbinol carbon: the E2 substrate

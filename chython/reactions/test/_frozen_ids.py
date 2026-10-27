@@ -26,7 +26,7 @@ and read the diff.  A new line is a new row; a CHANGED line is a renumber, which
 means.  Never hand-edit a line to make the ratchet pass.
 """
 
-#: `functional.tsv`: 422 rows, id -> the row it names.
+#: `functional.tsv`: 423 rows, id -> the row it names.
 FUNCTIONAL = {
     'functional:1': 'terminal_alkene',
     'functional:2': 'alkene',
@@ -450,6 +450,7 @@ FUNCTIONAL = {
     'functional:420': 'xec_aryl_halide',
     'functional:421': 'acyl_hydrazine_nh',
     'functional:422': 'lactim_oh',
+    'functional:423': 'alkyl_sulfonate_alpha_ch',
 }
 
 #: `protective.tsv`: 89 rows, id -> the row it names.
@@ -638,7 +639,7 @@ ROLES = {
     'roles:89': 'azole_nitrogen/imidazole',
 }
 
-#: `reactions.tsv`: 1547 rows, id -> the row it names.
+#: `reactions.tsv`: 1553 rows, id -> the row it names.
 REACTIONS = {
     'reactions:1': 'amidation/carboxylic_acid+primary_amine',
     'reactions:2': 'amidation/carboxylic_acid+primary_aniline',
@@ -2187,4 +2188,10 @@ REACTIONS = {
     'reactions:1545': 'miyaura_borylation/aryl_sulfonate',
     'reactions:1546': 'miyaura_borylation/alkenyl_halide',
     'reactions:1547': 'miyaura_borylation/alkenyl_sulfonate',
+    'reactions:1548': 'xec/aryl_halide+alkyl_sulfonate',
+    'reactions:1549': 'sulfonate_to_halide/alkyl_sulfonate',
+    'reactions:1550': 'sulfonate_to_halide/alkyl_sulfonate',
+    'reactions:1551': 'sulfonate_to_halide/alkyl_sulfonate',
+    'reactions:1552': 'sulfonate_fluorination/alkyl_sulfonate',
+    'reactions:1553': 'sulfonate_elimination/alkyl_sulfonate_alpha_ch',
 }

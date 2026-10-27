@@ -1498,7 +1498,7 @@ there is to carry:
 
 .. testoutput::
 
-    422 89
+    423 89
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']
@@ -1760,10 +1760,11 @@ unexplained under either setting.
 
 **The tautomer walk is the last.**  A record draws whichever tautomer its author chose, and ``canonicalize()``
 does not settle every one -- a demethylation builds the 2-hydroxypyrimidine and the record draws the
-pyrimidinone.  The third walk compares components with the bond orders dropped and lets a hydrogen move 2,
-4 or 6 bonds onto or off an N, O or S, the 1,3-, 1,5- and 1,7-shifts; the heavy atoms, their bonds, the
-charges and the hydrogen total still have to agree.  A carbon-to-carbon step is not a tautomer, so reducing
-the carbamate instead of the urea carbonyl on one nitrogen stays a mismatch.  The log says
+pyrimidinone.  The third walk compares components with the bond orders dropped and lets **one** hydrogen move
+2, 4 or 6 bonds onto or off an N, O or S, the 1,3-, 1,5- and 1,7-shifts; the heavy atoms, their bonds, the
+charges and the hydrogen total still have to agree.  Two hydrogens moved at once is a reaction at another
+site -- the imine reduced where the row reduced the ester -- and a carbon-to-carbon step is not a tautomer,
+so both stay a mismatch.  The log says
 ``reconstruct:tautomer``.
 
 .. testcode::
