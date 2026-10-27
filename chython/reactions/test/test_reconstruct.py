@@ -1089,3 +1089,11 @@ def test_a_sulfonate_displaced_by_a_salt_is_named_for_the_conditions_not_the_alc
                                  ('[K+].[F-]', 'FCCCc1ccccc1', 'react:sulfonate_fluorination')):
         rxn = smiles(f'CS(=O)(=O)OCCCc1ccccc1.{salt}>>{product}')
         assert rxn.reconstruct_mapping() == (label,), salt
+
+
+def test_a_pseudohalide_off_a_reagent_does_not_change_which_groups_the_record_lost():
+    # the Pd precatalyst's mesylate is a lost pseudohalide too, and the sulfonamide the product keeps must
+    # not come off with it: the strip of the Boc alone comes first
+    rxn = smiles('CC(C)(C)OC(=O)n1cc(B2OC(C)(C)C(C)(C)O2)cn1.Brc1ccc(CN2CCN(S(C)(=O)=O)CC2)cc1'
+                 '.CS(=O)(=O)O[Pd]c1ccccc1-c1ccccc1N>>CS(=O)(=O)N1CCN(Cc2ccc(-c3cn[nH]c3)cc2)CC1')
+    assert rxn.reconstruct_mapping() == ('deprotect:azole_boc+react:suzuki',)

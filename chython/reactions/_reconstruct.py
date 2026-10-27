@@ -407,15 +407,19 @@ def _pools(recorded, inputs) -> list:
     is cleaved counts level.  Ahead of both, where a pseudohalide is among the lost groups beside another,
     the strip that KEEPS it: a mesylate displaced beside a Boc cut is `deprotect:amine_boc+react:williamson`,
     and stripping the mesylate too reads the same record as a Mitsunobu on the bare alcohol.  A pseudohalide
-    leaves from O only, so on N it is stripped there too: a nosyl cut beside a mesylate displaced is
-    `deprotect:amine_nosyl+react:n_alkylation`.  A pool equal to an earlier one is not walked twice.
+    leaves from O only, so the next pool strips it from N as well: a nosyl cut beside a mesylate displaced
+    is `deprotect:amine_nosyl+react:n_alkylation`.  A pool equal to an earlier one is not walked twice.
     """
     out, seen = [], set()
     lost = _lost(recorded, inputs)
     rules = protective_rules()
     kept = tuple(name for name in lost if not rules[name].leaving)
     leaving = tuple(name for name in lost if rules[name].leaving)
-    first = ((kept, leaving),) if leaving else ()
+    first = []
+    if leaving:
+        if kept:
+            first.append((kept, ()))
+        first.append((kept, leaving))
     for names, on_nitrogen in (*first, *(((lost, ()), ((), ())) if lost else (((), ()),))):
         pool, stripped = _strip(inputs, names, on_nitrogen)
         if not stripped:
