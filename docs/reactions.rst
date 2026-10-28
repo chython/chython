@@ -1498,7 +1498,7 @@ there is to carry:
 
 .. testoutput::
 
-    423 89
+    425 89
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']

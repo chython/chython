@@ -26,7 +26,7 @@ and read the diff.  A new line is a new row; a CHANGED line is a renumber, which
 means.  Never hand-edit a line to make the ratchet pass.
 """
 
-#: `functional.tsv`: 423 rows, id -> the row it names.
+#: `functional.tsv`: 425 rows, id -> the row it names.
 FUNCTIONAL = {
     'functional:1': 'terminal_alkene',
     'functional:2': 'alkene',
@@ -451,6 +451,8 @@ FUNCTIONAL = {
     'functional:421': 'acyl_hydrazine_nh',
     'functional:422': 'lactim_oh',
     'functional:423': 'alkyl_sulfonate_alpha_ch',
+    'functional:424': 'alkoxyvinyl_stannane',
+    'functional:425': 'alkyl_enol_ether',
 }
 
 #: `protective.tsv`: 89 rows, id -> the row it names.
@@ -639,7 +641,7 @@ ROLES = {
     'roles:89': 'azole_nitrogen/imidazole',
 }
 
-#: `reactions.tsv`: 1553 rows, id -> the row it names.
+#: `reactions.tsv`: 1556 rows, id -> the row it names.
 REACTIONS = {
     'reactions:1': 'amidation/carboxylic_acid+primary_amine',
     'reactions:2': 'amidation/carboxylic_acid+primary_aniline',
@@ -2194,4 +2196,7 @@ REACTIONS = {
     'reactions:1551': 'sulfonate_to_halide/alkyl_sulfonate',
     'reactions:1552': 'sulfonate_fluorination/alkyl_sulfonate',
     'reactions:1553': 'sulfonate_elimination/alkyl_sulfonate_alpha_ch',
+    'reactions:1554': 'alkoxyvinyl_stille/aryl_halide+alkoxyvinyl_stannane',
+    'reactions:1555': 'alkoxyvinyl_stille/aryl_sulfonate+alkoxyvinyl_stannane',
+    'reactions:1556': 'enol_ether_bromination/alkyl_enol_ether',
 }

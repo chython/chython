@@ -1766,3 +1766,6 @@ id	name	groups	product	ring_sizes	probe	description
 1551	sulfonate_to_halide	alkyl_sulfonate	[Cl;D1]-[A@~:1]		C[C@@H](CC)OS(C)(=O)=O>>C(C)[C@H](Cl)C	ROSO2R' -> RCl (LiCl); the salt is an agent
 1552	sulfonate_fluorination	alkyl_sulfonate	[F;D1]-[A@~:1]		C[C@@H](CC)OS(C)(=O)=O>>C(C)[C@H](F)C	ROSO2R' -> RF (KF/K222, CsF, TBAF); the fluoride is an agent
 1553	sulfonate_elimination	alkyl_sulfonate_alpha_ch	[A:1]=[A:2]		CS(=O)(=O)OC1CCCCC1>>C1=CCCCC1	ROSO2R' with a beta C-H -> the alkene (DBU, tBuOK)
+1554	alkoxyvinyl_stille	aryl_halide,alkoxyvinyl_stannane	[A:1]-[A:101](=[A:102])-[A:103]		c1c(Br)cccc1.CCCC[Sn](CCCC)(CCCC)C(OCC)=C>>CC(=O)c1ccccc1	Aryl halide and a 1-alkoxyvinyl stannane, the enol ether hydrolysed: the aryl methyl ketone (Stille, then acid)
+1555	alkoxyvinyl_stille	aryl_sulfonate,alkoxyvinyl_stannane	[A:1]-[A:101](=[A:102])-[A:103]		O=S(C(F)(F)F)(Oc1ccccc1)=O.CCCC[Sn](CCCC)(CCCC)C(OCC)=C>>CC(=O)c1ccccc1	Aryl sulfonate and a 1-alkoxyvinyl stannane, the enol ether hydrolysed: the aryl methyl ketone (Stille, then acid)
+1556	enol_ether_bromination	alkyl_enol_ether	[Br;D1]-[A:1]-[A:2]=[A:3]		C=C(OCC)c1ccccc1>>BrCC(=O)c1ccccc1	alkyl enol ether -> alpha-bromo ketone (NBS, water)

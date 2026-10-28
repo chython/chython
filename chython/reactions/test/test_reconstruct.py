@@ -1100,3 +1100,12 @@ def test_a_pseudohalide_off_a_reagent_does_not_change_which_groups_the_record_lo
     rxn = smiles('CC(C)(C)OC(=O)n1cc(B2OC(C)(C)C(C)(C)O2)cn1.Brc1ccc(CN2CCN(S(C)(=O)=O)CC2)cc1'
                  '.CS(=O)(=O)O[Pd]c1ccccc1-c1ccccc1N>>CS(=O)(=O)N1CCN(Cc2ccc(-c3cn[nH]c3)cc2)CC1')
     assert rxn.reconstruct_mapping() == ('deprotect:azole_boc+react:suzuki',)
+
+
+def test_a_one_pot_enol_ether_route_is_its_own_transformation():
+    # the 1-ethoxyvinyl stannane coupled and hydrolysed is the aryl methyl ketone; the 1-ethoxyvinyl arene
+    # brominated by NBS in water is the bromoacetyl -- neither is a deprotection composed with a reaction
+    stille = smiles('CCCC[Sn](CCCC)(CCCC)C(OCC)=C.Brc1ccc(C#N)cc1.Cl>>CC(=O)c1ccc(C#N)cc1')
+    assert stille.reconstruct_mapping() == ('react:alkoxyvinyl_stille',)
+    bromination = smiles('C=C(OCC)c1ccc(C#N)cn1.O=C1CCC(=O)N1Br.O>>BrCC(=O)c1ccc(C#N)cn1')
+    assert bromination.reconstruct_mapping() == ('react:enol_ether_bromination',)
