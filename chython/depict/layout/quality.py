@@ -186,9 +186,13 @@ def _inside(p, poly):
 
 
 def perm(mol, lay, k=10):
-    """Atoms of `k` random-order re-reads of `mol` whose `lay` position has no same-element atom of
-    `lay(mol)` within `1e-3 L`, each component's centroid aligned: zero for a layout blind to atom order.
-    Where components sit on the page is not scored."""
+    """Atoms of `k` random-order re-reads of `mol` whose `lay` position has no same-element atom of the
+    reference's within `1e-3 L`, each component's centroid aligned: zero for a layout blind to atom order.
+    Where components sit on the page is not scored.
+
+    The reference is `mol` re-read from its own SMILES, so it carries what every re-read carries: a parity
+    stored on a double bond the stereo perception calls labile is no part of the molecule's identity and is
+    not written, so `mol` as parsed would be compared against re-reads holding less than it does."""
     def centred(m, p):
         p = rescaled(m, p)
         out = []
@@ -196,6 +200,7 @@ def perm(mol, lay, k=10):
             cx, cy = fsum(p[x][0] for x in c) / len(c), fsum(p[x][1] for x in c) / len(c)
             out.extend((m.element_of(x), p[x][0] - cx, p[x][1] - cy) for x in c)
         return out
+    mol = smiles(format(mol))
     ref = centred(mol, lay(mol))
     miss = 0
     for _ in range(k):
