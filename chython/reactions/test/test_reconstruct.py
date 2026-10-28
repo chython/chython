@@ -1109,3 +1109,37 @@ def test_a_one_pot_enol_ether_route_is_its_own_transformation():
     assert stille.reconstruct_mapping() == ('react:alkoxyvinyl_stille',)
     bromination = smiles('C=C(OCC)c1ccc(C#N)cn1.O=C1CCC(=O)N1Br.O>>BrCC(=O)c1ccc(C#N)cn1')
     assert bromination.reconstruct_mapping() == ('react:enol_ether_bromination',)
+
+
+@pytest.mark.parametrize('record, label', [
+    ('COC1=CC(=O)N(C)N=C1C.O=P(Cl)(Cl)Cl>>ClC1=CC(=O)N(C)N=C1C', 'react:deoxychlorination'),
+    ('CCOC1=C(NC)C(=O)C1=O.CCN>>CCNC1=C(NC)C(=O)C1=O', 'react:vinylogous_ester_amination'),
+    ('COC=C1C(=O)OC(C)(C)OC1=O.Nc1ccccc1>>O=C1OC(C)(C)OC(=O)C1=CNc1ccccc1', 'react:vinylogous_ester_amination'),
+    ('CCO/C=C/C#N.NNc1ccccc1>>N#CC=CNNc1ccccc1', 'react:vinylogous_ester_amination'),
+    ('C=C(C)OC.Nc1ccccc1.CC(=O)O[BH-](OC(C)=O)OC(C)=O.[Na+]>>CC(C)Nc1ccccc1', 'react:reductive_amination'),
+    ('C=C(C)OC.Nc1ccncc1>>CC(C)=Nc1ccncc1', 'react:imine_condensation'),
+    ('CCO/C=C/B1OC(C)(C)C(C)(C)O1.Brc1ccc(C#N)cc1>>O=CCc1ccc(C#N)cc1', 'react:alkoxyvinyl_suzuki'),
+    ('C=C(O[Si](C)(C)C)c1ccccc1.Brc1ccc(C#N)cc1>>N#Cc1ccc(CC(=O)c2ccccc2)cc1', 'react:alpha_arylation'),
+    ('CCCI.C1CCC(O[Si](C)(C)C)=CC1>>CCCC1CCCCC1=O', 'react:enolate_alkylation'),
+    ('COC1=NCCC1.O=C(CBr)c1ccccc1>>O=C(CN1CCCC1=O)c1ccccc1', 'react:n_alkylation'),
+])
+def test_an_enol_ether_reacts_directly_and_its_alkoxy_leaves_unmapped(record, label):
+    # one transformation, not a deprotection composed with a reaction; the bond forms on the enol carbon and
+    # the alkoxy (or silyloxy) carbon of the ether is left at 0
+    rxn = smiles(record)
+    assert rxn.reconstruct_mapping() == (label,)
+    product = rxn.products[0]
+    numbers = {product.map_number_of(n) for n in product.atom_numbers}
+    for molecule in rxn.reactants:
+        for n in molecule.atom_numbers:
+            if molecule.element_of(n) in (8, 14) and molecule.map_number_of(n) and \
+                    any(molecule.element_of(m) == 14 for m in molecule.neighbors_of(n)):
+                assert molecule.map_number_of(n) in numbers     # a silyl enol O becomes the carbonyl O
+    leaving = [n for molecule in rxn.reactants for n in molecule.atom_numbers
+               if molecule.element_of(n) == 6 and molecule.map_number_of(n) == 0]
+    assert leaving or 'alpha_arylation' in label or 'enolate' in label, 'the alkyl of the alkoxy stays unmapped'
+
+
+def test_an_oxime_oxygen_is_named_for_the_oxime():
+    rxn = smiles('ON=C(C)c1ccccc1.CC(C)(C)OC(=O)OC(=O)OC(C)(C)C>>CC(=NOC(=O)OC(C)(C)C)c1ccccc1')
+    assert rxn.reconstruct_mapping() == ('protect:oxime_boc',)

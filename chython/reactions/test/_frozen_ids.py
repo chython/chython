@@ -26,7 +26,7 @@ and read the diff.  A new line is a new row; a CHANGED line is a renumber, which
 means.  Never hand-edit a line to make the ratchet pass.
 """
 
-#: `functional.tsv`: 425 rows, id -> the row it names.
+#: `functional.tsv`: 431 rows, id -> the row it names.
 FUNCTIONAL = {
     'functional:1': 'terminal_alkene',
     'functional:2': 'alkene',
@@ -453,6 +453,12 @@ FUNCTIONAL = {
     'functional:423': 'alkyl_sulfonate_alpha_ch',
     'functional:424': 'alkoxyvinyl_stannane',
     'functional:425': 'alkyl_enol_ether',
+    'functional:426': 'alkoxy_enone',
+    'functional:427': 'enol_ether_carbonyl',
+    'functional:428': 'beta_alkoxyvinyl_boronate',
+    'functional:429': 'beta_alkoxyvinyl_stannane',
+    'functional:430': 'lactim_ether_o',
+    'functional:431': 'alkoxy_acrylonitrile',
 }
 
 #: `protective.tsv`: 89 rows, id -> the row it names.
@@ -641,7 +647,7 @@ ROLES = {
     'roles:89': 'azole_nitrogen/imidazole',
 }
 
-#: `reactions.tsv`: 1556 rows, id -> the row it names.
+#: `reactions.tsv`: 1576 rows, id -> the row it names.
 REACTIONS = {
     'reactions:1': 'amidation/carboxylic_acid+primary_amine',
     'reactions:2': 'amidation/carboxylic_acid+primary_aniline',
@@ -2199,4 +2205,24 @@ REACTIONS = {
     'reactions:1554': 'alkoxyvinyl_stille/aryl_halide+alkoxyvinyl_stannane',
     'reactions:1555': 'alkoxyvinyl_stille/aryl_sulfonate+alkoxyvinyl_stannane',
     'reactions:1556': 'enol_ether_bromination/alkyl_enol_ether',
+    'reactions:1557': 'vinylogous_ester_amination/alkoxy_enone+primary_amine',
+    'reactions:1558': 'vinylogous_ester_amination/alkoxy_enone+primary_aniline',
+    'reactions:1559': 'vinylogous_ester_amination/alkoxy_enone+secondary_amine',
+    'reactions:1560': 'vinylogous_ester_amination/alkoxy_enone+nh2_hydrazine',
+    'reactions:1561': 'deoxychlorination/alkoxy_enone',
+    'reactions:1562': 'reductive_amination/enol_ether_carbonyl+primary_amine',
+    'reactions:1563': 'reductive_amination/enol_ether_carbonyl+primary_aniline',
+    'reactions:1564': 'reductive_amination/enol_ether_carbonyl+secondary_amine',
+    'reactions:1565': 'imine_condensation/enol_ether_carbonyl+primary_amine',
+    'reactions:1566': 'imine_condensation/enol_ether_carbonyl+primary_aniline',
+    'reactions:1567': 'alkoxyvinyl_suzuki/aryl_halide+beta_alkoxyvinyl_boronate',
+    'reactions:1568': 'alkoxyvinyl_suzuki/aryl_sulfonate+beta_alkoxyvinyl_boronate',
+    'reactions:1569': 'alkoxyvinyl_stille/aryl_halide+beta_alkoxyvinyl_stannane',
+    'reactions:1570': 'alpha_arylation/aryl_halide+silyl_enol_ether',
+    'reactions:1571': 'enolate_alkylation/alkyl_halide+silyl_enol_ether',
+    'reactions:1572': 'n_alkylation/alkyl_halide+lactim_ether_o',
+    'reactions:1573': 'vinylogous_ester_amination/alkoxy_acrylonitrile+primary_amine',
+    'reactions:1574': 'vinylogous_ester_amination/alkoxy_acrylonitrile+primary_aniline',
+    'reactions:1575': 'vinylogous_ester_amination/alkoxy_acrylonitrile+secondary_amine',
+    'reactions:1576': 'vinylogous_ester_amination/alkoxy_acrylonitrile+nh2_hydrazine',
 }

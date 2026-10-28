@@ -1498,7 +1498,7 @@ there is to carry:
 
 .. testoutput::
 
-    425 89
+    431 89
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']
@@ -1536,7 +1536,7 @@ label                                the claim it makes about the record
 Every strip, and every ``protect:``, is the row's name **for the atom the group sits on**, because one
 group is installed and removed under other conditions on each: an ``amine_`` or ``hydroxyl_`` row reports
 the prefix of its site -- ``amine``, ``aniline``, ``amide``, ``azole``; ``hydroxyl``, ``phenol``, ``enol``,
-``carboxyl``.  The group is stripped first and the revealed atom then named by the ``site`` column of
+``oxime``, ``carboxyl``.  The group is stripped first and the revealed atom then named by the ``site`` column of
 ``functional.tsv``: the largest functional group whose site atom it is decides, and an atom no group claims
 keeps the row's own name.  An ester is named for its group too: a methyl ester saponified is
 ``deprotect:carboxyl_methyl``, a tert-butyl ester cut by acid ``deprotect:carboxyl_tbu``, an acetate taken off

@@ -224,7 +224,7 @@ id	name	smarts	precursor	example	decoys	site	description
 159	amino_alcohol	[N;D1;z1;x0:1]-[C;z1:2]-[C;z1:3]-[O;D1:4]		NCCO	NCCCO		1,2-amino alcohol
 160	hydroxamic_acid	[O;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]		CC(=O)NO	CC(=O)NC		R-CO-NH-OH
 161	hydrazide	[N;D1;z1;x1:1]-[N;D2;z1;x1:2]-[C;z2;x2:3]=[O:4]	[N:1]-[N:2]-[C:3]=[O:4]	CC(=O)NN	CC(=O)NO		R-CO-NH-NH2
-162	oxime	[O;D1;z1;x1:1]-[N;D2;z2;x1:2]=[C:3]		CC(C)=NO	CC(C)=NN	enol:1	C=N-OH
+162	oxime	[O;D1;z1;x1:1]-[N;D2;z2;x1:2]=[C:3]		CC(C)=NO	CC(C)=NN	oxime:1	C=N-OH
 163	O_alkylhydroxylamine	[N;D1;z1;x1:1]-[O;D2;z1;x1:2]-[C:3]	[N:1]-[O:2]-[C:3]	NOC	CON(C)C		R-O-NH2
 164	NO_dialkylhydroxylamine	[N;D2;z1;x1;h1:1](-[C;z1:2])-[O;D2;z1;x1:3]-[C;z1:4]	[N:1](-[C:2])-[O:3]-[C:4]	CNOC	NOC,CON(C)C		R'-O-NH-R'', the Weinreb amine
 165	tosyl_isocyanide	[C;-;D1:1]#[N;+;D2:2]-[C;D2,D3;z1;x2:3]-[S;D4;x2](=[O])=[O]		[C-]#[N+]CS(=O)(=O)c1ccc(C)cc1	[C-]#[N+]CC(=O)OC		TosMIC, the Van Leusen oxazole reagent
@@ -427,7 +427,7 @@ id	name	smarts	precursor	example	decoys	site	description
 340	ring_vinyl_ch	[C;z2;D2;h1:1]=;@[C,N;z2;M]	[C:1]	O=C1NC=CC=C1	c1ccccc1,CC=CC,O=C1CCCCN1		a C-H on a non-aromatic ring double bond: the azinone, enaminone and uracil C-H `arene_ch` (aromatic only) leaves out
 341	alpha_ch_carbonyl	[C;z1;x0;h1,h2,h3:1]-[C;z2;x1;D2,D3;M]=[O;z2;x0;M]	[C:1]	CC(C)=O	CC(=O)OC,CC(=O)N,CC(C)(C)O,O=Cc1ccccc1		an enolizable C-H beside a ketone or aldehyde carbonyl, the site an alpha-halogenation takes
 342	alpha_ch_acyl	[C;z1;x0;h1,h2:1]-[C;z2;x2;D3;M](=[O;z2;x0;M])-[O,N;z1;D2,D3;M]	[C:1]	CCC(=O)OC	CC(=O)O,CCC(C)=O,CC(=O)OC		a C-H beside an ester, lactone or amide carbonyl, the site of a base-mediated enolate halogenation
-343	silyl_enol_ether	[C;z2;x0;D1,D2:1]=[C;z2;x1;D2,D3:2]-[O;D2:3]-[Si;D4]	[C:1]=[C:2]-[O:3]-[Si](-[C])(-[C])-[C]	C=C(O[Si](C)(C)C)c1ccccc1	C=C(OC)c1ccccc1,CC(=O)c1ccccc1,C[Si](C)(C)Oc1ccccc1		C=C-O-SiR3, the enol equivalent an electrophilic halogen source takes to the alpha-halo ketone
+343	silyl_enol_ether	[C;z2;x0;D1,D2,D3:1]=[C;z2;x1;D2,D3:2]-[O;D2:3]-[Si;D4]	[C:1]=[C:2]-[O:3]-[Si](-[C])(-[C])-[C]	C=C(O[Si](C)(C)C)c1ccccc1	C=C(OC)c1ccccc1,CC(=O)c1ccccc1,C[Si](C)(C)Oc1ccccc1		C=C-O-SiR3, the enol equivalent an electrophilic halogen source takes to the alpha-halo ketone
 344	aryl_methyl	[C;z1;D1;x0:1]-[C;a;M]	[C:1]	Cc1ccccc1	CCc1ccccc1,COc1ccccc1,Cn1ccnc1		Ar-CH3, the methyl `benzylic_ch` (`D2,D3`) leaves out
 345	allylic_methyl	[C;z1;D1;x0:1]-[C;z2;M]=[C;z2;M]	[C:1]	CC=CC(=O)OC	CCC=C,Cc1ccccc1,CC(C)=O		CH3-C=C, the allylic Wohl-Ziegler site
 346	curtius_acid	[C:1]-[C;z2;x2;D3:2](=[O;D1;z2:3])-[O;D1;z1]	[C:1]-[C:2](=[O:3])-[O]	CC(=O)O	CC(=O)OC,CC(=O)N,OC(=O)O		R-COOH with R numbered, for the Curtius row that moves R from the carbonyl carbon to the new nitrogen
@@ -514,3 +514,9 @@ id	name	smarts	precursor	example	decoys	site	description
 423	alkyl_sulfonate_alpha_ch	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1]-[C;z1;h1,h2,h3:2])-[C]	[S](=[O])(=[O])(-[O]-[C:1]-[C:2])-[C]	CC(OS(C)(=O)=O)CC	CS(=O)(=O)OCc1ccccc1,CS(=O)(=O)OC		an alkyl sulfonate with an sp3 C-H beside the carbinol carbon: the E2 substrate
 424	alkoxyvinyl_stannane	[Sn;D4;z1]-;!@[C;z2:1](-[O;D2:2]-[C;z1])=[C;D1:3]	[Sn](-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])-[C:1](-[O:2]-[C]-[C])=[C:3]	CCCC[Sn](CCCC)(CCCC)C(OCC)=C	CCCC[Sn](CCCC)(CCCC)C=C,CCCC[Sn](CCCC)(CCCC)c1ccccc1		tributyl(1-ethoxyvinyl)tin and its kin: the Stille acetyl equivalent, the enol ether hydrolysed to the ketone
 425	alkyl_enol_ether	[C;z2;x0;D1,D2:1]=[C;z2;x1;D2,D3:2]-[O;D2:3]-[C;z1]	[C:1]=[C:2]-[O:3]-[C]-[C]	C=C(OCC)c1ccccc1	C=C(O[Si](C)(C)C)c1ccccc1,CC(=O)c1ccccc1,COc1ccccc1		C=C-O-alkyl, the 1-alkoxyvinyl an electrophilic halogen source takes to the alpha-halo ketone
+426	alkoxy_enone	[C;z2,z4:1](-[O;D2]-[C;z1])=,:[C;z2,z4:2]-,:[C;z2,z4:3]=[O;D1:4]	[C:1](-[O]-[C])=[C:2]-[C:3]=[O:4]	COC1=CC(=O)CCC1	COC1=CCCCC1,COc1ccncc1,COC(=O)C=C,CCOC=CC#N		the O-alkyl vinylogous ester, RO-C=C-C=O: an alkoxy azinone, an alkyl squarate, an alkoxymethylene dione; the alkoxy is the leaving group
+427	enol_ether_carbonyl	[C;z2;x0:1]=[C;z2;x1:2]-[O;D2]-[C;z1]	[C:1]=[C:2]-[O]-[C]	C=C(C)OC	COC(C)=O,C=C(C)O[Si](C)(C)C,CC(=O)C		an alkyl enol ether read as the carbonyl it masks: 2-methoxypropene for acetone; the alkoxy leaves.  A vinylogous ester matches too; `alkoxy_enone` is the larger group and its rows win
+428	beta_alkoxyvinyl_boronate	[B;D3](-[O;D2])(-[O;D2])-;!@[C;z2;D2:1]=[C;z2;D2:2]-[O;D2:3]-[C;z1]	[B]1(-[C:1]=[C:2]-[O:3]-[C]-[C])-[O]-[C](-[C])(-[C])-[C](-[C])(-[C])-[O]-1	CCO/C=C/B1OC(C)(C)C(C)(C)O1	C=CB1OC(C)(C)C(C)(C)O1,CCOC(=C)B1OC(C)(C)C(C)(C)O1		the 2-alkoxyvinyl boronate, ROCH=CH-B: the acetaldehyde homologation equivalent
+429	beta_alkoxyvinyl_stannane	[Sn;D4;z1]-;!@[C;z2;D2:1]=[C;z2;D2:2]-[O;D2:3]-[C;z1]	[Sn](-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])(-[C]-[C]-[C]-[C])-[C:1]=[C:2]-[O:3]-[C]-[C]	CCCC[Sn](CCCC)(CCCC)/C=C/OCC	CCCC[Sn](CCCC)(CCCC)C(OCC)=C,CCCC[Sn](CCCC)(CCCC)C=C		the 2-alkoxyvinyl stannane, ROCH=CH-SnR3: the acetaldehyde homologation equivalent
+430	lactim_ether_o	[N;D2;z2;x0:1]=[C;D3;z2;x2:2]-[O;D2:3]-[C;z1]	[N:1]=[C:2]-[O:3]-[C]	COC1=NCCCC1	O=C1CCCCN1,COC(C)=O		the O-alkyl lactim or imidate with its O kept: N-alkylation and dealkylation give the N-alkyl lactam
+431	alkoxy_acrylonitrile	[C;z2:1](-[O;D2]-[C;z1])=[C;z2:2]-[C;z3:3]#[N;D1:4]	[C:1](-[O]-[C])=[C:2]-[C:3]#[N:4]	CCOC=CC#N	COC1=CC(=O)CCC1,C=CC#N		the 3-alkoxyacrylonitrile, RO-C=C-C#N, the nitrile vinylogous ester; the alkoxy is the leaving group
