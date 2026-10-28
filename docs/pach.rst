@@ -719,8 +719,14 @@ and an over-declaring one are byte-identical; there is nothing to distinguish th
 layout, and a reader that tried to re-derive the offsets from what looked plausible would disagree with
 ``pach_record_length`` and with every other reader.
 
+**A unit this build does not perceive is drift, not damage.**  A record written by a build whose
+perception gave a unit this one refuses -- an axis below today's atropisomer bar, a bond-group entry on a
+bond with no unit -- reads whole: the configuration is dropped, or the bond group kept on its lower atom,
+and logged LOST on ``molecule.log`` as ``pach:stereo-unit-gone`` or ``pach:bond-group-unit-gone``, never in
+``problems``, so ``unpack`` returns the molecule.
+
 What a damaged record loses is bounded by the block the damage is in: a stereo record whose slots do
-not resolve to a perceived configuration drops that configuration and says so, a bond naming an atom
+not resolve to the unit they name drops that configuration and says so, a bond naming an atom
 that does not exist is dropped, and an enhanced-stereo entry naming one is dropped.  Two things are not
 bounded that way and answer ``None`` instead: an atom block whose header count and bytes disagree, since
 there are then no atoms to hang anything on, and a graph the ring perception refuses — its

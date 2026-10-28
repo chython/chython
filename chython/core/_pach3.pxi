@@ -949,15 +949,19 @@ cdef int _pach3_apply_stereo(MoleculeContainer mol, const unsigned char *data, P
                 if u is NULL or u.kind != kind or stereo_unit_partner(structure, u) != slot0:
                     u = NULL
         if u is NULL:
+            # PERCEPTION DRIFT, NOT DAMAGE: a record written by a build whose perception gave this unit
+            # states a configuration this build does not perceive.  The sign is dropped and logged LOST
+            # on the molecule; the record is readable and `unpack()` returns it.
             if kind == SU_TETRA:
-                problems.append('stereo record %d states a tetrahedral centre at atom %d, which '
-                                'anchors no stereo unit of that kind in this molecule; the '
-                                'configuration was dropped' % (k, atoms[slot0].n))
+                mol._log_event('pach:stereo-unit-gone', 'pach',
+                               'stereo record %d states a tetrahedral centre at atom %d, which anchors no '
+                               'stereo unit of that kind in this molecule; the configuration was dropped'
+                               % (k, atoms[slot0].n), mc_lost())
             else:
-                problems.append('stereo record %d states %s over atoms %d and %d, which anchor no '
-                                'stereo unit of that kind in this molecule; the configuration was '
-                                'dropped'
-                                % (k, smi_kind_name(<uint8_t> kind), atoms[slot0].n, atoms[slot2].n))
+                mol._log_event('pach:stereo-unit-gone', 'pach',
+                               'stereo record %d states %s over atoms %d and %d, which anchor no stereo '
+                               'unit of that kind in this molecule; the configuration was dropped'
+                               % (k, smi_kind_name(<uint8_t> kind), atoms[slot0].n, atoms[slot2].n), mc_lost())
             continue
         if u.n_refs != 4:
             # The encoder's twin, and unreachable for the same reason: `_stereo.pxi`'s "WHY N==4 IS THE
@@ -1307,9 +1311,9 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
                 # label on the lower-index atom.  A record written by a build that stored a group on
                 # any bond it was handed -- a carbonyl, say -- reads back with its kind and id intact.
                 anchor = a1 if a1 < a2 else a2
-                problems.append('bond-group entry %d names atoms %d and %d, which own no stereo unit '
-                                'in this record; it was kept as a group on atom %d'
-                                % (k, a1, a2, anchor))
+                mol._log_event('pach:bond-group-unit-gone', 'pach',
+                               'bond-group entry %d names atoms %d and %d, which own no stereo unit in this '
+                               'record; it was kept as a group on atom %d' % (k, a1, a2, anchor), mc_lost())
             elif structure_stereo_groups(mol._structure)[anchor]:
                 problems.append('bond-group entry %d repeats the unit at atom %d; the repeat was '
                                 'dropped' % (k, anchor))

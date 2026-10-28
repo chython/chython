@@ -704,7 +704,23 @@ def test_a_stereo_record_resolving_to_no_unit_is_dropped_and_reported():
         + (0).to_bytes(2, 'little') + (1).to_bytes(2, 'little') + bytes([0x00])
     mol, problems = pach_load(raw, compressed=False)
     assert mol is not None and mol.bond_count == 2
-    assert any('no stereo unit' in p for p in problems)
+    assert not any('no stereo unit' in p for p in problems), 'perception drift, not damage'
+    assert [r.severity for r in mol.log if r.rule == 'pach:stereo-unit-gone'] == [LOST]
+    assert MoleculeContainer.unpack(raw) == mol
+
+
+# chython 3.4 wrote 2-chloro-2'-fluorobiphenyl with a configured axis; this build's atropisomer rule scores its
+# ortho pair 2 + 1 below the 6-6 bar, so the axis is no unit any more.
+PACH_34_AXIS = bytes.fromhex('78da6d8c4912802010037b30802c6af923fc194f97b97930d5a7ae24e2e4c2f0dc7324e7f9f063ca1'
+                             'cac85190119090536b44022a2e82e91b1cc8e321ded1454a8a8d25073d739b0b4aebcb6bdb4680c1c')
+
+
+def test_a_record_stating_a_unit_this_build_does_not_perceive_unpacks_and_logs_it():
+    """A stored axis a later perception refuses is drift, not damage: `unpack()` returns the molecule, the
+    sign dropped and logged LOST on its log, and nothing is raised."""
+    mol = MoleculeContainer.unpack(PACH_34_AXIS)
+    assert mol == read_smiles('Clc1ccccc1-c1ccccc1F')
+    assert [r.severity for r in mol.log if r.rule == 'pach:stereo-unit-gone'] == [LOST]
 
 
 def test_a_stereo_record_naming_a_direction_the_centre_lacks_is_dropped_and_reported():
