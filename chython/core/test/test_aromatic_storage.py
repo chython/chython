@@ -89,8 +89,9 @@ def canonical_string(m):
 def biphenyl(order=4, substituted=False):
     """Two six-rings joined by one acyclic single bond, each ring written with `order`.
 
-    `substituted` puts a methyl ortho to each pivot -- a 2,2'-disubstituted biaryl, which is what
-    an atropisomer axis needs distinguishable ortho pairs for.
+    `substituted` puts an iodine ortho to one pivot and a methyl ortho to the other -- a
+    2,2'-disubstituted biaryl with distinguishable ortho pairs whose ortho score, 3 + 2, reaches the
+    6C-6C bar of 5.
     """
     m = MoleculeContainer()
     a = [m.add_atom(6) for _ in range(12)]
@@ -98,17 +99,19 @@ def biphenyl(order=4, substituted=False):
         for i in range(6):
             m.add_bond(a[base + i], a[base + (i + 1) % 6], order)
     m.add_bond(a[0], a[6], 1)
+    iodine = None
     if substituted:
-        for pivot_ortho in (1, 7):
-            m.add_bond(a[pivot_ortho], m.add_atom(6), 1)
+        iodine = m.add_atom(53)
+        m.add_bond(a[1], iodine, 1)
+        m.add_bond(a[7], m.add_atom(6), 1)
     # THE COUNTS ARE STATED, and for this fixture that is not optional.  `add_atom` stores H_UNKNOWN
     # when nothing is said, and axis detection reads the hydrogen count -- a pivot with three heavy
     # neighbours and an unknown hydrogen may or may not have a fourth direction, and refusing is the
     # only safe answer.  Leaving them unsaid does not weaken this fixture, it EMPTIES it: every unit
     # list comes back `[]` and four tests here stop asserting on an axis.  Degree decides: a methyl
-    # carries 3, an aromatic CH 1, a substituted ring carbon 0.
+    # carries 3, an aromatic CH 1, a substituted ring carbon 0, the iodine 0.
     for s in m.atom_numbers:
-        m.set_hydrogens(s, 3 if m.degree_of(s) == 1 else 3 - m.degree_of(s))
+        m.set_hydrogens(s, 0 if s == iodine else 3 if m.degree_of(s) == 1 else 3 - m.degree_of(s))
     return m, a
 
 

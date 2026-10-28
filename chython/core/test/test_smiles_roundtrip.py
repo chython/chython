@@ -52,8 +52,8 @@ MEASURED, on 2026-09-03, and every number below is asserted rather than describe
   the canonical order moves and the string moves with it.  That story is checked and not assumed:
   in STORED order, where the traversal does not consult the features at all, **94/95** are a fixed
   point.  Same molecules, same writer, and the difference is the ORDER and nothing else.
-* `test/stereo.sdf`, 294 bridged records carrying 974 signs: **293/294** a fixed point as a string,
-  and **293/293** of the stated-hydrogen records identical as a MOLECULE.  The one string that moves
+* `test/stereo.sdf`, 293 bridged records carrying 974 signs: **292/293** a fixed point as a string,
+  and **292/292** of the stated-hydrogen records identical as a MOLECULE.  The one string that moves
   is this corpus's single unstated-hydrogen record; no record comes back with a byte-identical InChI
   and a different string, which is what a mirror automorphism surviving the search would look like.
 * The NIBR PubChem examples, 340 bridged records emitting 1611 `/` and `\\` tokens: **340/340** a
@@ -226,7 +226,7 @@ def stereo_mols(records):
 
 
 def test_the_stereo_corpus_comes_back_as_the_SAME_MOLECULE(stereo_sdf):
-    """293 of 293 stated-hydrogen records keep their InChI, stereo layer included.
+    """292 of 292 stated-hydrogen records keep their InChI, stereo layer included.
 
     This is the assertion the whole file exists for.  It does not care which of an enantiomer's two
     labellings the canonical order chose, only that the compound that went in is the compound that
@@ -253,10 +253,10 @@ def test_the_stereo_corpus_comes_back_as_the_SAME_MOLECULE(stereo_sdf):
 
 
 def test_every_string_is_a_FIXED_POINT_except_the_one_SMILES_cannot_state(stereo_sdf):
-    """293 fixed points, 0 mirror-labelled, one unstated-hydrogen record -- pinned.
+    """292 fixed points, 0 mirror-labelled, one unstated-hydrogen record -- pinned.
 
     The mirror column is EMPTY because the canonical search's leaf certificate carries a parity tail
-    and its orbit prune refines by parity; 293 records are string fixed points.  Both numbers are
+    and its orbit prune refines by parity; 292 records are string fixed points.  Both numbers are
     pinned in both directions -- a rise means a mirror-labelled record came back, and a fall means a
     record stopped surviving its own round trip -- which makes this the second independent detector of
     the mirror-automorphism behaviour.
@@ -268,7 +268,9 @@ def test_every_string_is_a_FIXED_POINT_except_the_one_SMILES_cannot_state(stereo
     still fail here.
 
     The remaining 1 is not stereo at all: it is the record whose hydrogen count nobody stated, which
-    SMILES has no way to carry and which the last test in this file dissects on a benzene.
+    SMILES has no way to carry and which the last test in this file dissects on a benzene.  The bridge
+    drops a record with an atropisomer axis, since chython 2 states no sign for it -- which is where the
+    1,11-dinitro dibenzocycloheptanone, its axis in a seven-ring, went.
     """
     mols = stereo_mols(stereo_sdf)
     mirror = same = unstated = 0
@@ -280,8 +282,8 @@ def test_every_string_is_a_FIXED_POINT_except_the_one_SMILES_cannot_state(stereo
             unstated += 1
         elif molecule_to_inchi(mol) == molecule_to_inchi(read_smiles(out)):
             mirror += 1
-    assert (same, mirror, unstated) == (293, 0, 1), (
-        'measured 293 fixed / 0 mirror-labelled / 1 unstated on 2026-09-03, now %r'
+    assert (same, mirror, unstated) == (292, 0, 1), (
+        'measured 292 fixed / 0 mirror-labelled / 1 unstated on 2026-10-28, now %r'
         % ((same, mirror, unstated),))
 
 

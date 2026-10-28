@@ -31,7 +31,7 @@ numbers.
 Container format: `pach_corpus.load_corpus` reads it, so it is that module's, byte for byte.
 
 PUBLIC COMPOUNDS ONLY: ethanol, benzene, pyridine, aspirin, caffeine, sodium acetate, alanine,
-2-butene, an allene, 2-chloro-2'-fluorobiphenyl, butane, dimethyl maleate, muconic acid, BINOL,
+2-butene, an allene, 2-chloro-2'-iodobiphenyl, butane, dimethyl maleate, muconic acid, BINOL,
 fumaric acid.
 """
 from pathlib import Path
@@ -48,7 +48,7 @@ V3_PATH = Path(__file__).parent / 'pach_v3_corpus.bin.gz'
 V4_PATH = Path(__file__).parent / 'pach_v4_corpus.bin.gz'
 BGROUP_PATH = Path(__file__).parent / 'pach_bond_group_corpus.bin.gz'
 
-# 2-chloro-2'-fluorobiphenyl.  Built rather than parsed: SMILES has no atropisomer notation.
+# 2-chloro-2'-iodobiphenyl.  Built rather than parsed: SMILES has no atropisomer notation.
 _BIPHENYL_BONDS = [(0, 1, 2), (1, 2, 1), (2, 3, 2), (3, 4, 1), (4, 5, 2), (5, 0, 1),
                    (6, 7, 2), (7, 8, 1), (8, 9, 2), (9, 10, 1), (10, 11, 2), (11, 6, 1),
                    (0, 6, 1), (1, 12, 1), (7, 13, 1)]
@@ -57,11 +57,11 @@ _BIPHENYL_H = [0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0]
 _BUTANE_XY = [(0.0, 0.0), (1.5, 0.0), (2.0, -1.25), (3.5, -1.25)]
 
 
-def _chlorofluorobiphenyl():
+def _chloroiodobiphenyl():
     mol = MoleculeContainer()
     with mol.edit():
         sids = [mol.add_atom(e, implicit_h=h)
-                for e, h in zip(['C'] * 12 + ['Cl', 'F'], _BIPHENYL_H)]
+                for e, h in zip(['C'] * 12 + ['Cl', 'I'], _BIPHENYL_H)]
         for i, j, o in _BIPHENYL_BONDS:
             mol.add_bond(sids[i], sids[j], o)
     mol.set_parity(sids[0], 1)
@@ -140,7 +140,7 @@ BUILDERS = [
     ('trans_butene', lambda: read_smiles('C/C=C/C')),
     ('cis_butene', lambda: read_smiles('C/C=C\\C')),
     ('difluorodibromoallene', lambda: read_smiles('FC(Br)=[C@]=C(F)Br')),
-    ('chlorofluorobiphenyl', _chlorofluorobiphenyl),
+    ('chloroiodobiphenyl', _chloroiodobiphenyl),
     ('drawn_butane', _drawn_butane),
     ('wedged_alanine', _wedged_alanine),
     ('grouped_alanine', _grouped_alanine),

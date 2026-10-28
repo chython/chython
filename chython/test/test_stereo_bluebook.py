@@ -430,19 +430,9 @@ def test_gate3_spiro_and_macrocyclic_cumulenes_are_found(records, structure_id):
 
 @pytest.mark.parametrize('code', [
     'TH3', 'TH5', 'CT4',
-    # RULING F85: this fails today and is landed as a strict xfail rather than weakened.  VS023 is
-    # annotated AT and the core finds no kind-3 unit on it: the record is a BRIDGED biaryl -- the two
-    # aryl rings are joined by the pivot bond AND by a three-atom -CH2-C(=O)-CH2- bridge -- so the
-    # axis is itself a ring bond, and `_is_atropisomer_axis` refuses a ring bond outright
-    # (`e.flags & HE_IN_RING`).  The other six AT records all pass.  Chemically the annotation is
-    # right: a bridge that short locks the axis absolutely, so this is the one class of atropisomer
-    # where a ring axis is MORE hindered rather than less.  Owned by Task 3 (`_is_atropisomer_axis`,
-    # spec 4.5's heuristic); strict, so the moment it is fixed this flips to a failure and the
-    # marker is removed rather than rotting into a permanent exemption.
-    pytest.param('AT', marks=pytest.mark.xfail(strict=True, reason=(
-        'VS023: a bridged biaryl whose axis is a ring bond, refused by _is_atropisomer_axis\'s '
-        'HE_IN_RING clause. Annotated AT by the Blue Book; 6 of 7 AT records pass. '
-        'Ruling F85 -- a finding for Task 3, not an assertion to weaken.'))),
+    # VS023 is a BRIDGED biaryl -- the pivot bond and a three-atom -CH2-C(=O)-CH2- bridge close a
+    # seven-ring -- so its axis is a ring bond, judged as acyclic with the bridge as an ortho substituent
+    'AT',
 ])
 def test_gate3_annotated_codes_produce_their_unit_kind(records, code):
     """Each axial, even-cumulene and atropisomer annotation must yield the right kind.

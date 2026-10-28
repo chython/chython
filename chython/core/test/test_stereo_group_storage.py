@@ -184,7 +184,7 @@ def test_an_edit_that_re_anchors_an_axis_moves_the_group_byte_with_it():
     Breaking the ring double bond at pivot 1 frees that pivot, so the axis moves from atom 18 to atom 1
     and the collection has to move with it.  Nothing is lost, so nothing is logged.
     """
-    mol = smiles('C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12')
+    mol = smiles('C12=CC=CC=CC=C1I.CC1=CC=CC=CC=C12')
     mol.set_stereo_group((1, 18), STEREO_AND, 1)
     assert mol.stereo_group_anchor_of((1, 18)) == 18
     with mol.edit() as e:
@@ -205,7 +205,7 @@ def test_a_re_anchored_axis_whose_new_anchor_is_taken_keeps_its_label_and_logs()
     OR 1 on the ring double bond anchored at pivot 1 -- and breaking that double bond re-anchors the
     axis onto the slot the OR 1 byte occupies.
     """
-    mol = smiles('C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12')
+    mol = smiles('C12=CC=CC=CC=C1I.CC1=CC=CC=CC=C12')
     mol.set_stereo_group((1, 18), STEREO_AND, 1)
     mol.set_stereo_group(1, STEREO_OR, 1)
     assert mol.stereo_groups() == {(STEREO_OR, 1): [(1, 2)], (STEREO_AND, 1): [(1, 18)]}

@@ -850,8 +850,8 @@ _BIPHENYL_H = [0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1]
 
 
 def test_biphenyl_with_ortho_substituents_is_an_atropisomer():
-    # 2,2'-dichloro/fluoro-biphenyl: two Kekule rings, a single acyclic pivot bond, ortho Cl and F
-    m, sids = _mol(atoms='C' * 12 + 'ClF', hydrogens=_BIPHENYL_H + [0, 0],
+    # 2-chloro-2'-iodobiphenyl: two Kekule rings, a single acyclic pivot bond, ortho Cl and I
+    m, sids = _mol(atoms='C' * 12 + 'ClI', hydrogens=_BIPHENYL_H + [0, 0],
                    bonds=_BIPHENYL_BONDS + [(1, 12, 1), (7, 13, 1)])
     units = m.stereo_units()
     assert len(units) == 1
@@ -964,7 +964,7 @@ _COT_TWO = [(8, 9, 2), (9, 10, 1), (10, 11, 2), (11, 12, 1), (12, 13, 2), (13, 1
 
 
 def test_a_biaryl_of_eight_rings_relocates_its_atropisomer_anchor():
-    """An ortho-dichloro bi(cyclooctatetraenyl), in both atom orders. Ruling F45.
+    """A 2-chloro-2'-iodo bi(cyclooctatetraenyl), in both atom orders. Ruling F45.
 
     A Kekule aryl pivot ALWAYS carries a ring double bond, so it is always a cis/trans terminal as
     well as an axis end. Plain biphenyl never collides only because the small-ring cut drops a
@@ -980,7 +980,7 @@ def test_a_biaryl_of_eight_rings_relocates_its_atropisomer_anchor():
     """
     # ring 1's pivot is atom 0, whose ring double bond makes it the lower terminal of that chain, so
     # the axis has to move to atom 15 -- ring 2's pivot, whose own double bond runs to atom 14
-    lower_taken, a = _mol(atoms='C' * 16 + 'ClCl',
+    lower_taken, a = _mol(atoms='C' * 16 + 'ClI',
                           hydrogens=[0, 0] + [1] * 6 + [1] * 6 + [0, 0] + [0, 0],
                           bonds=_COT_ONE + _COT_TWO + [(0, 15, 1), (1, 16, 1), (14, 17, 1)])
     units = lower_taken.stereo_units()
@@ -993,7 +993,7 @@ def test_a_biaryl_of_eight_rings_relocates_its_atropisomer_anchor():
 
     # the same shape with each ring turned so that the axis' UPPER pivot is the taken one: no
     # relocation happens and the axis anchors on the lower pivot, as every bond kind does by default
-    upper_taken, b = _mol(atoms='C' * 16 + 'ClCl',
+    upper_taken, b = _mol(atoms='C' * 16 + 'ClI',
                           hydrogens=[1] * 6 + [0, 0, 0, 0] + [1] * 6 + [0, 0],
                           bonds=_COT_ONE + _COT_TWO + [(7, 8, 1), (6, 16, 1), (9, 17, 1)])
     units = upper_taken.stereo_units()
@@ -1005,7 +1005,7 @@ def test_a_biaryl_of_eight_rings_relocates_its_atropisomer_anchor():
 
     # and the ordinary case is untouched: biphenyl's axis still anchors on its lower pivot, which is
     # free because the six-ring's chain is cut
-    biphenyl, c = _mol(atoms='C' * 12 + 'ClF', hydrogens=_BIPHENYL_H + [0, 0],
+    biphenyl, c = _mol(atoms='C' * 12 + 'ClI', hydrogens=_BIPHENYL_H + [0, 0],
                        bonds=_BIPHENYL_BONDS + [(1, 12, 1), (7, 13, 1)])
     units = biphenyl.stereo_units()
     assert len(units) == 1 and units[0]['kind'] == 3 and units[0]['anchor'] == c[0]
@@ -1029,7 +1029,7 @@ def test_a_biaryl_of_eight_rings_can_lose_its_axis_to_both_pivots():
     for chain_from_the_pivot in (True, False):
         one, two = (_COT_ONE, _COT_TWO) if chain_from_the_pivot else (
             [(i, j, 3 - o) for i, j, o in _COT_ONE], [(i, j, 3 - o) for i, j, o in _COT_TWO])
-        m, a = _mol(atoms='C' * 16 + 'ClCl', hydrogens=hydrogens,
+        m, a = _mol(atoms='C' * 16 + 'ClI', hydrogens=hydrogens,
                     bonds=one + two + [(0, 8, 1), (1, 16, 1), (9, 17, 1)])
         units = m.stereo_units()
         # every ring double bond is a cis/trans unit and nothing else is emitted

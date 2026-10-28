@@ -539,15 +539,16 @@ def test_rdkit_agrees_on_the_CONFIGURATION_and_not_only_the_constitution(stereo_
     from our tokens and its canonical form is a fixpoint, so equality here is agreement about the
     molecule and not about the spelling.
 
-    Six records are skipped and all six for one reason: they are biaryls where V3 finds an
-    atropisomer unit and V2 has no atropisomer model, so there is no sign to ask V2 for.  The other
+    Seven records are skipped and all seven for one reason: they are biaryls where V3 finds an
+    atropisomer unit and V2 has no atropisomer model, so there is no sign to ask V2 for.  One of them
+    is a 1,11-dinitro dibenzocycloheptanone, whose axis lies in a seven-ring.  The other
     82 of the 300 carry no configuration V2 will state -- 1858 unset units -- and are not counted,
     because a record with nothing to get wrong is not evidence.
     """
     agreed, disagreed, skipped = _stereo_agreement(stereo_sdf)
     assert [source for source, _ in disagreed] == list(NOT_STEREOGENIC_IN_SOURCE), disagreed
     assert len(agreed) + len(disagreed) >= 212
-    assert skipped <= 6
+    assert skipped <= 7
 
 
 # Records whose source states a parity on a unit that is not stereogenic.  The writer drops that parity;
@@ -577,7 +578,7 @@ def test_a_parity_on_a_symmetric_spiro_end_is_not_written():
 
 
 def test_rdkit_agrees_on_every_cis_trans_double_bond(cis_trans):
-    """339 of 346: six skipped are atropisomers, one is `BRIDGEHEADS_UNREALISABLE`.  The `/` and `\\` half
+    """342 of 346: three skipped are atropisomers, one is `BRIDGEHEADS_UNREALISABLE`.  The `/` and `\\` half
     of the writer.
 
     `test/` has no double-bond geometry in any file, so without this corpus the direction tokens
@@ -590,8 +591,8 @@ def test_rdkit_agrees_on_every_cis_trans_double_bond(cis_trans):
     """
     agreed, disagreed, skipped = _stereo_agreement(cis_trans, labile=True)
     assert [source for source, _ in disagreed] == list(BRIDGEHEADS_UNREALISABLE), disagreed
-    assert len(agreed) >= 339
-    assert skipped <= 6
+    assert len(agreed) >= 342
+    assert skipped <= 3
 
 
 @mark.parametrize('corpus,agree_flipped', [('stereo_sdf', 80), ('cis_trans', 1)])
@@ -859,12 +860,13 @@ def test_chython_2_has_TWO_ATTRACTORS_for_an_allene_so_it_cannot_arbitrate(stere
 
 
 def test_the_bridge_reports_the_atropisomers_it_cannot_carry(cis_trans):
-    """Six records, nine units, and a skip that is written down instead of being quietly absent.
+    """Three records, three units, and a skip that is written down instead of being quietly absent.
 
     chython 2 has no atropisomer model at all, so there is no sign to ask it for -- which means these
     records cannot be compared, NOT that they are correct.  The test asserts the count so that a
     future bridge that starts carrying them changes a number here rather than silently widening what
-    the corpus is taken to prove.
+    the corpus is taken to prove.  The table's other N-heteroaryl axes score below their ring pair's
+    bar -- a pyrazolone N-linked to a benzothiazolium is 1 + 3 against the 5C-5N bar of 10.
     """
     reported = 0
     records = 0
@@ -874,4 +876,4 @@ def test_the_bridge_reports_the_atropisomers_it_cannot_carry(cis_trans):
         if atropisomers:
             records += 1
             reported += len(atropisomers)
-    assert (records, reported) == (6, 9)
+    assert (records, reported) == (3, 3)

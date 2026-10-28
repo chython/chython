@@ -1554,9 +1554,9 @@ def _build(elements, hydrogens, bonds):
     return m, sids
 
 
-def _chlorofluorobiphenyl():
-    """2-chloro-2'-fluorobiphenyl: an atropisomer axis anchored on its lower pivot, atom 0."""
-    m, sids = _build(['C'] * 12 + ['Cl', 'F'], _BIPHENYL_H + [0, 0],
+def _chloroiodobiphenyl():
+    """2-chloro-2'-iodobiphenyl: an atropisomer axis anchored on its lower pivot, atom 0."""
+    m, sids = _build(['C'] * 12 + ['Cl', 'I'], _BIPHENYL_H + [0, 0],
                      _BIPHENYL_BONDS + [(1, 12, 1), (7, 13, 1)])
     m.set_parity(sids[0], 1)
     return m, sids
@@ -1571,7 +1571,7 @@ def test_an_atropisomer_keeps_its_ref_order_and_sign_across_an_edit():
     compaction is monotone and no operation in the core permutes slots.  So the sign is carried
     through unchanged -- neither re-based nor dropped.
     """
-    m, sids = _chlorofluorobiphenyl()
+    m, sids = _chloroiodobiphenyl()
     unit = m.unit_of(sids[0])
     assert unit is not None and unit['kind'] == 3
     assert unit['refs'] == (sids[1], sids[5], sids[7], sids[11])
@@ -1589,7 +1589,7 @@ def test_relocating_an_atropisomer_anchor_drops_the_sign():
     """The one permutation an axis has -- the pair exchange -- comes with the anchor moving, and a
     harvest keyed on the ANCHOR drops it rather than following it.
 
-    An ortho-dichloro bi(cyclooctatetraenyl) anchors its axis on the UPPER pivot, atom 15, because
+    A 2-chloro-2'-iodo bi(cyclooctatetraenyl) anchors its axis on the UPPER pivot, atom 15, because
     the lower pivot's own ring double bond claimed it first (ruling F45).  Moving that double bond
     one bond round ring 1 frees atom 0, the axis returns to the lower pivot, and the two ref pairs
     trade places -- the same molecule, the same axis, described against a different atom.
@@ -1599,7 +1599,7 @@ def test_relocating_an_atropisomer_anchor_drops_the_sign():
     re-walking the axis.  Dropping is the safe direction -- the alternative is a sign read against
     pairs that traded places.  A caller who relocates an anchor must re-state the configuration.
     """
-    m, sids = _build(['C'] * 16 + ['Cl', 'Cl'],
+    m, sids = _build(['C'] * 16 + ['Cl', 'I'],
                      [0, 0] + [1] * 6 + [1] * 6 + [0, 0] + [0, 0],
                      _COT_ONE + _COT_TWO + [(0, 15, 1), (1, 16, 1), (14, 17, 1)])
     axis = m.unit_of(sids[15])

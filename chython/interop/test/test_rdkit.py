@@ -41,7 +41,7 @@ REPO = Path(__file__).resolve().parents[3] / 'test'
 # The four stereo unit kinds `_rdkit.py` restates from `chython/core/_stereo.pxi`, each with a
 # molecule that can only produce that one, so a renumbering in the core fails here.
 KINDS = [('C[C@H](N)O', 0, 'tetrahedral'), ('C/C=C/C', 1, 'cis/trans'),
-         ('CC(F)=C=C(F)C', 2, 'allene'), ('Cc1ccccc1-c1ccccc1C', 3, 'atropisomer')]
+         ('CC(F)=C=C(F)C', 2, 'allene'), ('Ic1ccccc1-c1ccccc1Cl', 3, 'atropisomer')]
 
 # Public compounds, one per constitutional feature this converter has to carry.
 CONSTITUTION = ['CCO', 'CC(=O)O', 'CC#N', 'C1CC1', 'C1=CC=CC=C1', 'c1ccccc1', 'c1ccncc1',
@@ -488,7 +488,7 @@ def test_cis_trans_round_trip(text):
 
 
 @mark.parametrize('text,name', [('CC(F)=C=C(F)C', 'allene/cumulene'),
-                                ('Cc1ccccc1-c1ccccc1C', 'atropisomer')])
+                                ('Ic1ccccc1-c1ccccc1Cl', 'atropisomer')])
 def test_kinds_rdkit_cannot_hold_are_dropped_and_said(text, name):
     """RDKit has no form for an allene or an atropisomer, so exporting one is a stated loss.
 

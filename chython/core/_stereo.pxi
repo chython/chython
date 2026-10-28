@@ -1068,9 +1068,34 @@ cdef inline bint _terminal_pair(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
 # graph property.  It lives in `_is_atropisomer_axis` alone so that the barrier it stands in for can
 # be retuned without touching perception.
 #
-# The rule: the bond is single and not in a ring, both ends are ring atoms, each end's ring carries
-# at least one ortho substituent, and the two ends' ortho pairs are distinguishable.  One condition
-# is not in the spec's sentence and is load-bearing anyway: NEITHER PIVOT MAY CARRY A HYDROGEN
+# The rule: the bond is single, both ends are hydrogen-free ring atoms, no ring of six atoms or fewer
+# runs through the bond (a longer bridge -- a seven-ring, a macrocycle -- is an ordinary ortho
+# substituent), and the four ortho positions' sizes reach the ring-pair type's bar:
+#
+# | size | ortho position                                                                             |
+# | ---- | ------------------------------------------------------------------------------------------ |
+# | 0    | C-H; ring N, with or without H; ring O                                                     |
+# | 1    | F; C#N, C#C; exocyclic =O, =S; OR; ring S; a fusion atom whose fused five-ring neighbour  |
+# |      | is an aromatic CH/NH or a lone-pair N                                                      |
+# | 2    | OH; NH2, NHR; C=O, C=N carbon; vinyl; Cl, Br; CH3; aryl; CF3; SR; anything else; a fusion |
+# |      | atom whose fused five-ring neighbour is substituted or sp3; quinolin-8-yl's peri N         |
+# | 3    | CH2R, CHR2, CR3; NR2; I; a fusion atom whose fused six-ring neighbour is a CH, substituted |
+# |      | or sp3 (the peri position of 1-naphthyl)                                                   |
+#
+# | type, by ring size and element of each pivot | bar | | type  | bar |
+# | -------------------------------------------- | --- |-| ----- | --- |
+# | 6C-6C                                        | 5   | | 5C-5C | 9   |
+# | 6C-6N, 5C-6N, 6N-6N                          | 8   | | 5C-5N | 10  |
+# | 5C-6C                                        | 7   | | 5N-5N, 5N-6N | 10 |
+# | 5N-6C                                        | 9   | |       |     |
+#
+# The bars are where an MMFF94 relaxed rotation scan, corrected against measured biaryl barriers
+# (biphenyl, 2,2'-dimethylbiphenyl, 1,1'-binaphthyl, BINOL), crosses LaPlante class 2, about 20
+# kcal/mol: the axis holds its configuration for hours at room temperature.  5N-5N, 5N-6N, 5C-6N and
+# 6N-6N had no model compound; they take the strictest bar of the nearest measured row.  Whether the
+# axis is then stereogenic -- each end unsymmetric about it -- is `mark_stereogenic`'s question.
+#
+# One condition is load-bearing beyond the score: NEITHER PIVOT MAY CARRY A HYDROGEN
 # DIRECTION.  Spec 3.3's case analysis argues the anchor cannot collide because a pivot's degree 3
 # is "fully consumed by two ring bonds plus the pivot -- no room for an exocyclic double bond".
 # That rules out a cumulene collision and not a tetrahedral one: a saturated pivot -- bicyclohexyl,
@@ -1316,128 +1341,275 @@ cdef bint _oxaziridine_nitrogen(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
     return False
 
 
-cdef inline bint _is_ring_fusion_atom(atom_t *atoms, uint32_t *ptr, halfedge_t *edges,
-                                      uint32_t o) noexcept nogil:
-    """Is `o` a ring-fusion atom -- degree three or more with every one of its bonds in a ring?
+DEF ATROP_PATH_MAX = 6          # ring bonds a search may walk: a ring of at most eight atoms
 
-    Ruling F46: such an ortho neighbour hinders rotation about a biaryl axis the way a substituent
-    does, because the ring fused there occupies the ortho position.  1,1'-binaphthyl is the case that
-    forces the rule: its hindrance is entirely the PERI hydrogen on C8, so nothing hangs off C8a as an
-    exocyclic substituent and the plain ortho test perceived nothing at all -- while BINOL, the same
-    scaffold plus two hydroxyls, was already a candidate.  Binaphthyl and BINAP are most of why
-    `kind = 3` exists, so half the kind was invisible.
 
-    A separate predicate rather than another clause inside the ortho loop, because it is a different
-    argument about a different atom: the loop asks what hangs OFF the ring, this asks what the ring
-    is fused TO.
+cdef bint _atrop_dfs(uint32_t *ptr, halfedge_t *edges, uint32_t cur, uint32_t dst, uint32_t ban1,
+                     uint32_t ban2, uint32_t depth, uint32_t limit, uint32_t *path) noexcept nogil:
+    """Depth-first leg of `_atrop_path`: extend `path[0:depth+1]` from `cur` to `dst` in `limit` bonds."""
+    cdef uint32_t k, n, m
+    cdef bint seen
+    if depth == limit:
+        return cur == dst
+    for k in range(ptr[cur], ptr[cur + 1]):
+        n = edges[k].to
+        if n == ban1 or n == ban2 or not (edges[k].flags & HE_IN_RING):
+            continue
+        seen = False
+        for m in range(depth + 1):
+            if path[m] == n:
+                seen = True
+                break
+        if seen or (n == dst and depth + 1 != limit):
+            continue
+        path[depth + 1] = n
+        if _atrop_dfs(ptr, edges, n, dst, ban1, ban2, depth + 1, limit, path):
+            return True
+    return False
+
+
+cdef int _atrop_path(uint32_t *ptr, halfedge_t *edges, uint32_t src, uint32_t dst, uint32_t ban1,
+                     uint32_t ban2, uint32_t limit, uint32_t *path) noexcept nogil:
+    """The fewest ring bonds from `src` to `dst` avoiding `ban1` and `ban2`, at most `limit`; -1 if none.
+
+    `path[0:L+1]` holds the atoms walked, `src` first.  Iterative deepening keeps it allocation-free and
+    shortest: the rings asked about are an aryl's, at most eight atoms.
     """
+    cdef uint32_t L
+    path[0] = src
+    for L in range(1, limit + 1):
+        if _atrop_dfs(ptr, edges, src, dst, ban1, ban2, 0, L, path):
+            return <int> L
+    return -1
+
+
+cdef inline bint _atrop_unsaturated(uint32_t *ptr, halfedge_t *edges, uint32_t n) noexcept nogil:
+    """A ring atom with a double or aromatic ring bond: aromatic whichever Kekule form was drawn."""
     cdef uint32_t k
-    if atoms[o].degree < 3:
-        return False
-    for k in range(ptr[o], ptr[o + 1]):
-        if not (edges[k].flags & HE_IN_RING):
-            return False
-    return True
+    for k in range(ptr[n], ptr[n + 1]):
+        if (edges[k].flags & HE_IN_RING) and (edges[k].order == 2 or edges[k].order == 4):
+            return True
+    return False
 
 
-cdef inline bint _atropisomer_end(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t pivot,
-                                  uint32_t partner, uint32_t *out) noexcept nogil:
-    """One end of a candidate axis: fill `out[0:2]` with the pivot's two ring directions in CSR
-    ascending order and answer whether the end qualifies.
+cdef inline uint32_t _atrop_hydrogens(atom_t *a) noexcept nogil:
+    return at_explicit_h(a) + (0 if at_implicit_h_unknown(a) else at_implicit_h(a))
 
-    No bounds guard on `out`, and that is a precondition rather than an omission: the degree test
-    below runs BEFORE the loop, so exactly two of the pivot's three half-edges are not the partner
-    bond.  The tetrahedral perception's guards are needed because there the count is only
-    known afterwards.
 
-    THE HYDROGEN TEST IS A TRUTHINESS TEST AND IS CORRECT ON THE SENTINEL, which is why this one
-    needed no code.  It reads "the pivot carries no hydrogen direction", and H_UNKNOWN (15) is
-    truthy, so an axis whose pivot has no recorded hydrogen count is refused.  That is the strict
-    direction and the one we want: an unrecorded count might be a hydrogen, and a hydrogen-bearing
-    pivot is a saturated centre that rotates (see the ATROPISOMERS block above), so admitting it on
-    the strength of a missing number would perceive an axis through a single bond that turns freely.
+cdef inline bint _atrop_halogen(uint8_t z) noexcept nogil:
+    return z == 9 or z == 17 or z == 35 or z == 53
+
+
+cdef uint32_t _atrop_substituent(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t o,
+                                 uint32_t q, uint32_t bond_order) noexcept nogil:
+    """Size of the substituent `q` hanging off ortho atom `o` by a bond of `bond_order` (see the table)."""
+    cdef uint32_t k, n, heavy = 0, halogens = 0
+    cdef bint double = False, triple = False
+    cdef uint8_t z = atoms[q].element
+    if bond_order == 2 and (z == 8 or z == 16):
+        return 1                                    # exocyclic =O / =S
+    if z == 9:
+        return 1
+    if z == 17 or z == 35:
+        return 2
+    if z == 53:
+        return 3
+    if at_in_ring(&atoms[q]) and _atrop_unsaturated(ptr, edges, q):
+        return 2                                    # an aryl
+    for k in range(ptr[q], ptr[q + 1]):
+        n = edges[k].to
+        if n == o or atoms[n].element == 1:
+            continue
+        heavy += 1
+        if _atrop_halogen(atoms[n].element):
+            halogens += 1
+        if edges[k].order == 3:
+            triple = True
+        elif edges[k].order == 2 or edges[k].order == 4:
+            double = True
+    if z == 8:
+        return 2 if heavy == 0 else 1               # OH / OR
+    if z == 7:
+        if double:
+            return 2
+        if triple:
+            return 1
+        return 3 if heavy >= 2 else 2               # NR2 / NH2, NHR
+    if z == 16:
+        return 2                                    # SR
+    if z == 6:
+        if triple:
+            return 1                                # C#N, C#C
+        if double:
+            return 2                                # C=O, C=N, vinyl
+        if halogens == 3:
+            return 2                                # CF3
+        return 2 if heavy == 0 else 3               # CH3 / CH2R, CHR2, CR3
+    return 2
+
+
+cdef inline bint _atrop_member(uint32_t *ring, uint32_t ring_n, uint32_t n) noexcept nogil:
+    cdef uint32_t m
+    for m in range(ring_n):
+        if ring[m] == n:
+            return True
+    return False
+
+
+cdef uint32_t _atrop_ortho(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t pivot,
+                           uint32_t o, uint32_t *ring, uint32_t ring_n) noexcept nogil:
+    """Size of ortho position `o` of the pivot whose aryl ring is `ring[0:ring_n]` (see the table).
+
+    A substituent `q` is a FUSION when a ring of at most eight atoms runs through `o`-`q` and another
+    atom of the pivot's ring and misses the pivot; any other ring through `q` -- a macrocycle, a bridge
+    that also holds the axis -- leaves it a plain substituent.
     """
-    cdef uint32_t k, m, o
-    cdef halfedge_t *e
-    cdef uint32_t ring[2]
-    cdef int n_ring = 0
-    cdef bint hindered = False
+    cdef uint32_t k, j, m, q, op, f_size
+    cdef uint32_t path[ATROP_PATH_MAX + 1]
+    cdef uint32_t fused[ATROP_PATH_MAX + 1]
+    cdef uint32_t first = SU_NO_REF
+    cdef uint32_t first_order = 0
+    cdef int L, best_l
+    cdef bint sub
+    for k in range(ptr[o], ptr[o + 1]):
+        q = edges[k].to
+        if q == pivot or atoms[q].element == 1 or _atrop_member(ring, ring_n, q):
+            continue
+        if first == SU_NO_REF:
+            first = q
+            first_order = edges[k].order
+        if edges[k].order == 2 and (atoms[q].element == 8 or atoms[q].element == 16):
+            return 1                                # an exocyclic =O wins over any other substituent
+        best_l = -1
+        for j in range(ptr[o], ptr[o + 1]):         # back to a ring neighbour of `o`, missing the pivot
+            op = edges[j].to
+            if op == pivot or op == q or not _atrop_member(ring, ring_n, op):
+                continue
+            L = _atrop_path(ptr, edges, q, op, o, pivot, ATROP_PATH_MAX, path)
+            if L >= 0 and (best_l < 0 or L < best_l):
+                best_l = L
+                for m in range(<uint32_t> L + 1):
+                    fused[m] = path[m]
+        if best_l < 0:
+            continue
+        f_size = <uint32_t> best_l + 2
+        if atoms[q].element == 7 and _atrop_hydrogens(&atoms[q]) == 0 and atoms[q].degree == 2:
+            return 1 if f_size == 5 else 2          # a peri lone-pair N: fused five / six (quinolin-8-yl)
+        sub = not _atrop_unsaturated(ptr, edges, q)
+        if not sub:
+            for j in range(ptr[q], ptr[q + 1]):
+                op = edges[j].to
+                if op != o and atoms[op].element != 1 and not _atrop_member(fused, <uint32_t> best_l + 1, op):
+                    sub = True
+                    break
+        if f_size == 5:
+            return 2 if sub else 1
+        return 3                                    # a fused six-ring: the peri position
+    if first == SU_NO_REF:                          # nothing hangs off `o`: the ring atom itself
+        if atoms[o].element == 16:
+            return 1
+        if atoms[o].element == 6 or atoms[o].element == 7 or atoms[o].element == 8:
+            return 0
+        return 2
+    return _atrop_substituent(atoms, ptr, edges, o, first, first_order)
+
+
+cdef bint _atrop_side(atom_t *atoms, uint32_t *ptr, halfedge_t *edges, uint32_t pivot, uint32_t partner,
+                      uint32_t *score, uint32_t *ring_size) noexcept nogil:
+    """One end of a candidate axis: a hydrogen-free pivot on two ring bonds, its aryl ring of at most
+    eight atoms, and the summed size of its two ortho positions into `score`.
+
+    THE HYDROGEN TEST IS A TRUTHINESS TEST AND IS CORRECT ON THE SENTINEL: H_UNKNOWN is truthy, so a
+    pivot whose hydrogen count nobody recorded is refused -- it might be a saturated centre, which turns.
+    """
+    cdef uint32_t k, m
+    cdef uint32_t n_ring = 0
+    cdef uint32_t ortho[2]
+    cdef uint32_t path[ATROP_PATH_MAX + 1]
+    cdef uint32_t ring[ATROP_PATH_MAX + 2]
+    cdef int L
     if atoms[pivot].degree != 3 or at_implicit_h(&atoms[pivot]) or at_explicit_h(&atoms[pivot]):
         return False
     for k in range(ptr[pivot], ptr[pivot + 1]):
-        e = &edges[k]
-        if e.to == partner:
+        if edges[k].to == partner:
             continue
-        if not (e.flags & HE_IN_RING):
-            return False        # a third acyclic bond: this is a branch point, not a biaryl pivot
-        ring[n_ring] = e.to
+        if not (edges[k].flags & HE_IN_RING):
+            return False        # a third acyclic bond: a branch point, not a biaryl pivot
+        ortho[n_ring] = edges[k].to
         n_ring += 1
-    for m in range(2):
-        o = ring[m]
-        if _is_ring_fusion_atom(atoms, ptr, edges, o):
-            hindered = True         # ruling F46: the fused ring is itself the ortho substituent
-            break
-        for k in range(ptr[o], ptr[o + 1]):
-            e = &edges[k]
-            if e.to == pivot or (e.flags & HE_IN_RING):
-                continue        # inside the ring, so not a substituent hanging off it
-            if atoms[e.to].element == 1:
-                continue        # a drawn hydrogen is not what hinders rotation
-            hindered = True
-            break
-        if hindered:
-            break
-    if not hindered:
-        return False
-    # The rule's distinguishability clause, spelled with the SHARED comparator so that no local
-    # verdict here can contradict the automorphism filter's exact one.  It is UNREACHABLE BY
-    # CONSTRUCTION, not merely unreached by today's molecules: the comparator requires `degree == 1`
-    # on both arguments and both of these are ring atoms, whose degree is at least two, so it can
-    # never fire for any comparator that keeps that terminal precondition -- and the precondition is
-    # load-bearing where the comparator is used on pi directions.  The line is therefore dead until
-    # the automorphism filter either widens the comparator to non-terminal pairs or replaces this
-    # call with the automorphism test, which is what actually decides it: the ortho pair of a
-    # 2,6-disubstituted end is symmetric, and the evidence is an automorphism swapping ring[0] with
-    # ring[1].  It is kept, rather than deleted, because it is the rule as spec 4.5 words it and
-    # because deleting it would hide the obligation.
-    # `test_a_symmetric_ortho_pair_is_still_a_candidate_here` pins the current answer so that a
-    # later automorphism edit is a visible change.
-    if _pi_directions_indistinguishable(&atoms[ring[0]], &atoms[ring[1]]):
-        return False
-    out[0] = ring[0]
-    out[1] = ring[1]
+    L = _atrop_path(ptr, edges, ortho[0], ortho[1], pivot, partner, ATROP_PATH_MAX, path)
+    if L < 0:
+        return False            # no aryl ring of eight atoms or fewer holds the pivot
+    for m in range(<uint32_t> L + 1):
+        ring[m] = path[m]
+    ring[L + 1] = pivot
+    ring_size[0] = <uint32_t> L + 2
+    score[0] = (_atrop_ortho(atoms, ptr, edges, pivot, ortho[0], ring, <uint32_t> L + 2)
+                + _atrop_ortho(atoms, ptr, edges, pivot, ortho[1], ring, <uint32_t> L + 2))
     return True
+
+
+cdef inline void _atrop_refs(uint32_t *ptr, halfedge_t *edges, uint32_t pivot, uint32_t partner,
+                             uint32_t *out) noexcept nogil:
+    """`out[0:2]`: the pivot's two directions other than `partner`, in CSR ascending order.  Called only
+    on a pivot `_is_atropisomer_axis` accepted, whose degree is three."""
+    cdef uint32_t k
+    cdef uint32_t n = 0
+    for k in range(ptr[pivot], ptr[pivot + 1]):
+        if edges[k].to != partner:
+            out[n] = edges[k].to
+            n += 1
+
+
+cdef inline uint32_t _atrop_bar(uint32_t ring_a, bint n_a, uint32_t ring_b, bint n_b) noexcept nogil:
+    """The ring-pair type's bar (see the table): a ring of five or fewer is a five-ring, any other a six."""
+    cdef bint five_a = ring_a <= 5
+    cdef bint five_b = ring_b <= 5
+    if five_a and five_b:
+        return 10 if (n_a or n_b) else 9            # 5C-5N, 5N-5N / 5C-5C
+    if five_a or five_b:
+        if (n_a and not five_a) or (n_b and not five_b):
+            return 10 if ((n_a and five_a) or (n_b and five_b)) else 8     # 5N-6N / 5C-6N
+        return 9 if (n_a or n_b) else 7             # 5N-6C / 5C-6C
+    return 8 if (n_a or n_b) else 5                 # 6C-6N, 6N-6N / 6C-6C
 
 
 cdef bint _is_atropisomer_axis(Structure structure, halfedge_t *e, uint32_t a,
                                uint32_t b) noexcept nogil:
-    """Is the bond `a`-`b`, whose half-edge is `e`, an atropisomer axis?  Spec 4.5's heuristic, in
-    one place.
+    """Is the bond `a`-`b`, whose half-edge is `e`, an atropisomer axis?  The ATROPISOMERS rule in one
+    place: the barrier the ortho score stands in for, not whether the axis is stereogenic.
 
-    Symmetric in `a` and `b`, so a caller may pass the bond either way round; the anchor rule is the
-    caller's, not this predicate's.  The half-edge is an argument rather than something this looks up
-    with `csr_find_at`, because the only caller is a sweep that already holds it and this predicate
-    is invoked on every bond in the molecule.
-
-    KNOWN OVER-ADMISSION.  The ortho test below counts a ring-FUSION neighbour as hindering
-    (ruling F46, which is what makes 1,1'-binaphthyl a candidate at all), and a fusion atom is not
-    always a peri position -- some fused biaryls are admitted whose real rotational barrier is low.
-    Over-admission is perception's safe direction: `mark_stereogenic` can remove a candidate;
-    nothing after this point re-examines a refused one.
+    Symmetric in `a` and `b`.  The half-edge is an argument because the only caller is a sweep that
+    already holds it and this predicate is invoked on every bond in the molecule.
     """
     cdef atom_t *atoms = structure.atoms()
     cdef uint32_t *ptr = csr_ptr(structure)
     cdef halfedge_t *edges = csr_edges(structure)
-    cdef uint32_t refs_a[2]
-    cdef uint32_t refs_b[2]
+    cdef uint32_t k
+    cdef uint32_t score_a = 0
+    cdef uint32_t score_b = 0
+    cdef uint32_t ring_a = 0
+    cdef uint32_t ring_b = 0
+    cdef uint32_t path[ATROP_PATH_MAX + 1]
     # an aromatic bond outside every ring is a single bond: OpenSMILES reads `c1c2` between two aromatic
     # rings as aromatic, and the biaryl axis is the same axis however the bond was spelled
-    if (e.order != 1 and e.order != 4) or (e.flags & HE_IN_RING):
+    if e.order != 1 and e.order != 4:
         return False
     if not at_in_ring(&atoms[a]) or not at_in_ring(&atoms[b]):
         return False
-    return (_atropisomer_end(atoms, ptr, edges, a, b, refs_a)
-            and _atropisomer_end(atoms, ptr, edges, b, a, refs_b))
+    if e.flags & HE_IN_RING:
+        # a bridge of four atoms or fewer holds the rings coplanar (fluorene, 9,10-dihydrophenanthrene);
+        # a longer one -- a seven-ring, a macrocycle -- is an ortho substituent like any other.  The test
+        # also refuses a bond inside an aryl ring, aromatic order and all
+        for k in range(ptr[a], ptr[a + 1]):
+            if edges[k].to != b and (edges[k].flags & HE_IN_RING) and \
+                    _atrop_path(ptr, edges, edges[k].to, b, a, SU_NO_REF, 4, path) >= 0:
+                return False
+    if not _atrop_side(atoms, ptr, edges, a, b, &score_a, &ring_a):
+        return False
+    if not _atrop_side(atoms, ptr, edges, b, a, &score_b, &ring_b):
+        return False
+    return score_a + score_b >= _atrop_bar(ring_a, atoms[a].element == 7, ring_b, atoms[b].element == 7)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -2339,8 +2511,8 @@ cdef Py_ssize_t _perceive_stereo_units(Structure structure, su_scratch_t *scratc
             # Both ends already qualified inside the predicate; these two calls are what collects
             # the refs.  Kept separate so the heuristic stays in one function.  The anchor's pair
             # leads, which is what makes the relocation above meaning-preserving.
-            _atropisomer_end(atoms, ptr, edges, pivot, other_pivot, &refs[0])
-            _atropisomer_end(atoms, ptr, edges, other_pivot, pivot, &refs[2])
+            _atrop_refs(ptr, edges, pivot, other_pivot, &refs[0])
+            _atrop_refs(ptr, edges, other_pivot, pivot, &refs[2])
             if _stereo_emit(out, &count, anchored, SU_ATROPISOMER, pivot, refs, 4, 0, 0):
                 return -1
 
@@ -2937,7 +3109,7 @@ cdef inline uint32_t stereo_owner_unit_count(Structure structure, uint32_t slot)
     a reader reaching that atom -- through the unit anchored there, or through the unit that merely owns
     it -- reaches the one unit either way.  A count of 2 is the case a per-ATOM collection syntax cannot
     spell, because the atom names two elements and the index says nothing about which; the biaryl pivot
-    of `C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12` is both, an atropisomer owner and a ring cis/trans terminal.
+    of `C12=CC=CC=CC=C1I.CC1=CC=CC=CC=C12` is both, an atropisomer owner and a ring cis/trans terminal.
     """
     cdef atom_t *atoms = structure.atoms()
     cdef uint32_t *ptr = csr_ptr(structure)
@@ -3687,18 +3859,13 @@ cdef int mark_stereogenic(Structure structure) except -1:
                     # one atom -- SU_TETRA, and SU_ALLENE, whose anchor is the chain centre -- has
                     # no set B and no partner to pin.
                     #
-                    # SET B IS STRUCTURALLY UNCOVERABLE FOR SU_ATROPISOMER, and that is a fact about
-                    # the kind rather than a gap in the fixtures -- the same standing as the "acts
-                    # evenly" row that `test_an_automorphism_that_acts_evenly_is_not_a_witness`
-                    # documents.  `_is_atropisomer_axis` requires a single bond with both ends in a
-                    # ring and the axis itself NOT `HE_IN_RING`, so the axis is never a ring bond and
-                    # the constitution's automorphism group factors over the two rings joined by it.
-                    # A sigma that exchanges the terminals therefore acts as a product of a ring
-                    # exchange and per-ring flips, and any odd action it has on the four directions is
-                    # already delivered by a single-ring flip that FIXES both terminals -- which is a
-                    # set A witness.  Measured: no biaryl changes verdict between `sets = 1` and
-                    # `sets = 2`.  Set B is live and load-bearing for SU_CIS_TRANS, which is where the
-                    # macrocycle test exercises it.
+                    # SET B for SU_ATROPISOMER: on an acyclic axis the constitution's automorphism
+                    # group factors over the two rings it joins, so a sigma exchanging the terminals
+                    # acts as a ring exchange times per-ring flips and any odd action it has on the
+                    # four directions is already a single-ring flip that FIXES both terminals -- a
+                    # set A witness.  An axis bridged by a ring of seven atoms or more (see
+                    # ATROPISOMERS) is a ring bond, the group no longer factors, and set B is live, as
+                    # it is for SU_CIS_TRANS in the macrocycle test.
                     sets = 2 if part != SU_NO_REF else 1
                     for s in range(sets):
                         if s:

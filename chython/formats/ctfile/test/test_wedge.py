@@ -131,7 +131,7 @@ def test_the_corpus_actually_exercises_every_kind_this_module_reads(corpus):
     ``test_every_allene_configuration_agrees_with_chython2`` compares; one of the 11 (``stereo.sdf``
     record 140) is a five-carbon cumulene, so the axial reading is exercised past three carbons.  The
     atropisomer count has no oracle -- chython 2 has no axial perception of a biaryl -- so it is a guard on
-    the corpus keeping the 6 axes that ``atropisomer_parity`` reads, of the 7 it perceives.
+    the corpus keeping the 9 configured axes ``atropisomer_parity`` reads, three of them bonds in a ring of 7 or more.
     """
     tetra = bond = allene = atropisomer = 0
     for records in corpus.values():
@@ -154,7 +154,7 @@ def test_the_corpus_actually_exercises_every_kind_this_module_reads(corpus):
     assert tetra > 1000, tetra
     assert bond > 100, bond
     assert allene == 11, allene
-    assert atropisomer == 6, atropisomer
+    assert atropisomer == 9, atropisomer
 
 
 def test_the_stereo_unit_kind_constants_match_what_the_core_emits():
@@ -859,7 +859,7 @@ def _atropo(mol):
 
 
 def test_an_atropisomer_wedge_is_read_and_the_two_wedge_directions_disagree():
-    """``_ATROPO_WEDGE`` is 2-chloro-2'-fluorobiphenyl as two unit hexagons along x, pivots at (1, 0) and
+    """``_ATROPO_WEDGE`` is 2-chloro-2'-iodobiphenyl as two unit hexagons along x, pivots at (1, 0) and
     (2, 0), with an UP wedge from pivot 1 to its ortho carbon 2.  The frame is the core's ``refs``, each
     pivot's two ring directions in slot order, so ``(2, 6, 9, 13)``, and the wedged pivot collapses onto
     its own position exactly as an allene terminal does: ``p0 = (1, 0, +1)``, ``p1 = (1, 0, -1)``, the far
@@ -2168,11 +2168,11 @@ comment
 M  END""".split('\n')
 
 
-# 2-chloro-2'-fluorobiphenyl, the smallest biaryl whose two ortho pairs are distinguishable: two regular
-# hexagons of unit edge along x, pivots at (1, 0) and (2, 0), both ortho substituents drawn UP.  The wedge
+# 2-chloro-2'-iodobiphenyl, a 2,2'-biaryl whose ortho score, Cl 2 + I 3, reaches the 6C-6C bar of 5: two
+# regular hexagons of unit edge along x, pivots at (1, 0) and (2, 0), both ortho substituents drawn UP.  The wedge
 # is on a RING bond, pivot 1 to its ortho 2, which is where a drawing states an axial configuration; the
 # Kekule form puts a single bond there, so the code sits on a bond MDL defines it for.
-_ATROPO_WEDGE = """2-chloro-2'-fluorobiphenyl
+_ATROPO_WEDGE = """2-chloro-2'-iodobiphenyl
   test
 comment
  14 15  0  0  0  0            999 V2000
@@ -2189,7 +2189,7 @@ comment
     4.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
     3.5000   -0.8660    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
     2.5000   -0.8660    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-    2.0000    1.7320    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0000    1.7320    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0
   1  2  1  1  0  0  0
   2  3  2  0  0  0  0
   3  4  1  0  0  0  0
@@ -2210,7 +2210,7 @@ M  END""".split('\n')
 
 # The other enantiomer, drawn as one: the whole layout reflected in x, the wedge unchanged.  Written out
 # in full rather than sliced from the fixture above, since the point is that the coordinates decide.
-_ATROPO_MIRROR = """(mirror image of 2-chloro-2'-fluorobiphenyl)
+_ATROPO_MIRROR = """(mirror image of 2-chloro-2'-iodobiphenyl)
   test
 comment
  14 15  0  0  0  0            999 V2000
@@ -2227,7 +2227,7 @@ comment
    -4.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
    -3.5000   -0.8660    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
    -2.5000   -0.8660    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -2.0000    1.7320    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+   -2.0000    1.7320    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0
   1  2  1  1  0  0  0
   2  3  2  0  0  0  0
   3  4  1  0  0  0  0
@@ -2256,7 +2256,7 @@ _ATROPO_RING_B_FLIPPED = _ATROPO_WEDGE[:12] + [
     '    4.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
     '    3.5000    0.8660    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
     '    2.5000    0.8660    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
-    '    2.0000   -1.7320    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0'] + _ATROPO_WEDGE[18:]
+    '    2.0000   -1.7320    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0'] + _ATROPO_WEDGE[18:]
 
 
 # The same drawing with no wedge anywhere: a flat biaryl, which is what all but 88 of the 4368 axes in a
@@ -2299,7 +2299,7 @@ def test_the_atropisomer_fixtures_are_what_the_tests_above_assume():
     index: a shifted line would wedge a different bond and still read a parity."""
     for lines in (_ATROPO_WEDGE, _ATROPO_MIRROR, _ATROPO_RING_B_FLIPPED, _ATROPO_FLAT):
         mol, _, _ = _build(lines)
-        assert format(mol).split(' ')[0] == 'C1=C(C(C2=CC=CC=C2Cl)=CC=C1)F', 'the tail holds the axis wedge'
+        assert format(mol).split(' ')[0] == 'C1=C(C(C2=CC=CC=C2I)=CC=C1)Cl', 'the tail holds the axis wedge'
         assert len(_atropo(mol)) == 1, 'the fixture must keep a stereogenic axis'
     assert _ATROPO_WEDGE[18] == '  1  2  1  1  0  0  0'      # pivot 1 to its ortho, the drawn wedge
     assert _ATROPO_WEDGE[23] == '  6  1  2  0  0  0  0'      # pivot 1's other ring bond, and a double one

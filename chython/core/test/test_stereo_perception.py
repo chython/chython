@@ -1081,8 +1081,8 @@ def test_a_symmetric_ortho_biaryl_is_not_marked_on_a_kekule_record():
     assert orbits[sids[1]] != orbits[sids[5]], 'the stored Kekule record breaks the ring turn'
     assert list(m.chiral_bonds()) == []
 
-    # the genuine atropisomer, for contrast: 2-chloro-2'-fluorobiphenyl has no such symmetry to lose
-    real, s = _mol(atoms='C' * 12 + 'ClF', hydrogens=[0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0],
+    # the genuine atropisomer, for contrast: 2-chloro-2'-iodobiphenyl has no such symmetry to lose
+    real, s = _mol(atoms='C' * 12 + 'ClI', hydrogens=[0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0],
                    bonds=bonds + [(1, 12, 1), (7, 13, 1)])
     assert list(real.chiral_bonds()) == [tuple(sorted((s[0], s[6])))]
 

@@ -707,8 +707,8 @@ def test_a_bond_group_tail_is_the_same_from_three_creation_orders():
 
 def test_an_atropisomer_group_is_a_fixed_point_of_three_write_read_cycles():
     """ROUND-TRIP INVARIANCE.  A tail index the next write would not pick again oscillates, and the
-    second cycle is where it shows: with the group written on the anchor this molecule alternated
-    `|&1:3|` and `|&1:9|` for ever, so a two-cycle test passes on a string that never settles.
+    second cycle is where it shows: with the group written on the anchor this molecule alternates
+    between its two pivots' indices for ever, so a two-cycle test passes on a string that never settles.
 
     Three cycles, and the string is compared to the previous one rather than to a spelled constant, so
     the invariant the test states is stability and not one canonical form.
@@ -717,8 +717,11 @@ def test_an_atropisomer_group_is_a_fixed_point_of_three_write_read_cycles():
     neither index says which of that atom's two elements AND 1 is on -- and the writer reports that on
     every cycle while still writing the tail (note 4 at the top of `_smiles_write.pxi`).  The axis
     configuration itself travels as the tail's wedge.
+
+    Diiodo, not the iodo/methyl twin: that one's canonical Kekule form puts both pivots on ring double
+    bonds, where the axis is lost (`test_a_biaryl_of_eight_rings_can_lose_its_axis_to_both_pivots`).
     """
-    mol = read_smiles('C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12')
+    mol = read_smiles('C12=CC=CC=CC=C1I.IC1=CC=CC=CC=C12')
     with mol.edit() as e:
         e.set_stereo_group(next(iter(mol.chiral_bonds())), 3, 1)
     mol.set_parity(mol.stereo_group_anchor_of(next(iter(mol.chiral_bonds()))), 1)

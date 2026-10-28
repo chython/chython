@@ -30,7 +30,7 @@ from pytest import mark, raises
 from chython.core import H_UNKNOWN, LOST, MoleculeContainer, pach_load, pach_record_length, read_smiles
 from .pach3_corpus import (BGROUP_BUILDERS, BGROUP_NAMES, BGROUP_PATH, BUILDERS, V3_PATH, V4_PATH,
                            answers, answers_bgroup, drawn, load_corpus)
-from .pach3_corpus import _BIPHENYL_BONDS, _BIPHENYL_H, _BUTANE_XY, _chlorofluorobiphenyl, _drawn_butane
+from .pach3_corpus import _BIPHENYL_BONDS, _BIPHENYL_H, _BUTANE_XY, _chloroiodobiphenyl, _drawn_butane
 from .pach_corpus import V0_NATIVE_PATH, V0_PATH, V2_PATH
 
 
@@ -463,7 +463,7 @@ def test_an_allene_stores_its_ends_and_not_its_centre():
 
 
 def test_an_atropisomer_stores_both_pivots():
-    mol = _chlorofluorobiphenyl()
+    mol = _chloroiodobiphenyl()
     rec = _record(mol.pack(compressed=False), 14, 15)
     # the two pivots of the biaryl axis, each followed by one of its own ring neighbours
     assert _slots(rec) == (0, 1, 6, 7, 3)
@@ -532,7 +532,7 @@ def test_the_frame_is_refs_order_on_every_configured_unit():
     read in that frame, which `translate_stereo` answers by its own path.
     """
     kinds = set()
-    for mol in [read_smiles(s) for s in _STEREO_CORPUS] + [_chlorofluorobiphenyl()]:
+    for mol in [read_smiles(s) for s in _STEREO_CORPUS] + [_chloroiodobiphenyl()]:
         raw = mol.pack(compressed=False, version=4)
         numbers = mol.atom_numbers
         slot_of = {n: i for i, n in enumerate(numbers)}
@@ -607,7 +607,7 @@ def test_both_allene_configurations_survive():
 
 def test_an_atropisomer_survives_both_ways():
     for parity in (1, 2):
-        mol = _chlorofluorobiphenyl()
+        mol = _chloroiodobiphenyl()
         mol.set_parity(mol.atom_numbers[0], parity)
         back, problems = pach_load(mol.pack(compressed=False), compressed=False)
         assert problems == []
@@ -627,7 +627,7 @@ def test_an_implicit_hydrogen_double_bond_keeps_its_configuration():
 def test_every_configured_unit_in_the_corpus_survives_the_round_trip():
     """The encoder's own corpus, read back.  All four kinds, and every one of them by equality rather
     than by parity byte, so a configuration landing on the wrong anchor fails here too."""
-    for mol in [read_smiles(s) for s in _STEREO_CORPUS] + [_chlorofluorobiphenyl()]:
+    for mol in [read_smiles(s) for s in _STEREO_CORPUS] + [_chloroiodobiphenyl()]:
         back, problems = pach_load(mol.pack(compressed=False, version=4), compressed=False)
         assert problems == []
         assert back == mol

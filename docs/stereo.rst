@@ -93,8 +93,9 @@ cis/trans       1         a double bond or an even cumulated chain, outside ring
                           C=N with no O or N on the nitrogen, an N=N holding a hydrogen, or a C=C
                           with an O-H or an N-H not acylated
 allene          2         the middle atom of an odd cumulated chain: ``C=C=C``, ``C=C=C=C=C``
-atropisomer     3         an acyclic single bond between two hydrogen-free ring atoms, each with an
-                          ortho substituent or a ring fusion; stereogenic only when at each end the
+atropisomer     3         a single bond between two hydrogen-free aryl atoms whose ortho score
+                          reaches its ring pair's bar (`Atropisomer axes`_), and through which no
+                          ring of six atoms or fewer runs; stereogenic only when at each end the
                           two ortho atoms are constitutionally distinct
 helical         4         an [n]helicene, n >= 5, of angularly fused six-rings
 planar          5         a substituted atom of an η5 ring under a metal, a substituted
@@ -445,6 +446,52 @@ identity ignores; the figure compares each record, canonicalized, with its unlab
    Each record compared with its unlabelled drawing.  The meso pair in one group states the drawn
    diastereomer, as ABS does, and the split pair states more; the two labels on unconfigured or
    non-stereogenic units state nothing.
+
+Atropisomer axes
+----------------
+
+A biaryl bond is an axis when the hindrance at its four ortho positions reaches a bar set by the two rings
+it joins.  Each ortho position scores by size, and the four are summed:
+
+====  ===========================================================================================
+size  ortho position
+====  ===========================================================================================
+0     C-H; ring N, with or without H; ring O
+1     F; C≡N, C≡C; exocyclic =O; OR; ring S; a fusion atom whose fused five-ring neighbour is an
+      aromatic CH, NH or N
+2     OH; NH2; C=O carbon; Cl, Br; CH3; aryl; CF3; a fusion atom whose fused five-ring neighbour is
+      substituted or sp3; quinolin-8-yl's peri N
+3     CH2R (a bridge or macrocycle linker included), iPr, cyclopropyl, tBu; I; NR2; the peri
+      position of a fused six-ring (1-naphthyl, quinolin-4-yl)
+====  ===========================================================================================
+
+=========================  ===  ======================  ===
+ring pair, by pivot        bar  ring pair               bar
+=========================  ===  ======================  ===
+6C-6C                      5    5C-6C                   7
+6C-6N, 5C-6N, 6N-6N        8    5N-6C (N-aryl azoles)   9
+5C-5C                      9    5C-5N, 5N-5N, 5N-6N     10
+=========================  ===  ======================  ===
+
+The bars are where a relaxed MMFF94 rotation scan, corrected against measured barriers of biphenyl,
+2,2'-dimethylbiphenyl, 1,1'-binaphthyl and BINOL, reaches LaPlante class 2, about 20 kcal/mol: an axis that
+holds its configuration for hours at room temperature.  The rule is topological; no force field runs.  A
+bridge of four atoms or fewer holds the rings coplanar (fluorene, 9,10-dihydrophenanthrene) and makes no
+axis; a longer bridge is an ortho substituent.  An axis is then stereogenic only when each end is
+unsymmetric about it.
+
+.. testcode::
+
+    for name, text in (('2,2\'-dimethylbiphenyl', 'Cc1ccccc1-c1ccccc1C'),
+                       ('2,6-dimethyl-2\'-chlorobiphenyl', 'Cc1cccc(C)c1-c1ccccc1Cl'),
+                       ('1,1\'-binaphthyl', 'c1ccc2c(c1)cccc2-c1cccc2ccccc12')):
+        print(name, [u['owners'] for u in smiles(text).stereo_units() if u['kind'] == 3])
+
+.. testoutput::
+
+    2,2'-dimethylbiphenyl []
+    2,6-dimethyl-2'-chlorobiphenyl [(8, 9)]
+    1,1'-binaphthyl [(10, 11)]
 
 Coupled bridgeheads
 -------------------
@@ -1561,7 +1608,7 @@ same way again.
 An atom that owns two units names neither of them.  Where both owners of an axis do, the lower one is
 written anyway -- a token is never suppressed on a prediction -- and the axis is reported
 ``smiles:stereo-group-axis-ambiguous``: the index carries the collection, and which of that atom's two
-elements the collection is on is what it cannot carry.  ``C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12`` with its
+elements the collection is on is what it cannot carry.  ``C12=CC=CC=CC=C1I.CC1=CC=CC=CC=C12`` with its
 axis configured is the case, its pivots being atropisomer owners and ring cis/trans terminals at once.
 
 .. testcode::
@@ -1572,7 +1619,7 @@ axis configured is the case, its pivots being atropisomer owners and ring cis/tr
     with muconic.edit() as e:
         for pair in muconic.chiral_bonds():
             e.set_stereo_group(pair, 3, 1)
-    bicycle = smiles('C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12')
+    bicycle = smiles('C12=CC=CC=CC=C1I.CC1=CC=CC=CC=C12')
     bicycle.set_parity(18, 1)
     with bicycle.edit() as e:
         e.set_stereo_group((1, 18), 2, 1)

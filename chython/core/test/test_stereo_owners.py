@@ -69,7 +69,7 @@ def test_an_allene_owns_its_terminals_and_anchors_between_them():
 
 
 def test_an_atropisomer_owns_both_pivots_however_it_is_anchored():
-    mol = smiles('C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12')
+    mol = smiles('C12=CC=CC=CC=C1I.CC1=CC=CC=CC=C12')
     axes = [(p, u) for p, u in mol.chiral_bonds().items() if u['kind'] == 3]
     assert len(axes) == 1
     pair, unit = axes[0]
@@ -85,7 +85,7 @@ def test_a_bare_atom_number_names_the_unit_anchored_there():
     `1` therefore names the cis/trans unit -- the one whose byte lives at slot 1 -- and the axis is
     reachable only as `(1, 18)`.
     """
-    mol = smiles('C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12')
+    mol = smiles('C12=CC=CC=CC=C1I.CC1=CC=CC=CC=C12')
     assert mol.stereo_group_anchor_of(1) == 1
     assert mol.stereo_group_anchor_of((1, 18)) == 18
 

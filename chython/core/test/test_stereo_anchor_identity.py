@@ -130,12 +130,12 @@ def test_an_atropisomer_may_anchor_at_either_pivot():
     """RULING 1's WITNESS.  A pivot claimed by another unit sends the axis to the OTHER pivot, so the
     anchor is not a function of the owner pair and `min(owners)` is not the resolution.
 
-    2,2'-dimethyl-1,1'-bi(cycloocta-1,3,5,7-tetraenyl), written so that the lower pivot opens its
+    2-iodo-2'-methyl-1,1'-bi(cycloocta-1,3,5,7-tetraenyl), written so that the lower pivot opens its
     ring and is therefore the lower terminal of a chain bond: the cis/trans cut admits a ring of
     eight, so that unit claims the lower pivot and the axis lands on the higher one.  The `.` is a
     separator, not a disconnection — ring closure 2 spans it and is the axis itself.
     """
-    mol = smiles('C12=CC=CC=CC=C1C.CC1=CC=CC=CC=C12')
+    mol = smiles('C12=CC=CC=CC=C1I.CC1=CC=CC=CC=C12')
     axes = [(p, u) for p, u in mol.chiral_bonds().items() if u['kind'] == 3]
     assert len(axes) == 1
     pair, unit = axes[0]
