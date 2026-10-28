@@ -616,17 +616,19 @@ def test_a_counter_ion_keeps_its_number_across_a_deprotection():
 
 
 @pytest.mark.parametrize('smiles, names, labels', [
-    ('CCCC(=O)OC(C)(C)C', ('tbu',), ('ester_hydrolysis',)),
-    ('CCCC(=O)OC', ('methyl',), ('ester_hydrolysis',)),
-    ('c1ccccc1CCOC(C)=O', ('acyl',), ('ester_hydrolysis',)),
-    ('c1ccccc1C(=O)OC', ('methyl',), ('ester_hydrolysis',)),
+    ('CCCC(=O)OC(C)(C)C', ('tbu',), ('carboxyl_tbu',)),
+    ('CCCC(=O)OC', ('methyl',), ('carboxyl_methyl',)),
+    ('c1ccccc1CCOC(C)=O', ('acyl',), ('hydroxyl_acyl',)),
+    ('c1ccccc1C(=O)OC', ('methyl',), ('carboxyl_methyl',)),
+    ('c1ccccc1C(=O)OCc1ccccc1', ('benzyl',), ('carboxyl_benzyl',)),
     ('c1ccccc1CCOC(=O)OC(C)(C)C', ('boc',), ('hydroxyl_boc',)),
     ('c1ccccc1CCOC', ('methyl',), ('hydroxyl_methyl',)),
     ('c1ccccc1NC(=O)OC(C)(C)C', ('boc',), ('aniline_boc',)),     # the label names the site
 ])
-def test_a_strip_cutting_a_carboxylic_ester_is_labelled_ester_hydrolysis(smiles, names, labels):
-    """`labels` names the mechanism and `names` the row: either side of an ester is one label, a carbonate
-    is not an ester, and methyl benzoate loses its methyl, the smaller half."""
+def test_a_strip_cutting_a_carboxylic_ester_is_named_for_its_group(smiles, names, labels):
+    """`labels` names the group on its site: a methyl ester saponified and a tert-butyl ester cut by acid are
+    two condition families and two labels, a carbonate is not an ester, and methyl benzoate loses its
+    methyl, the smaller half."""
     molecule = read_smiles(smiles)
     molecule.canonicalize()
     outcome = next(deprotect(molecule))

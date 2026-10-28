@@ -363,11 +363,10 @@ class EnumeratedDeprotection(NamedTuple):
     single reactant and the stripped one as its products, mapped 1-1 from 1 with the cleaved group at 0;
     the caller's molecule is never mutated.
 
-    `labels` is the mechanism per strip: `ester_hydrolysis` where the strip cuts a carboxylic ester, on
-    either side and whichever row claimed it (`carboxyl_tbu`, `hydroxyl_methyl` on a methyl ester,
-    `hydroxyl_acyl` on an acetate), and otherwise the row's name for the atom it sits on (`_sited`):
-    `aniline_boc`, `phenol_methyl`.  `sites` is that prefix per strip, from the `site` column of
-    `functional.tsv`, `''` where no group renames the row.
+    `labels` is the row's name for the atom it sits on, per strip (`_sited`): `aniline_boc`, `phenol_methyl`,
+    and on an ester `carboxyl_methyl`, `carboxyl_tbu` or `hydroxyl_acyl` -- each group names its own
+    conditions, so a methyl ester saponified and a tert-butyl ester cut by acid are two labels.  `sites` is
+    that prefix per strip, from the `site` column of `functional.tsv`, `''` where no group renames the row.
     """
     names: tuple[str, ...]
     reaction: ReactionContainer
@@ -457,25 +456,6 @@ def _sited(name: str, site: str) -> str:
     """The reported name: the row's under its site's prefix, `boc` on an aniline being `aniline_boc`; a row
     with no site keeps its own name."""
     return '%s_%s' % (site, name) if site else name
-
-
-def _label(molecule: MoleculeContainer, claim: _Claim, site: str = '') -> str:
-    """`ester_hydrolysis` when the claim cuts either O-C bond of a carboxylic ester, else the row's name for
-    its site (`_sited`).
-
-    The revealed oxygen lost a bond to the deleted atoms and is single-bonded to a carboxyl carbon: kept on
-    the acyl side (`carboxyl_tbu`, `hydroxyl_methyl` on a methyl ester) or deleted with it
-    (`hydroxyl_acyl`, `hydroxyl_piv`).  Boc, Cbz and Fmoc on oxygen are carbonates and keep their names.
-    """
-    for atom in claim.atoms - claim.deleted:
-        if molecule.element_of(atom) != 8:
-            continue
-        neighbors = tuple(molecule.neighbors_of(atom))
-        if claim.deleted.isdisjoint(neighbors):
-            continue
-        if any(_carboxyl(molecule, carbon, atom) for carbon in neighbors):
-            return 'ester_hydrolysis'
-    return _sited(claim.rule.name, site)
 
 
 def _claims(molecule: MoleculeContainer, rules: Iterable[ProtectiveGroup]) -> list[_Claim]:
@@ -709,7 +689,7 @@ def _strip_sites(molecule: MoleculeContainer, chosen: Sequence[int],
         if patched is None:                 # the claim stood but no outcome stayed inside it
             continue
         site = _site(patched, _revealed(working, claim), claim.rule)
-        acted.append((claim, _label(working, claim, site), site))
+        acted.append((claim, _sited(claim.rule.name, site), site))
         working = patched
     if not acted:
         return None
@@ -753,7 +733,7 @@ def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
         if patched is None:                 # the claim stood but no outcome stayed inside it
             break
         site = _site(patched, _revealed(working, claim), claim.rule)
-        labels.append(_label(working, claim, site))
+        labels.append(_sited(claim.rule.name, site))
         sites.append(site)
         working = patched
         names.append(claim.rule.name)

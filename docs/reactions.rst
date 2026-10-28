@@ -1533,14 +1533,21 @@ label                                the claim it makes about the record
 ``deprotect:<labels>+react:<name>``  strip what can be stripped, then a corpus row fires on what is left
 ===================================  =====================================================================
 
-A strip is named by its mechanism, the ``labels`` of the deprotection: one that cuts a carboxylic ester,
-on either side, is ``ester_hydrolysis`` whichever row claimed it, so a Boc amine methyl ester stripped of
-both reads ``deprotect:amine_boc+ester_hydrolysis``.  Any other strip, and every ``protect:``, is the row's
-name **for the atom the group sits on**, because one group is installed and removed under other conditions
-on each: an ``amine_`` or ``hydroxyl_`` row reports the prefix of its site -- ``amine``, ``aniline``,
-``amide``, ``azole``; ``hydroxyl``, ``phenol``, ``enol``, ``carboxyl``.  The group is stripped first and the
-revealed atom then named by the ``site`` column of ``functional.tsv``: the largest functional group whose
-site atom it is decides, and an atom no group claims keeps the row's own name.
+Every strip, and every ``protect:``, is the row's name **for the atom the group sits on**, because one
+group is installed and removed under other conditions on each: an ``amine_`` or ``hydroxyl_`` row reports
+the prefix of its site -- ``amine``, ``aniline``, ``amide``, ``azole``; ``hydroxyl``, ``phenol``, ``enol``,
+``carboxyl``.  The group is stripped first and the revealed atom then named by the ``site`` column of
+``functional.tsv``: the largest functional group whose site atom it is decides, and an atom no group claims
+keeps the row's own name.  An ester is named for its group too: a methyl ester saponified is
+``deprotect:carboxyl_methyl``, a tert-butyl ester cut by acid ``deprotect:carboxyl_tbu``, an acetate taken off
+an alcohol ``deprotect:hydroxyl_acyl``, and a Boc amine methyl ester stripped of both
+``deprotect:amine_boc+carboxyl_methyl``.  An ester no named group claims is ``react:ester_hydrolysis``.
+
+.. testcode::
+
+    assert smiles('COC(=O)c1ccccc1>>OC(=O)c1ccccc1').reconstruct_mapping() == ('deprotect:carboxyl_methyl',)
+    assert smiles('CC(C)(C)OC(=O)c1ccccc1>>OC(=O)c1ccccc1').reconstruct_mapping() == ('deprotect:carboxyl_tbu',)
+    assert smiles('CC(C)OC(=O)c1ccccc1>>OC(=O)c1ccccc1').reconstruct_mapping() == ('react:ester_hydrolysis',)
 
 Methyl benzoate from benzoic acid is ``protect:carboxyl_methyl`` and anisole from phenol
 ``protect:phenol_methyl``.  Where two rows claim the two halves of one ester, the smaller half is the

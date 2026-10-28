@@ -323,7 +323,7 @@ def test_a_group_cut_inside_a_larger_one_reads_as_the_inner_group():
     bom = smiles('c1ccccc1COCn1cccc1C>>OCn1cccc1C')
     assert bom.reconstruct_mapping() == ('deprotect:hydroxyl_benzyl',)
     pom = smiles('CC(C)(C)C(=O)OCn1cc(C)nn1>>OCn1cc(C)nn1')
-    assert pom.reconstruct_mapping() == ('deprotect:ester_hydrolysis',)
+    assert pom.reconstruct_mapping() == ('deprotect:hydroxyl_piv',)
 
 
 def test_a_sulfonyl_leaves_from_oxygen_and_protects_nitrogen():
@@ -652,18 +652,20 @@ def test_the_composed_rung_only_walks_what_the_stripping_reached():
 
 
 @pytest.mark.parametrize('reactants, product, label', [
-    (('CC(C)(C)OC(=O)NCCC(=O)OC',), 'NCCC(=O)O', 'deprotect:amine_boc+ester_hydrolysis'),
-    (('CC(C)(C)OC(=O)NCCC(=O)OC(C)(C)C',), 'NCCC(=O)O', 'deprotect:amine_boc+ester_hydrolysis'),
-    (('COC(=O)CCC(=O)OC',), 'OC(=O)CCC(=O)O', 'deprotect:ester_hydrolysis+ester_hydrolysis'),
+    (('CC(C)(C)OC(=O)NCCC(=O)OC',), 'NCCC(=O)O', 'deprotect:amine_boc+carboxyl_methyl'),
+    (('CC(C)(C)OC(=O)NCCC(=O)OC(C)(C)C',), 'NCCC(=O)O', 'deprotect:amine_boc+carboxyl_tbu'),
+    (('COC(=O)CCC(=O)OC',), 'OC(=O)CCC(=O)O', 'deprotect:carboxyl_methyl+carboxyl_methyl'),
     (('COC(=O)c1ccc(Br)cc1', 'OB(O)c1ccccc1'), 'OC(=O)c1ccc(-c2ccccc2)cc1',
-     'deprotect:ester_hydrolysis+react:suzuki'),
-    (('COC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'deprotect:ester_hydrolysis'),
-    (('CC(C)(C)OC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'deprotect:ester_hydrolysis'),
+     'deprotect:carboxyl_methyl+react:suzuki'),
+    (('COC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'deprotect:carboxyl_methyl'),
+    (('CC(C)OC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'react:ester_hydrolysis'),
+    (('CC(C)(C)OC(=O)c1ccccc1',), 'OC(=O)c1ccccc1', 'deprotect:carboxyl_tbu'),
     (('COC(=O)c1ccc2cc[nH]c2n1', 'Ic1ccccc1'), 'OC(=O)c1ccc2ccn(-c3ccccc3)c2n1',
-     'deprotect:ester_hydrolysis+react:ullmann_pyrrole'),
+     'deprotect:carboxyl_methyl+react:ullmann_pyrrole'),
 ])
-def test_an_ester_cleaved_to_its_acid_is_labelled_ester_hydrolysis(reactants, product, label):
-    # the mechanism and not the protecting-group row: a methyl and a tert-butyl ester read alike
+def test_an_ester_cleaved_to_its_acid_is_named_for_its_group(reactants, product, label):
+    # the group and not the mechanism: a methyl ester saponified and a tert-butyl ester cut by acid are two
+    # condition families; an ester no named group claims is the corpus row's
     rxn = ReactionContainer([smiles(x) for x in reactants], [smiles(product)])
     for molecule in rxn.molecules():
         molecule.canonicalize()
@@ -947,11 +949,12 @@ def test_an_absolute_source_drops_a_collection():
 def test_an_ester_hydrolysis_mapping_has_a_reaction_centre():
     # Both oxygens the row swaps are unmapped -- the alkoxy leaves, the OH arrives from an agent -- so the
     # centre is the acyl carbon's unmapped branch changing, and the reagents separate on it.
-    rxn = ReactionContainer([smiles(x) for x in ('COC(=O)c1ccccc1', '[Li+]', '[OH-]', 'O')],
+    # an isopropyl ester: no named group claims it, so the corpus row explains it
+    rxn = ReactionContainer([smiles(x) for x in ('CC(C)OC(=O)c1ccccc1', '[Li+]', '[OH-]', 'O')],
                             [smiles('OC(=O)c1ccccc1')])
-    assert rxn.reconstruct_mapping(stereo='loose', heal_stereo='product') == ('deprotect:ester_hydrolysis',)
+    assert rxn.reconstruct_mapping(stereo='loose', heal_stereo='product') == ('react:ester_hydrolysis',)
     assert rxn.remove_reagents(keep_reagents=True) is True
-    assert [m.smiles for m in rxn.reactants] == [smiles('COC(=O)c1ccccc1').smiles]
+    assert [m.smiles for m in rxn.reactants] == [smiles('CC(C)OC(=O)c1ccccc1').smiles]
     assert sorted(m.smiles for m in rxn.agents) == sorted(smiles(x).smiles for x in ('[Li+]', '[OH-]', 'O'))
 
 
