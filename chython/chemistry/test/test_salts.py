@@ -724,6 +724,7 @@ ACID_LADDER = (
     ('salts:thio-acid-sh', 2, 'CCOC(=S)S'),
     ('salts:hydrogen-halide', 3, 'Cl'),
     ('salts:carboxylic-oh', 4, 'CC(=O)O'),
+    ('salts:hydrazoic-nh', 4, 'N=[N+]=[N-]'),
     ('salts:tetrazole-1h', 4, 'c1nnn[nH]1'),
     ('salts:tetrazole-2h', 4, 'c1nn[nH]n1'),
     ('salts:thiophenol-sh', 4, 'Sc1ccccc1'),

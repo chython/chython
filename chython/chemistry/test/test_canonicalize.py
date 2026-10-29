@@ -324,6 +324,19 @@ def test_a_diazo_drawn_neutral_takes_its_charges():
     assert str(smiles(str(neutral))) == str(neutral)
 
 
+def test_sodium_azide_drawn_as_neutral_hydrazoic_acid_is_sodium_azide():
+    """`N=N=N.[Na]` takes the two charges, then the free metal takes the acid's proton."""
+    expected = smiles('[N-]=[N+]=[N-].[Na+]')
+    expected.canonicalize()
+    for text in ('N=N=N.[Na]', 'N=[N+]=[N-].[Na]'):
+        drawn = smiles(text)
+        drawn.canonicalize()
+        assert drawn == expected, text
+    acid = smiles('N=N=N')
+    acid.canonicalize()
+    assert str(acid) == '[N-]=[N+]=N'
+
+
 def test_the_pass_states_the_type_it_takes():
     """`smiles()` returns whichever container its string describes, so a `>>` in a structure column
     reaches this pass as a reaction.  An `AttributeError` naming a private attribute is not a refusal.

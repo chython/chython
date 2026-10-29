@@ -75,6 +75,7 @@ salts:sulfinic-oh	embed	protic_acid	[O;D1;z1;h1:1]-[S;z2]=O	-	2	sulfinic acid.  
 salts:thio-acid-sh	embed	protic_acid	[S;D1;z1;h1:1]-[C;z2]=[O,S]	-	2	thioacid, dithioacid, xanthic acid, dithiocarbamic acid.  Thioacetic acid is a rung optimistic here, which costs a tie broken the wrong way when one component holds two sites
 salts:hydrogen-halide	embed	protic_acid	[F,Cl,Br,I;D0;h1:1]	-	3	HF HCl HBr HI: the unbonded halogen holding its hydrogen
 salts:carboxylic-oh	embed	protic_acid	[O;D1;z1;h1:1]-[C;z2]=O	-	4	carboxylic acid
+salts:hydrazoic-nh	embed	protic_acid	[N;D1;h1:1]=[N+]=[N-]	-	4	hydrazoic acid, pKa 4.7: the azide salts
 salts:tetrazole-1h	embed	protic_acid	[nH;r5:1]:1:n:n:n:c:1	-	4	tetrazole 1H, the carboxylic-acid bioisostere
 salts:tetrazole-2h	embed	protic_acid	n:1:[nH;r5:1]:n:n:c:1	-	4	tetrazole 2H: standardize() converges no mobile hydrogen, so both tautomers get a row
 salts:thiophenol-sh	embed	protic_acid	[S;D1;z1;h1:1]-[C,N;a]	-	4	thiophenol

@@ -202,6 +202,9 @@ ADDED = {
     'groups:86': 'an isolated ring enol, every other neighbour of its C=C sp3: the ketone',
     'groups:87': 'the same with a carbon substituent on the far carbon',
     'groups:88': 'a diazo drawn neutral as A=N=N: the two charges',
+    'groups:89': 'hydrazoic acid drawn neutral as N=N=N: the two charges',
+    'groups:90': 'a 2-azaallenium or bis(phosphoranylidene)ammonium drawn neutral, X=N=X: a cation',
+    'groups:91': 'an iodonium drawn neutral, C-I-C: a cation',
 }
 
 
