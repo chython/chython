@@ -65,6 +65,9 @@ cdef bytes _unit_codes(Structure view, dict cache):
     cdef tuple members
     cdef object i
     cdef Structure v
+    cdef dict sets
+    cdef uint32_t *cls = NULL
+    cdef object pick
     if codes is not None:
         return codes if codes else None
     v = structure_clone(view)
@@ -88,17 +91,31 @@ cdef bytes _unit_codes(Structure view, dict cache):
                 fill[units[k].anchor] = 1
             elif units[k].kind != SU_TETRA or not unnamed & (unnamed - 1):
                 fill[units[k].anchor] = 2
-        # a coupled set is one choice, named on its lowest member: the others are implied by it
-        for members in _coupled_sets(_coupled_bridgeheads(v, cache)).values():
+        # a coupled set is one choice, named on one member: the others are implied by it.  The member is the
+        # first in the constitution's canonical order, not the lowest slot -- which member names the set
+        # decides the symmetry tests downstream, so a slot would make them follow the atom order
+        sets = _coupled_sets(_coupled_bridgeheads(v, cache))
+        if sets:
+            cls = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
+            if cls is NULL:
+                raise MemoryError()
+            if compute_atoms_order(v, cls, NULL) < 0:
+                raise MemoryError()
+        for members in sets.values():
             best = 0
             for i in members:
                 if fill[<uint32_t> i] and (not best or fill[<uint32_t> i] < best):
                     best = fill[<uint32_t> i]
                 fill[<uint32_t> i] = 0
-            fill[<uint32_t> members[0]] = best
+            pick = members[0]
+            for i in members:
+                if cls[<uint32_t> i] < cls[<uint32_t> pick]:
+                    pick = i
+            fill[<uint32_t> pick] = best
         codes = (<char *> fill)[:n]
     finally:
         PyMem_Free(fill)
+        PyMem_Free(cls)
     cache[b'M'] = codes
     return codes
 

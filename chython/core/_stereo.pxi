@@ -4924,10 +4924,34 @@ cdef int _bridgehead_signs(Structure structure, list pairs, dict signs, dict gro
                     bad.append((min(source, i), max(source, i)))
         if bad:
             unrealisable.extend(bad)
+            if _stated_racemic(structure, sg, members):
+                bad = []                    # the racemate: either out,out signing in its AND group says the same
         for i in members:
             signs[i] = 0 if bad else val[i]
             groups[i] = sg[<uint32_t> source] if sg is not NULL else 0
     return 0
+
+
+cdef bint _stated_racemic(Structure structure, uint8_t *sg, tuple members) except -1:
+    """Are the signed members of the coupled set `members` all in AND groups holding nothing but the set?
+
+    Then the drawing states the set racemic and its relation to nothing else, and an unrealisable pair of
+    signs says what either realisable one does: `validate_stereo` heals it so (`stereo:bridgehead-racemate`),
+    and identity reads it so, or a write before that heal would drop what the heal keeps."""
+    cdef set own = set()
+    cdef uint32_t k, n = structure.header.atom_count
+    cdef object i
+    if sg is NULL:
+        return False
+    for i in members:
+        if structure_parity_at(structure, <uint32_t> i):
+            if not sg[<uint32_t> i] or sg_kind(sg[<uint32_t> i]) != SG_KIND_AND:
+                return False
+            own.add(sg[<uint32_t> i])
+    for k in range(n):
+        if sg[k] in own and k not in members:
+            return False
+    return bool(own)
 
 
 cdef list structure_bridgehead_conflicts(Structure structure):

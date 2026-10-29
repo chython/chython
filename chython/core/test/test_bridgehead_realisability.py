@@ -451,3 +451,26 @@ def test_an_unrealisable_set_in_an_and_group_beside_its_neighbour_is_not_guessed
     m = read_smiles('O=C1NC(=O)[C@H]2[C@@H]1[C@H]1C=C[C@H]2C1 |&1:4,5,6,9|')
     assert m.validate_stereo()
     assert [r.rule for r in m.log if r.rule.startswith('stereo:bridgehead')] == ['stereo:bridgehead-unrealisable']
+
+
+def test_an_unrealisable_set_stated_racemic_writes_what_the_heal_keeps():
+    """Bicyclo[3.3.1]nonan-2-one oxime with its bridgeheads signed as no bicycle builds, in an AND group holding
+    nothing else: identity reads the racemate `validate_stereo` heals to, so writing before the heal drops
+    nothing the heal keeps, and every atom order canonicalizes to one string."""
+    m = read_smiles('ON=C1CC[C@@H]2CCC[C@@H]1C2 |&1:5,9|')
+    healed = m.copy()
+    healed.validate_stereo()
+    assert canon(str(m)) == canon(str(healed))      # one racemate; the stored AND phase is the drawing's
+    assert len({canon(format(m, 'r')) for _ in range(30)}) == 1
+
+
+def test_coupled_bridgeheads_each_unsigned_alone_in_an_and_group_heal_as_one_element():
+    """A tropane whose two bridgeheads are each unsigned in an AND group of its own: one racemic element, given
+    one realisable signing in one AND group, whatever the atom order -- sign 1 at each would build the bicycle
+    in some orders and not in others."""
+    m = read_smiles('O=C(NCC1CC2CCC(C1)N2C)c1ccccc1 |&1:6,&2:9|')
+    m.validate_stereo()
+    assert not [r for r in m.log if r.rule == 'stereo:bridgehead-unrealisable']
+    groups = m.stereo_groups()
+    assert len(groups) == 1 and len(next(iter(groups.values()))) == 2
+    assert len({canon(format(read_smiles('O=C(NCC1CC2CCC(C1)N2C)c1ccccc1 |&1:6,&2:9|'), 'r')) for _ in range(30)}) == 1

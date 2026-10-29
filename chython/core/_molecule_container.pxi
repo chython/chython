@@ -5731,11 +5731,22 @@ cdef class MoleculeContainer:
         """`validate_stereo`'s unsigned AND singletons: a stereogenic unit with no sign alone in an AND group
         -- drawn with a wavy bond, its parity unknown -- is a racemate whatever its sign, so it takes sign 1
         and keeps the group, logged REPAIRED `stereo:racemate-unsigned`.  A unit sharing its group with
-        another member is not healed: its configuration relative to them is what is unknown."""
+        another member is not healed: its configuration relative to them is what is unknown.
+
+        A COUPLED BRIDGEHEAD SET IS ONE ELEMENT: its members' signs are not independent, so sign 1 at each
+        would build the bicycle or not as the atom order falls.  A set whose members are all such singletons
+        takes one out,out signing (`_set_signing`) in the lowest of their AND groups, logged once; a set only
+        some of whose members qualify is not healed."""
         cdef dict groups = self.stereo_groups()
         cdef dict anchor = {}
+        cdef dict lone = {}
         cdef list todo = []
-        cdef object key, members, x, u
+        cdef list joint = []
+        cdef list pairs
+        cdef dict sets, signing
+        cdef set done = set()
+        cdef object key, members, x, u, a, slot, gid
+        cdef tuple sset
         if not groups:
             return 0
         for u in self.stereo_units():
@@ -5745,16 +5756,43 @@ cdef class MoleculeContainer:
                 continue
             x = members[0]
             if x in anchor and not anchor[x][1] and anchor[x][2]:
-                todo.append((x, anchor[x][0]))
-        if not todo:
+                lone[x] = key[1]
+        if not lone:
+            return 0
+        pairs = _coupled_bridgeheads(self._structure)
+        sets = _coupled_sets(pairs)
+        for x in sorted(lone, key=str):
+            if x in done:
+                continue
+            a = anchor[x][0]
+            slot = self._index_of[a] if isinstance(x, int) else None
+            if slot is None or slot not in sets:
+                todo.append((x, a))
+                continue
+            sset = sets[slot]
+            names = [self._numbers[<uint32_t> k] for k in sset]
+            done.update(names)
+            if all(n in lone for n in names):
+                joint.append((sset, names, min(lone[n] for n in names)))
+        if not todo and not joint:
             return 0
         with self.edit():
             for x, a in todo:
                 self.set_parity(a, 1)
+            for sset, names, gid in joint:
+                signing = _set_signing(pairs, sset)
+                for k in sset:
+                    self.set_parity(self._numbers[<uint32_t> k], signing[k])
+                    self.set_stereo_group(self._numbers[<uint32_t> k], STEREO_AND, gid)
         for x, a in todo:
             self._log_event('stereo:racemate-unsigned', 'stereo',
                             'unit %s is unsigned alone in an AND group: a racemate whatever its sign, given sign 1'
                             % (x if isinstance(x, int) else '-'.join(map(str, x))), mc_repaired())
+        for sset, names, gid in joint:
+            self._log_event('stereo:racemate-unsigned', 'stereo',
+                            'bridgeheads %s are unsigned, each alone in an AND group: one racemic element, given '
+                            'a realisable signing in AND group %d' % ('-'.join(map(str, sorted(names))), gid),
+                            mc_repaired())
         return 0
 
     cdef int _validate_bridgeheads(self, bint recover, list cleared) except -1:
