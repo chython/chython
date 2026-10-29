@@ -6153,12 +6153,17 @@ cdef Structure structure_live_groups_view(Structure structure, list dead=None, b
     return view
 
 
-cdef set _unrealisable_members(Structure structure, dict cache):
+cdef set _unrealisable_members(Structure structure, dict cache, dict relabel=None):
     """The slots of each coupled set whose drawn signs no bicycle realises and no AND group states racemic
-    (`_bridgehead_signs`): the members `validate_stereo` clears."""
+    (`_bridgehead_signs`): the members `validate_stereo` clears.
+
+    `relabel`, when given, takes the group byte each unsigned member of a realised set is written with: the
+    writer signs it from the set, so it carries the set's group and not a label of its own, which states
+    nothing.  Instance: a cinchona ester drawn with C4 signed and N1 unsigned in `&1` is the pure compound."""
     cdef list pairs, bad = []
     cdef dict signs = {}, groups = {}, sets
     cdef set out = set()
+    cdef uint8_t *sg
     cdef tuple t
     cdef object i
     if not _has_parity(structure):
@@ -6167,6 +6172,11 @@ cdef set _unrealisable_members(Structure structure, dict cache):
     if not pairs:
         return out
     _bridgehead_signs(structure, pairs, signs, groups, bad)
+    if relabel is not None and structure_has(structure, SEG_STEREO_GROUPS):
+        sg = structure_stereo_groups(structure)
+        for i in signs:
+            if signs[i] and not structure_parity_at(structure, <uint32_t> i) and sg[<uint32_t> i] != groups[i]:
+                relabel[i] = groups[i]
     if not bad:
         return out
     sets = _coupled_sets(pairs)
@@ -6198,6 +6208,7 @@ cdef Structure structure_stored_groups_view(Structure structure, dict cache=None
     cdef uint32_t next_id = 1
     cdef bint grouped = False, unlabelled = False, dropped = False, differs = False
     cdef set gone
+    cdef dict relabel = {}
     if not structure_has(structure, SEG_STEREO_GROUPS):
         return view
     sg0 = structure_stereo_groups(structure)
@@ -6205,7 +6216,7 @@ cdef Structure structure_stored_groups_view(Structure structure, dict cache=None
     # takes its members out of their collections with their signs: so does every writer, or a collection the
     # set shared with a centre is read back with members the heal never sees -- one string for the record
     # canonicalized and another for it written first
-    gone = _unrealisable_members(structure, cache)
+    gone = _unrealisable_members(structure, cache, relabel)
     for i in range(n):
         if sg0[i] and sg_kind(sg0[i]) > SG_KIND_ABS:
             grouped = True
@@ -6234,6 +6245,8 @@ cdef Structure structure_stored_groups_view(Structure structure, dict cache=None
     for i in gone:
         if sg0[<uint32_t> i]:
             differs = True
+    if relabel:
+        differs = True
     if not differs and view is not structure:
         for i in range(n):
             if sg1 is NULL or sg0[i] != sg1[i]:
@@ -6245,7 +6258,7 @@ cdef Structure structure_stored_groups_view(Structure structure, dict cache=None
     sg1 = structure_stereo_groups(view)
     par = structure_parities(view)
     for i in range(n):
-        sg1[i] = 0 if i in gone else sg0[i]
+        sg1[i] = 0 if i in gone else relabel.get(i, sg0[i])
         if not par[i] and other is not None and structure_parity_at(other, i):
             par[i] = structure_parity_at(structure, i)
     structure_invalidate_stereo_units(view)

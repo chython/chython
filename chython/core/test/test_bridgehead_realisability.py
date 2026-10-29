@@ -491,3 +491,27 @@ def test_an_unrealisable_set_leaves_its_shared_collection_when_written():
         other = read_smiles(format(m, 'r'))
         other.canonicalize()
         assert str(other) == str(direct)
+
+
+def test_a_label_on_an_unsigned_bridgehead_states_nothing_from_the_object_or_its_string():
+    """Quinine with C4 signed and N1 unsigned in `&1`: the set takes its group from its signed member, so the
+    record is the pure compound.  The writer signs N1 from the set and writes the set's group with it, so the
+    string read back and canonicalized is the same record from every atom order."""
+    import random
+    text = 'COc1ccc2nccc([C@@H](O)[C@H]3C[C@@H]4CCN3C[C@@H]4C=C)c2c1 |&1:17|'
+    direct = read_smiles(text)
+    assert '|' not in str(direct), str(direct)
+    direct.validate_stereo()
+    direct.canonicalize_stereo_groups()
+    state = random.getstate()
+    random.seed(20261029)
+    try:
+        forms = {str(direct)}
+        for _ in range(12):
+            other = read_smiles(format(read_smiles(text), 'r'))
+            other.validate_stereo()
+            other.canonicalize_stereo_groups()
+            forms.add(str(other))
+    finally:
+        random.setstate(state)
+    assert forms == {str(direct)} and '|' not in str(direct), forms
