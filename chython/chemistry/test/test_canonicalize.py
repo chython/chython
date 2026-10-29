@@ -295,6 +295,35 @@ def test_more_explicit_hydrogens_than_a_count_holds_is_a_record_and_not_an_excep
     assert 'records at most 14' in refused[0]
 
 
+def test_a_repair_reads_the_hydrogen_an_earlier_repair_moved():
+    """4-Nitroso-3-methyl-1-phenyl-5-pyrazolone: the nitroso row takes C4's hydrogen for the oxime, so
+    the five-ring CH row must not move it a second time and leave C4 five-valent."""
+    nitroso, oxime = smiles('CC1=NN(C(=O)C1N=O)c1ccccc1'), smiles('CC1=NN(C(=O)C1=NO)c1ccccc1')
+    nitroso.canonicalize()
+    oxime.canonicalize()
+    assert nitroso == oxime
+    assert not nitroso.check_valence()
+    assert str(smiles(str(nitroso))) == str(nitroso)
+
+
+def test_explicit_hydrogens_are_folded_before_the_repair():
+    """4-Hydroxypyridine drawn with hydrogen atoms reaches the 4-pyridone with its hydrogen on N."""
+    drawn, bare = smiles('[H]Oc1ccncc1'), smiles('Oc1ccncc1')
+    drawn.canonicalize()
+    bare.canonicalize()
+    assert drawn == bare
+    assert str(drawn) == str(bare) == 'C=1C(=O)C=CNC=1'
+
+
+def test_a_diazo_drawn_neutral_takes_its_charges():
+    """Ethyl diazoacetate drawn `C=N=N` is the compound drawn `C=[N+]=[N-]`."""
+    neutral, charged = smiles('CCOC(=O)C=N=N'), smiles('CCOC(=O)C=[N+]=[N-]')
+    neutral.canonicalize()
+    charged.canonicalize()
+    assert neutral == charged
+    assert str(smiles(str(neutral))) == str(neutral)
+
+
 def test_the_pass_states_the_type_it_takes():
     """`smiles()` returns whichever container its string describes, so a `>>` in a structure column
     reaches this pass as a reaction.  An `AttributeError` naming a private attribute is not a refusal.
@@ -306,7 +335,8 @@ def test_the_pass_states_the_type_it_takes():
 
 
 def test_the_stages_run_in_the_designed_order_and_the_log_proves_it():
-    """`standardize()` must see a Kekule structure, so `kekule()` precedes it.
+    """`standardize()` must see a Kekule structure with its hydrogens folded, so `kekule()` and the
+    implicification precede it.
 
     This is an order pin, not an outcome pin: no candidate molecule is unkekulizable before standardize
     and kekulizable after, because the rules that repair a ring atom's drawing are not in the table
@@ -318,7 +348,7 @@ def test_the_stages_run_in_the_designed_order_and_the_log_proves_it():
     m = smiles('[H]c1cc[n](=O)cc1.CN(=O)=O')
     log = m.log
     assert m.canonicalize() is True
-    assert [r.stage for r in repairs(log)] == ['kekule', 'standardize', 'implicify']
+    assert [r.stage for r in repairs(log)] == ['kekule', 'implicify', 'standardize']
 
 
 def test_an_unkekulizable_ring_is_logged_and_the_rest_of_the_pipeline_still_runs():

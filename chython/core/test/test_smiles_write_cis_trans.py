@@ -995,3 +995,15 @@ def test_an_exocyclic_double_bond_on_an_aromatic_ring_keeps_its_geometry(text):
     assert back == m and str(back) == str(m)
     mirror = read_smiles(text.replace('=C/', '=C\\'))
     assert mirror != m
+
+
+def test_an_unconfigured_double_bond_between_two_configured_ones_is_written_unknown():
+    """(2E,6E)-octa-2,4,6-triene with C4=C5 unconfigured: the two shared single bonds carry the outer
+    bonds' directions, which alone would configure C4=C5, so the tail names it in `ctu:`."""
+    m = read_smiles('C/C=C/C=C/C=C/C |ctu:3|')
+    assert sum(1 for u in m.stereo_units() if u['kind'] == 1 and u['parity']) == 2
+    text = str(m)
+    assert '|ctu:' in text, text
+    back = read_smiles(text)
+    assert back == m and str(back) == text
+    assert read_smiles('C/C=C/C=C/C=C/C') != m

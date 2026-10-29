@@ -20,8 +20,8 @@ pass                      writes                                           retur
 ========================= ================================================ ==========================
 ``kekule()``              definite bond orders; **repairs** to find a form ``KekuleResult``
 ``validate_stereo()``     drops the signs the constitution cannot justify  ``list``, the ids it dropped
-``standardize()``         group and metal-ligand tables, reagents rejoined ``bool``
 ``implicify_hydrogens()`` hydrogen atoms folded into counts                ``int``, the count removed
+``standardize()``         group and metal-ligand tables, reagents rejoined ``bool``
 ``neutralize()``          charges paired off                               ``bool``
 ``standardize_kekule()``  the Kekule form the small rings hold             ``bool``
 ``thiele()``              the aromatic form; **refuses**, never repairs    ``ThieleResult``
@@ -45,10 +45,11 @@ sequence — get the order wrong and two drawings of one compound stop agreeing:
     a.canonicalize()
 
     b = smiles('Oc1ccccn1')
-    b.kekule()                    # 1. definite orders, so the group rules can match
+    b.thiele()                    # 1. aromatic first, so a drawn Kekule form is not what the rules read
+    b.kekule(canonical=True)      #    then definite orders, so the group rules can match
     b.validate_stereo()           # 2. drop a sign the constitution cannot justify
-    standardize(b)                # 3. repair the drawing
-    implicify_hydrogens(b)        # 4. hydrogen ATOMS are a key difference, so they go
+    implicify_hydrogens(b)        # 3. hydrogen ATOMS are a key difference, and the rules read counts
+    standardize(b)                # 4. repair the drawing
     neutralize(b)                 # 5. pair off the charges acids.tsv can pair off
     standardize_kekule(b)         # 6. which Kekule form step 7 gets to read
     b.thiele()                    # 7. back to the aromatic form

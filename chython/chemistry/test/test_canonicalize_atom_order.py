@@ -255,3 +255,14 @@ def test_an_amidoxime_keeps_its_oxime():
     m = smiles('ON=C1C=CC=CN1')
     canonicalize(m)
     assert not [r for r in m.log if r.rule == 'isomers:exocyclic-imine']
+
+
+@mark.parametrize('text', ['Oc1cc(S)nc(O)n1',                                 # 6-mercaptouracil, CAS 6303-58-8
+                           'CN(C)[C+](N(C)C)n1n[n+]([O-])c2ccccc12',           # HBTU cation, CAS 94790-37-1
+                           'ON(=O)O[H]'])                                      # nitric acid, a hydrogen atom drawn
+def test_competing_repairs_at_one_site_pick_the_same_winner_from_every_atom_order(text):
+    forms = set()
+    for molecule in drawings(text, 20):
+        molecule.canonicalize()
+        forms.add(str(molecule))
+    assert len(forms) == 1, sorted(forms)

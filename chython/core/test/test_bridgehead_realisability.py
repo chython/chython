@@ -474,3 +474,20 @@ def test_coupled_bridgeheads_each_unsigned_alone_in_an_and_group_heal_as_one_ele
     groups = m.stereo_groups()
     assert len(groups) == 1 and len(next(iter(groups.values()))) == 2
     assert len({canon(format(read_smiles('O=C(NCC1CC2CCC(C1)N2C)c1ccccc1 |&1:6,&2:9|'), 'r')) for _ in range(30)}) == 1
+
+
+def test_an_unrealisable_set_leaves_its_shared_collection_when_written():
+    """Tropine-type bridgeheads signed as no bicycle builds, in one AND group with an unsigned lactate centre: the
+    set reads unknown and leaves the collection, in the written string as `validate_stereo` takes it out, so
+    the lactate centre is alone in its group on either path and both heal it the same way."""
+    m = read_smiles('CN1[C@@H]2CC[C@@H]1CC(C2)OC(=O)C(C)O |&1:2,5,12|')
+    assert str(m).endswith('|&1:12|')
+    direct = m.copy()
+    direct.canonicalize()
+    written = read_smiles(str(m))
+    written.canonicalize()
+    assert str(direct) == str(written)
+    for _ in range(10):
+        other = read_smiles(format(m, 'r'))
+        other.canonicalize()
+        assert str(other) == str(direct)

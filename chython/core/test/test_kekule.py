@@ -601,6 +601,31 @@ def test_a_ring_that_kekulises_as_written_is_never_handed_a_hydrogen():
                 assert mol.implicit_h_of(n) == read_smiles(string).implicit_h_of(n), (string, n)
 
 
+def test_unknown_ring_hydrogens_take_the_fewest_the_ring_affords():
+    """Every ring nitrogen at `H_UNKNOWN` gets a hydrogen only where no Kekule form spares it.
+
+    A must-match saturation can leave two free nitrogens that an alternating path joins; the path is
+    flipped rather than both nitrogens protonated.  Imidazole keeps the one NH no path removes.
+    """
+    from chython.core import H_UNKNOWN
+    from chython.core._core import read_smiles
+
+    for string in ['c1cnc2nccnc2c1',             # pyrido[2,3-b]pyrazine
+                   'Cn1nnc(N)n1',                # 1-methyl-5-aminotetrazole
+                   'Nc1cnn(-c2ccccc2)n1',        # 4-amino-2-phenyl-2H-1,2,3-triazole
+                   'c1cnc[nH]1']:                # imidazole
+        mol = read_smiles(string)
+        ring_n = [n for n in mol if mol.atom(n).element == 7 and mol.in_ring_of(n)]
+        with mol.edit():
+            for n in ring_n:
+                mol.set_hydrogens(n, H_UNKNOWN)
+        result = mol.kekule()
+        assert result.unresolved == [], (string, result.log)
+        reference = read_smiles(string)
+        reference.kekule()
+        assert mol == reference, (string, mol.smiles, reference.smiles)
+
+
 # A STATED HYDROGEN IS NOT PRIVILEGED OVER A STATED ZERO.  `c1cc[nH]cc1` does not come back
 # unresolved: the surplus-hydrogen relaxation gives the hydrogen up instead -- see
 # `test_a_stated_nh_in_a_six_ring_gives_the_hydrogen_up_rather_than_being_refused` at the end of this

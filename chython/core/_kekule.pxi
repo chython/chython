@@ -319,8 +319,15 @@ cdef uint8_t arom_classify_atom(uint32_t element, int charge, bint radical, uint
                 return AROM_MUST_NOT
             if nbrs == 3:
                 # N with three neighbours is pyrrole and nothing else; P and As can be P(III)
-                # or P(V)H, so for them the choice is still open
-                return AROM_MUST_NOT if element == AROM_Z_N else AROM_MAY
+                # or P(V)H, so for them a stated count settles it and an unstated one leaves it open
+                if element == AROM_Z_N or stated_h == 0:
+                    return AROM_MUST_NOT
+                if stated_h == 1:
+                    return AROM_MUST
+                if stated_h == AROM_H_UNSTATED:
+                    return AROM_MAY
+                invalid[0] = 1
+                return AROM_MUST_NOT
             if nbrs == 2:
                 if stated_h == AROM_H_UNSTATED:
                     return AROM_MAY           # pyrrole or pyridine, the classic free choice
@@ -530,6 +537,68 @@ cdef void arom_extend(arom_scratch_t *sc, uint32_t *atoms, uint32_t count) noexc
                 sc.mate[v] = <int32_t> w
                 sc.mate[w] = <int32_t> v
                 break
+
+
+cdef int arom_augment(arom_scratch_t *sc, uint32_t *atoms, uint32_t count) except -1:
+    """Grow the matching by alternating paths between unmatched may-match atoms.  Did one flip?
+
+    A may-match atom left unmatched becomes a two-electron donor with a hydrogen, so each flipped path
+    is one hydrogen fewer: the fewest the ring affords, which is what an unstated count means.  Instance:
+    pyrido[2,3-b]pyrazine with its ring counts unknown keeps every nitrogen a pyridine; imidazole keeps
+    the one NH no path removes.  Atoms in `atoms` order, canonical under `kekule(canonical=True)`.
+    """
+    cdef dict nbr = {}
+    cdef set members = set()
+    cdef list free = [], path, around
+    cdef uint32_t i, v, k
+    cdef object a, x
+    cdef bint grown = False
+    for i in range(count):
+        v = atoms[i]
+        members.add(v)
+    for i in range(count):
+        v = atoms[i]
+        if sc.cls[v] == AROM_MUST_NOT:
+            continue
+        around = []
+        for k in range(sc.aptr[v], sc.aptr[v + 1]):
+            if sc.e_alive[sc.aeid[k]] and sc.aadj[k] in members and sc.cls[sc.aadj[k]] != AROM_MUST_NOT:
+                around.append(sc.aadj[k])
+        nbr[v] = around
+        if sc.cls[v] == AROM_MAY and sc.mate[v] < 0:
+            free.append(v)
+
+    def walk(object u, set seen):
+        # an alternating path from the free atom `u`, its first step unmatched: [u, w1, m1, w2, m2, ..., end]
+        cdef object y, z, rest
+        for y in nbr.get(u, ()):
+            if y in seen:
+                continue
+            seen.add(y)
+            if sc.mate[<uint32_t> y] < 0:
+                if sc.cls[<uint32_t> y] == AROM_MAY:
+                    return [u, y]
+                continue
+            z = sc.mate[<uint32_t> y]
+            if z in seen:
+                continue
+            seen.add(z)
+            rest = walk(z, seen)
+            if rest is not None:
+                return [u, y] + rest
+        return None
+
+    for a in free:
+        if sc.mate[<uint32_t> a] >= 0:
+            continue
+        path = walk(a, {a})
+        if path is None:
+            continue
+        for x in range(0, len(path), 2):        # pair path[0]-path[1], path[2]-path[3], ...
+            sc.mate[<uint32_t> path[x]] = <int32_t> path[x + 1]
+            sc.mate[<uint32_t> path[x + 1]] = <int32_t> path[x]
+        grown = True
+    return grown
 
 
 cdef uint32_t arom_partial(arom_scratch_t *sc, uint32_t *atoms, uint32_t count) noexcept nogil:
@@ -1621,6 +1690,7 @@ def kekule(MoleculeContainer mol not None, aromatic_bonds=None, stated_h=None, *
                                 mc_repaired()))
         if ok:
             arom_extend(sc, sc.clist, count)
+            arom_augment(sc, sc.clist, count)
             if relaxed_h is not None:
                 for c in relaxed_h:
                     v = <uint32_t> c

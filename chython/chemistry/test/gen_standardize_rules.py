@@ -201,6 +201,7 @@ ADDED = {
     'groups:85': 'a diazonium drawn neutral, the inner nitrogen four-bonded: a cation',
     'groups:86': 'an isolated ring enol, every other neighbour of its C=C sp3: the ketone',
     'groups:87': 'the same with a carbon substituent on the far carbon',
+    'groups:88': 'a diazo drawn neutral as A=N=N: the two charges',
 }
 
 

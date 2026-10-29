@@ -144,11 +144,13 @@ cdef bint hyd_arom_takes(uint32_t element, int charge, bint radical, uint32_t nb
     elif not count_stated and cls == AROM_MAY:
         takes[0] = 1
         return False
-    # `AROM_MAY` collapses to "takes one", which is right for the caller that gets here: only a
-    # format whose notation fixes the count passes `count_stated`, and both such notations -- a bare
-    # aromatic atom in SMILES, a `VAL=`-free aromatic atom the caller has vouched for -- mean the
-    # no-hydrogen reading.  The kekuliser makes the same collapse for the same reason.
-    takes[0] = 0 if cls == AROM_MUST_NOT else 1
+    # `AROM_MAY` collapses to the no-hydrogen reading, which is right for the caller that gets here:
+    # only a format whose notation fixes the count passes `count_stated`, and both such notations -- a
+    # bare aromatic atom in SMILES, a `VAL=`-free aromatic atom the caller has vouched for -- mean it.
+    # With two neighbours that reading takes a ring double bond (pyridine); with three it takes none,
+    # the lambda-3 phosphole `Cp1cccc1`, where taking one is the lambda-5 PH.  The kekuliser makes the
+    # same collapse for the same reason.
+    takes[0] = 0 if cls == AROM_MUST_NOT or cls == AROM_MAY and nbrs >= 3 else 1
     return True
 
 

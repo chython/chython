@@ -136,7 +136,10 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     #    Nothing is recorded here about `result.unresolved`: the kekuliser writes a `LOST` record per
     #    system to `molecule.log` itself, naming it in `atoms`, so a second one here would summarise an
     #    event already reported.  `check_valence()` is still how those atoms are found.
-    #    Canonically, so the group rules see one form of the compound whatever the atom order.
+    #    Canonically, so the group rules see one form of the compound whatever the atom order.  A drawing
+    #    already in a Kekule form is aromatised first, or the rules would read whichever form was drawn:
+    #    the two Kekule drawings of HBTU's benzotriazole oxide repair to two resonance forms.
+    molecule.thiele()
     molecule.kekule(canonical=True)
 
     # 2. Drop the parities the constitution does not justify, on the localised form and before step 6
@@ -149,25 +152,30 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
     #    `recover_racemate` read as the racemate its drawer most likely meant.
     molecule.validate_stereo(recover_racemate=recover_racemate)
 
-    # 3. Repair the drawing.
-    standardize(molecule, fix_tautomers=fix_tautomers)
-
-    # 4. Explicit hydrogens are a `canonical_bytes` difference, so they have to go.
+    # 3. Explicit hydrogens are a `canonical_bytes` difference, so they have to go -- before step 4,
+    #    whose rows read implicit counts and move no hydrogen atom: `[H]Oc1ccncc1` would flip to the
+    #    4-pyridone with its hydrogen atom still on the oxygen.
     implicify_hydrogens(molecule)
 
+    # 4. Repair the drawing.
+    repaired = standardize(molecule, fix_tautomers=fix_tautomers)
+
     # 5. Pair off the charges an acid/base row can pair off, so a zwitterion and its neutral drawing
-    #    hash equal.  AFTER step 4, because `acids.tsv` reads implicit hydrogens: a cation drawn with
+    #    hash equal.  AFTER step 3, because `acids.tsv` reads implicit hydrogens: a cation drawn with
     #    hydrogen ATOMS is invisible to it until they have been folded in.  `keep_charge` stays at its
     #    default -- the net charge is part of the compound, so a canonical form may move a proton but
     #    never create or destroy one.  A quaternary ammonium keeps its counterion: it has no proton to
-    #    give, so the pass finds no donor and declines.
-    neutralize(molecule)
+    #    give, so the pass finds no donor and declines.  A repair or a pairing moves bonds and hydrogens
+    #    step 2 judged, so it is asked again: a parity a moved hydrogen leaves on an alternating cycle
+    #    would be dropped by the next canonicalisation, and the first answer would not be a fixed point.
+    if neutralize(molecule) | repaired:
+        molecule.validate_stereo(recover_racemate=recover_racemate)
 
     # 6. Which Kekule form, decided before step 7 reads one.  `thiele()` refuses a candidate ring whose
     #    atom holds its double bond outside the ring, so a compound with several Kekule forms has one
     #    aromatic form per form until this stage picks between them; a ring too big for `thiele()` to
     #    consider gets a canonical alternation here instead, nothing later collapsing its two.  AFTER
-    #    step 3, whose group rules are written against the orders the drawing carried, and after step 2,
+    #    step 4, whose group rules are written against the orders the drawing carried, and after step 2,
     #    whose parities would otherwise pin the very bond this stage moves.
     standardize_kekule(molecule)
 
@@ -185,22 +193,22 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
 
     # 9. Steps 3 to 8 again, while the placement keeps unblocking a repair.  `Oc1[nH]cnc2nncc1-2` is
     #    the shape: its mobile hydrogen sits on the one ring nitrogen the hydroxy-azine rows need free,
-    #    so step 3 declines, and by the time step 8 has moved it the repair is behind us -- the drawing
+    #    so step 4 declines, and by the time step 8 has moved it the repair is behind us -- the drawing
     #    kept its hydroxy form and the same compound drawn the other way got the oxo form and a
     #    different key.  Only the placement is re-entered from, since it is the one stage that can put
     #    the molecule back into a shape an earlier stage would have acted on.
     #
     #    `kekule()` leads, and not for the reason step 1 does: the `tautomer` rows are written against
     #    definite bond orders, so on the aromatic form step 7 left behind they match nothing at all and
-    #    re-running step 3 would be a guaranteed no-op.  Step 5 is re-entered every round: a repair and
+    #    re-running step 4 would be a guaranteed no-op.  Step 5 is re-entered every round: a repair and
     #    the placement both hand it charged sites it has not seen -- the placement moves an N-oxide's
     #    charge onto an azole NH, `c1ccc2[nH]cnc2[n+]1[O-]` to `c1ccc2nc[nH+]c2n1[O-]`, a zwitterion
     #    step 5 pairs off -- and what it pairs off can unblock the placement again.  It cannot cycle:
     #    step 5 only ever reduces the number of charged atoms and step 8 never adds one.  Step 6 rides
     #    with the aromatisation and not with the repair: the kekulisation above is free to come back with
     #    a different Kekule form than the one it was handed, which is the form step 7 would then read.
-    #    Step 2 is not re-entered: the parities it can justify are a property of the constitution, which
-    #    no stage from here on changes.
+    #    Step 2 is re-entered every round, on the localised form ahead of step 6: the placement moved a
+    #    hydrogen, and which double bonds an alternating cycle can move depends on where it sits.
     #
     #    A round the placement did not ask for is opened by a lactim `kekule()` left unrepairable: the
     #    hydroxy-azine rows need the C=N beside the C-OH, and which Kekule form comes back depends on the
@@ -215,6 +223,7 @@ def canonicalize(molecule: MoleculeContainer, *, fix_tautomers: bool = True,
         if changed:
             implicify_hydrogens(molecule)
         changed |= neutralize(molecule)
+        molecule.validate_stereo(recover_racemate=recover_racemate)     # the placement moved a hydrogen
         standardize_kekule(molecule)
         molecule.thiele()               # unconditional: step 6's form is what a caller compares, and
         moved = changed and standardize_isomers(molecule)   # the kekulisation has to be undone either way

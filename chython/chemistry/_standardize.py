@@ -100,7 +100,7 @@ def _apply(molecule: MoleculeContainer, rule: Rule, mapping: dict[int, int],
 
 
 def _pass(molecule: MoleculeContainer, rules: tuple[Rule, ...],
-          log: MutableSequence, fix_tautomers: bool = True) -> set[int]:
+          log: MutableSequence, fix_tautomers: bool = True, fix_hydrogens: bool = False) -> set[int]:
     """Run one rule table over `molecule`.  Returns every atom any patch wrote.
 
     The overlap policy is asymmetric on purpose: a match is rejected when any of its atoms has been
@@ -110,7 +110,9 @@ def _pass(molecule: MoleculeContainer, rules: tuple[Rule, ...],
     excluding them from the test as well lets a match overlapping an already-repaired site by exactly
     its own wildcard slip through and undo it.  The set is per rule, not per table, so a rule listed
     twice can catch what the first copy's own dedupe rejected.  Cross-rule ordering is handled by the
-    mutation itself: rules run in file order against the molecule as it now stands.
+    mutation itself: rules run in file order against the molecule as it now stands.  `fix_hydrogens`
+    recomputes the written atoms' counts after each patch, so a later row's `h` reads the hydrogen an
+    earlier row moved: `groups:42` takes the CH of 4-nitrosopyrazolone, and `groups:56` must not see it.
     """
     written: set[int] = set()
     for rule in rules:
@@ -123,7 +125,15 @@ def _pass(molecule: MoleculeContainer, rules: tuple[Rule, ...],
         seen: set[int] = set()
         # materialised before the first patch: iterating lazily while mutating would search a graph
         # that is changing underneath the search
-        for mapping in tuple(rule.query.get_mapping(molecule)):
+        mappings = list(rule.query.get_mapping(molecule))
+        if len(mappings) > 1:
+            # overlapping matches compete for one site, so the winner is fixed by the molecule and not
+            # by its atom order: lighter elements first in query order, then canonical position.
+            # Instance: the hydroxy and the mercapto site of `Oc1cc(S)nc(O)n1` want one ring nitrogen.
+            rank = molecule.canonical_order()
+            order = sorted(rule.numbers.values())
+            mappings.sort(key=lambda m: ([molecule.element_of(m[q]) for q in order], [rank[m[q]] for q in order]))
+        for mapping in mappings:
             # the test is the whole match; the update below is the site.  See the docstring.
             if not set(mapping.values()).isdisjoint(seen):
                 continue
@@ -132,6 +142,9 @@ def _pass(molecule: MoleculeContainer, rules: tuple[Rule, ...],
             touched = _apply(molecule, rule, mapping, log)
             if touched:
                 written |= touched
+                if fix_hydrogens:
+                    for n in sorted(touched):
+                        calc_implicit(molecule, n)
     return written
 
 
@@ -152,8 +165,8 @@ def standardize(molecule: MoleculeContainer, *, fix_hydrogens: bool = True,
     environment, so kekulise first or an aromatic atom whose charge a patch changed gets `H_UNKNOWN`.
     """
     with recording(molecule, stage='standardize') as lg:
-        written = _pass(molecule, groups_rules(), lg, fix_tautomers)
-        written |= _pass(molecule, metals_rules(), lg, fix_tautomers)
+        written = _pass(molecule, groups_rules(), lg, fix_tautomers, fix_hydrogens)
+        written |= _pass(molecule, metals_rules(), lg, fix_tautomers, fix_hydrogens)
         # third: bonds a free halide to a one-coordinate metal.  No `metals:` row matches a sigma
         # metal-carbon bond, so stages 1 and 2 cannot see the ion pair this reads or the covalent form
         # it writes.  Stage 4 must follow: counting anion equivalents before this would count a halide

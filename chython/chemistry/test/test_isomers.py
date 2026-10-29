@@ -690,3 +690,17 @@ def test_a_ring_handed_to_the_amidine_path_is_not_placed_by_the_ring_path_too():
     assert not check_valence(molecule), str(molecule)
     again = molecule.copy()
     assert not standardize_isomers(again) and again.canonical_bytes == molecule.canonical_bytes
+
+
+def test_an_amidine_c_n_with_a_choice_of_acceptor_carries_no_e_z():
+    """Aminoguanidine N-phenyl: the C=N moves between three nitrogens, so a drawn E/Z is no configuration --
+    dropped whether the drawing already puts the bond where the placement would, or the placement moves it.
+    An oxime and a ketone hydrazone keep theirs."""
+    for drawn in ('c1ccccc1N/C(=N/N)/NN', 'c1ccccc1NC(=NN)NN', 'N/N=C(\\NN)Nc1ccccc1'):
+        m = read_smiles(drawn)
+        standardize_isomers(m)
+        assert '/' not in str(m) and '\\' not in str(m), (drawn, str(m))
+    for kept in ('C/C=N/O', 'C/C(=N/N)c1ccccc1'):
+        m = read_smiles(kept)
+        standardize_isomers(m)
+        assert '/' in str(m) or '\\' in str(m), kept

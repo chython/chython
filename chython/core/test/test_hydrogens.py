@@ -182,6 +182,22 @@ def test_a_format_that_states_its_counts_may_withdraw_the_gate():
     assert derive_implicit_hydrogen(molecule, n, True) == (0, HYD_DERIVED)
 
 
+@mark.parametrize('source', ['Cp1cccc1',                                 # 1-methylphosphole
+                             'c1ccc(cc1)-p1c2ccccc2c2ccccc12'])         # 9-phenyl-9-phosphafluorene
+def test_a_three_coordinate_aromatic_phosphorus_is_the_lambda_3_phosphole(source):
+    """With three neighbours the no-hydrogen reading takes no ring double bond; taking one is the
+    lambda-5 PH, which a bare `p` does not say.  The canonical string reads back to itself."""
+    molecule = read_smiles(source)
+    p = next(n for n in molecule if molecule.atom(n).atomic_symbol == 'P')
+    assert molecule.implicit_h_of(p) == 0
+    assert derive_implicit_hydrogen(molecule, p, True) == (0, HYD_DERIVED)
+    molecule.kekule()
+    assert molecule.implicit_h_of(p) == 0
+    assert all(int(b.order) == 1 for b in molecule.bonds() if p in (b.n, b.m))
+    text = str(read_smiles(source))
+    assert str(read_smiles(text)) == text
+
+
 # --- the whole-molecule sweep
 
 def test_the_sweep_writes_the_counts_and_reports_the_rest():

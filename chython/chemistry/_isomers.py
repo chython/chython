@@ -64,6 +64,7 @@ __all__ = ['standardize_isomers']
 _RULE = 'isomers:placement'
 _RULE_KEKULE = 'isomers:kekule-placement'
 _RULE_AMIDINE = 'isomers:amidine'
+_RULE_AMIDINE_EZ = 'isomers:amidine-ez'
 _RULE_IMINE = 'isomers:exocyclic-imine'
 _RULE_BUDGET = 'isomers:placement-budget'
 _RULE_REFUSED = 'isomers:placement-refused'
@@ -830,6 +831,21 @@ def _place_amidines(molecule: MoleculeContainer, groups: list[tuple[int, list[in
     """
     if not groups:
         return False
+    # The C=N of a unit with a choice of acceptor carries no sign, moved or not: where the drawing already
+    # puts the bond on the canonical nitrogen nothing moves, and a sign kept there and lost on any other
+    # drawing would follow the drawing.
+    ez = {frozenset(u['owners']): u['anchor'] for u in molecule.stereo_units()
+          if u['kind'] == 1 and u['parity'] and isinstance(u['owners'], tuple)}
+    labile = [(carbon, n, ez[frozenset((carbon, n))]) for unit in _amidine_systems(groups)
+              if len({n for _, s in unit for n in s}) > 1 for carbon, sites in unit for n in sites
+              if frozenset((carbon, n)) in ez]
+    if labile:
+        with molecule.edit():
+            for _, _, anchor in labile:
+                molecule.set_parity(anchor, 0)
+        for carbon, n, _ in labile:
+            lines.append((_RULE_AMIDINE_EZ, (carbon, n), f'amidine C=N {carbon}={n}: the bond moves between the '
+                          f'nitrogens of its unit, so its drawn E/Z is no configuration and is dropped'))
     plan: list[tuple[list[tuple[int, list[int]]], dict[int, int], dict[int, int], dict[int, int]]] = []
     for unit in _amidine_systems(groups):
         sites = sorted({n for _, s in unit for n in s})
@@ -856,7 +872,7 @@ def _place_amidines(molecule: MoleculeContainer, groups: list[tuple[int, list[in
                       f'for this skeleton, and the hydrogens follow it'))
 
     if not plan:
-        return False
+        return bool(labile)
     with molecule.edit():
         for unit, accepted, charges, hydrogens in plan:
             for carbon, sites in unit:

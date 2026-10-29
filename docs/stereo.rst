@@ -141,7 +141,10 @@ Kind            SMILES                       CXSMILES tail           MOL V2000 /
 tetrahedral     ``@``/``@@``; ``@TH1``/      --                      wedge at the centre, 3D     ``/t``, ``/m``, ``/s``
                 ``@TH2`` read                                        coordinates, or the V2000
                                                                      atom parity field
-cis/trans       ``/`` and ``\``              --                      coordinates                 ``/b``
+cis/trans       ``/`` and ``\``              ``ctu:`` on an          coordinates                 ``/b``
+                                             unconfigured bond its
+                                             neighbours' tokens
+                                             would configure
 allene          ``@``/``@@`` on the middle   --                      wedge from a terminal to    ``/t`` on the middle
                 atom; ``@AL1``/``@AL2``                              its substituent             atom
                 read

@@ -94,12 +94,12 @@ def test_check_mode_passes():
 
 
 def test_row_counts():
-    """88 and 19.  A silent gain or loss of a rule is a behaviour change.  `gen_standardize_rules.MERGES`
+    """89 and 19.  A silent gain or loss of a rule is a behaviour change.  `gen_standardize_rules.MERGES`
     and `DELETED` say which rows collapsed into which, and the three rows past the port -- `groups:82` to
     `groups:84`, the neutral over-valent nitrogen written Kekule -- are gated by
     `test_standardize_overvalent_nitrogen.py`; `groups:86`/`87`, the isolated ring enol, by
     `test_the_isolated_ring_enol_rows_leave_a_stable_enol_alone`."""
-    assert len(GROUPS) == 88
+    assert len(GROUPS) == 89
     assert len(METALS) == 19
 
 
@@ -147,8 +147,9 @@ def test_z3_is_gone_where_the_port_ruled_it_z5_or_z6():
     assert sum(r.smarts.count('z3') for r in GROUPS) == 12, (
         'group A is 14 primitives, three of them on rows that merged into two; the twelfth is the sp '
         'nitrogen of groups:85, a diazonium')
-    assert sum(r.smarts.count('z5') for r in GROUPS) == 15, (
-        'group C is 15, one of them duplicated and the duplicate absorbed by a merge')
+    assert sum(r.smarts.count('z5') for r in GROUPS) == 16, (
+        'group C is 15, one of them duplicated and the duplicate absorbed by a merge; the sixteenth is the '
+        'cumulated nitrogen of groups:88, a diazo')
     assert sum(r.smarts.count('z6') for r in GROUPS) == 7
     for rule in METALS:
         assert 'z3' not in rule.smarts

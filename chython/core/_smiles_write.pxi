@@ -2322,8 +2322,28 @@ cdef bint smw_axis_wedge(Structure structure, smw_scratch_t *s, uint32_t slot, s
     return True
 
 
+cdef bint smw_ct_flanked(Structure structure, smw_scratch_t *s, uint32_t t, uint32_t f) noexcept:
+    """Does terminal `t` of the double bond to `f` carry a `/` or `\\` on any other bond?"""
+    cdef uint32_t *ptr = csr_ptr(structure)
+    cdef halfedge_t *edges = csr_edges(structure)
+    cdef halfedge_t *r
+    cdef uint32_t he
+    for he in range(ptr[t], ptr[t + 1]):
+        if edges[he].to == f:
+            continue
+        if s.he_dir[he]:
+            return True
+        r = csr_find_at(ptr, edges, edges[he].to, t)
+        if r is not NULL and s.he_dir[<uint32_t> (r - edges)]:
+            return True
+    return False
+
+
 cdef list smw_axis_wedges(Structure structure, smw_scratch_t *s):
-    """`[(atom index, bond index, 1 for wU), ...]` for every axis the string carries as a wedge.
+    """`[(atom index, bond index, kind), ...]`: kind 1 `wU`, 0 `wD` for every axis the string carries
+    as a wedge, and 2 `ctu` for every unconfigured stereogenic double bond whose two terminals both
+    carry a direction token placed for a neighbouring unit -- the tokens alone would configure it.
+    Instance: the unconfigured C=C of a polyene between two configured ones.
 
     A CXSMILES bond index counts bonds in string order, a ring closure at its closing digit: each
     atom in emission order adds its tree bond, then the closures it closes in written order.
@@ -2337,6 +2357,17 @@ cdef list smw_axis_wedges(Structure structure, smw_scratch_t *s):
     cdef list wanted = []
     cdef list out = []
     cdef tuple w
+    for i in range(s.n):
+        if s.dropped[i] or structure_parity_at(structure, i):
+            continue
+        u = stereo_unit_of(structure, i)
+        if u is NULL or u.kind != SU_CIS_TRANS or not (u.spare & SU_STEREOGENIC):
+            continue
+        far = stereo_unit_partner(structure, u)
+        if far == SU_NO_REF or s.dropped[far]:
+            continue
+        if smw_ct_flanked(structure, s, i, far) and smw_ct_flanked(structure, s, far, i):
+            wanted.append((i, far, 2))
     # Axes first: a helix end whose fjord atom is also an axis pivot shares its inner-rim bond with
     # that axis' wedge, and a bond carries one wedge, so the helix is then written at its other end.
     for kind in (SU_ATROPISOMER, SU_HELICAL, SU_PLANAR):
@@ -2544,6 +2575,12 @@ cdef str smw_tail_text(tuple t, list fgroups=None, list wedges=None):
                     group.append('%d.%d' % (w[0], w[1]))
             if group:
                 parts.append(('wU:' if key else 'wD:') + ','.join(group))
+        group = []
+        for w in sorted(wedges):
+            if w[2] == 2 and str(w[1]) not in group:
+                group.append(str(w[1]))
+        if group:
+            parts.append('ctu:' + ','.join(sorted(group, key=int)))
     if fgroups:
         group = []
         for key in fgroups:
