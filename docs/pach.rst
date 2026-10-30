@@ -226,14 +226,14 @@ Header, 12 bytes
 
      0      version    u8    3 | 4
      1      flags      u8    bit 0 = map block present; bit 1 = bond-group block present;
-                             bit 2 = isotope block present; bits 3-7 reserved, must be 0
+                             bits 2-7 reserved, must be 0
      2-3    atoms      u16
      4-5    bonds      u16
      6-7    stereo     u16   configuration records
      8-9    sgroups    u16   atom enhanced-stereo entries
      10-11  bgroups    u16   bond enhanced-stereo entries
 
-The blocks follow in that order — atoms, bonds, stereo, enhanced stereo, bond-group, map, isotope — each one
+The blocks follow in that order — atoms, bonds, stereo, enhanced stereo, bond-group, map — each one
 a count from the header times a constant stride, so a record's length is arithmetic:
 
 .. code-block:: text
@@ -245,9 +245,8 @@ a count from the header times a constant stride, so a record's length is arithme
             + sgroups * 3
             + bgroups * 5
             + (flags & 1 ? atoms * 2 : 0)
-            + (flags & 4 ? atoms * 2 : 0)
 
-The header is the one place slack is deliberate: five free flag bits and no reserved bytes.  A
+The header is the one place slack is deliberate: six free flag bits and no reserved bytes.  A
 future block needs a *count*, and the header is the only structure whose size cannot grow without
 moving every offset.  A reader ignores a reserved bit it does not know, and reports that it did.
 
@@ -261,7 +260,7 @@ moving every offset.  A reader ignores a reserved bit it does not know, and repo
 
 .. testoutput::
 
-    C(C)O ['header flags is 0x80; bits 0 to 2 are defined, bits 3-7 are reserved']
+    C(C)O ['header flags is 0x80; bits 0 and 1 are defined, bits 2-7 are reserved']
 
 Atom block
 ~~~~~~~~~~
@@ -281,9 +280,7 @@ No field crosses a byte boundary.
 
 ``iso`` (6 bits)
     ``MDL_ISOTOPE[z] - 32 + value`` for value 1..63, and 0 for unset: mass numbers from 31 below the
-    element's MDL reference to 31 above.  The widest shift over chython's nuclides is 8.  An isotope
-    outside that window, or on an ``R`` marker, is in the isotope block, and every atom's field is
-    then 0.
+    element's MDL reference to 31 above.  The widest shift over chython's nuclides is 8.
 
 ``rad`` (1 bit)
     The radical flag.
@@ -527,26 +524,6 @@ nothing for the field; a **partially** mapped molecule is writable, and "mapped 
     [1, 0]
     ['pach:map-number-lost']
 
-Isotope block, 2 bytes per atom
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-A ``u16`` per atom in atom order holding the absolute mass number, 0 for none, present when header
-flag bit 2 is set.  The writer sets it only when some atom's isotope has no ``iso`` spelling — a mass
-number more than 31 from the element's reference, or any isotope on an ``R`` marker — so every record
-the ``iso`` field can spell is written without it, byte for byte as before.
-
-.. testcode::
-
-    garbage = smiles('C[2Cl]')                    # stored as drawn, whatever it means
-    raw = garbage.pack(compressed=False)
-    print(raw[1] & 4, len(raw))                   # 12 + 2*3 + 1*5 + 2*2
-    print(MoleculeContainer.unpack(raw) == garbage)
-
-.. testoutput::
-
-    4 27
-    True
-
 What the writer refuses
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -555,6 +532,8 @@ whatever ``strict=`` says, naming what it refused and the atom too where one ato
 count limits are a property of the whole molecule and name neither:
 
 * more than 65535 atoms, or more than 65535 bonds
+* an isotope more than 31 mass units from its element's MDL reference
+* an isotope on an ``R`` marker, which has no reference mass to shift from
 * a formal charge outside -4..+11, which the arena's own -4..+8 cannot reach
 
 A coordinate outside ±838.8607 Å is the other class: the range is asked before the version byte is

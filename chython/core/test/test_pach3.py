@@ -283,32 +283,11 @@ def test_the_atom_block_being_short_returns_no_molecule_and_says_so():
 
 
 def test_a_reserved_flag_bit_is_reported_and_ignored():
-    raw = _v3_header(4, flags=0x08, atoms=1) + bytes([6, 0, 0x44])
+    raw = _v3_header(4, flags=0x04, atoms=1) + bytes([6, 0, 0x44])
     mol, problems = pach_load(raw, compressed=False)
     assert mol is not None
     assert any('reserved' in p for p in problems)
 
-
-@mark.parametrize('text', ['[2Cl]C', '[999C]CC[37Cl]', '[2*]C', '[65535U]', '[2H]C([2H])[2Cl] |a:1|'])
-def test_an_isotope_the_six_bit_field_cannot_spell_is_stored_in_the_isotope_block(text):
-    """Every isotope the arena holds is storable: flag bit 2 and one u16 per atom after the map block."""
-    mol = read_smiles(text)
-    raw = mol.pack(compressed=False)
-    assert raw[1] & 0x04
-    back, problems = pach_load(raw, compressed=False)
-    assert problems == [] and str(back) == str(mol)
-    assert pach_record_length(raw, compressed=False) == len(raw)
-
-
-def test_a_record_the_six_bit_field_spells_carries_no_isotope_block():
-    raw = read_smiles('C[13CH3]').pack(compressed=False)
-    assert not raw[1] & 0x04 and len(raw) == 12 + 2 * 3 + 5 + 0
-
-
-def test_a_truncated_isotope_block_costs_the_isotopes_that_did_not_arrive():
-    raw = read_smiles('[2Cl]CC').pack(compressed=False)
-    back, problems = pach_load(raw[:-3], compressed=False)
-    assert str(back) == 'C(C)[2Cl]' and any('isotope' in p for p in problems)
 
 def test_an_element_byte_outside_the_domain_reads_as_a_bare_r():
     raw = _v3_header(4, atoms=1) + bytes([0, 0, 0x40])

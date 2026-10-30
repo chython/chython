@@ -23,7 +23,7 @@
 # Header, 12 bytes:
 #    0      version   u8    3 | 4
 #    1      flags     u8    bit 0 = map block present; bit 1 = bond-group block present;
-#                           bit 2 = isotope block present; bits 3-7 reserved, must be 0
+#                           bits 2-7 reserved, must be 0
 #    2-3    atoms     u16
 #    4-5    bonds     u16
 #    6-7    stereo    u16
@@ -46,11 +46,6 @@ DEF PACH3_SGROUP_LEN = 3
 DEF PACH3_MAP_LEN = 2
 DEF PACH3_FLAG_MAP = 0x01
 DEF PACH3_FLAG_BGROUP = 0x02
-# One u16 per atom after the map block, the absolute mass number and 0 for none.  Written only when an
-# atom's isotope has no 6-bit spelling -- `[2Cl]`, an isotope on an R marker -- and then for every atom,
-# with each atom record's own field left 0, so every record the 6-bit field can spell is unchanged.
-DEF PACH3_FLAG_ISOTOPE = 0x04
-DEF PACH3_ISOTOPE_LEN = 2
 
 # One entry per BOND in a bond enhanced-stereo collection.  Atom indices and five bytes rather than
 # a bond position and three: the atom-group block references indices, `PACH3_BOND_LEN` is already 5
@@ -109,8 +104,7 @@ cdef inline void _p3_put_i24(unsigned char *p, int32_t v) noexcept nogil:
 
 
 cdef inline Py_ssize_t _pach3_size(uint32_t atoms, uint32_t bonds, uint32_t stereo, uint32_t sgroups,
-                                  uint32_t bgroups, bint want_xy, bint want_map,
-                                  bint want_iso=False) noexcept nogil:
+                                  uint32_t bgroups, bint want_xy, bint want_map) noexcept nogil:
     """The length arithmetic the header states, from the counts rather than from a buffer."""
     cdef Py_ssize_t out = PACH3_HEADER_LEN \
         + <Py_ssize_t> atoms * (PACH3_ATOM_XY_LEN if want_xy else PACH3_ATOM_FLAT_LEN) \
@@ -120,8 +114,6 @@ cdef inline Py_ssize_t _pach3_size(uint32_t atoms, uint32_t bonds, uint32_t ster
         + <Py_ssize_t> bgroups * PACH3_BGROUP_LEN
     if want_map:
         out += <Py_ssize_t> atoms * PACH3_MAP_LEN
-    if want_iso:
-        out += <Py_ssize_t> atoms * PACH3_ISOTOPE_LEN
     return out
 
 
@@ -135,7 +127,7 @@ cdef Py_ssize_t _pach3_length(const unsigned char *data, Py_ssize_t length) noex
         return -1
     return _pach3_size(_p3_u16(data + 2), _p3_u16(data + 4), _p3_u16(data + 6), _p3_u16(data + 8),
                        _p3_u16(data + 10), data[0] == PACH3_VERSION_XY,
-                       (data[1] & PACH3_FLAG_MAP) != 0, (data[1] & PACH3_FLAG_ISOTOPE) != 0)
+                       (data[1] & PACH3_FLAG_MAP) != 0)
 
 
 cdef int _pach3_report_losses(MoleculeContainer mol, uint32_t drop_mask, bint strict) except -1:
@@ -204,20 +196,8 @@ cdef int _pach3_report_losses(MoleculeContainer mol, uint32_t drop_mask, bint st
     return 0
 
 
-cdef inline bint _pach3_iso_fits(atom_t *a) noexcept nogil:
-    """Does the atom record's 6-bit field spell this atom's isotope?"""
-    cdef int32_t shift
-    if not a.isotope:
-        return True
-    if a.element == 0:
-        return False
-    shift = <int32_t> a.isotope - <int32_t> MDL_ISOTOPE[a.element] + PACH3_ISOTOPE_BIAS
-    return 1 <= shift <= 63
-
-
-cdef int _pach3_put_atom(atom_t *a, unsigned char *out, bint wide=False) except -1:
-    """The three bytes both versions share, at `out[0:3]`.  `wide`: the isotope is in the isotope block
-    and the field here is 0.
+cdef int _pach3_put_atom(atom_t *a, unsigned char *out) except -1:
+    """The three bytes both versions share, at `out[0:3]`.
 
         byte 0   bit 7 clear: bits 6-0 are the atomic number.  Bit 7 set: bits 6-0 are the R index.
         byte 1   isotope 6 | radical 1 | h_pinned 1
@@ -228,14 +208,14 @@ cdef int _pach3_put_atom(atom_t *a, unsigned char *out, bint wide=False) except 
     """
     cdef int32_t shift, charge
     if a.element == 0:
-        if a.isotope and not wide:
+        if a.isotope:
             raise ValueError('atom %d is an R marker carrying isotope %d, and the isotope field is a '
                              'shift from an element\'s reference mass' % (a.n, a.isotope))
         out[0] = <unsigned char> (0x80 | (at_r_index(a) & 0x7f))
     else:
         out[0] = <unsigned char> a.element
     out[1] = 0
-    if a.isotope and not wide:
+    if a.isotope:
         shift = <int32_t> a.isotope - <int32_t> MDL_ISOTOPE[a.element] + PACH3_ISOTOPE_BIAS
         if shift < 1 or shift > 63:
             raise ValueError('atom %d carries isotope %d and the pach isotope field reaches 31 mass '
@@ -452,7 +432,6 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask, bint strict)
     cdef uint8_t sg_value
     cdef bint want_xy
     cdef bint want_map
-    cdef bint want_iso
     cdef bint drop_wedges
     cdef unsigned char wedge
     cdef uint32_t wedged
@@ -538,27 +517,21 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask, bint strict)
     # many records there are is known only once they are written.  The stereo block is written in
     # place at its own offset and the record is the prefix `buf[:at]`, which is what a scratch buffer
     # and a memcpy would otherwise be for.
-    want_iso = False
-    for i in range(n):
-        if not _pach3_iso_fits(&atoms[i]):
-            want_iso = True
-            break
-    alloc = _pach3_size(n, nb, unit_count, sgroup_count, bgroup_count, want_xy, want_map, want_iso)
+    alloc = _pach3_size(n, nb, unit_count, sgroup_count, bgroup_count, want_xy, want_map)
     buf = <unsigned char *> PyMem_Malloc(alloc)
     if buf is NULL:
         raise MemoryError('pach record allocation failed')
     try:
         memset(buf, 0, alloc)
         buf[0] = PACH3_VERSION_XY if want_xy else PACH3_VERSION_FLAT
-        buf[1] = (PACH3_FLAG_MAP if want_map else 0) | (PACH3_FLAG_BGROUP if bgroup_count else 0) \
-            | (PACH3_FLAG_ISOTOPE if want_iso else 0)
+        buf[1] = (PACH3_FLAG_MAP if want_map else 0) | (PACH3_FLAG_BGROUP if bgroup_count else 0)
         _p3_put_u16(buf + 2, n)
         _p3_put_u16(buf + 4, nb)
         _p3_put_u16(buf + 8, sgroup_count)
         _p3_put_u16(buf + 10, bgroup_count)
         at = PACH3_HEADER_LEN
         for i in range(n):
-            _pach3_put_atom(&atoms[i], buf + at, want_iso)
+            _pach3_put_atom(&atoms[i], buf + at)
             if want_xy:
                 # In range by construction: `want_xy` is only still set because the pre-pass above
                 # checked every atom against `PACH3_XY_LIMIT`.
@@ -648,10 +621,6 @@ cdef bytes _pach3_encode(MoleculeContainer mol, uint32_t drop_mask, bint strict)
             for i in range(n):
                 _p3_put_u16(buf + at, atoms[i].map_number)
                 at += PACH3_MAP_LEN
-        if want_iso:
-            for i in range(n):
-                _p3_put_u16(buf + at, atoms[i].isotope)
-                at += PACH3_ISOTOPE_LEN
         # `at` and not `alloc`: the record ends where the last block ended, and an unconfigured unit
         # left room the header does not declare.  `pach_record_length` reads the counts, so the two
         # have to agree -- `test_the_declared_length_is_the_buffer_length` is where they are compared.
@@ -1062,8 +1031,7 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
     cdef uint32_t k, a1, a2, order, wedge
     cdef uint32_t nb_have, ns_have, nsg_have, nbg_have, nm_have
     cdef uint32_t slot, value, kind, group, anchor
-    cdef Py_ssize_t bonds_at, stereo_at, groups_at, bgroups_at, map_at, iso_at
-    cdef uint32_t ni_have
+    cdef Py_ssize_t bonds_at, stereo_at, groups_at, bgroups_at, map_at
     cdef size_t pa_len, edits_len, wedges_len, sg_len, maps_len
     cdef uint8_t *sg
     cdef uint16_t *maps = NULL
@@ -1085,8 +1053,8 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
     ns_declared = _p3_u16(data + 6)
     nsg_declared = _p3_u16(data + 8)
     nbg_declared = _p3_u16(data + 10)
-    if flags & ~<unsigned char> (PACH3_FLAG_MAP | PACH3_FLAG_BGROUP | PACH3_FLAG_ISOTOPE):
-        problems.append('header flags is 0x%02x; bits 0 to 2 are defined, bits 3-7 are reserved'
+    if flags & ~<unsigned char> (PACH3_FLAG_MAP | PACH3_FLAG_BGROUP):
+        problems.append('header flags is 0x%02x; bits 0 and 1 are defined, bits 2-7 are reserved'
                         % flags)
     if PACH3_HEADER_LEN + <Py_ssize_t> n * stride > length:
         problems.append('the header declares %d atoms and the atom block does not fit in %d byte(s)'
@@ -1187,15 +1155,6 @@ cdef tuple _pach3_decode(const unsigned char *data, Py_ssize_t length):
         nm_declared = 0
         if flags & PACH3_FLAG_MAP:
             nm_declared = n                            # the map block states one number per atom
-        # THE ISOTOPE BLOCK overrides every atom's 6-bit field, so it is read before anything builds
-        if flags & PACH3_FLAG_ISOTOPE:
-            iso_at = map_at + <Py_ssize_t> nm_declared * PACH3_MAP_LEN
-            ni_have = _p3_present(iso_at, length, n, PACH3_ISOTOPE_LEN)
-            if ni_have < n:
-                problems.append('the header declares %d isotope(s) and the buffer holds %d; the rest '
-                                'read as none' % (n, ni_have))
-            for i in range(n):
-                pa[i].isotope = <uint16_t> _p3_u16(data + iso_at + 2 * i) if i < ni_have else 0
         if nb_have < nb_declared:
             problems.append('the header declares %d bond(s) and the buffer holds %d; the rest of the '
                             'block was not read' % (nb_declared, nb_have))
