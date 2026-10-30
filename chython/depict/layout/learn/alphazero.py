@@ -19,12 +19,11 @@
 """AlphaZero rounds for the layout controller: a tester picks molecules, the policy plays them by tree search, the judge
 scores the drawings, and all three learn; the run resumes where it stopped.
 
-    python -m chython.depict.layout.learn.alphazero --run DIR [--rounds N] [--universe N] [--workers N] ...
+    python -m chython.depict.layout.learn.alphazero --run DIR [--rounds N] [--workers N] ...
 
 | stage | rule |
 | --- | --- |
-| pool | the corpus' molecules, largest component each, up to `max_atoms`; plus `universe` structures sampled with the \
-round as seed, held in memory and named by hash, so a resumed run draws them again and none is written |
+| pool | the corpus' molecules, largest component each, up to `max_atoms` |
 | tester | `Tester` over `descriptors` predicts a molecule's outcome; `molecules` picks favour the low, a `UNIFORM` \
 share at random, and `liked` liked molecules not held out so the judge has its pairs |
 | demos | once per run, `demos.primitive_demonstration` toward each liked pose not held out, in `workers` processes; \
@@ -78,7 +77,6 @@ class Config:
     corpus: str = ''
     poses: str = ''
     dislikes: str = ''
-    universe: int = 0
     molecules: int = 200
     sims: int = 32
     workers: int = 3
@@ -164,13 +162,6 @@ def _corpus(cfg):
         if len(_largest(mol)) <= cfg.max_atoms:
             out[r['id']] = r['smiles']
     return out
-
-
-def _universe(cfg, round_):
-    if not cfg.universe:
-        return {}
-    from .universe import sample
-    return {h: s for h, s, n in sample(cfg.universe * 3, seed=round_) if n and n <= cfg.max_atoms}
 
 
 def _liked(cfg, texts):
@@ -431,7 +422,7 @@ def _round(run, cfg, r, texts, liked, dislikes):
     prev = run / f'round-{r - 1:04d}'
     here = run / f'round-{r:04d}'
     here.mkdir(parents=True, exist_ok=True)
-    pool_texts = {**texts, **_universe(cfg, r)}
+    pool_texts = texts
     pool = [(s, read_smiles(t)) for s, t in pool_texts.items()]
     tester = Tester()
     if (prev / 'tester.pt').exists():

@@ -53,7 +53,7 @@ def test_a_tiny_run_plays_learns_judges_and_resumes(tmp_path):
         env = drive(Initial(mol, set(mol)).env(), best_step)
         lines.append(f'{i}\t{json.dumps([list(env.plane[x]) for x in mol])}')
     poses.write_text('\n'.join(lines) + '\n')
-    cfg = az.Config(corpus=str(corpus), poses=str(poses), dislikes=str(tmp_path / 'none.tsv'), universe=0,
+    cfg = az.Config(corpus=str(corpus), poses=str(poses), dislikes=str(tmp_path / 'none.tsv'),
                     molecules=2, sims=4, workers=0, width=16, layers=2, heads=2, epochs=3, patience=2, window=2)
     run = tmp_path / 'run'
     az.rounds(run, cfg, count=2)
