@@ -6258,7 +6258,11 @@ cdef Structure structure_stored_groups_view(Structure structure, dict cache=None
     sg1 = structure_stereo_groups(view)
     par = structure_parities(view)
     for i in range(n):
-        sg1[i] = 0 if i in gone else relabel.get(i, sg0[i])
+        if i in gone:                   # out with its sign, as `validate_stereo` takes it
+            sg1[i] = 0
+            par[i] = 0
+            continue
+        sg1[i] = relabel.get(i, sg0[i])
         if not par[i] and other is not None and structure_parity_at(other, i):
             par[i] = structure_parity_at(structure, i)
     structure_invalidate_stereo_units(view)

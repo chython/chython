@@ -515,3 +515,16 @@ def test_a_label_on_an_unsigned_bridgehead_states_nothing_from_the_object_or_its
     finally:
         random.setstate(state)
     assert forms == {str(direct)} and '|' not in str(direct), forms
+
+
+def test_an_unrealisable_set_is_written_without_its_signs_when_part_of_it_is_labelled():
+    """4-Aminoadamantan-1-ol with three bridgehead signs no adamantane builds and `&1` on two of them: the set
+    leaves its collection with its signs, as `validate_stereo` takes it, so the string reads back to itself
+    from the parsed record and from its pach."""
+    from chython.core import unpack
+    parsed = read_smiles('NC1[C@H]2CC3C[C@@](C2)(O)C[C@@H]1C3 |&1:2,10|')
+    for record in (parsed, unpack(parsed.pack())):
+        text = str(record)
+        validated = record.copy()
+        validated.validate_stereo()
+        assert '@' not in text and str(read_smiles(text)) == text == str(validated), text
