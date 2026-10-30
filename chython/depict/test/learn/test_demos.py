@@ -80,7 +80,10 @@ def test_a_rerun_skips_what_is_done(tmp_path):
 
 
 def test_a_huge_record_keeps_within_its_budget():
+    import sys
     from time import perf_counter
+    if 'coverage' in sys.modules:
+        pytest.skip('a wall-clock budget is not measurable under coverage instrumentation')
     mol = smiles('C' * 150 + 'c1ccccc1' + 'C' * 150)
     goal = {x: (float(i), 0.) for i, x in enumerate(mol)}
     t = perf_counter()
@@ -89,6 +92,7 @@ def test_a_huge_record_keeps_within_its_budget():
 
 
 def test_a_primitive_demonstration_reaches_a_reachable_drawing_and_replays():
+    pytest.importorskip('torch')
     from chython.depict.layout.learn.demos import primitive_demonstration
     from chython.depict.layout.learn.mcts import rebuild, step_key
     from chython.depict.layout.primitive import Initial

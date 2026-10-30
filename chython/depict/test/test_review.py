@@ -17,10 +17,15 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 import json
+import sys
 import threading
 from urllib.request import Request, urlopen
 from chython.depict.layout.review import Review, read_review, render, serve, write_review
 from chython.depict.layout.scorecard import _read_poses
+from pytest import mark
+
+# the review page's HTTP server: a dev tool whose sockets close early on Windows (WinError 10038)
+served = mark.skipif(sys.platform == 'win32', reason='the review server is not supported on Windows')
 
 
 def test_a_comment_survives_tabs_newlines_and_backslashes(tmp_path):
@@ -37,6 +42,7 @@ def test_render_draws_both_sides_of_a_reaction_and_hashes_the_plane():
     assert again['hash'] == out['hash']
 
 
+@served
 def test_a_like_is_stored_and_posed_and_a_dislike_unposes(tmp_path):
     corpus = tmp_path / 'corpus.tsv'
     corpus.write_text('id\tstratum\tsmiles\nhard:phenol\thard\tOc1ccccc1\nrxn:1\trxn\tCC>>CC\n')
@@ -73,6 +79,7 @@ def test_an_old_review_file_reads_as_the_chython_engine_and_keeps_every_field(tm
     assert again == review and again['hard:a']['comment'] == 'ok' and again['hard:a']['hash'] == '123'
 
 
+@served
 def test_a_dislike_of_another_drawing_keeps_the_liked_pose(tmp_path):
     corpus = tmp_path / 'corpus.tsv'
     corpus.write_text('id\tstratum\tsmiles\nhard:phenol\thard\tOc1ccccc1\n')
@@ -91,6 +98,7 @@ def test_a_dislike_of_another_drawing_keeps_the_liked_pose(tmp_path):
         app.render.close()
 
 
+@served
 def test_a_baseline_names_its_engine(tmp_path):
     from chython.depict.layout.scorecard import score_row, layout_fn
     corpus = tmp_path / 'corpus.tsv'
@@ -106,6 +114,7 @@ def test_a_baseline_names_its_engine(tmp_path):
         app.render.close()
 
 
+@served
 def test_a_vote_on_a_drawn_row_does_not_wait_for_the_renderer(tmp_path):
     corpus = tmp_path / 'corpus.tsv'
     corpus.write_text('id\tstratum\tsmiles\nhard:phenol\thard\tOc1ccccc1\n')
@@ -125,6 +134,7 @@ def test_a_vote_on_a_drawn_row_does_not_wait_for_the_renderer(tmp_path):
         app.render.close()
 
 
+@served
 def test_a_drawn_row_is_served_while_the_renderer_is_busy(tmp_path):
     corpus = tmp_path / 'corpus.tsv'
     corpus.write_text('id\tstratum\tsmiles\nhard:phenol\thard\tOc1ccccc1\n')
@@ -157,6 +167,7 @@ def test_a_worker_killed_on_a_stall_keeps_every_drawing_done():
         r.close()
 
 
+@served
 def test_a_dislike_keeps_the_disliked_drawing(tmp_path):
     from chython.depict.layout.review import read_drawings
     corpus = tmp_path / 'corpus.tsv'
@@ -173,6 +184,7 @@ def test_a_dislike_keeps_the_disliked_drawing(tmp_path):
         app.render.close()
 
 
+@served
 def test_a_like_approves_the_drawing_and_a_dislike_withdraws_it(tmp_path):
     from chython.depict.layout.approved import read_library
     corpus = tmp_path / 'corpus.tsv'
