@@ -86,7 +86,7 @@ id	name	smarts	precursor	example	decoys	site	description
 21	ketone	[O;z2;x0:1]=[C;D3;x1;z2:2]	[O:1]=[C:2]	CC(C)=O	CCC=O,CC(=O)OC		R2C=O
 22	carboxylic_acid	[O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]	[O:3]-[C:1]=[O:2]	CC(=O)O	CC(=O)OC,CC(=O)N	carboxyl:3	R-COOH; the hydroxyl is the leaving group
 23	acyl_chloride	[Cl;D1][C;z2;x2;D3:1]=[O:2]	[Cl]-[C:1]=[O:2]	CC(=O)Cl	CC(=O)O		R-COCl
-24	ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0]	[O:1]=[C:2]-[O]-[C]	CC(=O)OC	CC(=O)O		R-CO-OR'; the alkoxy is the leaving group
+24	ester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[O;D2;x0;!R]	[O:1]=[C:2]-[O]-[C]	CC(=O)OC	CC(=O)O		R-CO-OR'; the alkoxy is the leaving group, so its O is no ring atom: a ring ester is `lactone`
 25	primary_amine	[N;D1;z1;x0:1][C;z1:2]	[N:1]-[C:2]	CCN	Nc1ccccc1,CC(=O)N	amine:1	R-NH2 on sp3 carbon
 26	primary_aniline	[N;D1;z1;x0:1][C;a:2]	[N:1]-[C:2]	Nc1ccccc1	NCc1ccccc1	aniline:1	Ar-NH2
 27	secondary_amine	[N;D2;z1;x0:1]([C;z1:2])[C;z1:3]	[N:1](-[C:2])-[C:3]	CNC	CN(C)C,CNc1ccccc1	amine:1	R2NH, both substituents sp3 carbon
@@ -193,7 +193,7 @@ id	name	smarts	precursor	example	decoys	site	description
 128	redox_active_ester	[C;z1:1]-[C;z2;x2;D3:2](=[O:3])-[O;D2;x1]-[N;D3;x1;r5](-[C;z2;r5]=[O])-[C;z2;r5]=[O]	[C:1]-[C:2](=[O:3])-[O]-[N]1-[C](=[O])-[C]2=[C]-[C]=[C]-[C]=[C]-2-[C]-1=[O]	CCC(=O)ON1C(=O)CCC1=O	CCC(=O)OC		NHPI/NHS ester; decarboxylative coupling transfers the alkyl
 129	aryl_thiol	[S;x0;D1;z1:1]-[C;a:2]	[S:1]-[C:2]	Sc1ccccc1	CCS		Ar-SH
 130	disulfide	[S;D2;z1:1]-[S;D2;z1:2]		CSSC	CSC		R-S-S-R
-131	thioester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[S;D2;z1;x0]	[O:1]=[C:2]-[S]-[C]	CC(=O)SC	CC(=O)OC		R-CO-S-R', the Liebeskind-Srogl electrophile
+131	thioester	[O;z2;x0:1]=[C;D3;x2;z2:2]-[S;D2;z1;x0;!R]	[O:1]=[C:2]-[S]-[C]	CC(=O)SC	CC(=O)OC		R-CO-S-R', the Liebeskind-Srogl electrophile; the S is no ring atom, which the rows would delete from the ring
 132	azinone	[O;z2;x0:1]=[C;z2;x2;D3;r6:2](-[C,N;z2,z4;r6:3])-[N;z1;D2;r6:4]	[O:1]=[C:2](-[A:3])-[N:4]	O=C1C=Cc2ccccc2N1	O=C1CCCCN1	amide:4	aromatizable cyclic amide; the sp2/aromatic flank excludes a saturated lactam
 133	chloroazine	[Cl;D1]-[C;a:1]:[N;a;D2:2]		Clc1ccccn1	Clc1ccccc1,Clc1cccnc1		Cl on an aromatic carbon next to a ring N; hydrolyses to the azinone
 134	pyrrole	[N;h1;D2;a;r5:1]	[N;h1:1]	c1cc[nH]c1	c1ccncc1,C1CCNC1	azole:1	azole N-H; the H stays out of a template for tautomerism

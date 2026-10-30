@@ -1789,3 +1789,20 @@ id	name	groups	product	ring_sizes	probe	description
 1574	vinylogous_ester_amination	alkoxy_acrylonitrile,primary_aniline	[A:101](-[A:102])-[A:1]=[A:2]-[A:3]#[A:4]		CCOC=CC#N.Nc1ccccc1>>N#CC=CNc1ccccc1	An amine displacing the alkoxy of a 3-alkoxyacrylonitrile (addition-elimination): the 3-aminoacrylonitrile
 1575	vinylogous_ester_amination	alkoxy_acrylonitrile,secondary_amine	[A:101](-[A:102])(-[A:103])-[A:1]=[A:2]-[A:3]#[A:4]		CCOC=CC#N.C1CCNCC1>>N#CC=CN1CCCCC1	An amine displacing the alkoxy of a 3-alkoxyacrylonitrile (addition-elimination): the 3-aminoacrylonitrile
 1576	vinylogous_ester_amination	alkoxy_acrylonitrile,nh2_hydrazine	[A:101](-[A:102])-[A:1]=[A:2]-[A:3]#[A:4]		CCOC=CC#N.NNc1ccccc1>>N#CC=CNNc1ccccc1	An amine displacing the alkoxy of a 3-alkoxyacrylonitrile (addition-elimination): the 3-aminoacrylonitrile
+1577	aminolysis	lactone,ammonia	[A:2](=[A:1])-[A:101].[A:3]		O=C1CCCO1.N>>C(CCC(N)=O)O	Lactone opened by ammonia, giving the hydroxy primary amide
+1578	aminolysis	lactone,secondary_aniline	[A:2](=[A:1])-[A:101](-[A:102])-[A:103].[A:3]		O=C1CCCO1.CNc1ccccc1>>c1cc(ccc1)N(C(CCCO)=O)C	Lactone opened by a secondary aniline, giving the hydroxy amide
+1579	aminolysis	lactone,aziridine_nh	[A:2](=[A:1])-[A:101].[A:3]		O=C1CCCO1.C1CN1>>C1N(C(=O)CCCO)C1	Lactone opened by an aziridine NH, giving the hydroxy amide
+1580	aminolysis	lactone,biaryl_aniline	[A:2](=[A:1])-[A:101](-[A:102])-[A:103].[A:3]		O=C1CCCO1.c1ccc(Nc2ccccc2)cc1>>O=C(CCCO)N(c1ccccc1)c1ccccc1	Lactone and a diarylamine, giving the hydroxy amide
+1581	aminolysis	lactone,hydroxylamine	[A:2](=[A:1])-[A:101]-[A:102].[A:3]		O=C1CCCO1.NO>>C(CCC(NO)=O)O	Lactone and hydroxylamine, giving the hydroxy hydroxamic acid
+1582	aminolysis	lactone,ring_enamine_nh2	[A:2](=[A:1])-[A:101]-[A:102]=[A:103].[A:3]		O=C1CCCO1.NC1=CN(C)C(=O)C=C1>>N(C=1C=CC(N(C)C=1)=O)C(=O)CCCO	Lactone and an aminopyridone-type ring enamine, giving the hydroxy amide
+1583	hydrazide_formation	lactone,hydrazine_nh2nh2	[A:2](=[A:1])-[A:101]-[A:102].[A:3]		O=C1CCCO1.NN>>NNC(=O)CCCO	Lactone and hydrazine, giving the hydroxy hydrazide
+1584	weinreb_amidation	lactone,NO_dialkylhydroxylamine	[A:2](=[A:1])-[A:101](-[A:102])-[A:103]-[A:104].[A:3]		O=C1CCCO1.CNOC>>O(C)N(C)C(=O)CCCO	Lactone and N,O-dimethylhydroxylamine, giving the hydroxy Weinreb amide
+1585	n_acylation	lactone,primary_amide	[A:2](=[A:1])-[A:101]-[A:102]=[A:103].[A:3]	2:5,6	O=C1CCCO1.CC(N)=O>>CC(NC(CCCO)=O)=O	Lactone and a primary amide, giving the hydroxy imide
+1586	n_acylation	lactone,nh_carbamate	[A:2](=[A:1])-[A:101]-[A:102](=[A:103])-[A:104].[A:3]	2:5,6	O=C1CCCO1.O=C1NCCO1>>O=C(CCCO)N1C(OCC1)=O	Lactone and a carbamate N-H, giving the hydroxy N-acyl carbamate
+1587	n_acylation	lactone,nh_urea_any	[A:2](=[A:1])-[A:101]-[A:102](=[A:103])-[A:104].[A:3]	2:5,6	O=C1CCCO1.O=C1NCCN1C>>C1(N(C)CCN1C(=O)CCCO)=O	Lactone and a urea N-H, giving the hydroxy N-acyl urea
+1588	claisen	lactone,enolizable_ch	[A:2](=[A:1])-[A:101].[A:3]		O=C1CCCO1.CC(=O)c1ccccc1>>c1cc(C(CC(=O)CCCO)=O)ccc1	Lactone acylating an enolizable alpha carbon, giving the hydroxy 1,3-dicarbonyl
+1589	ester_to_alcohol	lactone	[A:1]-[A:2].[A:3]		O=C1CCCO1>>C(CCCO)O	Lactone reduced to the diol (LiAlH4)
+1590	weinreb	lactone,alkyl_grignard	[A:1]=[A:2]-[A:101].[A:3]		O=C1CCCO1.CC[Mg]Br>>C(CCC(CC)=O)O	Lactone and an alkyl Grignard, giving the hydroxy ketone
+1591	weinreb	lactone,aryl_grignard	[A:1]=[A:2]-[A:101].[A:3]		O=C1CCCO1.c1ccc([Mg]Br)cc1>>c1(C(=O)CCCO)ccccc1	Lactone and an aryl Grignard, giving the hydroxy ketone
+1592	grignard	alkyl_grignard,alkyl_grignard,lactone	[A:1]-[A:202](-[A:101])-[A:201].[A:203]		CC[Mg]Br.CC[Mg]Br.O=C1CCCO1>>C(CCCO)(CC)(O)CC	Two equivalents of an alkyl Grignard adding to a lactone, giving the diol
+1593	grignard	aryl_grignard,aryl_grignard,lactone	[A:1]-[A:202](-[A:101])-[A:201].[A:203]		Br[Mg]c1ccccc1.Br[Mg]c1ccccc1.O=C1CCCO1>>C(C(c1ccccc1)(O)c1ccccc1)CCO	Two equivalents of an aryl Grignard adding to a lactone, giving the diol

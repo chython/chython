@@ -647,7 +647,7 @@ ROLES = {
     'roles:89': 'azole_nitrogen/imidazole',
 }
 
-#: `reactions.tsv`: 1576 rows, id -> the row it names.
+#: `reactions.tsv`: 1593 rows, id -> the row it names.
 REACTIONS = {
     'reactions:1': 'amidation/carboxylic_acid+primary_amine',
     'reactions:2': 'amidation/carboxylic_acid+primary_aniline',
@@ -2225,4 +2225,21 @@ REACTIONS = {
     'reactions:1574': 'vinylogous_ester_amination/alkoxy_acrylonitrile+primary_aniline',
     'reactions:1575': 'vinylogous_ester_amination/alkoxy_acrylonitrile+secondary_amine',
     'reactions:1576': 'vinylogous_ester_amination/alkoxy_acrylonitrile+nh2_hydrazine',
+    'reactions:1577': 'aminolysis/lactone+ammonia',
+    'reactions:1578': 'aminolysis/lactone+secondary_aniline',
+    'reactions:1579': 'aminolysis/lactone+aziridine_nh',
+    'reactions:1580': 'aminolysis/lactone+biaryl_aniline',
+    'reactions:1581': 'aminolysis/lactone+hydroxylamine',
+    'reactions:1582': 'aminolysis/lactone+ring_enamine_nh2',
+    'reactions:1583': 'hydrazide_formation/lactone+hydrazine_nh2nh2',
+    'reactions:1584': 'weinreb_amidation/lactone+NO_dialkylhydroxylamine',
+    'reactions:1585': 'n_acylation/lactone+primary_amide',
+    'reactions:1586': 'n_acylation/lactone+nh_carbamate',
+    'reactions:1587': 'n_acylation/lactone+nh_urea_any',
+    'reactions:1588': 'claisen/lactone+enolizable_ch',
+    'reactions:1589': 'ester_to_alcohol/lactone',
+    'reactions:1590': 'weinreb/lactone+alkyl_grignard',
+    'reactions:1591': 'weinreb/lactone+aryl_grignard',
+    'reactions:1592': 'grignard/alkyl_grignard+alkyl_grignard+lactone',
+    'reactions:1593': 'grignard/aryl_grignard+aryl_grignard+lactone',
 }
