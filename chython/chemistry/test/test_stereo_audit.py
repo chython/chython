@@ -144,7 +144,7 @@ def test_a_non_stereo_read_record_does_not_pass_through():
 
 
 def test_the_pass_through_list_is_the_read_rows_of_the_docs_index():
-    text = Path(__file__).parents[3].joinpath('docs', 'stereo.rst').read_text()
+    text = Path(__file__).parents[3].joinpath('docs', 'stereo.rst').read_text(encoding='utf-8')
     section = search(r'\nIndex of stereo log rules\n-+\n(.*?)\n\nFive families', text, DOTALL).group(1)
     rows = findall(r'^``([a-z0-9:-]+)``\s+[A-Z]+(?: or [A-Z]+)?\s+(\S+)\s', section, MULTILINE)
     assert len(rows) > 100
@@ -498,7 +498,7 @@ def test_the_audit_survives_a_round_trip(text):
 
 
 def test_the_docs_table_names_every_code_and_severity():
-    text = Path(__file__).parents[3].joinpath('docs', 'stereo.rst').read_text()
+    text = Path(__file__).parents[3].joinpath('docs', 'stereo.rst').read_text(encoding='utf-8')
     section = search(r'\nAuditing labels\n-+\n(.*?)\n[^\n]+\n-+\n', text, DOTALL).group(1)
     rows = dict(findall(r'^``stereo-audit:([a-z-]+)``\s+(error|warning|info)\s', section, MULTILINE))
     assert rows == {code: row.severity for code, row in stereo_audit_codes().items()}

@@ -19,6 +19,8 @@
 """Targets reward outcomes, not routes."""
 import pytest
 
+pytest.importorskip('torch')
+
 from chython.core import smiles
 from chython.depict.layout.env import Env
 from chython.depict.layout.greedy import best_step, drive
