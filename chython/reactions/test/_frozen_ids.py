@@ -26,7 +26,7 @@ and read the diff.  A new line is a new row; a CHANGED line is a renumber, which
 means.  Never hand-edit a line to make the ratchet pass.
 """
 
-#: `functional.tsv`: 431 rows, id -> the row it names.
+#: `functional.tsv`: 433 rows, id -> the row it names.
 FUNCTIONAL = {
     'functional:1': 'terminal_alkene',
     'functional:2': 'alkene',
@@ -459,6 +459,8 @@ FUNCTIONAL = {
     'functional:429': 'beta_alkoxyvinyl_stannane',
     'functional:430': 'lactim_ether_o',
     'functional:431': 'alkoxy_acrylonitrile',
+    'functional:432': 'chromone',
+    'functional:433': 'ring_aryl_carbonate',
 }
 
 #: `protective.tsv`: 89 rows, id -> the row it names.
@@ -647,7 +649,7 @@ ROLES = {
     'roles:89': 'azole_nitrogen/imidazole',
 }
 
-#: `reactions.tsv`: 1593 rows, id -> the row it names.
+#: `reactions.tsv`: 1606 rows, id -> the row it names.
 REACTIONS = {
     'reactions:1': 'amidation/carboxylic_acid+primary_amine',
     'reactions:2': 'amidation/carboxylic_acid+primary_aniline',
@@ -2242,4 +2244,17 @@ REACTIONS = {
     'reactions:1591': 'weinreb/lactone+aryl_grignard',
     'reactions:1592': 'grignard/alkyl_grignard+alkyl_grignard+lactone',
     'reactions:1593': 'grignard/aryl_grignard+aryl_grignard+lactone',
+    'reactions:1594': 'knorr_pyrazole/chromone+hydrazine_nh2nh2',
+    'reactions:1595': 'knorr_pyrazole/chromone+alkyl_hydrazine',
+    'reactions:1596': 'knorr_pyrazole/chromone+aryl_hydrazine',
+    'reactions:1597': 'knorr_pyrazole/chromone+alkyl_hydrazine',
+    'reactions:1598': 'knorr_pyrazole/chromone+aryl_hydrazine',
+    'reactions:1599': 'knorr_pyrazole/chromone+carbazate',
+    'reactions:1600': 'carbamoylation/ring_aryl_carbonate+primary_amine',
+    'reactions:1601': 'carbamoylation/ring_aryl_carbonate+primary_aniline',
+    'reactions:1602': 'carbamoylation/ring_aryl_carbonate+secondary_amine',
+    'reactions:1603': 'carbamoylation/ring_aryl_carbonate+secondary_aniline',
+    'reactions:1604': 'carbamoylation/ring_aryl_carbonate+pyrrole',
+    'reactions:1605': 'carbamoylation/ring_aryl_carbonate+aziridine_nh',
+    'reactions:1606': 'carbamoylation/ring_aryl_carbonate+imidazole',
 }
