@@ -216,7 +216,7 @@ def test_layout2d_passes_a_chooser_to_the_controller():
 def test_layout2d_drives_a_peptide_backbone_with_the_chooser():
     from chython.depict.layout.molecule import layout2d
     mol = molecule('oxytocin')
-    plane = layout2d(mol, engine='chython', force=True, peptide=True, choose=best_step)
+    plane = layout2d(mol, engine='chython', force=True, chain=True, choose=best_step)
     assert set(plane) == set(mol) and routed_links(mol, plane)
 
 

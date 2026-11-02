@@ -229,7 +229,7 @@ def _stroke_path(subpaths, width: float, colour: str, bond_style) -> Path:
                 join=bond_style.join, miter_limit=bond_style.miter_limit)
 
 
-def wedge_paths(mol, plane, boxes, style: DepictStyle, *,
+def wedge_paths(mol, plane, boxes, style: DepictStyle, *, shown=frozenset(), avoid=frozenset(),
                 log=None) -> tuple[list[Path], set[tuple[int, int]]]:
     """All stereo-bond paths for ``mol`` at ``plane``, and the bond keys they claimed.
 
@@ -242,7 +242,9 @@ def wedge_paths(mol, plane, boxes, style: DepictStyle, *,
     ``depict:unwedged``; a cis/trans unit the plane disagrees with is drawn crossed and logged
     ``depict:crossed``, or ``depict:crossed-contradiction`` where the layout states the opposite, which
     is the actionable one.  ``plane`` reaches ``wedges_for_write`` explicitly, so the chooser answers for
-    this layout and not for whatever coordinates the molecule stores.
+    this layout and not for whatever coordinates the molecule stores.  ``shown`` names stereocentres the
+    drawing's geometry already states -- a perspective cage's, read in depth -- which take no wedge; ``avoid``
+    bonds no wedge may sit on, a routed cross-link's.
     """
     bond_style = style.bond
     claimed: set[tuple[int, int]] = set()
@@ -257,10 +259,11 @@ def wedge_paths(mol, plane, boxes, style: DepictStyle, *,
                       if u['kind'] == SU_CIS_TRANS and mol.parity_of(u['anchor']) != 0]
 
     if bond_style.wedges == 'recompute':
-        chosen, _ = wedges_for_write(mol, plane=plane)
+        chosen, _ = wedges_for_write(mol, plane=plane, avoid=avoid)
         wedge_list = chosen
     else:  # 'stored'
-        stored = _stored_for_plane(mol, plane, list(mol.wedges()), wedged_units, log)
+        stored = [w for w in _stored_for_plane(mol, plane, list(mol.wedges()), wedged_units, log)
+                  if _bond_key(w[0], w[1]) not in avoid]
         stored_centres = {narrow for narrow, wide, code in stored}
         # "a bond carries at most one wedge" holds only within one `wedges_for_write` call -- the chooser
         # is never told what is already stored -- so a chosen wedge whose narrow atom is unstored can
@@ -268,13 +271,15 @@ def wedge_paths(mol, plane, boxes, style: DepictStyle, *,
         # centre; the centre then reports `depict:unwedged`, which is true of the resulting picture.
         stored_bonds = {_bond_key(n, w) for n, w, _ in stored}
         # wedges_for_write always chooses when plane= is given: the stored shortcut is bypassed
-        chosen, _ = wedges_for_write(mol, plane=plane)
+        chosen, _ = wedges_for_write(mol, plane=plane, avoid=avoid)
         new_for_unchosen = [(n, w, c) for n, w, c in chosen
                             if n not in stored_centres and _bond_key(n, w) not in stored_bonds]
         wedge_list = stored + new_for_unchosen
 
     drawn: list[tuple[int, int]] = []
     for narrow, wide, code in wedge_list:
+        if narrow in shown:
+            continue
         p_narrow = plane[narrow]
         p_wide = plane[wide]
         box_narrow = boxes[narrow].box
@@ -306,7 +311,7 @@ def wedge_paths(mol, plane, boxes, style: DepictStyle, *,
 
     # configured units no drawn wedge covers
     for unit in sorted(wedged_units, key=lambda u: u['anchor']):
-        if not _covers(unit, drawn):
+        if unit['anchor'] not in shown and not _covers(unit, drawn):
             if log is not None:
                 log.append(LogRecord('depict:unwedged', (unit['anchor'],),
                                      f'atom {unit["anchor"]}: no wedge could be drawn for this '

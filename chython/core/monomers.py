@@ -30,6 +30,8 @@ a link beside an acyclic C=C moves a bond off it |
 | chain link | a cut from residue A's exit to residue B's entry, each used once |
 | main chain | the chain with most non-`other` residues; fewer than `MIN_RESIDUES` is not a peptide |
 | branch | an attached chain of >= `MIN_BRANCH` residues; a shorter one merges into its host residue |
+| side-chain ring | the last exit linked into an earlier residue's group: that path opens the chain, closed head to \
+tail, the residues before it hung from its group |
 | order | every choice and every walk goes by `canonical_order()` rank, so the result ignores atom numbering |
 """
 from collections import deque
@@ -121,6 +123,11 @@ def monomers(mol, library=None) -> Peptide | None:
         if (c, n) not in used and residue_of[c] in placed and residue_of[n] in placed:
             crosslinks.append((c, n))
 
+    if not cyclic:
+        rerouted = _through_side_chain(mol, residues, members, main, crosslinks, rank)
+        if rerouted is not None:
+            residues, members, main, crosslinks = rerouted
+            cyclic = True
     backbone = _oriented(mol, residues, members, main, None, rank)
     if len(main) > 1:
         p0, p1 = residues[main[0]].path, residues[main[1]].path
@@ -133,6 +140,45 @@ def monomers(mol, library=None) -> Peptide | None:
         residues = _symbols(mol, residues, library)
     return Peptide(tuple(residues), tuple(frozenset(m) for m in members), tuple(main), tuple(branches),
                    tuple(crosslinks), cyclic, tuple(backbone))
+
+
+def _through_side_chain(mol, residues, members, main, crosslinks, rank):
+    """`(residues, members, main, crosslinks)` with the main chain run round the ring a cross-link closes through a
+    side chain, or None.  The last residue's exit is linked to an atom of an earlier residue's group by a path off
+    its small rings to that residue's entry: the path becomes a unit opening the chain, closed head to tail on the
+    link, and the fewer than `MIN_BRANCH` residues before that residue hang from its group."""
+    last = residues[main[-1]].exit
+    small = {x for r in mol.sssr if len(r) <= 7 for x in r}
+    for k, i in enumerate(main[:MIN_BRANCH]):
+        entry = residues[i].entry
+        if entry is None or k == len(main) - 1:
+            continue
+        for link in crosslinks:
+            if last not in link:
+                continue
+            n = link[0] if link[1] == last else link[1]
+            if n not in members[i] or n in residues[i].path:
+                continue
+            path = _bfs_path(mol, n, entry, members[i] - small - set(residues[i].path), rank)
+            if path is None or len(path) < 3:
+                continue
+            core = path[:-1]                            # entry excluded: it opens residue `i`
+            group, stack = set(), [n]
+            while stack:
+                x = stack.pop()
+                if x in group or x == entry or x in residues[i].path or x not in members[i]:
+                    continue
+                group.add(x)
+                stack.extend(mol.neighbors_of(x))
+            unit = Residue(frozenset(group), 'other', n, core[-1], tuple(core))
+            residues = list(residues) + [unit]
+            members = [set(m) for m in members] + [group]
+            members[i] -= group
+            for j in main[:k]:                          # the cap and any short tail: hung from residue `i`
+                members[i] |= members[j]
+            links = [x for x in crosslinks if x is not link]
+            return residues, members, [len(residues) - 1] + list(main[k:]), links
+    return None
 
 
 def _heavy(mol, n):

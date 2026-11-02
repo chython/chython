@@ -17,7 +17,8 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""The CPK palette, the choice of 2D layout engine, and the peptide layout switch.
+"""The CPK palette, the choice of 2D layout engine and of the JavaScript runtime under smiles-drawer, and the
+chain layout switch.
 
 Owned here rather than by the facade, which only proxies `clean2d_engine`: state read by `depict/` is
 `depict/`'s, and nothing may import the facade.  That is what makes `import chython.depict` work on
@@ -27,14 +28,21 @@ from typing import Literal
 
 
 Clean2DEngine = Literal['rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo', 'chython']
+JSRuntime = Literal['auto', 'quickjs', 'v8']
 
 # Which 2D layout backend `clean2d()` uses when the caller does not name one.  `smilesdrawer` is a
-# JavaScript bundle on QuickJS: ~1 MB installed, and its behaviour does not move between releases.
+# JavaScript bundle, and its behaviour does not move between releases.
 clean2d_engine: Clean2DEngine = 'smilesdrawer'
 
-# Whether `layout2d()` lays a chain -- a peptide of `MIN_RESIDUES`+ residues, a macrocycle of beads -- out on its
-# backbone, chords and teleports routed round it; off by default.  The engine above still lays out its ring tiles
-# and anything the backbone layout leaves.
+# The runtime that executes `smilesdrawer`.  QuickJS (`quickjs-ng`, required, 0.5 MB) interprets it; V8 (the
+# `v8` extra, `mini-racer` or `py_mini_racer`, 61 MB) compiles it and is 1.2x faster on aspirin, 13x on C60.
+# `auto` takes V8 when it is importable.  The two draw the same shapes, but V8 breaks some symmetric ties the
+# other way (naphthol comes out mirrored), so the committed doc figures are QuickJS drawings.
+js_runtime: JSRuntime = 'auto'
+
+# Whether `layout2d(engine='chython')` lays a chain -- a peptide of `MIN_RESIDUES`+ residues, a macrocycle of
+# beads -- out on its backbone, chords and teleports routed round it; off by default.  Every other engine ignores
+# it and lays the whole molecule out itself.
 chain_layout: bool = False
 
 cpk = tuple('''
@@ -85,7 +93,7 @@ def get_chain_layout(flag: bool = None) -> bool:
     if flag is None:
         return chain_layout
     if not isinstance(flag, bool):
-        raise TypeError(f'peptide takes a bool or None, not {type(flag).__name__}')
+        raise TypeError(f'chain takes a bool or None, not {type(flag).__name__}')
     return flag
 
 
@@ -97,9 +105,19 @@ def set_chain_layout(flag: bool):
     chain_layout = flag
 
 
-get_peptide_layout = get_chain_layout                   # the switch's name before chains held more than peptides
-set_peptide_layout = set_chain_layout
+def get_js_runtime() -> JSRuntime:
+    """The JavaScript runtime setting, `auto` unresolved: which runtime `auto` takes is the engine's answer."""
+    return js_runtime
+
+
+def set_js_runtime(runtime: JSRuntime):
+    """Set the runtime `smilesdrawer` runs on.  Validated here; a runtime that is not installed fails at layout."""
+    if runtime not in ('auto', 'quickjs', 'v8'):
+        raise ValueError(f'Invalid JavaScript runtime: {runtime}')
+    global js_runtime
+    js_runtime = runtime
 
 
 __all__ = ['cpk', 'R_COLOUR', 'Clean2DEngine', 'clean2d_engine', 'get_clean2d_engine', 'set_clean2d_engine',
-           'chain_layout', 'get_chain_layout', 'set_chain_layout', 'get_peptide_layout', 'set_peptide_layout']
+           'JSRuntime', 'js_runtime', 'get_js_runtime', 'set_js_runtime',
+           'chain_layout', 'get_chain_layout', 'set_chain_layout']

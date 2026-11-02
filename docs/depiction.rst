@@ -163,7 +163,7 @@ Five engines, one interface.  Only the default needs nothing beyond a plain inst
 ================  ==============================  =================================================
 ``engine=``       needs                           notes
 ================  ==============================  =================================================
-``smilesdrawer``  ``quickjs``                     the default; a shipped JS bundle, ~1 MB installed
+``smilesdrawer``  ``quickjs-ng``; V8 optional      the default; a shipped JS bundle, ~1 MB installed
 ``rdkit``         ``rdkit``                       ``Compute2DCoords`` on an exported molecule
 ``cdk``           ``jpype1`` and a CDK jar        jar path from ``chython.class_paths`` or ``CDK_PATH``
 ``obabel``        the Open Babel Python bindings   the ``gen2D`` operation
@@ -172,7 +172,9 @@ Five engines, one interface.  Only the default needs nothing beyond a plain inst
 
 Every engine's import sits inside its own branch, so an unnamed toolkit is never imported to lay a
 molecule out.  Whichever answers, the plane is rescaled to one bond length and disconnected components
-are shifted apart, so a picture does not change scale with the engine that placed it.
+are shifted apart, so a picture does not change scale with the engine that placed it.  The native
+engine, ``engine='chython'``, hands a component of over 300 heavy atoms to ``smilesdrawer``: its fit
+scores every move over the whole drawing at each step, so its cost grows with the square of the size.
 
 Name one for a single call, or for the process:
 
@@ -194,6 +196,30 @@ Name one for a single call, or for the process:
 
     smilesdrawer
     smilesdrawer
+
+``smilesdrawer`` runs on either of two JavaScript runtimes, picked by ``chython.js_runtime``:
+
+============  ===================================  ============================================
+value         runtime                              notes
+============  ===================================  ============================================
+``auto``      V8 when importable, else QuickJS     the default
+``quickjs``   ``quickjs-ng``, required             0.5 MB, an interpreter
+``v8``        ``mini-racer`` or ``py_mini_racer``  ``chython[v8]``; 61 MB, 1.2x faster on
+                                                   aspirin, 13x on C60
+============  ===================================  ============================================
+
+Both draw the same shapes, but where the bundle breaks a symmetric tie on a last-bit difference in ``Math``,
+V8 can take the other branch and turn the drawing round: naphthol comes out mirrored.  The figures on this
+page are QuickJS drawings.  ``v8`` without either binding raises ``ImportError`` at layout; an unknown name
+raises ``ValueError`` at assignment.
+
+.. testcode::
+
+    print(chython.js_runtime)                 # the process default; 'quickjs' or 'v8' to pin one
+
+.. testoutput::
+
+    auto
 
 The name is validated where it is assigned, not later at draw time, so a typo raises at the line that
 holds it:
@@ -217,15 +243,16 @@ no heavy atom at all (``[H][H]``, ``[H-]``) is a chain along +x.
 Peptides
 ~~~~~~~~
 
-Off by default: ``layout2d(peptide=True)`` for one call, ``chython.chain_layout = True`` for the process.
-Then a molecule whose main chain has four or more residues, as segmented by ``monomers()``, is laid out on
+The native engine's alone: ``layout2d(engine='chython', chain=True)`` for one call,
+``chython.chain_layout = True`` for the process; off by default, and every other engine ignores it.  Then a molecule whose main chain has four or more residues, as segmented by ``monomers()``, is laid out on
 its backbone: a zigzag on the 120-degree lattice, side chains hung off it, cross-links routed around it.
 The backbone steps only where a side chain needs room, and takes the lowest such chain found.  Each
 connected component is its own case: every peptide gets its own backbone, every other component -- a
 counter-ion, a solvent -- goes to the engine, and the components are then placed side by side.
-Only side-chain rings -- Phe, Tyr, Trp, His -- go to the configured engine, one call per distinct ring
-system, so ``clean2d_engine`` still decides how an aromatic side chain looks.  A proline ring on the
-backbone is its regular pentagon; the amide joining two such rings is a bridge twice a bond long.
+Only side-chain rings -- Phe, Tyr, Trp, His -- go to the native engine, one call per distinct ring
+system.  A proline ring on the
+backbone is its regular pentagon; the amide joining two such rings is one bond, and a bridge twice a bond long
+only where one bond would tangle the drawing, as in three prolines in a row.
 
 A cross-link longer than one and a half bonds is drawn by routing, not as a straight bond:
 
@@ -257,14 +284,38 @@ whose backbone is off the lattice draws every cross-link as a plain bond.
                       'NC(CC(N)=O)C(=O)NC(CS%10)C(=O)N%11CCCC%11C(=O)NC(CC(C)C)C(=O)NCC(=O)N')
     print(len(monomers(oxytocin).main))
 
-    plane = oxytocin.layout2d(peptide=True)        # on the backbone
-    plane = oxytocin.layout2d()                    # the engine, as for any molecule: the default
+    plane = oxytocin.layout2d(engine='chython', chain=True)    # on the backbone
+    plane = oxytocin.layout2d(chain=True)                      # smilesdrawer ignores the switch
     chython.chain_layout = True                    # process-wide; validated at assignment
     chython.chain_layout = False
 
 .. testoutput::
 
     9
+
+Nucleic Acids
+~~~~~~~~~~~~~
+
+The same switch lays out a strand of four or more nucleotides, as segmented by ``chain.perceive()``: units
+joined O3' to O5' through one phosphorus, phosphodiester or phosphorothioate, any 2' group or none, a base or
+none.  The strand runs level, 5' on the left, and every unit is one drawing shifted along it: the furanose a
+regular pentagon standing on its C4'-C3' edge, C1' at its top, so every base points up; the 5'-phosphorus of
+each unit one bond from the last unit's O3', so no link is long.  Bases, 2' groups, the phosphorus' other atoms
+and conjugates at either end hang from the drawn atoms as a peptide's side chains do.
+
+.. testcode::
+
+    from chython import smiles
+
+    thymidine = 'C[C@@H]1O[C@@H](n2cc(C)c(=O)[nH]c2=O)C[C@@H]1O'
+    dt4 = smiles('O' + 'P(=O)(O)O'.join([thymidine] * 4))         # tetrathymidylate
+    plane = dt4.layout2d(engine='chython', chain=True)
+    phosphorus = [plane[n] for n in dt4 if dt4.atom(n).atomic_symbol == 'P']
+    print(len({round(y, 6) for _, y in phosphorus}))
+
+.. testoutput::
+
+    1
 
 Reaction Layout
 ~~~~~~~~~~~~~~~
@@ -289,7 +340,7 @@ split -- ``layout2d()`` returns everything and stores nothing, ``clean2d()`` sto
 ``(x, y)`` per gap.  The arrangement shifts plane dicts and never touches the molecules, so the members'
 own coordinates do not change.
 
-The molecule's keywords reach every member: ``engine=``, ``force=`` and ``peptide=``.
+The molecule's keywords reach every member: ``engine=``, ``force=`` and ``chain=``.
 ``rxn.rescale2d()`` is each member's ``rescale2d()``, true when any of them rescaled.
 
 

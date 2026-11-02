@@ -31,6 +31,7 @@ from .colorbar import colorbar, legend_side, place_colorbar
 from .field import contour_levels
 from .label import element_colour, labels
 from .layout import molecule as _molecule_layout, reaction as _reaction_layout
+from .layout.cage import cages
 from .overlay import BondScale, bands_of, render_overlays, scale_of, tiled_swatches
 from .peptide import link_paths, routed_links
 from .scene import (Box, Path, Scene, Text, TextRun, WHITE, circle, ellipse, polyline, rounded_box)
@@ -58,8 +59,9 @@ def molecule_scene(mol, *, style: DepictStyle | None = None, plane=None, overlay
         style = get_depict_style()
     if plane is None:
         plane = _plane_for(mol, log)
-    plane = _bridge_perspective(mol, plane)
-    under, over = _molecule_nodes(mol, plane, style, log, overlays)
+    found = cages(mol, plane)
+    plane = _bridge_perspective(mol, plane, frozenset().union(*(c.atoms for c in found)))
+    under, over = _molecule_nodes(mol, plane, style, log, overlays, found)
 
     # The colorbar comes after the content box is known: its position is derived from the content bounds.
     legend_nodes = []
@@ -176,14 +178,14 @@ _STRAIGHT_COS = -0.966
 _BRIDGE_PULL = 0.3
 
 
-def _bridge_perspective(mol, plane) -> dict[int, tuple[float, float]]:
+def _bridge_perspective(mol, plane, caged=frozenset()) -> dict[int, tuple[float, float]]:
     """`plane` with each T-shaped bridgehead of a bicycle drawn toward the one-atom bridge it shares.
 
     A bridgehead whose two ring bonds are drawn in one straight line, its bridge the stem of the T, has no
     bond a wedge can state its sign on that also shows the cage: with the hydrogen implicit, the stem is
     flat.  Pulled toward the bridge, the T becomes a Y -- the perspective drawing of a bicycle -- and both
     bridgeheads wedge to the bridge, which is how a reader sees the cage.  The drawing alone moves; the
-    molecule's stored coordinates are not touched.
+    molecule's stored coordinates are not touched.  A perspective cage's atoms, `caged`, are already drawn so.
     """
     implied = mol.implied_parities()
     units = {u['anchor']: u for u in mol.stereo_units()
@@ -203,6 +205,8 @@ def _bridge_perspective(mol, plane) -> dict[int, tuple[float, float]]:
         b = min(bridges, key=lambda x: (mol.degree_of(x), x))
         bx, by = plane[b]
         for h in members:
+            if h in caged:
+                continue
             others = [n for n in mol.neighbors_of(h) if n != b]
             if len(others) != 2:
                 continue
@@ -214,7 +218,7 @@ def _bridge_perspective(mol, plane) -> dict[int, tuple[float, float]]:
     return moved
 
 
-def _molecule_nodes(mol, plane, style: DepictStyle, log, overlays=()) -> tuple[list, list]:
+def _molecule_nodes(mol, plane, style: DepictStyle, log, overlays=(), found=None) -> tuple[list, list]:
     """One molecule's nodes, split into what goes under the type and what is the type.
 
     Two lists rather than one, so a caller composing several molecules keeps painter's order over the
@@ -239,14 +243,26 @@ def _molecule_nodes(mol, plane, style: DepictStyle, log, overlays=()) -> tuple[l
             if o.encode in ('color', 'both'):
                 colours.update(o.bond_colours(mol, style))
 
-    # The stereo bonds claim their keys, and the plain bonds skip them; so do routed peptide cross-links.
-    wedges, claimed = wedge_paths(mol, plane, boxes, style, log=log)
+    # A perspective cage's depth states its stereocentres where the geometry reads as stated: those take no wedge,
+    # and the rear bond of each crossing breaks so the depth is readable.  `found` when the caller looked already.
+    if found is None:
+        found = cages(mol, plane)
+    shown = frozenset().union(*(c.shows for c in found))
+    gaps: dict[tuple[int, int], list] = {}
+    for c in found:
+        for key, point in c.gaps:
+            gaps.setdefault(key, []).append(point)
+
+    # The stereo bonds claim their keys, and the plain bonds skip them; so do routed peptide cross-links, which no
+    # wedge may sit on either: a routed link is not drawn as the straight bond a wedge would be.
+    routed = {(min(k.a, k.b), max(k.a, k.b)) for k in links}
+    wedges, claimed = wedge_paths(mol, plane, boxes, style, shown=shown, avoid=routed, log=log)
     if links:
-        claimed = set(claimed) | {(min(k.a, k.b), max(k.a, k.b)) for k in links}
+        claimed = set(claimed) | routed
     bond_nodes = bond_paths(mol, plane, boxes, style, skip=claimed,
                             widths=widths if widths else None,
                             colours=colours if colours else None,
-                            log=log)
+                            gaps=gaps or None, log=log)
 
     radical_nodes = _radical_dots(mol, boxes, style)
 

@@ -61,17 +61,17 @@ def layout_fn(engine):
     if engine == 'peptide':
         return lambda mol: layout2d(mol, force=True)
     if engine == 'chython':
-        return lambda mol: layout2d(mol, engine=engine, force=True, peptide=True)
+        return lambda mol: layout2d(mol, engine=engine, force=True, chain=True)
     if engine == 'greedy':
         from .greedy import best_step
-        return lambda mol: layout2d(mol, engine='chython', force=True, peptide=True, choose=best_step)
+        return lambda mol: layout2d(mol, engine='chython', force=True, chain=True, choose=best_step)
     if engine.startswith('policy:'):
         import torch
         from .learn.train import chooser, load
         torch.set_num_threads(THREADS)                      # a forward pass this small gains nothing from more
         choose = chooser(load(engine[7:]))
-        return lambda mol: layout2d(mol, engine='chython', force=True, peptide=True, choose=choose)
-    return lambda mol: layout2d(mol, engine=engine, force=True, peptide=False)
+        return lambda mol: layout2d(mol, engine='chython', force=True, chain=True, choose=choose)
+    return lambda mol: layout2d(mol, engine=engine, force=True, chain=False)
 
 
 def _valid(mol, plane):

@@ -15,8 +15,12 @@ Configuration Reference
     chython.clean2d_engine = 'smilesdrawer'  # default
     # Options: 'rdkit', 'smilesdrawer', 'cdk', 'obabel', 'indigo', 'chython'
 
-    # a chain -- a peptide of 4+ residues, a macrocycle of ring units -- lays out on its backbone;
-    # the engine lays out its side-chain rings.  `chython.peptide_layout` is the same switch
+    # JavaScript runtime under 'smilesdrawer' — validated at assignment
+    chython.js_runtime = 'auto'  # default: V8 when importable, else QuickJS
+    # Options: 'auto', 'quickjs', 'v8' (pip install chython[v8])
+
+    # with engine 'chython', a chain -- a peptide of 4+ residues, a macrocycle of ring units -- lays
+    # out on its backbone; every other engine ignores the switch
     chython.chain_layout = False  # default
 
     # 3D conformer engine

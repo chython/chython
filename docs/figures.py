@@ -258,15 +258,19 @@ def render(page: Path) -> dict[tuple[str, str], str | None]:
     host without the extra has nothing to say about it, and neither writing nor calling it stale is that.
     """
     from os import chdir, getcwd
+    from chython.depict._config import get_js_runtime, set_js_runtime
 
     namespace = {'__name__': f'figures_{page.stem}'}
     drawn: dict[tuple[str, str], str | None] = {}
     pending: dict[str, str] = {}                   # each kind's variable from the last block, if a string
     skipped = False                                # whether that last block is one this host skipped
-    was = getcwd()
+    was, runtime = getcwd(), get_js_runtime()
     with TemporaryDirectory() as scratch:
         try:
             chdir(scratch)                         # a sample that writes a file writes it here
+            # The committed figures are QuickJS drawings, the runtime every install has: V8 draws the same
+            # shapes but breaks some symmetric ties the other way, turning a fragment round.
+            set_js_runtime('quickjs')
             for kind, payload, line, options in items(page):
                 if kind == 'code':
                     pending = {}
@@ -290,6 +294,7 @@ def render(page: Path) -> dict[tuple[str, str], str | None]:
                                      f'above it left no `{_ASSETS[kind].variable}` string')
         finally:
             chdir(was)
+            set_js_runtime(runtime)
     return drawn
 
 

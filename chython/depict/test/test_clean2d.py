@@ -22,13 +22,13 @@ A layout is unchanged by rotation, reflection and translation and the bundle pic
 symmetric alternatives, so literal coordinates are not a property of the algorithm.  What is asserted is
 that every molecule gets a layout, that no two atoms share a point, and that rings come out even.
 """
-from math import dist, hypot
+from math import dist, fsum, hypot
 from re import findall
 from pytest import approx, mark, raises, skip
 from chython.core import ReactionContainer, read_smiles as smiles
 from chython.depict.layout import molecule as layout_molecule
-from chython.depict._config import get_clean2d_engine
-from chython.depict.layout.molecule import ctx, _clean2d_tree
+from chython.depict._config import get_clean2d_engine, get_js_runtime, set_js_runtime
+from chython.depict.layout.molecule import ctx, v8, _clean2d_tree
 from chython.exceptions import ImplementationError
 
 
@@ -150,7 +150,7 @@ def test_no_overlapping_atoms(name, smi):
 def test_bonds_are_even(name, smi):
     """bond lengths stay close to uniform -- rings are not distorted; the engine's own drawing, no chain chapter"""
     mol = smiles(smi)
-    mol.clean2d(engine='smilesdrawer', peptide=False)
+    mol.clean2d(engine='smilesdrawer', chain=False)
 
     lengths = _bond_lengths(mol)
     mean = sum(lengths) / len(lengths)
@@ -236,6 +236,22 @@ def test_disconnected_components_are_separated():
     assert max(xy[n][0] for n in a) < min(xy[n][0] for n in b)
 
 
+def test_each_component_is_laid_out_as_if_alone():
+    """the engine takes one component per call: a mixture's component is drawn as that component alone
+
+    One call over a `.`-joined tree costs superlinearly in the component count and its placement is
+    discarded by `_place`, so the plane of each component is the engine's answer for it alone.
+    """
+    mol = smiles('CC(=O)O.c1ccc2ccccc2c1.CCN(CC)CC.[Na+]')
+    plane = layout_molecule._engine_layout(mol, 'smilesdrawer')
+    for c in mol.connected_components:
+        alone = layout_molecule._engine_layout(mol.substructure(c), 'smilesdrawer')
+        (x0, y0), (a0, b0) = plane[c[0]], alone[c[0]]
+        for n in c:
+            assert plane[n][0] - x0 == approx(alone[n][0] - a0, abs=1e-9)
+            assert plane[n][1] - y0 == approx(alone[n][1] - b0, abs=1e-9)
+
+
 def test_many_components_wrap_into_a_hexagonal_grid():
     """a line of components over `WRAP` times wider than tall breaks into rows staggered by half a pitch"""
     plane = layout_molecule.layout2d(smiles('.'.join(['[Na+].[Cl-]'] * 20)), engine='chython', force=True)
@@ -289,6 +305,21 @@ def test_a_few_components_stay_in_a_line():
     assert len(mids) == 1
 
 
+def test_the_row_limit_is_the_shortest_run_that_fits():
+    """`_limit` bisects the runs: the row count `_rows` gives never grows with the limit"""
+    from random import Random
+
+    rnd = Random(7)
+    for _ in range(200):
+        widths = [rnd.choice((.0, .5, 1.3, rnd.uniform(0, 8))) for _ in range(rnd.randrange(2, 14))]
+        n, space = len(widths), layout_molecule.SPACE
+        runs = sorted({fsum(widths[i:j]) + space * (j - i - 1) for i in range(n) for j in range(i + 1, n + 1)})
+        limits = layout_molecule._limits(widths)
+        for r in range(2, n + 1):
+            want = next(x for x in runs if x >= max(widths) and len(layout_molecule._rows(widths, x)) <= r)
+            assert limits(r) == want
+
+
 def test_layout_is_deterministic():
     """the same molecule laid out twice gives the same coordinates
 
@@ -307,6 +338,48 @@ def test_layout_is_deterministic():
             assert got[n] == approx(xy, abs=1e-9)
 
 
+@mark.parametrize('smi', ['CN1CCC23C4C1CC5=C2C(=C(C=C5)O)OC3C(C=C4)O', 'c1ccc2ccccc2c1O'])
+def test_both_runtimes_draw_the_same_shape(smi):
+    """QuickJS and V8 run one bundle: every interatomic distance agrees, though a tie may turn the drawing
+
+    Naphthol is the tie: V8 draws it mirrored, so the coordinates differ and the shape does not.
+    """
+    if not v8.available:
+        skip('neither mini-racer nor py_mini_racer is installed')
+    mol = smiles(smi)
+    was = get_js_runtime()
+    try:
+        set_js_runtime('quickjs')
+        reference = layout_molecule.layout2d(mol, engine='smilesdrawer', force=True)
+        set_js_runtime('v8')
+        plane = layout_molecule.layout2d(mol, engine='smilesdrawer', force=True)
+    finally:
+        set_js_runtime(was)
+    assert plane.keys() == reference.keys()
+    for n in mol:
+        for m in mol:
+            assert dist(plane[n], plane[m]) == approx(dist(reference[n], reference[m]), abs=1e-9)
+
+
+def test_auto_takes_v8_when_it_loads_and_quickjs_otherwise(monkeypatch):
+    was = get_js_runtime()
+    try:
+        set_js_runtime('auto')
+        monkeypatch.setattr(v8, '_ctx', False)
+        assert layout_molecule._js_runtime() is not v8
+        set_js_runtime('v8')
+        with raises(ImportError):
+            smiles('CCO').layout2d(engine='smilesdrawer', force=True)
+    finally:
+        set_js_runtime(was)
+
+
+def test_an_unknown_runtime_is_refused_at_assignment():
+    with raises(ValueError):
+        set_js_runtime('spidermonkey')
+    assert get_js_runtime() in ('auto', 'quickjs', 'v8')
+
+
 def test_engine_survives_many_layouts():
     """the shared context does not accumulate heap across calls
 
@@ -317,7 +390,7 @@ def test_engine_survives_many_layouts():
         skip('quickjs is not installed')
 
     mol = smiles('c1cc2cc3ccc(cc4ccc(cc5ccc(cc1n2)[nH]5)n4)[nH]3')
-    tree, _ = _clean2d_tree(mol)
+    (tree, _), = _clean2d_tree(mol)
 
     ctx(tree, run_gc=False)
     ctx.gc()
@@ -700,13 +773,15 @@ def test_a_layout_short_of_a_point_is_refused_rather_than_mis_assigned():
         return real(tree, run_gc=run_gc)[:-1]
 
     mol = smiles('c1ccccc1')
-    original = layout_molecule.ctx
+    original, runtime = layout_molecule.ctx, get_js_runtime()
     try:
+        set_js_runtime('quickjs')                       # the patched context is QuickJS's
         layout_molecule.ctx = short
         with raises(ImplementationError, match='5 points for 6 atoms'):
             mol.layout2d(engine='smilesdrawer')
     finally:
         layout_molecule.ctx = original
+        set_js_runtime(runtime)
     # and the real engine still answers through the restored name
     assert len(mol.layout2d(engine='smilesdrawer')) == 6
 

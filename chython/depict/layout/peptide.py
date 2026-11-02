@@ -26,7 +26,10 @@
 | bead | a ring system the chain runs through, entry to exit: one step of its tile's entry-exit span, the tile laid \
 along it, mirrored on an inverted vertex; a meta hexagon's three atoms lie on the lattice, the ring on them |
 | level | a chain of beads or arcs turns down, up, down at its other vertices: it runs level, never diagonal |
-| bridge | the amide between two backbone rings is `BRIDGE` long, along its lattice direction |
+| ends | a cross-link end off the backbone has its terminal neighbours mirrored across its other bond when that opens \
+its widest gap toward its partner, so the leg leaves straight |
+| bridge | the amide between two backbone rings is `L`, or `BRIDGE` long along its lattice direction when at `L` a \
+bond within `2 L` of it crosses or is left long and the long one does better: Pro-Pro-Pro stretches, Pro-Pro does not |
 | side chains | acyclic atoms walked natively at 120 deg; ring systems are engine tiles, cached by form |
 | freedoms | reflection, torsion flips at depth 2/3, then a stretched root bond -- never a rotation |
 | pins | the controller's `peptide_search` pins vertices up or down: near a stretched anchor, a cross-link's two hosts \
@@ -42,6 +45,7 @@ The plane it returns is complete; cross-links are drawn by `depict.peptide` from
 from collections import deque
 from math import atan2, cos, degrees, hypot, pi, radians, sin
 
+from ...core.chains import BEAD
 from ...core.monomers import _bfs_path, _neighbors
 from ...core.wedge import cis_trans_frame, cis_trans_parity
 
@@ -242,17 +246,7 @@ class _Scene:
 
     # collisions
     def bad(self, pts, skip):
-        ends = list(pts.values())                    # a new bond to a placed atom reaches past the points
-        ends.extend(self.pos[y] for x in pts for y in self.mol.neighbors_of(x) if y in self.pos and y not in pts)
-        xs = [p[0] for p in ends]
-        ys = [p[1] for p in ends]
-        (i0, j0), (i1, j1) = self._cell((min(xs) - L, min(ys) - L)), self._cell((max(xs) + L, max(ys) + L))
-        atoms, bonds = set(), set()
-        for i in range(i0, i1 + 1):
-            for j in range(j0, j1 + 1):
-                atoms.update(self._atoms.get((i, j), ()))
-                bonds.update(self._bonds.get((i, j), ()))
-        n = self._count(pts, skip, atoms, bonds)
+        n = self._count(pts, skip)
         if self._check is not None:
             self._check(n, self._brute(pts, skip))
         return n
@@ -260,9 +254,10 @@ class _Scene:
     def _brute(self, pts, skip):
         pos = self.pos
         bonds = {b for x in pos for b in self._placed_bonds(x)}
-        return self._count(pts, skip, set(pos), bonds)
+        return self._count_all(pts, skip, set(pos), bonds)
 
-    def _count(self, pts, skip, atoms, bonds):
+    def _count_all(self, pts, skip, atoms, bonds):
+        """`_count` by every pair: the reference the grid is checked against."""
         mol, pos = self.mol, self.pos
         atoms = [(y, pos[y]) for y in atoms if y not in skip and y not in pts]
         old = [tuple(b) for b in bonds if not b & pts.keys()]
@@ -286,6 +281,50 @@ class _Scene:
                     n += 1
         for x, p in pts.items():
             for c, d in old:
+                if x != c and x != d and _seg_dist(p, pos[c], pos[d]) < ON_BOND:
+                    n += 1
+        return n
+
+    def _count(self, pts, skip):
+        """The collisions `pts` makes with the placed atoms and bonds, each test asked of the cells near it only:
+        every threshold is under the cell's `L`, so an atom within reach of a point lies in its 3 x 3 cells, of a
+        bond in the cells of its box grown by one, and two crossing bonds share a cell."""
+        mol, pos = self.mol, self.pos
+        new = [(x, y) for x in pts for y in mol.neighbors_of(x) if frozenset((x, y)) not in self.links and
+               (y in pts and x < y or y in pos and y not in pts)]
+        cell = self._cell
+
+        def near_atoms(cells):
+            return {y for c in cells for y in self._atoms.get(c, ()) if y not in skip and y not in pts}
+
+        def near_bonds(cells):
+            return {b for c in cells for b in self._bonds.get(c, ()) if not b & pts.keys()}
+
+        def around(p):
+            i, j = cell(p)
+            return [(i + di, j + dj) for di in (-1, 0, 1) for dj in (-1, 0, 1)]
+        n = 0
+        for p in pts.values():
+            for q in self.slots.values():
+                if hypot(p[0] - q[0], p[1] - q[1]) < CLOSE:
+                    n += 1
+            for y in near_atoms(around(p)):
+                q = pos[y]
+                if hypot(p[0] - q[0], p[1] - q[1]) < CLOSE:
+                    n += 1
+        for a, b in new:
+            pa, pb = pts[a], pts[b] if b in pts else pos[b]
+            box = self._bond_cells(pa, pb)
+            for c, d in map(tuple, near_bonds(box)):
+                if len({a, b, c, d}) == 4 and _cross(pa, pb, pos[c], pos[d]):
+                    n += 1
+            (i0, j0), (i1, j1) = box[0], box[-1]
+            grown = [(i, j) for i in range(i0 - 1, i1 + 2) for j in range(j0 - 1, j1 + 2)]
+            for y in near_atoms(grown):
+                if y != a and y != b and _seg_dist(pos[y], pa, pb) < ON_BOND:
+                    n += 1
+        for x, p in pts.items():
+            for c, d in map(tuple, near_bonds(around(p))):
                 if x != c and x != d and _seg_dist(p, pos[c], pos[d]) < ON_BOND:
                     n += 1
         return n
@@ -387,11 +426,13 @@ def _kid_directions(k, d, s, linear):
     return [(d + 180 + 360 * (q + 1) / (k + 1), 1) for q in range(k)]
 
 
-def _group_tile(mol, group, a, rings, tiles, cis_trans, rank):
+def _group_tile(mol, group, a, rings, tiles, cis_trans, rank, linked=frozenset()):
     """`group` hung on `a` in a local frame: `a` at the origin, the slot axis along +x.
 
     Acyclic atoms walk the lattice at 120 degrees (straight through an sp atom); a ring system is its
-    tile, mapped rigidly onto the bond that enters it.  Returns `(points, spiro)`, `spiro` when the
+    tile, mapped rigidly onto the bond that enters it.  A cross-link end of `linked` counts its link as one more
+    child, the last slot left free for the leg: a gem-dimethyl link end takes the cross, its methyls a right angle
+    apart, not three bonds at 120.  Returns `(points, spiro)`, `spiro` when the
     anchor itself belongs to a ring system of the group.
     """
     pts, order, stack = {a: (0., 0.)}, {a: 0}, []
@@ -448,7 +489,10 @@ def _group_tile(mol, group, a, rings, tiles, cis_trans, rank):
             continue
         size = {y: len(_subtree(mol, y, group, pts.keys() | {x})) for y in kids}
         kids.sort(key=lambda y: (-size[y], rank[y]))
-        for y, (dy, sy) in zip(kids, _kid_directions(len(kids), d, s, mol.hybridization_of(x) == 3)):
+        dirs = _kid_directions(len(kids) + (x in linked), d, s, mol.hybridization_of(x) == 3)
+        if x in linked:
+            dirs = dirs[:len(kids)]                     # the last slot left for the leg: no two kids opposite
+        for y, (dy, sy) in zip(kids, dirs):
             stack.append((x, y, dy, sy))
 
     # a stated cis/trans bond reads back from the walk, or its far side is reflected about the bond
@@ -683,15 +727,24 @@ def _chain_dirs(ctx, dirs, inv):
     return out[:len(dirs)]
 
 
-def _hexagon(sc, path, mid):
-    """Commit a hexagon's other atoms, `path[1:-1]` from `path[0]` round to `path[-1]`, on the three placed atoms
-    `path[0]`, `mid`, `path[-1]`: its centre one bond from `mid` toward the other two."""
+def _arc(sc, path, mid):
+    """Commit a ring's other atoms, `path[1:-1]` from `path[0]` round to `path[-1]`, on the three placed atoms
+    `path[0]`, `mid`, `path[-1]`: on the regular polygon whose diagonal over them is the chord `path[0]`-`path[-1]`,
+    away from `mid`.  A hexagon's is the lattice's own, of side `L`; a thiazole's the regular pentagon on that
+    chord, its three sides `0.88 L`, rather than a pentagon of `L` and one long bond."""
     (ax, ay), (mx, my), (bx, by) = sc.pos[path[0]], sc.pos[mid], sc.pos[path[-1]]
+    n, k = len(path) + 1, len(path) - 1                 # the ring's size, and the sides the path spans
+    c = hypot(bx - ax, by - ay)
+    r = c / (2 * sin(k * pi / n))
     ux, uy = _norm((ax + bx - 2 * mx, ay + by - 2 * my))
-    cx, cy = mx + ux * L, my + uy * L
-    ta, tm = atan2(ay - cy, ax - cx), atan2(my - cy, mx - cx)
-    step = pi / 3 if (ta - tm) % (2 * pi) < pi else -pi / 3      # away from `mid`
-    sc.commit({x: (cx + L * cos(ta + step * j), cy + L * sin(ta + step * j)) for j, x in enumerate(path[1:-1], 1)})
+    h = (r * r - c * c / 4) ** .5 if r * r > c * c / 4 else 0.
+    if 2 * k < n:
+        h = -h
+    cx, cy = (ax + bx) / 2 + ux * h, (ay + by) / 2 + uy * h
+    ta, tb = atan2(ay - cy, ax - cx), atan2(by - cy, bx - cx)
+    step = min((2 * pi / n, -2 * pi / n),             # the way round that ends on `path[-1]` in `k` steps
+               key=lambda d: abs((ta + k * d - tb + pi) % (2 * pi) - pi))
+    sc.commit({x: (cx + r * cos(ta + step * j), cy + r * sin(ta + step * j)) for j, x in enumerate(path[1:-1], 1)})
 
 
 def _place_bead(sc, tile, system, a, b, flip):
@@ -712,6 +765,45 @@ def _place_bead(sc, tile, system, a, b, flip):
             vx, vy = 2 * k * ux - vx, 2 * k * uy - vy
         pts[x] = (px + c * vx - s * vy, py + s * vx + c * vy)
     sc.commit(pts)
+
+
+def _bridged(mol, atoms, a, b):
+    """The ring system of up to `BEAD` atom rings within `atoms` holding the bond `a`-`b`, when two of its rings share
+    more than two atoms, a bridged system no polygon on that edge draws; else None."""
+    rings = [set(r) for r in mol.sssr if len(r) <= BEAD and set(r) <= atoms]
+    system, held = set(), []
+    for r in rings:
+        if {a, b} <= r:
+            system |= r
+            held.append(r)
+    grown = True
+    while grown:
+        grown = False
+        for r in rings:
+            if r not in held and r & system:
+                system |= r
+                held.append(r)
+                grown = True
+    if any(len(r & q) > 2 for k, r in enumerate(held) for q in held[k + 1:]):
+        return frozenset(system)
+    return None
+
+
+def _place_cage(sc, tile, system, a, b, out):
+    """`_place_bead` of a bridged `system` on its placed edge `a`-`b`: of the tile and its mirror, the one making
+    fewer collisions, then the one whose centre lies on the side of `out`."""
+    best = None
+    for flip in (False, True):
+        saved = {x: sc.pos[x] for x in system if x in sc.pos}
+        _place_bead(sc, tile, system, a, b, flip)
+        pts = {x: sc.pos[x] for x in system if x not in saved}
+        sc.drop(list(pts))
+        cx = sum(p[0] for p in pts.values()) / len(pts) - sc.pos[a][0]
+        cy = sum(p[1] for p in pts.values()) / len(pts) - sc.pos[a][1]
+        key = (sc.bad(pts, {a, b}), cx * out[0] + cy * out[1] < 0)
+        if best is None or key < best[0]:
+            best = key, flip
+    _place_bead(sc, tile, system, a, b, best[1])
 
 
 def _place_groups(sc, ctx, order, skip=frozenset()):
@@ -748,7 +840,8 @@ def _place_groups(sc, ctx, order, skip=frozenset()):
         sc.slots[q] = (sc.pos[a][0] + L * d[0], sc.pos[a][1] + L * d[1])
     for q, (_, _, comp, a, d) in enumerate(jobs):
         del sc.slots[q]
-        tile, spiro = _group_tile(mol, comp, a, ctx.rings, ctx.tiles, ctx.cis_trans, rank)
+        tile, spiro = _group_tile(mol, comp, a, ctx.rings, ctx.tiles, ctx.cis_trans, rank,
+                                  frozenset(x for link in ctx.peptide.crosslinks for x in link))
         bad += _place(sc, _Group(comp, tile, spiro, () if spiro else _torsions(mol, comp, a, rank), a, d))
     return bad, progress or bool(jobs)
 
@@ -787,9 +880,9 @@ class _Context:
     """What survives across re-layouts: the segmentation, ring systems, the tile cache, stated cis/trans, and
     each layout by its inverted vertices, and the canonical rank ordering every choice."""
     __slots__ = ('mol', 'rank', 'peptide', 'rings', 'tiles', 'cis_trans', 'check', 'done', 'groups', 'frame',
-                 'solved', 'steps', 'bead_of', 'turns')
+                 'solved', 'steps', 'bead_of', 'turns', 'short')
 
-    def __init__(self, mol, peptide, tile, check):
+    def __init__(self, mol, peptide, tile, check, short=False):
         self.mol = mol
         self.rank = mol.canonical_order()
         self.peptide = peptide
@@ -802,6 +895,7 @@ class _Context:
         self.frame = None
         self.solved = {}
         self.steps = self.bead_of = self.turns = None    # bead steps and turns, filled by `_bead_steps`
+        self.short = short                           # every bridge at `L`
 
 
 def frame(ctx):
@@ -820,8 +914,9 @@ def frame(ctx):
             ks = sorted(idx[a] for a in att)
             if len(ks) == 2 and ks[1] - ks[0] == 1 and ks[0] in peptide.beads:
                 ring_jobs.append((comp, bb[ks[0]], bb[ks[1]]))     # a bead: its tile, no side constraint
-            elif len(ks) == 2 and ks[1] - ks[0] == 2 and peptide.residues[i].kind == 'arc':
-                ring_jobs.append((comp, bb[ks[0]], bb[ks[1]]))     # an arc: the hexagon on its three atoms
+            elif len(ks) == 2 and ks[1] - ks[0] == 2:
+                ring_jobs.append((comp, bb[ks[0]], bb[ks[1]]))     # an arc: the ring on its three atoms, a meta
+                # hexagon's or an azole's that a thiazole amino acid puts on the backbone
             elif len(ks) == 2 and ks[1] - ks[0] == 1:
                 ring_jobs.append((comp, bb[ks[0]], bb[ks[1]]))
                 pairs.append(ks)
@@ -829,7 +924,7 @@ def frame(ctx):
                     differ.add((ks[0], ks[1]))
                 same.update(p for p in ((ks[0] - 1, ks[0]), (ks[1], ks[1] + 1)) if p[0] >= 1 and p[1] <= n - 2)
     starts = {k0 for k0, _ in pairs}
-    bridges = {k1 + 1 for _, k1 in pairs if k1 + 2 in starts}
+    bridges = set() if ctx.short else {k1 + 1 for _, k1 in pairs if k1 + 2 in starts}
     same -= {p for k in bridges for p in ((k - 1, k), (k, k + 1))}     # a bridge clears its carbonyl
     ctx.frame = differ, same, ring_jobs, bridges, idx, links
     return ctx.frame
@@ -889,12 +984,127 @@ def peptide_layout(mol, peptide, tile, *, choose=None, _check=None):
     :param tile: `tile(sub) -> {atom: (x, y)}` at mean bond `L`, for ring systems and leftover atoms.
     :param choose: `choose(ctx) -> inverted vertices`; the controller's `peptide_search` by default.
     """
-    ctx = _Context(mol, peptide, tile, _check)
     if choose is None:
         from .search import peptide_search
         choose = peptide_search
-    inv = choose(ctx)
-    return None if inv is None else draw(ctx, frozenset(inv))[0]
+    bridged = _Context(mol, peptide, tile, _check)
+    bridges = frame(bridged)[3]
+    best = None
+    for ctx in (_Context(mol, peptide, tile, _check, True), bridged) if bridges else (bridged,):
+        inv = choose(ctx)
+        if inv is None:
+            continue
+        plane, cost = draw(ctx, frozenset(inv))
+        if plane is None:
+            continue
+        key = (_tangled(mol, plane, peptide),) + tuple(cost)
+        if best is None or key < best[1]:
+            best = plane, key, ctx, frozenset(inv)
+        bb = peptide.backbone
+        ends = [plane[bb[k + d]] for k in bridges for d in (-1, 0, 1) if 0 <= k + d < len(bb)]
+        near = {x for x, p in plane.items() if any(hypot(p[0] - q[0], p[1] - q[1]) < 2 * L for q in ends)}
+        if not _tangled(mol, plane, peptide, near):
+            break                                   # at `L` every bridge is clear: nothing to stretch for
+    if best is None:
+        return None
+    plane = _polish(mol, peptide, *best)
+    _open_ends(mol, plane, peptide)
+    return plane
+
+
+def _polish(mol, peptide, plane, key, ctx, inv):
+    """The chosen drawing with one backbone vertex pair inverted at a time while that collides less and tangles no
+    more: the search's pins and let-go pairs never reach such a step, a hairpin's carbonyl left stretched into a
+    neighbour's ring.  A chain of beads keeps the directions its beads set."""
+    while not peptide.beads:
+        found = None
+        for t in toggles(ctx, inv):
+            got, cost = draw(ctx, t)
+            if got is None or cost[0] >= key[1]:
+                continue
+            k = (_tangled(mol, got, peptide),) + tuple(cost)
+            if k[0] <= key[0] and (found is None or (k, sorted(t)) < found[0]):
+                found = (k, sorted(t)), got, t
+        if found is None:
+            return plane
+        (key, _), plane, inv = found
+    return plane
+
+
+def _bfs_order(mol, x, targets, links):
+    """The atoms of `targets` breadth-first from `x`, never across a link."""
+    seen, queue = {x}, deque([x])
+    while queue:
+        y = queue.popleft()
+        if y in targets:
+            yield y
+        for z in mol.neighbors_of(y):
+            if z not in seen and frozenset((y, z)) not in links:
+                seen.add(z)
+                queue.append(z)
+
+
+def _open_ends(mol, plane, peptide):
+    """For each cross-link end off the backbone, its terminal neighbours mirrored across the bond to its one other
+    neighbour, in place, when that turns the end's widest gap toward its bar, on the end's side of its backbone atom
+    and leaning toward the partner, and lands no atom within half a bond of another: the end's methyl moved aside so
+    its leg leaves straight for the bar."""
+    links = {frozenset(x) for x in peptide.crosslinks}
+    on = set(peptide.backbone)
+    for a, b in peptide.crosslinks:
+        for x, y in ((a, b), (b, a)):
+            if x in on:
+                continue
+            ends = [t for t in mol.neighbors_of(x) if t != y and len(mol.neighbors_of(t)) == 1]
+            inner = [t for t in mol.neighbors_of(x) if t != y and t not in ends]
+            if not ends or len(inner) != 1:
+                continue
+            (p,) = inner
+            (px, py), (xx, xy) = plane[p], plane[x]
+            ux, uy = xx - px, xy - py
+            d = hypot(ux, uy)
+            if d < 1e-9:
+                continue
+            ux, uy = ux / d, uy / d
+            host = next((z for z in _bfs_order(mol, x, on, links)), None)
+            side = 1. if host is None or xy >= plane[host][1] else -1.     # the bar is on the end's side
+            lean = .3 if plane[y][0] > xx else -.3                      # leaning toward the partner
+
+            def mirror(q):
+                vx, vy = q[0] - px, q[1] - py
+                k = vx * ux + vy * uy
+                return px + 2 * k * ux - vx, py + 2 * k * uy - vy
+
+            def gap(pos):
+                angs = sorted(atan2(pos[t][1] - xy, pos[t][0] - xx) for t in mol.neighbors_of(x) if t != y)
+                gaps = [((angs[(i + 1) % len(angs)] - angs[i]) % (2 * pi), angs[i]) for i in range(len(angs))]
+                g, lo = max(gaps)
+                t = lo + g / 2
+                return cos(t) * lean + sin(t) * side
+            moved = {t: mirror(plane[t]) for t in ends}
+            if gap({**plane, **moved}) <= gap(plane) + 1e-6:
+                continue
+            if any(hypot(q[0] - plane[z][0], q[1] - plane[z][1]) < L / 2 for q in moved.values() for z in plane
+                   if z not in moved and z != x):
+                continue
+            plane.update(moved)
+
+
+def _tangled(mol, plane, peptide, near=None):
+    """Bonds of `mol`, cross-links left out, crossing another or longer than `1.15 L`, a bridge of the backbone
+    excepted, in `plane`; of those with an atom in `near` alone when given."""
+    links = {frozenset(x) for x in peptide.crosslinks}
+    backbone = {frozenset(x) for x in zip(peptide.backbone, peptide.backbone[1:])}
+    bonds = [(b.n, b.m) for b in mol.bonds() if frozenset((b.n, b.m)) not in links and
+             (near is None or b.n in near or b.m in near)]
+    n = 0
+    for a, b in bonds:
+        d = hypot(plane[a][0] - plane[b][0], plane[a][1] - plane[b][1])
+        n += d > 1.15 * L and not (frozenset((a, b)) in backbone and abs(d - BRIDGE) < .01)
+    for i, (a, b) in enumerate(bonds):
+        for c, e in bonds[i + 1:]:
+            n += len({a, b, c, e}) == 4 and _cross(plane[a], plane[b], plane[c], plane[e])
+    return n
 
 
 def solve(ctx, pins=(), relax=()):
@@ -1050,7 +1260,7 @@ def _poses(mol, placed, pos, g, moved, end, lattice=False):
     """`(cost, points, end point, stretch)` of the atoms `moved`, at `pos`, for every turn, twist, reflection and
     stretch of `g` about its anchor, the anchor staying put; the cost counts a turn of 60 deg, a twist of 60 deg
     and a stretch of `L` as one each. With `lattice`, only the turns onto a lattice slot, untwisted and
-    unstretched: the anchor's angles stay at 120 degrees."""
+    unstretched, and none within 120 degrees of another drawn bond of the anchor: its angles stay at 120 degrees."""
     ax, ay = placed[g.anchor]
     root = next(x for x in mol.neighbors_of(g.anchor) if x in g.atoms)
     rx, ry = pos[root]
@@ -1063,6 +1273,10 @@ def _poses(mol, placed, pos, g, moved, end, lattice=False):
                                       for x, (vx, vy) in rel.items()}
         for tilt in (0., pi / 3, -pi / 3) if lattice else TILTS:
             dx, dy = _rot((ux, uy), tilt)
+            if lattice and tilt and any(dx * (placed[y][0] - ax) + dy * (placed[y][1] - ay) >
+                                        -.45 * hypot(placed[y][0] - ax, placed[y][1] - ay)
+                                        for y in mol.neighbors_of(g.anchor) if y in placed and y not in moved):
+                continue                                # a slot within 120 degrees of a drawn bond is no slot
             for twist in (0.,) if lattice else TWISTS:
                 c, s = cos(tilt + twist), sin(tilt + twist)
                 for reach in (0.,) if lattice else REACHES + SHIFTS:
@@ -1162,12 +1376,16 @@ def _draw(ctx, inv, bridges, ring_jobs, idx, links):
         if abs(idx[a] - idx[b]) == 2:
             path = _ring_path(mol, a, b, comp, rank)
             if path:
-                _hexagon(sc, path, bb[(idx[a] + idx[b]) // 2])
+                _arc(sc, path, bb[(idx[a] + idx[b]) // 2])
             continue
         if min(idx[a], idx[b]) in peptide.beads:
             k = min(idx[a], idx[b])
             system = ctx.peptide.residues[ctx.bead_of[k]].atoms
             _place_bead(sc, ctx.tiles(system), system, a, b, k in inv)
+            continue
+        system = _bridged(mol, comp | {a, b}, a, b)
+        if system is not None:                          # a cage on the edge: its tile, the shape's projection
+            _place_cage(sc, ctx.tiles(system), system, a, b, sc.outward(b if idx[a] == 0 else a))
             continue
         path = _ring_path(mol, a, b, comp, rank)
         if path:
@@ -1218,7 +1436,8 @@ def _draw(ctx, inv, bridges, ring_jobs, idx, links):
 
 
 def _lost(mol, peptide, plane, idx, links, rank):
-    """Links whose two ends leave the backbone on different sides, or level with it: no bracket takes them."""
+    """Links whose two ends leave the backbone on different sides, or level with it: no bracket takes them.  An end on
+    the backbone leaves on its free side, opposite its drawn bonds, as the router sends its leg."""
     lost = 0
     for q, (a, b) in enumerate(peptide.crosslinks):
         if peptide.head_to_tail and q == len(peptide.crosslinks) - 1:
@@ -1226,6 +1445,15 @@ def _lost(mol, peptide, plane, idx, links, rank):
         ka, kb = _host(mol, a, idx, links, rank), _host(mol, b, idx, links, rank)
         if ka is None or kb is None:
             continue
-        sa, sb = (plane[x][1] - plane[peptide.backbone[k]][1] for x, k in ((a, ka), (b, kb)))
+        sa, sb = (_leaves(mol, plane, x, peptide.backbone[k], links) for x, k in ((a, ka), (b, kb)))
         lost += not (sa * sb > 0 and min(abs(sa), abs(sb)) > 1e-3)
     return lost
+
+
+def _leaves(mol, plane, x, host, links):
+    """The height `x` leaves its backbone atom `host` toward: its own above or below `host`, or for a backbone atom,
+    the side away from its drawn bonds."""
+    if x != host:
+        return plane[x][1] - plane[host][1]
+    return -sum(plane[y][1] - plane[x][1] for y in mol.neighbors_of(x)
+                if y in plane and frozenset((x, y)) not in links)

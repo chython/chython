@@ -17,7 +17,7 @@
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
 """The peptide layout: the backbone's moves, the placement invariants, the collision index, the tile cache,
-and the `layout2d(peptide=)` switch."""
+and the `layout2d(chain=)` switch."""
 from math import atan2, degrees, hypot
 
 import pytest
@@ -26,7 +26,7 @@ from chython.core import ReactionContainer, smiles
 from chython.core.monomers import monomers
 from chython.core.test.peptides import CASES, PEPTIDES, explicit, molecule, peptide
 from chython.core.wedge import cis_trans_parity
-from chython.depict import get_clean2d_engine, get_peptide_layout, set_peptide_layout
+from chython.depict import get_chain_layout, get_clean2d_engine, set_chain_layout, set_clean2d_engine
 from chython.depict.layout.molecule import _engine_layout, _chain_plane, _rescale_plane, layout2d
 from chython.depict.layout.peptide import (L, ROUTE, _backbone_dirs, _cross, _ring_systems, _seg_dist, peptide_layout,
                                           toggles, valid)
@@ -36,11 +36,14 @@ from chython.depict.peptide import routed_links
 
 @pytest.fixture(autouse=True)
 def _chains():
-    """Chain layout is off by default; the layout under test here is the chain one."""
-    was = get_peptide_layout()
-    set_peptide_layout(True)
+    """Chain layout is off by default and only the native engine reads it; the layout under test here is the
+    chain one."""
+    was, engine = get_chain_layout(), get_clean2d_engine()
+    set_chain_layout(True)
+    set_clean2d_engine('chython')
     yield
-    set_peptide_layout(was)
+    set_chain_layout(was)
+    set_clean2d_engine(engine)
 
 
 LAYOUTS = PEPTIDES + ('tetrapeptide', 'Ac3c', 'branched', 'lactam', 'triazole staple', 'alkene staple',
@@ -206,9 +209,10 @@ def test_proline_is_a_regular_pentagon(name):
             assert min(t, 360 - t) == pytest.approx(108, abs=1e-6)
 
 
-@pytest.mark.parametrize('name, count', [('Pro-Pro', 1), ('Pro3', 2), ('Pro4', 3), ('collagen', 3)])
+@pytest.mark.parametrize('name, count', [('Pro-Pro', 0), ('Pro3', 2), ('Pro4', 3), ('collagen', 0)])
 def test_consecutive_prolines_bridge(name, count):
-    """The amide between two backbone rings is 2 L on its lattice direction; the chain stays level."""
+    """The amide between two backbone rings is `L`, and `2 L` on its lattice direction only where `L` tangles: two
+    prolines lie side by side, three in a row stretch; the chain stays level."""
     mol, pep, plane, _ = _layout(name)
     bb = pep.backbone
     long = [(a, b) for a, b in zip(bb, bb[1:])
@@ -263,21 +267,32 @@ def _is_lattice(mol, plane):
 def test_switch():
     """Off: the engine plane; on for one call or for the process."""
     mol = molecule('oxytocin')
-    set_peptide_layout(False)
+    set_chain_layout(False)
     assert not _is_lattice(mol, layout2d(mol, force=True))
-    assert _is_lattice(mol, layout2d(mol, force=True, peptide=True))
-    set_peptide_layout(True)
+    assert _is_lattice(mol, layout2d(mol, force=True, chain=True))
+    set_chain_layout(True)
     try:
         assert _is_lattice(mol, layout2d(mol, force=True))
-        assert not _is_lattice(mol, layout2d(mol, force=True, peptide=False))
+        assert not _is_lattice(mol, layout2d(mol, force=True, chain=False))
     finally:
-        set_peptide_layout(False)
+        set_chain_layout(False)
+
+
+@pytest.mark.parametrize('engine', ['smilesdrawer', 'rdkit'])
+def test_other_engines_ignore_the_switch(engine):
+    """Chain layout is the native engine's: any other lays the whole molecule out itself, switch on or off."""
+    if engine == 'rdkit':
+        pytest.importorskip('rdkit')
+    mol = molecule('oxytocin')
+    assert layout2d(mol, engine=engine, force=True, chain=True) == layout2d(mol, engine=engine, force=True,
+                                                                             chain=False)
+    assert not _is_lattice(mol, layout2d(mol, engine=engine, force=True, chain=True))
 
 
 def test_off_by_default():
     import subprocess
     import sys
-    out = subprocess.run([sys.executable, '-c', 'import chython.depict as d; print(d.get_peptide_layout())'],
+    out = subprocess.run([sys.executable, '-c', 'import chython.depict as d; print(d.get_chain_layout())'],
                          capture_output=True, text=True, check=True).stdout
     assert out.strip() == 'False'
 
@@ -285,20 +300,20 @@ def test_off_by_default():
 def test_threshold():
     """Three residues are no peptide: the engine plane, exactly."""
     mol = molecule('tripeptide')
-    assert layout2d(mol, force=True, peptide=True) == layout2d(mol, force=True, peptide=False)
-    assert _is_lattice(molecule('tetrapeptide'), layout2d(molecule('tetrapeptide'), force=True, peptide=True))
+    assert layout2d(mol, force=True, chain=True) == layout2d(mol, force=True, chain=False)
+    assert _is_lattice(molecule('tetrapeptide'), layout2d(molecule('tetrapeptide'), force=True, chain=True))
 
 
 @pytest.mark.parametrize('flag', ['yes', 1, None])
 def test_set_rejects_non_bool(flag):
     with pytest.raises(TypeError):
-        set_peptide_layout(flag)
+        set_chain_layout(flag)
 
 
 def test_salt():
     """A counter-ion is its own component, placed right of the peptide."""
     mol = smiles(CASES['oxytocin'] + '.OC(=O)C(F)(F)F')
-    plane = layout2d(mol, force=True, peptide=True)
+    plane = layout2d(mol, force=True, chain=True)
     assert set(plane) == set(mol)
     pep, acid = sorted(mol.connected_components, key=len, reverse=True)
     assert min(plane[x][0] for x in acid) > max(plane[x][0] for x in pep) + .8
@@ -307,13 +322,13 @@ def test_salt():
 
 def test_facade_forwards():
     import chython
-    chython.peptide_layout = False
+    chython.chain_layout = False
     try:
-        assert get_peptide_layout() is False and chython.chain_layout is False
+        assert get_chain_layout() is False
     finally:
-        chython.peptide_layout = True
+        chython.chain_layout = True
     with pytest.raises(TypeError):
-        chython.peptide_layout = 'off'
+        chython.chain_layout = 'off'
 
 
 def test_explicit_hydrogens():
@@ -340,42 +355,27 @@ def test_a_ring_in_the_backbone_path_goes_to_the_engine():
 
 def test_per_call_switch_rejects_non_bool():
     with pytest.raises(TypeError):
-        layout2d(molecule('oxytocin'), force=True, peptide='no')
+        layout2d(molecule('oxytocin'), force=True, chain='no')
 
 
 def test_container_method_follows_switch():
-    mol = molecule('leu-enkephalin')
+    mol = molecule('oxytocin')                     # the cascade alone draws a linear peptide on the lattice too
     mol.clean2d()
     assert _is_lattice(mol, mol.coordinates())
-    assert not _is_lattice(mol, mol.layout2d(force=True, peptide=False))
-    mol.clean2d(force=True, peptide=False)
+    assert not _is_lattice(mol, mol.layout2d(force=True, chain=False))
+    mol.clean2d(force=True, chain=False)
     assert not _is_lattice(mol, mol.coordinates())
 
 
 def test_reaction_forwards_switch():
-    """A reaction's members follow `peptide=` like a molecule does."""
-    rxn = ReactionContainer([molecule('leu-enkephalin')], [molecule('oxytocin')])
+    """A reaction's members follow `chain=` like a molecule does."""
+    rxn = ReactionContainer([molecule('gramicidin S')], [molecule('oxytocin')])
     planes, _, _ = rxn.layout2d(force=True)
     assert all(_is_lattice(m, p) for m, p in zip(rxn.molecules(), planes))
-    planes, _, _ = rxn.layout2d(force=True, peptide=False)
+    planes, _, _ = rxn.layout2d(force=True, chain=False)
     assert not any(_is_lattice(m, p) for m, p in zip(rxn.molecules(), planes))
-    rxn.clean2d(force=True, peptide=False)
+    rxn.clean2d(force=True, chain=False)
     assert not any(_is_lattice(m, m.coordinates()) for m in rxn.molecules())
-
-
-@pytest.mark.parametrize('engine', ['smilesdrawer', 'rdkit', 'cdk', 'obabel', 'indigo'])
-def test_engine_independence(engine):
-    """Only ring tiles come from the engine, so the invariants hold whichever lays them out."""
-    try:
-        _engine_layout(smiles('c1ccccc1C'), engine)
-    except Exception as e:                                  # the toolkit is absent
-        pytest.skip(f'{engine}: {e}')
-    for name in ('semaglutide', 'linaclotide'):
-        mol = molecule(name)
-        pep = monomers(mol)
-        plane = layout2d(mol, engine=engine, force=True)
-        assert _audit(mol, pep, plane) == {'close': 0, 'cross': 0, 'on_bond': 0, 'long': 0,
-                                           'angle': pytest.approx(0, abs=1)}, name
 
 
 # constitutions of Ser-Leu-Ser-Asn (PubChem CID 18741409) and gramicidin S (CID 71777)
@@ -389,7 +389,7 @@ def test_layout_is_blind_to_atom_order(kind):
     """Random-order re-reads of one peptide lay out as one drawing: every choice goes by canonical rank."""
     mol = smiles(BLIND[kind])
     assert monomers(mol) is not None
-    assert perm(mol, lambda m: layout2d(m, engine='chython', force=True, peptide=True)) == 0
+    assert perm(mol, lambda m: layout2d(m, engine='chython', force=True, chain=True)) == 0
 
 
 # PubChem 14969
@@ -427,12 +427,12 @@ def test_a_link_end_whose_partner_is_not_drawn_yet_keeps_its_leaves():
     from chython.depict.layout.molecule import layout2d
     mol = smiles('CC1=C(C(=C(C=C1)C(=O)NC(C(C)OC(=O)C(C(C)C)N(C)C(=O)OC(C)(C)C)C(=O)N[C@H](C(C)C)C(=O)N2CCCC2C(=O)'
                  'N(CCC(=O)OC)CC(=O)OC(C)(C)C)[N+](=O)[O-])OCC3=CC=CC=C3')       # pubchem 14845251
-    plane = layout2d(mol, engine='chython', force=True, peptide=True)
+    plane = layout2d(mol, engine='chython', force=True, chain=True)
     assert set(plane) == set(mol)
 
 
 def test_a_cyclodextrin_lays_out_as_a_chain_of_regular_beads():
-    from chython.core.chains import perceive
+    from chython.core.chains import Chain, perceive
     from chython.core.test.test_chains import ALPHA_CD
     from chython.depict.peptide import _on_lattice
     mol = smiles(ALPHA_CD)
@@ -454,7 +454,7 @@ def test_a_chain_the_lattice_refuses_falls_back(monkeypatch):
 
 
 def test_a_calixarene_zigzags_through_three_atoms_of_each_ring():
-    from chython.core.chains import perceive
+    from chython.core.chains import Chain, perceive
     from chython.core.test.test_chains import CALIX4
     from chython.depict.peptide import _on_lattice
     mol = smiles(CALIX4)
@@ -470,7 +470,7 @@ def test_a_calixarene_zigzags_through_three_atoms_of_each_ring():
 
 @pytest.mark.parametrize('name', ['alpha-cd', 'calix4'])
 def test_a_chain_of_beads_runs_level(name):
-    from chython.core.chains import perceive
+    from chython.core.chains import Chain, perceive
     from chython.core.test.test_chains import ALPHA_CD, CALIX4
     mol = smiles({'alpha-cd': ALPHA_CD, 'calix4': CALIX4}[name])
     bb = perceive(mol).backbone
@@ -480,7 +480,7 @@ def test_a_chain_of_beads_runs_level(name):
 
 @pytest.mark.parametrize('name', ['alpha-cd'])
 def test_the_backbone_enters_and_leaves_a_bead_along_its_bisectors(name):
-    from chython.core.chains import perceive
+    from chython.core.chains import Chain, perceive
     from chython.core.test.test_chains import ALPHA_CD, CALIX4
     mol = smiles({'alpha-cd': ALPHA_CD, 'calix4': CALIX4}[name])
     chain = perceive(mol)
@@ -500,3 +500,112 @@ def test_the_backbone_enters_and_leaves_a_bead_along_its_bisectors(name):
 def _angle(plane, x, y):
     from math import atan2, degrees
     return degrees(atan2(plane[y][1] - plane[x][1], plane[y][0] - plane[x][0]))
+
+
+def test_a_thiazole_amino_acid_lies_on_the_backbone_as_an_arc():
+    """Dolastatin 3 (PubChem 9852693): each thiazole puts three atoms on the backbone, its ring the regular pentagon
+    on their chord, so the cyclic peptide lays out on the lattice with no long ring bond."""
+    from chython.depict.layout.molecule import _chain_plane
+    mol = smiles('CC(C)C[C@H]1C(=O)N[C@H](C2=NC(=CS2)C(=O)NCC3=NC(=CS3)C(=O)N[C@H](C(=O)N4CCC[C@H]4C(=O)N1)C(C)C)'
+                 'CCC(=O)N')
+    plane = _chain_plane(mol, 'chython')
+    assert plane is not None and set(plane) == set(mol)
+    assert _is_lattice(mol, plane)
+    for ring in mol.sssr:                       # a thiazole's three free sides share the chord: none left long
+        if len(ring) == 5:
+            sides = [hypot(plane[a][0] - plane[b][0], plane[a][1] - plane[b][1]) for a, b in zip(ring, ring[1:] +
+                                                                                                    ring[:1])]
+            assert max(sides) < 1.1 * L
+
+
+def test_a_link_ends_methyl_steps_aside_for_its_leg():
+    """A cross-link end off the backbone whose methyl sits toward its partner has the methyl mirrored across its
+    other bond: the end's widest gap then faces the partner."""
+    from math import atan2, cos, pi, sin
+    from types import SimpleNamespace
+    from chython.depict.layout.peptide import _open_ends
+    mol = smiles('CCN(C)C')                     # C-C-N(methyl)-partner
+    c1, c2, n, me, partner = sorted(mol)
+    plane = {c1: (-L, -L), c2: (0., -L), n: (0., 0.), me: (L * .87, L * .5), partner: (3 * L, 2 * L)}
+    pep = SimpleNamespace(crosslinks=((n, partner),), backbone=(c1,))
+
+    def facing(pos):
+        angs = sorted(atan2(pos[t][1] - pos[n][1], pos[t][0] - pos[n][0]) for t in (c2, me))
+        g, lo = max(((angs[(i + 1) % 2] - angs[i]) % (2 * pi), angs[i]) for i in range(2))
+        t = lo + g / 2
+        return cos(t) * 3 + sin(t) * 2
+    before = facing(plane)
+    _open_ends(mol, plane, pep)
+    assert plane[me][0] < 0 and facing(plane) > before
+
+
+def test_a_lattice_turn_keeps_its_anchor_at_120_degrees():
+    """Shortening a link, a side chain turns only onto a slot no nearer than 120 degrees to its anchor's other drawn
+    bonds: at a backbone atom of two drawn bonds the group keeps the exterior bisector."""
+    from math import atan2, degrees, sqrt
+    from types import SimpleNamespace
+    from chython.depict.layout.peptide import _poses
+    mol = smiles('CC(C)CC')                     # anchor C2: backbone C1 and C3, side chain C4-C5
+    c1, c2, c3, c4, c5 = sorted(mol)
+    placed = {c1: (-L * sqrt(3) / 2, -L / 2), c2: (0., 0.), c3: (L * sqrt(3) / 2, -L / 2)}
+    pos = {c4: (0., L), c5: (L * sqrt(3) / 2, 1.5 * L)}
+    g = SimpleNamespace(anchor=c2, atoms=frozenset((c4, c5)))
+    for _, pts, _, _ in _poses(mol, placed, pos, g, set(pos), c5, True):
+        t = degrees(atan2(pts[c4][1], pts[c4][0]))
+        for y in (c1, c3):
+            u = degrees(atan2(placed[y][1], placed[y][0]))
+            assert abs((t - u + 180) % 360 - 180) > 119
+
+
+def test_a_gem_dimethyl_link_end_keeps_a_slot_for_its_leg():
+    """DPDPE (PubChem 5311040): a penicillamine carbon ending the disulfide's link has four bonds, the link among them:
+    its methyls a right angle apart, neither opposite the other nor squeezed with the leg into three slots."""
+    from math import atan2, degrees, pi
+    from chython.core.chains import Chain, perceive
+    mol = smiles('CC1(C)SSC(C)(C)[C@@H](C(=O)O)NC(=O)[C@H](Cc2ccccc2)NC(=O)CNC(=O)[C@@H]1NC(=O)[C@@H](N)'
+                 'Cc1ccc(O)cc1')
+    plane = layout2d(mol, engine='chython', force=True, chain=True)
+    ends = [x for link in perceive(mol).crosslinks for x in link
+            if sum(len(mol.neighbors_of(y)) == 1 for y in mol.neighbors_of(x)) == 2]
+    assert ends
+    for x in ends:
+        u, v = (atan2(plane[y][1] - plane[x][1], plane[y][0] - plane[x][0]) for y in mol.neighbors_of(x)
+                if len(mol.neighbors_of(y)) == 1)
+        assert degrees(abs((u - v + pi) % (2 * pi) - pi)) == pytest.approx(90, abs=1)
+
+
+def test_a_bridged_system_on_a_cycle_edge_is_its_tile():
+    """A 14-membered lactam fused on an edge of a 7-oxanorbornene: the chain layout draws the cage as its tile, the
+    engine's projection of the shape, up to a rigid motion, not as a polygon with its bridge left over."""
+    from itertools import combinations
+    from chython.core.chains import Chain, perceive
+    from chython.depict.layout.molecule import _tile_fn
+    from chython.depict.layout.peptide import _Tiles
+    mol = smiles('O=C1NCCCCCCCCCC2C3C=CC(O3)C12')
+    plane = layout2d(mol, engine='chython', force=True, chain=True)
+    chain = perceive(mol)
+    assert isinstance(chain, Chain)
+    cage = frozenset(x for r in mol.sssr if len(r) <= 8 for x in r)
+    tile = _Tiles(mol, _tile_fn('chython'))(cage)
+    for a, b in combinations(sorted(cage - set(chain.backbone)), 2):          # the atoms the tile places
+        drawn = hypot(plane[a][0] - plane[b][0], plane[a][1] - plane[b][1])
+        assert abs(drawn - hypot(tile[a][0] - tile[b][0], tile[a][1] - tile[b][1])) < 1e-6
+
+
+def test_a_colliding_backbone_is_polished_by_vertex_pairs():
+    """Oxytocin handed a backbone one vertex pair off the search's that collides more: the layout inverts pairs back
+    while that collides less, and the drawing comes out with fewer violations than that backbone's own."""
+    from chython.depict.layout.peptide import _Context, draw, toggles
+    from chython.depict.layout.search import peptide_search
+    mol = molecule('oxytocin')
+    pep = monomers(mol)
+    tile = _Tile()
+    ctx = _Context(mol, pep, tile, None)
+    good = frozenset(peptide_search(ctx))
+    floor = draw(ctx, good)[1][0]
+    worse = [t for t in toggles(ctx, good) if draw(ctx, t)[0] is not None and draw(ctx, t)[1][0] > floor]
+    assert worse
+    bad = min(worse, key=sorted)
+    before = sum(v for k, v in _audit(mol, pep, draw(ctx, bad)[0]).items() if k != 'angle')
+    plane = peptide_layout(mol, pep, tile, choose=lambda c: bad)
+    assert sum(v for k, v in _audit(mol, pep, plane).items() if k != 'angle') < before

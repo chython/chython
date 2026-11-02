@@ -20,7 +20,8 @@
 import pytest
 
 from chython.core import smiles
-from chython.depict.layout.cascade import GOLDEN, cascade_layout, covered, drawing_hash, fit, golden
+from chython.depict.layout.cascade import GOLDEN, cascade_layout, covered, drawing_hash, fit, golden, in_ring_angle, \
+    system_drawing
 from chython.depict.layout.primitive import Initial
 from chython.depict.layout.quality import shape
 from chython.depict.layout.score import terms
@@ -86,7 +87,7 @@ def test_every_approved_drawing_is_kept():
     changed = []
     for i, (text, points) in read_library().items():
         mol = smiles(text)
-        plane = layout2d(mol, engine='chython', force=True, peptide=True)          # the review page's drawing
+        plane = layout2d(mol, engine='chython', force=True, chain=True)          # the review page's drawing
         if not same_picture(mol, dict(zip(mol, map(tuple, points))), plane):
             changed.append(i)
     assert not changed, f'{len(changed)} approved drawings changed: {changed[:8]}'
@@ -615,3 +616,166 @@ def test_a_crown_turns_its_oxygens_inward():
     r = {x: ((plane[x][0] - cx) ** 2 + (plane[x][1] - cy) ** 2) ** .5 for x in mol}
     assert max(r[x] for x in mol if mol.atom(x).atomic_symbol == 'O') < \
         min(r[x] for x in mol if mol.atom(x).atomic_symbol == 'C')
+
+
+def test_two_substituents_of_a_ring_atom_keep_their_slots():
+    """17-hydroxyprogesterone: C17's hydroxy and acetyl stay a third of the exterior angle apart; a defect is
+    repaired by stretching or flipping, never by turning one substituent into the other."""
+    from math import atan2, degrees, pi
+    mol = smiles('CC(=O)C1(O)CCC2C3CCC4=CC(=O)CCC4(C)C3CCC21C')
+    c17 = next(x for x in mol if len(mol.neighbors_of(x)) == 4 and
+               any(mol.atom(y).atomic_symbol == 'O' for y in mol.neighbors_of(x)))
+    ac, oh = sorted((y for y in mol.neighbors_of(c17) if not mol.atom(y).in_ring),
+                    key=lambda y: mol.atom(y).atomic_symbol)
+    plane = cascade_layout(mol)
+    a, b = (atan2(plane[y][1] - plane[c17][1], plane[y][0] - plane[c17][0]) for y in (ac, oh))
+    assert degrees(abs((a - b + pi) % (2 * pi) - pi)) == pytest.approx(84, abs=1)
+
+
+def test_a_macrocycles_small_rings_are_regular():
+    """PubChem 10424223: the epoxide and the dihydrofuran on its 14-membered ring are evened like a fused
+    system's rings, the macrocycle taking up the difference."""
+    from math import hypot
+    mol = smiles('C/C/1=C/CC[C@@H]2[C@@H](O2)CC/C(=C/[C@H]3C(=C(CO3)C)CC1)/C')
+    plane = cascade_layout(mol)
+    for ring in mol.sssr:
+        if len(ring) <= 9:
+            sides = [hypot(plane[a][0] - plane[b][0], plane[a][1] - plane[b][1])
+                     for a, b in zip(ring, ring[1:] + ring[:1])]
+            assert max(sides) < 1.05 * min(sides), ring
+
+
+def test_a_medium_ring_fused_to_small_rings_is_a_regular_polygon():
+    """Curvularin's 12-membered lactone, fused to its resorcinol: off the lattice, the lactone a regular dodecagon,
+    the benzene a regular hexagon outward on their shared edge."""
+    from math import hypot
+    mol = smiles('C[C@H]1CCCCC(=O)c2c(O)cc(O)cc2CC(=O)O1')
+    plane = cascade_layout(mol)
+    for ring in mol.sssr:
+        sides = [hypot(plane[a][0] - plane[b][0], plane[a][1] - plane[b][1]) for a, b in zip(ring, ring[1:] + ring[:1])]
+        assert max(sides) < 1.02 * min(sides), len(ring)
+    big = max(mol.sssr, key=len)
+    cx = sum(plane[x][0] for x in big) / len(big)
+    cy = sum(plane[x][1] for x in big) / len(big)
+    radii = [hypot(plane[x][0] - cx, plane[x][1] - cy) for x in big]
+    assert max(radii) < 1.02 * min(radii)
+
+
+def test_two_substituents_take_the_slots_leaving_both_more_room():
+    """PubChem 14530699: the dioxane's quaternary carbons place their two substituents in the order leaving more room,
+    so the drawing needs no stretched bond."""
+    from math import hypot
+    from chython.depict.layout.lattice import L
+    mol = smiles('CCOC(=O)CC1(C[C@](O[C@@H](O1)C(Cl)(Cl)Cl)(C)C(C)(C)C)O[Si](C)(C)C(C)(C)C')
+    plane = cascade_layout(mol)
+    assert max(hypot(plane[b.n][0] - plane[b.m][0], plane[b.n][1] - plane[b.m][1]) for b in mol.bonds()) < 1.05 * L
+
+
+def test_a_large_ring_substituent_bent_onto_its_ring_is_settled_on_its_bisector():
+    """PubChem 9291689: the pyridine's phenylthio and amide, each bent onto a ring bond to clear the other, are put
+    back on their bisectors and the rest repaired round them; no substituent of a two-ring-bond atom within 105
+    degrees of a ring bond."""
+    from math import atan2, degrees, pi
+    mol = smiles('C1CCN(CC1)C2=CC=C(C=C2)NC(=O)C3=C(N=CC=C3)SC4=CC=CC=C4')
+    plane = cascade_layout(mol)
+    for x in mol:
+        ring = [y for y in mol.neighbors_of(x) if any(x in r and y in r for r in mol.sssr)]
+        exo = [y for y in mol.neighbors_of(x) if y not in ring]
+        if len(ring) != 2 or len(exo) != 1:
+            continue
+        t = atan2(plane[exo[0]][1] - plane[x][1], plane[exo[0]][0] - plane[x][0])
+        for y in ring:
+            u = atan2(plane[y][1] - plane[x][1], plane[y][0] - plane[x][0])
+            assert degrees(abs((t - u + pi) % (2 * pi) - pi)) >= 105, (x, exo[0])
+
+
+def test_a_peri_bridging_ring_takes_the_strain_its_small_rings_stay_regular():
+    """Rucaparib: the azepinone closing round the indole's peri atoms is an arc of equal bonds, the pyrrole and the
+    benzene regular polygons."""
+    from math import atan2, degrees, pi
+    mol = smiles('CNCc1ccc(cc1)-c1[nH]c2cc(F)cc3C(=O)NCCc1c23')
+    plane = cascade_layout(mol)
+    for ring in mol.sssr:
+        if len(ring) > 6:
+            continue
+        n = len(ring)
+        for i in range(n):
+            a, x, b = plane[ring[i - 1]], plane[ring[i]], plane[ring[(i + 1) % n]]
+            t = abs((atan2(a[1] - x[1], a[0] - x[0]) - atan2(b[1] - x[1], b[0] - x[0]) + pi) % (2 * pi) - pi)
+            assert degrees(t) == pytest.approx(180 - 360 / n, abs=1), n
+
+
+@pytest.mark.parametrize('text', ['CN1CC[C@]23C=C[C@@H](O)C[C@@H]2Oc2c3c(C1)ccc2OC',     # galanthamine
+                                  'CN1CC[C@]23CC[C@@H](O)C[C@@H]2Oc2c3c(C1)ccc2OC'])    # lycoramine
+def test_a_galanthamine_draws_from_its_template_with_its_substituents_outside(text):
+    """The benzofuro-benzazepine draws as its reference drawing, a flat template: its substituents stay outside its
+    rings."""
+    from math import atan2
+    from chython.depict.layout.primitive import Initial
+    from chython.depict.layout.rings import ring_blocks
+    mol = smiles(text)
+    (block, rings), = [(b, rs) for b, rs in ring_blocks(mol) if len(rs) == 4]
+    assert system_drawing(mol, block, rings, mol.canonical_order())[0] == 'shape'
+    plane = cascade_layout(mol)
+    scope = Initial(mol, set(mol), mol.canonical_order()).scope
+    for x in block:
+        for y in mol.neighbors_of(x):
+            if y not in block:
+                assert not in_ring_angle(scope, plane, x, atan2(plane[y][1] - plane[x][1], plane[y][0] - plane[x][0]))
+
+
+@pytest.mark.parametrize('text', ['CC(=O)N1CCC(C1)(C(F)(F)F)C(F)(F)F', 'CC(C)(C)OC(=O)N1CCC(C1)(C(F)(F)F)C(F)(F)F'])
+def test_a_ring_atoms_two_substituents_keep_off_its_ring_bonds(text):
+    """Two CF3 on one ring atom of an N-acyl pyrrolidine: their fluorines crowd each other, and no fit may settle
+    that by folding a CF3 onto a ring bond; the fit off even wins then."""
+    from math import atan2, degrees, pi
+    mol = smiles(text)
+    plane = cascade_layout(mol)
+    for x in mol:
+        ns = list(mol.neighbors_of(x))
+        if len(ns) < 3:
+            continue
+        t = sorted(atan2(plane[y][1] - plane[x][1], plane[y][0] - plane[x][0]) for y in ns)
+        assert min(degrees((b - a) % (2 * pi)) for a, b in zip(t, t[1:] + t[:1])) > 30, x
+
+
+@pytest.mark.parametrize('text', ['CC(=O)N1CCC(C1)(C(F)(F)F)C(F)(F)F', 'CC(C)(C)OC(=O)N1CCC(C1)(C(F)(F)F)C(F)(F)F'])
+def test_two_crowded_substituents_of_a_ring_atom_stretch_from_it_kept_even(text):
+    """The two CF3 of an N-acyl pyrrolidine's ring atom: their fluorines clear by a stretch of one CF3's bond to the
+    ring, the ring atom's exterior angle in three equal gaps and each CF3 a square cross, no C-F bond stretched."""
+    from math import atan2, degrees, hypot
+    from chython.depict.layout.lattice import L
+    mol = smiles(text)
+    plane = cascade_layout(mol)
+
+    def gaps(a):
+        t = sorted(degrees(atan2(plane[y][1] - plane[a][1], plane[y][0] - plane[a][0])) % 360
+                   for y in mol.neighbors_of(a))
+        return sorted(round((v - u) % 360) for u, v in zip(t, t[1:] + t[:1]))
+    cf3 = [x for x in mol if sum(mol.atom(y).atomic_symbol == 'F' for y in mol.neighbors_of(x)) == 3]
+    (gem,) = {y for x in cf3 for y in mol.neighbors_of(x) if mol.atom(y).atomic_symbol == 'C'}
+    assert gaps(gem) == [84, 84, 84, 108]
+    assert all(gaps(x) == [90] * 4 for x in cf3)
+    lengths = {(b.n, b.m): hypot(plane[b.n][0] - plane[b.m][0], plane[b.n][1] - plane[b.m][1]) for b in mol.bonds()}
+    assert {frozenset(b) for b, d in lengths.items() if d > 1.05 * L} <= {frozenset((gem, x)) for x in cf3}
+
+
+def test_a_component_past_the_size_cap_is_drawn_by_smiles_drawer(monkeypatch):
+    """Past `LARGE` heavy atoms the fit, whose repair scores every move over the whole drawing, is not run: the
+    component comes from smiles-drawer at a mean bond of `L`, the small component beside it from the fit."""
+    from math import hypot
+    from chython.depict.layout import cascade
+    from chython.depict.layout.lattice import L
+    fitted, real = [], cascade.fit
+
+    def fit(initial):
+        fitted.append(len(initial.scope.atoms))
+        return real(initial)
+    monkeypatch.setattr(cascade, 'LARGE', 8)
+    monkeypatch.setattr(cascade, 'fit', fit)
+    mol = smiles('CC(=O)Oc1ccccc1C(=O)O.CCO')               # aspirin, ethanol
+    plane = cascade.cascade_layout(mol)
+    assert fitted == [3]
+    big = [b for b in mol.bonds() if b.n <= 13 and b.m <= 13]
+    mean = sum(hypot(plane[b.n][0] - plane[b.m][0], plane[b.n][1] - plane[b.m][1]) for b in big) / len(big)
+    assert abs(mean - L) < 1e-9

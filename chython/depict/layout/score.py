@@ -84,10 +84,11 @@ TERMS = ('defects', 'closure', 'crowd', 'stretched', 'bent', 'ring', 'straight',
 class Scope:
     """What a component's score and edits read and never change."""
     __slots__ = ('mol', 'atoms', 'rank', 'bonds', 'acyclic', 'ring_bonds', 'corners', 'closures', 'frames', 'linear',
-                 'adj', 'sides', 'within2', 'rings', 'drawn_bonds', 'kernel', 'positions', 'orient')
+                 'adj', 'sides', 'within2', 'rings', 'drawn_bonds', 'kernel', 'positions', 'orient', 'projected')
 
     def __init__(self, mol, atoms, rank, closures):
         self.mol = mol
+        self.projected = frozenset()                    # a shape's projected atoms, their angles a 3D view's
         self.rank = rank
         self.atoms = sorted(atoms, key=rank.__getitem__)
         whole = {x: None for x in atoms}

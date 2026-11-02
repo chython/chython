@@ -23,11 +23,13 @@ Every entry point takes `mol` first; `chython.depict._hooks` injects the public 
 A plane is a plain `{n: (x, y)}` dict and is never the molecule -- only `clean2d`, `rescale2d`
 and `_store_plane` write to the arena, so a renderer can lay a molecule out without changing it.
 """
+from bisect import bisect_left
 from importlib.resources import files
+from threading import Lock
 from math import atan2, ceil, cos, fsum, hypot, log, pi, radians, sin, sqrt
 from ...exceptions import ImplementationError
 from ...core.chains import Chain, perceive
-from .._config import Clean2DEngine, get_chain_layout, get_clean2d_engine
+from .._config import Clean2DEngine, get_chain_layout, get_clean2d_engine, get_js_runtime
 from ..label import ink_boxes
 from ..style import get_depict_style
 from .peptide import peptide_layout
@@ -55,6 +57,54 @@ try:
     ctx = _JSFunction('clean2d', files(__package__).joinpath('clean2d.js').read_text(encoding='utf-8') + _JS_SHIM)
 except Exception:  # absent, or built against an incompatible libquickjs
     ctx = None
+
+
+class _V8:
+    """smiles-drawer on V8: `mini-racer` and the legacy `py_mini_racer` both install module `py_mini_racer` with
+    the same `MiniRacer().eval()` / `.call()` and answer plain lists.  Built on first use -- an isolate is 61 MB
+    and starts in ~20 ms -- and called under a lock, since the legacy binding is not thread-safe."""
+    __slots__ = ('_ctx', '_lock')
+
+    def __init__(self):
+        self._ctx = None
+        self._lock = Lock()
+
+    @property
+    def available(self) -> bool:
+        if self._ctx is None:
+            with self._lock:
+                if self._ctx is None:
+                    try:
+                        from py_mini_racer import MiniRacer
+
+                        ctx = MiniRacer()
+                        ctx.eval(files(__package__).joinpath('clean2d.js').read_text(encoding='utf-8'))
+                    except Exception:  # absent, or a binding without a native library for this platform
+                        ctx = False
+                    self._ctx = ctx
+        return self._ctx is not False
+
+    def __call__(self, tree):
+        with self._lock:
+            return self._ctx.call('$.clean2d', tree)
+
+
+v8 = _V8()
+
+
+def _js_runtime():
+    """The `tree -> xy` callable `js_runtime` names: `auto` is V8 when it loads, QuickJS otherwise."""
+    runtime = get_js_runtime()
+    if runtime != 'quickjs' and v8.available:
+        return v8
+    if runtime == 'v8':
+        raise ImportError('the v8 runtime needs `mini-racer` (pip install chython[v8]) or `py_mini_racer`')
+    if ctx is None:
+        raise ImportError('quickjs is not installed or broken')
+    # `run_gc=False`: the binding otherwise runs a full QuickJS collection after every call, which costs 3x and
+    # reclaims nothing -- the engine's own threshold GC holds this context under a megabyte across thousands of
+    # layouts.
+    return lambda tree: ctx(tree, run_gc=False)
 
 
 def _adjacency(mol):
@@ -85,7 +135,7 @@ def _stored_plane(mol):
     return dict.fromkeys(mol, (0., 0.))
 
 
-def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: bool = None, choose=None):
+def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False, chain: bool = None, choose=None):
     """Compute a 2d layout and return it as `{n: (x, y)}`, leaving the molecule untouched.
 
     This is the form a renderer wants -- drawing must not change what it draws.  `clean2d()` is this
@@ -96,14 +146,16 @@ def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide:
     https://pubs.acs.org/doi/10.1021/acs.jcim.7b00425 is used; it can be changed globally with the
     `chython.clean2d_engine` parameter.
 
-    A peptide of `MIN_RESIDUES`+ residues lays out on its backbone (`layout/peptide.py`), the engine
-    laying out its ring tiles; `peptide=None` follows `chython.peptide_layout`.  Each component is its own
-    peptide or not: the peptides are laid out one by one, every other component by the engine in one call.
-    A peptide the lattice cannot take goes to the engine; with no peptide the engine takes `mol` whole.
+    With `engine='chython'` and the chain switch on, a chain -- a peptide of `MIN_RESIDUES`+ residues, a
+    macrocycle of beads -- lays out on its backbone (`layout/peptide.py`), the engine laying out its ring tiles, and
+    a nucleic-acid strand level, every unit one drawing (`layout/nucleic.py`);
+    `chain=None` follows `chython.chain_layout`.  Each component is its own chain or not: the chains are laid out
+    one by one, every other component by the engine in one call.  A chain the lattice cannot take goes to the
+    engine; with no chain the engine takes `mol` whole.  Every other engine ignores the switch.
 
     :param engine: override globally set engine
     :param force: recompute even if the molecule already carries a layout
-    :param peptide: override the global peptide switch
+    :param chain: override the global chain switch; only `engine='chython'` reads it
     :param choose: with `engine='chython'`, `choose(env, steps)` drives the controller greedily, a peptide's pins
         included (`layout/greedy.py`); None runs the deterministic cascade (`layout/cascade.py`). Any other engine
         refuses it.
@@ -114,7 +166,7 @@ def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide:
     engine = get_clean2d_engine(engine)
     if choose is not None and engine != 'chython':
         raise ValueError(f'a step chooser drives only the chython engine, not {engine}')
-    plane = _chain_planes(mol, engine, choose) if get_chain_layout(peptide) else None
+    plane = _chain_planes(mol, engine, choose) if get_chain_layout(chain) and engine == 'chython' else None
     if plane is None:
         plane = _engine_layout(mol, engine, choose)
         _rescale_plane(mol, plane)
@@ -128,7 +180,7 @@ def layout2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide:
     return plane
 
 
-def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: bool = None, choose=None):
+def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False, chain: bool = None, choose=None):
     """Compute a 2d layout and store it on the molecule.
 
     Not always a recomputation: a molecule that already `has_layout` is left exactly as it is, since the
@@ -136,7 +188,7 @@ def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: 
 
     :param engine: override globally set engine
     :param force: lay the molecule out again whatever coordinates it already has
-    :param peptide: override the global peptide switch
+    :param chain: override the global chain switch; only `engine='chython'` reads it
     :param choose: with `engine='chython'`, `choose(env, steps)` drives the controller greedily, a peptide's pins
         included (`layout/greedy.py`); None runs the deterministic cascade (`layout/cascade.py`). Any other engine
         refuses it.
@@ -145,7 +197,7 @@ def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False, peptide: 
         return
     # `force=True` below: the has_layout question is already answered, and asking it again would send a
     # molecule that has a layout down the stored-plane branch.
-    _store_plane(mol, layout2d(mol, engine=engine, force=True, peptide=peptide, choose=choose))
+    _store_plane(mol, layout2d(mol, engine=engine, force=True, chain=chain, choose=choose))
 
 
 def _chain_planes(mol, engine: Clean2DEngine, choose=None):
@@ -187,9 +239,13 @@ def _chain_plane(mol, engine: Clean2DEngine, choose=None):
         segmentation = perceive(heavy)
         if not isinstance(segmentation, Chain):
             return None
-    from .greedy import peptide_greedy
-    plane = peptide_layout(heavy, segmentation, _tile_fn(engine, choose),
-                           choose=None if choose is None else peptide_greedy(choose))
+    if segmentation.kind == 'nucleic':
+        from .nucleic import nucleic_layout
+        plane = nucleic_layout(heavy, segmentation, _tile_fn(engine, choose))
+    else:
+        from .greedy import peptide_greedy
+        plane = peptide_layout(heavy, segmentation, _tile_fn(engine, choose),
+                               choose=None if choose is None else peptide_greedy(choose))
     if plane is None or not deferred:
         return plane
     _place_peptide_hydrogens(mol, plane, deferred, {frozenset(x) for x in segmentation.crosslinks})
@@ -260,37 +316,32 @@ def _engine_layout(mol, engine: Clean2DEngine, choose=None):
         for n, (x, y, _) in zip(mol, rd.GetConformers()[0].GetPositions()):
             plane[n] = (x, y)
     elif engine == 'smilesdrawer':
-        if ctx is None:
-            raise ImportError('quickjs is not installed or broken')
+        run = _js_runtime()
         # smiles-drawer normalizes the layout regardless of the tree root, so a single
-        # deterministic layout pass is enough.
-        tree, order = _clean2d_tree(mol)
-        if not order:
-            # Every atom was withheld by `_deferred_hydrogens`: no component has a heavy atom
-            # (`[H][H]`, `[H-]`).  The engine is not called -- there is no tree and `xy` would be empty.
-            _place_deferred_hydrogens(mol, plane)
-            return plane
-        try:
-            # `run_gc=False`: the binding otherwise runs a full QuickJS collection after every call,
-            # which costs 3x and reclaims nothing -- the engine's own threshold GC holds this context
-            # under a megabyte across thousands of layouts.
-            xy = ctx(tree, run_gc=False)
-        except Exception:
-            raise ImplementationError
+        # deterministic layout pass is enough.  One call per component: a `.`-joined tree costs
+        # superlinearly in the component count (60 small components: 1.2 s against 14 ms), and the
+        # placement it gives the components is discarded by `_place`.
+        components = _clean2d_tree(mol)
+        for tree, order in components:
+            try:
+                xy = run(tree)
+            except Exception:
+                raise ImplementationError
 
-        # The `zip` below is a positional correspondence, and `zip` truncates in silence: with fewer
-        # points than atoms every atom after the missing one takes its neighbour's place, so the
-        # molecule is laid out wrong rather than not laid out.  Check it here instead.
-        if len(xy) != len(order):
-            raise ImplementationError(f'smiles-drawer returned {len(xy)} points for {len(order)} '
-                                      f'atoms: the layout cannot be assigned')
-        # `float()` and not the bare subtraction: QuickJS returns an integral JS number as a Python
-        # `int`, so a one-atom molecule laid out at the origin would come back `(0, 0)`.
-        shift_x, shift_y = xy[0]
-        for n, (x, y) in zip(order, xy):
-            plane[n] = (float(x - shift_x), float(shift_y - y))
-        # The explicit hydrogens the tree left out, here and not later: everything downstream
+            # The `zip` below is a positional correspondence, and `zip` truncates in silence: with fewer
+            # points than atoms every atom after the missing one takes its neighbour's place, so the
+            # molecule is laid out wrong rather than not laid out.  Check it here instead.
+            if len(xy) != len(order):
+                raise ImplementationError(f'smiles-drawer returned {len(xy)} points for {len(order)} '
+                                          f'atoms: the layout cannot be assigned')
+            # `float()` and not the bare subtraction: both runtimes return an integral JS number as a Python
+            # `int`, so a one-atom molecule laid out at the origin would come back `(0, 0)`.
+            shift_x, shift_y = xy[0]
+            for n, (x, y) in zip(order, xy):
+                plane[n] = (float(x - shift_x), float(shift_y - y))
+        # The explicit hydrogens the trees left out, here and not later: everything downstream
         # subscripts the plane per atom, so the plane this branch returns must be total over `mol`.
+        # With no heavy atom at all (`[H][H]`, `[H-]`) there is no tree and the engine is not called.
         _place_deferred_hydrogens(mol, plane)
     elif engine == 'cdk':
         from ...interop._cdk import to_cdk
@@ -388,8 +439,9 @@ def _place(mol, plane) -> None:
     if len(comps) == 1 or line <= (ASPECT if len(comps) >= CROWD else WRAP) * max(max(heights), SPACE):
         return
     best = None
+    limit = _limits(widths)
     for r in range(2, len(comps) + 1):
-        rows = _rows(widths, _limit(widths, r))
+        rows = _rows(widths, limit(r))
         width = max(fsum(widths[i] for i in row) + SPACE * (len(row) - 1) for row in rows)
         height = fsum(max(heights[i] for i in row) for row in rows) + SPACE * (len(rows) - 1)
         k = abs(log(max(width, SPACE) / max(height, SPACE) / ASPECT))
@@ -432,11 +484,16 @@ def _combs(mol, plane, comps, ink):
     return out
 
 
-def _limit(widths, r):
-    """The shortest row `_rows` breaks `widths` into `r` rows or fewer at: no row a lone spill of the others."""
-    n = len(widths)
-    runs = sorted({fsum(widths[i:j]) + SPACE * (j - i - 1) for i in range(n) for j in range(i + 1, n + 1)})
-    return next(x for x in runs if x >= max(widths) and len(_rows(widths, x)) <= r)
+def _limits(widths):
+    """`r` to the shortest row `_rows` breaks `widths` into `r` rows or fewer at: no row a lone spill of the others.
+
+    The candidates are the runs of consecutive widths no shorter than the widest, built once; `_rows` never gives
+    more rows at a longer limit, so the shortest one that fits is bisected.
+    """
+    n, widest = len(widths), max(widths)
+    runs = sorted(x for x in {fsum(widths[i:j]) + SPACE * (j - i - 1) for i in range(n) for j in range(i + 1, n + 1)}
+                  if x >= widest)
+    return lambda r: runs[bisect_left(runs, True, key=lambda x: len(_rows(widths, x)) <= r)]
 
 
 def _rows(widths, limit):
@@ -618,12 +675,13 @@ def _place_deferred_hydrogens(mol, plane):
 
 
 def _clean2d_tree(mol):
-    """Build a smiles-drawer parse tree from the molecule graph -- a plain iterative DFS with
-    ring-closure detection, since the layout needs only valid connectivity and is root-invariant.
+    """Build a smiles-drawer parse tree per connected component from the molecule graph -- a plain
+    iterative DFS with ring-closure detection, since the layout needs only valid connectivity and is
+    root-invariant.
 
-    Returns `(tree, order)` where `order[i]` is the stable id of the i-th atom created, matching
-    smiles-drawer's atom index; the `_deferred_hydrogens` are in neither.  See clean2d/README for the
-    node schema.
+    Returns `[(tree, order), ...]`, one pair per component holding a heavy atom, where `order[i]` is the
+    stable id of the i-th atom created, matching smiles-drawer's atom index; the `_deferred_hydrogens`
+    are in neither.  See clean2d/README for the node schema.
     """
     atoms = {a.n: a for a in mol.atoms()}
     bonds = _adjacency(mol)
@@ -632,7 +690,6 @@ def _clean2d_tree(mol):
     deferred = set(_deferred_hydrogens(mol, bonds))
     bonds = {n: {m: order for m, order in row.items() if m not in deferred}
              for n, row in bonds.items() if n not in deferred}
-    order = []
     nodes = {}  # atom number -> its node dict
     parent_of = {}  # atom number -> tree parent atom number (root: None)
 
@@ -641,14 +698,14 @@ def _clean2d_tree(mol):
     bond_symbol = {1: '-', 2: '=', 3: '#', 4: '-', 8: '-'}
 
     # spanning forest via iterative DFS. all neighbours become `branches`.
-    components = []
+    components, orders = [], []
     for root in bonds:
         if root in nodes:
             continue
         nodes[root] = rnode = {'atom': atoms[root].atomic_symbol, 'isBracket': False,
                                'branches': [], 'branchCount': 0, 'ringbonds': [], 'ringbondCount': 0,
                                'bond': '-', 'branchBond': '-', 'next': None, 'hasNext': False}
-        order.append(root)
+        orders.append(order := [root])
         components.append(rnode)
         parent_of[root] = None
         stack = [root]
@@ -671,28 +728,18 @@ def _clean2d_tree(mol):
             else:
                 stack.pop()
 
-    # ring closures: every non-tree edge gets a matching ringbond id on both ends.
-    cycle = 0
-    for n in order:
-        for m in bonds[n]:
-            if m <= n or parent_of.get(m) == n or parent_of.get(n) == m:
-                continue
-            cycle += 1
-            bs = bond_symbol[bonds[n][m]]
-            for k in (n, m):
-                nodes[k]['ringbonds'].append({'bond': bs, 'id': cycle})
-                nodes[k]['ringbondCount'] += 1
-
-    if not components:
-        # No heavy atoms at all; `_engine_layout` checks `not order` and skips the engine.
-        return None, []
-
-    # chain disconnected components through `next` with a '.' bond.
-    for prev, comp in zip(components, components[1:]):
-        comp['bond'] = '.'
-        prev['next'] = comp
-        prev['hasNext'] = True
-    return components[0], order
-
+    # ring closures: every non-tree edge gets a matching ringbond id on both ends, numbered per tree.
+    for order in orders:
+        cycle = 0
+        for n in order:
+            for m in bonds[n]:
+                if m <= n or parent_of.get(m) == n or parent_of.get(n) == m:
+                    continue
+                cycle += 1
+                bs = bond_symbol[bonds[n][m]]
+                for k in (n, m):
+                    nodes[k]['ringbonds'].append({'bond': bs, 'id': cycle})
+                    nodes[k]['ringbondCount'] += 1
+    return list(zip(components, orders))
 
 __all__ = ['clean2d', 'layout2d', 'rescale2d']

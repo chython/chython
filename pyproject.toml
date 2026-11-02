@@ -85,6 +85,9 @@ ml = ['numpy>=1.21.0']
 # C in the core, so the one dependency the mapper adds over `ml` is the runtime and the weights.
 mapping = ['numpy>=1.21.0', 'onnxruntime>=1.16', 'chython-rxnmap>=2.0']
 rdkit = ['rdkit>=2025.9']
+# V8 under `clean2d_engine = 'smilesdrawer'`: 1.2-30x faster than the required QuickJS, at 61 MB installed, so an
+# extra and not the default.  `chython.js_runtime = 'auto'` takes it when importable.
+v8 = ['mini-racer>=0.12']
 extra-clean2d = ['jpype1>=1.6.0', 'openbabel-wheel>=3.1.1.22', 'epam.indigo>=1.45']
 extra-clean3d = ['cdpkit>=1.2.3']
 iupac = ["openclatura>=0.2; python_version >= '3.11'"]

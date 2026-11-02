@@ -261,7 +261,7 @@ def chains(mol, boxes, plain=None) -> list[tuple[int, ...]]:
 
 
 def bond_paths(mol, plane, boxes, style: DepictStyle, *, skip=frozenset(), widths=None, colours=None,
-               log=None) -> list[Path]:
+               gaps=None, log=None) -> list[Path]:
     """Every non-stereo bond, as `Path` objects.  Stereo bonds are `wedge.py`'s.
 
     Order by order:
@@ -275,7 +275,9 @@ def bond_paths(mol, plane, boxes, style: DepictStyle, *, skip=frozenset(), width
     A bond whose two labels leave nothing to draw is skipped and reported through `log` -- see `trim`.
     `skip` names bonds somebody else draws (a wedge draws its own).  `widths` and `colours` override the
     style per bond, keyed low-first; a bond differing from its chain neighbour breaks the chain, since
-    one path cannot taper or change colour half way along.
+    one path cannot taper or change colour half way along.  `gaps` maps a bond to the points where it
+    passes behind another -- a perspective cage's rear bond -- and each of its lines breaks there, half
+    `bond.spacing` either side; such a bond is drawn alone, out of any chain.
     """
     _check_boxes(mol, boxes)
     _check_plane(mol, plane)
@@ -299,8 +301,9 @@ def bond_paths(mol, plane, boxes, style: DepictStyle, *, skip=frozenset(), width
     # which bonds are one plain stroke, not which order they are: an order-4 bond the notation gave no
     # second line draws what an order-1 bond draws.  `doubles` carries the whole difference between the
     # three aromatic notations, so one expression covers all of them.
+    behind = {} if gaps is None else {_key(*k): v for k, v in gaps.items()}
     plain = {key for key, order in orders.items()
-             if order == 1 or (order == 4 and key not in doubles)}
+             if (order == 1 or (order == 4 and key not in doubles)) and key not in behind}
 
     out = []
     for run in chains(mol, boxes, plain):
@@ -333,6 +336,8 @@ def bond_paths(mol, plane, boxes, style: DepictStyle, *, skip=frozenset(), width
             # any order this module does not model, drawn as the plain line the arena guarantees is a
             # contact.  An order-4 bond never lands here: it is in `doubles` or in `plain`.
             lines = [axis]
+        if key in behind:
+            lines = _gapped(lines, behind[key], bond_style.spacing / 2)
         out.append(_path([polyline(pair) for pair in lines], width, colour, bond_style, dashes=dashes))
 
     if bond_style.aromatic == 'circle':
@@ -353,6 +358,26 @@ def bond_paths(mol, plane, boxes, style: DepictStyle, *, skip=frozenset(), width
                 ornament = _circle_path(ring, plane, bond_style)
                 if ornament is not None:
                     out.append(ornament)
+    return out
+
+
+def _gapped(lines, points, half: float) -> list[Segment]:
+    """`lines` each broken `half` either side of the foot of every one of `points` on it."""
+    out = []
+    for (ax, ay), (bx, by) in lines:
+        dx, dy = bx - ax, by - ay
+        length = (dx * dx + dy * dy) ** .5
+        if length < 1e-12:
+            continue
+        cuts = sorted(((px - ax) * dx + (py - ay) * dy) / length for px, py in points)
+        t = 0.
+        for c in cuts:
+            if c - half > t:
+                out.append(((ax + dx * t / length, ay + dy * t / length),
+                            (ax + dx * (c - half) / length, ay + dy * (c - half) / length)))
+            t = max(t, c + half)
+        if t < length:
+            out.append(((ax + dx * t / length, ay + dy * t / length), (bx, by)))
     return out
 
 

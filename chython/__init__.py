@@ -29,8 +29,8 @@ from sys import modules as _modules
 from types import ModuleType as _ModuleType
 from .core import *
 from .core import read_smarts as smarts
-from .depict import (Clean2DEngine, DepictStyle, get_chain_layout, get_clean2d_engine, get_depict_style,
-                     get_peptide_layout, set_chain_layout, set_clean2d_engine, set_depict_style, set_peptide_layout)
+from .depict import (Clean2DEngine, DepictStyle, JSRuntime, get_chain_layout, get_clean2d_engine, get_depict_style,
+                     get_js_runtime, set_chain_layout, set_clean2d_engine, set_depict_style, set_js_runtime)
 from .formats import *
 # By full path, not through `formats`' star: `pdb` is that subpackage's name too and the function
 # would shadow it.
@@ -45,8 +45,8 @@ from .interop.config import _facade_alias as _interop_facade_alias
 
 
 class _Facade(_ModuleType):
-    """Gives `chython` itself properties, so `chython.clean2d_engine` and `chython.chain_layout` (alias
-    `chython.peptide_layout`) forward both the read and the write to their one home in `depict/_config.py`,
+    """Gives `chython` itself properties, so `chython.clean2d_engine`, `chython.js_runtime` and
+    `chython.chain_layout` forward both the read and the write to their one home in `depict/_config.py`,
     validated on the spot.
     """
     @property
@@ -66,12 +66,12 @@ class _Facade(_ModuleType):
         set_chain_layout(flag)
 
     @property
-    def peptide_layout(self) -> bool:
-        return get_peptide_layout()
+    def js_runtime(self) -> JSRuntime:
+        return get_js_runtime()
 
-    @peptide_layout.setter
-    def peptide_layout(self, flag: bool):
-        set_peptide_layout(flag)
+    @js_runtime.setter
+    def js_runtime(self, runtime: JSRuntime):
+        set_js_runtime(runtime)
 
 
 _modules[__name__].__class__ = _Facade

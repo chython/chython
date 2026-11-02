@@ -258,8 +258,29 @@ def test_a_bridged_system_starts_as_its_predefined_shape(text, name):
     (block,) = init.rigid
     skel, _ = skeleton(mol, block)
     wants = [_distances({i: (x * L, y * L) for i, (x, y) in pts.items()}, list(pts))
-             for _, _, pts, _, _ in _shapes()[skel.canonical_bytes]]
+             for _, _, pts, _, _, _, _ in _shapes()[skel.canonical_bytes]]
     assert _distances(init.plane, block) in wants
+
+
+@pytest.mark.parametrize('wedged', [0, 1])
+def test_a_cage_view_keeps_a_wedged_atom_off_its_bond_crossing(monkeypatch, wedged):
+    """6-hydroxytropinone's ethano bridge: whichever of its two carbons carries the wedge, the tropane view chosen
+    keeps that one away from where the bridges cross, at the bridge's outer end."""
+    from chython.depict.layout import shapes
+    mol = smiles('CN1[C@@H]2C[C@H](O)[C@H]1CC(=O)C2')
+    rings = {x for x in mol if mol.atom(x).in_ring}
+    heads = {x for x in rings if sum(y in rings for y in mol.neighbors_of(x)) == 3}
+
+    def by_head(x):
+        return x not in heads and any(y in heads for y in mol.neighbors_of(x))
+    ethano = sorted(x for x in rings if by_head(x) and any(by_head(y) for y in mol.neighbors_of(x) if y in rings))
+    x = ethano[wedged]
+    monkeypatch.setattr(shapes, '_wedged', lambda m: {x})
+    plane, _ = shapes.shape(mol, rings)
+    skel, _ = shapes.skeleton(mol, rings)
+    (_, _, pts, _, _, crossed, _), = shapes._shapes()[skel.canonical_bytes]
+    spots = [(pts[i][0] * L, pts[i][1] * L) for i in crossed]
+    assert min(hypot(plane[x][0] - a, plane[x][1] - b) for a, b in spots) > .5 * L
 
 
 def test_porphine_starts_as_its_template_and_a_crown_ether_as_its_zigzag_circle():
@@ -293,3 +314,47 @@ def test_camphor_is_drawn_as_camphor_and_norbornane_as_norbornane():
         (block,) = init.rigid
         want = _distances({i: (x * L, y * L) for i, (x, y) in enumerate(DRAWN[name][1])}, range(len(DRAWN[name][1])))
         assert _distances(init.plane, block) == want, name
+
+
+def test_a_spiro_hinge_swaps_the_far_rings_two_bonds():
+    """Spirapril: the spiro atom's hinge mirrors the dithiolane on its bisector there, the two ring neighbours trading
+    places and every bond keeping its length."""
+    from chython.depict.layout.primitive import PrimitiveEnv
+    mol, init = _initial('CCOC(=O)[C@H](CCc1ccccc1)N[C@@H](C)C(=O)N1CC2(C[C@H]1C(O)=O)SCCS2')
+    (a, x, y, part), = init.hinges
+    assert {mol.atom(z).atomic_symbol for z in (x, y)} == {'S'}
+    env = PrimitiveEnv(init)
+    (move,) = [m for m in env._moves() if m.kind == 'flip' and m.pivot == a and m.part == part]
+    moved = {**env.plane, **env._moved(move)}
+    for p, q in ((x, y), (y, x)):
+        assert hypot(moved[p][0] - env.plane[q][0], moved[p][1] - env.plane[q][1]) < 1e-9
+    for b in mol.bonds():
+        before = hypot(env.plane[b.n][0] - env.plane[b.m][0], env.plane[b.n][1] - env.plane[b.m][1])
+        assert abs(hypot(moved[b.n][0] - moved[b.m][0], moved[b.n][1] - moved[b.m][1]) - before) < 1e-9
+
+
+def test_every_bridgehead_of_a_drawn_cage_has_its_models_handedness():
+    """A drawn shape's depth turns each bridgehead its model's way, all alike: a bridgehead drawn nearly flat, as
+    pseudopelletierine's, would otherwise read against its partner."""
+    from itertools import islice
+    from chython.depict.layout import shapes
+
+    def volume(p, a, skel):
+        (a1, a2, a3), (b1, b2, b3), (c1, c2, c3) = [[p[n][k] - p[a][k] for k in range(3)]
+                                                    for n in sorted(skel.neighbors_of(a))]
+        return a1 * (b2 * c3 - b3 * c2) - a2 * (b1 * c3 - b3 * c1) + a3 * (b1 * c2 - b2 * c1)
+    models = shapes._models()
+    for key, found in shapes._shapes().items():
+        if key not in models:
+            continue
+        model, xyz = models[key]
+        for name, skel, pts, _, _, _, depth in found:
+            if name not in shapes.DRAWN:
+                continue
+            heads = [x for x in pts if len(skel.neighbors_of(x)) == 3]
+            drawn = {x: (*pts[x], depth[x]) for x in pts}
+            signs = set()
+            for mapping in islice(model.as_query().get_mapping(skel), 1):
+                solid = {j: xyz[i] for i, j in mapping.items()}
+                signs = {volume(drawn, x, skel) * volume(solid, x, skel) > 0 for x in heads}
+            assert len(signs) == 1, name

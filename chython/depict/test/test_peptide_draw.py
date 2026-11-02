@@ -45,12 +45,14 @@ def _kinds(name):
 
 @pytest.fixture(autouse=True)
 def _chains():
-    """Chain layout is off by default; every drawing here is of one."""
-    from chython.depict import get_chain_layout, set_chain_layout
-    was = get_chain_layout()
+    """Chain layout is off by default and only the native engine reads it; every drawing here is of one."""
+    from chython.depict import get_chain_layout, get_clean2d_engine, set_chain_layout, set_clean2d_engine
+    was, engine = get_chain_layout(), get_clean2d_engine()
     set_chain_layout(True)
+    set_clean2d_engine('chython')
     yield
     set_chain_layout(was)
+    set_clean2d_engine(engine)
 
 
 @pytest.mark.parametrize('name, brackets, teleports', [('oxytocin', 1, 0), ('linaclotide', 2, 1),
@@ -87,7 +89,7 @@ def test_no_links_nothing_routed(name):
 @pytest.mark.parametrize('name', ['oxytocin', 'gramicidin S'])        # the engine takes 18 s on linaclotide
 def test_engine_plane_draws_plain(name):
     mol = molecule(name)
-    assert routed_links(mol, layout2d(mol, force=True, peptide=False)) == ()
+    assert routed_links(mol, layout2d(mol, force=True, chain=False)) == ()
 
 
 def _points(path):
@@ -348,17 +350,6 @@ def test_on_lattice_takes_a_bead_step_at_any_length():
     assert _on_lattice(plane, (1, 2, 3), (1,)) and not _on_lattice(plane, (1, 2, 3))
 
 
-def test_chain_layout_is_the_peptide_switch():
-    import chython
-    from chython.depict import get_chain_layout, get_peptide_layout, set_chain_layout, set_peptide_layout
-    assert get_chain_layout is get_peptide_layout and set_chain_layout is set_peptide_layout
-    chython.chain_layout = False
-    try:
-        assert chython.peptide_layout is False
-    finally:
-        chython.chain_layout = True
-
-
 @pytest.mark.parametrize('name', ['alpha-cd', 'calix4'])
 def test_a_cycle_closure_leaves_along_free_slots_and_crosses_nothing(name):
     from math import atan2, pi
@@ -385,3 +376,52 @@ def test_a_cycle_closure_leaves_along_free_slots_and_crosses_nothing(name):
         u = atan2(q[1] - p[1], q[0] - p[0])
         assert min(abs((u - atan2(dy, dx) + pi) % (2 * pi) - pi) for dx, dy in _free_directions(mol, plane, x, keys)) \
             < .1
+
+
+def test_a_leg_from_a_level_slot_leaves_down_its_diagonal():
+    """A level free direction turns 45 degrees toward the bar: the leg leaves on the diagonal and turns once, by 45
+    degrees, into the vertical, rather than a level stub and a right-angle corner."""
+    from math import atan2, degrees
+    from chython.depict.peptide import JOG, L, _leg
+    mol = smiles('CN')
+    c, n = sorted(mol)
+    plane = {n: (0., 0.), c: (L * .94, L * .34)}                # the bond rises at 20 degrees
+    crossings, pts = _leg(mol, plane, n, [(-1., 0.)], -3 * L, {}, frozenset())
+    assert crossings == 0
+    assert degrees(atan2(pts[0][1], pts[0][0])) == pytest.approx(-135)
+    assert pts[1][0] == pytest.approx(pts[0][0]) and pts[1][1] == pytest.approx(-3 * L)
+    assert abs(pts[0][0]) == pytest.approx(JOG * .7071, abs=1e-3)
+
+
+def test_a_blocked_vertical_leg_steps_aside_on_one_diagonal():
+    """Straight down blocked: the sideways step is one diagonal from the atom, then the vertical, a single bend of
+    45 degrees rather than a stub, a step and a vertical."""
+    from math import atan2, degrees
+    from chython.depict.peptide import L, _leg
+    mol = smiles('CN.C')
+    c, n, blocker = sorted(mol)
+    plane = {n: (0., 0.), c: (0., L), blocker: (0., -1.5 * L)}
+    crossings, pts = _leg(mol, plane, n, [(0., -1.)], -4 * L, {}, frozenset())
+    assert crossings == 0 and len(pts) == 2
+    assert abs(degrees(atan2(pts[0][1], pts[0][0]))) == pytest.approx(135) or \
+        degrees(atan2(pts[0][1], pts[0][0])) == pytest.approx(-45)
+    assert pts[1][0] == pytest.approx(pts[0][0]) and pts[1][1] == pytest.approx(-4 * L)
+
+
+def test_a_routed_cross_link_carries_no_wedge():
+    """PubChem 11309298: the alpha carbon closing the lactam bracket wedges one of its own drawn bonds, never the
+    cross-link, which the bracket draws rather than a straight bond a wedge could sit on."""
+    from chython.depict.style import get_depict_style
+    from chython.depict.wedge import wedge_paths
+    mol = smiles('C[C@H]([C@H]1C(=O)N[C@H](C(=O)N[C@@H](CCCCNC(=O)CC[C@@H](C(=O)N[C@@H](C(=O)N[C@H](C(=O)N1)CC2=CC=C(C'
+                 '=C2)CNC(C)C)CC3=CNC4=CC=CC=C43)NC(=O)[C@H](CC5=CC=CC=C5)N)C(=O)N[C@@H](CO)C(=O)O)CC6=CC=CC=C6)O')
+    plane = layout.layout2d(mol, engine='chython', force=True, chain=True)
+    links = routed_links(mol, plane)
+    assert links
+    keys = {(min(k.a, k.b), max(k.a, k.b)) for k in links}
+    style = get_depict_style()
+    _, claimed = wedge_paths(mol, plane, labels(mol, plane, style), style, avoid=keys)
+    assert not keys & set(claimed)
+    log = []
+    molecule_scene(mol, plane=plane, log=log)
+    assert not [r for r in log if r.code == 'depict:unwedged']

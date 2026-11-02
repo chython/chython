@@ -137,3 +137,17 @@ def test_frozen():
         p.main = ()
     with pytest.raises(FrozenInstanceError):
         p.residues[0].kind = 'other'
+
+
+def test_a_ring_closed_through_a_side_chain_runs_round_on_the_backbone():
+    """Three Ala closed on N-(2-aminoethyl)glycine, the PNA unit, its nitrogen acetylated: the link from the last
+    residue reaches the glycine's side chain, so the main chain runs round the ring through it, head to tail, and
+    the acetyl hangs from the glycine."""
+    mol = smiles('C[C@@H]1NC(=O)[C@H](C)NC(=O)[C@H](C)NC(=O)CN(C(C)=O)CCNC1=O')
+    p = monomers(mol)
+    ring = max(mol.sssr, key=len)
+    assert p.head_to_tail and set(ring) <= set(p.backbone) and len(p.backbone) == len(ring)
+    (acetyl,) = [x for x in mol if mol.atom(x).atomic_symbol == 'C' and x not in ring and
+                 any(mol.atom(y).atomic_symbol == 'O' for y in mol.neighbors_of(x))]
+    host = next(i for i, m in enumerate(p.members) if acetyl in m and i in p.main)
+    assert p.residues[host].kind == 'alpha'

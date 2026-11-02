@@ -31,11 +31,15 @@ whichever breaks fewer cis/trans units, then adds fewer defects; any other macro
 tree leaves along the entry atom's first exit direction (a shape: away from its template neighbours); at a spiro \
 atom the two systems back to back instead; parents first |
 | exits | substituent out: a polygon template atom's substituents, each with its subtree, on the directions splitting \
-evenly its widest gap outside every ring corner, a fusion atom's lone one on the extension of its fused bond; a \
-shape's, or an atom with neither, on whichever of `EXITS` directions leaves the subtree most room up to `ROOM`, then \
-is nearest the direction away from the template; two of one atom at least `APART`; a substituent-out exit leaving \
-less than `CLEAR` gives way to the most room when that has fewer defects |
+evenly its widest gap outside every ring corner, two of them in the order leaving both more room, a fusion atom's \
+lone one on the extension of its fused bond, an atom of a ring fused in a shape's projection out from that ring's \
+centre, parallel to its ring bonds as in 3D; a shape's, or an atom with neither, on whichever of `EXITS` directions \
+leaves the subtree most room up to `ROOM`, then is nearest the direction away from the template; two of one atom at \
+least `APART`; a substituent-out exit leaving less than `CLEAR` gives way to the most room when that has fewer \
+defects, no nearer than `PINCH` to its two ring bonds |
 | boundary | every tree bond outside a template then set to `L`, its subtree moved along it, parents first |
+| faces | a shape's wedged stereocentre: its substituents turned onto the faces its configuration requires under the \
+cage's depth (`cage.place`), and those bonds never rotated after |
 | upright | the whole drawing then turned so the largest `shapes.shape` system stands as its shape is drawn |
 | template | a drawn system moves only rigidly: no flip, rotation or stretch is offered on a bond inside it; the \
 crossings a bridged template draws are `inherent`, not `defects` |
@@ -54,7 +58,7 @@ stretching one moves its closure, which the score prices.
 """
 from math import atan2, cos, pi, radians, sin
 
-from .cascade import TEMPLATE, in_ring_angle, system_drawing
+from .cascade import PINCH, TEMPLATE, in_ring_angle, system_drawing
 from .edits import STEP, Move, broken, embed, masked, outside_angles
 from .env import STOP, Step
 from .lattice import L
@@ -82,10 +86,37 @@ STRETCH = .25 * L       # the step a blocked substituent-out exit stretches by, 
 SMALL = 4               # the most atoms a stretched substituent holds: a nitro, a carboxyl, a sulfonyl
 
 
+def _crosses(mol, drawing):
+    """True when two bonds among the atoms of `drawing` cross in it: a perspective, not a flat template."""
+    bonds = [(b.n, b.m) for b in mol.bonds() if b.n in drawing and b.m in drawing]
+    for i, (a, b) in enumerate(bonds):
+        for c, d in bonds[i + 1:]:
+            if {a, b} & {c, d}:
+                continue
+            (x1, y1), (x2, y2), (x3, y3), (x4, y4) = drawing[a], drawing[b], drawing[c], drawing[d]
+            den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+            if abs(den) < 1e-12:
+                continue
+            t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den
+            u = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / den
+            if 0 < t < 1 and 0 < u < 1:
+                return True
+    return False
+
+
+def _axis(px, py, qx, qy, t=0.):
+    """The direction of a flip's mirror line: the bond from `(px, py)` to `(qx, qy)`, turned by `t`."""
+    dx, dy = qx - px, qy - py
+    if not t:
+        return dx, dy
+    c, s = cos(t), sin(t)
+    return c * dx - s * dy, s * dx + c * dy
+
+
 class Initial:
     """A component's start, built once: its scope, tree embedding with templates, and every tree bond's subtree."""
     __slots__ = ('mol', 'scope', 'plane', 'root', 'edges', 'anchor', 'rigid', 'shaped', 'inherent', 'upright', 'terms',
-                 'ct')
+                 'ct', 'depth', 'faced', 'projected', 'hinges')
 
     def __init__(self, mol, atoms, rank=None):
         rank = mol.canonical_order() if rank is None else rank
@@ -95,7 +126,9 @@ class Initial:
         self.scope.orient = True                        # the drawing's orientation is a step here, not a post-step
         self.plane = dict(tree.plane)
         self.rigid = []                                 # the atoms of each templated ring system
-        upright, even, kinds = None, [], []
+        self.depth = {}                                 # a shape's atom -> its z toward the viewer
+        faced = set()                                   # (cage atom, substituent): placed on its face, never rotated
+        upright, even, kinds, cores = None, [], [], []
         for b, rs in ring_blocks(mol):                  # canonical order: each system on the tree drawn so far
             if not b <= atoms:
                 continue
@@ -111,14 +144,23 @@ class Initial:
                     best = (score, moved, v)
             self.plane.update(best[1])
             self.rigid.append(frozenset(b))
-            kinds.append(kind)
             if kind == 'shape' and (upright is None or len(b) > len(upright[0])):
                 upright = (b, best[2])
+            if kind == 'shape' and not _crosses(mol, best[2]):
+                kind = 'flat'                           # a template drawn flat: its substituents keep out of rings
+            kinds.append(kind)
+            if kind == 'shape':
+                from .shapes import fused3d
+                core, drawn = fused3d(mol, b, rs, rank)
+                self.depth.update(drawn[best[0][2]][1])
+                cores.append(core)
             elif kind == 'system':
                 even += rs
         for fix in (regularize, wheels, fair, seat):    # a system drawing's rings, as `relax` evens them
             fix(mol, self.plane, even, rank)
-        self.shaped = frozenset().union(*(b for b, k in zip(self.rigid, kinds) if k == 'shape'))
+        self.shaped = frozenset().union(*cores)         # a shape's own atoms, not the rings fused to it
+        self.projected = frozenset().union(*(b for b, k in zip(self.rigid, kinds) if k == 'shape'))   # and those
+        self.scope.projected = self.projected
         self.inherent = sum(self._internal(self.plane, b) for b in self.rigid)
         self.upright = upright is not None
         self.root = tree.root
@@ -151,6 +193,10 @@ class Initial:
             self._enter(tree, children, below, b, kind)
         for b, kind in zip(self.rigid, kinds):
             self._exits(tree, children, below, b, kind)
+            if kind == 'shape':
+                faced |= self._faces(children, below, b)
+        self.faced = frozenset(faced)
+        self.hinges = self._hinges(tree)
         depth = {}
         for p, x, _ in self.edges:
             k, y = 0, p
@@ -260,12 +306,21 @@ class Initial:
                 continue
             parent = tree.parent[a] if tree.parent[a] is not None and tree.parent[a] not in held else None
             dirs = None if kind == 'shape' else self._directions(a, held, len(kids) + (parent is not None))
+            if kind == 'shape' and a not in self.shaped and len(kids) == 1 and parent is None:
+                ring = next((r for r in self.mol.sssr if a in r and set(r) <= block and not set(r) <= self.shaped),
+                            None)
+                if ring is not None:                    # a ring fused in the projection: out from its centre
+                    cx = sum(plane[y][0] for y in ring) / len(ring)
+                    cy = sum(plane[y][1] for y in ring) / len(ring)
+                    dirs = [atan2(plane[a][1] - cy, plane[a][0] - cx)]
             if dirs and parent is not None:
                 up = atan2(plane[parent][1] - plane[a][1], plane[parent][0] - plane[a][0])
                 dirs.remove(min(dirs, key=lambda t: abs((t - up + pi) % (2 * pi) - pi)))
             if not dirs:
                 self._roomiest(tree, below, held, a, kids, kind != 'shape')
                 continue
+            if len(kids) == 2 and len(dirs) == 2:       # two substituents: the assignment leaving both more room
+                kids = max((kids, kids[::-1]), key=lambda ks: (self._swap_room(below, a, ks, dirs), ks == kids))
             for x, t in zip(kids, dirs):
                 self._turn_part(below[x], a, t - atan2(plane[x][1] - plane[a][1], plane[x][0] - plane[a][0]))
             for x in kids:                              # substituent out, unless the most room has fewer defects
@@ -273,11 +328,81 @@ class Initial:
                         self._clear_by_stretch(tree, below, held | block, a, x):
                     continue
                 fixed = {y: plane[y] for y in below[x]}
-                self._roomiest(tree, below, held, a, [x])
+                self._roomiest(tree, below, held, a, [x], outside=True)
                 moved = {y: plane[y] for y in below[x]}
                 plane.update(fixed)
                 if delta_terms(self.scope, plane, moved)[0] < 0:
                     plane.update(moved)
+
+    def _faces(self, children, below, block):
+        """Turn each substituent of a wedged stereocentre of the shape `block` not already reading as stated onto the
+        face its parity requires under the depth its bridgeheads read as (`cage.place`); the `(atom, substituent)` bonds
+        of every stereocentre reading as stated.  A stereocentre
+        whose substituent is its tree parent, whose faces cannot be told apart, or whose face adds a defect, is left to
+        its wedge."""
+        from .cage import _units, place, reads, sign
+        mol, plane, rank = self.mol, self.plane, self.scope.rank
+        z = {x: self.depth[x] for x in block if x in self.depth}
+        units = _units(mol)
+        s = sign(mol, plane, z, units)
+        out = set()
+        for a in sorted(z, key=rank.__getitem__):
+            if a not in units or any(y in block and y not in z for y in mol.neighbors_of(a)):
+                continue                                # no stereocentre, or one a fused ring holds
+            kids = [x for x in children.get(a, ()) if x not in block]
+            if not kids or len(kids) != sum(y not in block for y in mol.neighbors_of(a)):
+                continue
+            if reads(mol, plane, z, a, s, units) == mol.parity_of(a):     # already on its face: kept there
+                out.update((a, x) for x in kids)
+                continue
+            dirs = place(mol, plane, z, a, s, units)
+            if dirs is None:
+                continue
+            part = frozenset().union(*(below[x] for x in kids))
+            fixed = {y: plane[y] for y in part}
+            for x in kids:
+                self._turn_part(below[x], a, dirs[x] - atan2(plane[x][1] - plane[a][1], plane[x][0] - plane[a][0]))
+            moved = {y: plane[y] for y in part}
+            plane.update(fixed)
+            if delta_terms(self.scope, plane, moved)[0] > 0:    # a face that lands on the drawing: the wedge says it
+                continue
+            plane.update(moved)
+            out.update((a, x) for x in kids)
+        return out
+
+    def _hinges(self, tree):
+        """`[(a, x, y, part)]`: of each spiro atom `a` of four bonds, all its two rings', the ring system on its side
+        away from the root, `x` and `y` its two ring neighbours of `a`, `part` that system with everything beyond it;
+        a flip on the bisector of `x` and `y` swaps the two, which no tree bond can, `a` holding both rings.  An atom
+        with a bond besides would swing a ring onto it."""
+        mol, out = self.mol, []
+        for a in sorted(self.scope.atoms, key=self.scope.rank.__getitem__):
+            blocks = [b for b in self.rigid if a in b]
+            if len(blocks) != 2 or len(self.scope.adj[a]) != 4:
+                continue
+            for b in blocks:
+                ends = sorted((y for y in mol.neighbors_of(a) if y in b), key=self.scope.rank.__getitem__)
+                if len(ends) != 2:
+                    continue
+                part, stack = set(), [ends[0]]
+                while stack:
+                    x = stack.pop()
+                    if x != a and x not in part:
+                        part.add(x)
+                        stack.extend(mol.neighbors_of(x))
+                if tree.root not in part and part <= set(self.scope.atoms):
+                    out.append((a, ends[0], ends[1], frozenset(part)))
+        return out
+
+    def _swap_room(self, below, a, kids, dirs):
+        """The least room, rounded to a hundredth of `L`, both `kids` of `a` leave when turned onto `dirs` in order."""
+        plane = self.plane
+        saved = {y: plane[y] for x in kids for y in below[x]}
+        for x, t in zip(kids, dirs):
+            self._turn_part(below[x], a, t - atan2(plane[x][1] - plane[a][1], plane[x][0] - plane[a][0]))
+        room = min(self._room(below[x], a, 0.) for x in kids)
+        plane.update(saved)
+        return round(room / L, 2)
 
     def _clear_by_flip(self, tree, below, fixed, a, x):
         """True when a flip of a placed acyclic substituent in the way, about one of its tree bonds below a template,
@@ -371,7 +496,7 @@ class Initial:
                 room = min(room, ((px - q[0]) ** 2 + (py - q[1]) ** 2) ** .5)
         return room
 
-    def _roomiest(self, tree, below, block, a, kids, flat=True):
+    def _roomiest(self, tree, below, block, a, kids, flat=True, outside=False):
         """Turn each of `kids`, in rank order, to whichever of `EXITS` directions leaves its subtree most room from
         every other atom, up to `ROOM`, then is nearest the direction away from `block` and `a`'s tree parent, a shape's
         neighbours inside its outline left out while two on it remain; two at least `APART`; never, when `flat`,
@@ -406,6 +531,9 @@ class Initial:
                     continue
                 if flat and in_ring_angle(self.scope, plane, a, t):
                     continue
+                if outside and len(inside) == 2 and any(abs((t - atan2(plane[y][1] - ay, plane[y][0] - ax) + pi) %
+                                                            (2 * pi) - pi) < PINCH for y in inside):
+                    continue                            # a substituent giving way stays clear of its two ring bonds
                 room = self._room(part, a, t - atan2(plane[x][1] - ay, plane[x][0] - ax), others)
                 key = (-round(min(room, cap) / L, 2), round(abs((t - base + pi) % (2 * pi) - pi), 6))
                 if best is None or key < best[0]:
@@ -475,7 +603,7 @@ class PrimitiveEnv:
                     for x, p in plane.items()}
         (px, py), (qx, qy) = plane[m.pivot], plane[m.other]
         if m.kind == 'flip':
-            dx, dy = qx - px, qy - py
+            dx, dy = _axis(px, py, qx, qy, m.arg)
             d = dx * dx + dy * dy or 1.
             out = {}
             for x in m.part:
@@ -502,9 +630,13 @@ class PrimitiveEnv:
     def _moves(self):
         out = []
         plane = self.plane
+        for a, x, y, part in self.initial.hinges:      # a spiro ring system mirrored on its bisector at `a`
+            t = atan2(plane[y][1] - plane[a][1], plane[y][0] - plane[a][0]) - \
+                atan2(plane[x][1] - plane[a][1], plane[x][0] - plane[a][0])
+            out.append(Move('flip', a, x, ((t + pi) % (2 * pi) - pi) / 2, part))
         for p, x, part in self.initial.edges:
             out.append(Move('flip', p, x, 0., part))
-            if (p, x) in self.initial.anchor:
+            if (p, x) in self.initial.anchor and (p, x) not in self.initial.faced:
                 for t in ANGLES:
                     for side in ((t, -t) if t < pi - 1e-9 else (t,)):
                         m = Move('rotate', p, x, side, part)

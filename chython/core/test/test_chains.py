@@ -102,3 +102,15 @@ def test_a_cycle_ignores_atom_order():
 def test_a_mixture_is_asked_per_component():
     assert cycles(smiles(ALPHA_CD + '.[Na+].[Cl-]')) is None
     assert isinstance(cycles(smiles('C1COCCOCCOCCOCCOCCO1')), Circle)
+
+
+@pytest.mark.parametrize('text', ['O=C1NCCCCCCCCCC2C3CCC(C3)C12', 'O=C1NCCCCCCCCCC2C3C=CC(O3)C12'])
+def test_a_bridged_system_on_a_cycle_edge_is_one_group(text):
+    """A norbornane, or a 7-oxanorbornene, fused on an edge of a 14-membered lactam: the cycle passes its two fused
+    atoms, and its other atoms are one group, none of its bonds a cross-link drawn as a chord."""
+    mol = smiles(text)
+    chain = perceive(mol)
+    small = {frozenset(b) for r in mol.sssr if len(r) <= 8 for b in zip(r, r[1:] + r[:1])}
+    assert isinstance(chain, Chain) and not [x for x in chain.crosslinks if frozenset(x) in small]
+    cage = {x for r in mol.sssr if len(r) <= 8 for x in r} - set(chain.backbone)
+    assert sum(bool(m & cage) for m in chain.members) == 1

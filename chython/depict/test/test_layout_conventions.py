@@ -228,7 +228,7 @@ def test_components_do_not_overlap():
 
 def test_layout2d_dispatches_to_the_engine():
     mol = smiles('c1ccccc1O')
-    plane = layout2d(mol, engine='chython', force=True, peptide=False)
+    plane = layout2d(mol, engine='chython', force=True, chain=False)
     assert set(plane) == set(mol)
 
 
@@ -1023,17 +1023,14 @@ def test_a_ring_s_branches_leave_each_other_their_slots():
     assert degrees(gaps[0]) > 110
 
 
-@pytest.mark.xfail(strict=False, reason='a convention the cascade does not yet keep')
 @pytest.mark.parametrize('s', ['C1=CC2CC1C1C2C(=O)OC1=O', 'C1CC2C3CCC(C3)C2C1', 'C1CC2CC1C1CCCCC21'])
-def test_a_one_atom_bridge_spans_a_regular_hexagon(s):
-    # nadic anhydride, tricyclo[5.2.1.0^2,6]decane, a benzo-fused norbornane: no shape draws these systems
+def test_a_norbornane_fused_to_a_ring_is_drawn_in_perspective(s):
+    # nadic anhydride, tricyclo[5.2.1.0^2,6]decane, a fused norbornane: the cage in perspective, its ring fused on
+    from chython.depict.layout.cage import cages
     mol = smiles(s)
     plane = chython_layout(mol)
-    ls = [hypot(plane[b.n][0] - plane[b.m][0], plane[b.n][1] - plane[b.m][1]) for b in mol.bonds()
-          if mol.in_ring_of(b.n) and mol.in_ring_of(b.m)]
-    assert max(ls) / min(ls) < 1.05
-    d = defects(mol, plane)
-    assert (d['ovl61'], d['crs'], d['aob']) == (0, 0, 0)
+    (cage,) = cages(mol, plane)
+    assert len(cage.atoms) == 7 and cage.gaps
 
 
 @pytest.mark.xfail(strict=False, reason='a convention the cascade does not yet keep')

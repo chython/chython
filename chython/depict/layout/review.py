@@ -174,9 +174,11 @@ def worker(engine='chython'):
 
 
 def source_stamp(root=SOURCES):
-    """Latest modification time over the depict sources and the compiled core."""
+    """Latest modification time over the depict sources and the core's, compiled and Python: `monomers` segments the
+    chains depict draws."""
     paths = [p for p in Path(root).rglob('*.py') if 'test' not in p.parts]
-    paths += (Path(root).parent / 'core').glob('_core*.so')
+    core = Path(root).parent / 'core'
+    paths += [p for p in core.glob('*.py')] + list(core.glob('_core*.so'))
     return max((p.stat().st_mtime for p in paths), default=0.)
 
 

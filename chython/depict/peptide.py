@@ -195,7 +195,9 @@ def _leg(mol, plane, x, us, level, ink, links):
     """`(crossings, points)` after `x` to the bar at height `level`: straight along a direction of `us` when
     that is steep, short and clear, else a stub of `JOG` along one, a rise, a sideways step of `k JOG` and a
     vertical: the path crossing least, then the shortest step, the order of `us` breaking a tie.  `JOG` is half
-    a bond past `x`'s label, so the vertical runs between the lattice's columns."""
+    a bond past `x`'s label, so the vertical runs between the lattice's columns.  A level direction is first tried
+    turned 45 degrees toward the bar, and a sideways step from a steep one first taken as one diagonal from `x`: either
+    way the leg leaves at 45 degrees and turns once, by 45 degrees, into the vertical."""
     p = plane[x]
     for u in us:
         if abs(u[1]) > sin(radians(25)):
@@ -204,12 +206,24 @@ def _leg(mol, plane, x, us, level, ink, links):
             if t > 0 and abs(q[0] - p[0]) <= LEG and not _hits(mol, plane, x, p, q, ink, links):
                 return 0, [q]
     best, s = None, 1 if level > p[1] else -1
+    diagonal = sin(radians(45))
+    starts = []
+    for u in us:
+        if abs(u[1]) < sin(radians(25)):                # a level slot: its diagonal toward the bar first
+            starts.append((diagonal if u[0] > 0 else -diagonal, s * diagonal))
+        starts.append(u)
     for k in range(SIDESTEP + 1):
-        for u in us:
+        for u in starts:
             j = JOG + (ray_box_exit(p, u, ink[x]) if x in ink else 0.)
             e = (p[0] + u[0] * j, p[1] + u[1] * j)
             first = _hits(mol, plane, x, p, e, ink, links)
             for dx in (k * JOG, -k * JOG) if k else (0.,):
+                if k and abs(u[1]) > sin(radians(25)) and s * (level - p[1]) > k * JOG:
+                    q = (p[0] + dx, p[1] + s * k * JOG)  # the sideways step as one diagonal from `x`, then down
+                    pts = [q, (q[0], level)]
+                    n = _hits(mol, plane, x, p, q, ink, links) + _hits(mol, plane, None, q, pts[1], ink, links)
+                    if best is None or n < best[0]:
+                        best = n, pts
                 for h in range(max(1, int(s * (level - e[1]) / JOG * 2)) if k else 1):
                     y = e[1] + s * h * JOG / 2                 # the height of the sideways step
                     pts = [e, (e[0], y), (e[0] + dx, y), (e[0] + dx, level)] if h else \

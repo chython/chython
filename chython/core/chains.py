@@ -29,7 +29,7 @@ chain layout reads.
 | `head_to_tail` | the chain closes on itself |
 | `backbone` | the main chain's atoms, consecutive ones bonded or a bead's entry and exit |
 | `beads` | indices `k` of the backbone steps `backbone[k]`-`backbone[k + 1]` that cross a bead, entry to exit |
-| `kind` | `'peptide'` or `'cycle'` |
+| `kind` | `'peptide'`, `'cycle'` or `'nucleic'` |
 """
 from dataclasses import dataclass
 
@@ -79,9 +79,10 @@ class Chain:
 
 
 def perceive(mol):
-    """The chain or circle `mol` is, or None: a peptide first, then `cycles`."""
-    from .monomers import monomers                      # monomers builds Chains: imported at call time
-    return monomers(mol) or cycles(mol)
+    """The chain or circle `mol` is, or None: a peptide first, then a nucleic-acid strand, then `cycles`."""
+    from .monomers import monomers                      # both build Chains: imported at call time
+    from .nucleotides import nucleotides
+    return monomers(mol) or nucleotides(mol) or cycles(mol)
 
 
 def cycles(mol):
@@ -98,8 +99,10 @@ heteroatom, repeated three or more times |
     | opening | a C(=O)-O or C(=O)-N bond of the cycle, else one between a bead and another unit, else any; ranks |
     | units | an atom on the cycle; a crossed hexagon entered meta, its three-atom arc on the backbone; any other \
 crossed bead, with its entry and exit |
-    | groups | every other atom, claimed in rank order from the units without crossing the backbone |
-    | links | a bond between two groups off the backbone, moved to start on it; the closure last |
+    | groups | every other atom, claimed in rank order from the units without crossing the backbone; a small-ring \
+system's atoms off the backbone one group, a cage fused on a cycle edge never split |
+    | links | a bond between two groups off the backbone, moved to start on it, none closing a small-ring system on \
+its backbone atoms; the closure last |
 
     A mixture is no cycle: each component is asked on its own.
     """
@@ -168,11 +171,22 @@ crossed bead, with its entry and exit |
                 backbone.append(x)
                 residues.append(Residue(frozenset((x,)), 'unit', x, x, (x,)))
     members = _claim(mol, residues, set(backbone), rank)
+    on = set(backbone)
+    for atoms, _ in systems:                            # a system fused on a backbone edge: one group, never split
+        off = atoms - on
+        hosts = sorted({i for i, m in enumerate(members) if m & off}, key=lambda i: min(rank[x] for x in members[i]))
+        for i in hosts[1:]:
+            members[hosts[0]] |= members[i] & off
+            members[i] -= off
+        if hosts:                                       # its backbone atoms too: the edge it closes on
+            members[hosts[0]] |= atoms & on
     group = {x: i for i, m in enumerate(members) for x in m}
+    closing = {frozenset((x, y)) for atoms, _ in systems for x in atoms - on for y in mol.neighbors_of(x)
+               if y in atoms and y in on}               # a fused system's bonds to its own backbone atoms
     steps = {frozenset(p) for p in zip(backbone, backbone[1:])}
     links = sorted({tuple(sorted((x, y), key=rank.__getitem__)) for x in mol for y in mol.neighbors_of(x)
-                    if group[x] != group[y] and frozenset((x, y)) not in steps and
-                    frozenset((x, y)) != frozenset((backbone[-1], backbone[0]))},
+                    if group[x] != group[y] and frozenset((x, y)) not in steps and frozenset((x, y)) not in closing
+                    and frozenset((x, y)) != frozenset((backbone[-1], backbone[0]))},
                    key=lambda t: (rank[t[0]], rank[t[1]]))
     links = [_to_backbone(mol, members, set(backbone), link, rank) for link in links]
     links.append((backbone[-1], backbone[0]))

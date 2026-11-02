@@ -41,7 +41,7 @@ A step is kept only when no defect count grows on the atoms it moved: `ovl61`, `
 step may break a cis/trans configuration or bend an atom of `linear_atoms`.
 """
 from collections import deque
-from math import atan2, cos, hypot, pi, radians, sin, sqrt
+from math import atan2, cos, floor, hypot, pi, radians, sin, sqrt
 
 from ...core.wedge import cis_trans_frame
 from .lattice import L
@@ -933,14 +933,24 @@ def _cycles(mol, plane, rank, size=8):
 def _inr(plane, rings, part=None):
     """Atoms inside a ring polygon on the other side of `part`: the scorecard's `inr` across the moved bond; with no
     `part`, every atom inside a ring it is not in."""
+    if not rings:
+        return 0
+    cells = {}                                          # atoms by square cell of side `L`: a ring's box, not a scan
+    for x, q in plane.items():
+        cells.setdefault((floor(q[0] / L), floor(q[1] / L)), []).append(x)
     n = 0
     for r in rings:
         poly = [plane[x] for x in r]
         x0, x1 = min(p[0] for p in poly), max(p[0] for p in poly)
         y0, y1 = min(p[1] for p in poly), max(p[1] for p in poly)
         ring, moved = set(r), part is not None and r[0] in part
-        n += sum(_inside(q, poly) for x, q in plane.items() if x0 <= q[0] <= x1 and y0 <= q[1] <= y1 and
-                 (x not in ring if part is None else (x in part) != moved))     # the ring's box first
+        for i in range(floor(x0 / L), floor(x1 / L) + 1):
+            for j in range(floor(y0 / L), floor(y1 / L) + 1):
+                for x in cells.get((i, j), ()):
+                    q = plane[x]
+                    if x0 <= q[0] <= x1 and y0 <= q[1] <= y1 and \
+                            (x not in ring if part is None else (x in part) != moved):
+                        n += _inside(q, poly)
     return n
 
 

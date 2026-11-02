@@ -23,13 +23,14 @@
 | start | `primitive.Initial`: the tree, each ring system's `system_drawing`, substituent exits, boundary bonds at `L` |
 | fit | while a defect, a broken stated cis/trans or an atom inside a ring is left, up to `FIT` moves: of the flips, \
 anchored rotations and stretches of tree bonds whose subtree holds some atoms of the trouble but not all, none \
-putting an atom inside a ring, a substituent `in_ring_angle` of its atom or two bonds of an acyclic atom within \
-`PINCH`, the move repairing most cis/trans units, then a stretch along a linear atom of no metal, then removing \
-most defects, then bending fewest substituents within `EXIT` of their atom's ring bonds, a bend kept only for a \
-defect it clears, then leaving fewest atoms off even (see `_off`), then taking most atoms out of rings, then not \
-stretching a bond to a terminal atom; ties to the kind in `KIND` order, then the smaller move, then a stretch of a \
-bond between two sp3 atoms, then the step order; no move breaks a stated cis/trans or a linear atom, and no \
-stretch leaves a bond past `STRETCHED` |
+putting an atom inside a ring, a substituent `in_ring_angle` of its atom, two bonds of an acyclic atom or, but in \
+the fit allowing atoms off even, two substituents of a ring atom within `PINCH`, the move repairing most cis/trans \
+units, then a stretch along a linear atom of no metal, then removing most defects, then bending fewest substituents \
+within `EXIT` of their atom's ring bonds, then squeezing fewest pairs of a ring atom's two substituents (see \
+`_squeezed`), a bend or squeeze kept only for a defect it clears, then leaving fewest atoms off even (see `_off`), \
+then taking most atoms out of rings, then not stretching a bond to a terminal atom; ties to the kind in `KIND` \
+order, then the smaller move, then a stretch of a bond between two sp3 atoms, then the step order; no move breaks a \
+stated cis/trans or a linear atom, and no stretch leaves a bond past `STRETCHED` |
 | unstick | a defect, an atom off even or a long bond left: a flip, bend or stretch taken at a bond joining two \
 massive fragments, or a cheap one near the trouble, when the repair after it leaves a better scene (see `_unstick`) |
 | settle | a ring substituent inside a ring, bent onto it or off its bisector put on the bisector, the rest repaired \
@@ -50,11 +51,14 @@ The ring systems: each drawn once, by kind, its drawing and mirror image in plan
 
 | kind | drawing |
 | --- | --- |
-| shape | `shapes.shape`: a predefined cage |
-| circle | a crown `cycles` calls a `Circle`: `templates.crown`, its edge-fused rings regular polygons outward |
+| shape | `shapes.fused3d`: a predefined cage, rings fused to it on one edge each as regular polygons |
+| circle | a crown `cycles` calls a `Circle`: `templates.crown`, its edge-fused rings regular polygons outward; a ring \
+of `MEDIUM` atoms with smaller rings fused on its edges: the regular polygon, those outward (`_medium`) |
 | ring | one ring of up to `TEMPLATE` atoms: its regular polygon |
 | system | rings of up to `TEMPLATE` atoms: the first clean `edits._block_drawings` drawing, else the first; an \
 ortho-fused system's the most regular of the first `REGULAR` clean ones, its rings evened by `relax.regularize` |
+| | an ortho-fused macrocycle's: its rings of up to `TEMPLATE` atoms evened by `relax.regularize` too, unless that \
+adds a defect |
 | units | a macrocycle holding a ring of up to `TEMPLATE` atoms: the first clean drawing, if it has no defect of \
 its own |
 | tree | any other macrocycle: None, so it rides the tree |
@@ -74,7 +78,7 @@ from pathlib import Path
 from ...core import MoleculeContainer
 from .lattice import L, project
 from .relax import count_defects
-from .shapes import shape
+from .shapes import fused3d, shape
 from .tree import Grid
 
 
@@ -90,7 +94,11 @@ SPACE = .7 * L          # two atoms nearer than this, neither bonded nor geminal
 FIT = 32                # fitting moves at most per component
 STRETCHED = 3 * L       # the longest a fitting stretch leaves a bond
 EXIT = pi / 2 - 1e-6    # the least angle a fitting move leaves between a substituent and its atom's ring bonds
-PINCH = pi / 3 - 1e-6   # the least angle a fitting move leaves between two bonds of an acyclic atom
+PINCH = pi / 3 - 1e-6   # the least angle a fitting move leaves between two bonds of an acyclic atom, or two
+                        # substituents of a ring atom
+LARGE = 300             # heavy atoms of a component past which smiles-drawer draws it, not the fit
+CRAMP = pi / 8          # a substituent's bond this near a ring bond of its atom is folded onto the ring, unless
+                        # the atom has two of each: then `PINCH`
 EVEN = pi / 36          # how far below `360 / n` a gap of an acyclic atom of n bonds is off even
 UNSTICK = 8             # flips and bends the fit tries with a repair after each, when stuck
 AFTER = 8               # repair moves after such a move
@@ -102,20 +110,25 @@ CROWDED = .99 * L       # unbonded atoms nearer than the lattice's 1 L overload 
 LOOSE = 1.5 * L         # and nearer than this, a tie between two flips decided
 UNLOAD = .01            # the least overload, in L squared, a flip of `_unload` removes
 SETTLE = 8              # substituents a component's settle tries
-SMALL_SETTLE = 4        # the most atoms a settled substituent holds
+SMALL_SETTLE = 40       # the most atoms a settled substituent holds
 NUDGES = tuple((r * cos(k * pi / 6), r * sin(k * pi / 6)) for r in (L / 4, L / 2) for k in range(12))
 KIND = {'flip': 0, 'rotate': 1, 'stretch': 2}
 GOLDEN = Path(__file__).resolve().parents[3] / 'test' / 'layout_golden.tsv'
 DIGITS = 4              # decimals of `L` a drawing hash keeps: platform noise below them is not a change
+MEDIUM = (10, 12)       # a fused ring this size is a regular polygon, off the lattice
 
 
 def system_drawing(mol, atoms, rings, rank):
     """`(kind, [drawing, mirror image])` of the ring system `atoms` with `rings`, each drawing `{atom: (x, y)}`, or
     None to leave it to the tree; `kind` one of the table's."""
-    found = shape(mol, atoms, rank)
+    found = fused3d(mol, atoms, rings, rank)
     if found is not None:
-        return 'shape', found
+        return 'shape', [p for p, _ in found[1]]
     found = _circle(mol, atoms, rings, rank)
+    if found is None:
+        found = _medium(mol, atoms, rings)
+    if found is None:
+        found = _peri(mol, atoms, rings)
     if found is not None:
         return 'circle', [found, {x: (-p[0], p[1]) for x, p in found.items()}]
     if len(rings) == 1:
@@ -201,6 +214,96 @@ def _circle(mol, atoms, rings, rank):
     return None if _ct_broken(mol, probe, frames, set(probe)) else plane
 
 
+def _medium(mol, atoms, rings):
+    """A block of a ring of `MEDIUM` atoms and smaller rings fused to it on one edge each, `{atom: (x, y)}`, or
+    None: the medium ring a regular polygon, every other ring one outward on its edge, off the lattice; None when a
+    ring shares no single edge, lands on the drawing, or a stated cis/trans unit would break."""
+    from .relax import _ct_broken, _frames
+    from .shapes import _polygons
+    big = max(rings, key=len)
+    if not MEDIUM[0] <= len(big) <= MEDIUM[1] or len(rings) < 2 or \
+            sum(len(r) >= MEDIUM[0] for r in rings) > 1:
+        return None
+    n = len(big)
+    r = L / (2 * sin(pi / n))
+    plane = {x: (r * cos(2 * pi * i / n), r * sin(2 * pi * i / n)) for i, x in enumerate(big)}
+    plane = _polygons(mol, plane, [q for q in rings if q is not big])
+    if plane is None or set(plane) != set(atoms):
+        return None
+    probe = dict(plane)                                 # each substituent on its atom's outward bisector
+    for x in atoms:
+        ring_nb = [y for y in mol.neighbors_of(x) if y in plane]
+        ux = sum(plane[x][0] - plane[y][0] for y in ring_nb)
+        uy = sum(plane[x][1] - plane[y][1] for y in ring_nb)
+        d = hypot(ux, uy) or 1.
+        for y in mol.neighbors_of(x):
+            if y not in plane:
+                probe[y] = (plane[x][0] + ux / d * L, plane[x][1] + uy / d * L)
+    return None if _ct_broken(mol, probe, _frames(mol, probe), set(probe)) else plane
+
+
+def _peri(mol, atoms, rings):
+    """A block whose largest ring, of 7 to `TEMPLATE` atoms, closes round an ortho-fused set of smaller rings at a
+    peri atom, `{atom: (x, y)}`, or None: the smaller rings regular polygons each fused on one edge, the largest
+    ring's free atoms an arc of equal bonds from one placed atom to the other, outward -- an indole's pyrrole stays
+    regular and the azepine bridging it takes the strain.  None when the rest is no such arc or it lands on the
+    drawing."""
+    from .shapes import _polygons
+    big = max(rings, key=len)
+    small = [r for r in rings if r is not big]
+    if not 7 <= len(big) <= TEMPLATE or not small or any(len(r) >= len(big) for r in small) or \
+            not any(sum(x in r for r in rings) == 3 for x in big):
+        return None
+    first = small[0]
+    n = len(first)
+    rad = L / (2 * sin(pi / n))
+    plane = {x: (rad * cos(2 * pi * i / n), rad * sin(2 * pi * i / n)) for i, x in enumerate(first)}
+    plane = _polygons(mol, plane, small[1:])
+    if plane is None:
+        return None
+    k = len(big)
+    free = [i for i, x in enumerate(big) if x not in plane]
+    if not free:
+        return None
+    start = next(i for i in range(k) if big[i] in plane and big[(i + 1) % k] not in plane)
+    path = [big[start]]
+    i = (start + 1) % k
+    while big[i] not in plane:
+        path.append(big[i])
+        i = (i + 1) % k
+    path.append(big[i])
+    if len(path) - 2 != len(free):
+        return None
+    (ax, ay), (bx, by) = plane[path[0]], plane[path[-1]]
+    c = hypot(bx - ax, by - ay)
+    m = len(path) - 1                                   # bonds of the arc, each `L`
+    if c >= m * L or c < 1e-9:
+        return None
+    lo, hi = 1e-6, 2 * pi / m - 1e-6                    # the arc's turn per bond: chord `c` of `m` chords `L`
+    for _ in range(60):
+        phi = (lo + hi) / 2
+        if L * sin(m * phi / 2) / sin(phi / 2) > c:
+            lo = phi
+        else:
+            hi = phi
+    r = L / (2 * sin(phi / 2))
+    mx, my = (ax + bx) / 2, (ay + by) / 2
+    gx = sum(p[0] for p in plane.values()) / len(plane)
+    gy = sum(p[1] for p in plane.values()) / len(plane)
+    nx, ny = -(by - ay) / c, (bx - ax) / c
+    if (mx - gx) * nx + (my - gy) * ny < 0:
+        nx, ny = -nx, -ny                               # bulging away from what is drawn
+    h = r * cos(m * phi / 2)
+    cx, cy = mx - nx * h, my - ny * h
+    ta = atan2(ay - cy, ax - cx)
+    step = min((phi, -phi), key=lambda d: abs((ta + m * d - atan2(by - cy, bx - cx) + pi) % (2 * pi) - pi))
+    added = {x: (cx + r * cos(ta + step * j), cy + r * sin(ta + step * j)) for j, x in enumerate(path[1:-1], 1)}
+    if any(hypot(q[0] - p[0], q[1] - p[1]) < L / 2 for q in added.values() for p in plane.values()):
+        return None
+    plane.update(added)
+    return plane if set(plane) == set(atoms) else None
+
+
 def _key(mol, atoms):
     """`(key molecule, order)`: `atoms` and their bonds as an all-carbon, all-single-bond graph with one stub atom
     per bond leaving them; `order[i]` the atom of `mol` the key's atom `i + 1` stands for, None for a stub."""
@@ -262,17 +365,26 @@ def _drawing(key):
             first = best[1]
         if first is not None and not ortho and max(map(len, rings)) <= TEMPLATE:
             _untangle(key, first, atoms)                # a bridged small-ring system's own defects, nudged out once
-        if first is not None and ortho and max(map(len, rings)) <= TEMPLATE:
+        if first is not None and ortho:
             from .relax import regularize                   # the key has no stated geometry to keep: even its rings
             ring = key.substructure(atoms)               # the drawing holds the ring atoms alone
+            kept = dict(first)
             regularize(ring, first, [tuple(r) for r in rings], {x: rank[x] for x in ring})
-        if first is not None and (max(map(len, rings)) <= TEMPLATE or not sum(count_defects(
-                first, list(atoms), [(n, m) for n in atoms for m in key.neighbors_of(n) if m in atoms and n < m]))):
+            if max(map(len, rings)) > TEMPLATE and _defects(key, first, atoms) > _defects(key, kept, atoms):
+                first.clear()                           # a macrocycle evened onto itself: drawn as it was
+                first.update(kept)
+        if first is not None and (max(map(len, rings)) <= TEMPLATE or not _defects(key, first, atoms)):
             out = (key, first)
     if len(_DRAWINGS) >= CACHE:
         _DRAWINGS.clear()
     _DRAWINGS[k] = out
     return out
+
+
+def _defects(key, plane, atoms):
+    """The defects of the ring system `atoms` of `key` drawn as `plane`."""
+    return sum(count_defects(plane, list(atoms), [(n, m) for n in atoms for m in key.neighbors_of(n) if m in atoms
+                                                  and n < m]))
 
 
 def _untangle(key, plane, atoms):
@@ -344,24 +456,33 @@ def fit(initial):
     """The plane of `initial`'s component after the fit: `{atom: (x, y)}`. The fit runs by flips and bends alone and
     with stretches allowed, neither leaving an atom off even, an acyclic atom's gaps at `360 / n` or a ring atom's lone
     substituent on its bisector, the better by `_judge` winning, the flips on a tie; when the winner leaves a defect or
-    a broken cis/trans, the fit allowing atoms off even is run too, and the one leaving less wins."""
+    a broken cis/trans, the fit allowing atoms off even is run too, and the one leaving less wins; when it leaves a bond
+    `_cramped`, that fit is run too and wins when `_judge` weighs it better."""
     flips, left = _fit(initial, True, False)
     judged = _judge(initial, flips, left)
-    if judged == ((0, 0), 0, 0, False, 0.):             # nothing a stretch could better
+    if judged == ((0, 0), 0, 0, 0, 0, False, 0.):       # nothing a stretch could better
         return flips
     plane, rest = _fit(initial, True)
-    if judged <= _judge(initial, plane, rest):
+    stretched = _judge(initial, plane, rest)
+    if judged <= stretched:
         plane, rest = flips, left
+    else:
+        judged = stretched
     if rest > (0, 0):
         other, more = _fit(initial, False)
         if more < rest:
+            return other
+    elif judged[2]:                                     # a bond cramped onto its ring: the fit off even may free it
+        other, more = _fit(initial, False)
+        if _judge(initial, other, more) < judged:
             return other
     return plane
 
 
 def _judge(initial, plane, left):
-    """`(defects and broken cis/trans, atoms inside rings, atoms off even, an unbonded pair nearer than `SPACE`, stretch
-    in `L`s)` of a fitted `plane`: how `fit` weighs a drawing by flips against one by stretches."""
+    """`(defects and broken cis/trans, atoms inside rings, atoms `_cramped`, atoms off even, ring atoms `_squeezed`, an
+    unbonded pair nearer than `SPACE`, stretch in `L`s)` of a fitted `plane`: how `fit` weighs a drawing by flips
+    against one by stretches."""
     scope = initial.scope
     rings = [r for r in scope.rings if r[0] in plane]
     grid = Grid()
@@ -371,7 +492,9 @@ def _judge(initial, plane, left):
                 for x in scope.atoms for y in grid.atoms(plane[x], SPACE) if y != x)
     stretch = sum(max(hypot(plane[p][0] - plane[x][0], plane[p][1] - plane[x][1]) - L, 0.)
                   for p, x, _ in initial.edges)
-    return left, len(_inside_rings(plane, rings)), _uneven(scope, plane, set(scope.atoms)), close, round(stretch / L, 2)
+    every = set(scope.atoms)
+    return (left, len(_inside_rings(plane, rings)), _cramped(scope, plane), _uneven(scope, plane, every),
+            _squeezed(scope, plane, every), close, round(stretch / L, 2))
 
 
 def _fit(initial, even, stretch=True):
@@ -381,7 +504,7 @@ def _fit(initial, even, stretch=True):
     scope, mol = initial.scope, initial.mol
     orient, scope.orient = scope.orient, False          # the fit reads defects; the pose orients afterwards
     rings = [r for r in scope.rings if r[0] in env.plane]   # this component's own
-    _repair(env, scope, mol, rings, even, stretch=stretch)
+    _repair(env, scope, mol, rings, even, stretch=stretch, gem=stretch)
     _unstick(env, scope, mol, rings, even, stretch)
     if even:
         _settle(env, initial, rings)
@@ -393,9 +516,10 @@ def _fit(initial, even, stretch=True):
     return dict(env.plane), (max(env.defects, 0), env.ct)
 
 
-def _repair(env, scope, mol, rings, even, held=frozenset(), banned=frozenset(), budget=FIT, stretch=True):
+def _repair(env, scope, mol, rings, even, held=frozenset(), banned=frozenset(), budget=FIT, stretch=True, gem=False):
     """The fit's moves, up to `budget`, while a defect, a broken stated cis/trans or an atom inside a ring is left; no
-    move shifts an atom of `held` or turns a bond of `banned`, nor, unless `stretch`, stretches one."""
+    move shifts an atom of `held` or turns a bond of `banned`, nor, unless `stretch`, stretches one, nor, with `gem`,
+    turns a ring atom's two substituents off even: the fit that stretches lengthens their bonds instead."""
     from .relax import _ct_broken, defect_atoms
     for _ in range(budget):
         inside = _inside_rings(env.plane, rings)
@@ -406,7 +530,7 @@ def _repair(env, scope, mol, rings, even, held=frozenset(), banned=frozenset(), 
             trouble |= {x for f in scope.frames if _ct_broken(mol, env.plane, [f], set(f[2])) for x in f[2]}
         best = _best(env, scope, mol, rings, even, held, trouble,
                      (m for m in env._moves() if (m.pivot, m.other) not in banned and (stretch or m.kind != 'stretch')),
-                     bool(inside))
+                     bool(inside), gem)
         if best is None:
             break
         _, moved, d, ct = best
@@ -459,7 +583,7 @@ def _unstick(env, scope, mol, rings, even, stretch=True):
                 moved = env._moved(k)
                 cut = {k.pivot, k.other}
                 if masked(scope, env.plane, moved, LONGEST) or even and \
-                        _uneven(scope, {**env.plane, **moved}, cut) > _uneven(scope, env.plane, cut):
+                        _uneven(scope, {**env.plane, **moved}, cut, stretch) > _uneven(scope, env.plane, cut, stretch):
                     continue
                 d = delta_terms(scope, env.plane, moved)
                 (wide if at else cheap).append(((d[0], KIND[k.kind], len(k.part), env.tie(k)), k, moved, d))
@@ -471,7 +595,7 @@ def _unstick(env, scope, mol, rings, even, stretch=True):
             env.terms = tuple(a + b for a, b in zip(env.terms, d))
             env._legal = None
             _repair(env, scope, mol, rings, even, banned=frozenset({(m.pivot, m.other)}), budget=AFTER,
-                    stretch=stretch)
+                    stretch=stretch, gem=stretch)
             got = _scene(env, scope, every, rings)
             if got < now and (best is None or got < best[0]):
                 best = (got, dict(env.plane), env.terms, env.ct)
@@ -498,7 +622,7 @@ def _scene(env, scope, every, rings):
             round(stretch / L, 2), -round(min(near, L) / L, 2))
 
 
-def _best(env, scope, mol, rings, even, held, trouble, moves, inside=True):
+def _best(env, scope, mol, rings, even, held, trouble, moves, inside=True, gem=False):
     """`(key, moved, delta terms, delta cis/trans)` of the fit's best of `moves` on `trouble`, or None."""
     from .edits import masked
     from .primitive import LONGEST
@@ -531,22 +655,27 @@ def _best(env, scope, mol, rings, even, held, trouble, moves, inside=True):
         inr = _inr({**env.plane, **moved}, rings, part) - _inr(env.plane, rings, part)
         if inr > 0 or (ct, d[0], inr) >= (0, 0, 0):
             continue                                    # never an atom into a ring
-        if _pinched(scope, {**env.plane, **moved}, part) > _pinched(scope, env.plane, part):
-            continue                                    # never two bonds of an acyclic atom squeezed together
+        if _pinched(scope, {**env.plane, **moved}, part, even) > _pinched(scope, env.plane, part, even):
+            continue                                    # never two bonds of an atom squeezed together
         bent = _bent_exits(scope, {**env.plane, **moved}, part) - _bent_exits(scope, env.plane, part)
         if bent > 0 and (ct, d[0]) >= (0, 0):
             continue                                    # a substituent bent onto its ring only to clear a defect
+        if _cramped(scope, {**env.plane, **moved}, part) > _cramped(scope, env.plane, part):
+            continue                                    # never a substituent folded onto its ring bond
+        squeezed = _squeezed(scope, {**env.plane, **moved}, part) - _squeezed(scope, env.plane, part)
+        if squeezed > 0 and (ct, d[0]) >= (0, 0):
+            continue
         shaped = env.initial.shaped
         if _inward(scope, {**env.plane, **moved}, part, shaped) > _inward(scope, env.plane, part, shaped):
             continue                                    # never a substituent across its own ring
-        uneven = _uneven(scope, {**env.plane, **moved}, part) - _uneven(scope, env.plane, part) if even else 0
+        uneven = _uneven(scope, {**env.plane, **moved}, part, gem) - _uneven(scope, env.plane, part, gem) if even else 0
         if uneven > 0:
             continue                                    # the even fit never bends: it stretches or flips instead
         sp3 = m.kind == 'stretch' and mol.hybridization_of(m.pivot) == 1 and mol.hybridization_of(m.other) == 1
         end = m.kind == 'stretch' and len(scope.adj[m.other]) == 1         # a terminal bond keeps its length
         line = m.kind == 'stretch' and not end and (m.pivot in scope.linear or m.other in scope.linear) and \
             not mol.atom(m.pivot).is_metal and not mol.atom(m.other).is_metal
-        key = (ct, not line, d[0], bent, uneven, inr, end, KIND[m.kind], len(moved), not sp3, env.tie(m))
+        key = (ct, not line, d[0], bent, squeezed, uneven, inr, end, KIND[m.kind], len(moved), not sp3, env.tie(m))
         if best is None or key < best[0]:
             best = (key, moved, d, ct)
     return best
@@ -568,11 +697,12 @@ def _even_line(env, scope, mol, m, moved):
 def _inverse(env, m):
     """`{atom: point}` of the atoms of `env`'s plane outside `m.part` moved by the inverse of `m`: the drawing `m`
     makes, up to a rigid motion, with `m.part` left in place."""
+    from .primitive import _axis
     plane = env.plane
     (px, py), (qx, qy) = plane[m.pivot], plane[m.other]
     rest = [x for x in plane if x not in m.part]
     if m.kind == 'flip':
-        dx, dy = qx - px, qy - py
+        dx, dy = _axis(px, py, qx, qy, m.arg)
         d = dx * dx + dy * dy or 1.
         out = {}
         for x in rest:
@@ -591,10 +721,11 @@ def _inverse(env, m):
 
 
 def _settle(env, initial, rings):
-    """Each ring substituent of up to `SMALL_SETTLE` atoms, not of a shape, inside a ring, bent onto its ring or off
-    its bisector, in rank order, up to `SETTLE`: the flip or anchored rotation of its tree bond putting it on the
-    bisector outside every ring, then the repair with its subtree held; kept when that leaves no more defects or
-    broken cis/trans and fewer atoms inside rings, bent or off even, the first such move of the fewest defects added."""
+    """Each ring substituent of up to `SMALL_SETTLE` atoms, not of a shape's projection, inside a ring, bent onto its
+    ring or off its bisector, in rank order, up to `SETTLE`: the flip or anchored rotation of its tree bond putting it
+    on the bisector outside every ring, then the repair with that bond never turned again; kept when that leaves no more
+    defects or broken cis/trans and fewer atoms inside rings, bent or off even, the first such move of the fewest
+    defects added."""
     from .relax import _ct_broken, _inr
     from .score import delta_terms
     scope, mol = initial.scope, initial.mol
@@ -603,7 +734,7 @@ def _settle(env, initial, rings):
     def worse(plane):
         return len(_inside_rings(plane, rings)) + _bent_exits(scope, plane, every) + _uneven(scope, plane, every)
     targets = [(p, x, part) for p, x, part in initial.edges if len(part) <= SMALL_SETTLE and len(scope.adj[p]) == 3
-               and p not in initial.shaped
+               and p not in initial.projected
                and sum(frozenset((p, y)) in scope.ring_bonds for y in scope.adj[p]) == 2]
     tries = 0
     for p, x, part in sorted(targets, key=lambda e: scope.rank[e[1]]):
@@ -633,7 +764,7 @@ def _settle(env, initial, rings):
             env.plane.update(moved)
             env.terms = tuple(a + b for a, b in zip(env.terms, d))
             env._legal = None
-            _repair(env, scope, mol, rings, True, frozenset(part))
+            _repair(env, scope, mol, rings, True, banned=frozenset({(p, x)}))
             if (max(env.defects, 0), env.ct) <= now and worse(env.plane) < bad:
                 break
             env.plane, env.terms, env.ct = saved
@@ -746,7 +877,8 @@ def _space(env, scope, mol):
 def _nudge(env, scope, mol):
     """While a defect is left, up to `FIT` times: move the atom of the trouble, with its terminal neighbours, by
     whichever of `NUDGES`, or an end atom round its neighbour by whichever of 24 directions, removes most defects and
-    breaks no stated cis/trans: a crowded cage atom pulled clear."""
+    breaks no stated cis/trans: a crowded cage atom pulled clear, but never an atom of a cage whose depth places a
+    stereocentre's substituent, nor that substituent."""
     from .edits import masked
     from .primitive import LONGEST
     from .relax import _ct_broken, defect_atoms
@@ -755,7 +887,11 @@ def _nudge(env, scope, mol):
         if env.defects <= 0:
             return
         best = None
+        faced = {v for bond in env.initial.faced for v in bond}
+        faced |= {x for b in env.initial.rigid if b & faced for x in b}
         for x in sorted(defect_atoms(env.plane, scope.atoms, scope.bonds), key=scope.rank.__getitem__):
+            if x in faced:                              # a cage its depth reads, and its faced substituents, stay
+                continue
             part = [x] + [y for y in scope.adj[x] if len(scope.adj[y]) == 1]
             tries = [(hypot(dx, dy), {y: (env.plane[y][0] + dx, env.plane[y][1] + dy) for y in part})
                      for dx, dy in NUDGES]
@@ -797,6 +933,23 @@ def _bent_exits(scope, plane, part):
     return n
 
 
+def _squeezed(scope, plane, part):
+    """Ring atoms of two ring bonds and two substituents, in `part` or bonded to it, whose substituents are nearer
+    than a third of the exterior angle less `EVEN`: off the even slots, which split it in three."""
+    n = 0
+    for x in {z for y in part for z in (y, *scope.adj[y])}:
+        ring = [y for y in scope.adj[x] if frozenset((x, y)) in scope.ring_bonds]
+        exo = [y for y in scope.adj[x] if frozenset((x, y)) not in scope.ring_bonds]
+        if len(ring) != 2 or len(exo) != 2:
+            continue
+        px, py = plane[x]
+        u, v = (atan2(plane[y][1] - py, plane[y][0] - px) for y in ring)
+        a, b = (atan2(plane[y][1] - py, plane[y][0] - px) for y in exo)
+        inner = abs((u - v + pi) % (2 * pi) - pi)
+        n += abs((a - b + pi) % (2 * pi) - pi) < (2 * pi - inner) / 3 - EVEN
+    return n
+
+
 def _inward(scope, plane, part, shaped):
     """Bonds from a ring atom, not in `shaped`, to a substituent, an end in `part`, `in_ring_angle` of the atom."""
     n = 0
@@ -827,36 +980,71 @@ def in_ring_angle(scope, plane, a, t):
     return False
 
 
-def _pinched(scope, plane, part):
-    """Acyclic atoms of three or more bonds, in `part` or bonded to it, two of whose bonds are nearer than `PINCH`."""
+def _pinched(scope, plane, part, ring=True):
+    """Atoms, in `part` or bonded to it, two of whose bonds are nearer than `PINCH`: of an acyclic atom of three or
+    more bonds any two, of a ring atom, when `ring`, two substituents."""
     n = 0
     for x in {z for y in part for z in (y, *scope.adj[y])}:
-        k = len(scope.adj[x])
-        if k < 3 or any(frozenset((x, y)) in scope.ring_bonds for y in scope.adj[x]):
+        if len(scope.adj[x]) < 3:
+            continue
+        exo = [y for y in scope.adj[x] if frozenset((x, y)) not in scope.ring_bonds]
+        if len(exo) < 2 or not ring and len(exo) < len(scope.adj[x]):
             continue
         px, py = plane[x]
-        t = sorted(atan2(plane[y][1] - py, plane[y][0] - px) for y in scope.adj[x])
-        gap = min(min(v - u for u, v in zip(t, t[1:])), 2 * pi - t[-1] + t[0])
+        t = sorted(atan2(plane[y][1] - py, plane[y][0] - px) for y in exo)
+        if len(exo) < len(scope.adj[x]):                # a ring atom: the gaps between its substituents alone
+            gap = min(v - u for u, v in zip(t, t[1:]))
+            gap = min(gap, 2 * pi - t[-1] + t[0]) if len(exo) > 2 else min(gap, 2 * pi - gap)
+        else:
+            gap = min(min(v - u for u, v in zip(t, t[1:])), 2 * pi - t[-1] + t[0])
         n += gap < PINCH
     return n
 
 
-def _uneven(scope, plane, part):
+def _cramped(scope, plane, part=None):
+    """Ring atoms, in `part` or bonded to it, or of the whole drawing, with a substituent's bond folded onto a ring
+    bond, which neither `_pinched` nor `_squeezed`, both between substituents, counts: nearer than `PINCH` at an atom
+    of two ring bonds and two substituents, whose exterior angle has a slot for each, nearer than `CRAMP` elsewhere."""
+    n = 0
+    for x in scope.atoms if part is None else {z for y in part for z in (y, *scope.adj[y])}:
+        if len(scope.adj[x]) < 3:
+            continue
+        px, py = plane[x]
+        t = sorted((atan2(plane[y][1] - py, plane[y][0] - px), frozenset((x, y)) in scope.ring_bonds)
+                   for y in scope.adj[x])
+        least = PINCH if len(t) == 4 and sum(r for _, r in t) == 2 else CRAMP
+        n += any((v - u) % (2 * pi) < least and r != q for (u, r), (v, q) in zip(t, t[1:] + t[:1]))
+    return n
+
+
+def _uneven(scope, plane, part, gem=False):
     """Atoms, in `part` or bonded to it, `_off` even."""
-    return sum(_off(scope, plane, x) for x in {z for y in part for z in (y, *scope.adj[y])})
+    return sum(_off(scope, plane, x, gem) for x in {z for y in part for z in (y, *scope.adj[y])})
 
 
-def _off(scope, plane, x):
+def _off(scope, plane, x, gem=False):
     """True when `x` is off even: an acyclic atom of two bonds, not linear, `EVEN` or more off 120 degrees; of n >= 3
     bonds a gap of which is `EVEN` or more below `360 / n`; a ring atom of one substituent that substituent `EVEN` or
-    more off its bisector; never a metal."""
+    more off its bisector, and with `gem` of two a gap of its exterior angle twice `EVEN` off a third of it; never a
+    metal, nor an atom of a shape's projection."""
+    if x in scope.projected:                            # a 3D view's angles are the view's, not off even
+        return False
     k = len(scope.adj[x])
     ring = sum(frozenset((x, y)) in scope.ring_bonds for y in scope.adj[x])
-    if k < 2 or ring and (ring, k) != (2, 3) or scope.mol.atom(x).is_metal:     # a metal keeps its own geometry
-        return False
+    if k < 2 or ring and (ring, k) not in ((2, 3), (2, 4) if gem else ((2, 3),)) or scope.mol.atom(x).is_metal:
+        return False                                    # a metal keeps its own geometry
     px, py = plane[x]
     t = sorted(atan2(plane[y][1] - py, plane[y][0] - px) for y in scope.adj[x])
     gaps = [v - u for u, v in zip(t, t[1:])] + [2 * pi - t[-1] + t[0]]
+    if ring and k == 4:                                 # two substituents: the exterior angle in three equal gaps
+        bonds = sorted((atan2(plane[y][1] - py, plane[y][0] - px), frozenset((x, y)) in scope.ring_bonds)
+                       for y in scope.adj[x])
+        split = [((v - u) % (2 * pi), r and q) for (u, r), (v, q) in zip(bonds, bonds[1:] + bonds[:1])]
+        inner = [g for g, both in split if both]
+        if len(inner) != 1:                             # a substituent between the ring bonds: inside its ring
+            return False
+        third = (2 * pi - inner[0]) / 3
+        return any(abs(g - third) > 2 * EVEN for g, both in split if not both)
     if ring:                                            # the two gaps beside the substituent equal
         y = next(y for y in scope.adj[x] if frozenset((x, y)) not in scope.ring_bonds)
         u = atan2(plane[y][1] - py, plane[y][0] - px)
@@ -898,9 +1086,13 @@ def cascade_layout(mol, log=None):
     plane = {}
     x0 = 0.
     for c in sorted((set(c) for c in mol.connected_components), key=lambda c: min(rank[x] for x in c)):
-        initial = Initial(mol, c, rank)
-        pts = fit(initial)
-        if not initial.upright:
+        large = sum(mol.atom(x).atomic_symbol != 'H' for x in c) > LARGE
+        if large:
+            pts = _large(mol, c)
+        else:
+            initial = Initial(mol, c, rank)
+            pts = fit(initial)
+        if not large and not initial.upright:
             rings = [r for b, rs in blocks if b <= c for r in rs]
             level(pts)
             spiro = any(sum(x in r for r in rings) > 1 and sum(1 for y in mol.neighbors_of(x) if
@@ -917,6 +1109,18 @@ def cascade_layout(mol, log=None):
             plane[a] = (x + dx, y + dy)
         x0 = max(xs) + dx + GAP
     return plane
+
+
+def _large(mol, atoms):
+    """`{atom: (x, y)}` of a component over `LARGE` heavy atoms, drawn by smiles-drawer and scaled to a mean bond of
+    `L`: the fit's repair scores every move over the whole drawing at each step, so its cost grows with the square of
+    the size and a 500-atom oligonucleotide takes many minutes."""
+    from .molecule import _engine_layout
+    sub = mol.substructure(atoms)
+    plane = _engine_layout(sub, 'smilesdrawer')
+    bonds = [hypot(plane[b.n][0] - plane[b.m][0], plane[b.n][1] - plane[b.m][1]) for b in sub.bonds()]
+    k = L * len(bonds) / (sum(bonds) or 1.)
+    return {x: (k * plane[x][0], k * plane[x][1]) for x in atoms}
 
 
 def covered(mol):
@@ -956,7 +1160,7 @@ def golden(corpus=None):
             continue
         mol = smiles(row['smiles'])
         if covered(mol):
-            out[row['id']] = drawing_hash(mol, layout2d(mol, engine='chython', force=True, peptide=False))
+            out[row['id']] = drawing_hash(mol, layout2d(mol, engine='chython', force=True, chain=False))
     return out
 
 

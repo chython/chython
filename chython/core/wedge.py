@@ -1421,7 +1421,7 @@ class _Planar:
         return getattr(self._mol, name)
 
 
-def wedges_for_write(mol, log=None, plane=None, cis_trans_stated=()):
+def wedges_for_write(mol, log=None, plane=None, cis_trans_stated=(), avoid=()):
     """Wedges to emit, as ``[(narrow, wide, wedge), ...]``.  Returns ``(wedges, log)``.
 
     `plane` is ``{stable id: (x, y)}`` -- the layout to draw for, defaulting to the molecule's own
@@ -1464,6 +1464,9 @@ def wedges_for_write(mol, log=None, plane=None, cis_trans_stated=()):
     would be false for them -- per anchor rather than per format, because MRV's spelling names no
     reference atoms and is therefore only writable where it cannot be ambiguous.  A caller with a channel
     passes what it wrote; the CTAB versions pass nothing and keep the line.
+
+    `avoid` is bonds, `(n, m)` either way round, no wedge may sit on: a renderer's routed cross-links, which are
+    not drawn as the straight bond a wedge would be.
     """
     out = [] if log is None else log
     # THE FORMAT CANNOT HOLD THIS AND SAYS SO, reported before every branch below so that no shortcut
@@ -1542,7 +1545,7 @@ def wedges_for_write(mol, log=None, plane=None, cis_trans_stated=()):
     # prettier-drawing heuristic bid against an allene's only option would trade a configuration for an
     # aesthetic.  Correctness is the gate; the heuristic works on what is left.
     axial_wedges = {}
-    taken = set()
+    taken = {(n, m) for n, m in avoid}
     for unit in sorted((u for u in configured if u['kind'] in (SU_ALLENE, SU_ATROPISOMER, SU_HELICAL, SU_PLANAR)),
                        key=lambda u: (u['kind'], u['anchor'])):
         anchor = unit['anchor']

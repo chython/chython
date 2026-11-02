@@ -24,33 +24,47 @@
 skeleton has its canonical form, whatever the elements and orders |
 | model | `MODELS`: a skeleton's carbon frame from an MMFF-relaxed ETKDG conformer, mean bond 1, in its SMILES atom \
 order, and its views best first, each seen orthographically, the model's z axis up |
-| choice | per molecule, the drawing and symmetry whose reference substitutes most of the atoms the molecule \
-substitutes, then leaving fewest of them inside its outline, drawn shapes first |
+| choice | per molecule, the drawing and symmetry leaving fewest of the molecule's wedged stereocentres within \
+`CROSS` of a bond crossing, where a wedge cannot say which bond is in front; then whose reference substitutes \
+most of the atoms the molecule substitutes, then leaving fewest of them inside its outline, drawn shapes first |
 | drawn | `DRAWN`: a reference molecule and its ring atoms' points read from a drawing of it, mean bond 1; several \
-may share a skeleton, and they replace the model's views |
+may share a skeleton, and they replace the model's views; a drawing in `BESIDE` draws only a cage with a ring fused \
+to it, the bare skeleton keeping its model's views |
 | shape | `SHAPES`: points in `L`: the drawn skeletons, each other model seen along its first view |
+| depth | each drawing's atoms' z, toward the viewer: a model's view its own, a drawn skeleton's from its model \
+aligned to the drawing by orthographic Procrustes over the skeleton's symmetries and the model's mirror image; read \
+the way round that puts a one-atom bridge in front |
 | drawing | `shape(mol, atoms)`: the matched shape and its mirror image in plane coordinates, or None |
+| fused | `fused3d(mol, atoms, rings)`: a ring system of a shape and one more ring on one of its edges, a benzo- or \
+pyrrolidino-fused cage: all of it in perspective, the ring a regular polygon in 3D \
+seen as the cage is, the view the one whose shortest projected bond is longest; any other fused system is flat |
 
 | shape | skeletons it draws |
 | --- | --- |
 | norbornane | camphor, norbornene |
 | bicyclo[2.2.2]octane | quinuclidine, DABCO |
 | bicyclo[3.2.1]octane | tropane |
-| bicyclo[3.3.1]nonane | granatane |
+| bicyclo[3.3.1]nonane | granatane; fused to a ring, pseudopelletierine |
+| galanthamine | the benzofuro-benzazepine of galanthamine, lycoramine |
 | bicyclo[1.1.1]pentane, bicyclo[2.1.1]hexane, adamantane, twistane, cubane, prismane, tetrahedrane | |
 """
 from functools import lru_cache
 from itertools import islice
-from math import cos, pi, sin
+from math import atan2, cos, pi, sin, tan
 
 from ...core import MoleculeContainer, smiles
 from .lattice import L
 
 
-__all__ = ['DRAWN', 'MODELS', 'SHAPES', 'skeleton', 'shape']
+__all__ = ['DRAWN', 'MODELS', 'SHAPES', 'skeleton', 'shape', 'shape3d', 'fused3d']
 
 EDGE = .08               # an atom this near its drawing's outline, in bonds, is on it
+CROSS = .55              # an atom this near a crossing of two of its drawing's bonds, in bonds, is at it
+SAMPLES = 96             # view directions a fused cage of a model skeleton is tried along
+BESIDE = {'pseudopelletierine'}    # drawings kept for fused cages: the bare skeleton keeps its model's views
+CLEAR = .6 * L           # a fused cage's view leaves every bond and unbonded pair at least this long
 MAPPINGS = 48            # skeleton symmetries tried for a molecule's substituents
+HANDED = .2              # a bridgehead's signed volume, in bonds cubed, once turned to its model's handedness
 
 
 MODELS = {
@@ -246,6 +260,15 @@ DRAWN = {                # name: (reference SMILES, its ring atoms' points in th
         (-0.22, 0.707), (0.312, 1.419), (0.312, 0.337), (1.1, -0.09), (0.616, -0.907),
         (-0.22, -0.546), (-1.207, -0.831), (-0.694, -0.09),
     ], 'Wikimedia Commons Barrelene_structure.png'),
+    'galanthamine': ('CN1CC[C@]23C=C[C@@H](O)C[C@@H]2Oc2c3c(C1)ccc2OC', [
+        (2.143, 0.346), (1.243, -0.546), (0.512, 0.054), (-0.285, -0.509), (0.549, -0.97), (0.549, -1.958),
+        (-0.285, -2.433), (-1.126, -1.958), (-1.126, -0.97), (-1.77, -0.019), (-1.126, 0.953), (-0.285, 0.471),
+        (0.549, 0.953), (1.324, 0.273), (0.549, 1.941), (-0.285, 2.431), (-1.126, 1.941),
+    ], 'Wikimedia Commons Galanthamine.svg'),
+    'pseudopelletierine': ('CN1C2CCCC1CC(=O)C2', [
+        (-0.031, 1.361), (-0.217, -0.103), (-1.308, -0.275), (-1.132, -0.896), (-0.727, 0.282),
+        (0.385, 0.445), (1.175, 0.209), (1.175, -0.757), (0.681, -0.265),
+    ], 'Wikimedia Commons Pseudopelletierine.svg'),
 }
 
 
@@ -282,51 +305,386 @@ def _blocks(mol):
 
 @lru_cache()
 def _shapes():
-    """Per skeleton, its drawings: `(name, skeleton, order, points, inside, bearing)`, points and the sets keyed by
-    skeleton atom, `bearing` the atoms the reference molecule substitutes; drawn shapes first, in table order."""
+    """Per skeleton, its drawings: `(name, skeleton, points, inside, bearing, crossed, depth)`, points, depth and the
+    sets keyed by skeleton atom, `bearing` the atoms the reference molecule substitutes, `crossed` those `_crossed`,
+    `depth` each atom's z in bonds; drawn shapes first, in table order."""
     out = {}
-    tables = [(name, text, [pts], True) for name, (text, pts, _) in DRAWN.items()]
-    tables += [(name, text, [_seen(xyz, v) for v in views], False) for name, (text, views, xyz) in MODELS.items()]
-    drawn = set()
-    for name, text, seen, is_drawn in tables:
+    models = {}                                         # skeleton key -> (skeleton, {atom: xyz})
+    for text, _, xyz in MODELS.values():
+        mol = smiles(text)
+        ring = _ring(mol)
+        skel, order = skeleton(mol, set(ring))
+        index = {x: i + 1 for i, x in enumerate(order)}
+        models.setdefault(skel.canonical_bytes, (skel, {index[x]: p for x, p in zip(ring, xyz)}))
+    tables = [(name, text, [pts], None, True) for name, (text, pts, _) in DRAWN.items()]
+    tables += [(name, text, [_seen(xyz, v) for v in views], [_toward(xyz, v) for v in views], False)
+               for name, (text, views, xyz) in MODELS.items()]
+    drawn, beside = set(), set()
+    for name, text, seen, depths, is_drawn in tables:
         mol = smiles(text)
         ring = _ring(mol)
         skel, order = skeleton(mol, set(ring))
         key = skel.canonical_bytes
-        if not is_drawn and key in drawn:                # a drawn shape replaces the model's views
+        if not is_drawn and key in drawn and key not in beside:     # a drawn shape replaces the model's views
             continue
         if is_drawn:
             drawn.add(key)
+            if name in BESIDE:
+                beside.add(key)
         index = {x: i + 1 for i, x in enumerate(order)}
         bearing = {index[x] for x in ring if any(y not in index for y in mol.neighbors_of(x))}
-        for p in seen:
+        for k, p in enumerate(seen):
             at = dict(zip(ring, p))
             inner = {index[ring[i]] for i in _inside(p)}
-            out.setdefault(key, []).append((name, skel, {index[x]: at[x] for x in ring}, inner, bearing))
+            pts = {index[x]: at[x] for x in ring}
+            if depths is None:
+                depth = _aligned(skel, pts, *models[key]) if key in models else dict.fromkeys(pts, 0.)
+            else:
+                depth = {index[x]: z for x, z in zip(ring, depths[k])}
+            out.setdefault(key, []).append((name, skel, pts, inner, bearing, _crossed(skel, pts),
+                                            _bridge_front(skel, depth)))
     return out
+
+
+def _bridge_front(skel, depth):
+    """`depth`, or its negation, so that the one-atom bridges of `skel` lie toward the viewer: a projection reads
+    either way round, and a drawing of a bridged bicycle shows its bridge passing in front, camphor's and
+    7-oxanorbornane's alike."""
+    heads = {x for x in depth if sum(1 for y in skel.neighbors_of(x)) == 3}
+    bridges = [x for x in depth if x not in heads and len(skel.neighbors_of(x)) == 2 and
+               all(y in heads for y in skel.neighbors_of(x))]
+    if not bridges:
+        return depth
+    mean = sum(depth.values()) / len(depth)
+    if sum(depth[x] for x in bridges) / len(bridges) < mean:
+        return {x: -z for x, z in depth.items()}
+    return depth
+
+
+def _toward(xyz, view):
+    """Each point of `xyz`'s z as `_seen` sees it along `view`: toward the viewer."""
+    n = sum(v * v for v in view) ** .5
+    return [sum(a * b / n for a, b in zip(p, view)) for p in xyz]
+
+
+def _aligned(skel, pts, model, xyz):
+    """`skel`'s atoms' z under the drawing `pts`: the model's points `xyz` of skeleton `model`, or their mirror image,
+    turned and scaled so their orthographic projection comes nearest `pts`, over every mapping of `model` onto
+    `skel`."""
+    best = None
+    for mirror in (1., -1.):
+        for mapping in islice(model.as_query().get_mapping(skel), MAPPINGS):
+            pairs = [((xyz[i][0], xyz[i][1], mirror * xyz[i][2]), pts[j]) for i, j in mapping.items()]
+            fit = _procrustes([a for a, _ in pairs], [b for _, b in pairs])
+            if fit is not None and (best is None or fit[0] < best[0]):
+                best = (fit[0], {j: z for (_, j), z in zip(mapping.items(), fit[1])},
+                        {j: a for a, (_, j) in zip((a for a, _ in pairs), mapping.items())})
+    return _handed(skel, pts, best[1], best[2]) if best else dict.fromkeys(pts, 0.)
+
+
+def _handed(skel, pts, z, model):
+    """The depth `z` under the drawing `pts`, each bridgehead turned to the handedness the clearest one shares with
+    the `model`'s points: a bridgehead drawn almost flat would otherwise read against its partner.  A turned one goes
+    `HANDED` past flat, its neighbours kept."""
+    def volume(p, a):
+        (a1, a2, a3), (b1, b2, b3), (c1, c2, c3) = [[p[n][k] - p[a][k] for k in range(3)]
+                                                    for n in sorted(skel.neighbors_of(a))]
+        return a1 * (b2 * c3 - b3 * c2) - a2 * (b1 * c3 - b3 * c1) + a3 * (b1 * c2 - b2 * c1)
+    heads = [x for x in pts if len(skel.neighbors_of(x)) == 3]
+    if not heads:
+        return z
+    drawn = {x: (pts[x][0], pts[x][1], z[x]) for x in pts}
+    ratio = {x: volume(drawn, x) / volume(model, x) for x in heads}
+    clearest = max(heads, key=lambda x: abs(ratio[x]))
+    want = 1 if ratio[clearest] > 0 else -1
+    z = dict(z)
+    for x in heads:
+        if ratio[x] * want > 0:
+            continue
+        v0 = volume(drawn, x)
+        drawn[x] = (*pts[x], z[x] + 1)
+        slope = volume(drawn, x) - v0                   # the volume is linear in the bridgehead's own depth
+        if abs(slope) < 1e-9:
+            continue
+        target = want * (1 if volume(model, x) > 0 else -1) * HANDED
+        z[x] += (target - v0) / slope
+        drawn[x] = (*pts[x], z[x])
+    return z
+
+
+def _procrustes(xs, ys):
+    """`(residual, depths)`: the rotation and scale whose orthographic projection takes the 3D points `xs` nearest the
+    2D points `ys`, and each point's z under it; None for a degenerate cloud."""
+    n = len(xs)
+    mx = [sum(p[k] for p in xs) / n for k in range(3)]
+    my = [sum(p[k] for p in ys) / n for k in range(2)]
+    xc = [[p[k] - mx[k] for k in range(3)] for p in xs]
+    yc = [[p[k] - my[k] for k in range(2)] for p in ys]
+    b = [[sum(y[r] * x[c] for x, y in zip(xc, yc)) for c in range(3)] for r in range(2)]       # Y^T X, 2 x 3
+    sa, sb, sd = (sum(v * v for v in b[0]), sum(u * v for u, v in zip(*b)), sum(v * v for v in b[1]))
+    det = sa * sd - sb * sb
+    if det <= 1e-12:
+        return None
+    t = det ** .5
+    k = (sa + sd + 2 * t) ** .5
+    ra, rb, rd = (sa + t) / k, sb / k, (sd + t) / k                         # sqrt(B B^T)
+    rdet = ra * rd - rb * rb
+    ia, ib, id_ = rd / rdet, -rb / rdet, ra / rdet                          # its inverse
+    rows = [[ia * b[0][c] + ib * b[1][c] for c in range(3)], [ib * b[0][c] + id_ * b[1][c] for c in range(3)]]
+    r1, r2 = rows
+    r3 = [r1[1] * r2[2] - r1[2] * r2[1], r1[2] * r2[0] - r1[0] * r2[2], r1[0] * r2[1] - r1[1] * r2[0]]
+    scale = (ra + rd) / sum(v * v for x in xc for v in x)
+    residual = sum((y[0] - scale * sum(a * c for a, c in zip(x, r1))) ** 2 +
+                   (y[1] - scale * sum(a * c for a, c in zip(x, r2))) ** 2 for x, y in zip(xc, yc))
+    return residual, [scale * sum(a * c for a, c in zip(x, r3)) for x in xc]
+
+
+def _crossed(skel, pts):
+    """The atoms of `skel` nearer than `CROSS` to a point where two of its bonds cross in the drawing `pts`."""
+    bonds = [(b.n, b.m) for b in skel.bonds()]
+    points = []
+    for i, (a, b) in enumerate(bonds):
+        for c, d in bonds[i + 1:]:
+            if {a, b} & {c, d}:
+                continue
+            (x1, y1), (x2, y2), (x3, y3), (x4, y4) = pts[a], pts[b], pts[c], pts[d]
+            den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+            if abs(den) < 1e-9:
+                continue
+            t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den
+            u = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / den
+            if 0 < t < 1 and 0 < u < 1:
+                points.append((x1 + t * (x2 - x1), y1 + t * (y2 - y1)))
+    return {x for x, (px, py) in pts.items() if any(((px - cx) ** 2 + (py - cy) ** 2) ** .5 < CROSS
+                                                    for cx, cy in points)}
+
+
+def _wedged(mol):
+    """The atoms of `mol` a drawing wedges: tetrahedral and allene stereocentres of a stated parity."""
+    from ...core import SU_ALLENE, SU_TETRA
+    return {u['anchor'] for u in mol.stereo_units()
+            if u['kind'] in (SU_TETRA, SU_ALLENE) and mol.parity_of(u['anchor'])}
 
 
 def shape(mol, atoms, rank=None):
     """The predefined shape of the ring system `atoms` and its mirror image, `[{atom: (x, y)}]` in plane coordinates,
-    or None when no shape matches: the drawing and atom mapping whose reference substitutes most of the atoms `mol`
-    substitutes, then leave fewest of them inside the outline, in table order, then by the canonical ranks the
-    mapping gives the drawing's atoms, so the choice ignores atom order."""
+    or None when no shape matches: the drawing and atom mapping leaving fewest wedged stereocentres of `mol` at a
+    crossing, then whose reference substitutes most of the atoms `mol` substitutes, then leave fewest of them inside
+    the outline, in table order, then by the canonical ranks the mapping gives the drawing's atoms, so the choice
+    ignores atom order."""
+    found = shape3d(mol, atoms, rank)
+    return None if found is None else [p for p, _ in found]
+
+
+def shape3d(mol, atoms, rank=None):
+    """`shape`'s two drawings, each with its atoms' depth: `[({atom: (x, y)}, {atom: z})]`, z toward the viewer in
+    plane units; the mirror image, turned left to right, keeps the depth."""
+    ranked = _ranked(mol, atoms, rank)
+    if not ranked:
+        return None
+    _, plane, z = ranked[0]
+    return [(plane, z), ({x: (-p[0], p[1]) for x, p in plane.items()}, z)]     # mirrored left to right: up stays up
+
+
+def _ranked(mol, atoms, rank=None, fused=False):
+    """`[(score, {atom: (x, y)}, {atom: z})]` of every drawing and mapping of the shape of `atoms`, best first: of a
+    `fused` cage its `BESIDE` drawing alone when it has one, of a bare one every other drawing."""
     rank = mol.canonical_order() if rank is None else rank
     skel, order = skeleton(mol, atoms)
     found = _shapes().get(skel.canonical_bytes)
     if not found:
-        return None
+        return []
+    own = [f for f in found if f[0] in BESIDE]
+    found = (own or found) if fused else [f for f in found if f[0] not in BESIDE]
     mine = {i + 1 for i, x in enumerate(order) if any(y not in atoms for y in mol.neighbors_of(x))}
-    best = None
-    for k, (name, ref, pts, inner, bearing) in enumerate(found):
+    wedged = {i + 1 for i, x in enumerate(order) if x in _wedged(mol)}
+    out = []
+    for k, (name, ref, pts, inner, bearing, crossed, depth) in enumerate(found):
         for mapping in islice(ref.as_query().get_mapping(skel), MAPPINGS):
             subs = {i for i, x in mapping.items() if x in mine}
-            score = (-len(subs & bearing), len(subs & inner), k,
+            score = (sum(mapping[i] in wedged for i in crossed), -len(subs & bearing), len(subs & inner), k,
                      tuple(rank[order[mapping[i] - 1]] for i in sorted(mapping)))
-            if best is None or score < best[0]:
-                best = (score, pts, mapping)
-    if best is None:
+            plane = {order[mapping[i] - 1]: (p[0] * L, p[1] * L) for i, p in pts.items()}
+            out.append((score, plane, {order[mapping[i] - 1]: depth[i] * L for i in pts}))
+    out.sort(key=lambda t: t[0])
+    return out
+
+
+def fused3d(mol, atoms, rings, rank=None):
+    """`(core, [({atom: (x, y)}, {atom: z})])`: the ring system `atoms` of `rings` as a shape and its mirror image,
+    `core` the atoms the shape draws and the only ones with a depth: the system itself when a shape draws it whole,
+    or all its rings but one fused on one edge.  That ring is a regular
+    polygon in 3D, in the plane its fusion atoms' cage bonds make with their edge, seen as the cage is: of the
+    cage's drawings and `SAMPLES` views of its model, the one leaving fewest wedged stereocentres at a crossing, then
+    whose shortest projected bond and nearest two unbonded atoms are `CLEAR`, then fewest one-atom bridges inside
+    its outline, a camphor's bridge standing out of it, then the clearest.  None otherwise."""
+    whole = shape3d(mol, atoms, rank)
+    if whole is not None:
+        return frozenset(atoms), whole
+    if len(rings) < 3:
         return None
-    _, pts, mapping = best
-    plane = {order[mapping[i] - 1]: (p[0] * L, p[1] * L) for i, p in pts.items()}
-    return [plane, {x: (-p[0], p[1]) for x, p in plane.items()}]     # mirrored left to right: up stays up
+    for i, ring in enumerate(rings):
+        core = frozenset().union(*(r for k, r in enumerate(rings) if k != i))
+        if len(core & set(ring)) != 2:
+            continue
+        bonds = [(b.n, b.m) for b in mol.bonds() if b.n in atoms and b.m in atoms]
+        heads = {x for x in core if sum(y in core for y in mol.neighbors_of(x)) == 3}
+        bridges = [x for x in core if x not in heads and sum(y in heads for y in mol.neighbors_of(x)) == 2]
+        best = None
+        for score, plane, z in _ranked(mol, core, rank, True) + _sampled(mol, core, rank):
+            added = _ring3d(mol, plane, z, ring)
+            if added is None:
+                continue
+            full = {**plane, **added}
+            shortest = min(((full[a][0] - full[b][0]) ** 2 + (full[a][1] - full[b][1]) ** 2) ** .5 for a, b in bonds)
+            pts = sorted(full)
+            closest = min((((full[a][0] - full[b][0]) ** 2 + (full[a][1] - full[b][1]) ** 2) ** .5
+                           for k, a in enumerate(pts) for b in pts[k + 1:] if b not in mol.neighbors_of(a)),
+                          default=L)
+            inner = {pts[k] for k in _inside([full[x] for x in pts])}
+            clear = min(shortest, closest)
+            key = (score[0], clear < CLEAR, sum(x in inner for x in bridges), -round(clear / L, 2), score[1:])
+            if best is None or key < best[0]:
+                best = key, full, z
+        if best is not None:
+            _, full, z = best
+            return core, [(full, z), ({x: (-p[0], p[1]) for x, p in full.items()}, z)]
+    return None
+
+
+def _sampled(mol, atoms, rank=None):
+    """`[(score, {atom: (x, y)}, {atom: z})]` of the model of the shape of `atoms` seen along `SAMPLES` directions
+    spread over the sphere, each mapping onto `atoms`; a drawn shape, whose views are its drawing, offers none."""
+    from math import acos, sqrt
+    rank = mol.canonical_order() if rank is None else rank
+    skel, order = skeleton(mol, atoms)
+    key = skel.canonical_bytes
+    if key not in _models() or any(not is_model for is_model in _drawn_keys().get(key, ())):
+        return []
+    model, xyz = _models()[key]
+    wedged = {i + 1 for i, x in enumerate(order) if x in _wedged(mol)}
+    out = []
+    golden = pi * (3 - sqrt(5))
+    for k in range(SAMPLES):
+        h = 1 - 2 * (k + .5) / SAMPLES
+        view = (sqrt(1 - h * h) * cos(golden * k), sqrt(1 - h * h) * sin(golden * k), h)
+        ids = sorted(xyz)
+        seen = dict(zip(ids, _seen([xyz[i] for i in ids], view)))
+        depth = dict(zip(ids, _toward([xyz[i] for i in ids], view)))
+        crossed = _crossed(model, seen)
+        depth = _bridge_front(model, depth)
+        for mapping in islice(model.as_query().get_mapping(skel), MAPPINGS):
+            score = (sum(mapping[i] in wedged for i in crossed), 0, 0, len(_shapes()[key]),
+                     tuple(rank[order[mapping[i] - 1]] for i in sorted(mapping)))
+            out.append((score, {order[mapping[i] - 1]: (p[0] * L, p[1] * L) for i, p in seen.items()},
+                        {order[mapping[i] - 1]: depth[i] * L for i in seen}))
+    return out
+
+
+@lru_cache()
+def _models():
+    """Skeleton key -> `(skeleton, {atom: xyz})` of each model."""
+    out = {}
+    for text, _, xyz in MODELS.values():
+        mol = smiles(text)
+        ring = _ring(mol)
+        skel, order = skeleton(mol, set(ring))
+        index = {x: i + 1 for i, x in enumerate(order)}
+        out.setdefault(skel.canonical_bytes, (skel, {index[x]: p for x, p in zip(ring, xyz)}))
+    return out
+
+
+@lru_cache()
+def _drawn_keys():
+    """Skeleton key -> one `False` per drawn shape of it: a drawn skeleton keeps to its drawing."""
+    out = {}
+    for text, _, _ in DRAWN.values():
+        mol = smiles(text)
+        out.setdefault(skeleton(mol, set(_ring(mol)))[0].canonical_bytes, []).append(False)
+    return out
+
+
+def _ring3d(mol, plane, z, ring):
+    """`{atom: (x, y)}` of the atoms `ring` adds to the cage `plane` at depth `z`: the regular polygon on the edge it
+    shares, in 3D in the plane of that edge and the bonds leaving it into the cage, outward, projected as the cage is;
+    None when the ring shares no single edge or an atom lands within half a bond of the cage."""
+    n = len(ring)
+    shared = [k for k, x in enumerate(ring) if x in plane]
+    if len(shared) != 2 or (shared[1] - shared[0]) % n not in (1, n - 1):
+        return None
+    i, j = shared
+    if (j - i) % n != 1:
+        i, j = j, i                                     # ring[i] then ring[j] in the ring's order
+    a, b = ring[i], ring[j]
+
+    def point(x):
+        return plane[x][0], plane[x][1], z[x]
+    pa, pb = point(a), point(b)
+    side = sum((u - v) ** 2 for u, v in zip(pa, pb)) ** .5
+    e = tuple((v - u) / side for u, v in zip(pa, pb))
+    out = [0., 0., 0.]
+    for x, px in ((a, pa), (b, pb)):
+        for y in mol.neighbors_of(x):
+            if y in plane and y not in ring:
+                for k in range(3):
+                    out[k] += px[k] - point(y)[k]
+    dot = sum(u * v for u, v in zip(out, e))
+    w = [u - dot * v for u, v in zip(out, e)]
+    norm = sum(u * u for u in w) ** .5
+    if norm < 1e-9:
+        return None
+    w = [u / norm for u in w]
+    apothem = side / (2 * tan(pi / n))
+    r = side / (2 * sin(pi / n))
+    centre = [(u + v) / 2 + apothem * c for u, v, c in zip(pa, pb, w)]
+    tb = atan2(-apothem, side / 2)                      # b's angle about the centre, in the (e, w) frame
+    added = {}
+    for k in range(1, n - 1):
+        t = tb + 2 * pi * k / n
+        p3 = [c + r * (cos(t) * u + sin(t) * v) for c, u, v in zip(centre, e, w)]
+        added[ring[(j + k) % n]] = (p3[0], p3[1])
+    if any(((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** .5 < L / 2 for p in added.values() for q in plane.values()):
+        return None
+    return added
+
+
+def _polygons(mol, plane, rest):
+    """`plane` with each ring of `rest` added as a regular polygon on the one edge it shares with `plane`, on the side
+    away from the drawing; None when a ring shares no single edge, or an atom it adds lands within half a bond of
+    one drawn."""
+    rest = list(rest)
+    while rest:
+        for ring in rest:
+            shared = [i for i, x in enumerate(ring) if x in plane]
+            if len(shared) == 2 and (shared[1] - shared[0]) % len(ring) in (1, len(ring) - 1):
+                break
+        else:
+            return None
+        rest.remove(ring)
+        n = len(ring)
+        i, j = shared
+        if (j - i) % n != 1:
+            i, j = j, i                                 # ring[i] then ring[j] in the ring's order
+        (ax, ay), (bx, by) = plane[ring[i]], plane[ring[j]]
+        side = ((ax - bx) ** 2 + (ay - by) ** 2) ** .5
+        mx, my = (ax + bx) / 2, (ay + by) / 2
+        nx, ny = (by - ay) / side, (ax - bx) / side     # a normal of the edge
+        cx = sum(p[0] for p in plane.values()) / len(plane)
+        cy = sum(p[1] for p in plane.values()) / len(plane)
+        if (mx - cx) * nx + (my - cy) * ny < 0:
+            nx, ny = -nx, -ny
+        apothem = side / (2 * tan(pi / n))
+        ox, oy = mx + nx * apothem, my + ny * apothem
+        # from ring[j] onward round the centre, the turn's sense the one taking ring[i] to ring[j]
+        t0 = atan2(by - oy, bx - ox)
+        ti = atan2(ay - oy, ax - ox)
+        step = 2 * pi / n if (t0 - ti) % (2 * pi) < pi else -2 * pi / n
+        r = side / (2 * sin(pi / n))
+        added = {}
+        for k in range(1, n - 1):
+            x = ring[(j + k) % n]
+            added[x] = (ox + r * cos(t0 + k * step), oy + r * sin(t0 + k * step))
+        if any(((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** .5 < L / 2 for p in added.values() for q in plane.values()):
+            return None
+        plane.update(added)
+    return plane
