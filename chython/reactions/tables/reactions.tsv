@@ -1302,7 +1302,7 @@ id	name	groups	product	ring_sizes	probe	description
 1092	enolate_alkylation	alkyl_halide,enolizable_ch	[A@~:1]-[A:101]		C[C@H](Br)CC.CC(=O)c1ccccc1>>C([C@@H](CC)C)C(c1ccccc1)=O	Alkyl halide alkylating the alpha carbon of a ketone, ester, amide or nitrile
 1093	enolate_alkylation	alkyl_sulfonate,enolizable_ch	[A@~:1]-[A:101]		C[C@@H](CC)OS(C)(=O)=O.CC(=O)c1ccccc1>>C([C@@H](CC)C)C(c1ccccc1)=O	Alkyl sulfonate alkylating the alpha carbon of a ketone, ester, amide or nitrile
 1094	enolate_alkylation	alkyl_halide,alkyl_halide,enolizable_ch2	[A:1]-[A:201]-[A:101]		CI.CI.CCOC(=O)Cc1ccccc1>>CCOC(=O)C(C)(C)c1ccccc1	Two equivalents of an alkyl halide on one alpha CH2, giving the gem-dialkyl carbon
-1095	enolate_alkylation	1_2_dihaloethane,enolizable_ch2	[A:1]1-[A:2]-[A:101]-1		BrCCBr.CCOC(=O)Cc1ccccc1>>CCOC(=O)C1(CC1)c1ccccc1	A 1,2-dihaloethane on an alpha CH2, giving the cyclopropane
+1095	enolate_alkylation	1_2_dihaloalkane,enolizable_ch2	[A:1]1-[A:2]-[A:101]-1		BrCCBr.CCOC(=O)Cc1ccccc1>>CCOC(=O)C1(CC1)c1ccccc1	A 1,2-dihaloalkane on an alpha CH2, giving the cyclopropane
 1096	active_methylene_alkylation	alkyl_halide,active_ch	[A@~:1]-[A:101]		C[C@H](Br)CC.CCOC(=O)CC(=O)OCC>>CC[C@H](C(C(OCC)=O)C(=O)OCC)C	Alkyl halide alkylating a C-H between two activating groups
 1097	active_methylene_alkylation	alkyl_sulfonate,active_ch	[A@~:1]-[A:101]		C[C@@H](CC)OS(C)(=O)=O.CCOC(=O)CC(=O)OCC>>CC[C@H](C(C(OCC)=O)C(=O)OCC)C	Alkyl sulfonate alkylating a C-H between two activating groups
 1098	enolate_alkylation	dimethyl_sulfate,enolizable_ch	[A:1]-[A:101]		COS(=O)(=O)OC.CC(=O)c1ccccc1>>CCC(=O)c1ccccc1	Dimethyl sulfate methylating the alpha carbon of a ketone, ester, amide or nitrile

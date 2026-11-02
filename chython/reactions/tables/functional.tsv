@@ -394,7 +394,7 @@ id	name	smarts	precursor	example	decoys	site	description
 308	enolizable_ch	[C;z1;h1,h2,h3:1]-[C;z2,z3;M]=,#[O,N;M]	[C:1]	CC(=O)CC	Cc1ccccc1,CC=C,CCO		an sp3 C-H beside a C=O, C=N or C#N carbon, the enolate nucleophile; the activating group is context
 309	active_ch	[C;z1;h1,h2:1](-[C,S,N;*;M]=,#[O,N;M])-[C,S,N;*;M]=,#[O,N;M]	[C:1]	CCOC(=O)CC(=O)OCC	CC(=O)CC,CCS(C)(=O)=O		a C-H between two C=O, C#N, S=O or N=O groups, alkylated under carbonate or hydride base
 310	enolizable_ch2	[C;z1;h2,h3:1]-[C;z2,z3;M]=,#[O,N;M]	[C:1]	CC(=O)CC	CC(C)C(=O)C(C)C,Cc1ccccc1		`enolizable_ch` with two hydrogens to give: the gem-dialkylation, condensation and olefination substrate
-311	1_2_dihaloethane	[Cl,Br,I;D1]-[C;z1;x1;D2:1]-[C;z1;x1;D2:2]-[Cl,Br,I;D1]	[Br]-[C:1]-[C:2]-[Br]	BrCCBr	BrCCCBr,CCBr		X-CH2-CH2-X, the cyclopropanating bis-electrophile
+311	1_2_dihaloalkane	[Cl,Br,I;D1]-[C;z1;x1;D2,D3:1]-;!@[C;z1;x1;D2,D3:2]-[Cl,Br,I;D1]	[Br]-[C:1]-[C:2]-[Br]	CC(Br)CBr	BrCCCBr,CCBr,BrC1CCCCC1Br,CC(C)(Br)CBr		X-C-C-X on two primary or secondary carbons, the cyclopropanating bis-electrophile; the C-C bond is acyclic, since a ring vicinal dihalide eliminates
 312	nitroarene_ortho_methyl	[C;D1;z1:1]-[C;a;M]:[C;a;M]-[N;+;M](=[O;M])-[O;-;M]	[C:1]	Cc1ccccc1[N+](=O)[O-]	Cc1ccc(cc1)[N+](=O)[O-],Cc1ccccc1		an aryl methyl ortho to NO2, the Leimgruber-Batcho substrate
 313	thiazolidinone_ch2	[C;z1;h2;r5:1](-[S;r5;M])-[C;r5;M]=[O;M]	[C:1]	O=C1CSC(=S)N1	O=C1CCCN1,CSCC(C)=O		the ring CH2 between S and C=O of a thiazolidinone, rhodanine or thiazolone
 314	oxindole_ch2	[C;z1;h2;r5:1](-[C;a;M])-[C;r5;M](=[O;M])-[N;M]	[C:1]	O=C1Cc2ccccc2N1	O=C1CCCN1,CC(=O)N		the C3 methylene of an oxindole
