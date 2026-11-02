@@ -704,3 +704,15 @@ def test_an_amidine_c_n_with_a_choice_of_acceptor_carries_no_e_z():
         m = read_smiles(kept)
         standardize_isomers(m)
         assert '/' in str(m) or '\\' in str(m), kept
+
+
+def test_two_exocyclic_imines_share_one_ring_hydrogen():
+    """1,3-Diiminoisoindoline: both imines sit beside one ring N-H, which gives its hydrogen once.  One imine
+    takes it, the other stays: the neutral amino-imino form, the formula kept, the same molecule as that
+    tautomer written as such."""
+    molecule = read_smiles('c1ccc2C(NC(c2c1)=N)=N')
+    formula = molecule.brutto_formula
+    assert standardize_isomers(molecule)
+    assert molecule.brutto_formula == formula and not check_valence(molecule), str(molecule)
+    assert not any(molecule.charge_of(n) for n in molecule.atom_numbers)
+    assert converge('c1ccc2C(NC(c2c1)=N)=N', 'NC1=NC(=N)c2ccccc12')[2]

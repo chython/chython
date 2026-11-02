@@ -564,11 +564,12 @@ def _imine_handover(molecule: MoleculeContainer, lines: list) -> bool:
     ring path keeps a ring's hydrogen count and the amidine path stays out of a ring holding a C=C, so the
     hydrogen an exocyclic imine took from the ring is handed back here, and both paths then place the rest.
     The imine nitrogen bears carbon or hydrogen only -- an amidoxime keeps its oxime -- and the ring nitrogen
-    is an `-NH-` of single bonds.  Of two such nitrogens the canonical order picks one, the ring path
+    is an `-NH-` of single bonds, and gives its hydrogen once: of the two imines of 1,3-diiminoisoindoline
+    one takes it, the other stays an imine.  Of two such nitrogens the canonical order picks one, the ring path
     deciding between them again when the system is one it places.  A ring system with no C=C, a cyclic
     guanidine of a triazinane or creatinine, is the amidine path's and is not touched.
     """
-    moves = []
+    moves, used = [], set()                             # a donor gives its hydrogen, and takes its C=N, once
     positions = None
     for atoms, _ in _ring_systems(molecule):
         if not _conjugated_carbon(molecule, atoms):
@@ -582,7 +583,8 @@ def _imine_handover(molecule: MoleculeContainer, lines: list) -> bool:
                       and all(molecule.element_of(y) in (1, 6) for y in molecule.neighbors_of(x) if y != c)]
             if not imines:
                 continue
-            donors = [y for y in molecule.neighbors_of(c) if y in atoms and molecule.element_of(y) == 7
+            donors = [y for y in molecule.neighbors_of(c) if y in atoms and y not in used
+                      and molecule.element_of(y) == 7
                       and not molecule.charge_of(y) and not molecule.radical_of(y) and molecule.implicit_h_of(y)
                       and all(molecule.order_of(y, z) == 1 for z in molecule.neighbors_of(y))]
             if not donors:
@@ -595,6 +597,7 @@ def _imine_handover(molecule: MoleculeContainer, lines: list) -> bool:
                         positions = molecule.atoms_order
                 donors.sort(key=positions.__getitem__)
             moves.append((c, imines[0], donors[0]))
+            used.add(donors[0])
     if not moves:
         return False
     counts = {n: molecule.implicit_h_of(n) for _, x, y in moves for n in (x, y)}
