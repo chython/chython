@@ -381,35 +381,36 @@ def test_a_protection_is_explained():
     labels = rxn.reconstruct_mapping()
     assert labels and all(label.startswith('protect:') for label in labels)
     product = rxn.products[0]
-    amine = rxn.reactants[0]
+    amine, anhydride = rxn.reactants
     numbers = {amine.map_number_of(n) for n in amine.atom_numbers}
-    carried = {product.map_number_of(n) for n in product.atom_numbers if product.map_number_of(n)}
-    assert carried == numbers                       # the whole revealed fragment is numbered
-    # the protecting group's own atoms are NEW and correctly carry no number
-    assert any(product.map_number_of(n) == 0 for n in product.atom_numbers)
+    carried = {product.map_number_of(n) for n in product.atom_numbers}
+    assert numbers <= carried                       # the whole revealed fragment is numbered
+    assert 0 not in carried                         # and the Boc from its source, the anhydride
+    boc = carried - numbers
+    assert boc <= {anhydride.map_number_of(n) for n in anhydride.atom_numbers} and len(boc) == 7
 
-    # PER ATOM, and not only as a set.  `(element, degree, implicit_h)` separates the distinguishable
-    # atoms; the ring CH positions share a triple and cannot be separated, being one symmetry orbit.
-    source = {amine.map_number_of(n): n for n in amine.atom_numbers}
+    # PER ATOM, and not only as a set.  The reaction site and the group's carbonyl change neighbours; the rest
+    # keeps `(element, degree)`, the ring CH positions one symmetry orbit and not separable.
+    source = {molecule.map_number_of(n): (molecule, n) for molecule in rxn.reactants for n in molecule.atom_numbers}
     for n in product.atom_numbers:
-        mn = product.map_number_of(n)
-        if mn == 0:        # protecting group atom, genuinely new -- no source to check against
-            continue
-        m = source[mn]
-        if product.atom(n).element == 7:      # the reaction site; update if the substrate changes
-            assert product.atom(n).element == amine.atom(m).element
-        else:
-            assert (product.atom(n).element, product.degree_of(n), product.atom(n).implicit_h) == \
-                   (amine.atom(m).element, amine.degree_of(m), amine.atom(m).implicit_h)
+        molecule, m = source[product.map_number_of(n)]
+        assert product.atom(n).element == molecule.atom(m).element
+        if product.atom(n).element == 6 and any(product.atom(y).element == 7 for y in product.neighbors_of(n)):
+            continue                                # the carbonyl, bonded to the nitrogen it now protects
+        if product.atom(n).element != 7:
+            assert product.degree_of(n) == molecule.degree_of(m)
 
 
 @pytest.mark.parametrize('source', ['CC(=O)OC(C)=O', 'CC(=O)Cl', 'CC(=O)O'])
 def test_a_named_group_installed_is_a_protection_whatever_supplies_it(source):
-    """An acetate from Ac2O, AcCl or AcOH is one label, and the group's source is an agent: unmapped."""
+    """An acetate from Ac2O, AcCl or AcOH is one label, and the acetyl is mapped from its source: the product
+    carries every atom it took, the leaving half of the source stays unmapped."""
     rxn = smiles(f'OCc1ccccc1.{source}>>CC(=O)OCc1ccccc1')
     assert rxn.reconstruct_mapping() == ('protect:hydroxyl_acyl',)
-    acyl = next(m for m in rxn.reactants if 'O' in m and len(m) < 8)
-    assert all(not acyl.map_number_of(n) for n in acyl.atom_numbers)
+    (acyl,) = [m for m in rxn.reactants if len(m) < 8]
+    product = rxn.products[0]
+    assert all(product.map_number_of(n) for n in product.atom_numbers)
+    assert len([n for n in acyl.atom_numbers if acyl.map_number_of(n)]) == 3     # CH3, C and its =O
 
 
 def test_a_named_group_installed_is_a_protection_and_any_other_acylation_a_reaction():
@@ -1143,3 +1144,17 @@ def test_an_enol_ether_reacts_directly_and_its_alkoxy_leaves_unmapped(record, la
 def test_an_oxime_oxygen_is_named_for_the_oxime():
     rxn = smiles('ON=C(C)c1ccccc1.CC(C)(C)OC(=O)OC(=O)OC(C)(C)C>>CC(=NOC(=O)OC(C)(C)C)c1ccccc1')
     assert rxn.reconstruct_mapping() == ('protect:oxime_boc',)
+
+
+@pytest.mark.parametrize('text', ['CCN.OC(=O)c1ccccc1>>CCNC(=O)c1ccccc1', 'CCN.CC(=O)Cl>>CCNC(C)=O',
+                                  'CC(C)N.ClC(=O)c1ccccc1>>CC(C)NC(=O)c1ccccc1'])
+def test_a_protecting_acyl_is_mapped_from_its_donor(text):
+    """An N-acetyl or N-benzoyl reads as its protection, and the acid or acid chloride that supplied it is mapped:
+    every product atom carries a number, only the donor's leaving OH or Cl does not."""
+    rxn = smiles(text)
+    (label,) = rxn.reconstruct_mapping()
+    assert label.startswith('protect:amine_')
+    product = rxn.products[0]
+    assert all(product.map_number_of(n) for n in product.atom_numbers)
+    donor = next(m for m in rxn.reactants if any(m.atom(n).atomic_symbol in ('O', 'Cl') for n in m.atom_numbers))
+    assert [donor.atom(n).atomic_symbol for n in donor.atom_numbers if not donor.map_number_of(n)] in (['O'], ['Cl'])

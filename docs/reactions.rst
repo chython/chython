@@ -1554,8 +1554,9 @@ Methyl benzoate from benzoic acid is ``protect:carboxyl_methyl`` and anisole fro
 protecting group: methyl benzoate is a methyl ester of benzoic acid, not a benzoate of methanol.
 
 **Protection comes right after purification.** A label names conditions, and installing a protecting
-group is one family of them whatever supplies the group, so the group's source is an agent and is never
-mapped: an acetate from Ac\ :sub:`2`\ O, AcCl or AcOH is ``protect:hydroxyl_acyl`` each time.  Every named
+group is one family of them whatever supplies the group: an acetate from Ac\ :sub:`2`\ O, AcCl or AcOH is
+``protect:hydroxyl_acyl`` each time.  The group's atoms are mapped from the input that holds them, the acid
+of an N-benzoyl, the anhydride of a Boc, so the record balances; its leaving half stays unmapped.  Every named
 group of ``protective.tsv`` reads this way, a methyl ether, a benzylamine and a tosylamide included, and so
 do the triflate, mesylate and tosylate pseudohalides of an OH, which are set by many reagents
 (``protect:hydroxyl_triflyl``), and the enol triflate of a ketone, on its own site

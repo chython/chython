@@ -513,7 +513,7 @@ def _single_group_strips(recorded) -> Iterator[EnumeratedDeprotection]:
 
 
 def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
-    """The recorded product is a recorded input, masked: `protect:<groups>`, the group's source an agent.
+    """The recorded product is a recorded input, masked: `protect:<groups>`, the group mapped from its source.
 
     FIRST AFTER PURIFICATION, because a label names conditions and installing a protecting group is one
     family of them whatever supplies the group: an acetate from Ac2O, AcCl or AcOH is `protect:hydroxyl_acyl`
@@ -551,7 +551,8 @@ def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
             continue
         names = sorted(_sited(name, site) for name, site in zip(outcome.names, outcome.sites))
         yield _Explanation('protect:%s' % '+'.join(names),
-                           lambda target, p=pairs, o=options: _number_from_pairs(target, p, o.loose),
+                           lambda target, p=pairs, o=options: _number_groups(target, p, inputs,
+                                                                             _number_from_pairs(target, p, o.loose)),
                            '+'.join(outcome.rule_ids))
 
 
@@ -726,6 +727,42 @@ def _pair_with_inputs(stripped, inputs, loose: bool):
     return pairs
 
 
+def _number_groups(target, pairs, inputs, numbered):
+    """`numbered`, with each piece of `target` the stripped pairs left unmapped -- the protecting group --
+    numbered from an input component no pair used that holds it: the acid of an N-benzoyl, the anhydride of a
+    Boc, the bromide of a benzyl ether.  The group's source is the coupling partner whose atoms the product
+    carries, so the record balances; a piece no input holds, a reagent's fragment none was recorded for,
+    stays at zero."""
+    used = {candidate.map_number_of(n) for _, candidate in pairs for n in candidate.atom_numbers}
+    pool = sorted((part for molecule in inputs for part in molecule.split()
+                   if not {part.map_number_of(n) for n in part.atom_numbers} & used), key=len)
+    free = {n for n in target.atom_numbers if not target.map_number_of(n) and target.element_of(n) != 1}
+    pieces = []
+    while free:
+        piece, stack = set(), [free.pop()]
+        while stack:
+            x = stack.pop()
+            piece.add(x)
+            for y in target.neighbors_of(x):
+                if y in free:
+                    free.discard(y)
+                    stack.append(y)
+        pieces.append(piece)
+    for piece in sorted(pieces, key=lambda p: (-len(p), min(p))):
+        fragment = target.substructure(sorted(piece))
+        order = list(fragment)
+        query = fragment.as_query()
+        for k, part in enumerate(pool):
+            mapping = next(query.get_mapping(part), None)
+            if mapping is None:
+                continue
+            for q, n in mapping.items():
+                target.set_map_number(order[q - 1], part.map_number_of(n))
+            del pool[k]
+            break
+    return numbered
+
+
 def _number_from_pairs(target, pairs, loose: bool) -> tuple[bool, list[_Link]]:
     """Copy map numbers from each input component onto the stripped component it matched.
 
@@ -735,8 +772,8 @@ def _number_from_pairs(target, pairs, loose: bool) -> tuple[bool, list[_Link]]:
     restores, and a built atom's id belongs to nothing in `target`.  Hence the guard on `ids`; such an
     atom has no source and must stay at zero.
 
-    Complete is always True.  A protecting group's atoms are genuinely new, so zero is the right answer
-    and not a shortfall; a cleaved fragment matching no input never enters `pairs` at all.
+    Complete is always True.  A protecting group's atoms are left at zero here and numbered from their
+    source by `_number_groups`; a cleaved fragment matching no input never enters `pairs` at all.
 
     THE LINKS RUN THE OTHER WAY ROUND TOO.  This rung reconstructs backwards, so the stripped fragment
     carries the record's own configuration and the input carries what went in -- which is the same pair
