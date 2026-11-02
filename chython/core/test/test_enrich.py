@@ -27,7 +27,7 @@ several isomorphisms and a stereo-blind labelling cannot say which one the sourc
 against.  A wrong choice there is a plausible diastereomer, which is why refusing the site is the
 answer and a mapped count with no mismatches is not evidence of anything.
 """
-from pytest import raises
+from pytest import mark, raises
 
 from chython.core import (AutomorphismBudgetExceeded, INFO, LOST, MoleculeContainer, REFUSED,
                           REPAIRED, STEREO_ABS, STEREO_AND, STEREO_OR, STEREO_UNSPECIFIED,
@@ -430,3 +430,15 @@ def test_the_atom_count_does_not_move_which_is_what_separates_this_from_union():
     assert base.enrich_from(read_smiles('C[C@H](N)C(=O)O'))
     assert base.atom_count == before
     assert base.connected_components_count == 1
+
+
+@mark.parametrize('source', ['C/C=C/CO', 'C/C=C\\CO'])
+@mark.parametrize('base', ['OCC=CC', 'C(C)=CCO', 'CC=CCO', 'C(CO)=CC'])
+def test_a_cis_trans_unit_anchored_at_the_other_end_is_borrowed(source, base):
+    """But-2-en-1-ol, E and Z, onto every spelling of the bare base: which end of the double bond each record
+    anchors its unit on depends on atom order alone, and the configuration comes across either way."""
+    want = read_smiles(source)
+    target = read_smiles(base)
+    target.enrich_from(read_smiles(source))
+    assert target == want, (base, str(target))
+    assert 'enrich:no-unit-here' not in [r.rule for r in target.log]

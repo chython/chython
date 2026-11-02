@@ -6454,6 +6454,13 @@ cdef class MoleculeContainer:
             if not unit['parity']:
                 continue
             anchor = inverse[unit['anchor']]
+            if anchor not in base_refs and isinstance(unit['owners'], tuple) and unit['anchor'] in unit['owners']:
+                # a cis/trans unit, which either end of its bond may anchor: two records can pick opposite
+                # ends.  An allene's anchor is its midpoint, the same in both.  The refs come across
+                # unchanged -- a pair exchange is even, and `_parity_in_order` takes it.
+                for x in unit['owners']:
+                    if x != unit['anchor'] and inverse[x] in base_refs:
+                        anchor = inverse[x]
             if anchor not in base_refs:
                 self._log_event(
                     'enrich:no-unit-here', 'enrich',
