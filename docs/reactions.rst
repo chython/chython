@@ -1440,12 +1440,13 @@ the sites, largest first, deduplicated by product -- so two symmetry-equivalent 
 
 .. testoutput::
 
-    {'amide_boc': 2}
-    ('boc', 'boc') ('amide_boc', 'amine_boc') C(C)N
-    ('boc',) ('amide_boc',) O=C(NCC)OC(C)(C)C
+    {'amine_boc': 2}
+    ('boc', 'boc') ('amine_boc', 'amine_boc') C(C)N
+    ('boc',) ('amine_boc',) O=C(NCC)OC(C)(C)C
 
-Each Boc of the pair sits on a nitrogen that carries the other one, a carbamate, so each is reported
-``amide_boc``; the full strip names the second ``amine_boc``, since it comes off an amine.
+A group is named by the atom it sits on with the other groups on that atom set aside, so each Boc of the
+pair is ``amine_boc`` -- not ``amide_boc`` for the carbamate the other one makes -- and ``deprotect()`` names
+every strip so, whichever comes off first, as ``protective_groups()`` counts them.
 
 ``R-N(Boc)2 -> R-NHBoc`` is reachable this way, which is the case a rule-level unit cannot express.  The
 deduplication is by product multiset, compared as canonical structures and never as strings, so a bis-Boc

@@ -261,7 +261,7 @@ def test_two_groups_on_one_atom_are_two():
     """
     molecule = read_smiles('c1ccccc1CN(C(=O)OC(C)(C)C)C(=O)OC(C)(C)C')
     molecule.thiele()
-    assert protective_groups(molecule) == {'amide_boc': 2}       # each sits beside the other's carbamate
+    assert protective_groups(molecule) == {'amine_boc': 2}       # each on the amine, the other set aside
     outcome = next(deprotect(molecule))
     assert outcome.names == ('boc', 'boc')
     assert {skeleton(p) for p in outcome.reaction.products} == {skeleton(read_smiles('c1ccccc1CN'))}
@@ -634,3 +634,16 @@ def test_a_strip_cutting_a_carboxylic_ester_is_named_for_its_group(smiles, names
     outcome = next(deprotect(molecule))
     assert outcome.names == names
     assert outcome.labels == labels
+
+
+@pytest.mark.parametrize('text, row, label', [('CC(=O)N(C(C)=O)c1ccccc1', 'acyl', 'aniline_acyl'),
+                                              ('CS(=O)(=O)N(S(C)(=O)=O)c1ccccc1', 'mesyl', 'aniline_mesyl'),
+                                              ('CC(C)(C)OC(=O)N(C(=O)OC(C)(C)C)CCO', 'boc', 'amine_boc')])
+def test_a_doubly_protected_nitrogen_is_labelled_alike_by_both(text, row, label):
+    """N,N-Diacetyl and N,N-dimesyl aniline, an N,N-di-Boc amine: each group is named by the atom it sits on with
+    the other set aside -- an aniline, not an amide the other group makes -- and `deprotect()` labels both
+    strips as `protective_groups()` counts them, whichever comes off first."""
+    molecule = read_smiles(text)
+    assert protective_groups(molecule) == {label: 2}
+    outcomes = [o.labels for o in deprotect(molecule, (row,), partial=True)]
+    assert (label, label) in outcomes and all(set(o) == {label} for o in outcomes)

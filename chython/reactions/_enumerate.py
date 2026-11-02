@@ -526,18 +526,20 @@ def protective_group_hits(molecule: MoleculeContainer) -> tuple[GroupHit, ...]:
 
     The count is CLAIMS and not matches, so a Boc-protected alcohol reports one `hydroxyl_boc` and no
     `hydroxyl_tbu`, and both a bis-Boc diamine and an N,N-di-Boc amine report two.  A sited row is
-    reported under the site it sits on (`_sited`): the `boc` row on an aniline is `aniline_boc`.
+    reported under the site it sits on (`_sited`), the other groups on that atom set aside (`_bare_site`): the
+    `boc` row on an aniline is `aniline_boc`, and both Bocs of an N,N-di-Boc aniline are.
 
     `protective_groups()` is this folded to `{name: count}`.
     """
     counted = Counter()
     rows = {}
-    for claim in _claims(molecule, protective_rules().values()):
+    claims = _claims(molecule, protective_rules().values())
+    for claim in claims:
         name = claim.rule.name
         if claim.rule.sited:
-            patched = _patch_within(claim.rule.template, molecule, claim.deleted)
-            if patched is not None:
-                name = _sited(name, _site(patched, _revealed(molecule, claim), claim.rule))
+            site = _bare_site(molecule, claim, claims)
+            if site is not None:
+                name = _sited(name, site)
         counted[name] += 1
         rows[name] = claim.rule.id
     return tuple(GroupHit(rows[name], name, count) for name, count in counted.items())
@@ -669,6 +671,37 @@ def _write_numbers(molecule: MoleculeContainer, numbers: dict[int, int]) -> Mole
     return molecule
 
 
+def _bare_site(molecule: MoleculeContainer, claim: _Claim, claims) -> str | None:
+    """The site `claim` sits on read on `molecule` with every claim of `claims` revealing the same atom
+    stripped, the other groups still on: both acetyls of an N,N-diacetyl aniline sit on an aniline, not one on
+    an amide the other makes.  None when no strip stays inside its claim."""
+    atom = _revealed(molecule, claim)
+    if atom is None:
+        return None
+    patched = molecule
+    for other in claims:
+        if other == claim or _revealed(molecule, other) != atom:
+            continue
+        stripped = _patch_within(other.rule.template, patched, other.deleted)
+        if stripped is None or atom not in set(stripped.atom_numbers):
+            return None
+        patched = stripped
+    patched = _patch_within(claim.rule.template, patched, claim.deleted)
+    if patched is None:
+        return None
+    return _site(patched, atom, claim.rule)
+
+
+def _input_site(molecule: MoleculeContainer, claim: _Claim) -> str | None:
+    """The site `claim` sits on read on the INPUT `molecule`, as `protective_group_hits` reads it: by
+    `_bare_site`, whichever group comes off first.  None when the claim's atoms are not all the input's, a
+    strip having renumbered them; the caller reads the site after the strips then."""
+    ids = set(molecule.atom_numbers)
+    if not set(claim.deleted) <= ids or _revealed(molecule, claim) not in ids:
+        return None
+    return _bare_site(molecule, claim, _claims(molecule, protective_rules().values()))
+
+
 def _strip_sites(molecule: MoleculeContainer, chosen: Sequence[int],
                  rules: tuple[ProtectiveGroup, ...]) -> EnumeratedDeprotection | None:
     """Remove exactly the claims at the indices in `chosen`, and nothing else.
@@ -688,7 +721,7 @@ def _strip_sites(molecule: MoleculeContainer, chosen: Sequence[int],
         patched = _patch_within(claim.rule.template, working, claim.deleted)
         if patched is None:                 # the claim stood but no outcome stayed inside it
             continue
-        site = _site(patched, _revealed(working, claim), claim.rule)
+        site = _input_site(molecule, claim) or _site(patched, _revealed(working, claim), claim.rule)
         acted.append((claim, _sited(claim.rule.name, site), site))
         working = patched
     if not acted:
@@ -732,7 +765,7 @@ def _strip(molecule: MoleculeContainer, chosen: frozenset[str],
         patched = _patch_within(claim.rule.template, working, claim.deleted)
         if patched is None:                 # the claim stood but no outcome stayed inside it
             break
-        site = _site(patched, _revealed(working, claim), claim.rule)
+        site = _input_site(molecule, claim) or _site(patched, _revealed(working, claim), claim.rule)
         labels.append(_sited(claim.rule.name, site))
         sites.append(site)
         working = patched
