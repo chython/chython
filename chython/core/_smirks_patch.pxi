@@ -1215,7 +1215,7 @@ cdef tuple smk_one(ReactionTemplate t, MoleculeContainer work, set work_bonds, d
 
 
 def smk_apply(ReactionTemplate t, tuple molecules, bint automorphism_filter, object log, bint report,
-              bint dedupe):
+              bint dedupe, object accept=None):
     """Validate eagerly, then hand back the generator.
 
     The split is the point: a bad argument raises from the CALL, not from the first `next()`, so a
@@ -1231,11 +1231,11 @@ def smk_apply(ReactionTemplate t, tuple molecules, bint automorphism_filter, obj
             raise TypeError('a template applies to molecules; this one was handed a %s' % type(m).__name__)
     if not molecules:
         raise ValueError('a template needs at least one molecule to apply to')
-    return smk_enumerate(t, list(molecules), automorphism_filter, log, report, dedupe)
+    return smk_enumerate(t, list(molecules), automorphism_filter, log, report, dedupe, accept)
 
 
 def smk_enumerate(ReactionTemplate t, list inputs, bint automorphism_filter, object log, bint report,
-                  bint dedupe):
+                  bint dedupe, object accept=None):
     """Every distinct outcome of one template over one set of inputs.
 
     The inputs are unioned into one working container, which is why an intramolecular template needs
@@ -1291,6 +1291,8 @@ def smk_enumerate(ReactionTemplate t, list inputs, bint automorphism_filter, obj
     else:
         candidates = t.reactants.get_mapping(work, automorphism_filter)
     for mapping in candidates:
+        if accept is not None and not accept(mapping):
+            continue                    # refused before its outcome is built
         # THE OUTCOME CARRIES WHAT ITS OWN PATCH REPORTED, on `rxn.log` under stage `react`, whether or
         # not the caller passed a `log=`.  A candidate that produced nothing has no container to write
         # to, so its line is only on the caller's list -- and a duplicate outcome is not yielded, so

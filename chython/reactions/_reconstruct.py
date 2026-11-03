@@ -1185,6 +1185,62 @@ def _anchors(owners) -> tuple:
 
 # --- enumeration ----------------------------------------------------------------------------------
 
+def _built_sizes(run: Sequence[MoleculeContainer], wanted: set[int]):
+    """`accept_for(template)` for `_outcomes`: an embedding is built only when a component it would build
+    could have the heavy-atom count of a recorded component.
+
+    Building an outcome copies and reseals the whole pool, about a tenth of a second for a 500-atom input,
+    and an aromatic C-H row embeds once per C-H; the sizes of what an embedding builds are graph arithmetic
+    on the pool's union, the ids `ReactionTemplate.__call__` hands `accept`.  Each component holding a
+    matched atom is counted after the template's deletions, the bonds it drops between atoms it keeps and
+    the bonds and atoms it adds; a created atom may be a hydrogen, so a count within the number created
+    passes.  A NECESSARY CONDITION: an embedding refused here cannot build a recorded component.
+    """
+    work = run[0].copy()
+    for molecule in run[1:]:
+        work = work.union(molecule)
+    heavy = {n: work.element_of(n) != 1 for n in work.atom_numbers}
+    adjacency = {n: set(work.neighbors_of(n)) for n in work.atom_numbers}
+
+    def accept_for(template):
+        product_of = {reactant: product for reactant, product in template.mapped_pairs.values()}
+        reactant_of = {product: reactant for reactant, product in product_of.items()}
+        deleted = tuple(template.deleted_atoms)
+        product_bonds = set(template.product_bonds)
+        dropped = [(a, b) for a, b in template.reactant_bonds if a in product_of and b in product_of
+                   and tuple(sorted((product_of[a], product_of[b]))) not in product_bonds]
+        made = list(template.product_bonds)              # in product ids: a created atom is its own node
+        slack = len(template.created_atoms)              # one may be a hydrogen, counted here as heavy
+
+        def accept(mapping):
+            gone = {mapping[n] for n in deleted}
+            cut = {frozenset((mapping[a], mapping[b])) for a, b in dropped}
+            extra = {}
+            for a, b in made:
+                x = mapping[reactant_of[a]] if a in reactant_of else ('new', a)
+                y = mapping[reactant_of[b]] if b in reactant_of else ('new', b)
+                extra.setdefault(x, set()).add(y)
+                extra.setdefault(y, set()).add(x)
+            seen = set()
+            for seed in mapping.values():
+                if seed in seen or seed in gone:
+                    continue
+                size, stack = 0, [seed]
+                seen.add(seed)
+                while stack:
+                    x = stack.pop()
+                    size += heavy.get(x, True)
+                    for y in adjacency.get(x, set()) | extra.get(x, set()):
+                        if y not in seen and y not in gone and frozenset((x, y)) not in cut:
+                            seen.add(y)
+                            stack.append(y)
+                if any(size - slack <= w <= size for w in wanted):
+                    return True
+            return False
+        return accept
+    return accept_for
+
+
 def _supplies(supply: Counter, targets: Sequence[Mapping[str, int]], rule) -> bool:
     """Could this pool, plus whatever the row creates, hold the atoms of SOME recorded component?
 
@@ -1289,6 +1345,7 @@ def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContaine
                 if not counts - available:
                     fitting.append(rule)
     targets = [part.element_counts for part in recorded.split()]
+    sizes_wanted = {sum(n for element, n in counts.items() if element != 1) for counts in targets}
     for subset in sorted(fits, key=lambda subset: (len(subset), subset)):
         if not fits[subset]:
             continue
@@ -1299,11 +1356,12 @@ def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContaine
         supply = Counter()
         for molecule in pool:
             supply.update(molecule.element_counts)
+        sizes = _built_sizes(run, sizes_wanted)
         try:
             for rule in sorted(fits[subset], key=_specificity, reverse=True):
                 if not _supplies(supply, targets, rule):
                     continue
-                for outcome in _outcomes(rule, run):
+                for outcome in _outcomes(rule, run, sizes):
                     yield pool, outcome
         except Exception:
             continue
@@ -1351,12 +1409,17 @@ def _reproduces(recorded: MoleculeContainer, products: Sequence[MoleculeContaine
     built.
     """
     parts = list(recorded.split())
-    passengers = {part for molecule in consumed for part in molecule.split()}
-    built = [candidate for product in products for candidate in product.split()
-             if candidate not in passengers]
+    built = [candidate for product in products for candidate in product.split()]
+    # equal containers have equal atom counts: hash, which costs a canonical form, only what could be equal
+    lengths = {len(candidate) for candidate in built}
+    passengers = {part for molecule in consumed for part in molecule.split() if len(part) in lengths}
+    if passengers:
+        built = [candidate for candidate in built if candidate not in passengers]
     if not loose:
-        want = {_ungrouped(part) for part in parts}
-        return any(_ungrouped(candidate) in want for candidate in built)
+        lengths = {len(candidate) for candidate in built}
+        want = {_ungrouped(part) for part in parts if len(part) in lengths}
+        return any(_ungrouped(candidate) in want for candidate in built if len(candidate) in
+                   {len(part) for part in parts})
     if loose == TAUTOMER:
         built = [candidate for candidate in built if not any(_same(candidate, passenger, TAUTOMER)
                                                              for passenger in passengers)]

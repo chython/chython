@@ -559,9 +559,9 @@ def _pools(reaction):
     offered = []
     kept = _reconstruct._outcomes
 
-    def counting(rule, molecules):
+    def counting(rule, molecules, *rest):
         offered.append(len(molecules))
-        return kept(rule, molecules)
+        return kept(rule, molecules, *rest)
 
     _reconstruct._outcomes = counting
     try:
@@ -602,10 +602,10 @@ def test_a_plate_record_offers_each_row_one_pool_per_slot_choice():
     offered = Counter()
     kept = _reconstruct._outcomes
 
-    def counting(rule, molecules):
+    def counting(rule, molecules, *rest):
         offered[rule.id] += 1
         assert len(molecules) <= len(rule.groups)
-        return kept(rule, molecules)
+        return kept(rule, molecules, *rest)
 
     amines = [smiles('C' * k + 'N') for k in range(2, 12)]
     rxn = ReactionContainer([smiles('CCC(=O)O'), *amines], [smiles('CCC(=O)NCC')])
@@ -1158,3 +1158,24 @@ def test_a_protecting_acyl_is_mapped_from_its_donor(text):
     assert all(product.map_number_of(n) for n in product.atom_numbers)
     donor = next(m for m in rxn.reactants if any(m.atom(n).atomic_symbol in ('O', 'Cl') for n in m.atom_numbers))
     assert [donor.atom(n).atomic_symbol for n in donor.atom_numbers if not donor.map_number_of(n)] in (['O'], ['Cl'])
+
+
+def test_an_embedding_that_cannot_build_a_recorded_component_is_not_built():
+    """Boc-protected 4-aminobiphenyl, nine aromatic C-H: a bromination embedding builds 21 heavy atoms, so it
+    is refused against the free aniline (13) and accepted against the bromide (21) -- graph arithmetic on
+    the embedding, before the 20-atom input is copied and resealed; a urea's created carbonyl joins its two
+    amines into one counted component."""
+    from .._reconstruct import _built_sizes
+    from ...core import read_smirks
+    boc = smiles('CC(C)(C)OC(=O)Nc1ccc(cc1)-c1ccccc1')
+    bromination = read_smirks('[C;a;h1:1]>>[A:1]-[Br]')
+    embeddings = list(bromination.reactants.get_mapping(boc))
+    assert len(embeddings) == 9
+    assert not any(_built_sizes([boc], {13})(bromination)(m) for m in embeddings)
+    assert all(_built_sizes([boc], {21})(bromination)(m) for m in embeddings)
+    urea = read_smirks('[N;D1:1].[N;D1:2]>>[A:1]C(=O)[A:2]')
+    a, b = smiles('CCN'), smiles('CCCN')
+    work = a.union(b)
+    (embedding, *_) = [m for m in urea.reactants.get_mapping(work) if m[1] in a.atom_numbers]
+    assert _built_sizes([a, b], {9})(urea)(embedding)
+    assert not _built_sizes([a, b], {3})(urea)(embedding)

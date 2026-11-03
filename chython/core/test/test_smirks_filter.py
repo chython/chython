@@ -213,3 +213,19 @@ def test_the_mask_is_still_refused_on_a_product_side():
     with raises(IncorrectSmirks) as exc:
         read_smirks('[Na;D0;*:1]>>[Na;M:1]')
     assert 'protects a MATCHED atom' in str(exc.value)
+
+
+def test_accept_is_asked_before_an_outcome_is_built():
+    """Toluene's five ring C-H: `accept` sees each embedding as `{query atom: atom id}` and a refused one is
+    never built, so a caller that can tell from the embedding alone saves the copy and reseal."""
+    template = read_smirks('[C;a;h1:1]>>[A:1]-[Br]')
+    toluene = smiles('Cc1ccccc1')
+    asked = []
+
+    def accept(mapping):
+        asked.append(dict(mapping))
+        return mapping[1] == 3                          # the ortho carbon next to the methyl only
+    outcomes = list(template(toluene, accept=accept, dedupe=False))
+    assert len(asked) == 5 and all(set(m) == {1} for m in asked)
+    assert len(outcomes) == 1
+    assert len(list(template(toluene, dedupe=False))) == 5

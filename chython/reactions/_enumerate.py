@@ -159,12 +159,13 @@ def _fitting(molecules: Sequence[MoleculeContainer], rules: Mapping[str, tuple[R
         yield rule
 
 
-def _outcomes(rule: ReactionRule, molecules: Sequence[MoleculeContainer]
+def _outcomes(rule: ReactionRule, molecules: Sequence[MoleculeContainer], accept_for=None
               ) -> Iterator[EnumeratedReaction]:
-    """Every reaction `rule` produces on `molecules` that touched all of them."""
+    """Every reaction `rule` produces on `molecules` that touched all of them.  `accept_for(template)`, when
+    given, is the `accept` each template is applied with."""
     inputs = len(molecules)
     for template in rule.templates:
-        for rxn in template(*molecules):
+        for rxn in template(*molecules, accept=None if accept_for is None else accept_for(template)):
             if len(rxn.reactants) == inputs:
                 yield EnumeratedReaction(rule.name, rxn, rule.id)
 
@@ -628,7 +629,9 @@ def _patch_within(template: ReactionTemplate, molecule: MoleculeContainer,
     """
     before = set(molecule.atom_numbers)
     # every embedding: two symmetry-equivalent sites build one structure, and the claim names which site
-    for rxn in template(molecule, dedupe=False):
+    deleted = tuple(template.deleted_atoms)
+    for rxn in template(molecule, dedupe=False,
+                        accept=lambda mapping: all(mapping[n] in allowed for n in deleted)):
         after = set()
         for product in rxn.products:
             after |= set(product.atom_numbers)
@@ -703,14 +706,29 @@ def _bare_site(molecule: MoleculeContainer, claim: _Claim, claims) -> str | None
     return _site(patched, atom, claim.rule)
 
 
+_INPUT_SITES: dict = {}                 # id(input) -> (input, its claims, {claim: site}); the input held so
+_INPUT_SITES_MAX = 4                    # its id cannot be reused while the entry stands
+
+
 def _input_site(molecule: MoleculeContainer, claim: _Claim) -> str | None:
     """The site `claim` sits on read on the INPUT `molecule`, as `protective_group_hits` reads it: by
     `_bare_site`, whichever group comes off first.  None when the claim's atoms are not all the input's, a
-    strip having renumbered them; the caller reads the site after the strips then."""
+    strip having renumbered them; the caller reads the site after the strips then.
+
+    Memoized per input: every subset `_strip_sites` takes off one molecule asks again for the same sites,
+    and each answer is a strip of the whole molecule."""
     ids = set(molecule.atom_numbers)
     if not set(claim.deleted) <= ids or _revealed(molecule, claim) not in ids:
         return None
-    return _bare_site(molecule, claim, _claims(molecule, protective_rules().values()))
+    entry = _INPUT_SITES.get(id(molecule))
+    if entry is None or entry[0] is not molecule:
+        if len(_INPUT_SITES) >= _INPUT_SITES_MAX:
+            _INPUT_SITES.pop(next(iter(_INPUT_SITES)))
+        entry = _INPUT_SITES[id(molecule)] = (molecule, _claims(molecule, protective_rules().values()), {})
+    sites = entry[2]
+    if claim not in sites:
+        sites[claim] = _bare_site(molecule, claim, entry[1])
+    return sites[claim]
 
 
 def _strip_sites(molecule: MoleculeContainer, chosen: Sequence[int],

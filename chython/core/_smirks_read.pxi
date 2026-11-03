@@ -1129,7 +1129,7 @@ cdef class ReactionTemplate:
         return 'read_smirks(%r)' % self.smirks
 
     def __call__(self, *molecules, bint automorphism_filter=True, log=None, bint report=False,
-                 bint dedupe=True):
+                 bint dedupe=True, accept=None):
         """Apply this template to one molecule or to several, yielding one `ReactionContainer` per
         distinct outcome.
 
@@ -1172,9 +1172,15 @@ cdef class ReactionTemplate:
         outcomes by atom id needs every one, since the default keeps only the first of each structure.
         `automorphism_filter` is a different collapse -- over the template's own symmetry, not the
         outcome's.
+
+        `accept`, a callable taking an embedding `{reactant query atom: atom id}`, is asked before the
+        embedding's outcome is built, and a falsy answer skips it.  The ids are the working container's:
+        the first input's own, the later inputs' as `union` renumbers them.  Building an outcome copies
+        and reseals the whole input, so a caller that can tell from the embedding alone that the outcome
+        is not the one it wants saves that.
         """
         return smk_apply(self, molecules, automorphism_filter,
-                         log if log is not None else [], report, dedupe)
+                         log if log is not None else [], report, dedupe, accept)
 
 
 def read_smirks(text, log=None, *, rule_id=None):
