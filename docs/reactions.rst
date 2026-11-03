@@ -1362,7 +1362,8 @@ first rule that reaches it, so a Boc-protected alcohol reports one ``hydroxyl_bo
 ``hydroxyl_tbu``, whose pattern also fits inside it.  The two above are two sites on two different
 nitrogens; the claim is over the atoms a rule **deletes** rather than over its whole match, which is why
 an *N,N*-di-Boc amine is also two groups and not one -- both rules match with the same nitrogen and
-share nothing else.
+share nothing else.  A claim that would leave its atom bare is refused and still shadows its atoms: the
+Boc of a Boc-NH-Cbz is not read as a tert-butyl ether, and tert-butyl carbamate carries no group at all.
 
 ``protective_group_hits()`` is that report with the ids, most specific first:
 

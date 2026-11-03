@@ -659,3 +659,23 @@ def test_a_labelled_group_keeps_its_site(plain, labelled):
     b.thiele()
     assert protective_groups(a) == protective_groups(b) and all('_' in name for name in protective_groups(b))
     assert [o.labels for o in deprotect(a)] == [o.labels for o in deprotect(b)]
+
+
+@pytest.mark.parametrize('text, groups, stripped', [
+    ('CC(C)(C)OC(=O)NC(=O)OCc1ccccc1', {'amide_cbz': 1}, 'CC(C)(C)OC(N)=O'),            # Boc-NH-Cbz
+    ('CC(C)(C)OC(=O)NS(=O)(=O)c1ccccc1', {'amide_phenylsulfonyl': 1}, 'CC(C)(C)OC(N)=O'),
+    ('CC(C)(C)OC(=O)N', {}, None),                                                   # tert-butyl carbamate
+    ('NC(=O)OCc1ccccc1', {}, None)])                                                 # benzyl carbamate
+def test_a_group_refused_on_its_atom_is_not_read_inside(text, groups, stripped):
+    """Two groups on one NH, or one on an NH2, cannot both come off: the nitrogen would be left bare.  The
+    refused group shadows its atoms, so no smaller row reads its tert-butyl or benzyl half as an ether."""
+    molecule = read_smiles(text)
+    molecule.thiele()
+    assert protective_groups(molecule) == groups
+    outcome = next(deprotect(molecule), None)
+    if stripped is None:
+        assert outcome is None
+    else:
+        (product,) = outcome.reaction.products
+        want = read_smiles(stripped)
+        assert product.canonical_bytes == want.canonical_bytes

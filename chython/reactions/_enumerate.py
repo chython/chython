@@ -471,13 +471,16 @@ def _claims(molecule: MoleculeContainer, rules: Iterable[ProtectiveGroup]) -> li
     (`amine_boc` demands `[N;D2,D3]`), but two rows together can consume every neighbour of the atom
     they reveal, and then the product is a bare heteroatom rather than a deprotection.  Only one reading
     of a doubly substituted O can be true, so the second claim is refused -- except on an ester claimed
-    from its acyl side, where a smaller alkyl group displaces the acyl claim (`_acyl_rival`).  A genuinely
+    from its acyl side, where a smaller alkyl group displaces the acyl claim (`_acyl_rival`).  A refused
+    group still shadows its atoms: no smaller row claims inside it, so the Boc of a Boc-NH-Cbz is not read
+    as a tert-butyl ether on its own oxygen; it is seen by the next pass, once the Cbz is gone.  A genuinely
     nested group is seen by the next pass, once the outer one is gone.
 
     A claim deletes the explicit hydrogens of the atoms it deletes: a pentadeuterioethyl ether is
     `phenol_ethyl` as the ethyl ether is.
     """
     claimed = set()
+    shadowed = set()                        # a group refused as baring its atom: no smaller row reads inside it
     out = []
     for rule in rules:
         deleted_query_atoms = rule.template.deleted_atoms
@@ -485,13 +488,14 @@ def _claims(molecule: MoleculeContainer, rules: Iterable[ProtectiveGroup]) -> li
             deleted = frozenset(mapping[n] for n in deleted_query_atoms)
             # an explicit hydrogen -- a deuterium, a tritium -- goes with the atom it sits on
             deleted |= {y for x in deleted for y in molecule.neighbors_of(x) if molecule.element_of(y) == 1}
-            if not claimed.isdisjoint(deleted):
+            if not claimed.isdisjoint(deleted) or not shadowed.isdisjoint(deleted):
                 continue
             bare = _bare(molecule, mapping.values(), deleted, claimed)
             if bare:
                 rival = _acyl_rival(molecule, out, bare, deleted)
                 if rival is None or _bare(molecule, mapping.values(), deleted, claimed - rival.deleted):
-                    continue                # nothing of the substrate would be left on a revealed atom
+                    shadowed |= deleted     # nothing of the substrate would be left on a revealed atom
+                    continue
                 out.remove(rival)
                 claimed -= rival.deleted
             claimed = claimed | deleted
