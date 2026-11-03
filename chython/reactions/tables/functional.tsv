@@ -170,7 +170,7 @@ id	name	smarts	precursor	example	decoys	site	description
 105	azo	[N;D2;x1:1]=[N;D2;x1:2]		c1ccc(N=Nc2ccccc2)cc1	CCN=[N+]=[N-]		R-N=N-R
 106	isocyano	[N;+;D2;x0:1]#[C;-;D1:2]	[N;+:1]#[C;-:2]	CC[N+]#[C-]	CCC#N		R-NC, charge-separated
 107	guanidine	[N;z1;x0:1]-[C;!R:2](-[N;z1;x0:3])=[N;x0:4]		NC(N)=N	NC(N)=O		acyclic guanidine
-108	nitroso	[N;D2;z2:1]=[O;D1:2]		CCN=O	CC[N+](=O)[O-]		R-N=O
+108	nitroso	[N;D2;z2:1]=[O;D1:2]		CC(C)(C)N=O	CC[N+](=O)[O-]		R-N=O
 109	isothiocyanate	[N;z2;x0;D2:1]=[C:2]=[S;D1:3]		CCN=C=S	CCN=C=O		R-N=C=S
 110	alkyl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;z1:1]	[Cl]-[Mg]-[C:1],[Br]-[Mg]-[C:1],[I]-[Mg]-[C:1]	CC[Mg]Br	Br[Mg]c1ccccc1		RMgX on sp3 carbon
 111	aryl_grignard	[Mg;D2](-[F,Cl,Br,I])-[C;a:1]	[Cl]-[Mg]-[C:1],[Br]-[Mg]-[C:1],[I]-[Mg]-[C:1]	Br[Mg]c1ccccc1	CC[Mg]Br		ArMgX
@@ -251,7 +251,7 @@ id	name	smarts	precursor	example	decoys	site	description
 185	aryl_ether	[O;D2;z1;x0:1](-[C;a:2])[C;z1,a:3]		COc1ccccc1	COC,CC(=O)Oc1ccccc1		Ar-O-R and Ar-O-Ar.  Separate from `dialkyl_ether` because only this one is an SNAr and Ullmann product and a demethylation substrate
 186	acetal	[O;D2;z1:1]-[C;z1;x2;h0,h1:2]-[O;D2;z1:3]		COC(C)OC	COC,CC(=O)OC,OCCO		R-O-CH(R)-O-R, the masked carbonyl.  `h0,h1` admits the ketal and excludes an orthoester
 187	hemiketal	[O;D1;z1;x0;h1:1]-[C;z1;x2:2]-[O;D2;z1:3]	[O:1]-[C:2]-[O:3]	OC1(OC)CCCCC1	OCCOC,CCO		HO-C(-OR), the ring-opened sugar form
-188	enol	[O;D1;z1;x0;h1:1]-[C;z2:2]=[C;z2:3]	[O:1]-[C:2]=[C:3]	OC1=CCCCC1	OCC=C,CCO,Oc1ccccc1	enol:1	HO-C=C.  `z2` on both carbons, so a phenol -- aromatic, not `z2` -- is not one
+188	enol	[O;D1;z1;x0;h1:1]-[C;z2:2]=[C;z2:3]	[O:1]-[C:2]=[C:3]	OC1=CC(=O)CCC1	OCC=C,CCO,Oc1ccccc1	enol:1	HO-C=C.  `z2` on both carbons, so a phenol -- aromatic, not `z2` -- is not one
 189	silyl_ether	[Si;D4:1]-[O;D2;z1:2]-[C:3]		C[Si](C)(C)OCC	C[Si](C)(C)C,CCO,COC		R3Si-O-R, a protected alcohol.  `protective.tsv` removes the named ones; this reports any
 # --- the carbonyl derivatives beside primary_amide/secondary_amide/ester ------------------
 190	tertiary_amide	[N;D3;z1;x0:1]-[C;D2,D3;z2;x2:2]=[O;D1;z2;x0:3]	[N:1]-[C:2]=[O:3]	CN(C)C=O	CC(=O)NC,CC(=O)N,CN(C)C,O=C(OC(C)(C)C)N1CCCCC1,CN(C)C(=O)N(C)C,CN(C)S(=O)(=O)C		R-CO-NR2, the level `primary_amide` and `secondary_amide` left out.  `x0` on the nitrogen because an amide N's three neighbours are all CARBON; `x2` on the carbonyl is what excludes a carbamate and a urea, whose carbonyl is `x3`
@@ -307,7 +307,7 @@ id	name	smarts	precursor	example	decoys	site	description
 232	alkoxide	[O;D1;z1;x0;-:1]-[C;z1:2]	[O;-:1]-[C:2]	CC[O-].[Na+]	CCO,CC(=O)[O-],[O-]c1ccccc1		RO-
 233	phenoxide	[O;D1;z1;x0;-:1]-[C;a:2]	[O;-:1]-[C:2]	[O-]c1ccccc1.[Na+]	Oc1ccccc1,CC[O-]		ArO-
 234	thiolate	[S;D1;z1;x0;-:1]-[C:2]	[S;-:1]-[C:2]	CC[S-].[Na+]	CCS		RS-
-235	ammonium	[N;z1;x0;+;h1,h2,h3:1]		CC[NH3+].[Cl-]	CCN,CCCC[N+](CCCC)(CCCC)CCCC		The protonated amine.  `h1,h2,h3` is what distinguishes it from a quaternary salt
+235	ammonium	[N;z1;x0;+;h1,h2,h3:1]		C[NH2+]C.F[B-](F)(F)F	CCN,CCCC[N+](CCCC)(CCCC)CCCC		The protonated amine.  `h1,h2,h3` is what distinguishes it from a quaternary salt
 236	quaternary_ammonium	[N;D4;z1;x0;+;h0:1]		CCCC[N+](CCCC)(CCCC)CCCC	CC[NH3+],CCN		R4N+, a phase-transfer catalyst rather than a protonation state
 # --- strained rings, where ring size is the reactivity ------------------------------------
 237	oxetane	[O;D2;z1;r4:1]([C;z1;r4:2])[C;z1;r4:3]		C1COC1	C1CO1,C1CCOC1		The four-membered ether, a carbonyl bioisostere and a slow electrophile
@@ -315,7 +315,7 @@ id	name	smarts	precursor	example	decoys	site	description
 239	beta_lactam	[N;D2,D3;z1;r4:1]-[C;D3;z2;r4:2]=[O;D1;x0:3]		O=C1CC2N1CCS2	O=C1CCCN1,CC(=O)N,C1CNC1	amide:1	The four-membered lactam.  `D2,D3` because a fused penicillin or cephalosporin nitrogen is D3 and `D2` alone reaches only the monocyclic model compound
 # --- and two spellings that only a charge or a metal distinguishes ------------------------
 240	acyl_azide	[N;D1;z2;-:1]=[N;D2;+:2]=[N;D2;z2:3]-[C;D3;z2:4]=[O;D1;x0:5]		O=C(c1ccccc1)N=[N+]=[N-]	CCN=[N+]=[N-]		R-CO-N3, the Curtius substrate, as distinct from the alkyl azide
-241	metalate_carbanion	[Mg,Zn,Cu,Li;D1;+:1]-[C:2]		CC[Zn+].[Br-]	CC[Mg]Br,CCC,CC[O-].[Na+]		The ionic spelling of an organometallic, which the neutral `alkyl_grignard` row cannot match; the `*_zinc` rows take it too
+241	metalate_carbanion	[Mg,Zn,Cu,Li;D1;+:1]-[C:2]		CC[Zn+].F[B-](F)(F)F	CC[Mg]Br,CCC,CC[O-].[Na+]		The ionic spelling of an organometallic, which the neutral `alkyl_grignard` row cannot match; the `*_zinc` rows take it too
 # --- the merged leaving-group classes, for a row that couples any sulfonate ---------------
 242	aryl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;a:1])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C](-[F])(-[F])-[F]	O=S(=O)(Oc1ccccc1)C(F)(F)F	CS(=O)(=O)Nc1ccccc1,CS(=O)(=O)c1ccccc1,CS(=O)(=O)OCC		ArOSO2R for any R -- triflate, mesylate, tosylate, besylate.  The three named rows answer "which pseudohalide"; this one answers "does this couple", which is the question a coupling row asks
 243	alkyl_sulfonate	[S;D4](=[O])(=[O])(-[O;D2]-;!@[C;z1;x1:1])-[C]	[S](=[O])(=[O])(-[O]-[C:1])-[C]	CS(=O)(=O)OCC	CS(=O)(=O)NCC,CS(=O)(=O)CC,CS(=O)(=O)Oc1ccccc1		ROSO2R' on sp3 carbon, any R'.  The SN2 leaving group as one class

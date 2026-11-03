@@ -196,3 +196,9 @@ def test_each_corpus_accessor_returns_its_cached_object():
     for accessor in (chython.functional_rules, chython.protective_rules, chython.reaction_rules,
                      chython.roles):
         assert accessor() is accessor()
+
+
+def test_the_facade_states_its_version():
+    from importlib.metadata import version
+    import chython
+    assert chython.__version__ == version('chython')

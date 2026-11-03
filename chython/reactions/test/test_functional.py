@@ -63,3 +63,18 @@ def test_a_site_names_an_n_or_o_its_example_carries(group):
     example = read_smiles(group.example)
     elements = {example.atom(mapping[atom]).atomic_symbol for mapping in group.query.get_mapping(example)}
     assert elements and elements <= {'N', 'O'}, group.id
+
+
+#: Rows whose group no canonical molecule holds, by design: a lactim is always written as its lactam, and
+#: `lactim_oh` names the site an O-alkyl lactim reveals on a stripped, uncanonicalized form.
+NOT_CANONICAL = {'lactim_oh'}
+
+
+@pytest.mark.parametrize('group', [g for g in GROUPS if g.name not in NOT_CANONICAL], ids=lambda group: group.name)
+def test_every_row_matches_its_own_example_canonicalized(group):
+    """`canonicalize()` rewrites tautomers, charges and ion pairs, so a row whose example it rewrites can
+    never match the canonical molecule a caller hands it: the example is one `canonicalize()` keeps."""
+    molecule = read_smiles(group.example)
+    molecule.canonicalize()
+    assert next(group.query.get_mapping(molecule), None), (
+        f'{group.id} ({group.name}) does not match its own example canonicalized, {molecule}: {group.smarts}')

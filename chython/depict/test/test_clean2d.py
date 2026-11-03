@@ -863,3 +863,19 @@ def test_hydride_alone_lays_out_to_origin():
     (n, (x, y)), = plane.items()
     assert x == approx(0., abs=1e-12)
     assert y == approx(0., abs=1e-12)
+
+
+@mark.parametrize('engine', ['smilesdrawer', 'chython'])
+@mark.parametrize('text', ['C1CCCC/C=C/CCCC1', 'O=C1CCCCCC/C=C/CCCCCO1', 'C/C=C/C'])
+def test_a_stored_layout_drawing_a_double_bond_the_other_way_is_logged(engine, text):
+    """(E)-Cyclodecene, an (E)-macrolactone, (E)-but-2-ene: a molfile states the geometry only by coordinates,
+    so `clean2d()` logs each stated cis/trans bond its plane draws the other way round, and only those."""
+    from chython.core.wedge import cis_trans_parity
+    mol = smiles(text)
+    mark = len(mol.log)
+    mol.clean2d(engine=engine, force=True)
+    plane = {n: mol.coordinates()[n] for n in mol}
+    wrong = [u['anchor'] for u in mol.stereo_units() if u['kind'] == 1 and u['parity']
+             and cis_trans_parity(mol, u, plane=plane) not in (0, u['parity'])]
+    logged = [r.atoms for r in mol.log[mark:] if r.rule == 'clean2d:cis-trans-inverted']
+    assert logged == ([tuple(wrong)] if wrong else [])

@@ -20,11 +20,13 @@
 #
 """chython's public surface: a facade re-exporting the packages below it.
 
-`__all__` is empty by design.  `smarts` is the short spelling of `read_smarts` and the same function
-object.  `smiles` is bidirectional: a string in reads -- a `>` that is not a dative `->` makes it a
-reaction SMILES and the result a `ReactionContainer` -- and a container in writes one.  `pach` is the
-same door for the wire format, and `unpach`/`unpack` its import half under chython 2's two names.
+`__all__` is empty by design; `__version__` is the installed distribution's.  `smarts` is the short
+spelling of `read_smarts` and the same function object.  `smiles` is bidirectional: a string in reads -- a
+`>` that is not a dative `->` makes it a reaction SMILES and the result a `ReactionContainer` -- and a
+container in writes one.  `pach` is the same door for the wire format, and `unpach`/`unpack` its import
+half under chython 2's two names.
 """
+from importlib.metadata import PackageNotFoundError as _NotInstalled, version as _version
 from sys import modules as _modules
 from types import ModuleType as _ModuleType
 from .core import *
@@ -75,6 +77,11 @@ class _Facade(_ModuleType):
 
 
 _modules[__name__].__class__ = _Facade
+
+try:                                    # the installed distribution's version; None for a bare source tree
+    __version__ = _version('chython')
+except _NotInstalled:
+    __version__ = None
 
 # `conformer_engine` and `class_paths` live in `chython.interop.config`; aliased here rather than
 # copied, or `chython.conformer_engine = 'cdpkit'` would be a silent no-op.  Must run AFTER the

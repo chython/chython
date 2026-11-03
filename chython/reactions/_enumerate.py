@@ -473,6 +473,9 @@ def _claims(molecule: MoleculeContainer, rules: Iterable[ProtectiveGroup]) -> li
     of a doubly substituted O can be true, so the second claim is refused -- except on an ester claimed
     from its acyl side, where a smaller alkyl group displaces the acyl claim (`_acyl_rival`).  A genuinely
     nested group is seen by the next pass, once the outer one is gone.
+
+    A claim deletes the explicit hydrogens of the atoms it deletes: a pentadeuterioethyl ether is
+    `phenol_ethyl` as the ethyl ether is.
     """
     claimed = set()
     out = []
@@ -480,6 +483,8 @@ def _claims(molecule: MoleculeContainer, rules: Iterable[ProtectiveGroup]) -> li
         deleted_query_atoms = rule.template.deleted_atoms
         for mapping in rule.template.reactants.get_mapping(molecule):
             deleted = frozenset(mapping[n] for n in deleted_query_atoms)
+            # an explicit hydrogen -- a deuterium, a tritium -- goes with the atom it sits on
+            deleted |= {y for x in deleted for y in molecule.neighbors_of(x) if molecule.element_of(y) == 1}
             if not claimed.isdisjoint(deleted):
                 continue
             bare = _bare(molecule, mapping.values(), deleted, claimed)
@@ -549,8 +554,10 @@ def protective_groups(molecule: MoleculeContainer) -> dict[str, int]:
     """`{name: count}` for the protecting groups this molecule carries.
 
     An absent group is absent from the dict, so `'amine_boc' in mol.protective_groups()` is the presence
-    test.  A method and not a cached property, because `deprotect()` reads it and a cache goes stale on
-    the first edit.  `protective_group_hits()` is the same answer with each row's id beside its count.
+    test.  A sited row is named for its site (`aniline_boc`); one whose strip cannot be read back to a site
+    keeps its bare row name (`boc`), so a caller enumerating the reportable names takes both.  A method and
+    not a cached property, because `deprotect()` reads it and a cache goes stale on the first edit.
+    `protective_group_hits()` is the same answer with each row's id beside its count.
     """
     return {hit.name: hit.count for hit in protective_group_hits(molecule)}
 

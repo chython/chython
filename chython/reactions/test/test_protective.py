@@ -647,3 +647,15 @@ def test_a_doubly_protected_nitrogen_is_labelled_alike_by_both(text, row, label)
     assert protective_groups(molecule) == {label: 2}
     outcomes = [o.labels for o in deprotect(molecule, (row,), partial=True)]
     assert (label, label) in outcomes and all(set(o) == {label} for o in outcomes)
+
+
+@pytest.mark.parametrize('plain, labelled', [('CCOc1ccccc1', '[2H]C([2H])([2H])C([2H])([2H])Oc1ccccc1'),
+                                             ('CCOC(=O)c1ccccc1', '[2H]C([2H])([2H])C([2H])([2H])OC(=O)c1ccccc1')])
+def test_a_labelled_group_keeps_its_site(plain, labelled):
+    """Ethyl phenyl ether and ethyl benzoate, protio and pentadeuterio: the claim deletes the explicit
+    deuteria with their carbons, so the strip reads back to the same site."""
+    a, b = read_smiles(plain), read_smiles(labelled)
+    a.thiele()
+    b.thiele()
+    assert protective_groups(a) == protective_groups(b) and all('_' in name for name in protective_groups(b))
+    assert [o.labels for o in deprotect(a)] == [o.labels for o in deprotect(b)]

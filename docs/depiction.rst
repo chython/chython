@@ -176,6 +176,11 @@ are shifted apart, so a picture does not change scale with the engine that place
 engine, ``engine='chython'``, hands a component of over 300 heavy atoms to ``smilesdrawer``: its fit
 scores every move over the whole drawing at each step, so its cost grows with the square of the size.
 
+A molfile states double-bond geometry only by its coordinates, so ``clean2d()`` checks every stated
+cis/trans bond against the plane it stores and logs a ``clean2d:cis-trans-inverted`` record in ``mol.log``
+for each one drawn the other way round; the plane is kept.  ``smilesdrawer`` draws an *E* bond in a medium
+or large ring *cis*: write such a ring's molfile from the ``chython`` or ``rdkit`` engine.
+
 Name one for a single call, or for the process:
 
 .. testcode::

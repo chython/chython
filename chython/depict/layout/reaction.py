@@ -62,6 +62,7 @@ def clean2d(rxn, *, engine=None, force: bool = False, chain: bool = None) \
     planes, arrow, signs = layout2d(rxn, engine=engine, force=force, chain=chain)
     for m, plane in zip(rxn.molecules(), planes):
         _molecule._store_plane(m, plane)
+        _molecule._log_inverted(m, plane, _molecule.get_clean2d_engine(engine))
     return arrow, signs
 
 

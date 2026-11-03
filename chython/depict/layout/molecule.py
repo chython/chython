@@ -197,7 +197,9 @@ def clean2d(mol, *, engine: Clean2DEngine = None, force: bool = False, chain: bo
         return
     # `force=True` below: the has_layout question is already answered, and asking it again would send a
     # molecule that has a layout down the stored-plane branch.
-    _store_plane(mol, layout2d(mol, engine=engine, force=True, chain=chain, choose=choose))
+    plane = layout2d(mol, engine=engine, force=True, chain=chain, choose=choose)
+    _store_plane(mol, plane)
+    _log_inverted(mol, plane, get_clean2d_engine(engine))
 
 
 def _chain_planes(mol, engine: Clean2DEngine, choose=None):
@@ -395,6 +397,22 @@ def _engine_layout(mol, engine: Clean2DEngine, choose=None):
 
 # The geometry below operates on a plane, never on the molecule; `rescale2d` and the `_fix_plane_*`
 # functions are the same operations applied to the stored coordinates.
+
+
+def _log_inverted(mol, plane, engine):
+    """Log each stated cis/trans configuration the stored `plane` draws the other way round.  A molfile states
+    double-bond geometry only by its coordinates, so one written from this plane holds the other isomer;
+    the plane is kept, the record says so.  A ring's E bond drawn cis by smiles-drawer is the known case."""
+    from ...core import LOST, LogRecord, SU_CIS_TRANS, recording
+    from ...core.wedge import cis_trans_parity
+    wrong = [u['anchor'] for u in mol.stereo_units() if u['kind'] == SU_CIS_TRANS and u['parity']
+             and cis_trans_parity(mol, u, plane=plane) not in (0, u['parity'])]
+    if wrong:
+        with recording(mol, stage='clean2d') as log:
+            log.append(LogRecord('clean2d:cis-trans-inverted', tuple(wrong),
+                                 f'the {engine} layout draws {len(wrong)} stated cis/trans bond(s) the other way '
+                                 f'round, anchored on {wrong}; a molfile written from it holds the other isomer',
+                                 LOST))
 
 
 def _store_plane(mol, plane):

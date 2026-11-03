@@ -1345,7 +1345,9 @@ what is masked here, and what does the molecule look like unmasked.  **A row is 
 N or S it sits on** -- ``boc``, ``benzyl``, ``tosyl`` -- and every report names it **for the atom it sits
 on**, by the ``site`` column of ``functional.tsv``: ``amine_boc`` on an alkyl amine, ``aniline_boc`` on an
 aniline, ``carboxyl_tbu`` on an acid.  Rows that reveal a carbon or two atoms, the acetals and
-``hydroxyl_amine_acetone``, keep their own names:
+``hydroxyl_amine_acetone``, keep their own names, and so does a sited row whose strip cannot be read
+back to a site.  A group's isotopes do not move its site: a pentadeuterioethyl ether is ``phenol_ethyl``
+as the ethyl ether is.
 
 .. testcode::
 
