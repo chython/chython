@@ -6115,6 +6115,7 @@ cdef Structure structure_live_groups_view(Structure structure, list dead=None, b
     cdef uint32_t i
     structure = _bridgeheads_filled(drawn, cache, inert)   # the implied signs, before any phase is read
     structure = _ring_sets_cleared(structure, cache)       # a ring set stating nothing is no choice either
+    structure = _pair_signs_moved(structure)               # an equivalent pair's sign: on the centre between
     view = structure_stereogenic_view(structure, cache)
     respelled = _restating_as_abs(structure, view, cache)
     if respelled is not structure:
@@ -6268,6 +6269,149 @@ cdef Structure structure_stored_groups_view(Structure structure, dict cache=None
     structure_invalidate_stereo_units(view)
     refresh_parity_features(view)
     return view
+
+
+cdef frozenset _signing_meaning(Structure s, tuple atoms, uint8_t b, list pairs, dict cache):
+    """What `s` states about `atoms`, every other parity as drawn: a frozenset of worlds, a world being one choice
+    of the unsigned `atoms` (and of the OR phase when `b` is OR) as the frozenset of species over the AND phases
+    of the signed ones, which are all in group `b`.
+
+    A species is the identity with every one of `atoms` signed and read ABS, so two spellings signing different
+    atoms compare by the molecules they name.  A signing no bicycle realises (`_bridgehead_signs`) is no species.
+    Raises AutomorphismBudgetExceeded from an identity.
+    """
+    cdef uint32_t n = len(atoms), j, mask
+    cdef uint8_t *par = structure_parities(s)
+    cdef uint8_t *vp
+    cdef uint8_t *vs
+    cdef bint is_or = sg_kind(b) != SG_KIND_AND
+    cdef dict worlds = {}
+    cdef list bad = []
+    cdef tuple drawn = tuple(par[<uint32_t> a] for a in atoms)
+    cdef object world, phase
+    cdef Structure v
+    for mask in range(1u << n):
+        phase = None
+        world = []
+        for j in range(n):
+            bit = (mask >> j) & 1
+            if drawn[j]:
+                # signed: one AND or OR phase for all of them, read off the first signed member
+                if phase is None:
+                    phase = bit
+                elif phase != bit:
+                    break
+            else:
+                world.append(bit)
+        else:
+            v = structure_clone(s)
+            vp = structure_parities(v)
+            vs = structure_stereo_groups(v)
+            for j in range(n):
+                vp[<uint32_t> atoms[j]] = (<uint8_t> (3 - drawn[j]) if (mask >> j) & 1 else drawn[j]) if drawn[j] \
+                    else <uint8_t> (1 + ((mask >> j) & 1))
+                vs[<uint32_t> atoms[j]] = sg_pack(SG_KIND_ABS, 0)
+            structure_invalidate_stereo_units(v)
+            refresh_parity_features(v)
+            if pairs:
+                _bridgehead_signs(v, pairs, {}, {}, bad)
+                if bad:
+                    bad.clear()
+                    continue
+            if is_or:
+                world.append(phase)
+            worlds.setdefault(tuple(world), set()).add(mol_identity_bytes(structure_stereogenic_view(v, cache)))
+    return frozenset(frozenset(w) for w in worlds.values())
+
+
+cdef Structure _pair_signs_moved(Structure structure):
+    """`structure` with each AND or OR group of exactly two constitutionally equivalent signed members respelled as
+    one sign, in that group, on an unsigned and ungrouped stereocentre the automorphisms fix, the pair left open --
+    where that states the same molecules (`_signing_meaning`); `structure` itself when none does, else a clone.
+
+    On a meso core the pair and the centre between them name one relative configuration: `|&1:a,b|` on the
+    bridgeheads with C3 open and `|&1:x|` on C3 with the bridgeheads open both state the C3 epimer mixture --
+    exo and endo 6-amino-3-azabicyclo[3.1.0]hexane, tropine and pseudotropine -- and both are written on C3.
+    Where the pair's relative configuration is free, as the trans fusion of bicyclo[4.1.0]heptane, the pair
+    states it too, the meanings differ, and nothing moves.
+    """
+    cdef uint32_t n = structure.header.atom_count, i, x, a1, a2, flags = 0
+    cdef uint8_t *sg
+    cdef uint8_t *par
+    cdef uint8_t *cp
+    cdef uint8_t *cs
+    cdef uint32_t *comp
+    cdef uint32_t *orbits = NULL
+    cdef dict members = {}, cache = {}
+    cdef list pairs, todo
+    cdef dict size
+    cdef object b, v, signs, want
+    cdef Structure out = structure, bare, c
+    if n == 0 or n > MEANING_ATOM_LIMIT or not structure_has(structure, SEG_STEREO_GROUPS) \
+            or not _has_parity(structure):
+        return structure
+    sg = structure_stereo_groups(structure)
+    par = structure_parities(structure)
+    for i in range(n):
+        if sg[i] and par[i] and sg_kind(sg[i]) != SG_KIND_ABS:
+            members.setdefault(sg[i], []).append(i)
+    todo = [(b, v[0], v[1]) for b, v in members.items() if len(v) == 2]
+    if not todo:
+        return structure
+    bare = structure_clone(structure)
+    memset(structure_parities(bare), 0, <size_t> n)
+    structure_invalidate_stereo_units(bare)
+    refresh_parity_features(bare)
+    orbits = <uint32_t *> PyMem_Malloc(<size_t> n * sizeof(uint32_t))
+    if orbits is NULL:
+        raise MemoryError()
+    try:
+        mol_automorphisms(bare, NULL, orbits, &flags)
+        if flags & (CANON_ASYMMETRIC | CANON_BUDGET_EXCEEDED):
+            return structure
+        size = {}
+        for i in range(n):
+            size[orbits[i]] = size.get(orbits[i], 0) + 1
+        ensure_stereo_units(structure)
+        comp = structure_component_labels(structure)
+        sg = structure_stereo_groups(structure)
+        par = structure_parities(structure)
+        pairs = _coupled_bridgeheads(structure, cache)
+        for b, a1, a2 in todo:
+            if orbits[a1] != orbits[a2]:
+                continue
+            for x in range(n):
+                if (size[orbits[x]] != 1 or par[x] or sg[x] or comp[x] != comp[a1]
+                        or stereo_unit_of(structure, x) is NULL):
+                    continue
+                try:
+                    # a centre at all: kept by the view with the pair signed
+                    c = structure_clone(out)
+                    structure_parities(c)[x] = 1
+                    structure_invalidate_stereo_units(c)
+                    refresh_parity_features(c)
+                    if not structure_parity_at(structure_stereogenic_view(c, cache), x):
+                        continue
+                    want = _signing_meaning(out, (a1, a2, x), <uint8_t> b, pairs, cache)
+                    for signs in (1, 2):
+                        c = structure_clone(out)
+                        cp = structure_parities(c)
+                        cs = structure_stereo_groups(c)
+                        cp[a1] = cp[a2] = cs[a1] = cs[a2] = 0
+                        cp[x] = <uint8_t> signs
+                        cs[x] = <uint8_t> b
+                        structure_invalidate_stereo_units(c)
+                        refresh_parity_features(c)
+                        if _signing_meaning(c, (a1, a2, x), <uint8_t> b, pairs, cache) == want:
+                            out = c
+                            break
+                except AutomorphismBudgetExceeded:
+                    continue
+                if out is not structure and not structure_parity_at(out, a1):
+                    break
+        return out
+    finally:
+        PyMem_Free(orbits)
 
 
 cdef Structure _restating_as_abs(Structure structure, Structure view, dict cache):

@@ -317,3 +317,46 @@ def test_validate_stereo_leaves_an_unsigned_member_that_is_not_an_and_singleton(
     m = read_smiles(text)
     m.validate_stereo()
     assert not [r for r in m.log if r.rule == 'stereo:racemate-unsigned']
+
+
+# --- a group on an equivalent pair beside an open centre ------------------------------------------------------
+
+CORES = {'aminoazabicyclohexane': ('N[C@H]1C2CNCC12', 'NC1[C@H]2CNC[C@@H]12', 'NC1[C@@H]2CNC[C@H]12'),
+         'tropine': ('O[C@H]1CC2CCC(C1)N2C', 'OC1C[C@H]2CC[C@@H](C1)N2C', 'OC1C[C@@H]2CC[C@H](C1)N2C'),
+         'methyloxabicyclohexane': ('C[C@H]1C2COCC12', 'CC1[C@H]2COC[C@@H]12', 'CC1[C@@H]2COC[C@H]12')}
+
+
+def signed(text):
+    """The slots of `text`'s signed atoms, comma-joined for a CXSMILES group."""
+    atoms = re.findall(r'\[[^]]+]|Br|Cl|[BCNOSPFI]', text)
+    return ','.join(str(i) for i, a in enumerate(atoms) if '@' in a)
+
+
+@mark.parametrize('core', CORES.values(), ids=CORES.keys())
+def test_an_and_pair_and_the_centre_between_are_one_epimer_mixture(core):
+    """On a meso core whose fusion is fixed, `&` on the centre with the bridgeheads open and `&` on the
+    bridgeheads with the centre open both state the exo and endo mixture: one identity, written on the centre,
+    and not the unsigned compound."""
+    m = canon(f'{core[0]} |&1:{signed(core[0])}|')
+    for text in core[1:]:
+        other = canon(f'{text} |&1:{signed(text)}|')
+        assert other == m and hash(other) == hash(m) and str(other) == str(m), text
+    assert m != canon(core[0].replace('@', '')) and len(re.findall(r'@@?', str(m))) == 1
+    assert str(canon(str(m))) == str(m)
+
+
+@mark.parametrize('core', CORES.values(), ids=CORES.keys())
+def test_an_or_pair_and_the_centre_between_state_nothing(core):
+    """In OR either spelling names one of exo and endo, unknown which: the unsigned compound."""
+    flat = canon(core[0].replace('@', ''))
+    for text in core:
+        m = canon(f'{text} |o1:{signed(text)}|')
+        assert m == flat and str(m) == str(flat), text
+
+
+def test_a_pair_free_to_fuse_trans_is_not_the_centre():
+    """7-Methylbicyclo[4.1.0]heptane admits a trans fusion, so a bridgehead pair also states the fusion and the
+    two spellings stay apart."""
+    centre = canon('C[C@H]1C2CCCCC12 |&1:1|')
+    pair = canon('CC1[C@H]2CCCC[C@@H]12 |&1:2,7|')
+    assert centre != pair and pair != canon('CC1C2CCCCC12')

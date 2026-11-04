@@ -404,6 +404,11 @@ drawing, which may be either diastereomer; ``|&1:1,&2:4|`` splits the pair and b
 system's signs whose completions with an open centre are the unsigned compound's state nothing together:
 cyclopropane-1,2,3-tricarboxylic acid with C2, C3 cis and C1 open is both isomers, unlabelled or under
 ``a`` or ``o1``.  An AND mirror leaves C1, so ``&1`` there is the all-cis and cis,cis,trans mixture.
+On a meso core whose fusion is fixed, a group on the equivalent bridgeheads with the centre between them open
+and the same group on that centre alone name one relative configuration, written on the centre:
+``NC1[C@H]2CNC[C@@H]12 |&1:2,6|`` and ``N[C@H]1C2CNCC12 |&1:1|`` are both the exo and endo mixture of
+6-amino-3-azabicyclo[3.1.0]hexane, and under ``o1`` either is the unlabelled compound.  Where a trans fusion
+exists, as in bicyclo[4.1.0]heptane, the pair also states the fusion and the two stay apart.
 ``mol.live_stereo_groups()`` answers the membership the rewrite keeps, in ``canonical_stereo_groups()``
 shape, ``mol.dead_stereo_groups()`` the members it drops under their stored ids, and
 ``mol.stereo_is_live(x)`` one member; all three read the meaning without rewriting anything.
@@ -416,6 +421,15 @@ shape, ``mol.dead_stereo_groups()`` the members it drops under their stored ids,
 .. testoutput::
 
     False False
+
+.. testcode::
+
+    pair, centre = canonical('NC1[C@H]2CNC[C@@H]12 |&1:2,6|'), canonical('N[C@H]1C2CNCC12 |&1:1|')
+    print(pair == centre, str(pair), pair == canonical('NC1C2CNCC12'))
+
+.. testoutput::
+
+    True C1NCC2[C@@H](N)C12 |&1:4| False
 
 .. testcode::
 
