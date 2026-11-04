@@ -842,7 +842,9 @@ def _deprotect_toward(molecule: MoleculeContainer, targets: Sequence[MoleculeCon
     site's formula delta is measured once, by stripping it alone, and summed: claims are disjoint, so
     the deltas add.  A group a strip EXPOSES is not a site of `molecule` and is reached by the full strip
     alone.  So a record naming one Boc among twelve acetates costs thirteen single strips and the one
-    subset that fits, not `2^13`.  At most `bound` subsets are stripped, largest first.
+    subset that fits, not `2^13`.  At most `bound` subsets are stripped, largest first, and a subset of
+    rows that only delete is stripped only where a component of what is left hashes as a target's
+    (`_wl_hash`): which sites come off is a regiochemistry the formula cannot see.
     """
     rules = tuple(protective_rules().values())
     claims = _claims(molecule, rules)
@@ -880,7 +882,13 @@ def _deprotect_toward(molecule: MoleculeContainer, targets: Sequence[MoleculeCon
                     if len(subsets) >= bound:
                         break
     seen = {_products_key(full)}
+    wanted = {_wl_hash(part, set(part.atom_numbers)) for part in targets}
+    adjacency = {n: set(molecule.neighbors_of(n)) for n in molecule.atom_numbers}
     for subset in sorted(subsets, key=lambda s: (-len(s), s))[:bound]:
+        if all(_deletes_only(claims[index].rule) for index in subset):
+            gone = set().union(*(claims[index].deleted for index in subset))
+            if not _components_hashed(molecule, adjacency, gone) & wanted:
+                continue                # no component of this strip can be a target: not built
         outcome = _strip_sites(molecule, subset, rules)
         if outcome is None:
             continue
@@ -889,6 +897,48 @@ def _deprotect_toward(molecule: MoleculeContainer, targets: Sequence[MoleculeCon
             continue
         seen.add(key)
         yield outcome
+
+
+def _deletes_only(rule: ProtectiveGroup) -> bool:
+    """Does `rule` only delete atoms -- no atom created, no bond made -- so its strip's heavy-atom graph is the
+    input's less the claim?"""
+    template = rule.template
+    if template.created_atoms:
+        return False
+    product_of = {reactant: product for reactant, product in template.mapped_pairs.values()}
+    kept = {tuple(sorted((product_of[a], product_of[b]))) for a, b in template.reactant_bonds
+            if a in product_of and b in product_of}
+    return set(template.product_bonds) <= kept
+
+
+def _wl_hash(molecule: MoleculeContainer, atoms: set, adjacency=None, rounds: int = 3) -> int:
+    """A Weisfeiler-Lehman hash of the heavy atoms of `atoms` by element and bonds alone: equal molecules
+    hash equal whatever their bond orders, hydrogens or stereo, so unequal hashes rule a pair out."""
+    heavy = [n for n in atoms if molecule.element_of(n) != 1]
+    keep = set(heavy)
+    neighbours = {n: [m for m in (adjacency[n] if adjacency is not None else molecule.neighbors_of(n))
+                      if m in keep] for n in heavy}
+    label = {n: molecule.element_of(n) for n in heavy}
+    for _ in range(rounds):
+        label = {n: hash((label[n], tuple(sorted(label[m] for m in neighbours[n])))) for n in heavy}
+    return hash(tuple(sorted(label.values())))
+
+
+def _components_hashed(molecule: MoleculeContainer, adjacency: dict, gone: set) -> set:
+    """`_wl_hash` of each heavy component `molecule` breaks into with the atoms of `gone` deleted."""
+    left = {n for n in molecule.atom_numbers if n not in gone and molecule.element_of(n) != 1}
+    out = set()
+    while left:
+        part, stack = set(), [left.pop()]
+        while stack:
+            x = stack.pop()
+            part.add(x)
+            for y in adjacency[x]:
+                if y in left:
+                    left.discard(y)
+                    stack.append(y)
+        out.add(_wl_hash(molecule, part, adjacency))
+    return out
 
 
 def deprotect(molecule: MoleculeContainer, names: Sequence[str] = (), *,

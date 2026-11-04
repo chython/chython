@@ -1179,3 +1179,24 @@ def test_an_embedding_that_cannot_build_a_recorded_component_is_not_built():
     (embedding, *_) = [m for m in urea.reactants.get_mapping(work) if m[1] in a.atom_numbers]
     assert _built_sizes([a, b], {9})(urea)(embedding)
     assert not _built_sizes([a, b], {3})(urea)(embedding)
+
+
+def test_a_deprotection_builds_only_the_subsets_that_could_be_the_record():
+    """beta-D-Glucose pentaacetate to 6-O-acetyl-D-glucose: five ways to take four acetyls off fit the formula,
+    and only the one keeping the 6-acetate leaves a graph that hashes as the record's, so one subset is built,
+    not five; the answer is the same."""
+    from .. import _enumerate
+    text = ('CC(=O)OC[C@H]1O[C@@H](OC(C)=O)[C@H](OC(C)=O)[C@@H](OC(C)=O)[C@@H]1OC(C)=O>>'
+            'CC(=O)OC[C@H]1O[C@@H](O)[C@H](O)[C@@H](O)[C@@H]1O')
+    built, kept = [], _enumerate._strip_sites
+
+    def counting(molecule, chosen, rules):
+        built.append(len(chosen))
+        return kept(molecule, chosen, rules)
+    _enumerate._strip_sites = counting
+    try:
+        labels = smiles(text).reconstruct_mapping()
+    finally:
+        _enumerate._strip_sites = kept
+    assert labels == ('deprotect:' + '+'.join(['hydroxyl_acyl'] * 4),)
+    assert built.count(4) == 1

@@ -33,8 +33,8 @@ from collections.abc import Callable, Container, Iterator, Mapping, Sequence
 from itertools import chain, product as cartesian
 from typing import NamedTuple
 
-from ._enumerate import (_claims, _deprotect_toward, _needs, _outcomes, _revealed, _sited, _strip_sites, deprotect,
-                         EnumeratedDeprotection, EnumeratedReaction, functional_groups, protective_groups)
+from ._enumerate import (_claims, _deprotect_toward, _needs, _outcomes, _revealed, _sited, _strip_sites, _wl_hash,
+                         deprotect, EnumeratedDeprotection, EnumeratedReaction, functional_groups, protective_groups)
 from ._numbering import fast_mapping
 from ._tables import functional_rules, protective_rules, reaction_rules
 from ..core import (INFO, LOST, LogRecord, MoleculeContainer, REFUSED, ReactionContainer, STEREO_ABS,
@@ -220,9 +220,23 @@ def _settle(products: Sequence[MoleculeContainer], targets: list[dict[int, int]]
 
 
 def _settled(recorded: MoleculeContainer, found: Iterator) -> list:
-    """`(source, outcome, settled products)` for every `(source, outcome)` a rung enumerated."""
-    targets = [_heavy(part) for part in recorded.split()]
-    return [(source, outcome, _settle(outcome.reaction.products, targets)) for source, outcome in found]
+    """`(source, outcome, settled products)` for every `(source, outcome)` a rung enumerated that could
+    reproduce the record.
+
+    Settling canonicalizes every product, a quarter of a second for a thousand-atom one, and only a product
+    with a component equal to one of the record's is ever compared: an outcome none of whose components
+    hashes as a recorded one (`_wl_hash`, by element and bonds, which settling does not move) is dropped
+    unsettled.  The rest keep their order."""
+    parts = list(recorded.split())
+    targets = [_heavy(part) for part in parts]
+    wanted = {_wl_hash(part, set(part.atom_numbers)) for part in parts}
+    out = []
+    for source, outcome in found:
+        if not any(_wl_hash(part, set(part.atom_numbers)) in wanted
+                   for product in outcome.reaction.products for part in product.split()):
+            continue
+        out.append((source, outcome, _settle(outcome.reaction.products, targets)))
+    return out
 
 
 def _ranked(found: list) -> list:
