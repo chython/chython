@@ -94,8 +94,8 @@ def test_a_product_stating_no_cap_is_refused_at_load():
 
 
 def test_the_glossary_is_complete():
-    assert len(roles()) == 58
-    assert sum(len(rows) for rows in roles().values()) == 94
+    assert len(roles()) == 59
+    assert sum(len(rows) for rows in roles().values()) == 95
 
 
 def test_every_role_family_is_present():
@@ -114,7 +114,7 @@ def test_every_role_family_is_present():
         'alkyl_amine', 'aryl_amine', 'amide_nitrogen', 'amidine_nitrogen', 'azole_nitrogen',
         'hydrazine_nitrogen',
         'alkyl_thiol', 'aryl_thiol', 'alkyl_hydroxyl', 'aryl_hydroxyl', 'acid_hydroxyl',
-        'alkynyl_terminal', 'sulfonyl',
+        'alkynyl_terminal', 'alkenyl_terminal', 'sulfonyl',
         'alkyl_deoxy', 'aryl_deoxy', 'carbonyl_electrophile',
         'alkyl_decarboxy', 'aryl_decarboxy', 'alkenyl_decarboxy', 'alkynyl_decarboxy',
         'alkyl_deamino', 'aryl_deamino'}
@@ -192,3 +192,9 @@ def test_a_michael_acceptor_is_cut_at_its_saturated_beta_carbon():
 
 def test_an_aryl_hydrazine_is_cut_at_its_terminal_nitrogen():
     assert _same(_cuts('NNc1ccccc1', 'hydrazine_nitrogen'), '[R]NNc1ccccc1')
+
+
+def test_an_alkyl_terminal_alkene_is_cut_at_its_saturated_terminal_carbon():
+    assert _same(_cuts('C=CCOc1ccccc1', 'alkenyl_terminal'), '[R]CCCOc1ccccc1')
+    for text in ('C=CC(=O)OC', 'C=CC#N', 'C=Cc1ccccc1', 'C=C(C)CC'):    # conjugated or 1,1-disubstituted
+        assert not _cuts(text, 'alkenyl_terminal'), text

@@ -98,3 +98,4 @@ id	name	group	product	example	decoys	description
 98	michael_acceptor	alkenyl_nitrile	[A@=:1]([#0:20])-[A:2]-[A:3]#[A:4]			beta carbon of an acrylonitrile; the alkene is saturated
 99	michael_acceptor	vinyl_sulfonyl	[A@=:1]([#0:20])-[A:2]-[A:3](=[A:4])=[A:5]			beta carbon of a vinyl sulfone or sulfonamide; the alkene is saturated
 100	hydrazine_nitrogen	aryl_hydrazine	[A@=:1]([#0:20])-[A:2]-[A:3]			terminal NH2 of an aryl hydrazine as an N-nucleophile
+101	alkenyl_terminal	alkyl_terminal_alkene	[A@=:1]([#0:20])-[A:2]-[A:3]			terminal CH2 of an alkyl vinyl group; the alkene is saturated, anti-Markovnikov

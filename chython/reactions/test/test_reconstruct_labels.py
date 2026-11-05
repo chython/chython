@@ -30,6 +30,10 @@ from ...core import read_smiles as smiles
 
 
 LABELS = [
+    # an alkene meeting an aryl electrophile: hydroboration only where nothing conjugates it
+    ('Brc1ccccc1.C=CCOc1ccccc1>>c1ccc(cc1)CCCOc1ccccc1', 'hydroboration_suzuki'),
+    ('Brc1ccccc1.C=CC(=O)OC>>COC(=O)CCc1ccccc1', 'reductive_heck'),
+    ('Brc1ccccc1.C=CC#N>>N#CCCc1ccccc1', 'reductive_heck'),
     # Pd/Cu: the unactivated aryl electrophile
     ('Brc1ccccc1.CCN>>CCNc1ccccc1', 'buchwald_hartwig'),
     ('Brc1cccnc1.CCN>>CCNc1cccnc1', 'buchwald_hartwig'),                    # meta to the ring N

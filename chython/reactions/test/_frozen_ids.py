@@ -26,7 +26,7 @@ and read the diff.  A new line is a new row; a CHANGED line is a renumber, which
 means.  Never hand-edit a line to make the ratchet pass.
 """
 
-#: `functional.tsv`: 433 rows, id -> the row it names.
+#: `functional.tsv`: 434 rows, id -> the row it names.
 FUNCTIONAL = {
     'functional:1': 'terminal_alkene',
     'functional:2': 'alkene',
@@ -461,6 +461,7 @@ FUNCTIONAL = {
     'functional:431': 'alkoxy_acrylonitrile',
     'functional:432': 'chromone',
     'functional:433': 'ring_aryl_carbonate',
+    'functional:434': 'alkyl_terminal_alkene',
 }
 
 #: `protective.tsv`: 89 rows, id -> the row it names.
@@ -556,7 +557,7 @@ PROTECTIVE = {
     'protective:89': 'mesyl',
 }
 
-#: `roles.tsv`: 94 rows, id -> the row it names.
+#: `roles.tsv`: 95 rows, id -> the row it names.
 ROLES = {
     'roles:1': 'aryl_halide/aryl_chloride',
     'roles:2': 'aryl_halide/aryl_bromide',
@@ -652,6 +653,7 @@ ROLES = {
     'roles:98': 'michael_acceptor/alkenyl_nitrile',
     'roles:99': 'michael_acceptor/vinyl_sulfonyl',
     'roles:100': 'hydrazine_nitrogen/aryl_hydrazine',
+    'roles:101': 'alkenyl_terminal/alkyl_terminal_alkene',
 }
 
 #: `reactions.tsv`: 1606 rows, id -> the row it names.
@@ -2171,8 +2173,8 @@ REACTIONS = {
     'reactions:1513': 'ch_borylation/arene_ch',
     'reactions:1514': 'ch_borylation/ring_vinyl_ch',
     'reactions:1515': 'ch_borylation/heteroatom_terminal_alkene',
-    'reactions:1516': 'hydroboration_suzuki/aryl_halide+terminal_alkene',
-    'reactions:1517': 'hydroboration_suzuki/aryl_sulfonate+terminal_alkene',
+    'reactions:1516': 'hydroboration_suzuki/aryl_halide+alkyl_terminal_alkene',
+    'reactions:1517': 'hydroboration_suzuki/aryl_sulfonate+alkyl_terminal_alkene',
     'reactions:1518': 'reductive_heck/aryl_halide+enoyl',
     'reactions:1519': 'reductive_heck/aryl_halide+alkenyl_nitrile',
     'reactions:1520': 'zinc_insertion/alkyl_halide',
