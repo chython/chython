@@ -16,12 +16,6 @@ id	name	group	product	example	decoys	description
 10	aryl_fluoride	aryl_fluoride	[A@=:1][#0:20]			aryl C-F, separate from the other halides
 11	alkyl_fluoride	alkyl_fluoride	[A@=:1][#0:20]			sp3 C-F, separate from the other halides
 12	alkenyl_fluoride	alkenyl_fluoride	[A@=:1]([#0:20])=[A:2]			vinyl C-F, separate from the other halides
-13	aryl_sulfonate	aryl_triflate	[A@=:1][#0:20]			aryl triflate as a pseudohalide electrophile
-14	aryl_sulfonate	aryl_mesylate	[A@=:1][#0:20]			aryl mesylate as a pseudohalide electrophile
-15	aryl_sulfonate	aryl_tosylate	[A@=:1][#0:20]			aryl tosylate as a pseudohalide electrophile
-16	alkyl_sulfonate	alkyl_triflate	[A@=:1][#0:20]			sp3 triflate as a pseudohalide electrophile
-17	alkyl_sulfonate	alkyl_mesylate	[A@=:1][#0:20]			sp3 mesylate as a pseudohalide electrophile
-18	alkyl_sulfonate	alkyl_tosylate	[A@=:1][#0:20]			sp3 tosylate as a pseudohalide electrophile
 19	alkynyl_halide	alkynyl_chloride	[A@=:1]([#0:20])#[A:2]			sp C-Cl; the alkyne is kept
 20	alkynyl_halide	alkynyl_bromide	[A@=:1]([#0:20])#[A:2]			sp C-Br; the alkyne is kept
 21	alkynyl_halide	alkynyl_iodide	[A@=:1]([#0:20])#[A:2]			sp C-I; the alkyne is kept
@@ -93,3 +87,14 @@ id	name	group	product	example	decoys	description
 87	aryl_deamino	primary_aniline	[A@=:2][#0:20]			deaminative coupling via a diazonium
 88	azole_nitrogen	pyrazole	[A:1]:[A@=:2][#0:20]	Cc1cc[nH]n1		NH-pyrazole capped at the h0 nitrogen, the other tautomer's N-substitution
 89	azole_nitrogen	imidazole	[A:1]:[A:2]:[A@=:3][#0:20]	Cc1c[nH]cn1		NH-imidazole capped at the h0 nitrogen, the other tautomer's N-substitution
+90	aryl_sulfonate	aryl_sulfonate	[A@=:1][#0:20]			aryl sulfonate of any sulfonyl group as a pseudohalide electrophile
+91	alkyl_sulfonate	alkyl_sulfonate	[A@=:1][#0:20]			sp3 sulfonate of any sulfonyl group as a pseudohalide electrophile
+92	acyl_ester	ester	[A@=:2]([#0:20])=[A:1]			alkyl or aryl ester as an acylating electrophile; the alkoxy or aryloxy leaves
+93	acyl_ester	activated_ester	[A@=:2]([#0:20])=[A:1]			N-hydroxy ester as an acylating electrophile; the N-oxy group leaves
+94	acyl_anhydride	anhydride	[A@=:1]([#0:20])=[A:2].[A:3](=[A:4])-[O]			anhydride as an acylating electrophile; the other acyl leaves as its acid, kept on a cyclic one
+95	carbamoyl	isocyanate	[A:1]-[A@=:2]([#0:20])=[A:3]			isocyanate as a carbamoylating electrophile; the N takes a hydrogen
+96	carbamoyl	aryl_carbamate	[A:1]-[A@=:2]([#0:20])=[A:3]			aryl carbamate as a carbamoylating electrophile; the aryloxy leaves
+97	michael_acceptor	enoyl	[A@=:1]([#0:20])-[A:2]-[A:3]=[A:4]			beta carbon of an enoate, enamide or enone; the alkene is saturated
+98	michael_acceptor	alkenyl_nitrile	[A@=:1]([#0:20])-[A:2]-[A:3]#[A:4]			beta carbon of an acrylonitrile; the alkene is saturated
+99	michael_acceptor	vinyl_sulfonyl	[A@=:1]([#0:20])-[A:2]-[A:3](=[A:4])=[A:5]			beta carbon of a vinyl sulfone or sulfonamide; the alkene is saturated
+100	hydrazine_nitrogen	aryl_hydrazine	[A@=:1]([#0:20])-[A:2]-[A:3]			terminal NH2 of an aryl hydrazine as an N-nucleophile

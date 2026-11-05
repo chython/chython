@@ -94,8 +94,8 @@ def test_a_product_stating_no_cap_is_refused_at_load():
 
 
 def test_the_glossary_is_complete():
-    assert len(roles()) == 53
-    assert sum(len(rows) for rows in roles().values()) == 89
+    assert len(roles()) == 58
+    assert sum(len(rows) for rows in roles().values()) == 94
 
 
 def test_every_role_family_is_present():
@@ -109,8 +109,10 @@ def test_every_role_family_is_present():
         'aryl_stannane', 'alkyl_stannane', 'alkenyl_stannane',
         'aryl_silane', 'alkenyl_silane', 'alkynyl_silane',
         'alkyl_acyl', 'aryl_acyl', 'alkenyl_acyl', 'alkynyl_acyl',
-        'acyl_halide', 'carbamoyl_halide',
+        'acyl_halide', 'carbamoyl_halide', 'acyl_ester', 'acyl_anhydride', 'carbamoyl',
+        'michael_acceptor',
         'alkyl_amine', 'aryl_amine', 'amide_nitrogen', 'amidine_nitrogen', 'azole_nitrogen',
+        'hydrazine_nitrogen',
         'alkyl_thiol', 'aryl_thiol', 'alkyl_hydroxyl', 'aryl_hydroxyl', 'acid_hydroxyl',
         'alkynyl_terminal', 'sulfonyl',
         'alkyl_deoxy', 'aryl_deoxy', 'carbonyl_electrophile',
@@ -138,3 +140,55 @@ def test_the_deoxy_roles_drop_the_oxygen():
     product = next(iter(reaction.products))
     assert 'O' not in product.brutto
     assert product.atom(where[2]).atomic_symbol == 'C'
+
+
+def _cuts(text, role):
+    mol = smiles(text)
+    mol.canonicalize()
+    out = []
+    for fragment in mol.sticky_fragments(role):
+        cut = smiles(fragment.canonical_smiles)
+        cut.canonicalize()
+        out.append(cut)
+    return out
+
+
+def _same(cuts, *expected):
+    want = []
+    for text in expected:
+        mol = smiles(text)
+        mol.canonicalize()
+        want.append(mol)
+    return len(cuts) == len(want) and all(any(c == w for c in cuts) for w in want)
+
+
+def test_a_sulfonate_of_any_sulfonyl_group_is_cut():
+    for text in ('Cc1ccc(cc1)S(=O)(=O)Oc1ccccc1', 'O=S(=O)(Oc1ccccc1)c1ccc(cc1)[N+](=O)[O-]',
+                 'O=S(=O)(Oc1ccccc1)C(F)(F)C(F)(F)C(F)(F)C(F)(F)F'):
+        assert _same(_cuts(text, 'aryl_sulfonate'), '[R]c1ccccc1'), text
+    assert _same(_cuts('CCS(=O)(=O)OCC', 'alkyl_sulfonate'), '[R]CC')
+
+
+def test_an_ester_gives_the_acid_s_acyl_cut():
+    assert _cuts('COC(=O)c1ccccc1', 'acyl_ester') == _cuts('OC(=O)c1ccccc1', 'aryl_acyl')
+    assert _same(_cuts('CC(=O)ON1C(=O)CCC1=O', 'acyl_ester'), '[R]C(C)=O')
+    assert not _cuts('O=C1CCCO1', 'acyl_ester')                  # a lactone is not an ester row
+
+
+def test_a_cyclic_anhydride_keeps_its_other_acyl_as_the_acid():
+    assert _same(_cuts('O=C1CCC(=O)O1', 'acyl_anhydride'), '[R]C(=O)CCC(=O)O')
+
+
+def test_an_isocyanate_nitrogen_takes_a_hydrogen():
+    assert _same(_cuts('O=C=Nc1ccccc1', 'carbamoyl'), '[R]C(=O)Nc1ccccc1')
+    assert _same(_cuts('CNC(=O)Oc1ccccc1', 'carbamoyl'), '[R]C(=O)NC')
+
+
+def test_a_michael_acceptor_is_cut_at_its_saturated_beta_carbon():
+    assert _same(_cuts('C=CC(=O)N1CCCC1', 'michael_acceptor'), '[R]CCC(=O)N1CCCC1')
+    assert _same(_cuts('C=CC#N', 'michael_acceptor'), '[R]CCC#N')
+    assert _same(_cuts('C=CS(C)(=O)=O', 'michael_acceptor'), '[R]CCS(C)(=O)=O')
+
+
+def test_an_aryl_hydrazine_is_cut_at_its_terminal_nitrogen():
+    assert _same(_cuts('NNc1ccccc1', 'hydrazine_nitrogen'), '[R]NNc1ccccc1')

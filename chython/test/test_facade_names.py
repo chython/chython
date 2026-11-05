@@ -185,7 +185,7 @@ def test_the_whole_corpus_is_reachable_without_a_molecule():
     # the other two are name-to-rows, because a reaction name names a row family.
     reactions, handles = chython.reaction_rules(), chython.roles()
     assert len(reactions) == 193 and sum(len(v) for v in reactions.values()) == 1606
-    assert len(handles) == 53 and sum(len(v) for v in handles.values()) == 89
+    assert len(handles) == 58 and sum(len(v) for v in handles.values()) == 94
     assert all(r.name == name for name, rows in reactions.items() for r in rows)
 
 

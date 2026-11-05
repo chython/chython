@@ -556,7 +556,7 @@ PROTECTIVE = {
     'protective:89': 'mesyl',
 }
 
-#: `roles.tsv`: 89 rows, id -> the row it names.
+#: `roles.tsv`: 94 rows, id -> the row it names.
 ROLES = {
     'roles:1': 'aryl_halide/aryl_chloride',
     'roles:2': 'aryl_halide/aryl_bromide',
@@ -570,12 +570,6 @@ ROLES = {
     'roles:10': 'aryl_fluoride/aryl_fluoride',
     'roles:11': 'alkyl_fluoride/alkyl_fluoride',
     'roles:12': 'alkenyl_fluoride/alkenyl_fluoride',
-    'roles:13': 'aryl_sulfonate/aryl_triflate',
-    'roles:14': 'aryl_sulfonate/aryl_mesylate',
-    'roles:15': 'aryl_sulfonate/aryl_tosylate',
-    'roles:16': 'alkyl_sulfonate/alkyl_triflate',
-    'roles:17': 'alkyl_sulfonate/alkyl_mesylate',
-    'roles:18': 'alkyl_sulfonate/alkyl_tosylate',
     'roles:19': 'alkynyl_halide/alkynyl_chloride',
     'roles:20': 'alkynyl_halide/alkynyl_bromide',
     'roles:21': 'alkynyl_halide/alkynyl_iodide',
@@ -647,6 +641,17 @@ ROLES = {
     'roles:87': 'aryl_deamino/primary_aniline',
     'roles:88': 'azole_nitrogen/pyrazole',
     'roles:89': 'azole_nitrogen/imidazole',
+    'roles:90': 'aryl_sulfonate/aryl_sulfonate',
+    'roles:91': 'alkyl_sulfonate/alkyl_sulfonate',
+    'roles:92': 'acyl_ester/ester',
+    'roles:93': 'acyl_ester/activated_ester',
+    'roles:94': 'acyl_anhydride/anhydride',
+    'roles:95': 'carbamoyl/isocyanate',
+    'roles:96': 'carbamoyl/aryl_carbamate',
+    'roles:97': 'michael_acceptor/enoyl',
+    'roles:98': 'michael_acceptor/alkenyl_nitrile',
+    'roles:99': 'michael_acceptor/vinyl_sulfonyl',
+    'roles:100': 'hydrazine_nitrogen/aryl_hydrazine',
 }
 
 #: `reactions.tsv`: 1606 rows, id -> the row it names.
