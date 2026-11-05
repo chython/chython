@@ -19,19 +19,16 @@
 """Asking for the aromatic spelling must not silently choose a tautomer.
 
 `kekule()` repairs, because it is the boundary where input arrives; `thiele()` must not, because by
-then the data is the library's own arena.  The hydrogen move chython 2 did inside `thiele` belongs to
-`standardize_isomers` instead.  Both halves are pinned here.
+then the data is the library's own arena.  A hydrogen move belongs to `standardize_isomers`.  Both
+halves are pinned here.
 """
 import pytest
 
-from chython.chemistry.test._oracle import ask, needs_oracle
 from chython.core import read_smiles
 import chython.chemistry                                                         # noqa: F401
 
 
-#: 4,7-dihydro-pyrrolo-pyridine drawn with the hydrogen on the wrong nitrogen.  chython 2's own
-#: fixture (`algorithms/aromatics/test/test_thiele.py::test_tautomer_fix`), so the divergence is
-#: anchored to their test rather than to ours.
+#: 4,7-dihydro-pyrrolo-pyridine drawn with the hydrogen on the wrong nitrogen.
 SHIFTED = 'N1C=CC2=NC=CC2=C1'
 
 #: `{atom: total hydrogens}` as written: atom 1 carries the NH, atom 5 is the bare aromatic N.
@@ -67,38 +64,9 @@ def test_thiele_reports_no_tautomer_decision_in_its_result():
     assert result.refused == []
 
 
-@needs_oracle
-def test_chython_2_moved_the_hydrogen_and_that_is_the_defect():
-    """Pins the divergence at its source, so nobody 'fixes' V3 back into chython 2's behaviour.
-
-    Triaged: V3 is right.  Both `fix_tautomers` branches are asserted, since the flag being the only
-    difference is what makes the hydrogen move a hidden second job.
-    """
-    script = """
-from chython import smiles
-
-for line in sys.stdin:
-    source, _, flag = line.rstrip('\\n').partition('\\t')
-    m = smiles(source)
-    m.thiele(fix_tautomers=flag == 'on')
-    sys.stdout.write('%s\\t%s\\t%s\\n' % (flag, format(m, 's'),
-                     ','.join('%d:%d' % (n, a.total_hydrogens) for n, a in m.atoms())))
-"""
-    answers = dict(line.split('\t', 1) for line in ask(script, f'{SHIFTED}\ton\n{SHIFTED}\toff'))
-    on_smiles, on_h = answers['on'].split('\t')
-    off_smiles, off_h = answers['off'].split('\t')
-
-    as_written = ','.join(f'{n}:{h}' for n, h in AS_WRITTEN.items())
-    assert off_h == as_written, 'chython 2 leaves the hydrogens alone with the flag off'
-    assert on_h != as_written, (
-        'chython 2 no longer moves the hydrogen, so this divergence is stale -- re-triage it rather '
-        'than deleting the test')
-    assert on_smiles != off_smiles
-
-
 def test_the_hydrogen_move_belongs_to_standardize_isomers():
-    """The hydrogen move chython 2 made inside `thiele` is `standardize_isomers`' own: an azole N-H
-    outranks an azine N-H, so the hydrogen goes to atom 5, not atom 1.
+    """The hydrogen move is `standardize_isomers`' own: an azole N-H outranks an azine N-H, so the
+    hydrogen goes to atom 5, not atom 1.
     """
     molecule = read_smiles(SHIFTED)
     molecule.thiele()

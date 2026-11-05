@@ -25,16 +25,7 @@ the point of this file.
 None of them warns.  `atoms_count` and `len(mol)` are one question asked two ways, so neither is the
 one true form, and a library must not print into an application's output for using an API that works.
 The silence is asserted rather than assumed: `simplefilter('error')` turns any warning into a failure.
-
-The chython 2 comparison at the foot is an independent witness, not an oracle: it catches a spelling
-that disagrees with the library the name comes from.  It runs chython 2 in a subprocess rather than
-importing it, so it outlives V2 leaving this tree, and skips when the oracle is not provisioned.
-
-It also records the one place the two libraries disagree -- `[O]`.  That case is excluded from the mass
-comparison with the reason written out, not quietly reconciled: a spelling tested against a divergence
-would make the divergence the specification.
 """
-from math import isclose
 from warnings import catch_warnings, simplefilter
 
 from chython.core import read_smiles
@@ -134,58 +125,3 @@ def test_names_whose_meaning_differs_are_not_spellings():
     mol = read_smiles('c1ccccc1C1CCCCC1')          # one aromatic ring, one saturated
     assert len(mol.rings) == 2
     assert len(mol.aromatic_rings) == 1, 'a filter over the ring set, not a spelling of rings'
-
-
-# --- chython 2 as an independent witness ---------------------------------------------------------
-#
-# Not an oracle. What this catches is a spelling that disagrees with the library the name comes from,
-# which is the only thing a second spelling is for. Nothing above depends on it.
-#
-# Reached through `oracle`: an INSTALLED chython 2 in another interpreter, so this file imports
-# no chython 2 and the witness outlives V2 leaving the tree. `from chython import smiles` -- the
-# FACADE and not the module path -- is deliberate and stays that way inside the oracle: what is
-# being witnessed is the behaviour a consumer of chython 2 actually saw.
-
-V2_VALUES = """
-from chython import smiles
-
-out = []
-for smi in _payload:
-    mol = smiles(smi)
-    out.append({'atoms_count': mol.atoms_count, 'bonds_count': mol.bonds_count,
-                'molecular_charge': mol.molecular_charge, 'molecular_mass': mol.molecular_mass,
-                'numbers': list(mol)})
-_emit(out)
-"""
-
-
-def test_the_spellings_agree_with_chython_two():
-    from .oracle import ask
-
-    answers = ask(V2_VALUES, COMPOUNDS)
-    assert len(answers) == len(COMPOUNDS)
-    for smi, old in zip(COMPOUNDS, answers):
-        new = read_smiles(smi)
-        assert new.atoms_count == old['atoms_count'], smi
-        assert new.bonds_count == old['bonds_count'], smi
-        assert new.molecular_charge == old['molecular_charge'], smi
-        # every number chython 2 numbered an atom is an atom here too, and one that is not an atom
-        # in either is not an atom here
-        assert all(n in new for n in old['numbers']), smi
-        assert max(old['numbers']) + 1 not in new, smi
-
-        if smi == '[O]':
-            # NOT COMPARED, AND THE DISAGREEMENT IS chython 2's.  Its SMILES reader re-derives the
-            # hydrogen count of a BRACKET atom from valence rules, so `[O]` arrives carrying two
-            # implicit hydrogens and masses 18.02 -- where an absent count inside brackets means
-            # zero, and this reader gives it zero and masses 15.999.  chython 2 is not even
-            # self-consistent about it: `[N]` gets three hydrogens and `[C]` gets none.  The
-            # spelling is exact; the molecule being weighed is not the same molecule.
-            continue
-        # APPROXIMATE, AND ONLY HERE.  That the spelling is exactly `float(mol)` is asserted above by
-        # equality; what this line witnesses is that the two libraries weigh the same molecule the
-        # same, and they add the masses up in a different grouping -- chython 2 sums atom-plus-its-
-        # hydrogens per atom, this sums atoms and hydrogens separately -- so benzene-ol lands
-        # 3e-14 apart on the last bits.  Demanding exact equality here would assert an accumulation
-        # order neither library promises.
-        assert isclose(new.molecular_mass, old['molecular_mass'], rel_tol=1e-12), smi

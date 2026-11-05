@@ -1543,54 +1543,6 @@ def test_a_wrap_landing_inside_whitespace_is_still_reported(tmp_path):
     assert not [x for x in log if str(x).startswith('unsupported: ')], 'a mangling is not a missing feature'
 
 
-# --- chython 2 differential: side assignment and component order
-
-def _drain(reader):
-    """Every record a reader will give up; `read_record()` signals end of file by raising.  Written as a
-    loop rather than a comprehension because PEP 479 would turn that `StopIteration` into a `RuntimeError`
-    exactly when the oracle and this reader disagree on the record count.
-    """
-    out = []
-    while True:
-        try:
-            out.append(reader.read_record())
-        except StopIteration:
-            return out
-
-
-def test_v2_agrees_on_the_sides_of_every_rdf_fixture(root, oracle_session):
-    """chython 2 reading the same four files, asked for *counts* rather than molecules: side assignment and
-    component order are what this stream can get wrong in a way no hand-written test catches.
-
-    `agents` is compared and no fixture exercises it -- all eleven reactions have zero agents and RXN
-    V2000's counts line has no agent field -- so that comparison is `0 == 0` everywhere.  The final
-    assertion names files the oracle could not read, since `tolerant=True` must not silently shrink
-    coverage.
-    """
-    from chython.core.reaction import ReactionContainer
-    from chython.formats.ctfile import RDFRead
-
-    names = ('MR.rdf', 'ions.rdf', 'standardize.rdf', 'reaction_centerslist.rdf')
-    expected = oracle_session.read_rdf({n: root / 'test' / n for n in names}, tolerant=True)
-
-    unread = []
-    for name in names:
-        reference = expected.get(name)
-        if reference is None:
-            unread.append(name)
-            continue      # V2 cannot read the file; collect and report below
-        with RDFRead(root / 'test' / name) as f:
-            ours = [{'reactants': len(r.reactants),
-                     'products': len(r.products),
-                     'agents': len(r.agents),
-                     'atoms': [m.atom_count for m in r.molecules()]}
-                    for r in _drain(f) if isinstance(r, ReactionContainer)]
-        theirs = [x for x in reference if x is not None]
-        assert ours == theirs, name
-    # every fixture must have been readable by V2; a missing one is a broken oracle or a moved file
-    assert not unread, f'chython 2 could not read {unread}'
-
-
 def test_a_value_split_before_a_dollar_round_trips_and_the_reader_says_it_absorbed_a_keyword():
     """The one round trip that is exact *and* logged.  The writer chunks at the arming length, so a boundary
     can fall just before a ``$`` inside a value; the reader rejoins it byte for byte and still reports

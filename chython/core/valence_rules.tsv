@@ -47,8 +47,7 @@
 # these elements there are two -- R2Sn is a stannylene or R2SnH2, R-Tl is Tl(I) or Tl(III) -- so a
 # first-matching row there invents a compound.  Evidence first; this is not a gap to close by hand.
 #
-# Do not hand-edit `common` or `curated` rows: they are derived from chython 2 and a test
-# re-derives them.  Re-run `derive`, or add a row with a new provenance.
+# A row added from data carries a `mined:<corpus>` provenance naming the corpus.
 
 element	charge	radical	bonds	implicit_h	env	provenance
 H	-1	0	0	0	*	curated

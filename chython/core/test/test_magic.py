@@ -698,7 +698,7 @@ def test_matmul_is_a_core_slot_whose_body_arrives_by_injection():
 # ================================================================================================
 # THE IDENTITY, MEASURED.  These are the tests that decide whether `==` may exist at all: a canonical
 # form is only an identity if it separates what chemistry separates and merges what chemistry merges,
-# and both directions have to be shown.  The oracle for the merges is chython 2's own answer.
+# and both directions have to be shown.
 def _configure_double_bond(m, x, y, sub_x, sub_y, want):
     """Configure the cis/trans unit on the `x`=`y` bond so that `sub_x` and `sub_y` stand in relation
     `want` (1 or 2).  Returns the stored parity.
@@ -746,10 +746,9 @@ def test_cis_and_trans_butene_are_two_compounds():
 
 
 def test_hexa_2_4_diene_has_exactly_THREE_stereoisomers():
-    """The oracle is chython 2, which answers three.  FOUR parity combinations exist and only three
-    compounds do, because (2E,4Z) and (2Z,4E) are the same molecule read from its two ends.  A test
-    asserting "all four differ" would enshrine the opposite bug, so the merge is asserted separately
-    below and not left implied by a count."""
+    """FOUR parity combinations exist and only three compounds do, because (2E,4Z) and (2Z,4E) are
+    the same molecule read from its two ends.  A test asserting "all four differ" would enshrine the
+    opposite bug, so the merge is asserted separately below and not left implied by a count."""
     forms = {(a, b): _hexadiene(a, b) for a in (1, 2) for b in (1, 2)}
     assert len(set(forms.values())) == 3
     assert len({hash(m) for m in forms.values()}) == 3

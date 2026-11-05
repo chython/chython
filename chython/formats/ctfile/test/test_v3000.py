@@ -31,7 +31,7 @@ from .._errors import MalformedCtfile, UnsupportedCtfile
 from .._facade import mol as mol_io
 from .._v2000 import emit_v2000, parse_v2000
 from .._hydrogens import MRV_IMPLICIT_H
-from .._sdf import sniff_version, split_records
+from .._sdf import sniff_version
 from .._sgroup import NO_INDEX
 from .._v3000 import V3000_STAMP, emit_v3000, parse_v3000
 from ....core import SU_TETRA, read_smiles
@@ -729,34 +729,6 @@ def test_a_bond_reference_whose_bond_was_deleted_is_dropped_and_reported():
     body = [x for x in lines if x.startswith('M  V30 1 SUP')]
     assert len(body) == 1 and 'XBONDS' not in body[0] and 'CSTATE' not in body[0], body
     assert 'ATOMS=(2 1 2)' in body[0], 'the atoms are still there; only the bond references went'
-
-
-def test_the_one_v3000_record_in_the_corpus_agrees_with_chython2(root, v2_molecules):
-    """Thin, and named as thin: ``implicit.sdf`` has exactly one V3000 record, and it is the only
-    V3000 in this repository a second implementation has an opinion about."""
-    path = root / 'test' / 'implicit.sdf'
-    if not path.exists() or 'implicit.sdf' not in v2_molecules:
-        return
-    with path.open(encoding='utf8', errors='replace') as f:
-        records = list(split_records(f))
-    v2 = v2_molecules['implicit.sdf']
-    assert len(v2) == len(records), 'chython 2 read a different number of records; not an oracle'
-    checked = 0
-    for n, record in enumerate(records):
-        if sniff_version(record, []) != V3000_STAMP:
-            continue
-        # The one V3000 record is heteroaromatic, its nitrogen count needing a Kekule form; both
-        # readers decline it, so the comparison below covers only where V2 commits.
-        mol, _, _ = parse_v3000(record, []).build()
-        m2 = v2[n]
-        nums = list(m2)
-        assert len([*mol.atom_numbers]) == len(nums)
-        for sid, num in zip(mol.atom_numbers, nums):
-            assert mol.element_of(sid) == m2.atom(num).atomic_number
-            if m2.atom(num).implicit_hydrogens is not None:
-                assert mol.implicit_h_of(sid) == m2.atom(num).implicit_hydrogens
-        checked += 1
-    assert checked, 'no V3000 record found in implicit.sdf; this test proved nothing'
 
 
 def test_query_atom_message_does_not_promise_a_query_reader():

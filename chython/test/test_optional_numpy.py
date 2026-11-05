@@ -27,7 +27,7 @@ error that names the extra rather than at `import chython` with a traceback from
 WHY THESE TESTS RUN IN SUBPROCESSES.  Both questions are about the import graph, and this process has
 already answered them the wrong way round: pytest has imported chython, and numpy is in `sys.modules`
 because some other test asked for a fingerprint.  Neither question can be asked in-process, so each
-one gets a fresh interpreter -- the same reason `core/test/oracle.py` spawns rather than imports.
+one gets a fresh interpreter.
 
 THIS FILE IS A RATCHET.  A single module-level `from numpy import ...` anywhere `chython.chemistry`
 imports eagerly -- a featurizer, say -- drags numpy into the façade for every caller.  A measurement
@@ -67,8 +67,8 @@ for _name in [n for n in sys.modules if n == 'numpy' or n.startswith('numpy.')]:
 def _python(script):
     """Run `script` in a fresh interpreter with this checkout importable.  Returns the CompletedProcess.
 
-    No `-I`: unlike `core/test/oracle.py`, the whole point here is to import the tree under test, and `-I`
-    drops the working directory from `sys.path`.  `cwd=ROOT` is what puts this checkout first.
+    No `-I`: the whole point here is to import the tree under test, and `-I` drops the working directory
+    from `sys.path`.  `cwd=ROOT` is what puts this checkout first.
     """
     return run([executable, '-c', script], cwd=ROOT, capture_output=True, text=True, timeout=300)
 

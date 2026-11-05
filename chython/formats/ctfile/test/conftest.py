@@ -27,8 +27,6 @@ from pathlib import Path
 
 from pytest import fixture
 
-from chython.core.test import oracle
-
 from .._sdf import split_records
 
 
@@ -37,12 +35,6 @@ from .._sdf import split_records
 CORPUS = ('arenes.sdf', 'cycle.sdf', 'isomorphism.sdf', 'mcs.sdf', 'peptide.sdf',
           'standardize.sdf', 'stereo.sdf', 'implicit.sdf', 'depict.sdf', 'hbonds.sdf',
           'morgan_ruiner.sdf')
-
-
-#: Is any bond drawn at `sid` an aromatic one?  An alias for the production predicate, deliberately
-#: not a second copy: two suites use the answer as the licence for committing a hydrogen count, and a
-#: local re-implementation could widen that escape hatch in one file while the other stayed narrow.
-from .._hydrogens import _holds_aromatic_bond as holds_an_aromatic_bond
 
 
 def _root():
@@ -69,44 +61,3 @@ def corpus(root):
         with path.open(encoding='utf8', errors='replace') as f:
             out[name] = list(split_records(f))
     return out
-
-
-@fixture(scope='session')
-def oracle_session():
-    """One chython 2 interpreter for the whole CTfile suite.  Skips when it is not provisioned.
-
-    A subprocess and not an import: inside chython 2's own interpreter this tree's package does not
-    exist, so an oracle cannot silently become a mirror of the reader it is checking.  See
-    ``chython/core/test/oracle.py``.
-    """
-    live = oracle.session()
-    yield live
-    live.close()
-
-
-@fixture(scope='session')
-def v2_reader(oracle_session):
-    """``f(record_text) -> chython 2 record`` for one hand-written MDL record.
-
-    What comes back is an ``oracle.Record``, answering under chython 2's own attribute names
-    (``atom(n).implicit_hydrogens``, ``bonds()``, iteration over atom numbers).  Not a molecule.
-    """
-    def read(text):
-        record, = oracle_session.read_mdl([text])
-        assert record is not None, 'chython 2 could not read this fixture record'
-        return record
-    return read
-
-
-@fixture(scope='session')
-def v2_molecules(root, oracle_session):
-    """``{filename: [chython 2 record, ...]}`` -- the oracle side, read in one call.
-
-    A ``None`` hydrogen count is a real answer ("unknown") to be matched, not a gap to be filled.  A
-    file chython 2 cannot read at all is dropped rather than raised.
-    """
-    paths = {name: root / 'test' / name for name in CORPUS
-             if (root / 'test' / name).exists()}
-    return {name: records
-            for name, records in oracle_session.read_sdf(paths, tolerant=True).items()
-            if records is not None}

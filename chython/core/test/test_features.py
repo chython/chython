@@ -417,8 +417,7 @@ def test_signature_mask_drops_exactly_the_environment_fields():
 
 
 # The isotope and MDL reference tables are generated C arrays, so their tests live in
-# test_element_tables.py, next to the generator that produces them -- including the two that use
-# chython 2 as the oracle.
+# test_element_tables.py, next to the generator that produces them.
 
 
 def test_element_buckets_group_atoms_by_element():

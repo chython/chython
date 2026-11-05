@@ -25,7 +25,7 @@ test against another implementation anywhere in this file, and the corpus is rea
 WHY THIS FILE SITS IN `chython/test/` AND NOT IN `chython/core/test/`, WHICH IS WHERE ITS SUBJECT
 LIVES.  It needs two things from two different layers: the core's stereo perception, and a reader for
 an MDL corpus.  The dependency direction is `core <- chemistry <- {formats, ...}`, and
-`chython/core/test/test_no_chython_two_imports.py` holds the core's own suite to it -- the core must be
+`chython/core/test/test_core_isolation.py` holds the core's own suite to it -- the core must be
 shippable and testable alone, so nothing under `chython/core/` may import `chython.formats`.  A gate
 that genuinely needs both layers therefore belongs above both, which is this directory.
 

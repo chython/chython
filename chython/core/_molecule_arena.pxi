@@ -242,10 +242,9 @@ DEF H_UNKNOWN      = 15      # ... 15 is not a count there, it is "nobody knows"
 # a measurement.  So no comment or test in this file quotes a population as the reason -- if one
 # needs a number, it names the corpus and the reader that produced it, and both change.
 #
-# CORRESPONDENCE WITH chython 2: `Element.implicit_hydrogens` returns `None` for exactly this
-# population, and that None is the oracle this sentinel reproduces.  So `implicit_h_of` answers None
-# too, and `int(None)` raising in a caller's arithmetic is the point: a fabricated 0 would not raise,
-# it would just make the mass, the formula and the valence quietly wrong.  15 rather than a separate
+# `implicit_h_of` answers None for this population, and `int(None)` raising in a caller's arithmetic
+# is the point: a fabricated 0 would not raise, it would just make the mass, the formula and the
+# valence quietly wrong.  15 rather than a separate
 # flag byte because the nibble already had a value nobody could reach -- no atom carries fifteen
 # implicit hydrogens -- so the state costs no space and cannot be lost by a writer that forgets it.
 

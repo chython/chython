@@ -18,24 +18,14 @@
 #
 """The valence rule collection: the data file, the compiled tables, and the three questions.
 
-Four kinds of test here and the distinction matters.
+Two kinds of test here.
 
-  * The data file is what chython 2 states -- `derive()` again and compare.
   * The compiled tables are what the data file says -- the generator's proof, and the reason the
     tables are committed rather than built.
-  * The answers reproduce chython 2's, swept exhaustively against an oracle lifted out of the
-    molecule methods the rules are embedded in.
-  * The answers stated directly, which need no oracle at all. Those are the cases somebody would
-    otherwise have to rediscover.
+  * The answers stated directly.  Those are the cases somebody would otherwise have to rediscover.
 
-The first and third kinds ask chython 2 through `oracle`: an INSTALLED chython 2 in another
-interpreter, one subprocess per sweep, never an import.  Unprovisioned, those tests skip and the other
-two kinds still run.
-
-A DISAGREEMENT IS A QUESTION, NOT A VERDICT.  V2's collection contradicts itself in at least one
-place (`test_the_phosphorous_acid_row_is_unreachable_in_chython_two`) and V2's reader answers `[O]`
-differently (see `test_alternative_spellings.py`).  Neither is smoothed over and neither may be: a
-comparison made to pass by changing the core moves the port to match the divergence.
+The collection contradicts itself in at least one place (`test_the_phosphorous_acid_row_is_unreachable`),
+and that is recorded rather than smoothed over: fixing it means changing the TSV on a chemistry argument.
 """
 from collections import Counter, defaultdict
 
@@ -45,7 +35,7 @@ from chython.core._core import (valence_check, valence_has_rules, valence_implic
                                 valence_rules)
 
 from .gen_valence_rules import (PREAMBLE, PXI, TSV, canonical_order, compile_tables, coverage,
-                                derive, hydrogen_tables, read_tsv)
+                                hydrogen_tables, read_tsv)
 
 
 def rows(rules):
@@ -56,105 +46,11 @@ def rows(rules):
     return out
 
 
-# chython 2's three answers, lifted out of the molecule methods the rules are embedded in and run
-# IN THE ORACLE INTERPRETER -- see `oracle` for why the second opinion is a subprocess and not an
-# import.  One call answers a whole sweep: the round trip costs more than 23,364 lookups do.
-#
-#   implicit_h   V2's `MoleculeContainer.calc_implicit` -- `valence_rules` for the bond-order sum,
-#                then the FIRST rule whose environment is contained in the atom's, and None on either
-#                miss.  The rest of that method is the aromatic special case and the element-H short
-#                circuit, neither of which is the collection's business: V2 answers 0 hydrogens for
-#                any H atom before it ever reaches a rule.
-#   accepts      V2's `check_implicit`, the same lift: ANY matching rule wins, not the first.
-#   has_rules    where V2 raises ValenceError, which is the boundary between "no rule" and "this
-#                element in this state was never described".  The environment is not consulted.
-ORACLE = """
-from collections import defaultdict
-
-from chython.exceptions import ValenceError
-from chython.periodictable.base.element import _elements_map
-
-MAP = _elements_map()
-
-
-def rules_for(z, charge, radical, order_sum):
-    atom = MAP[z](charge=charge, is_radical=radical)
-    try:
-        return atom.valence_rules(order_sum)
-    except ValenceError:
-        return None
-
-
-def counted(environment):
-    counts = defaultdict(int)
-    for order, number in environment:
-        counts[(order, number)] += 1
-    return counts
-
-
-def implicit_h(z, charge, radical, order_sum, environment):
-    rules = rules_for(z, charge, radical, order_sum)
-    if rules is None:
-        return None
-    counts = counted(environment)
-    for _set, needed, h in rules:
-        if all(counts[k] >= c for k, c in needed.items()):
-            return h
-    return None
-
-
-def accepts(z, charge, radical, order_sum, environment, want):
-    rules = rules_for(z, charge, radical, order_sum)
-    if rules is None:
-        return False
-    counts = counted(environment)
-    for _set, needed, h in rules:
-        if h == want and all(counts[k] >= c for k, c in needed.items()):
-            return True
-    return False
-
-
-out = []
-for question in _payload:
-    verb = question[0]
-    if verb == 'implicit_h':
-        z, charge, radical, bonds, env = question[1:]
-        out.append(implicit_h(z, charge, radical, bonds, [tuple(t) for t in env]))
-    elif verb == 'accepts':
-        z, charge, radical, bonds, env, want = question[1:]
-        out.append(accepts(z, charge, radical, bonds, [tuple(t) for t in env], want))
-    elif verb == 'has_rules':
-        z, charge, radical, bonds = question[1:]
-        out.append(rules_for(z, charge, radical, bonds) is not None)
-    else:
-        raise ValueError(verb)
-_emit(out)
-"""
-
-
-def oracle(questions):
-    """Ask chython 2 a batch of questions. `questions` is a list of `(verb, *args)` tuples."""
-    from .oracle import ask
-
-    answers = ask(ORACLE, [list(q) for q in questions])
-    assert len(answers) == len(questions), (len(answers), len(questions))
-    return answers
-
-
 # --- the data file
 
-def test_the_shipped_file_is_what_chython_two_states():
-    """Re-derive every `common` and `curated` row through the oracle and compare."""
-    shipped = read_tsv()
-    assert rows(shipped) == rows(canonical_order(derive())), \
-        'chython/core/valence_rules.tsv has drifted from chython 2; run gen_valence_rules.py derive'
-    assert {r.provenance for r in shipped} == {'common', 'curated'}, \
-        'a row with another provenance is fine, but then this test must stop asserting the set'
-
-
 def test_the_shape_of_the_collection_is_what_was_measured():
-    # a size regression is the cheapest way to notice the oracle changed under us, and these are
-    # the numbers the generated header states
+    # a size regression is the cheapest way to notice a lost or duplicated row, and these are the
+    # numbers the generated header states
     shipped = read_tsv()
     provenance = Counter(r.provenance for r in shipped)
     assert len(shipped) == 1036
@@ -195,14 +91,14 @@ def test_the_shipped_files_comment_block_is_the_generators_preamble():
     """
     assert TSV.read_text(encoding='utf-8').startswith(PREAMBLE), \
         'valence_rules.tsv\'s comment block has drifted from PREAMBLE in gen_valence_rules.py; ' \
-        'edit the constant and re-run gen_valence_rules.py derive'
+        'edit the TSV\'s comment block and the constant together'
 
 
 def test_the_committed_tables_are_the_shipped_file():
     """The generated block in _valence.pxi, byte for byte, from the TSV.
 
-    This is what "generated and committed" buys: a wheel build does not depend on chython 2
-    importing, and a table produced during a build is invisible in review.
+    This is what "generated and committed" buys: a wheel build runs no generator, and a table
+    produced during a build is invisible in review.
     """
     assert compile_tables(canonical_order(read_tsv())) in PXI.read_text(encoding='utf-8'), \
         'the tables are stale; run gen_valence_rules.py compile and rebuild'
@@ -213,48 +109,12 @@ def test_the_compiled_module_is_the_shipped_file():
     assert valence_rules() == rows(read_tsv())
 
 
-# --- the sweeps against chython 2
-
-def test_every_row_reproduces_the_oracle_on_its_own_environment():
-    """Each row, asked about exactly the state it describes, in both directions.
-
-    The sweep that catches a wrong offset, a truncated environment or a lost row -- every row is
-    reached through its own key, so no row is merely present but unreachable.
-    """
-    shipped = valence_rules()
-    questions = []
-    for z, charge, radical, bonds, h, env in shipped:
-        questions.append(('implicit_h', z, charge, radical, bonds, env))
-        questions.append(('accepts', z, charge, radical, bonds, env, h))
-    answers = oracle(questions)
-    for i, (z, charge, radical, bonds, h, env) in enumerate(shipped):
-        assert valence_implicit_h(z, charge, radical, bonds, env) == answers[2 * i], \
-            (z, charge, radical, bonds, env)
-        assert (valence_check(z, charge, radical, bonds, h, env) == 'valid') == answers[2 * i + 1], \
-            (z, charge, radical, bonds, env)
-
-
-def test_the_environment_free_sweep_reproduces_the_oracle():
-    """Every element, every charge and radical state in the collection, every valence 0..10.
-
-    Environment left empty on purpose: it is the case the `env=*` rows answer and the one every
-    caller hits most, and it is where a mis-sorted key array shows up as a wrong element's answer.
-    """
-    states = [(z, charge, radical, order_sum)
-              for z in range(1, 119) for charge in range(-4, 5)
-              for radical in (False, True) for order_sum in range(11)]
-    answers = oracle([('implicit_h', z, charge, radical, order_sum, ())
-                      for z, charge, radical, order_sum in states])
-    for state, expected in zip(states, answers):
-        assert valence_implicit_h(*state) == expected, state
-
-
 # --- two tables, one collection
 
 def first_matching_row(z, charge, radical, order_sum, environment):
     """The hydrogen answer read straight off the shipped rows: the FIRST match wins.
 
-    Deliberately not the compiled tables and not chython 2 -- this is the definition the dense
+    Deliberately not the compiled tables -- this is the definition the dense
     hot table has to be a projection of, written in six lines so that "one indexed load" has
     something to be checked against that is obviously right.
     """
@@ -324,20 +184,6 @@ def test_the_two_tables_are_not_one_table_queried_twice():
                          ((2, 'O'), (2, 'O'), (1, 'C'), (1, 'C'))) == 'valid'
 
 
-def test_has_rules_is_the_valence_error_boundary():
-    """`valence_has_rules` must be exactly where chython 2 raises, environment ignored.
-
-    Swept over every element rather than a named sample: the oracle answers a whole sweep in one call,
-    so there is no reason to sample.
-    """
-    states = [(z, charge, radical, valence)
-              for z in range(1, 119) for charge in range(-2, 3)
-              for radical in (False, True) for valence in range(9)]
-    answers = oracle([('has_rules', *state) for state in states])
-    for state, expected in zip(states, answers):
-        assert valence_has_rules(*state) is expected, state
-
-
 # --- row order
 
 def test_row_order_within_a_key_is_observable():
@@ -374,7 +220,7 @@ def test_row_order_within_a_key_is_observable():
 
 
 def test_a_bare_atom_takes_its_common_valence_and_not_the_atomic_row():
-    # `[C]` in chython 2 is methane's four hydrogens: the common-valence row sits at the same key
+    # a bare `[C]` is methane's four hydrogens: the common-valence row sits at the same key
     # as an atomic-carbon row with none, and it is scanned first.  This is the largest class of
     # order-observable key and the one a reordering would silently change
     assert valence_implicit_h('C', 0, False, 0) == 4
@@ -422,8 +268,8 @@ def test_a_LONE_metal_is_the_metal_and_only_a_SUBSTITUTED_one_takes_hydrides():
         assert valence_implicit_h(element, 0, False, 0) == hydrogens, element
 
 
-def test_the_phosphorous_acid_row_is_unreachable_in_chython_two():
-    """chython 2's own collection contradicts itself here, and the port reproduces it exactly.
+def test_the_phosphorous_acid_row_is_unreachable():
+    """The collection contradicts itself here.
 
     `P` at three bonds with one single and one double oxygen is phosphorous acid, and the curated
     row for it grants two hydrogens. The common valence 3 row sits at the same key with zero and
@@ -525,7 +371,7 @@ def test_a_hydrogen_is_the_same_hydrogen_drawn_or_counted():
     assert valence_check('P', 0, False, 0, 5) == 'valid'
 
 
-# --- the answers that must survive the oracle's removal
+# --- the answers everyone knows
 
 def test_the_answers_everyone_knows():
     assert valence_implicit_h('C', 0, False, 4, [(1, 'C')] * 4) == 0
@@ -534,18 +380,16 @@ def test_the_answers_everyone_knows():
     assert valence_implicit_h('O', 0, False, 1, [(1, 'C')]) == 1      # an alcohol
     assert valence_implicit_h('O', 0, False, 2, [(1, 'C')] * 2) == 0  # an ether
     assert valence_implicit_h('H', 0, False, 1, [(1, 'C')]) == 0
-    # and hydrogen never grows a partner: chython 2 excludes it from the implicit-H path by atomic
-    # number, so the collection has no row for an unbonded neutral non-radical H at all -- the
-    # states it does have are H+, H- and the radical.  A caller wanting V2's molecule-level answer
-    # for an H atom must apply V2's short circuit itself
+    # and hydrogen never grows a partner: the collection has no row for an unbonded neutral
+    # non-radical H at all -- the states it does have are H+, H- and the radical
     assert valence_implicit_h('H', 0, False, 0) is None
     assert valence_implicit_h('H', 0, True, 0) == 0
     assert valence_implicit_h('H', 1, False, 0) == 0
 
 
 def test_an_explicit_hydrogen_is_an_ordinary_neighbour():
-    # chython 2 counts explicit H in both the order sum and the environment, and a row written
-    # against a hydrogen neighbour is unreachable otherwise
+    # explicit H counts in both the order sum and the environment, and a row written against a
+    # hydrogen neighbour is unreachable otherwise
     assert valence_implicit_h('C', 0, False, 4, [(1, 'H')] * 4) == 0
     assert valence_implicit_h('C', 0, False, 2, [(1, 'H')] * 2) == 2
 
@@ -569,8 +413,7 @@ def test_the_environment_is_a_lower_bound_and_not_a_match():
 def test_a_multiplicity_is_not_a_set():
     """A sulfone row demands two double-bonded oxygens and must not fire on a sulfoxide.
 
-    The half of the environment test that chython 2 writes as a count dict on top of a set. With
-    the set alone, one oxygen would satisfy `=O =O`.
+    The environment is a multiset: with a set alone, one oxygen would satisfy `=O =O`.
     """
     assert valence_implicit_h('S', 0, False, 6, [(2, 'O'), (2, 'O'), (1, 'C'), (1, 'C')]) == 0
     assert valence_implicit_h('S', 0, False, 6, [(2, 'O'), (1, 'C'), (1, 'C'), (1, 'C'),
@@ -590,7 +433,7 @@ def test_the_two_valence_models_answer_differently():
     changes with the environment (dimethyl sulfone is fine, above) and the notation model has
     nowhere to put an environment, because a string's syntax cannot depend on what its atoms are
     bonded to. Merging them would either make the reader reject strings RDKit emits or make MDL
-    accept structures chython 2 rejects.
+    accept structures the collection does not describe.
     """
     six_carbons = [(1, 'C')] * 6
     assert valence_implicit_h('S', 0, False, 6, six_carbons) is None, \
@@ -640,8 +483,8 @@ def test_a_charged_state_is_a_different_question():
 
 
 def test_a_metal_has_legal_valences_and_no_hydrogens():
-    # every alkali metal states common valence 0 first, which is chython 2's way of saying "these
-    # valences are legal, none of them grants a hydrogen"
+    # every alkali metal states common valence 0 first: these valences are legal, none of them
+    # grants a hydrogen
     assert valence_implicit_h('Na', 0, False, 0) == 0
     assert valence_implicit_h('Na', 0, False, 1, [(1, 'Cl')]) == 0
     assert valence_implicit_h('Na', 0, False, 2, [(1, 'Cl')] * 2) is None
@@ -738,59 +581,7 @@ def test_the_coverage_report_counts_gaps_and_not_violations(tmp_path, capsys):
     assert 'C' not in unknown and 'C' not in violation
 
 
-def test_both_readers_measure_the_same_coverage(tmp_path, capsys):
-    """The pin on switching the coverage tool's parser from chython 2's reader to the core's.
-
-    A parser swap under a number people quote is worse than a broken comparison, because nothing
-    announces it: the corpus changes and the report still prints.  So both readers stay wired up and
-    this requires them to agree, atom for atom and element for element, over strings they both
-    accept.  The V2 half runs in the oracle interpreter, so this stays live after chython 2 leaves
-    the tree.
-    """
-    corpus = tmp_path / 'corpus.smi'
-    # public compounds spanning what the collection is asked about: charged, radical, hypervalent,
-    # aromatic, metal, explicit hydrogens, a dative contact
-    corpus.write_text('\n'.join((
-        'CCO', 'CC(=O)O', 'CC(=O)[O-]', 'c1ccccc1', 'c1ccncc1', 'c1cc[nH]c1', 'Cc1ccccc1',
-        'CS(=O)(=O)C', 'C[N+](C)(C)C', 'O=[N+]([O-])c1ccccc1', 'OP(=O)(O)O', 'FC(F)(F)S(=O)(=O)O',
-        'CC[Si](C)(C)C', 'B(O)(O)c1ccccc1', 'ClC(Cl)(Cl)Cl', 'BrCCBr', 'ICI',
-        '[Fe+]', '[Fe+2]', '[Na+].[Cl-]', '[Cu+2].[O-]S(=O)(=O)[O-]',
-        '[H][N]([H])([H])[H]', '[H]O[H]', 'N', 'NO', 'ON=O', 'C#N', '[C-]#[O+]',
-        'O=C=O', 'S=C=S', 'CN=[N+]=[N-]', 'C1CC1', 'C1CCCCC1', 'O1CCOCC1',
-        'c1ccc2ccccc2c1', 'c1ccc(-c2ccccc2)cc1', 'CC(C)(C)OC(=O)N', 'CSC', 'CS(C)=O',
-    )) + '\n')
-
-    core_unknown, core_violation = coverage([str(corpus)], 'core')
-    core_out = capsys.readouterr().out
-    v2_unknown, v2_violation = coverage([str(corpus)], 'v2')
-    v2_out = capsys.readouterr().out
-
-    assert core_unknown == v2_unknown, \
-        f'the two readers disagree about which states have no rule: {core_unknown} != {v2_unknown}'
-    assert core_violation == v2_violation, \
-        f'the two readers disagree about which states violate one: {core_violation} != {v2_violation}'
-    # and the same corpus, not merely the same verdicts on a smaller one: a reader that accepted
-    # fewer strings could agree on every atom it saw and still be measuring something else
-    assert core_out.splitlines()[:2] == v2_out.splitlines()[:2], (core_out, v2_out)
-    # the comparison is evidence only if it could have failed: something must be in the columns
-    assert core_unknown or core_violation
-
-
 # --- the harness
 
 def test_the_harness_can_fail():
-    # the sweeps above are evidence only if the comparison could have disagreed: make the oracle
-    # and the port answer different questions on purpose and check the assertion would fire
-    asked, = oracle([('implicit_h', 6, 0, False, 4, ())])
-    assert valence_implicit_h('C', 0, False, 3) != asked
     assert valence_rules() != rows(read_tsv())[:-1]
-    # and the bridge itself carries a real answer rather than a default: a broken subprocess that
-    # returned None for everything would make every sweep above pass vacuously
-    assert asked == 0
-    assert oracle([('has_rules', 6, 0, False, 4), ('has_rules', 6, 0, False, 5)]) == [True, False]
-
-
-def test_the_derivation_harness_can_fail():
-    # separate from the rest because it needs the oracle to hand over 1036 rows rather than answer
-    # a question, and a skip here must not hide the cheaper checks above
-    assert rows(read_tsv()) != rows(canonical_order(derive()))[:-1]

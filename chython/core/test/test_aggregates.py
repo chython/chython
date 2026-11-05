@@ -18,8 +18,7 @@
 #
 """The molecule-level aggregates over the atom table: `is_radical` and the brutto formula.
 
-Both are folds -- an `any` and a `Counter` -- and both are chython 2 names restored with chython 2's
-meaning, which for the formula includes an atom ORDER that is not Hill's.
+Both are folds -- an `any` and a `Counter` -- and the formula has an atom ORDER that is not Hill's.
 """
 from chython.core import MoleculeContainer, read_smiles
 
@@ -32,9 +31,7 @@ def test_is_radical_is_false_on_a_closed_shell_molecule():
 
 def test_is_radical_is_true_when_one_atom_carries_the_flag():
     # the ethyl radical.  THE CXSMILES RADICAL FIELD AND NOT `[CH2]`: an absent hydrogen term inside
-    # brackets means zero here, so nothing about a bracket atom implies an unpaired electron, and
-    # chython 2 -- which re-derives the count from valence and calls the difference a radical -- reads
-    # this string as a radical for a reason this reader deliberately does not have.
+    # brackets means zero here, so nothing about a bracket atom implies an unpaired electron.
     assert read_smiles('C[CH2] |^1:1|').is_radical is True
 
 
@@ -122,7 +119,7 @@ def test_brutto_formula_drops_a_count_of_one():
 
 
 def test_brutto_formula_keeps_bruttos_order_rather_than_hills():
-    # Hill would write CHF3O3S; chython 2 puts O before F because O is in the seeded lead
+    # Hill would write CHF3O3S; O comes before F because O is in the seeded lead
     assert read_smiles('FC(F)(F)S(=O)(=O)O').brutto_formula == 'CHO3F3S'
     # and a salt trails its metal, because sodium sorts after oxygen by atomic number
     assert read_smiles('CC(=O)[O-].[Na+]').brutto_formula == 'C2H3O2Na'
@@ -152,48 +149,3 @@ def test_brutto_says_nothing_about_a_hydrogen_count_it_does_not_have():
         mol.add_atom('C', implicit_h=None)
     assert mol.unknown_h_count == 1
     assert mol.brutto == {'C': 1}
-
-
-# --- the chython 2 witness -----------------------------------------------------------------------
-#
-# Not an oracle: every answer above is stated outright.  What this catches is the one thing a stated
-# answer cannot -- that the ORDER and the hydrogen folding are chython 2's on a molecule nobody
-# thought to write a case for.  Reached through `oracle`, an installed chython 2 in another
-# interpreter, so this file imports no chython 2.
-#
-# THE RADICAL IS SPELT IN CXSMILES ON BOTH SIDES.  Bare `C[CH2]` is a radical to chython 2 and is not
-# one here, and that divergence belongs to the READERS -- chython 2 re-derives a bracket atom's
-# hydrogen count from valence rules and calls the shortfall a radical, where an absent count inside
-# brackets means zero here.  Comparing it would compare two different molecules and say nothing about
-# the fold under test; `|^1:1|` states the radical outright and both readers agree on it.
-
-COMPOUNDS = ('CCO', 'c1ccccc1', 'CC(=O)Oc1ccccc1C(=O)O', '[NH4+].[Cl-]', 'CC(=O)[O-].[Na+]',
-             '[2H]O[2H]', '[13CH4]', 'C[CH2] |^1:1|', '[O-][N+](=O)c1ccccc1',
-             'FC(F)(F)S(=O)(=O)O',
-             'B(O)(O)c1ccccc1', '[Fe+2].[Cl-].[Cl-]', 'N', 'O', '[Na+]', 'CC[Si](C)(C)C',
-             'c1ccc2[nH]ccc2c1', 'O=[U](=O)([O-])[O-]', '[H][H]',
-             'CCCCCCCCCCCCCCCCCC(=O)O')
-
-V2_VALUES = """
-from chython import smiles
-
-out = []
-for smi in _payload:
-    mol = smiles(smi)
-    out.append([list(mol.brutto.items()), mol.brutto_formula, mol.is_radical])
-_emit(out)
-"""
-
-
-def test_the_aggregates_agree_with_chython_two():
-    from .oracle import ask
-
-    answers = ask(V2_VALUES, list(COMPOUNDS))
-    assert len(answers) == len(COMPOUNDS)
-    for smi, (brutto, formula, radical) in zip(COMPOUNDS, answers):
-        mol = read_smiles(smi)
-        # `list(...items())` on both sides: the order is part of the answer, and comparing dicts
-        # would pass on a molecule whose formula chython 2 spells in a different sequence
-        assert list(mol.brutto.items()) == [tuple(x) for x in brutto], smi
-        assert mol.brutto_formula == formula, smi
-        assert mol.is_radical == radical, smi

@@ -53,7 +53,7 @@ def test_the_probe_set_is_the_same_in_all_five_toolkits():
 
 @mark.parametrize('toolkit', oracles.TOOLKITS)
 def test_an_absent_oracle_skips_and_does_not_fail(toolkit, monkeypatch):
-    """The `core/test/oracle.py` posture: a machine without an oracle still gets a green suite."""
+    """A machine without an oracle still gets a green suite."""
     monkeypatch.setitem(oracles._PROBES, toolkit, lambda: None)
     with raises(BaseException) as caught:
         oracles.require(toolkit)

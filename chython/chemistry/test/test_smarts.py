@@ -19,12 +19,10 @@
 """What `compile_smarts` must get right, stated as behaviour rather than as a token stream.
 
 `compile_smarts` calls the core lexer and then numbers the atoms chython 2's way, so most of this
-file pins that the TABLES' dialect is still the dialect the tables were written in.  chython 2 is
-the behaviour oracle; the two deliberate divergences, `z` and `[M]`'s charge, are asserted by name
-rather than skipped.
+file pins that the TABLES' dialect is still the dialect the tables were written in.  The two
+deliberate divergences from chython 2, `z` and `[M]`'s charge, are asserted by name.
 """
 import pytest
-from ._oracle import ask, needs_oracle
 from chython.chemistry._smarts import SmartsSyntaxError, compile_smarts
 from chython.core import read_smiles
 
@@ -146,7 +144,6 @@ def test_a_metal_combined_with_a_primitive_chython_2_ignored_now_means_it():
 
 
 def test_an_ordinary_atom_does_default_to_neutral_and_non_radical():
-    """Measured against chython 2, which agrees -- so this is not a divergence."""
     assert not _atom_sets('[C]', '[CH3-]')
     assert len(_atom_sets('[C;-]', '[CH3-]')) == 1
 
@@ -225,76 +222,6 @@ def test_the_lexer_accepts_what_the_subset_compiler_could_not(text):
     assert len(numbers) == query.atom_count
 
 
-# --- the chython 2 oracle ---------------------------------------------------------------------- #
-
-# (pattern, molecule).  Every pattern is drawn from chython 2's own rule tables or is a primitive
-# combination they use; every molecule is a public compound.
-_DIFFERENTIAL = [
-    ('[P;D4;x0;z1]', 'CP(C)(C)C'),
-    # a NEUTRAL sulfide donating to borane: an oxonium salt matches neither engine, since a list of
-    # elements constrains charge to neutral in both, and the case would compare two empty sets
-    ('[B;z1]-[O,S;D3;z1]', 'CS(C)B(C)(C)C'),
-    ('[N;D3;z2;x2;+]([O;D1;-])([O;D1])=C', 'C=[N+]([O-])O'),
-    ('[O;D1;z1][N;D3;z1][C,N;z1]', 'ON(C)C'),
-    ('[C;a]', 'c1ccccc1'),
-    ('[N;a;r5;D2;h1]', 'c1cc[nH]c1'),
-    ('[C;D1;h3]', 'CC(=O)OC'),
-    ('[O;D1;z2]=[C;D3;z2]', 'CC(=O)C'),
-    ('[C;r6]:[C;r6]', 'c1ccccc1'),
-    ('[N;D1;z1;x0]-[C;z1]', 'NCC'),
-    ('[C,N,O]', 'NCCO'),
-    ('[S;D4](=[O;D1])(=[O;D1])([A])[A]', 'CS(=O)(=O)C'),
-    ('[C;!R]', 'c1ccccc1CC'),
-    ('[N;D3;z1]([A])([A])[A]', 'CN(C)C'),
-    ('[Cl,Br,I;D1]', 'ClCCBr'),
-    ('[C;x1;z2]=[O;D1]', 'CC=O'),
-    ('[C;D2;z3]#[N;D1]', 'CC#N'),
-]
-
-
-# Reports the matched atom sets of one `pattern<TAB>molecule` per input line.
-_SCRIPT = """
-from chython import smiles, smarts
-
-for line in sys.stdin:
-    pattern, _, source = line.rstrip('\\n').partition('\\t')
-    if not pattern:
-        continue
-    hits = {tuple(sorted(m.values())) for m in smarts(pattern).get_mapping(smiles(source))}
-    sys.stdout.write('%s\\t%s\\n' % (line.rstrip('\\n'),
-                                    ';'.join(','.join(map(str, h)) for h in sorted(hits))))
-"""
-
-
-@pytest.fixture(scope='module')
-def oracle_hits():
-    """`{(pattern, molecule): {atom sets}}` from the pinned chython 2, in one subprocess."""
-    stdin = '\n'.join(f'{pattern}\t{molecule}' for pattern, molecule in _DIFFERENTIAL)
-    hits = {}
-    for line in ask(_SCRIPT, stdin):
-        pattern, molecule, sets = line.split('\t')
-        hits[(pattern, molecule)] = {frozenset(int(n) for n in s.split(',')) for s in
-                                     sets.split(';') if s}
-    assert len(hits) == len(_DIFFERENTIAL)
-    return hits
-
-
-@needs_oracle
-@pytest.mark.parametrize('pattern,molecule', _DIFFERENTIAL)
-def test_the_same_smarts_finds_the_same_atoms_as_chython_2(pattern, molecule, oracle_hits):
-    """chython 2 is the oracle for behaviour.  Compare the SET OF MATCHED ATOM SETS: the engines may
-    enumerate embeddings in different orders and number query atoms differently, and neither is a
-    behaviour difference.  Out of process, because in-process `from chython import smarts` would read
-    the tree under test rather than chython 2.
-    """
-    expected = oracle_hits[(pattern, molecule)]
-    assert expected, f'chython 2 finds nothing for {pattern!r} on {molecule!r}; useless as a case'
-    # chython 2 numbers molecule atoms 1..n in parse order and so does the core reader, so the
-    # two atom-number spaces coincide for a SMILES with no explicit atom maps.
-    assert _atom_sets(pattern, molecule) == expected
-
-
-@needs_oracle
 def test_z3_deliberately_diverges_from_chython_2():
     """The one named behaviour change, asserted rather than left implicit.
 
@@ -303,7 +230,5 @@ def test_z3_deliberately_diverges_from_chython_2():
     translating this primitive silently stops matching, so the translation is done once per rule at
     extraction time and recorded in the knowledge file.
     """
-    line, = ask(_SCRIPT, '[C;z3]\tC=C=C')
-    assert line.split('\t')[2], 'chython 2 calls the allene carbon z3'
-    assert not _atom_sets('[C;z3]', 'C=C=C'), 'the core does not: z3 is sp and nothing else'
+    assert not _atom_sets('[C;z3]', 'C=C=C'), 'an allene carbon is not z3: z3 is sp and nothing else'
     assert len(_atom_sets('[C;z5]', 'C=C=C')) == 1, 'it is z5 there'

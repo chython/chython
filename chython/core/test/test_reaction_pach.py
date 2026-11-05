@@ -74,7 +74,7 @@ def _reaction(spec):
     """Build a reaction from a `reactants>agents>products` string with the V3 SMILES reader.
 
     Written out rather than reached for through `chython.formats`, because `chython/core/` may not
-    import anything above itself -- see `test_no_chython_two_imports.py`.
+    import anything above itself -- see `test_core_isolation.py`.
     """
     sides = spec.split('>')
     assert len(sides) == 3

@@ -21,16 +21,12 @@
 branch.  It is the sibling of `pach_corpus.py`, one layer up: those corpora pin a MOLECULE record and
 this one pins the four bytes chython 2 put in front of a concatenation of them.
 
-PROVENANCE, exactly.  Every record was produced by `gen_reaction_pach_corpus.py`, which runs an
-INSTALLED chython 2.24 in a separate interpreter (`oracle.py`) and captures two things per reaction:
-the bytes `ReactionContainer.pack(compressed=False)` wrote, and the answers
-`ReactionContainer.unpack` gave when handed those same bytes back.  So the answers are chython 2's
-reading of chython 2's writing, and nothing in this tree contributed to either.  Nothing was
-hand-assembled; nothing was transcribed from a docstring.
+PROVENANCE, exactly.  Every record holds two things per reaction, both from chython 2.24: the bytes
+`ReactionContainer.pack(compressed=False)` wrote, and the answers `ReactionContainer.unpack` gave when
+handed those same bytes back.  Nothing in this tree contributed to either; nothing was hand-assembled.
 
-DO NOT REGENERATE THIS AGAINST A LATER CHYTHON.  A fixture whose answers came from the code under
-test asserts only that the code agrees with itself.  Regenerating needs a chython 2 interpreter and
-the diff has to be read record by record.
+THE CORPUS IS FROZEN.  A fixture whose answers came from the code under test asserts only that the
+code agrees with itself, so it is never regenerated.
 
 ONE BEHAVIOUR IS DELIBERATELY ABSENT FROM THE CORPUS, because chython 2 cannot express it.
 `ReactionContainer.unpack` slices the product side as `molecules[-products:]`, so a record with ZERO

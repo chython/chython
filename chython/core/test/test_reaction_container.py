@@ -19,10 +19,6 @@
 """The chython 3 reaction container: what it holds, what it refuses to refuse, and what it does not carry.
 
 Public reactions only -- esterification, amide formation, a Suzuki coupling, all textbook.
-
-The chython 2 differential at the foot runs in a SEPARATE INTERPRETER with `-I`.  Not decoration:
-without `-I` the child puts this working tree on `sys.path` first and imports the very code under
-test, so the comparison passes by comparing the tree to itself.
 """
 from warnings import catch_warnings, simplefilter
 
@@ -30,7 +26,6 @@ from pytest import mark, raises, warns
 
 from chython.core import H_UNKNOWN, read_reaction_smiles, read_smiles
 from chython.core.reaction import ReactionContainer, ReactionModelingView
-from . import oracle
 
 
 def _esterification():
@@ -102,10 +97,8 @@ def test_agents_are_empty_not_absent():
 # --- garbage in, stored anyway -------------------------------------------------------------------
 
 def test_an_empty_reaction_is_stored_rather_than_refused():
-    """chython 2 RAISES HERE AND THIS CONTAINER STORES.  `ValueError('At least one graph object
-    required')` leaves a reader meeting an empty `$RFMT` record in a real RDF with a choice between
-    crashing and dropping the record -- and dropping a record is the one thing a reader may never do.
-    Input is garbage by default; a container holds it."""
+    """A reader meeting an empty `$RFMT` record in a real RDF must not drop it, so the container
+    stores it.  Input is garbage by default; a container holds it."""
     rxn = ReactionContainer()
     assert len(rxn) == 0 and not rxn
     assert rxn.reactants == () and rxn.products == () and rxn.agents == ()
@@ -390,126 +383,28 @@ def test_the_warning_is_charged_to_the_caller():
         f'blamed {record[0].filename}:{record[0].lineno}, wanted this file:{here}'
 
 
-# --- chython 2 as an independent witness ---------------------------------------------------------
-#
-# A SEPARATE INTERPRETER, AND `-I` IS LOAD-BEARING.  Without it the child prepends this working tree
-# to `sys.path` and imports the code under test, so the differential compares the tree to itself and
-# always agrees.
-#
-# This is a witness, not an oracle: it catches the container disagreeing with chython 2 on the things
-# that are meant to mean the same on both sides.  It goes when the version pin stops resolving.
-
-ORACLE_SCRIPT = r'''
-from chython import smiles
-
-out = []
-for s in _payload:
-    r = smiles(s)
-    out.append({'reactants': [str(m) for m in r.reactants],
-                'agents': [str(m) for m in r.reagents],
-                'products': [str(m) for m in r.products],
-                'title': r.name,
-                'maps': [sorted(n for n in m) for m in r.molecules()]})
-_emit(out)
-'''
+# --- map numbers are what the record stated ------------------------------------------------------
 
 REACTIONS = ['[CH3:1][CH2:2][OH:3].[CH3:4][C:5](=[O:6])[OH:7]>[H+]>'
              '[CH3:1][CH2:2][O:3][C:5](=[O:6])[CH3:4].[OH2:7]',
-             '[CH3:1][C:2](=[O:3])[OH:4].[NH2:5][CH3:6]>>[CH3:1][C:2](=[O:3])[NH:5][CH3:6].[OH2:4]',
              'CCO>>CC=O']
 
 
-def _oracle(*reactions):
-    """chython 2's split of each reaction string.  The reactions travel as the payload, so there is
-    no temporary script file on disk and no argv quoting to get wrong.
+@mark.parametrize('text', REACTIONS)
+def test_every_unmapped_atom_is_accounted_for(text):
+    """`n` is identity, `map_number` is what the record stated, 0 when it stated nothing.  An atom the
+    string left unmapped is either counted by `modeling_view` or sits on the agents side, which the view
+    excludes by design.
 
-    The isolation flag, the version pin and the not-this-tree check are `oracle.py`'s and not this
-    file's.  Spelled out per test file, any one of them missing makes the differential pass vacuously
-    instead of fail.
+    Both shapes are here: the esterification is PARTIALLY mapped -- only its `[H+]` agent is bare --
+    and the oxidation is mapped nowhere.
     """
-    return oracle.ask(ORACLE_SCRIPT, list(reactions))
-
-
-def test_the_oracle_is_really_a_different_library():
-    """FIRST, A NEGATIVE CONTROL.  The version pin and the absence of this tree, checked before any
-    comparison is believed -- a differential against yourself passes and means nothing.
-
-    `oracle.verify` is what every `_oracle` call above already runs, so this is a statement of intent
-    in the file that depends on it rather than the only thing enforcing it.  The guards' own tests --
-    including the control that drops `-I` and watches an unisolated child import this tree -- are in
-    `test_oracle.py`.
-    """
-    oracle.require()
-    oracle.verify()
-
-
-@mark.parametrize('index', range(len(REACTIONS)))
-def test_the_three_sides_agree_with_chython_two(index):
-    """Same reaction string, same split into three sides.  What is compared is the PARTITION, not the
-    SMILES text -- the two libraries' canonical writers are different code and string identity is
-    not the claim (and this repository has already ruled that it is not sound anyway)."""
-    reference = _oracle(REACTIONS[index])[0]
-    rxn = _rebuild(REACTIONS[index])
-    assert len(rxn.reactants) == len(reference['reactants'])
-    assert len(rxn.agents) == len(reference['agents'])
-    assert len(rxn.products) == len(reference['products'])
-
-
-def test_a_fully_stated_atom_map_agrees_with_chython_two():
-    """The amide formation, where every atom in the string carries a map.  Where the two libraries can
-    both be believed, they agree; the test below is about where only one of them can."""
-    reference = _oracle(REACTIONS[1])[0]
-    rxn = _rebuild(REACTIONS[1])
-    ours = [sorted(a.map_number for a in m.atoms()) for m in rxn.molecules()]
-    assert ours == reference['maps']
-
-
-@mark.parametrize('index,invented', [(0, [[8]]), (2, [[1, 2, 3], [4, 5, 6]])])
-def test_chython_two_invents_map_numbers_where_this_container_reports_none(index, invented):
-    """A DIVERGENCE THE DIFFERENTIAL PINS, AND THE PORTING NOTE THAT GOES WITH IT.
-
-    chython 2 has one integer per atom doing two jobs: the atom's identity within its container and
-    its atom-atom map number.  So an atom the string left unmapped still comes back carrying a number,
-    continuing whatever sequence the mapped atoms established, and a consumer cannot tell that number
-    from a stated one -- which for a reaction is the difference between "these two are the same atom"
-    and "nobody said".  The core keeps the two apart: `n` is identity, `map_number` is what the record
-    stated, 0 when it stated nothing.
-
-    Both shapes are here.  Reaction 0 is PARTIALLY mapped -- only its `[H+]` agent is bare, and
-    chython 2 hands it 8, the next number after the seven that were stated, indistinguishable from part
-    of the map.  Reaction 2 is mapped nowhere and comes back mapped throughout.
-
-    This is why `modeling_view` counts unmapped atoms and keys them apart from the stated ones.  If the
-    numbers were believable there would be nothing to count and nothing to keep apart.
-    """
-    reference = _oracle(REACTIONS[index])[0]
-    rxn = _rebuild(REACTIONS[index])
-    ours = [sorted(a.map_number for a in m.atoms()) for m in rxn.molecules()]
-    theirs = reference['maps']
-
-    bare = [(o, t) for o, t in zip(ours, theirs) if set(o) == {0}]
-    assert [t for _, t in bare] == invented, 'chython 2 numbered what the record left bare'
-
-    # and every bare atom is ACCOUNTED FOR: either counted by the view, or on the agents side, which
-    # the view excludes by design.  Nothing goes missing without a number attached to it.
+    rxn = read_reaction_smiles(text)
+    bare = [m for m in rxn.molecules() if {a.map_number for a in m.atoms()} == {0}]
+    assert bare
     agent_atoms = sum(m.atom_count for m in rxn.agents)
-    assert sum(len(o) for o, _ in bare) == sum(rxn.modeling_view().unmapped.values()) + agent_atoms
+    assert sum(m.atom_count for m in bare) == sum(rxn.modeling_view().unmapped.values()) + agent_atoms
 
 
-def test_the_title_arrives_identically_including_when_it_is_empty():
-    """The rename, checked against the library it renames.  chython 2's `name` normalises absent to
-    `''`, and so does this `title` -- one type and one spelling for the same statement."""
-    reference = _oracle(*REACTIONS)
-    for record in reference:
-        assert record['title'] == ''
-    assert _rebuild(REACTIONS[0]).title == ''
-
-
-def _rebuild(reaction_smiles):
-    """Build the chython 3 container from a reaction SMILES.
-
-    One line, calling the core's reaction reader, so the differential tests above compare V2's whole
-    reader against V3's rather than against a splitter written in a test file.  The name is kept
-    because these tests read better with it than with the reader's.
-    """
-    return read_reaction_smiles(reaction_smiles)
+def test_an_absent_title_is_the_empty_string():
+    assert read_reaction_smiles(REACTIONS[0]).title == ''

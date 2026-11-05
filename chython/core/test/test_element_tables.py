@@ -25,9 +25,7 @@ hold what they claim.
 
 The tables are checked-in data with no upstream, so "correct" is not a property anything can
 re-derive -- what these tests hold is that the two files agree with each other and that the arrays
-are their transposition.  Two tests at the foot use chython 2 as an independent witness that
-nothing has been lost from its own tables -- through a subprocess, so this file does not import it;
-nothing above depends on them and they skip when it is not provisioned.
+are their transposition.
 """
 from math import fsum, isclose
 from pytest import raises
@@ -183,88 +181,6 @@ def test_the_compiled_mdl_table_is_the_elements_file():
     mdl = mdl_isotope_table()
     assert mdl[0] == 0
     assert list(mdl[1:]) == [e.mdl_isotope for e in ELEMENTS]
-
-
-# --- chython 2 as an independent witness -------------------------------------------------------
-#
-# Not an oracle: the TSVs are the authority, and these two tests neither define nor re-derive them.
-# What they catch is a LOSS -- a nuclide or a mass that chython 2 carries and an edit here dropped
-# or altered.  Nothing above depends on them.
-#
-# chython 2 is reached through `oracle`, which runs an INSTALLED copy in another interpreter, so
-# this file imports no chython 2 and the witness survives V2 leaving the tree.  It is a genuine
-# second opinion and not a copy of these numbers: V2's tables were compiled from the nuclear data
-# independently of whoever wrote `isotopes.tsv`, which is exactly why a frozen snapshot of them
-# would have been worth less -- it would be one more rendering of the same rows, checked against
-# itself.  Unprovisioned, both tests skip and the self-consistency gates above still run.
-
-V2_TABLES = """
-from chython.periodictable.base import Element
-
-masses = {}
-mdl = {}
-symbols = {}
-radii = {}
-for z in range(1, 119):
-    e = Element.from_atomic_number(z)()
-    symbols[str(z)] = e.atomic_symbol
-    mdl[str(z)] = e.mdl_isotope
-    radii[str(z)] = e.atomic_radius
-    for a, mass in e.isotopes_masses.items():
-        masses[f'{z}-{a}'] = (mass, e.isotopes_distribution.get(a, 0.0))
-_emit({'masses': masses, 'mdl': mdl, 'symbols': symbols, 'radii': radii})
-"""
-
-
-def v2_tables():
-    from .oracle import ask
-
-    return ask(V2_TABLES)
-
-
-# (z, mass_number) -> the weight chython 3 states instead of chython 2's, and why.  A MASS is never
-# listed: a different mass is a different measurement and stays a failure.  A weight can differ for a
-# reason that is not a measurement at all, and then the difference is declared here or it is a loss.
-RESTATED_WEIGHTS = {
-    (14, 28): (0.922296, 'silicon\'s three published abundances sum to 1.000001, which `compile` '
-                         'refuses; the excess comes off the dominant nuclide -- see isotopes.tsv'),
-}
-
-
-def test_nothing_chython_two_carries_has_been_lost():
-    """Exact float equality: both sides are IEEE doubles and JSON round-trips them exactly.
-
-    A subset check, not equality, because the tables hold nuclides chython 2's do not -- every mass
-    number `MDL_ISOTOPE` names has a row here, and for 19 elements chython 2 stopped short of its
-    own reference value.  Extra rows are the point; changed and missing ones are the failure, unless
-    the change is declared in `RESTATED_WEIGHTS` with its reason.
-    """
-    theirs = v2_tables()['masses']
-    ours = {(i.z, i.mass_number): (i.mass, i.abundance) for i in ISOTOPES}
-
-    for nuclide, (mass, abundance) in theirs.items():
-        z, a = (int(p) for p in nuclide.split('-'))
-        restated = RESTATED_WEIGHTS.get((z, a))
-        expected = (mass, restated[0] if restated else abundance)
-        assert ours.get((z, a)) == expected, nuclide
-    # the comparison is evidence only if it looked at a real table: V2 carries about 350 nuclides,
-    # and a bridge that handed back an empty dict would make this pass without comparing anything
-    assert len(theirs) > 300, len(theirs)
-
-    # the ratchet, in the other direction: an entry chython 2 turns out to agree with is deleted, not
-    # left behind to describe a divergence that is not there
-    agreed = sorted(k for k, (weight, _) in RESTATED_WEIGHTS.items()
-                    if theirs.get('%d-%d' % k, (None, None))[1] == weight)
-    assert not agreed, ('RESTATED_WEIGHTS declares a weight chython 2 already states: %s -- delete '
-                        'the entry, the tables agree' % agreed)
-
-
-def test_the_mdl_reference_table_agrees_with_chython_two():
-    answer = v2_tables()
-    for e in ELEMENTS:
-        assert e.symbol == answer['symbols'][str(e.z)], e.z
-        assert e.mdl_isotope == answer['mdl'][str(e.z)], e.symbol
-    assert len(answer['symbols']) == 118
 
 
 def test_the_compiled_isotope_rows_are_the_isotopes_file():
@@ -451,20 +367,3 @@ def test_the_compiled_radius_array_is_the_column():
     assert table[0] == 0.0, 'index 0 is unused so that the index IS the atomic number'
     for e in ELEMENTS:
         assert table[e.z] == e.atomic_radius, e.symbol
-
-
-def test_the_radius_column_agrees_with_chython_two_except_for_lithium():
-    """The witness the mass and MDL columns have, over all 118 rows.
-
-    ONE ROW DISAGREES DELIBERATELY.  chython 2.24 states 167 for lithium; V3 states 1.67, which is the
-    value between helium's 0.31 and beryllium's 1.12 that the column's unit admits.  Named here because
-    a witness that excused an unexplained disagreement would witness nothing.
-    """
-    theirs = v2_tables()['radii']
-    assert len(theirs) == 118
-    assert theirs['3'] == 167
-    for e in ELEMENTS:
-        if e.z == 3:
-            assert e.atomic_radius == 1.67
-        else:
-            assert e.atomic_radius == theirs[str(e.z)], e.symbol

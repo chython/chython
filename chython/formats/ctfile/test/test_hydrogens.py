@@ -32,7 +32,6 @@ from .._hydrogens import (H_MAX, MRV_IMPLICIT_H, calc_implicit, implicit_for_ato
 from .._sdf import parse_record
 from .._sgroup import UNSUPPORTED
 from .._v2000 import emit_v2000, parse_v2000
-from .conftest import holds_an_aromatic_bond
 
 
 def _record(atoms, bonds, extra=(), title='t'):
@@ -209,14 +208,6 @@ def test_the_two_readings_of_an_ambiguous_aromatic_atom_share_one_total_valence(
     ctab, mol, log = _read(atoms, ring + [(4, 6, 1)])
     n = [s for s in mol.atom_numbers if mol.element_of(s) == 7][0]
     assert mol.implicit_h_of(n) == 0 and not ctab.unknown_hydrogens, log
-
-
-def test_the_reader_declines_on_the_same_predicate_the_corpus_sweep_licenses_itself_with():
-    """One predicate, not two spellings of one.  The read gate and the corpus sweep's licence for
-    committing a count where chython 2 says unknown have to be the same question, so a change to
-    either side's scope moves both and cannot move one silently."""
-    from .._hydrogens import _holds_aromatic_bond
-    assert holds_an_aromatic_bond is _holds_aromatic_bond
 
 
 def test_a_stated_valence_on_an_atom_with_no_bonds_drawn_sets_the_count():
@@ -783,31 +774,14 @@ def test_calc_implicit_returns_a_result_object_that_cannot_be_unpacked():
         raise AssertionError('HydrogenResult became unpackable; a caller can now read it positionally')
 
 
-def test_every_corpus_record_reads_and_the_unknowns_are_exactly_v2s(corpus, v2_molecules):
-    """The whole 512-record corpus reads, and the marking is checked against chython 2 per atom rather than
-    by a count:
-
-    * every atom V2 answers ``None`` for is in ``unknown_hydrogens`` -- nothing gets a fabricated count;
-    * every atom V2 commits a number for is **not** in ``unknown_hydrogens``, and the number agrees -- which
-      is the direction a lazy implementation fails, marking everything unknown satisfying the first.
-
-    The first is deliberately asymmetric with the second.  V2 answers ``None`` for 253 atoms here; this
-    reader marks 124 and answers the other 129, because the shared derivation asks the kekuliser's own
-    aromatic classifier where V2 asked a narrower arithmetic, so a pyridine-class heteroatom, a charged
-    aromatic and a non-organic-subset element get a count every Kekule form of the ring agrees on.
-    Recovering a count V2 leaves unknown is allowed; committing a *different* count, or losing one V2
-    commits, is not.
-
-    So ``recovered`` is checked for its two legitimate sources -- a stated valence equal to the drawn sum,
-    which V2's ``parse_mol_v2000`` never reads, and an aromatic bond.  An atom in neither would mean the two
-    valence collections had drifted.
+def test_every_corpus_record_reads_and_every_unknown_names_its_reason(corpus):
+    """The whole 512-record corpus reads, and every atom marked unknown carries its own log line saying
+    why: an aromatic bond the classifier could not settle, or no rule for the element.
     """
     from .._sdf import sniff_version
     from .._v3000 import V3000_STAMP, parse_v3000
 
     total = aromatic = no_rule = 0
-    v2_unknown_and_marked = v2_number_and_agreed = v2_number_but_marked = disagreed = 0
-    recovered = []
     for name, records in corpus.items():
         for n, record in enumerate(records):
             total += 1
@@ -834,40 +808,8 @@ def test_every_corpus_record_reads_and_the_unknowns_are_exactly_v2s(corpus, v2_m
                 f'marked unknown with no per-atom log line: {unknown - reason.keys()}'
             aromatic += sum(1 for s in unknown if reason[s] == 'aromatic')
             no_rule += sum(1 for s in unknown if reason[s] == 'no_rule')
-            if name not in v2_molecules:
-                continue
-            m2 = v2_molecules[name][n]
-            # V2 numbers its atoms 1..n in atom-block order and so do our stable ids on a fresh build
-            for i, (sid, num) in enumerate(zip(mol.atom_numbers, m2)):
-                h2 = m2.atom(num).implicit_hydrogens
-                if h2 is None:
-                    if sid in unknown:
-                        v2_unknown_and_marked += 1
-                    else:
-                        recovered.append((name, n, i, ctab.atoms[i].valence,
-                                          holds_an_aromatic_bond(mol, sid)))
-                elif sid in unknown:
-                    v2_number_but_marked += 1
-                elif mol.implicit_h_of(sid) == h2:
-                    v2_number_and_agreed += 1
-                else:
-                    disagreed += 1
     assert total == 512, f'the corpus changed size ({total}); remeasure before trusting the rest'
-    assert v2_number_but_marked == 0, \
-        f'{v2_number_but_marked} atom(s) marked unknown that V2 answers outright'
-    assert disagreed == 0, f'{disagreed} atom(s) where both commit and the numbers differ'
     assert (aromatic, no_rule) == (37, 87), (aromatic, no_rule)
-    assert v2_unknown_and_marked == aromatic + no_rule, \
-        'every atom marked unknown here is one V2 answers None for; the converse no longer holds'
-
-    # Two ways to earn a recovery, and the split is asserted rather than the total so a recovery that is
-    # neither shows up as drift.  Fourteen come from a stated total valence equal to the drawn bond sum,
-    # which V2's `parse_mol_v2000` never reads (`line[48:51]`); 129 come from an aromatic bond, where the
-    # shared derivation asks the kekuliser's classifier and V2 asked its own narrower arithmetic.
-    assert len(recovered) == 143, len(recovered)
-    assert sum(1 for *_, valence, _ in recovered if valence is not None) == 14
-    assert all(valence is not None or aromatic for *_, valence, aromatic in recovered), \
-        f'a count committed where V2 says unknown, with neither a stated valence nor an aromatic bond'
 
 
 def test_implicit_h_records_skips_the_atoms_that_hold_the_sentinel():

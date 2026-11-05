@@ -313,47 +313,6 @@ def test_the_shifted_distance_matrix_is_the_encoding_chytorch_documents():
     assert d[0, 1] == 3
 
 
-# --- the chython 2 witness -----------------------------------------------------------------------
-#
-# Not an oracle: every answer above is stated outright.  What this catches is the thing a stated
-# answer cannot -- that `split`'s components and `augmented_substructure`'s meaning of "radius" agree
-# with chython 2 on molecules nobody thought to write a case for.  Reached through `oracle`, an
-# installed chython 2 in another interpreter, so this file imports no chython 2.
-#
-# `distance_matrix` IS ABSENT HERE, because chython 2 has no counterpart to compare against.
-
-COMPOUNDS = ('CCO', 'CC(=O)OCC', 'c1ccccc1O', 'CC(C)C(=O)Nc1ccccc1', 'CCO.[Na+]',
-             'C1CCCCC1', 'OCC1OC(O)C(O)C(O)C1O', 'CN1C=NC2=C1C(=O)N(C)C(=O)N2C',
-             'CC(=O)Nc1ccc(O)cc1', 'C[N+](C)(C)C.[Cl-]', 'N', 'OS(=O)(=O)O',
-             'C1CC2CCC1CC2', 'c1ccc2ccccc2c1')
-
-SEEDS = ((1,), (1, 2), (2,))
-RADII = (0, 1, 2, 99)
-
-# `_augmented_substructure` and not `augmented_substructure`: chython 2's private method returns the
-# atom-number LEVELS, which is what the shells have to be compared as.  Comparing the molecules it
-# builds would compare two SMILES writers instead.
-V2_VALUES = """
-from chython import smiles
-
-out = []
-for smi in _payload:
-    mol = smiles(smi)
-    levels = []
-    for seed in ((1,), (1, 2), (2,)):
-        for deep in (0, 1, 2, 99):
-            try:
-                levels.append([sorted(x) for x in mol._augmented_substructure(list(seed), deep)])
-            except ValueError:                 # a seed atom this molecule does not have
-                levels.append(None)
-    out.append({'levels': levels,
-                'components': [sorted(x) for x in mol.connected_components],
-                'adjacency': mol.adjacency_matrix().tolist(),
-                'orders': mol.adjacency_matrix(True).tolist()})
-_emit(out)
-"""
-
-
 @needs_numpy
 def test_distance_matrix_of_a_two_hundred_atom_chain_is_exact_end_to_end():
     """Large enough that a truncated half-edge copy leaves a reachable atom unreachable."""
@@ -376,30 +335,3 @@ def test_distance_matrix_of_three_components_marks_every_cross_pair():
         for j in range(6):
             same = i // 2 == j // 2
             assert (dist[i, j] >= 0) == same, (i, j, dist[i, j])
-
-
-@needs_numpy
-def test_the_topology_surface_agrees_with_chython_two():
-    from .oracle import ask
-
-    answers = ask(V2_VALUES, list(COMPOUNDS))
-    assert len(answers) == len(COMPOUNDS)
-    for smi, old in zip(COMPOUNDS, answers):
-        mol = read_smiles(smi)
-        assert [sorted(p.atom_numbers) for p in mol.split()] == old['components'], smi
-        assert mol.adjacency_matrix().tolist() == old['adjacency'], smi
-        assert mol.adjacency_matrix(True).tolist() == old['orders'], smi
-
-        i = 0
-        for seed in SEEDS:
-            for deep in RADII:
-                want = old['levels'][i]
-                i += 1
-                if want is None:
-                    # chython 2 refuses an unknown seed atom with ValueError and this refuses with
-                    # KeyError; both refuse, and which exception is not what this witness is for
-                    with raises(KeyError):
-                        mol.augmented_substructures(list(seed), deep)
-                    continue
-                got = [sorted(s.atom_numbers) for s in mol.augmented_substructures(list(seed), deep)]
-                assert got == want, f'{smi} seed={seed} deep={deep}'

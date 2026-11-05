@@ -24,7 +24,7 @@ matrix is (format x feature x toolkit x direction) and BOTH directions are asser
 emits the feature and chython must recover it, and chython emits the feature and the reference reader
 must recover it.  The second is the release-critical half.
 
-THE ASYMMETRY, taken from :mod:`chython.core.test.oracle`: an **absent** oracle SKIPS -- a machine
+THE ASYMMETRY: an **absent** oracle SKIPS -- a machine
 without Marvin still runs the whole suite green -- while a **present but unusable** one FAILS loudly,
 because a provisioned oracle that answers nothing turns a differential into a tautology.
 

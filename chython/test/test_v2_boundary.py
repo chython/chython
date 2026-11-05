@@ -49,9 +49,7 @@ statement, at module level or inside a function -- a deferred import is still an
 reading only the top of each file reports a tree cleaner than the one that exists.
 
 WHAT DOES NOT COUNT.  Mentioning a V2 name in a string, a comment or a docstring: prose is not a
-dependency.  Neither is a subprocess: `chython/core/test/oracle.py` runs an out-of-tree chython 2.24
-under `-I` to keep the differential tests alive, and it is not on this ledger because spawning an
-interpreter is not an import, which is what lets those tests run with V2 off the import graph.
+dependency.
 
 ONE PACKAGE AND ONE EXTENSION.  The import ledger holds the Python half; the extension ledger further
 down holds the compiled half.  `test_one_chython_one_so` at the bottom is the conjunction.
@@ -73,11 +71,7 @@ V2_PACKAGES = frozenset({'algorithms', 'containers', 'files', 'periodictable', '
 # (importing module, chython 2 package) -> why it is still there, and whose job it is.
 #
 # EMPTY.  A reason field is not decoration: it says whether the next person is looking at a real feature
-# gap, a test that needs an out-of-process oracle, or a line somebody forgot, and those three want
-# completely different work.  A test oracle in particular does NOT belong here -- it reaches chython 2
-# through `chython/core/test/oracle.py`, which spawns an out-of-tree 2.24 under `-I`, pins the version
-# and asserts the child's `chython.__file__` lies outside this repository, so an oracle cannot silently
-# become a test of this tree against itself.
+# gap or a line somebody forgot, and those two want completely different work.
 #
 # Adding an entry back is legitimate -- write the pair and the reason -- but it is a decision somebody
 # makes in this file, which is the whole point.

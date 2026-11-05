@@ -538,7 +538,7 @@ cdef object _standardize_fn():
     demand would work, and it was written that way first, but it makes the bottom layer name the
     package above it -- a cycle that is merely lazy rather than absent.  It also breaks the core's
     hard invariant that `chython/core/` imports nothing from this distribution but `chython.core`
-    (`core/test/test_no_chython_two_imports.py`); an exception carved out for one sibling is an
+    (`core/test/test_core_isolation.py`); an exception carved out for one sibling is an
     exception someone later widens.
 
     The cost is this message, for the narrow case of importing `chython.core` directly and calling
@@ -708,7 +708,7 @@ cdef object _depict_fn(object impl, str name):
     """The registered body, or an error that names the package which registers it.
 
     NO FALLBACK IMPORT, for the reason `_standardize_fn` states at length: a lazy cycle is still a
-    cycle, and `core/test/test_no_chython_two_imports.py` holds the core to importing nothing from
+    cycle, and `core/test/test_core_isolation.py` holds the core to importing nothing from
     this distribution but `chython.core`.
 
     `ImportError` and not `NotImplementedError`: the method is not unimplemented, it is unregistered,

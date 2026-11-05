@@ -34,7 +34,6 @@ from pytest import raises
 from chython.core import MoleculeContainer, ReactionContainer
 from chython.core._core import (IncorrectSmiles, read_reaction_smiles, read_smiles,
                                 write_reaction_smiles)
-from . import oracle
 
 
 def test_a_two_part_reaction_smiles_reads_into_a_reaction_container():
@@ -229,8 +228,7 @@ def test_a_reaction_round_trips_through_its_own_string():
 
 
 def test_enhanced_stereo_groups_survive_a_reaction_round_trip():
-    """The case chython 2 CANNOT pass: its reaction tail carried `^1:` and `f:` and nothing else, so
-    every reaction SMILES it wrote silently dropped `&n:` / `on:` / `a:`.
+    """The reaction tail carries `&n:` / `on:` / `a:` beside `^1:` and `f:`.
 
     Asserted on the groups' shape rather than on their ids: an id is opaque, and the writer renumbers
     them per side exactly as `DetachedSmiles.join` does, so `&1` on the product side of the input is
@@ -276,58 +274,3 @@ def test_read_smirks_still_refuses_the_three_part_form_the_reader_accepts():
     with raises(IncorrectSmirks) as e:
         read_smirks('[C:1]C>N>[C:1]O')
     assert 'agent' in str(e.value)
-
-
-# --------------------------------------------------------------------------------------------------
-# DIFFERENTIAL against chython 2.24, run out of process.  Both directions in one comparison: V2 reads
-# the original string, V2 reads OUR rewrite of it, and the two readings must agree.  That is a stronger
-# claim than comparing our string to V2's -- it says our writer emits something V2 accepts AND that
-# means the same reaction -- and it never compares one library's canonical text to the other's, which
-# this repository has ruled unsound.
-#
-# NO STEREOCENTRES IN THIS CORPUS.  V2's canonical writer is order-dependent on symmetric centres, so
-# a disagreement there would be V2's and not ours; the round-trip test above is where stereo is stated.
-
-ORACLE_SPLIT = r'''
-from chython import smiles
-
-out = []
-for s in _payload:
-    try:
-        r = smiles(s)
-    except Exception as e:
-        out.append({'error': '%s: %s' % (type(e).__name__, e)})
-        continue
-    out.append({'reactants': sorted(str(m) for m in r.reactants),
-                'agents': sorted(str(m) for m in r.reagents),
-                'products': sorted(str(m) for m in r.products)})
-_emit(out)
-'''
-
-DIFFERENTIAL = ['CCO.CC(=O)O>[H+]>CCOC(C)=O.O',
-                '[CH3:1][C:2](=[O:3])[OH:4].[NH2:5][CH3:6]>>'
-                '[CH3:1][C:2](=[O:3])[NH:5][CH3:6].[OH2:4]',
-                'Brc1ccccc1.OB(O)c1ccccc1>>c1ccc(-c2ccccc2)cc1',
-                'CCO>>CC=O',
-                'CC(=O)Cl.CCN>CCN(CC)CC>CC(=O)NCC']
-
-
-@oracle.requires_oracle
-def test_what_we_write_reads_back_in_chython_two_as_the_same_reaction():
-    ours = [str(read_reaction_smiles(text)) for text in DIFFERENTIAL]
-    answers = oracle.ask(ORACLE_SPLIT, DIFFERENTIAL + ours)
-    for i, text in enumerate(DIFFERENTIAL):
-        original, rewritten = answers[i], answers[i + len(DIFFERENTIAL)]
-        assert 'error' not in rewritten, (ours[i], rewritten.get('error'))
-        assert 'error' not in original, (text, original.get('error'))
-        assert original == rewritten, (text, ours[i])
-
-
-@oracle.requires_oracle
-def test_chython_two_refuses_what_this_reader_accepts_and_that_is_the_improvement():
-    """The two records V2 cannot read at all, kept as a differential in the negative direction: this
-    is the compatibility gap the reader closes, and a future V2 that could read them would mean the
-    corpus assumption changed."""
-    answers = oracle.ask(ORACLE_SPLIT, ['N->[Cu]>>N', 'CC>>CO |f:0.1|'])
-    assert 'error' in answers[0], answers[0]
-    assert len(read_reaction_smiles('N->[Cu]>>N').reactants) == 1

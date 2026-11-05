@@ -35,7 +35,7 @@ one fact with two spellings is the defect the substrate was built to remove.
 THE OTHER FOUR PASSES ARE TESTED IN `chython/chemistry/test/test_reaction_passes.py` AND NOT HERE, and
 the split is not tidiness.  `standardize`, `canonicalize` and `neutralize` are registered onto
 `MoleculeContainer` by injection when `chython.chemistry` is imported, and
-`test_no_chython_two_imports.py` forbids a file under `chython/core/` from importing it -- because
+`test_core_isolation.py` forbids a file under `chython/core/` from importing it -- because
 `import chython.chemistry` runs `chython/__init__.py`, and a `core` suite that needs the façade is not
 provable in isolation.  A reaction-level test of a
 chemistry-level pass therefore belongs one layer up, next to the pass it exercises.  What stays here

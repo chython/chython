@@ -68,5 +68,5 @@ def test_an_r_bearing_molecule_is_a_legitimate_target():
 
 # The same refusal on a fragment the stickers enumerator built lives in
 # `chython/reactions/test/test_stickers.py`: `sticky_fragments` is injected by `chython.reactions`, and
-# `test_no_chython_two_imports.py` forbids this directory any import of this distribution but
+# `test_core_isolation.py` forbids this directory any import of this distribution but
 # `chython.core`.

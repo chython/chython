@@ -128,10 +128,9 @@
 #
 # The fifteenth is not a bare atom: phosphorus at three bonds with `-O =O` should by the curated row
 # carry two hydrogens (phosphorous acid), but the common valence 3 row sits at the same key with zero
-# and is scanned first, so the curated row's two-hydrogen state is unreachable.  The `common` and
-# `curated` rows are derived from chython 2 and a test re-derives them, so changing this means
-# deleting or re-keying a row in the TSV -- not a change to this file -- and it must be argued on
-# chemistry.
+# and is scanned first, so the curated row's two-hydrogen state is unreachable.  The rows live in
+# `valence_rules.tsv`, so changing this means deleting or re-keying a row there -- not a change to
+# this file -- and it must be argued on chemistry.
 #
 # ELEMENT DATA HANGS OFF AN ATOMIC NUMBER, NOT OFF A PER-ELEMENT TYPE.
 #

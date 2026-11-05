@@ -26,7 +26,7 @@ caller that wants the whole plane, or the aromatic rings, should not assemble ei
 """
 from pytest import approx, raises
 # `chython.smiles` is the bidirectional door over this function, and nothing under `chython/core/` may
-# import the facade (`test_no_chython_two_imports.py` ratchets it).  Aliased rather than spelled out at
+# import the facade (`test_core_isolation.py` ratchets it).  Aliased rather than spelled out at
 # each call so the bodies below read the way a caller writes them.
 from chython.core import STEREO_UNSPECIFIED, WEDGE_UP, read_smiles as smiles
 

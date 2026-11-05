@@ -43,8 +43,7 @@ WHERE THIS DISAGREES WITH chython 2, measured, all four rows deliberate and all 
 | borole                     | YES | no  | 4 pi: neutral B is the EMPTY-orbital atom, not a donor    |
 | pyridones, p-benzoquinone  | no  | no  | agreement, by different mechanisms                       |
 
-V2 is an oracle, not a contract; each of these was measured against `chython.smiles(...).thiele()`
-before it was written down.
+Each V2 cell was measured against chython 2.24's `smiles(...).thiele()`; the V3 rule stands alone.
 """
 from itertools import permutations
 from math import factorial

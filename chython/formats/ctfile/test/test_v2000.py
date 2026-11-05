@@ -16,11 +16,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""V2000 reading and writing, against chython 2 and against the corpus.
+"""V2000 reading and writing, against the corpus.
 
-The oracle test is the centre of the file: two independent implementations reading the same bytes and
-reporting the same molecule.  What the oracle cannot check is a record chython 2 refuses, so the
-recoveries have their own tests below with the malformation written out inline.
+The recoveries have their own tests below with the malformation written out inline.
 """
 
 from pytest import raises
@@ -30,14 +28,13 @@ from .._hydrogens import implicit_for_atom
 from .._sdf import sniff_version
 from .._sgroup import SGroupStore
 from .._v2000 import V2000_STAMP, emit_v2000, parse_v2000
-from .conftest import holds_an_aromatic_bond
 
 
 def _v2000_only(records):
     """``(index, record)`` for the V2000 records of a file.
 
     A ``.sdf`` may mix versions -- ``test/implicit.sdf`` opens with a V3000 record.  The index is
-    kept so the oracle stays aligned with chython 2's record list.
+    the record's position in its file.
     """
     return [(i, r) for i, r in enumerate(records) if sniff_version(r, []) == V2000_STAMP]
 
@@ -58,7 +55,7 @@ def _read(lines):
     return ctab.build()
 
 
-# the corpus sweep and the oracle
+# the corpus sweep
 
 def test_every_record_is_read_or_refused_but_never_crashes(corpus):
     """No record in the corpus raises anything other than a ``CtfileError``.
@@ -79,81 +76,6 @@ def test_every_record_is_read_or_refused_but_never_crashes(corpus):
                 refused += 1
     assert read > 400, f'only {read} records read; the corpus should yield hundreds'
     assert read + refused > 500
-
-
-def test_agrees_with_chython2_wherever_chython2_commits(corpus, v2_molecules):
-    """Constitution identical to chython 2's, and hydrogen counts identical wherever V2 gives one.
-
-    Honouring V2000 ``vvv`` over the valence rules changes a ferrocene Cp carbon's hydrogen count
-    from 1 to 2, and this test fails on it.
-    """
-    compared = 0
-    for name, records in corpus.items():
-        v2 = v2_molecules.get(name)
-        if v2 is None or len(v2) != len(records):
-            continue
-        for n, record in _v2000_only(records):
-            m2 = v2[n]
-            try:
-                mol, _, _ = parse_v2000(record, []).build()
-            except UnsupportedCtfile:
-                continue
-            sids = list(mol.atom_numbers)
-            nums = list(m2)
-            where = f'{name} record {n}'
-            assert len(sids) == len(nums), f'{where}: atom count {len(sids)} vs {len(nums)}'
-            for sid, num in zip(sids, nums):
-                a2, a3 = m2.atom(num), mol.atom(sid)
-                assert a3.element == a2.atomic_number, f'{where} atom {num}: element'
-                assert a3.charge == a2.charge, f'{where} atom {num}: charge'
-                assert bool(a3.is_radical) == bool(a2.is_radical), f'{where} atom {num}: radical'
-                assert (a3.isotope or 0) == (a2.isotope or 0), f'{where} atom {num}: isotope'
-                if a2.implicit_hydrogens is not None:
-                    assert mol.implicit_h_of(sid) == a2.implicit_hydrogens, \
-                        f'{where} atom {num}: implicit H'
-            ours = {frozenset((sids.index(b.n), sids.index(b.m))): b.order for b in mol.bonds()}
-            theirs = {frozenset((nums.index(u), nums.index(v))): b.order for u, v, b in m2.bonds()}
-            assert ours == theirs, f'{where}: bonds'
-            compared += 1
-    assert compared > 400, f'only {compared} records compared against chython 2'
-
-
-def test_where_chython2_says_unknown_we_say_unknown_or_it_was_derivable(corpus, v2_molecules):
-    """An atom V2 reports as unknown must be one of three things here:
-
-    * flagged unknown here too;
-    * determined by something the file stated -- a hydrogen count, or a total valence equal to the
-      orders drawn, which says nothing is left over for hydrogen;
-    * holding an aromatic bond, where the core's classifier settles the count because every Kekule
-      form of the ring gives the same one.  V2 committed only for a neutral aromatic carbon.
-
-    A non-aromatic recovery would mean the two valence tables had drifted, and is still caught.
-    """
-    checked = 0
-    for name, records in corpus.items():
-        v2 = v2_molecules.get(name)
-        if v2 is None or len(v2) != len(records):
-            continue
-        for n, record in _v2000_only(records):
-            m2 = v2[n]
-            try:
-                ctab = parse_v2000(record, [])
-                mol, _, _ = ctab.build()
-            except UnsupportedCtfile:
-                continue
-            unknown = set(ctab.unknown_hydrogens)
-            stated = {i for i, a in enumerate(ctab.atoms)
-                      if a.stated_h is not None or a.valence is not None}
-            for i, (sid, num) in enumerate(zip(mol.atom_numbers, list(m2))):
-                if m2.atom(num).implicit_hydrogens is not None:
-                    continue
-                checked += 1
-                aromatic = holds_an_aromatic_bond(mol, sid)
-                assert sid in unknown or i in stated or aromatic, (
-                    f'{name} record {n} atom {num}: chython 2 says the hydrogen count is unknown, '
-                    f'but this reader committed to {mol.implicit_h_of(sid)} with nothing stated in '
-                    f'the file and no aromatic bond to settle it')
-    assert checked, 'the corpus contains no unknown hydrogen counts; this test proved nothing'
 
 
 def test_read_write_read_is_identical(corpus):
@@ -508,7 +430,7 @@ def test_bond_type_four_is_stored_as_an_aromatic_bond():
     assert mol.aromatic_bond_count == 6
     assert [mol.order_of(b.n, b.m) for b in mol.bonds()] == [4] * 6
     assert [mol.implicit_h_of(s) for s in mol.atom_numbers] == [1] * 6, \
-        'an aromatic CH is derivable without a Kekule form, and chython 2 agrees'
+        'an aromatic CH is derivable without a Kekule form'
     assert not any('unreliable' in x for x in log), \
         'an aromatic record is now ordinary; a warning per record would be noise'
 
@@ -542,7 +464,7 @@ def test_an_aromatic_molecule_is_written_as_read_and_kekule_first_still_works():
 
 def test_an_aromatic_heteroatom_whose_count_needs_a_kekule_form_is_marked_not_refused():
     """Pyridine drawn with bond type 4: the nitrogen's count needs a Kekule form nobody supplied,
-    so it is genuinely unknown and chython 2 answers ``None`` for it too.
+    so it is genuinely unknown.
 
     The record is read anyway: the count is stored as ``H_UNKNOWN``, registered in
     ``unknown_hydrogens`` and logged per atom.  Answering ``None`` rather than 0 is what distinguishes

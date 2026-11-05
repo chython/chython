@@ -16,9 +16,9 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""The valence rule collection: derive it, compile it, measure it.
+"""The valence rule collection: compile it, measure it.
 
-Three verbs on one subject, which is why they are one file:
+Two verbs on one subject, which is why they are one file:
 
     python chython/core/test/gen_valence_rules.py compile
         chython/core/valence_rules.tsv -> the generated tables in chython/core/_valence.pxi.
@@ -26,41 +26,24 @@ Three verbs on one subject, which is why they are one file:
         are out of scan order, because the file's row order IS part of the semantics (see
         `canonical_order`).
 
-    python chython/core/test/gen_valence_rules.py derive
-        chython 2's `periodictable` -> the `common` and `curated` rows of the TSV.  This is how
-        those two provenances stay checkable; rows with any other provenance are carried through
-        untouched.  Run it when chython 2's tables change.
-
-        chython 2 is reached through `oracle`, which runs an INSTALLED copy in another
-        interpreter.  This file imports no chython 2 and neither does its test, which is what lets
-        chython 2 be deleted from this repository without the core's suite dying with it -- see
-        `test_no_chython_two_imports.py`.  Unprovisioned, `derive` and the one test that calls it
-        skip; the TSV is checked in, so nothing else in the collection's coverage is lost.
-
-    python chython/core/test/gen_valence_rules.py coverage [--v2] FILE...
+    python chython/core/test/gen_valence_rules.py coverage FILE...
         Parse molecules with the core's own reader and report how many atoms the collection has
         no rule for, by element.  This is the data-driven-development hook: an element at the top
         of that report is one whose rules are missing, and a `mined:<corpus>` row is how it gets
-        fixed.  `--v2` reads with chython 2 instead (through the oracle); the two must produce the
-        same report and `test_both_readers_measure_the_same_coverage` requires it, which is what
-        keeps switching the parser from being a silent corpus swap.
+        fixed.
 
 WHY A TSV AND NOT PYTHON.
 
 The rules are data.  Spelled as 118 Python classes with two properties each, a rule change is a code
 change, the collection sits behind an import, and no tool that is not Python can read it.  One
 tab-separated file can be diffed, sorted, grepped, joined against a mining run's output, and
-reviewed by a chemist who does not read Cython.  `test_valence.py` re-derives every `common` and
-`curated` row from chython 2 and fails if a single one drifted.
-
-Reading the file needs no chython 2 either: the element names come from `elements.tsv`, so a data
-file's parser does not depend on a whole library being importable, and `derive` requires the two
-libraries to agree on all 118 before it writes a row keyed by one.
+reviewed by a chemist who does not read Cython.  The element names come from
+`elements.tsv`, so reading the file needs no library to be importable.
 
 THE FLAT SHAPE, AND WHAT IT COSTS.
 
-chython 2 states a rule as `(charge, radical, implicit, environment)` where `implicit` is a
-*maximum*: an alcohol oxygen's `(0, False, 1, ((1, 'C'),))` means "one single-bonded carbon, and
+A rule authored as `(charge, radical, implicit, environment)` with `implicit` a
+*maximum* would read: an alcohol oxygen's `(0, False, 1, ((1, 'C'),))` means "one single-bonded carbon, and
 then either one hydrogen or one more bond".  One authored rule therefore describes several
 valence states.  The TSV has one row per *state* instead, so that rule is two rows -- bonds 1
 with 1 hydrogen, bonds 2 with 0.  The cost is that editing "the alcohol rule" means editing two
@@ -80,8 +63,8 @@ THE COLUMNS.
                 `-` `=` `#` for orders 1, 2, 3.  A LOWER BOUND, never an exact match: `-C`
                 matches methanol and dimethyl ether alike, and a repeated token means a
                 multiplicity, so `=O =O` does not match a sulfoxide
-    provenance  `common`   from chython 2's `_common_valences`
-                `curated`  from chython 2's `_valences_exceptions`
+    provenance  `common`   an element's common valences
+                `curated`  an exception for a charge, radical or neighbourhood
                 `mined:<corpus>` added from data.  Say which corpus; that is the whole point
 """
 from __future__ import annotations
@@ -178,8 +161,7 @@ PREAMBLE = """\
 # these elements there are two -- R2Sn is a stannylene or R2SnH2, R-Tl is Tl(I) or Tl(III) -- so a
 # first-matching row there invents a compound.  Evidence first; this is not a gap to close by hand.
 #
-# Do not hand-edit `common` or `curated` rows: they are derived from chython 2 and a test
-# re-derives them.  Re-run `derive`, or add a row with a new provenance.
+# A row added from data carries a `mined:<corpus>` provenance naming the corpus.
 """
 
 
@@ -215,9 +197,7 @@ class Rule:
 def symbols():
     """Atomic number -> symbol, from the core's own table.
 
-    `elements.tsv` is the authority for the names, so reading the TSV needs no chython 2 import --
-    a dependency nobody would look for in a data file's parser.  `test_element_tables.py` checks
-    that the two libraries spell all 118 the same way.
+    `elements.tsv` is the authority for the names, so reading the TSV imports nothing but the core.
     """
     from chython.core._core import element_symbols
 
@@ -267,12 +247,10 @@ def canonical_order(rules):
 
     Both halves are measured rather than assumed.  Sorting by key is free -- lookup is by exact
     key.  The `env=*` partition is a *stable* one, and on the shipped collection it is the
-    identity permutation: chython 2 already emits every empty-environment rule at a key before
-    every non-empty one, so this reordering changes no answer.  That was checked over all 576
-    keys before it was written down, and `test_the_shipped_file_is_already_in_scan_order` keeps
-    it true.  A stable partition also matters for its own sake: fourteen of the fifteen
-    order-observable keys have `env=*` on both sides of the pair, so an unstable sort within the
-    `*` group would silently change the hydrogen count of a bare atom.
+    identity permutation; `test_the_shipped_file_is_already_in_scan_order` keeps it true.  A stable
+    partition also matters for its own sake: fourteen of the fifteen order-observable keys have
+    `env=*` on both sides of the pair, so an unstable sort within the `*` group would silently
+    change the hydrogen count of a bare atom.
     """
     order = {}
     for i, rule in enumerate(rules):
@@ -304,78 +282,6 @@ def write_tsv(rules, path=TSV):
     for rule in rules:
         lines.append('\t'.join(rule.row()))
     path.write_text('\n'.join(lines) + '\n')
-
-
-# chython 2's two properties per element, expanded into one row per valence state.  This runs IN
-# THE ORACLE INTERPRETER, not here -- see `oracle` for why the second opinion is a subprocess.
-#
-# It reproduces `_compiled_valence_rules` -- including the *order* in which it appends, which is
-# observable through the first-match rule -- and then flattens its dict into rows.  The arithmetic
-# is chython 2's, quoted rather than reasoned about: only the first common valence grants implicit
-# hydrogens, hydrogen itself is excluded so `[H][H]` never grows a third hydrogen, and an element
-# whose first common valence is 0 takes the same path as hydrogen.
-DERIVE_IN_ORACLE = """
-from collections import defaultdict
-
-import chython.periodictable                  # noqa: F401  -- registers the subclasses
-from chython.periodictable.base.element import Element
-
-lifted = {}
-for cls in Element.__subclasses__():
-    lifted[cls.__name__] = cls.atomic_number.fget(None)
-
-rules = defaultdict(list)           # key tuple -> list of (h, env, provenance)
-for cls in Element.__subclasses__():
-    z = lifted[cls.__name__]
-    common = cls._common_valences.fget(None)
-    if common and common[0] and z != 1:
-        valence = common[0]
-        for h in range(valence + 1):
-            rules[(z, 0, False, valence - h)].append((h, (), 'common'))
-        for valence in common[1:]:
-            rules[(z, 0, False, valence)].append((0, (), 'common'))
-    else:
-        for valence in common:
-            rules[(z, 0, False, valence)].append((0, (), 'common'))
-
-    for charge, radical, implicit, environment in cls._valences_exceptions.fget(None):
-        env = tuple(sorted((order, lifted[e]) for order, e in environment))
-        explicit = sum(order for order, _ in environment)
-        if implicit:
-            for h in range(implicit + 1):
-                rules[(z, charge, radical, explicit + implicit - h)].append((h, env, 'curated'))
-        else:
-            rules[(z, charge, radical, explicit)].append((0, env, 'curated'))
-
-out = []
-for (z, charge, radical, bonds), entries in rules.items():
-    for h, env, provenance in entries:
-        out.append((z, charge, radical, bonds, h, sorted(env), provenance))
-# the symbol map travels with the rows so that the caller can require the two libraries spell all
-# 118 elements the same way before it writes any of them into a file keyed by symbol
-_emit({'rules': out, 'symbols': {str(v): k for k, v in lifted.items()}})
-"""
-
-
-def derive():
-    """chython 2's rules, flattened into one row per valence state. Needs the oracle.
-
-    Skips when the oracle is not provisioned -- the TSV is checked in and every other test in
-    `test_valence.py` reads it, so an unprovisioned machine loses this one comparison and keeps
-    the rest of the collection's coverage.
-    """
-    from chython.core.test.oracle import ask
-
-    answer = ask(DERIVE_IN_ORACLE)
-    # V2 and the core must agree on all 118 names or the TSV would round-trip through a different
-    # element.  Checked here rather than in a test of its own: this is the one place where a
-    # disagreement would corrupt data instead of merely failing a comparison.
-    theirs = {int(z): name for z, name in answer['symbols'].items()}
-    ours = symbols()
-    assert theirs == ours, {z: (theirs.get(z), ours.get(z)) for z in set(theirs) | set(ours)
-                            if theirs.get(z) != ours.get(z)}
-    return [Rule(z, charge, radical, bonds, h, tuple(sorted(tuple(t) for t in env)), provenance)
-            for z, charge, radical, bonds, h, env, provenance in answer['rules']]
 
 
 def emit_array(name, ctype, values, per_line, comment):
@@ -572,22 +478,12 @@ def rewrite_pxi(block, path=PXI):
     return True
 
 
-# The two readers, behind one shape: (z, charge, radical, order_sum, implicit_h, env, aromatic) per
-# atom, for a whole list of strings at a time.  Two of them and not one because a parser swap has to
-# be EVIDENCED rather than announced -- a silent one changes the corpus underneath a coverage number
-# that people quote, which is the more insidious of the two failure modes a shadowed name creates.
-# `test_both_readers_measure_the_same_coverage` runs the pair over the same strings and requires the
-# same counts.
-#
-# The V2 reader runs in the oracle interpreter, so this file imports no chython 2 -- see
-# `oracle`.  A whole corpus per subprocess and not a string per subprocess: the round trip costs
-# more than the parse, and at one call per line a 5K corpus would take twenty minutes.
-#
-# `implicit_h` is the state being CHECKED, so it stays out of the bond-order sum and out of the
-# environment.  An explicit H atom is an ordinary neighbour and is in both, which is what chython 2
-# does and what the rows written against a hydrogen neighbour need.
+# One state per atom: (z, charge, radical, order_sum, implicit_h, env, aromatic).  `implicit_h` is
+# the state being CHECKED, so it stays out of the bond-order sum and out of the environment.  An
+# explicit H atom is an ordinary neighbour and is in both, which is what the rows written against a
+# hydrogen neighbour need.
 
-def _atom_states_core(lines):
+def _atom_states(lines):
     from chython.core._core import read_smiles
 
     out = []
@@ -617,70 +513,17 @@ def _atom_states_core(lines):
     return out
 
 
-# by module path, never `from chython import smiles`: the root name became the core's reader, and a
-# root import here would quietly make this the other one
-STATES_IN_ORACLE = """
-from chython.files.daylight.smiles import smiles
-
-out = []
-for line in _payload:
-    try:
-        mol = smiles(line)
-    except Exception:
-        out.append(None)
-        continue
-    atoms = mol._atoms
-    states = []
-    for n, atom in atoms.items():
-        env = []
-        order_sum = 0
-        aromatic = False
-        for m, bond in mol._bonds[n].items():
-            order = int(bond)
-            if order == 4:
-                aromatic = True
-                break
-            if order == 8:
-                continue
-            order_sum += order
-            env.append((order, atoms[m].atomic_number))
-        states.append((atom.atomic_number, atom.charge, atom.is_radical, order_sum,
-                       atom.implicit_hydrogens or 0, env, aromatic))
-    out.append(states)
-_emit(out)
-"""
-
-
-def _atom_states_v2(lines):
-    from chython.core.test.oracle import ask
-
-    out = []
-    for states in ask(STATES_IN_ORACLE, list(lines)):
-        if states is None:
-            out.append(None)
-        else:
-            out.append([(z, charge, radical, order_sum, implicit_h,
-                         [tuple(t) for t in env], aromatic)
-                        for z, charge, radical, order_sum, implicit_h, env, aromatic in states])
-    return out
-
-
-READERS = {'core': _atom_states_core, 'v2': _atom_states_v2}
-
-
-def coverage(paths, reader='core'):
+def coverage(paths):
     """How many atoms the collection has nothing to say about, by element.
 
     Reads with the core's own reader; the verdicts come from the compiled core, so this measures the
-    shipped tables and not the Python they came from.  `reader='v2'` reads with chython 2 instead,
-    which is how the switch stays checkable rather than trusted -- see the note above `READERS`.
+    shipped tables and not the Python they came from.
 
     Aromatic atoms are counted separately rather than guessed at: there are no aromatic rows, by
     design, so an aromatic atom is not a coverage gap.
     """
     from chython.core._core import valence_check
 
-    states_of = READERS[reader]
     seen = Counter()
     unknown = Counter()
     violation = Counter()
@@ -692,7 +535,7 @@ def coverage(paths, reader='core'):
             line = line.split()[0] if line.split() else ''
             if line:
                 lines.append(line)
-    for states in states_of(lines):
+    for states in _atom_states(lines):
         if states is None:              # a string this reader does not accept is not a coverage gap
             continue
         molecules += 1
@@ -720,17 +563,7 @@ def coverage(paths, reader='core'):
 
 def main(argv):
     verb = argv[0] if argv else 'compile'
-    if verb == 'derive':
-        foreign = []
-        if TSV.exists():
-            for rule in read_tsv():
-                if rule.provenance not in ('common', 'curated'):
-                    foreign.append(rule)
-        rules = canonical_order(derive() + foreign)
-        write_tsv(rules)
-        print(f'{TSV}: {len(rules)} rows'
-              + (f', {len(foreign)} carried through' if foreign else ''))
-    elif verb == 'compile':
+    if verb == 'compile':
         rules = read_tsv()
         ordered = canonical_order(rules)
         if [r.row() for r in ordered] != [r.row() for r in rules]:
@@ -741,21 +574,12 @@ def main(argv):
         else:
             print(f'{PXI}: already current')
     elif verb == 'coverage':
-        reader = 'core'
-        argv = list(argv)
-        for name in ('--v2', '--core'):
-            if name in argv:
-                argv.remove(name)
-                reader = name[2:]
         if len(argv) < 2:
             raise SystemExit('coverage needs at least one file of SMILES')
-        coverage(argv[1:], reader)
+        coverage(argv[1:])
     else:
         raise SystemExit(__doc__)
 
 
 if __name__ == '__main__':
-    # nothing to import first: `symbols` reads the core's table and `derive` registers V2's 118
-    # Element subclasses inside the oracle interpreter, where forgetting to would make the
-    # derivation silently trivial rather than merely wrong
     main(sys.argv[1:])

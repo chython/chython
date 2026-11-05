@@ -48,11 +48,10 @@ pytest chython/test/               # tree-wide: packaging, libinchi staging, V2 
 ```
 
 Tests live in `test/` subdirectories per package; no centralized conftest; data files in `/test/` at the
-repo root. **Differential tests run chython 2.24 out of process** — `core/test/oracle.py` spawns a pinned
-separate install under `-I`, the only sanctioned way to consult V2 since a subprocess is not an import;
-they skip when that venv is absent. **Every Python sample in `docs/` is executed**: `test_doc_samples.py`
-runs each `.. testcode::` block and forbids `.. code-block:: python`, which renders identically and runs
-never.
+repo root. **No test consults chython 2**, in process or out: an expected value is stated in the test.
+Frozen corpora written by chython 2 (pach v0/v2) stay, as wire-format fixtures. **Every Python sample in
+`docs/` is executed**: `test_doc_samples.py` runs each `.. testcode::` block and forbids
+`.. code-block:: python`, which renders identically and runs never.
 
 ## Architecture
 
@@ -162,7 +161,7 @@ specified but unimplemented, are under `docs/superpowers/specs/`.
   with a reason, rather than re-running a sweep. What is left to `pycodestyle --max-line-length=120` and to
   judgement: aligned assignment blocks (E221) and `chemistry/test/test_tpsa_tsv.py`'s hand-aligned probe
   table (E131), `depict/style.py`'s trailing comments continued under their column (E114/E116), and the
-  documented mid-file imports in `interop/__init__.py` and `formats/ctfile/test/conftest.py` (E402)
+  documented mid-file import in `interop/__init__.py` (E402)
 - `chython/__init__.py` is a thin façade; `__all__` is empty by design. Engine and depiction configuration
   is documented in `docs/config.rst`. **`torch_device` is gone** — when the neural mapper lands it runs on
   ONNX Runtime, not torch

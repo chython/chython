@@ -31,8 +31,7 @@ line says so in the log.  That split is the reader's whole error policy: syntax 
 logged, and nothing is silently repaired.
 
 **Acceptance tests for the V2 divergences.**  A V2 reading is a specification input, and the test that
-pins the V3 reading is where it goes.  Each one below names what V2 does, MEASURED against chython 2.24
-and not recalled:
+pins the V3 reading is where it goes.  Each one below names what V2 does:
 
 * `~` matches nothing in V2 (it lexes to bond order 8, the dative bond).  Here it is a real five-way
   disjunction.
@@ -53,30 +52,18 @@ there beside genuine sp carbons.  The core reports what it found, `5` for two cu
 unchanged; translating the 50 `z3` primitives carried over from V2 is a separate task with its own
 written mapping, and this file only makes the difference visible.
 
-The last section runs the whole thing against chython 2.24 in a separate interpreter -- the ORACLE,
-pinned to that version and skipped cleanly when it is not installed.  That subprocess runs under `-I`
-and asserts on the module path it actually imported, because a child started with plain `-c` from the
-repo root imports the tree under test: the differential then compares this reader against itself and
-passes with flying colours, which is the one failure mode a differential cannot survive.  Two
-exclusions apply there and
-both are the matching kernel's semantics rather than the reader's, verified by building the same query
-through the journal API by hand where no lexer is involved:
+Two matching-kernel rules, Daylight's, that a V2 template does not assume:
 
-1. The core's `is_substructure` is a MONOMORPHISM, as Daylight SMARTS specifies -- `CCC` matches
-   cyclopropane.  V2's is induced: it rejects a match whose mapped atoms carry a bond the query did
-   not state.
-2. `.` here means "no bond stated", again as Daylight specifies.  V2 additionally demands that the
-   two sides land in different connected components, so its `[O;D1].[O;D1]` misses benzoic acid.
+1. `is_substructure` is a MONOMORPHISM -- `CCC` matches cyclopropane.  V2's matching was induced.
+2. `.` means "no bond stated".  V2 additionally demanded that the two sides land in different
+   connected components, so its `[O;D1].[O;D1]` missed benzoic acid.
 """
-from json import dumps, loads
-from os import environ
 from pathlib import Path
 from re import compile as compile_regex
 
 from pytest import mark, raises, skip
 
 from chython.core import IncorrectSmarts, QueryContainer, read_smarts, read_smiles
-from chython.core.test.oracle import ask
 
 
 # The panel.  Public compounds and minimal probes; every name below is what the molecule IS, so a
@@ -95,46 +82,6 @@ PANEL = {
     'thf': 'C1CCOC1', 'deuteriomethane': '[2H]C', 'carbon13_methane': '[13CH4]',
 }
 MOLECULES = {k: read_smiles(v) for k, v in PANEL.items()}
-
-# The second panel, for the shipped-template differential at the bottom of the file only.  The panel
-# above is built of minimal probes, which is what a test about one primitive needs and exactly the
-# wrong thing for a test about real templates: against it the 486 templates this tree ships match 59
-# cells out of 15066, so the differential mostly agrees that neither reader matched -- which two
-# readers can do while disagreeing about everything.  These are
-# textbook reagents and bench chemicals chosen so the shipped functional-group patterns actually
-# fire.  Public compounds only.
-REAGENTS = {
-    'boc_glycine': 'OC(=O)CNC(=O)OC(C)(C)C', 'boc_piperidine': 'O=C(OC(C)(C)C)N1CCCCC1',
-    'boc_anhydride': 'O=C(OC(C)(C)C)OC(=O)OC(C)(C)C',
-    'cbz_alanine': 'CC(NC(=O)OCc1ccccc1)C(=O)O', 'benzyl_alcohol': 'OCc1ccccc1',
-    'phenylboronic_acid': 'OB(O)c1ccccc1', 'phenylboronic_pinacol_ester': 'CC1(C)OB(c2ccccc2)OC1(C)C',
-    'bromobenzene': 'Brc1ccccc1', 'iodobenzene': 'Ic1ccccc1', 'benzyl_bromide': 'BrCc1ccccc1',
-    'bromopyridine': 'Brc1ccncc1', 'chloropyridine': 'Clc1ccccn1', 'bromobutane': 'CCCCBr',
-    'chloronitrobenzene': 'Clc1ccc(cc1)[N+](=O)[O-]',
-    'benzamide': 'NC(=O)c1ccccc1', 'acetanilide': 'CC(=O)Nc1ccccc1',
-    'ethyl_benzoate': 'CCOC(=O)c1ccccc1', 'ethyl_acetate': 'CCOC(C)=O',
-    'ethyl_bromoacetate': 'CCOC(=O)CBr', 'diethyl_malonate': 'CCOC(=O)CC(=O)OCC',
-    'ethyl_cyanoacetate': 'CCOC(=O)CC#N',
-    'benzaldehyde': 'O=Cc1ccccc1', 'acetophenone': 'CC(=O)c1ccccc1', 'benzonitrile': 'N#Cc1ccccc1',
-    'chloroacetone': 'CC(=O)CCl', 'cyclohexanone': 'O=C1CCCCC1', 'cyclohexanol': 'OC1CCCCC1',
-    'benzoyl_chloride': 'ClC(=O)c1ccccc1', 'acetic_anhydride': 'CC(=O)OC(C)=O',
-    'succinic_anhydride': 'O=C1CCC(=O)O1', 'trifluoroacetic_acid': 'OC(=O)C(F)(F)F',
-    'benzenesulfonyl_chloride': 'O=S(=O)(Cl)c1ccccc1', 'benzenesulfonamide': 'NS(=O)(=O)c1ccccc1',
-    'tosyl_chloride': 'Cc1ccc(cc1)S(=O)(=O)Cl', 'methyl_tosylate': 'Cc1ccc(cc1)S(=O)(=O)OC',
-    'methyl_mesylate': 'COS(C)(=O)=O', 'phenyl_triflate': 'O=S(=O)(Oc1ccccc1)C(F)(F)F',
-    'styrene_oxide': 'C1OC1c1ccccc1', 'phenylacetylene': 'C#Cc1ccccc1',
-    'phenyl_isocyanate': 'O=C=Nc1ccccc1', 'acetophenone_oxime': 'CC(=NO)c1ccccc1',
-    'phenylhydrazine': 'NNc1ccccc1', 'phenylurea': 'NC(=O)Nc1ccccc1', 'thiophenol': 'Sc1ccccc1',
-    'anisole': 'COc1ccccc1', 'benzylamine': 'NCc1ccccc1', 'n_methylaniline': 'CNc1ccccc1',
-    'glycine': 'NCC(=O)O', 'proline': 'OC(=O)C1CCCN1', 'nicotinic_acid': 'OC(=O)c1cccnc1',
-    'imidazole': 'c1c[nH]cn1', 'pyrazole': 'c1cc[nH]n1', 'indole': 'c1ccc2[nH]ccc2c1',
-    'thiophene': 'c1ccsc1', 'furan': 'c1ccoc1', 'piperidine': 'C1CCNCC1',
-    'morpholine': 'C1COCCN1', 'aspirin': 'CC(=O)Oc1ccccc1C(=O)O',
-    'paracetamol': 'CC(=O)Nc1ccc(O)cc1', 'ibuprofen': 'CC(C)Cc1ccc(cc1)C(C)C(=O)O',
-    'caffeine': 'Cn1cnc2c1c(=O)n(C)c(=O)n2C',
-}
-TEMPLATE_PANEL = {**PANEL, **REAGENTS}
-TEMPLATE_MOLECULES = {k: read_smiles(v) for k, v in TEMPLATE_PANEL.items()}
 
 
 def hits(pattern):
@@ -853,216 +800,6 @@ def test_log_is_optional():
 
 
 # ----------------------------------------------------------------------------------------------
-# THE ORACLE.  chython 2.24, in its own interpreter, on the whole table above.
-# ----------------------------------------------------------------------------------------------
-# The interpreter, the pin, the isolation flag and the identity guards all live in `oracle`, and
-# `CHYTHON2_ORACLE` is the one variable that selects the interpreter.
-
-# What V2's lexer refuses outright, measured.  These are not divergences to reconcile: `H` and `[0C]`
-# reach box bits V2 cannot spell, `*` and `[c]` are Daylight spellings it rejects, and z5/z6 are the
-# hybridizations its validator caps away.
-V2_REFUSED = ['[C;H3]', '[C;H0]', '[C;H4]', '[c]', '[*;D4]', '*', '[0*]',
-              '[C;z5]', '[C;z6]', '[S;z5]', '[N;z5]', '[C;r1]', '[C;r2]', '[C;+9]', '[C;z7]',
-              '[C;#0]', '[C;!@]', '[C;!:1]', '[C;!M]', '[13]', '[13;D2]',
-              '[$(CC)]', '[C;Q]', '', '[]', '[C;', 'C-', 'C-=C', ')C', 'C(C', 'C1CC',
-              # V2 has no token for the dative bond in either direction: `^` falls through to its
-              # SMILES tokeniser ("invalid smiles") and `!^` reaches its bond validator, which refuses
-              # it.  So a table that creates order-8 bonds cannot query one there.
-              'C^C', 'C!^C', '[B]^[N]',
-              # nor a token for the two fields whose default an atom withdraws here: V2's lexer knows
-              # no `*` (its element lookup goes looking for a QueryElement named `*`) and no radical
-              # primitive, so "a metal of any charge" is unsayable there and "a radical" is sayable
-              # only by index, in the tail.
-              '[*]', '[*;+]', '[C;*]', '[M;*]', '[!*]', '[C;^]', '[C;!^]', '[M;*;^]', '[C;^,!^]',
-              'C%1C', 'C11', '[C;D]', '[C;z]', '[C;r]', '[C;x]', '[C;h]', '[C:]', '-C',
-              'C-(C)C', 'C(C-)C', 'C-.C', '$C', '[C;!C]', 'C!~C', 'C—C',
-              # V2 has five primitives and one acyclic spelling, no negated element, no `&` and no
-              # juxtaposition
-              '[C;R]', '[C;r0]', '[!C]', '[C&D1]', '[CD1]']
-
-# What V2 reads DIFFERENTLY, each with its own acceptance test above.  Excluded here because this
-# sweep asserts agreement and these are the places where agreement is the wrong answer.
-V2_DIVERGES = ['C~C', 'c1ccccc1', 'cc', 'cC', '[C;z3]', '[S;z3]', '[N;z3]',
-               '[C;M]', '[C;A]', '[C;M:1][O:2]', '[C;M][O]',
-               '[0C]',                                # V2 drops the zero
-               '[N+,O]',                              # V2 hoists the charge across the OR
-               '[C;D1;D2]', '[C:99999]', '(C)',        # V2 is lenient where the arena is not
-               '[O;D1].[O;D1]',                       # V2's component rule
-               'CCC', 'CCCC', 'CCCCC', 'C1CC1',       # V2's induced matching
-               'CC', 'C-C', 'C-;@C', 'C-;!@C', 'C-,=C', 'C-,:C', 'C=C', 'C#C', 'Br', 'Cl']
-
-# V2 counts a drawn deuterium as a `D` neighbour and not as an `h`; here it is a hydrogen like any other.
-# Excluded per pair, since every other panel molecule agrees on the same patterns.
-V2_DIVERGES_ON_DEUTERIUM = compile_regex(r'[;&,!]\s*[Dh]\d')
-
-_CHILD = r'''
-from chython import smarts, smiles
-
-payload = _payload
-
-mols = []
-for s in payload['panel']:
-    try:
-        mols.append(smiles(s))
-    except Exception:
-        mols.append(None)
-
-out = {}
-for p in payload['patterns']:
-    try:
-        q = smarts(p)
-    except Exception as exc:
-        out[p] = ['ERR', '%s: %s' % (type(exc).__name__, exc)]
-        continue
-    row = []
-    for m in mols:
-        if m is None:
-            row.append(None)
-            continue
-        try:
-            # `<=`, not `<`: V2's `__lt__` is a PROPER subgraph and reports False for a query the
-            # same size as the molecule, which `is_substructure` here does not.
-            row.append(bool(q <= m))
-        except Exception:
-            row.append(None)
-    out[p] = ['OK', row]
-_emit(out)
-'''
-
-
-def _ask_oracle(patterns, panel=PANEL):
-    """Ask chython 2 which of `patterns` match which of `panel`.
-
-    Resolving the interpreter, pinning the version, passing `-I` and asserting that the child did not
-    import the tree under test all live in `chython.core.test.oracle`, which a test enforces is the
-    only place the oracle is spawned.  A local copy of those guards with `-I` missing turns a negative
-    control into a test that agrees with itself forever.
-    """
-    return ask(_CHILD, {'panel': list(panel.values()), 'patterns': list(patterns)})
-
-
-SWEEP = [p for p in ['[C;h2]', '[C;x0]', '[C;a]', '[C;r6]', '[C;z1]', '[C;D2]', '[C;!R]',
-                     '[Dy]', '[Ho]', '[Mg]', '[Ag]', '[Ru]', '[Ar]', '[At]', '[Hf]',
-                     '[H]', '[M]', '[A]', '[C]', '[#7]', '[N]', '[F,Cl,Br,I]', '[C,N,O;D1;x0]',
-                     '[C;D1;x0]', '[N;D1;x0]', '[O;D1;x0]', '[13C]', '[2H]',
-                     '[O;D0]', '[S;D4]', '[C;h3]', '[C;x2]', '[C;x1]', '[C;r3]', '[C;r5]',
-                     '[C;z4]', '[C;D2,D3]', '[C;r5,r6]', '[N+,O]', '[N;+]', '[O]',
-                     '[C;D1]', '[C;D1;x0;z1]', '[C;z1;x0;D1]', '[C;D3]', '[C;+2]', '[C;++]',
-                     'Br', 'Cl', 'CC', 'C-C', 'C=C', 'C#C', 'C:C', 'C=O', 'C-;@C', 'C-;!@C',
-                     'C-,=C', 'C-,:C', '[C;a]:[C;a]', 'CCC', 'CCCC', 'CCCCC', 'C1CC1',
-                     'C(C)(C)C', 'C1CCCCC1', 'C%10CCCCC%10',
-                     '[C:1][O:2]', '[C@](F)(Cl)Br', '[C@@](F)(Cl)Br',
-                     '[C;a]1:[C;a]:[C;a]:[C;a]:[C;a]:[C;a]:1']
-         if p not in set(V2_REFUSED) | set(V2_DIVERGES)]
-
-
-def _has_induced_embedding(q, mol):
-    """Does some embedding of `q` in `mol` add no bond the query did not state?
-
-    V2's matcher only accepts those, so where the core's ONLY embeddings are non-induced V2 says no
-    and the pair carries no information about the reader.  This is the narrowest possible exclusion:
-    it is per pattern AND per molecule, so `CC` is still compared against every acyclic molecule in
-    the panel and only excused on the ring where the difference bites.
-    """
-    stated = q.bond_count
-    for mapping in q.get_mapping(mol):
-        atoms = list(mapping.values())
-        found = sum(1 for i, n in enumerate(atoms) for m in atoms[i + 1:]
-                    if mol.order_of(n, m) is not None)
-        if found == stated:
-            return True
-    return False
-
-
-def test_oracle_agrees_on_everything_it_can_read():
-    """The regression net: 60-odd patterns times the panel, against chython 2.24 in its own
-    interpreter.  Skips cleanly when the oracle is not installed, so an unprovisioned checkout still
-    runs the suite -- a differential test that cannot be skipped is a differential test nobody runs.
-
-    A disagreement here is not automatically a bug in this reader.  It is a question, and the answer
-    is written down in one of the acceptance tests above before the pattern is allowed onto
-    `V2_DIVERGES`.  The one exclusion applied INSIDE the loop is the kernel's, not the reader's: a
-    pair where the core's every embedding is non-induced tells us nothing, because V2 refuses those
-    by construction.  A pattern V2 matches and the core does not is never excused.
-    """
-    answers = _ask_oracle(SWEEP)
-    names = list(PANEL)
-    unexpected_refusals, mismatches = [], []
-    for pattern in SWEEP:
-        status, payload = answers[pattern]
-        if status == 'ERR':
-            unexpected_refusals.append((pattern, payload))
-            continue
-        q = read_smarts(pattern)
-        for name, v2 in zip(names, payload):
-            if v2 is None:
-                continue
-            mine = q.is_substructure(MOLECULES[name])
-            if mine == v2:
-                continue
-            if mine and not v2 and not _has_induced_embedding(q, MOLECULES[name]):
-                continue
-            if name == 'deuteriomethane' and V2_DIVERGES_ON_DEUTERIUM.search(pattern):
-                continue
-            mismatches.append('%s vs %s: V3=%s V2=%s' % (pattern, name, mine, v2))
-    assert not unexpected_refusals, ('V2 refused a pattern this sweep believed it could read; move '
-                                     'it to V2_REFUSED with a reason: %r' % unexpected_refusals[:5])
-    assert not mismatches, mismatches[:20]
-
-
-def test_z3_is_the_only_z_that_moved():
-    """The port table for `z`, measured rather than recalled, over 92 molecules and five elements.
-
-    801 `z` primitives ship in this tree and the epic that translates them needs to know exactly
-    which ones are safe to leave alone.  The answer measured here: `z1`, `z2` and `z4` select the
-    same atoms in both generations, so every primitive that uses them is safe; `z3` is the only one
-    that moved, and it moved in the dangerous direction -- V2's `z3` is a strict SUPERSET, so a
-    template carried over verbatim matches strictly less here and fails quietly instead of erroring.
-
-    This is a statement about the two generations' hybridization words, not about the lexer, which
-    passes the digit through untouched.  It lives here because it is the sweep that can prove it.
-    """
-    elements = ('C', 'N', 'S', 'P', 'O')
-    agreeing = ['[%s;z%d]' % (e, z) for e in elements for z in (1, 2, 4)]
-    answers = _ask_oracle(agreeing + ['[%s;z3]' % e for e in elements], TEMPLATE_PANEL)
-    names = list(TEMPLATE_PANEL)
-
-    def both(pattern):
-        status, payload = answers[pattern]
-        assert status == 'OK', 'V2 could not read %s: %r' % (pattern, payload)
-        q = read_smarts(pattern)
-        return ({n for n, v in zip(names, payload) if v},
-                {n for n in names if q.is_substructure(TEMPLATE_MOLECULES[n])})
-
-    for pattern in agreeing:
-        v2, core = both(pattern)
-        assert v2 == core, ('%s is documented as meaning the same in both generations but selects '
-                            'differently: V2-only %r, core-only %r'
-                            % (pattern, sorted(v2 - core), sorted(core - v2)))
-
-    widened = {}
-    for element in elements:
-        v2, core = both('[%s;z3]' % element)
-        assert not core - v2, ('the core matched z3 where V2 did not, so z3 is not a subset after '
-                               'all and the port table above is wrong: %r' % sorted(core - v2))
-        if v2 - core:
-            widened[element] = sorted(v2 - core)
-    # named explicitly: a port that only remembers "allene" loses the sulfonyls, which are the bulk
-    assert 'S' in widened and 'C' in widened, widened
-    assert 'dimethyl_sulfone' in widened['S'] and 'benzenesulfonamide' in widened['S'], widened['S']
-    assert 'allene' in widened['C'], widened['C']
-
-
-def test_oracle_refuses_what_this_file_says_it_refuses():
-    """The other half of the same claim: every string on `V2_REFUSED` really is one V2 could not
-    read.  Without this the list is a place to hide a disagreement."""
-    answers = _ask_oracle(V2_REFUSED)
-    read_by_v2 = [p for p, (status, _) in answers.items() if status == 'OK']
-    assert not read_by_v2, ('V2 reads these after all, so they belong in the sweep or in an '
-                            'acceptance test: %r' % read_by_v2)
-
-
-# ----------------------------------------------------------------------------------------------
 # THE REAL TEMPLATES.  Not spellings chosen to exercise a rule -- the strings this codebase ships.
 # ----------------------------------------------------------------------------------------------
 _LITERAL = compile_regex(r"smarts\(\s*'([^']{2,300})'")
@@ -1075,7 +812,7 @@ def _template_corpus():
     Read out of the SOURCE rather than out of the rule tables, because the tables hold compiled
     queries and a compiled query can only give its string back through a writer -- which would make
     this a test of the writer.  When the template packages move or go, this returns nothing and the
-    tests below skip: an empty corpus is not a passing differential.
+    test below skips.
     """
     root = Path(__file__).resolve().parent.parent.parent
     out = set()
@@ -1089,56 +826,10 @@ TEMPLATES = _template_corpus()
 
 
 def test_every_shipped_template_reads():
-    """The reader's actual job.  No oracle: a template that does not read is a failure on its own."""
+    """The reader's actual job: a template that does not read is a failure on its own."""
     if not TEMPLATES:
         skip('no `smarts(...)` literals in this tree any more -- point TEMPLATE_SOURCES at the '
              'package that holds the templates now')
     assert len(TEMPLATES) > 100, 'the harvest looks broken, not the reader'
     for pattern in TEMPLATES:
         read_smarts(pattern)
-
-
-def test_shipped_templates_match_what_v2_matched():
-    """The whole shipped corpus against chython 2.24, molecule by molecule.
-
-    This is the test that says the front end can be swapped.  Everything above it pins a rule; this
-    one asks the templates themselves whether the rules add up to the same queries.  Same two
-    kernel-level exclusions as the sweep: a dot-separated pattern (V2 demanded separate components)
-    and a pair with no induced embedding (V2's matcher rejects those).
-
-    What it does NOT cover, stated so nobody reads more into a green tick than is there: only 3 of
-    the 47 `z3` templates in the corpus match any panel molecule at all, so agreement on the other
-    44 is agreement about nothing.  Their semantics are pinned instead by the port table in
-    `test_z3_is_the_only_z_that_moved`, one primitive at a time, which is where the epic that
-    translates them should look.
-    """
-    if not TEMPLATES:
-        skip('no `smarts(...)` literals in this tree any more')
-    corpus = [p for p in TEMPLATES if '.' not in p]
-    answers = _ask_oracle(corpus, TEMPLATE_PANEL)
-    names = list(TEMPLATE_PANEL)
-    mismatches, unread, agreed_true = [], [], 0
-    for pattern in corpus:
-        status, payload = answers[pattern]
-        if status == 'ERR':
-            unread.append((pattern, payload))
-            continue
-        q = read_smarts(pattern)
-        for name, v2 in zip(names, payload):
-            if v2 is None:
-                continue
-            mine = q.is_substructure(TEMPLATE_MOLECULES[name])
-            if mine == v2:
-                agreed_true += mine
-                continue
-            if mine and not v2 and not _has_induced_embedding(q, TEMPLATE_MOLECULES[name]):
-                continue
-            mismatches.append('%s vs %s: V3=%s V2=%s' % (pattern, name, mine, v2))
-    assert not unread, ('V2 cannot read a template shipped in this tree, which is a finding about '
-                        'the template and not about this reader: %r' % unread[:5])
-    assert not mismatches, mismatches[:20]
-    # Two readers agree perfectly on a corpus neither one matches, so the count of cells where both
-    # said YES is the only number here that measures anything.  It is asserted so that a panel that
-    # drifts into irrelevance, or a reader that quietly stops matching, fails instead of passing.
-    assert agreed_true > 400, ('only %d template/molecule pairs matched in BOTH readers -- this '
-                               'differential is no longer evidence' % agreed_true)

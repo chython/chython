@@ -16,79 +16,18 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""Does each ported rule fire on the same molecules as a pinned out-of-tree chython 2.24, and produce
-the same product?  A disagreement is not automatically V3 being wrong: triage it and name the
-deliberate divergence below rather than relaxing the comparison.
-
-Version pinning, isolation of the child and skipping when chython 2 is absent live in
-`chython.chemistry.test._oracle`, along with the silent ways this comparison can be made worthless.
+"""The standardization pass over the drawn-wrong corpus: it repairs, it is idempotent, and the
+dative-bond rules leave the donor neutral.
 """
 import pytest
 
-from chython.chemistry.test._oracle import ask, needs_oracle
 from chython.core import read_smiles
 from ._corpus import CORPUS
 import chython.chemistry                                                         # noqa: F401
 
 
-# Run inside the oracle interpreter.  Deliberately tiny: everything it prints is data, since analysis
-# done there is analysis this repository cannot see or maintain.
-_SCRIPT = """
-from chython import smiles
-
-for line in sys.stdin:
-    line = line.strip()
-    if not line:
-        continue
-    try:
-        m = smiles(line)
-        m.standardize()
-        sys.stdout.write('%s\\t%s\\n' % (line, format(m, 's')))
-    except Exception as e:
-        sys.stdout.write('%s\\tERROR %s: %s\\n' % (line, type(e).__name__, e))
-"""
-
-
-@pytest.fixture(scope='module')
-def oracle_answers():
-    """`{input smiles: standardized smiles}` from the pinned chython 2, in one subprocess."""
-    answers = dict(line.partition('\t')[::2] for line in ask(_SCRIPT, '\n'.join(CORPUS)))
-    assert len(answers) == len(CORPUS)
-    return answers
-
-
-@needs_oracle
-def test_the_oracle_is_the_version_the_rules_were_ported_against(oracle_answers):
-    """Reaching the fixture at all is the assertion: `ask` checks the version and the import path.
-
-    Named so a broken oracle fails once with a reason, not as 79 apparent chemistry regressions.
-    """
-    assert oracle_answers
-
-
-@needs_oracle
-def test_every_corpus_molecule_standardizes_to_what_chython_2_produces(oracle_answers):
-    """All 79, compared AS MOLECULES: a string comparison would fail on atom order and on which
-    resonance partner carries the charge, which are writer differences and not repair differences.
-    """
-    disagreements = []
-    for source, expected in sorted(oracle_answers.items()):
-        assert not expected.startswith('ERROR'), f'the oracle cannot read its own corpus: {source}'
-        molecule = read_smiles(source)
-        molecule.standardize()
-        got = molecule.smiles
-        if read_smiles(expected) != read_smiles(got):
-            disagreements.append(f'{source}\n    chython 2: {expected}\n    chython 3: {got}')
-    assert not disagreements, (
-        f'{len(disagreements)} of {len(CORPUS)} molecules standardize differently.  Triage each one '
-        'and decide which engine is right -- do not relax this test:\n' + '\n'.join(disagreements))
-
-
-@needs_oracle
-def test_the_comparison_can_fail():
-    """Negative control: a pass that did nothing would agree with the oracle everywhere, so "no
-    disagreements" is evidence only while something is actually being repaired.
-    """
+def test_the_pass_repairs_most_of_the_corpus():
+    """Every corpus molecule is drawn wrong, so the pass repairs most of them."""
     changed = 0
     for source in CORPUS:
         molecule = read_smiles(source)
@@ -101,11 +40,11 @@ def test_the_comparison_can_fail():
 
 
 def test_the_pass_is_idempotent():
-    """Standardizing twice must be standardizing once.  No oracle needed: a self-consistency.
+    """Standardizing twice must be standardizing once.
 
-    Catches the `D` translation: the core counts a dative bond in an atom's degree where chython 2
-    does not, so a rule meaning "four single bonds, therefore a formal charge" can fire on an atom
-    whose fourth bond the pass itself just made dative.
+    Catches the `D` translation: the core counts a dative bond in an atom's degree, so a rule meaning
+    "four single bonds, therefore a formal charge" can fire on an atom whose fourth bond the pass
+    itself just made dative.
     """
     drifting = []
     for source in CORPUS:

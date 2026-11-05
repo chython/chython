@@ -39,10 +39,8 @@ makes `==` self-break on a ROUND TRIP: write the molecule out, read it back, and
 order is not the writer's, so the two compare unequal and the same compound sits in a set twice.
 Measured over 4 creation orders on the 294 usable records of `test/stereo.sdf`, a constitution-only
 certificate oscillates on 55 of them, its canonical SMILES on 43, and 45 fail write -> read -> `==`;
-the certificate below answers 0 / 294 on all three.  The corpus-scale gate lives in
-`test_smiles_write_differential.py::test_the_tetrahedral_string_does_not_depend_on_the_creation_order`;
-this file is the per-molecule half -- one named compound per mechanism, so a regression says WHICH
-shape broke.
+the certificate below answers 0 / 294 on all three.  This file holds one named compound per
+mechanism, so a regression says WHICH shape broke.
 
 WHAT PREVENTS IT, in one sentence each, both in `_canonical.pxi`:
 
@@ -54,17 +52,9 @@ WHAT PREVENTS IT, in one sentence each, both in `_canonical.pxi`:
     NAME a unit's frame -- which is precisely the mirror case, because the two ring branches leaving a
     carbinol carbon share a colour -- it does not prune at all and both labellings reach a leaf.
 
-V2 IS NOT THE ORACLE HERE.  Put the same question to an isolated chython 2.24 -- eight creation
-orders, count the distinct canonical strings -- and it oscillates on twelve of the fifteen witnesses
-below, up to SIX distinct strings for one compound, and fails its own write -> read -> `==` on six of
-them.  Oscillation is a property of this family of certificate algorithms, so V2 agreeing with V3 on a
-symmetric stereocentre is worth nothing as evidence.  V2 earns its keep here in two other ways: as a
-gross-ordering check on the stereo-free control (it agrees there), and as a source of acceptance
-tests, since where V2 diverges it diverges in a nameable way -- see the note on
-`test_the_two_spellings_of_an_achiral_compound_are_one_compound`.  What actually pins the fix is the
-invariants, which need no oracle at all: one canonical form per compound across creation orders, a
-molecule equal to itself after a write-then-read, a molecule not equal to its enantiomer, and
-`__hash__` agreeing with `__eq__` on all of it.
+WHAT PINS THE FIX is the invariants, which need no second opinion: one canonical form per compound
+across creation orders, a molecule equal to itself after a write-then-read, a molecule not equal to
+its enantiomer, and `__hash__` agreeing with `__eq__` on all of it.
 
 A SECOND, INDEPENDENT DEFECT LIVES ON THE SAME PATH and these tests catch it too.  `__eq__` opens
 with an exact rejection on `_union_feature_words`, and word IV of that screen (`_features.pxi`,
@@ -287,16 +277,8 @@ def test_the_two_spellings_of_an_achiral_compound_are_one_compound(name, left, r
 
     This is the assertion that makes the fix a canonicalisation rather than a refusal to tie-break:
     it would be easy to make every sweep above pass by giving the two labellings different canonical
-    forms and calling the molecule two compounds.  RDKit agrees with this reading on all five -- the
-    differential file's `test_nothing_oscillates_and_a_REGRESSION_would_have_to_be_a_MIRROR_PAIR`
-    measures it corpus-wide, and the sign-inversion check above reproduces it per row.
-
-    CHYTHON 2 AGREES ON THREE AND NOT ON THE OTHER TWO, which is why it is not the oracle here.  Asked
-    the same question, 2.24 returns one canonical string for meso-tartaric acid, meso-2,3-butanediol
-    and cis-cyclohexane-1,2-diol, and TWO for cis-cyclobutane-1,3-diol and cis-1,4-dimethyl-
-    cyclohexane -- it splits an achiral compound in half.  That is the V2 divergence these rows exist
-    to fence off, not a precedent to preserve, so the specification is the invariant and not the second
-    opinion.
+    forms and calling the molecule two compounds.  RDKit agrees with this reading on all five, and the
+    sign-inversion check above reproduces it per row.
     """
     a = read_smiles(left)
     b = read_smiles(right)

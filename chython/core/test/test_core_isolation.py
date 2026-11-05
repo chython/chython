@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""The core depends on nothing above it, and its tests do not reach into chython 2.
+"""The core depends on nothing above it, and neither do its tests.
 
 THE RULE.  The dependency direction is one-way:
 
@@ -28,21 +28,8 @@ distribution.  In particular NOTHING IMPORTS `chython` ITSELF.  That is not a st
 under `chython/core/` couples the core's own test suite to every layer above it.  Compiling the core
 to a `.so` does not help -- the package `__init__` runs first either way.
 
-WHY THIS IS A TEST RATHER THAN A NOTE IN A DOCUMENT.  Reaching upward for a cheap second opinion is
-easy to do one file at a time, and the cost is invisible until the suite cannot run without the thing
-it is replacing.  A note does not stop that; a test does.
-
-A SUBPROCESS IS NOT AN IMPORT, and the distinction is the whole point.  `oracle.py` compares against
-chython 2, permanently -- it runs it in ANOTHER INTERPRETER against an INSTALLED
-copy.  Nothing enters this process's `sys.modules`, the working tree is not on the oracle's
-`sys.path`, and deleting chython 2 from this repository changes nothing about it.  So:
-
-    subprocess.run([oracle_interpreter, '-I', '-c', 'import chython.periodictable ...'])   OK
-    import chython.periodictable                                                           NOT OK
-
-Do not "simplify" the first into the second.  The string `chython.periodictable` appearing inside a
-subprocess payload is fine and this test is written to allow it -- it looks at import STATEMENTS,
-not at text.
+A test rather than a note: reaching upward for a cheap fixture is easy one file at a time, and the
+cost is invisible until the core's suite cannot run without the layers above it.
 """
 import ast
 import pathlib
@@ -52,13 +39,8 @@ import re
 CORE = pathlib.Path(__file__).resolve().parent.parent
 ROOT = CORE.parent
 
-# everything in the distribution that the core may not name.  `chython.core` is the one allowed
-# `chython.*` prefix; the bare facade is the worst of the lot and is checked for separately
-FORBIDDEN = ('periodictable', 'containers', 'files', 'algorithms', 'reactor',
-             'exceptions', 'reactor', 'core.deprecated')
-
-# EMPTY, and it is meant to stay that way.  DO NOT ADD TO THIS LIST -- an entry is an instance of the
-# blocker this test exists to have removed, and the second assertion below fails if one appears.
+# EMPTY, and it is meant to stay that way.  DO NOT ADD TO THIS LIST -- an entry is a core file that
+# imports from above the core, and the second assertion below fails if one appears.
 KNOWN_DEBT = set()
 
 
@@ -74,9 +56,7 @@ def sources():
 def python_imports(path):
     """Dotted module names imported by a `.py` file, from its AST -- not from its text.
 
-    An AST and not a grep because a subprocess payload, a docstring and a comment all mention the
-    forbidden names legitimately, and a grep would either fail on those or be taught exceptions
-    until it stopped meaning anything.
+    An AST and not a grep because a string, a docstring and a comment may mention any module name.
     """
     # `encoding='utf-8'` here and in `cython_imports` below: `core/` is UTF-8 -- `_molecule_container.pxi`
     # writes `4.3×10⁹` about an int32 overflow -- and `read_text` without it asks the locale, which on the
@@ -135,35 +115,22 @@ def test_the_core_imports_nothing_else_from_this_distribution():
     """The core's suite runs against `chython.core` and the standard library and nothing else.
 
     A failure names the file and the module.  The fix is never to add the file to `KNOWN_DEBT`: it
-    is either to state the answer directly, or to reach chython 2 through `oracle.ask`, which
-    runs it in another interpreter and is therefore not an import.
+    is to state the answer directly.
     """
     bad = [(f, m) for f, m in offenders() if f not in KNOWN_DEBT]
     assert not bad, (
         'chython/core/ must not import anything from this distribution except chython.core -- '
-        'importing the facade or any chython 2 package loads ~130 modules and makes the core\'s '
-        f'suite die with chython 2:\n' + '\n'.join(f'  {f}: {m}' for f, m in sorted(bad)))
+        'importing the facade couples the core\'s suite to every layer above it:\n'
+        + '\n'.join(f'  {f}: {m}' for f, m in sorted(bad)))
 
 
 def test_the_known_debt_has_not_grown():
     """The allow-list is a ratchet: it may shrink, and adding to it must be a visible decision."""
     assert {f for f, _ in offenders()} <= KNOWN_DEBT, \
-        'a new file reached into chython 2; remove the import rather than widening KNOWN_DEBT'
+        'a new file imports from above the core; remove the import rather than widening KNOWN_DEBT'
     # and every entry still earns its place: a stale name would quietly re-open the hole
     for name in KNOWN_DEBT:
         assert (CORE / 'test' / name).is_file(), f'{name} is gone; drop it from KNOWN_DEBT'
-
-
-def test_the_forbidden_names_are_the_packages_that_actually_exist():
-    """The list is only a guard while at least one name it holds is a module that exists.
-
-    A list matching nothing makes the guard above a no-op that passes because nothing can match it,
-    so this test says so loudly instead.
-    """
-    present = {name for name in FORBIDDEN
-               if (ROOT / name).is_dir() or (ROOT / f'{name}.py').is_file()}
-    assert present, 'none of the forbidden packages exist any more: chython 2 is gone, so this ' \
-                    'file and oracle.py have done their job and can be deleted together'
 
 
 def test_the_scan_actually_reaches_the_files_it_claims_to():
@@ -173,7 +140,7 @@ def test_the_scan_actually_reaches_the_files_it_claims_to():
     names = {p.name for p in paths}
     assert len(paths) > 60, len(paths)
     assert '_valence.pxi' in names and '_core.pyx' in names
-    assert 'test_valence.py' in names and 'oracle.py' in names
+    assert 'test_valence.py' in names and 'test_core_isolation.py' in names
     assert sum(1 for p in paths if p.suffix == '.pxi') > 15
 
 
@@ -195,11 +162,10 @@ def test_the_scan_would_catch_an_offender(tmp_path):
                    'cimport chython.algorithms\n')
     assert cython_imports(pxi) == ['chython.containers', 'chython.algorithms']
 
-    # a subprocess payload naming a forbidden module is NOT an import, and must not be flagged
-    ok = tmp_path / 'subprocess_user.py'
-    ok.write_text('from chython.core.test.oracle import ask\n'
-                  'ask("from chython.periodictable.base.element import _elements_map")\n')
-    assert python_imports(ok) == ['chython.core.test.oracle']
+    # a string naming a module is not an import, and must not be flagged
+    ok = tmp_path / 'string_user.py'
+    ok.write_text('PAYLOAD = "from chython.periodictable.base.element import _elements_map"\n')
+    assert python_imports(ok) == []
 
 
 def test_a_relative_import_out_of_the_core_is_caught(tmp_path):

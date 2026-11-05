@@ -23,16 +23,9 @@ The title, the S-groups and the aliases live on the molecule, not beside it as r
 take ``title=`` and ``sgroups=`` and those still override, but passing nothing means "what the
 molecule says" rather than "empty".
 """
-from contextlib import contextmanager
 from io import StringIO
-from pathlib import Path
-from shutil import rmtree
-from tempfile import mkdtemp
 
 from pytest import fixture, mark
-
-# The one definition of "run something under chython 2", shared with the core's differentials.
-from chython.core.test import oracle
 
 from .._sdf import emit_record, parse_record
 from .._sgroup import NO_INDEX, SGroupStore
@@ -489,86 +482,3 @@ def test_an_unrecognised_v2000_property_line_is_dropped_and_says_so():
     # S-groups.
     assert molecule.title == 'phenol'
     assert len(molecule.sgroups) == 2
-
-
-# the differential oracle: chython 2.24
-
-def _oracle(source):
-    """Run `source` under the pinned, isolated chython 2.24 and hand back its stdout.
-
-    A subprocess against an installed 2.24, not an import: V2 is not in this tree.  The spawn lives
-    in `chython/core/test/oracle.py`, the only place that starts an oracle interpreter; it passes
-    `-I`, checks the version and checks which `chython` the child imported, on every call.
-    """
-    return oracle.ask_text(source)
-
-
-@contextmanager
-def _record_file():
-    """`RICH` on disk, for the oracle to open.  Passed by path so the record text stays in one place."""
-    path = Path(mkdtemp()) / 'probe.mol'
-    path.write_text(RICH)
-    try:
-        yield path
-    finally:
-        rmtree(path.parent, ignore_errors=True)
-
-
-def test_the_oracle_is_the_pinned_version_and_is_not_this_tree():
-    """Pinned, because "whatever chython 2 is installed" is not a fixed comparison, and separate,
-    because an oracle importing `./chython/` would agree with this parser about everything.  Both
-    checks run on every `_oracle` call; their own tests are in `chython/core/test/test_oracle.py`.
-    """
-    oracle.require()
-    oracle.verify()
-    assert oracle.probe()[0] == oracle.VERSION
-
-
-def test_v3_reads_the_same_constitution_as_chython_2():
-    """The parser must agree with V2 about the constitution.
-
-    Not compared by SMILES string: the two versions' canonical writers are independent and are
-    allowed to disagree about output.
-    """
-    with _record_file() as path:
-        out = _oracle('''
-from chython import mdl_mol
-m = mdl_mol(open(%r).read())
-print('ATOMS', m.atoms_count)
-print('BONDS', m.bonds_count)
-print('SMILES', str(m))
-''' % str(path))
-
-    ours = mol(RICH)
-    assert 'ATOMS %d' % ours.atom_count in out
-    assert 'BONDS %d' % ours.bond_count in out
-    # The two canonical SMILES writers are independent, so the strings may differ; the molecule may
-    # not -- same heavy-atom composition, same aromatic/Kekule representation as drawn.
-    v2 = out.split('SMILES', 1)[1].strip()
-    assert v2.count('O') == 1 and v2.count('C') == 6
-    assert ours.aromatic_bond_count == 0 and v2.islower() is False
-
-
-def test_chython_2_loses_every_sgroup_and_alias():
-    """A deliberate divergence, pinned: chython 2.24 has no S-group storage, logs `ignored line` /
-    `ignored data` for the alias and the DAT group, and returns a molecule with neither a `sgroups`
-    nor an `aliases` attribute.  V2 is the oracle for the constitution only.  If a future chython 2
-    gained S-group support this fails, and the response is to compare rather than to delete it.
-    """
-    with _record_file() as path:
-        out = _oracle('''
-from chython import mdl_mol
-m = mdl_mol(open(%r).read())
-print('SGROUPS', hasattr(m, 'sgroups'))
-print('ALIASES', hasattr(m, 'aliases'))
-print('LOG', 'ignored' in repr(dict(m.meta)))
-''' % str(path))
-
-    assert 'SGROUPS False' in out, 'chython 2 grew S-group storage; compare rather than assume'
-    assert 'ALIASES False' in out
-    assert 'LOG True' in out, 'chython 2 no longer even logs what it drops'
-
-    # the divergence, asserted on our side
-    ours = mol(RICH)
-    assert len(ours.sgroups) == 2
-    assert list(ours.aliases.values()) == [b'OH-label']

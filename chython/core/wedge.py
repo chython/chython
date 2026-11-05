@@ -87,9 +87,7 @@ SU_HELICAL = 4
 SU_PLANAR = 5
 
 # The out-of-plane displacement a wedge stands for.  The magnitude is arbitrary -- the determinant is
-# linear in it, so the sign of the answer does not depend on the number -- but 1.0 is what chython 2
-# uses, and keeping it identical means the oracle test compares two computations of the same
-# quantity rather than two quantities that happen to agree.
+# linear in it, so the sign of the answer does not depend on the number.
 _WEDGE_Z = {WEDGE_UP: 1.0, WEDGE_DOWN: -1.0, WEDGE_NONE: 0.0}
 
 

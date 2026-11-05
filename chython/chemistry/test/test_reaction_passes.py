@@ -28,7 +28,7 @@ from chython.core import Log, LogRecord, read_reaction_smiles
 
 
 def test_standardize_runs_on_every_side():
-    """The iron carbonyl is the differential suite's own witness that a patch fires."""
+    """The iron carbonyl is a record the standardization patches are known to fire on."""
     r = read_reaction_smiles('C(=O)[Fe](C=O)C=O>>CC.C(=O)[Fe](C=O)C=O')
     assert r.standardize() is True
     assert r.reactants[0].smiles == '[O+]#[C-]~[Fe](~[C-]#[O+])~[C-]#[O+]'

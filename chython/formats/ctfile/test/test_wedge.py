@@ -16,10 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""Drawing to configuration, and back.  The corpus oracle -- chython 2 reading the same bytes, bridged by
-V2's own ``_translate_tetrahedron_sign(n, env)`` -- runs first: a round trip and a hand-written geometry
-check both pass with every parity flipped, so only a second stack catches a global sign inversion.
-"""
+"""Drawing to configuration, and back."""
 
 from pytest import fixture, mark
 
@@ -43,95 +40,11 @@ def _tetra(mol):
     return [u for u in mol.stereo_units() if u['kind'] == SU_TETRA and u['stereogenic']]
 
 
-# --- the oracle
-
-def test_every_configuration_agrees_with_chython2_or_the_record_contradicts_itself(corpus,
-                                                                                   v2_molecules):
-    """Two independent stacks, same bytes, same configurations.  Each disagreement must be a centre
-    whose wedge drawing and atom parity field contradict each other, with a log line naming it -- the
-    drawing wins there, which is a decision and not a tolerance.
-    """
-    agree = disagree = 0
-    for name, records in corpus.items():
-        v2 = v2_molecules.get(name)
-        if v2 is None or len(v2) != len(records):
-            continue
-        for n, (record, m2) in enumerate(zip(records, v2)):
-            try:
-                mol, _, log = _build(record)
-            except Exception:
-                continue
-            sids = list(mol.atom_numbers)
-            nums = list(m2)
-            if len(sids) != len(nums):
-                continue
-            to_num = dict(zip(sids, nums))
-            for unit in _tetra(mol):
-                anchor = unit['anchor']
-                ours = mol.parity_of(anchor)
-                num = to_num[anchor]
-                if m2.atom(num).stereo is None or not ours:
-                    continue
-                env = tuple(to_num[r] for r in unit['refs'] if r is not None)
-                # `None` is V2 declining the frame: it cannot express this one, so it is no oracle
-                # for this centre.
-                sign = m2.tetrahedron_sign(num, env)
-                if sign is None:
-                    continue
-                theirs = 2 if sign else 1
-                if theirs == ours:
-                    agree += 1
-                    continue
-                disagree += 1
-                assert any(f'atom {anchor}:' in x and 'disagree' in x for x in log), (
-                    f'{name} record {n} atom {anchor}: parity {ours} against chython 2\'s {theirs}, '
-                    f'and nothing in the log explains it')
-    assert agree > 900, f'only {agree} configurations compared; the oracle stopped covering'
-    assert disagree < agree / 100, f'{disagree} unexplained-by-contradiction disagreements'
-
-
-def test_no_centre_that_chython2_configures_is_left_unset(corpus, v2_molecules):
-    """The half of the oracle that catches dropped stereo rather than inverted stereo.  One gap is
-    admitted: 30 centres chython 2 configures and the core calls non-stereogenic -- bridgeheads of cages that
-    are their own mirror image, a carbinol between two aryls told apart only by their Kekule phases, and
-    ring-constrained centres.  A configuration stored there is one the core will not translate.
-    """
-    missing = []
-    not_stereogenic = 0
-    for name, records in corpus.items():
-        v2 = v2_molecules.get(name)
-        if v2 is None or len(v2) != len(records):
-            continue
-        for n, (record, m2) in enumerate(zip(records, v2)):
-            try:
-                mol, _, _ = _build(record)
-            except Exception:
-                continue
-            sids = list(mol.atom_numbers)
-            nums = list(m2)
-            if len(sids) != len(nums):
-                continue
-            units = {u['anchor']: u for u in mol.stereo_units()}
-            for anchor, num in zip(sids, nums):
-                if m2.atom(num).stereo is None or mol.parity_of(anchor):
-                    continue
-                unit = units.get(anchor)
-                if unit is None or not unit['stereogenic']:
-                    not_stereogenic += 1
-                else:
-                    missing.append(f'{name} record {n} atom {num}')
-    assert not missing, f'{len(missing)} centres configured by chython 2 and unset here: {missing[:5]}'
-    assert not_stereogenic == 30, (f'{not_stereogenic} centres the core calls non-stereogenic and '
-                                  f'chython 2 configures; the perception gap moved')
-
-
 def test_the_corpus_actually_exercises_every_kind_this_module_reads(corpus):
-    """Coverage guard on the two oracle tests above: without it they pass on a corpus with no stereo.
-    The two axial counts are exact.  The allene count is the number
-    ``test_every_allene_configuration_agrees_with_chython2`` compares; one of the 11 (``stereo.sdf``
-    record 140) is a five-carbon cumulene, so the axial reading is exercised past three carbons.  The
-    atropisomer count has no oracle -- chython 2 has no axial perception of a biaryl -- so it is a guard on
-    the corpus keeping the 9 configured axes ``atropisomer_parity`` reads, three of them bonds in a ring of 7 or more.
+    """Coverage guard on the corpus: the sweeps in this file pass vacuously on a corpus with no stereo.
+    The two axial counts are exact.  One of the 11 allenes (``stereo.sdf`` record 140) is a five-carbon
+    cumulene, so the axial reading is exercised past three carbons; the 9 configured axes
+    ``atropisomer_parity`` reads include three bonds in a ring of 7 or more.
     """
     tetra = bond = allene = atropisomer = 0
     for records in corpus.values():
@@ -219,23 +132,6 @@ def test_an_up_wedge_and_a_down_wedge_on_the_same_bond_give_opposite_parities():
     pb = [b.parity_of(u['anchor']) for u in _tetra(b)]
     assert pa and pa != [0]
     assert pa == [3 - x for x in pb], f'{pa} against {pb}'
-
-
-def test_which_direction_gets_which_label_is_the_one_chython2_gives(v2_reader):
-    """The sign pinned on one small fixture, expected value fetched from chython 2 rather than written
-    down: ``volume < 0 == anticlockwise == SMILES @ == parity 2``.
-    """
-    lines = list(_TETRA_FLAT)
-    lines[8] = '  1  2  1  1  0  0  0'
-    mol, _, _ = _build(lines)
-    m2 = v2_reader('\n'.join(lines))
-    unit, = _tetra(mol)
-    # our frame, expressed in V2's numbering -- the two stacks number this fixture's atoms alike
-    env = tuple(r for r in unit['refs'] if r is not None)
-    assert m2.atom(unit['anchor']).stereo is not None, 'chython 2 read no configuration here'
-    sign = m2.tetrahedron_sign(unit['anchor'], env)
-    assert sign is not None, 'chython 2 cannot express this frame, so it pins nothing'
-    assert mol.parity_of(unit['anchor']) == (2 if sign else 1)
 
 
 def test_a_wedge_on_a_non_stereogenic_centre_is_reported_and_not_stored():
@@ -548,11 +444,8 @@ def test_a_cis_double_bond_reads_differently_from_a_trans_one():
     assert a == [3 - x for x in b], (a, b)
 
 
-def test_the_same_side_pair_gets_the_label_chython2_gives_it(oracle_session):
-    """The bond sign, pinned against chython 2's *SMILES* stack: its SDF reader derives no double-bond
-    geometry from coordinates, so there is nothing there to compare against.  Both stacks are asked the
-    same frame-free question -- one named terminal substituent on each end.
-    """
+def test_the_same_side_pair_is_parity_2():
+    """The stored bond parity is what `cis_trans_parity` returns, and the same-side pair is parity 2."""
     ours = {}
     for name, lines in (('cis', _BUTENE_CIS), ('trans', _BUTENE_TRANS)):
         mol, _, _ = _build(lines)
@@ -560,14 +453,6 @@ def test_the_same_side_pair_gets_the_label_chython2_gives_it(oracle_session):
         assert cis_trans_parity(mol, unit) == mol.parity_of(unit['anchor']), \
             'the stored parity is not what the geometry function returns'
         ours[name] = mol.parity_of(unit['anchor'])
-
-    # `C/C=C\C` is the same-side pair; atoms 1 and 4 are the terminal substituents in both notations
-    read = dict(oracle_session.read_smiles([r'C/C=C\C', 'C/C=C/C']))
-    for name, smi in (('cis', r'C/C=C\C'), ('trans', 'C/C=C/C')):
-        sign = read[smi].cis_trans_sign(2, 3, 1, 4)
-        assert sign is not None, f'{name}: chython 2 states no geometry for {smi}'
-        theirs = 2 if sign else 1
-        assert ours[name] == theirs, f'{name}: {ours[name]} against chython 2\'s {theirs}'
     assert ours['cis'] == 2, 'the same-side pair is parity 2; see cis_trans_parity'
 
 
@@ -636,60 +521,6 @@ def test_a_tetrasubstituted_allene_reads_from_a_pair_of_wedges_on_one_terminal()
     lone, _, _ = _build(single)
     unit, = _allene(lone)
     assert lone.parity_of(unit['anchor']) == 1, 'dropping the redundant hash changed the answer'
-
-
-def test_the_allene_sign_is_the_one_chython2_gives(v2_reader):
-    """The axial sign pinned against chython 2, which reads allene wedges too.  The frame bridge is
-    V2's ``_translate_allene_sign(c, nn, nm)``, which takes one substituent from each terminal:
-    ``refs[0]`` and ``refs[2]`` are exactly that and are never holes.  True is parity 2, as in the
-    tetrahedral and cis/trans cases.
-    """
-    for lines in (_ALLENE_WEDGE, _ALLENE_MIRROR, _ALLENE_TETRA):
-        mol, _, _ = _build(lines)
-        unit, = _allene(mol)
-        anchor = unit['anchor']
-        m2 = v2_reader('\n'.join(lines))
-        assert m2.atom(anchor).stereo is not None, 'chython 2 read no configuration here'
-        sign, = m2.translate([[2, anchor, unit['refs'][0], unit['refs'][2]]])
-        assert sign is not None, 'chython 2 cannot express this frame, so it pins nothing'
-        assert mol.parity_of(anchor) == (2 if sign else 1)
-
-
-def test_every_allene_configuration_agrees_with_chython2(corpus, v2_molecules):
-    """The corpus oracle for the axial sign.  All 11 configured corpus allenes are compared and the
-    assertion is exact: 11 is small enough that a frame error on the two carrying a hole would hide
-    inside any percentage.
-    """
-    agree = 0
-    wrong = []
-    for name, records in corpus.items():
-        v2 = v2_molecules.get(name)
-        if v2 is None or len(v2) != len(records):
-            continue
-        for n, (record, m2) in enumerate(zip(records, v2)):
-            try:
-                mol, _, _ = _build(record)
-            except Exception:
-                continue
-            sids = list(mol.atom_numbers)
-            nums = list(m2)
-            if len(sids) != len(nums):
-                continue
-            to_num = dict(zip(sids, nums))
-            for unit in _allene(mol):
-                anchor = unit['anchor']
-                ours = mol.parity_of(anchor)
-                assert ours, f'{name} record {n} atom {anchor}: a drawn allene left unread'
-                sign, = m2.translate([[SU_ALLENE, to_num[anchor], to_num[unit['refs'][0]],
-                                       to_num[unit['refs'][2]]]])
-                if sign is None:
-                    continue
-                if ours == (2 if sign else 1):
-                    agree += 1
-                else:
-                    wrong.append(f'{name} record {n} atom {anchor}: {ours} against {2 if sign else 1}')
-    assert not wrong, wrong
-    assert agree == 11, f'{agree} allenes compared; the oracle stopped covering'
 
 
 def test_a_five_carbon_cumulene_is_axial_and_read_the_same_way():

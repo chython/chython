@@ -760,3 +760,12 @@ def test_dead_owner_members_leave_the_axis_its_own_index():
     text = write_smiles(mol, 'x', log=log)
     assert text == 'CC=[C@]=CC |&1:3|', text
     assert not log, log
+
+
+def test_a_parity_on_a_symmetric_spiro_end_is_not_written():
+    """The terminal spiro atoms of a trispiro carry a cyclopentane whose two arms are exchanged by an
+    automorphism, so only the middle atom's parity is written."""
+    m = read_smiles('C1CC[C@]2(C1)C[C@]1(C[C@]3(CCCC3)CC1)CC2')
+    out = write_smiles(m)
+    assert out.count('@') == 1, out
+    assert read_smiles(out) == m
