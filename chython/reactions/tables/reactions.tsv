@@ -555,7 +555,7 @@ id	name	groups	product	ring_sizes	probe	description
 401	appel_iodide	secondary_alcohol	[I;D1]-[A@~:2]		C[C@H](O)CC>>C(C)[C@H](I)C	R2CHOH -> R2CHI
 402	carboxylation	aryl_halide	[A:1]-[C](=[O])-[O;D1]		c1c(Br)cccc1>>c1(ccccc1)C(=O)O	ArX -> ArCOOH (CO2 or CO)
 403	nitrile_hydrolysis	nitrile	[A:2](=[O])-[O;D1]		C(CC)#N>>C(CC)(=O)O	RCN -> RCOOH, through the amide
-404	ester_hydrolysis	acyclic_ester	[A:1]=[A:2]-[O;D1]		O=C(CC)OC>>C(CC)(=O)O	RCOOR' -> RCOOH; the alkoxy leaves with the alcohol
+404	ester_hydrolysis	ester	[A:1]=[A:2]-[O;D1]		O=C(CC)OC>>C(CC)(=O)O	RCOOR' -> RCOOH; the alkoxy leaves with the alcohol
 #
 # --- the boroxine methyl donor, and the activated lactam halides toward oxygen ----------------------
 405	suzuki_alkyl	aryl_halide,alkyl_boroxine	[A:1]-[A:101]		c1c(Br)cccc1.CB1OB(C)OB(C)O1>>c1c(C)cccc1	Aryl halide and an alkyl boroxine, trimethylboroxine the methylating one (Suzuki)
@@ -1683,7 +1683,7 @@ id	name	groups	product	ring_sizes	probe	description
 1469	hydrazone_formation	ketone,hydrazine_nh2nh2	[A:2]=[A:101]-[A:102]		CC(=O)c1ccccc1.NN>>CC(=NN)c1ccccc1	Ketone and hydrazine, giving the unsubstituted hydrazone
 1470	hydrazone_formation	aldehyde,hydrazine_nh2nh2	[A:2]=[A:101]-[A:102]		CCC=O.NN>>CCC=NN	Aldehyde and hydrazine, giving the unsubstituted hydrazone
 # --- biaryl XEC, sulfinimines, aza-Michael, formylation, C-H borylation, zinc insertion, pyrimidines, amidines ---
-1471	biaryl_xec	aryl_halide,xec_aryl_halide	[A:1]-[A:101]	1:5,6,7	Brc1ccccc1.Clc1ncccn1>>c1ccc(-c2ncccn2)cc1	Two aryl halides joined to the biaryl (diboron one-pot, or a reductant); the borane is an agent
+1471	biaryl_xec	aryl_halide,aryl_halide	[A:1]-[A:101]	1:5,6,7	Brc1ccccc1.Clc1ncccn1>>c1ccc(-c2ncccn2)cc1	Two aryl halides joined to the biaryl (diboron one-pot, or a reductant); the borane is an agent
 1472	biaryl_xec	aryl_halide,aryl_sulfonate	[A:1]-[A:101]	1:5,6,7	Brc1ccccc1.O=S(=O)(Oc1ccncc1)C(F)(F)F>>c1ccc(-c2ccncc2)cc1	Aryl halide and aryl sulfonate joined to the biaryl (diboron one-pot, or a reductant)
 1473	sulfinimine_condensation	aldehyde,primary_sulfinamide	[A:2]=[A:101]-[A:102](=[A:103])-[A:104]		CC(C)(C)[S@](N)=O.O=Cc1ccccc1>>CC(C)(C)[S@@](=O)N=Cc1ccccc1	Aldehyde and a primary sulfinamide, giving the N-sulfinyl aldimine (Ti(OR)4, CuSO4)
 1474	sulfinimine_condensation	ketone,primary_sulfinamide	[A:2]=[A:101]-[A:102](=[A:103])-[A:104]		CC(C)(C)[S@](N)=O.CC(=O)c1ccccc1>>CC(C)(C)[S@@](=O)N=C(C)c1ccccc1	Ketone and a primary sulfinamide, giving the N-sulfinyl ketimine (Ti(OR)4)

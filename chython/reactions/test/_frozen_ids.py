@@ -26,7 +26,7 @@ and read the diff.  A new line is a new row; a CHANGED line is a renumber, which
 means.  Never hand-edit a line to make the ratchet pass.
 """
 
-#: `functional.tsv`: 434 rows, id -> the row it names.
+#: `functional.tsv`: 432 rows, id -> the row it names.
 FUNCTIONAL = {
     'functional:1': 'terminal_alkene',
     'functional:2': 'alkene',
@@ -286,7 +286,6 @@ FUNCTIONAL = {
     'functional:256': 'alkenyl_sulfonate',
     'functional:257': 'tetramethylstannane',
     'functional:258': 'diboron_ester',
-    'functional:259': 'acyclic_ester',
     'functional:260': 'alkyl_boroxine',
     'functional:261': 'nh_carbamate',
     'functional:262': 'nh_urea_any',
@@ -447,7 +446,6 @@ FUNCTIONAL = {
     'functional:417': 'alkynyl_grignard',
     'functional:418': 'lactim_ether',
     'functional:419': 'aminopyrazole_nh',
-    'functional:420': 'xec_aryl_halide',
     'functional:421': 'acyl_hydrazine_nh',
     'functional:422': 'lactim_oh',
     'functional:423': 'alkyl_sulfonate_alpha_ch',
@@ -1061,7 +1059,7 @@ REACTIONS = {
     'reactions:401': 'appel_iodide/secondary_alcohol',
     'reactions:402': 'carboxylation/aryl_halide',
     'reactions:403': 'nitrile_hydrolysis/nitrile',
-    'reactions:404': 'ester_hydrolysis/acyclic_ester',
+    'reactions:404': 'ester_hydrolysis/ester',
     'reactions:405': 'suzuki_alkyl/aryl_halide+alkyl_boroxine',
     'reactions:406': 'suzuki_alkyl/aryl_sulfonate+alkyl_boroxine',
     'reactions:407': 'suzuki_alkyl/alkenyl_halide+alkyl_boroxine',
@@ -2128,7 +2126,7 @@ REACTIONS = {
     'reactions:1468': 'heteroarene_hydrogenation/benzo_pyridine_ring',
     'reactions:1469': 'hydrazone_formation/ketone+hydrazine_nh2nh2',
     'reactions:1470': 'hydrazone_formation/aldehyde+hydrazine_nh2nh2',
-    'reactions:1471': 'biaryl_xec/aryl_halide+xec_aryl_halide',
+    'reactions:1471': 'biaryl_xec/aryl_halide+aryl_halide',
     'reactions:1472': 'biaryl_xec/aryl_halide+aryl_sulfonate',
     'reactions:1473': 'sulfinimine_condensation/aldehyde+primary_sulfinamide',
     'reactions:1474': 'sulfinimine_condensation/ketone+primary_sulfinamide',
