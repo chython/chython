@@ -37,6 +37,7 @@ from collections import Counter
 from ._errors import StereoMismatch
 from ._graph import Edge, Node, PolymerGraph
 from ._library import markers_for_closures, piece_keys, signature
+from ._shape import Shape
 from ..core import LogRecord, LOST, smiles
 
 
@@ -64,10 +65,14 @@ def decompose(mol, library, log):
         work.clean_stereo_groups()
     work.thiele()
     rank = work.canonical_order()
-    cap_cuts = _cap_cuts(work, rank, library)
+    shape = Shape(work)
+    cap_cuts = _cap_cuts(work, rank, library, shape)
+    phosphorus = any(work.atom(n).atomic_symbol == 'P' for n in work.atom_numbers)
     best = None
     for scope, pairs in library.cut_scopes:
-        attempt = _attempt(work, rank, pairs, library, cap_cuts, _types(scope))
+        if scope != 'PEPTIDE' and best is not None and not phosphorus:
+            break       # every nucleotide carries phosphorus; without it the other scopes only fragment
+        attempt = _attempt(work, rank, pairs, library, cap_cuts, _types(scope), shape)
         if not attempt[0][0]:
             best = attempt
             break
@@ -81,11 +86,14 @@ def _types(scope):
     return None if scope == 'ALL' else frozenset((scope, 'CHEM'))
 
 
-def _attempt(work, rank, pairs, library, cap_cuts, types):
+def _attempt(work, rank, pairs, library, cap_cuts, types, shape):
     """``((unmatched atoms, units), nodes, pieces, cuts)`` of one cut scope; lookups limited to `types`.
 
-    Raises :class:`StereoMismatch` when counting constitution-only matches as matches would cover more of
-    the molecule: then a configuration, not the library, is what stands between a unit and its monomer.
+    Candidates are screened by :mod:`._shape` key, read off the molecule with nothing written; only the
+    units a covering chooses are written out and checked exactly.  A chosen unit that fails is dropped
+    and the covering rerun.  Raises :class:`StereoMismatch` when a unit matching a monomer by constitution
+    only would cover atoms the final covering leaves unmatched: then a configuration, not the library, is
+    what stands between that unit and its monomer.
     """
     cuts = list(cap_cuts)
     small = _small_ring_bonds(work)
@@ -107,22 +115,49 @@ def _attempt(work, rank, pairs, library, cap_cuts, types):
             neighbours[owner[m]].add(owner[n])
 
     units = _Units(work, pieces, cuts, owner, library, types)
-    matched, loose = {}, {}                         # by full key; by constitution key only
+    parts = [shape.piece(p) for p in pieces]
+    incident = [[] for _ in pieces]
+    for bond in cuts:
+        a, b = owner[bond[0]], owner[bond[1]]
+        if a != b:
+            incident[a].append(bond)
+            incident[b].append(bond)
+    candidates = set()
     for group in _connected_groups(neighbours):
-        result = units.evaluate(group)
-        if result.matches:
-            matched[group] = result
-        elif result.constitution:
-            loose[group] = result
-    chosen, unmatched = _cover(pieces, matched, neighbours)
-    if loose:
-        widened, still = _cover(pieces, {**matched, **loose}, neighbours)
-        if _missed(pieces, still) < _missed(pieces, unmatched):
-            blamed = [loose[g] for g in widened if g in loose]
-            raise StereoMismatch('; '.join(f'{r.text} is monomer {_names(r.constitution)} by constitution and '
-                                           f'not by stereo' for r in blamed))
+        internal, boundary = [], []
+        for p in group:
+            for n, m in incident[p]:
+                inside_n, inside_m = owner[n] in group, owner[m] in group
+                if inside_n and inside_m:
+                    if p == min(owner[n], owner[m]):
+                        internal.append((n, m))
+                else:
+                    boundary.append((n, m) if inside_n else (m, n))
+        key = shape.join([parts[p] for p in group], internal, boundary)
+        if _scoped_entries(library.by_shape(key), types):
+            candidates.add(group)
 
-    nodes = [(group, matched[group]) for group in chosen]
+    verified, loose = {}, {}                        # exact matches; constitution-only matches
+    while True:
+        chosen, unmatched = _cover(pieces, candidates, neighbours)
+        failed = False
+        for group in chosen:
+            result = units.evaluate(group)
+            if result.matches:
+                verified[group] = result
+                continue
+            candidates.discard(group)
+            failed = True
+            if result.constitution:
+                loose[group] = result
+        if not failed:
+            break
+    blamed = [r for g, r in loose.items() if g <= unmatched]
+    if blamed:
+        raise StereoMismatch('; '.join(f'{r.text} is monomer {_names(r.constitution)} by constitution and '
+                                       f'not by stereo' for r in blamed))
+
+    nodes = [(group, verified[group]) for group in chosen]
     for region in _regions(unmatched, neighbours):
         nodes.append((region, units.evaluate(region, inline=True)))
     nodes.sort(key=lambda item: min(rank[a] for p in item[0] for a in pieces[p]))
@@ -162,13 +197,13 @@ def _missed(pieces, unmatched):
 MAX_CAP = 12
 
 
-def _cap_cuts(work, rank, library):
+def _cap_cuts(work, rank, library, shape):
     """Bonds whose far side is a terminal cap.
 
-    The far side is ring-free, at most MAX_CAP atoms, and with a marker where the bond was a one-R library
-    monomer; and the near end is an attachment the cap can join -- an R1 cap meets an R2 site, an R2 cap
-    an R1 site, of the cap's polymer type.  Without the second test an N-terminal amine reads as an amide
-    cap and an alanine's methyl as a methyl cap.
+    The far side is ring-free, at most MAX_CAP atoms, and has the :mod:`._shape` key of a one-R library
+    monomer with a marker where the bond was; and the near end is an attachment the cap can join -- an R1
+    cap meets an R2 site, an R2 cap an R1 site, of the cap's polymer type.  Without the second test an
+    N-terminal amine reads as an amide cap and an alanine's methyl as a methyl cap.
     """
     out = set()
     formulas = library.cap_formulas
@@ -182,10 +217,10 @@ def _cap_cuts(work, rank, library):
             side = _side(work, far, near, MAX_CAP)
             if side is None or _formula(work, side, 1) not in formulas:
                 continue
-            detached = work.detached_smiles({10: (far, near)})
-            text, _ = markers_for_closures(detached.text)
+            # a screen: a wrong cap cut only leaves one more piece, which a unit merges back
+            key = shape.join([shape.piece(tuple(side))], (), ((far, near),))
             end = signature(work, near, far)
-            for monomer, used in library.caps(piece_keys(text)[0]):
+            for monomer, used in library.caps_by_shape(key):
                 (label,) = used
                 partner = 'R2' if label == 1 else 'R1' if label == 2 else 'R3+'
                 if end in library.link_ends(monomer.polymer_type, partner):

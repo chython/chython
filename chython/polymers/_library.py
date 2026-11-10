@@ -37,6 +37,7 @@ from json import load as json_load
 from pathlib import Path
 from typing import NamedTuple
 
+from ._shape import shape_of_core
 from ..core import LogRecord, LOST, smiles
 
 
@@ -95,6 +96,10 @@ class MonomerLibrary:
         """
         return self._built().core.get(key, ())
 
+    def by_shape(self, key):
+        """``((monomer, used R numbers), ...)`` whose core has this :mod:`._shape` key -- a screen, not a match."""
+        return self._built().shapes.get(key, ())
+
     def by_constitution(self, key):
         """As :meth:`by_core`, with stereo removed from the key."""
         return self._built().constitution.get(key, ())
@@ -117,6 +122,10 @@ class MonomerLibrary:
         is every type at once.
         """
         return self._built().pairs
+
+    def caps_by_shape(self, key):
+        """``((monomer, used), ...)`` for a terminal cap whose core has this :mod:`._shape` key."""
+        return self._built().cap_shapes.get(key, ())
 
     def caps(self, key):
         """``((monomer, used), ...)`` for a one-R monomer -- a terminal cap -- whose core has this key."""
@@ -286,6 +295,8 @@ class _Index(NamedTuple):
     caps: dict
     cap_formulas: frozenset
     ends: dict
+    shapes: dict
+    cap_shapes: dict
 
 
 def markers_for_closures(text):
@@ -366,6 +377,7 @@ def _scopes(ends, signatures):
 def _build_index(library):
     core, constitution, labelled, signatures, formulas = {}, {}, {}, set(), set()
     caps, cap_formulas = {}, set()
+    shapes, cap_shapes = {}, {}
     ends = {}                       # (polymer type, 'R1' | 'R2' | 'R3+') -> signatures
     for m in library.monomers:
         try:
@@ -389,8 +401,10 @@ def _build_index(library):
                 core.setdefault(key, []).append(entry)
                 constitution.setdefault(flat, []).append(entry)
                 labelled[(m.polymer_type, m.symbol, frozenset(used))] = (piece, names)
+                shapes.setdefault(shape_of_core(piece), []).append(entry)
                 if size == len(labels) == 1:
                     caps.setdefault(key, []).append(entry)
+                    cap_shapes.setdefault(shape_of_core(piece), []).append(entry)
                     cap_formulas.add(formulas_of(piece))
                 if size == len(labels) > 1:
                     for marker in markers:
@@ -404,4 +418,5 @@ def _build_index(library):
     return _Index({k: tuple(v) for k, v in core.items()}, {k: tuple(v) for k, v in constitution.items()},
                   frozenset(signatures), labelled, frozenset(formulas), pairs,
                   {k: tuple(v) for k, v in caps.items()}, frozenset(cap_formulas),
-                  {k: frozenset(v) for k, v in ends.items()})
+                  {k: frozenset(v) for k, v in ends.items()}, {k: tuple(v) for k, v in shapes.items()},
+                  {k: tuple(v) for k, v in cap_shapes.items()})
