@@ -16,13 +16,14 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, see <https://www.gnu.org/licenses/>.
 #
-"""File formats: MDL V2000/V3000 with SDF and RDfile framing, Tripos MOL2, XYZ, PDBx/mmCIF, legacy
-PDB and the XML family.  Strings -- SMILES, SMARTS, InChI, names -- are not files and live elsewhere.
+"""File formats: MDL V2000/V3000 with SDF and RDfile framing, ChemDraw CDX and CDXML, Tripos MOL2, XYZ,
+PDBx/mmCIF, legacy PDB and the XML family.  Strings -- SMILES, SMARTS, InChI, names -- are not files and live elsewhere.
 A reader returns what the file said and normalises nothing; a writer neither repairs nor mutates its
 argument; an unparsable record is stored with its error (``SDFRead.failed``) rather than raised past.
 Unmodelled constructs round-trip, stored on the container so a molecule-only consumer cannot lose them.
 """
 
+from .cdx import CdxError, MalformedCdx, UnsupportedCdx, cdx, cdxml
 from .ctfile import (ERDFWrite, ESDFWrite, FIELDDISP_TAIL, FailedRecord, RDFRead, RDFWrite, SDFRead,
                      SDFWrite, SGroup, SGroupStore, STEREOLABEL, add_data_sgroup, data_sgroups, mol,
                      promote_stereo_labels, rxn, stereo_labels)
@@ -61,6 +62,7 @@ _set_sgroup_fns(add_data_sgroup=add_data_sgroup, data_sgroups=data_sgroups,
 # reads it: the alternative is `mol.sgroups`, which is the arena's dicts and the core's alphabet.
 __all__ = ['SDFRead', 'SDFWrite', 'ESDFWrite', 'RDFRead', 'RDFWrite', 'ERDFWrite',
            'FailedRecord', 'mol', 'rxn',
+           'cdx', 'cdxml', 'CdxError', 'MalformedCdx', 'UnsupportedCdx',
            'SGroup', 'SGroupStore', 'add_data_sgroup', 'data_sgroups', 'FIELDDISP_TAIL',
            'STEREOLABEL', 'stereo_labels', 'promote_stereo_labels',
            # `mol2` shadows its own module inside this package, as `xyz` already does: the facade is the

@@ -1,0 +1,835 @@
+# CDX/CDXML vocabulary, read by `chython.formats.cdx._vocabulary`.  GENERATED from Revvity's
+# open-source ChemDraw library (docs/AllCDXObjects.htm, docs/TableOfPropertiesByCDXMLName.htm,
+# chemdraw/CDXConstants.h and the XMLPutEnum tables); regenerate, never hand-edit.
+#
+# Copyright (c) 1986-2025, CambridgeSoft Corp, Revvity Inc and others.  BSD 3-Clause License:
+# Redistribution and use in source and binary forms, with or without modification, are permitted
+# provided that the following conditions are met: (1) redistributions of source code must retain
+# the above copyright notice, this list of conditions and the following disclaimer; (2)
+# redistributions in binary form must reproduce the above copyright notice, this list of
+# conditions and the following disclaimer in the documentation and/or other materials provided
+# with the distribution; (3) neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this software without
+# specific prior written permission.  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+# CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES ARE DISCLAIMED.
+#
+# COLUMNS: kind  tag-or-value  name  cdxml  type-or-enum  [enum]
+#   object    tag    kCDXObj name      element name
+#   property  tag    kCDXProp name     attribute name    CDX data type    enum (when enumerated)
+#   enum      value  enum type         CDXML spelling
+object	0x000E	kCDXProp_RepresentsProperty	represent
+object	0x0100	kCDXProp_FontTable	fonttable
+object	0x0300	kCDXProp_ColorTable	colortable
+object	0x8000	kCDXObj_Document	CDXML
+object	0x8001	kCDXObj_Page	page
+object	0x8002	kCDXObj_Group	group
+object	0x8003	kCDXObj_Fragment	fragment
+object	0x8004	kCDXObj_Node	n
+object	0x8005	kCDXObj_Bond	b
+object	0x8006	kCDXObj_Text	t
+object	0x8007	kCDXObj_Graphic	graphic
+object	0x8008	kCDXObj_Curve	curve
+object	0x8009	kCDXObj_EmbeddedObject	embeddedobject
+object	0x800A	kCDXObj_NamedAlternativeGroup	altgroup
+object	0x800B	kCDXObj_TemplateGrid	templategrid
+object	0x800C	kCDXObj_RegistryNumber	regnum
+object	0x800D	kCDXObj_ReactionScheme	scheme
+object	0x800E	kCDXObj_ReactionStep	step
+object	0x800F	kCDXObj_ObjectDefinition	objectdefinition
+object	0x8010	kCDXObj_Spectrum	spectrum
+object	0x8011	kCDXObj_ObjectTag	objecttag
+object	0x8013	kCDXObj_Sequence	sequence
+object	0x8014	kCDXObj_CrossReference	crossreference
+object	0x8015	kCDXObj_Splitter	splitter
+object	0x8016	kCDXObj_Table	table
+object	0x8017	kCDXObj_BracketedGroup	bracketedgroup
+object	0x8018	kCDXObj_BracketAttachment	bracketattachment
+object	0x8019	kCDXObj_CrossingBond	crossingbond
+object	0x801A	kCDXObj_Border	border
+object	0x801B	kCDXObj_Geometry	geometry
+object	0x801C	kCDXObj_Constraint	constraint
+object	0x801D	kCDXObj_TLCPlate	tlcplate
+object	0x801E	kCDXObj_TLCLane	tlclane
+object	0x801F	kCDXObj_TLCSpot	tlcspot
+object	0x8020	kCDXObj_ChemicalProperty	chemicalproperty
+object	0x8021	kCDXObj_Arrow	arrow
+object	0x8022	kCDXObj_StoichiometryGrid	stoichiometrygrid
+object	0x8023	kCDXObj_SGComponent	sgcomponent
+object	0x8024	kCDXObj_SGDatum	sgdatum
+object	0x8025	kCDXObj_BioShape	bioshape
+object	0x8026	kCDXObj_PlasmidMap	plasmidmap
+object	0x8027	kCDXObj_PlasmidMarker	plasmidmarker
+object	0x8028	kCDXObj_PlasmidRegion	plasmidregion
+object	0x8029	kCDXObj_RLogic	rlogic
+object	0x802A	kCDXObj_RLogicItem	rlogicitem
+object	0x802B	kCDXObj_Annotation	annotation
+object	0x802C	kCDXObj_GEPPlate	gepplate
+object	0x802D	kCDXObj_GEPBand	gepband
+object	0x802E	kCDXObj_Marker	marker
+object	0x802F	kCDXObj_GEPLane	geplane
+object	0x8030	kCDXObj_DocumentProperties	DocumentProperties
+object	0x8031	kCDXObj_Property	Property
+object	0x8032	kCDXObj_ColoredMolecularArea	ColoredMolecularArea
+property	0x0001	kCDXProp_CreationUserName	CreationUserName	CDXString
+property	0x0002	kCDXProp_CreationDate	CreationDate	CDXDate
+property	0x0003	kCDXProp_CreationProgram	CreationProgram	CDXString
+property	0x0004	kCDXProp_ModificationUserName	ModificationUserName	CDXString
+property	0x0005	kCDXProp_ModificationDate	ModificationDate	CDXDate
+property	0x0006	kCDXProp_ModificationProgram	ModificationProgram	CDXString
+property	0x0007	kCDXProp_Unused1		obsolete
+property	0x0008	kCDXProp_Name	Name	CDXString
+property	0x0009	kCDXProp_Comment	Comment	CDXString
+property	0x000A	kCDXProp_ZOrder	Z	INT16
+property	0x000B	kCDXProp_RegistryNumber	RegistryNumber	CDXString
+property	0x000C	kCDXProp_RegistryAuthority	RegistryAuthority	CDXString
+property	0x000D	kCDXProp_Unused2		obsolete
+property	0x000E	kCDXProp_RepresentsProperty	RepresentsProperty	CDXRepresentsProperty
+property	0x000F	kCDXProp_IgnoreWarnings	IgnoreWarnings	CDXBooleanImplied
+property	0x0010	kCDXProp_ChemicalWarning	Warning	CDXString
+property	0x0011	kCDXProp_Visible	Visible	CDXBoolean
+property	0x0012	kCDXProp_Transparent	Transparent	CDXBoolean
+property	0x0013	kCDXProp_SupersededBy	SupersededBy	CDXObjectID
+property	0x0014	kCDXProp_StructurePerspective	ShowPerspective	CDXBoolean
+property	0x0100	kCDXProp_FontTable	FontTable	CDXFontTable
+property	0x0200	kCDXProp_2DPosition	p	CDXPoint2D
+property	0x0201	kCDXProp_3DPosition	xyz	CDXPoint3D
+property	0x0202	kCDXProp_2DExtent	extent	CDXPoint2D
+property	0x0203	kCDXProp_3DExtent	extent3D	CDXPoint3D
+property	0x0204	kCDXProp_BoundingBox	BoundingBox	CDXRectangle
+property	0x0205	kCDXProp_RotationAngle	RotationAngle	INT32
+property	0x0206	kCDXProp_BoundsInParent	BoundsInParent	CDXRectangle
+property	0x0207	kCDXProp_3DHead	Head3D	CDXPoint3D
+property	0x0208	kCDXProp_3DTail	Tail3D	CDXPoint3D
+property	0x0209	kCDXProp_TopLeft	TopLeft	CDXPoint2D
+property	0x020A	kCDXProp_TopRight	TopRight	CDXPoint2D
+property	0x020B	kCDXProp_BottomRight	BottomRight	CDXPoint2D
+property	0x020C	kCDXProp_BottomLeft	BottomLeft	CDXPoint2D
+property	0x020D	kCDXProp_3DCenter	Center3D	CDXPoint3D
+property	0x020E	kCDXProp_3DMajorAxisEnd	MajorAxisEnd3D	CDXPoint3D
+property	0x020F	kCDXProp_3DMinorAxisEnd	MinorAxisEnd3D	CDXPoint3D
+property	0x0300	kCDXProp_ColorTable	ColorTable	CDXColorTable
+property	0x0301	kCDXProp_ForegroundColor	color	UINT16
+property	0x0302	kCDXProp_BackgroundColor	bgcolor	INT16
+property	0x0303	kCDXProp_FadePercent	FadePercent	INT16
+property	0x0304	kCDXProp_Unused8
+property	0x0305	kCDXProp_Unused9
+property	0x0306	kCDXProp_ForegroundAlpha	alpha	UINT16
+property	0x0307	kCDXProp_BackgroundAlpha	bgalpha	UINT16
+property	0x0308	kCDXProp_HighlightColor	highlightColor
+property	0x0400	kCDXProp_Node_Type	NodeType	INT16	CDXNodeType
+property	0x0401	kCDXProp_Node_LabelDisplay	LabelDisplay	INT8	CDXLabelDisplay
+property	0x0402	kCDXProp_Node_Element	Element	INT16
+property	0x0403	kCDXProp_Atom_ElementList	ElementList	CDXElementList
+property	0x0404	kCDXProp_Atom_Formula	NodeFormula	CDXFormula
+property	0x0420	kCDXProp_Atom_Isotope	Isotope	INT16
+property	0x0421	kCDXProp_Atom_Charge	Charge	INT8
+property	0x0422	kCDXProp_Atom_Radical	Radical	UINT8	CDXRadical
+property	0x0423	kCDXProp_Atom_RestrictFreeSites	FreeSites	UINT8
+property	0x0424	kCDXProp_Atom_RestrictImplicitHydrogens	ImplicitHydrogens	CDXBooleanImplied
+property	0x0425	kCDXProp_Atom_RestrictRingBondCount	RingBondCount	INT8	CDXRingBondCount
+property	0x0426	kCDXProp_Atom_RestrictUnsaturatedBonds	UnsaturatedBonds	INT8	CDXUnsaturation
+property	0x0427	kCDXProp_Atom_RestrictRxnChange	RxnChange	CDXBooleanImplied
+property	0x0428	kCDXProp_Atom_RestrictRxnStereo	RxnStereo	INT8	CDXReactionStereo
+property	0x0429	kCDXProp_Atom_AbnormalValence	AbnormalValence	CDXBooleanImplied
+property	0x042A	kCDXProp_Unused3
+property	0x042B	kCDXProp_Atom_NumHydrogens	NumHydrogens	UINT16
+property	0x042C	kCDXProp_Unused4
+property	0x042D	kCDXProp_Unused5
+property	0x042E	kCDXProp_Atom_HDot	HDot	CDXBooleanImplied
+property	0x042F	kCDXProp_Atom_HDash	HDash	CDXBooleanImplied
+property	0x0430	kCDXProp_Atom_Geometry	Geometry	INT8	CDXAtomGeometry
+property	0x0431	kCDXProp_Atom_BondOrdering	BondOrdering	CDXObjectIDArray
+property	0x0432	kCDXProp_Node_Attachments	Attachments	CDXObjectIDArrayWithCounts
+property	0x0433	kCDXProp_Atom_GenericNickname	GenericNickname	CDXString
+property	0x0434	kCDXProp_Atom_AltGroupID	AltGroupID	CDXObjectID
+property	0x0435	kCDXProp_Atom_RestrictSubstituentsUpTo	SubstituentsUpTo	UINT8
+property	0x0436	kCDXProp_Atom_RestrictSubstituentsExactly	SubstituentsExactly	UINT8
+property	0x0437	kCDXProp_Atom_CIPStereochemistry	AS	INT8	CDXAtomCIPType
+property	0x0438	kCDXProp_Atom_Translation	Translation	INT8	CDXTranslation
+property	0x0439	kCDXProp_Atom_AtomNumber	AtomNumber	CDXString
+property	0x043A	kCDXProp_Atom_ShowQuery	ShowAtomQuery	CDXBoolean
+property	0x043B	kCDXProp_Atom_ShowStereo	ShowAtomStereo	CDXBoolean
+property	0x043C	kCDXProp_Atom_ShowAtomNumber	ShowAtomNumber	CDXBoolean
+property	0x043D	kCDXProp_Atom_LinkCountLow	LinkCountLow	INT16
+property	0x043E	kCDXProp_Atom_LinkCountHigh	LinkCountHigh	INT16
+property	0x043F	kCDXProp_Atom_IsotopicAbundance	IsotopicAbundance	INT8	CDXAbundance
+property	0x0440	kCDXProp_Atom_ExternalConnectionType	ExternalConnectionType	INT8	CDXExternalConnectionType
+property	0x0441	kCDXProp_Atom_GenericList	GenericList	CDXGenericList
+property	0x0442	kCDXProp_Atom_ShowTerminalCarbonLabels	ShowTerminalCarbonLabels	CDXBooleanImplied
+property	0x0443	kCDXProp_Atom_ShowNonTerminalCarbonLabels	ShowNonTerminalCarbonLabels	CDXBooleanImplied
+property	0x0444	kCDXProp_Atom_HideImplicitHydrogens	HideImplicitHydrogens	CDXBooleanImplied
+property	0x0445	kCDXProp_Atom_ShowEnhancedStereo	ShowAtomEnhancedStereo	CDXBoolean
+property	0x0446	kCDXProp_Atom_EnhancedStereoType	EnhancedStereoType	UINT8	CDXEnhancedStereoType
+property	0x0447	kCDXProp_Atom_EnhancedStereoGroupNum	EnhancedStereoGroupNum	UINT16
+property	0x0448	kCDXProp_Node_NeedsClean	NeedsClean	CDXBoolean
+property	0x0449	kCDXProp_Atom_ResidueID	ResidueID	CDXString
+property	0x044A	kCDXProp_Atom_ShowResidueID	ShowResidueID	CDXBoolean
+property	0x044B	kCDXProp_Atom_ExternalConnectionNum	ExternalConnectionNum	INT8
+property	0x044C	kCDXProp_Atom_ShowAtomID	ShowAtomID	CDXBoolean
+property	0x044D	kCDXProp_Atom_AtomID	AtomID	UINT32
+property	0x044E	kCDXProp_Node_HydrogenBondAttachmentAtoms	HydrogenBondAttachmentAtoms	CDXObjectIDArray
+property	0x044F	kCDXProp_Node_HydrogenBonds	HydrogenBonds	CDXObjectIDArray
+property	0x0500	kCDXProp_Mole_Racemic	Racemic	CDXBoolean
+property	0x0501	kCDXProp_Mole_Absolute	Absolute	CDXBoolean
+property	0x0502	kCDXProp_Mole_Relative	Relative	CDXBoolean
+property	0x0503	kCDXProp_Mole_Formula	Formula	CDXFormula
+property	0x0504	kCDXProp_Mole_Weight	Weight	FLOAT64
+property	0x0505	kCDXProp_Frag_ConnectionOrder	ConnectionOrder	CDXObjectIDArray
+property	0x0506	kCDXProp_Frag_SequenceType	SequenceType	INT8	CDXSeqType
+property	0x0507	kCDXProp_Frag_IsFromGuidedStereo	StereoGuided	CDXBoolean
+property	0x0508	kCDXProp_Frag_IsComplement		CDXBoolean
+property	0x0600	kCDXProp_Bond_Order	Order	INT16
+property	0x0601	kCDXProp_Bond_Display	Display	INT16	CDXBondDisplay
+property	0x0602	kCDXProp_Bond_Display2	Display2	INT16	CDXBondDisplay
+property	0x0603	kCDXProp_Bond_DoublePosition	DoublePosition	INT16	CDXBondDoublePosition
+property	0x0604	kCDXProp_Bond_Begin	B	CDXObjectID
+property	0x0605	kCDXProp_Bond_End	E	CDXObjectID
+property	0x0606	kCDXProp_Bond_RestrictTopology	Topology	INT8	CDXBondTopology
+property	0x0607	kCDXProp_Bond_RestrictRxnParticipation	RxnParticipation	INT8	CDXBondReactionParticipation
+property	0x0608	kCDXProp_Bond_BeginAttach	BeginAttach	UINT8
+property	0x0609	kCDXProp_Bond_EndAttach	EndAttach	UINT8
+property	0x060A	kCDXProp_Bond_CIPStereochemistry	BS	INT8	CDXBondCIPType
+property	0x060B	kCDXProp_Bond_BondOrdering	BondCircularOrdering	CDXObjectIDArray
+property	0x060C	kCDXProp_Bond_ShowQuery	ShowBondQuery	CDXBoolean
+property	0x060D	kCDXProp_Bond_ShowStereo	ShowBondStereo	CDXBoolean
+property	0x060E	kCDXProp_Bond_CrossingBonds	CrossingBonds	CDXObjectIDArray
+property	0x060F	kCDXProp_Bond_ShowRxn	ShowBondRxn	CDXBoolean
+property	0x0610	kCDXProp_Bond_Connectivity	Connectivity	INT16	CDXConnectivity
+property	0x0611	kCDXProp_Bond_BeginExternalNum	BeginExternalNum	INT8
+property	0x0612	kCDXProp_Bond_EndExternalNum	EndExternalNum	INT8
+property	0x0613	kCDXProp_Bond_Connectivity_Routed	Routed	CDXBoolean
+property	0x0700	kCDXProp_Text	Text	CDXString
+property	0x0701	kCDXProp_Justification	Justification	INT8	CDXTextJustification
+property	0x0702	kCDXProp_LineHeight	LineHeight	UINT16
+property	0x0703	kCDXProp_WordWrapWidth	WordWrapWidth	INT16
+property	0x0704	kCDXProp_LineStarts	LineStarts	INT16ListWithCounts
+property	0x0705	kCDXProp_LabelAlignment	LabelAlignment	INT8	CDXLabelDisplay
+property	0x0706	kCDXProp_LabelLineHeight	LabelLineHeight	INT16
+property	0x0707	kCDXProp_CaptionLineHeight	CaptionLineHeight	INT16
+property	0x0708	kCDXProp_InterpretChemically	InterpretChemically	CDXBooleanImplied
+property	0x0709	kCDXProp_UTF8Text		CDXString
+property	0x0800	kCDXProp_MacPrintInfo	MacPrintInfo	Unformatted
+property	0x0801	kCDXProp_WinPrintInfo	WinPrintInfo	Unformatted
+property	0x0802	kCDXProp_PrintMargins	PrintMargins	CDXRectangle
+property	0x0803	kCDXProp_ChainAngle	ChainAngle	INT32
+property	0x0804	kCDXProp_BondSpacing	BondSpacing	INT16
+property	0x0805	kCDXProp_BondLength	BondLength	CDXCoordinate
+property	0x0806	kCDXProp_BoldWidth	BoldWidth	CDXCoordinate
+property	0x0807	kCDXProp_LineWidth	LineWidth	CDXCoordinate
+property	0x0808	kCDXProp_MarginWidth	MarginWidth	CDXCoordinate
+property	0x0809	kCDXProp_HashSpacing	HashSpacing	CDXCoordinate
+property	0x080A	kCDXProp_LabelStyle	(not used)	CDXFontStyle
+property	0x080B	kCDXProp_CaptionStyle	(not used)	CDXFontStyle
+property	0x080C	kCDXProp_CaptionJustification	CaptionJustification	INT8	CDXTextJustification
+property	0x080D	kCDXProp_FractionalWidths	FractionalWidths	CDXBooleanImplied
+property	0x080E	kCDXProp_Magnification	Magnification	INT16
+property	0x080F	kCDXProp_WidthPages	WidthPages	INT16
+property	0x0810	kCDXProp_HeightPages	HeightPages	INT16
+property	0x0811	kCDXProp_DrawingSpaceType	DrawingSpace	INT8
+property	0x0812	kCDXProp_Width	Width	CDXCoordinate
+property	0x0813	kCDXProp_Height	Height	CDXCoordinate
+property	0x0814	kCDXProp_PageOverlap	PageOverlap	CDXCoordinate
+property	0x0815	kCDXProp_Header	Header	CDXString
+property	0x0816	kCDXProp_HeaderPosition	HeaderPosition	CDXCoordinate
+property	0x0817	kCDXProp_Footer	Footer	CDXString
+property	0x0818	kCDXProp_FooterPosition	FooterPosition	CDXCoordinate
+property	0x0819	kCDXProp_PrintTrimMarks	PrintTrimMarks	CDXBooleanImplied
+property	0x081A	kCDXProp_LabelStyleFont	LabelFont	INT16
+property	0x081B	kCDXProp_CaptionStyleFont	CaptionFont	INT16
+property	0x081C	kCDXProp_LabelStyleSize	LabelSize	INT16
+property	0x081D	kCDXProp_CaptionStyleSize	CaptionSize	INT16
+property	0x081E	kCDXProp_LabelStyleFace	LabelFace	INT16
+property	0x081F	kCDXProp_CaptionStyleFace	CaptionFace	INT16
+property	0x0820	kCDXProp_LabelStyleColor	LabelColor	INT16
+property	0x0821	kCDXProp_CaptionStyleColor	CaptionColor	INT16
+property	0x0822	kCDXProp_BondSpacingAbs	BondSpacingAbs	CDXCoordinate
+property	0x0823	kCDXProp_LabelJustification	LabelJustification	INT8	CDXTextJustification
+property	0x0824	kCDXProp_FixInplaceExtent	FixInPlaceExtent	CDXPoint2D
+property	0x0825	kCDXProp_Side	Side	UINT16	CDXSideType
+property	0x0826	kCDXProp_FixInplaceGap	FixInPlaceGap	CDXPoint2D
+property	0x0827	kCDXProp_CartridgeData	CartridgeData	Unformatted
+property	0x0828	kCDXProp_AminoAcidTermini	AminoAcidTermini	INT8	CDXAminoAcidTermini
+property	0x0829	kCDXProp_ShowSequenceTermini	ShowSequenceTermini	CDXBooleanImplied
+property	0x082A	kCDXProp_ShowSequenceBonds	ShowSequenceBonds	CDXBooleanImplied
+property	0x082B	kCDXProp_ResidueWrapCount	ResidueWrapCount	INT8
+property	0x082C	kCDXProp_ResidueBlockCount	ResidueBlockCount	INT8
+property	0x082D	kCDXProp_Unused10		obsolete
+property	0x082E	kCDXProp_Unused11		obsolete
+property	0x082F	kCDXProp_BondSpacingType	BondSpacingType
+property	0x0830	kCDXProp_LabelStyleFontName
+property	0x0831	kCDXProp_CaptionStyleFontName
+property	0x0832	kCDXProp_ShowSequenceUnlinkedBranches	ShowSequenceUnlinkedBranches	CDXBooleanImplied
+property	0x0833	kCDXProp_MonomerRenderingStyle	MonomerRenderingStyle	CDXString
+property	0x0900	kCDXProp_Window_IsZoomed	WindowIsZoomed	CDXBooleanImplied
+property	0x0901	kCDXProp_Window_Position	WindowPosition	CDXPoint2D
+property	0x0902	kCDXProp_Window_Size	WindowSize	CDXPoint2D
+property	0x0A00	kCDXProp_Graphic_Type	GraphicType	INT16	CDXGraphicType
+property	0x0A01	kCDXProp_Line_Type	LineType	INT16	CDXLineType
+property	0x0A02	kCDXProp_Arrow_Type	ArrowType	INT16	CDXArrowType
+property	0x0A03	kCDXProp_Rectangle_Type	RectangleType	INT16	CDXRectangleType
+property	0x0A04	kCDXProp_Oval_Type	OvalType	INT16	CDXOvalType
+property	0x0A05	kCDXProp_Orbital_Type	OrbitalType	INT16	CDXOrbitalType
+property	0x0A06	kCDXProp_Bracket_Type	BracketType	INT16	CDXBracketType
+property	0x0A07	kCDXProp_Symbol_Type	SymbolType	INT16	CDXSymbolType
+property	0x0A08	kCDXProp_Curve_Type	CurveType	INT16
+property	0x0A20	kCDXProp_Arrowhead_Size	HeadSize	INT16
+property	0x0A21	kCDXProp_Arc_AngularSize	AngularSize	INT16
+property	0x0A22	kCDXProp_Bracket_LipSize	LipSize	INT16
+property	0x0A23	kCDXProp_Curve_Points	CurvePoints	CDXCurvePoints
+property	0x0A24	kCDXProp_Bracket_Usage	BracketUsage	INT8	CDXBracketUsage
+property	0x0A25	kCDXProp_Polymer_RepeatPattern	PolymerRepeatPattern	INT8	CDXPolymerRepeatPattern
+property	0x0A26	kCDXProp_Polymer_FlipType	PolymerFlipType	INT8	CDXPolymerFlipType
+property	0x0A27	kCDXProp_BracketedObjects	BracketedObjectIDs	CDXObjectIDArray
+property	0x0A28	kCDXProp_Bracket_RepeatCount	RepeatCount	FLOAT64
+property	0x0A29	kCDXProp_Bracket_ComponentOrder	ComponentOrder	INT16
+property	0x0A2A	kCDXProp_Bracket_SRULabel	SRULabel	CDXString
+property	0x0A2B	kCDXProp_Bracket_GraphicID	GraphicID	CDXObjectID
+property	0x0A2C	kCDXProp_Bracket_BondID	BondID	CDXObjectID
+property	0x0A2D	kCDXProp_Bracket_InnerAtomID	InnerAtomID	CDXObjectID
+property	0x0A2E	kCDXProp_Curve_Points3D	CurvePoints3D	CDXCurvePoints3D
+property	0x0A2F	kCDXProp_Arrowhead_Type	ArrowheadType	INT16	CDXArrowHeadType
+property	0x0A30	kCDXProp_Arrowhead_CenterSize	ArrowheadCenterSize	UINT16
+property	0x0A31	kCDXProp_Arrowhead_Width	ArrowheadWidth	UINT16
+property	0x0A32	kCDXProp_ShadowSize	ShadowSize	UINT16
+property	0x0A33	kCDXProp_Arrow_ShaftSpacing	ArrowShaftSpacing	UINT16
+property	0x0A34	kCDXProp_Arrow_EquilibriumRatio	ArrowEquilibriumRatio	UINT16
+property	0x0A35	kCDXProp_Arrowhead_Head	ArrowheadHead	INT16	CDXArrowHeadPosition
+property	0x0A36	kCDXProp_Arrowhead_Tail	ArrowheadTail	INT16	CDXArrowHeadPosition
+property	0x0A37	kCDXProp_Fill_Type	FillType	INT16	CDXFillType
+property	0x0A38	kCDXProp_Curve_Spacing	CurveSpacing	UINT16
+property	0x0A39	kCDXProp_Closed	Closed	CDXBoolean
+property	0x0A3A	kCDXProp_Arrow_Dipole	Dipole	CDXBoolean
+property	0x0A3B	kCDXProp_Arrow_NoGo	NoGo	INT8	CDXNoGoType
+property	0x0A3C	kCDXProp_CornerRadius	CornerRadius	INT16
+property	0x0A3D	kCDXProp_Frame_Type	FrameType	INT16	CDXFrameType
+property	0x0A3E	kCDXProp_Arrow_SourceID	ArrowSource	INT16
+property	0x0A3F	kCDXProp_Arrow_TargetID	ArrowTarget	INT16
+property	0x0A40	kCDXProp_Arrow_IsSmart_Deleted
+property	0x0A60	kCDXProp_Picture_Edition	Edition	Unformatted
+property	0x0A61	kCDXProp_Picture_EditionAlias	EditionAlias	Unformatted
+property	0x0A62	kCDXProp_MacPICT	MacPICT	Unformatted
+property	0x0A63	kCDXProp_WindowsMetafile	WindowsMetafile	Unformatted
+property	0x0A64	kCDXProp_OLEObject	OLEObject	Unformatted
+property	0x0A65	kCDXProp_EnhancedMetafile	EnhancedMetafile	Unformatted
+property	0x0A66	kCDXProp_Compressed_MacPICT	CompressedMacPICT
+property	0x0A67	kCDXProp_Compressed_WindowsMetafile	CompressedWindowsMetafile
+property	0x0A68	kCDXProp_Compressed_OLEObject	CompressedOLEObject
+property	0x0A69	kCDXProp_Compressed_EnhancedMetafile	CompressedEnhancedMetafile
+property	0x0A6A	kCDXProp_Uncompressed_MacPICT_Size	UncompressedMacPICTSize	INT32
+property	0x0A6B	kCDXProp_Uncompressed_WindowsMetafile_Size	UncompressedWindowsMetafileSize	INT32
+property	0x0A6C	kCDXProp_Uncompressed_OLEObject_Size	UncompressedOLEObjectSize	INT32
+property	0x0A6D	kCDXProp_Uncompressed_EnhancedMetafile_Size	UncompressedEnhancedMetafileSize	INT32
+property	0x0A6E	kCDXProp_GIF	GIF	Unformatted
+property	0x0A6F	kCDXProp_TIFF	TIFF	Unformatted
+property	0x0A70	kCDXProp_PNG	PNG	Unformatted
+property	0x0A71	kCDXProp_JPEG	JPEG	Unformatted
+property	0x0A72	kCDXProp_BMP	BMP	Unformatted
+property	0x0A73	kCDXProp_PDF	PDF	Unformatted
+property	0x0A80	kCDXProp_Spectrum_XSpacing	XSpacing	FLOAT64
+property	0x0A81	kCDXProp_Spectrum_XLow	XLow	FLOAT64
+property	0x0A82	kCDXProp_Spectrum_XType	XType	INT16	CDXSpectrumXType
+property	0x0A83	kCDXProp_Spectrum_YType	YType	INT16	CDXSpectrumYType
+property	0x0A84	kCDXProp_Spectrum_XAxisLabel	XAxisLabel	CDXString
+property	0x0A85	kCDXProp_Spectrum_YAxisLabel	YAxisLabel	CDXString
+property	0x0A86	kCDXProp_Spectrum_DataPoint	(not used)	FLOAT64
+property	0x0A87	kCDXProp_Spectrum_Class	Class	INT16	CDXSpectrumClass
+property	0x0A88	kCDXProp_Spectrum_YLow	YLow	FLOAT64
+property	0x0A89	kCDXProp_Spectrum_YScale	YScale	FLOAT64
+property	0x0AA0	kCDXProp_TLC_OriginFraction	OriginFraction	FLOAT64
+property	0x0AA1	kCDXProp_TLC_SolventFrontFraction	SolventFrontFraction	FLOAT64
+property	0x0AA2	kCDXProp_TLC_ShowOrigin	ShowOrigin	CDXBoolean
+property	0x0AA3	kCDXProp_TLC_ShowSolventFront	ShowSolventFront	CDXBoolean
+property	0x0AA4	kCDXProp_ShowBorders	ShowBorders	CDXBoolean
+property	0x0AA5	kCDXProp_TLC_ShowSideTicks	ShowSideTicks	CDXBoolean
+property	0x0AB0	kCDXProp_TLC_Rf	Rf	FLOAT64
+property	0x0AB1	kCDXProp_TLC_Tail	Tail	CDXCoordinate
+property	0x0AB2	kCDXProp_TLC_ShowRf	ShowRf	CDXBoolean
+property	0x0AB3	kCDXProp_GEP_ShowScale	ShowScale
+property	0x0AB4	kCDXProp_GEP_ScaleUnit	UnitID
+property	0x0AB5	kCDXProp_GEP_StartRange	StartRange
+property	0x0AB6	kCDXProp_GEP_EndRange	EndRange
+property	0x0AB7	kCDXProp_GEP_ShowValue	ShowValue
+property	0x0AB8	kCDXProp_GEP_Value	BandValue
+property	0x0AB9	kCDXProp_GEP_LaneLabelsAngle	LabelsAngle
+property	0x0ABA	kCDXProp_GEP_AxisWidth	AxisWidth
+property	0x0AC0	kCDXProp_BioShape_Type	BioShapeType		CDXBioShapeType
+property	0x0AC1	kCDXProp_1SubstrateEnzyme_ReceptorSize	EnzymeReceptorSize
+property	0x0AC2	kCDXProp_Receptor_NeckWidth	NeckWidth
+property	0x0AC3	kCDXProp_HelixProtein_CylinderWidth	CylinderWidth	CDXCoordinate
+property	0x0AC4	kCDXProp_HelixProtein_CylinderHeight	CylinderHeight	CDXCoordinate
+property	0x0AC5	kCDXProp_HelixProtein_CylinderDistance	CylinderDistance	CDXCoordinate
+property	0x0AC6	kCDXProp_HelixProtein_PipeWidth	PipeWidth	CDXCoordinate
+property	0x0AC7	kCDXProp_HelixProtein_Extra	HelixProteinExtra
+property	0x0AC8	kCDXProp_Membrane_ElementSize	MembraneElementSize	CDXCoordinate
+property	0x0AC9	kCDXProp_Membrane_StartAngle	MembraneStartAngle
+property	0x0ACA	kCDXProp_Membrane_EndAngle	MembraneEndAngle
+property	0x0ACB	kCDXProp_DNA_WaveLength	DNAWaveLength	CDXCoordinate
+property	0x0ACC	kCDXProp_DNA_WaveWidth	DNAWaveWidth	CDXCoordinate
+property	0x0ACD	kCDXProp_DNA_Offset	DNAWaveOffset	CDXCoordinate
+property	0x0ACE	kCDXProp_DNA_WaveHeight	DNAWaveHeight	CDXCoordinate
+property	0x0ACF	kCDXProp_Gprotein_UpperHeight	GproteinUpperHeight
+property	0x0B00	kCDXProp_NamedAlternativeGroup_TextFrame	TextFrame	CDXRectangle
+property	0x0B01	kCDXProp_NamedAlternativeGroup_GroupFrame	GroupFrame	CDXRectangle
+property	0x0B02	kCDXProp_NamedAlternativeGroup_Valence	Valence	INT16
+property	0x0B80	kCDXProp_GeometricFeature	GeometricFeature	INT8	CDXGeometricFeature
+property	0x0B81	kCDXProp_RelationValue	RelationValue	FLOAT64
+property	0x0B82	kCDXProp_BasisObjects	BasisObjects	CDXObjectIDArray
+property	0x0B83	kCDXProp_ConstraintType	ConstraintType	INT8	CDXConstraintType
+property	0x0B84	kCDXProp_ConstraintMin	ConstraintMin	FLOAT64
+property	0x0B85	kCDXProp_ConstraintMax	ConstraintMax	FLOAT64
+property	0x0B86	kCDXProp_IgnoreUnconnectedAtoms	IgnoreUnconnectedAtoms	CDXBooleanImplied
+property	0x0B87	kCDXProp_DihedralIsChiral	DihedralIsChiral	CDXBooleanImplied
+property	0x0B88	kCDXProp_PointIsDirected	PointIsDirected	CDXBooleanImplied
+property	0x0BB0	kCDXProp_ChemicalPropertyType	ChemicalPropertyType	UINT32
+property	0x0BB1	kCDXProp_ChemicalPropertyDisplayID	ChemicalPropertyDisplayID	CDXObjectID
+property	0x0BB2	kCDXProp_ChemicalPropertyIsActive	ChemicalPropertyIsActive	CDXBoolean
+property	0x0BB3	kCDXProp_ChemicalPropertyUnknown
+property	0x0BB4	kCDXProp_ChemicalPropertyName	ChemPropName
+property	0x0BB5	kCDXProp_ChemicalPropertyFormula	ChemPropFormula
+property	0x0BB6	kCDXProp_ChemicalPropertyExactMass	ChemPropExactMass
+property	0x0BB7	kCDXProp_ChemicalPropertyMolWeight	ChemPropMolWt
+property	0x0BB8	kCDXProp_ChemicalPropertyMOverZ	ChemPropMOverZ
+property	0x0BB9	kCDXProp_ChemicalPropertyAnalysis	ChemPropAnalysis
+property	0x0BBA	kCDXProp_ChemicalPropertyBoilingPoint	ChemPropBoilingPt
+property	0x0BBB	kCDXProp_ChemicalPropertyMeltingPoint	ChemPropMeltingPt
+property	0x0BBC	kCDXProp_ChemicalPropertyCriticalTemp	ChemPropCritTemp
+property	0x0BBD	kCDXProp_ChemicalPropertyCriticalPressure	ChemPropCritPres
+property	0x0BBE	kCDXProp_ChemicalPropertyCriticalVolume	ChemPropCritVol
+property	0x0BBF	kCDXProp_ChemicalPropertyGibbsEnergy	ChemPropGibbs
+property	0x0BC0	kCDXProp_ChemicalPropertyLogP	ChemPropLogP
+property	0x0BC1	kCDXProp_ChemicalPropertyMR	ChemPropMR
+property	0x0BC2	kCDXProp_ChemicalPropertyHenrysLaw	ChemPropHenry
+property	0x0BC3	kCDXProp_ChemicalPropertyHeatOfForm	ChemPropEForm
+property	0x0BC4	kCDXProp_ChemicalPropertytPSA	ChemProptPSA
+property	0x0BC5	kCDXProp_ChemicalPropertyCLogP	ChemPropCLogP
+property	0x0BC6	kCDXProp_ChemicalPropertyCMR	ChemPropCMR
+property	0x0BC7	kCDXProp_ChemicalPropertyLogS	ChemPropLogS
+property	0x0BC8	kCDXProp_ChemicalPropertyPKa	ChemPropPKa
+property	0x0BC9	kCDXProp_ChemicalPropertyID	ChemPropID
+property	0x0BCA	kCDXProp_ChemicalPropertyFragmentLabel	ChemPropFragmentLabel
+property	0x0BCB	kCDXProp_ChemicalPropertyTypeIUPACAtomNumber
+property	0x0BCC	kCDXProp_ChemicalPropertyIsChemicallySignificant	ChemicallySignificant
+property	0x0BCD	kCDXProp_ChemicalPropertyExternalBonds	ExternalBonds
+property	0x0C00	kCDXProp_ReactionStep_Atom_Map	ReactionStepAtomMap	CDXObjectIDArray
+property	0x0C01	kCDXProp_ReactionStep_Reactants	ReactionStepReactants	CDXObjectIDArray
+property	0x0C02	kCDXProp_ReactionStep_Products	ReactionStepProducts	CDXObjectIDArray
+property	0x0C03	kCDXProp_ReactionStep_Plusses	ReactionStepPlusses	CDXObjectIDArray
+property	0x0C04	kCDXProp_ReactionStep_Arrows	ReactionStepArrows	CDXObjectIDArray
+property	0x0C05	kCDXProp_ReactionStep_ObjectsAboveArrow	ReactionStepObjectsAboveArrow	CDXObjectIDArray
+property	0x0C06	kCDXProp_ReactionStep_ObjectsBelowArrow	ReactionStepObjectsBelowArrow	CDXObjectIDArray
+property	0x0C07	kCDXProp_ReactionStep_Atom_Map_Manual	ReactionStepAtomMapManual	CDXObjectIDArray
+property	0x0C08	kCDXProp_ReactionStep_Atom_Map_Auto	ReactionStepAtomMapAuto	CDXObjectIDArray
+property	0x0C09	kCDXProp_RxnAutonumber_Style	RxnAutonumberStyle	INT16	CDXRxnAutonumberStyle
+property	0x0C0A	kCDXProp_RxnAutonumber_Conditions	RxnAutonumberConditions	CDXBoolean
+property	0x0C0B	kCDXProp_RxnAutonumber_Start	RxnAutonumberStart	INT16
+property	0x0C0C	kCDXProp_RxnAutonumber_Format	RxnAutonumberFormat	CDXString
+property	0x0D00	kCDXProp_ObjectTag_Type	TagType	INT16	CDXObjectTagType
+property	0x0D01	kCDXProp_Unused6		obsolete
+property	0x0D02	kCDXProp_Unused7		obsolete
+property	0x0D03	kCDXProp_ObjectTag_Tracking	Tracking	CDXBoolean
+property	0x0D04	kCDXProp_ObjectTag_Persistent	Persistent	CDXBoolean
+property	0x0D05	kCDXProp_ObjectTag_Value	Value	varies
+property	0x0D06	kCDXProp_Positioning	PositioningType	INT8	CDXPositioningType
+property	0x0D07	kCDXProp_PositioningAngle	PositioningAngle	INT32
+property	0x0D08	kCDXProp_PositioningOffset	PositioningOffset	CDXPoint2D
+property	0x0E00	kCDXProp_Sequence_Identifier	SequenceIdentifier	CDXString
+property	0x0F00	kCDXProp_CrossReference_Container	CrossReferenceContainer	CDXString
+property	0x0F01	kCDXProp_CrossReference_Document	CrossReferenceDocument	CDXString
+property	0x0F02	kCDXProp_CrossReference_Identifier	CrossReferenceIdentifier	CDXString
+property	0x0F03	kCDXProp_CrossReference_Sequence	CrossReferenceSequence	CDXString
+property	0x1000	kCDXProp_Template_PaneHeight	PaneHeight	CDXCoordinate
+property	0x1001	kCDXProp_Template_NumRows	NumRows	INT16
+property	0x1002	kCDXProp_Template_NumColumns	NumColumns	INT16
+property	0x1100	kCDXProp_Group_Integral	Integral	CDXBoolean
+property	0x1200	kCDXProp_SG_DataType	SGDataType	INT16
+property	0x1201	kCDXProp_SG_PropertyType	SGPropertyType	INT16
+property	0x1202	kCDXProp_SG_DataValue	SGDataValue
+property	0x1203	kCDXProp_SG_ComponentIsReactant	ComponentIsReactant	CDXBoolean
+property	0x1204	kCDXProp_SG_ComponentIsHeader	ComponentIsHeader	CDXBoolean
+property	0x1205	kCDXProp_IsHidden	IsHidden	CDXBoolean
+property	0x1206	kCDXProp_IsReadOnly	IsReadOnly	CDXBoolean
+property	0x1207	kCDXProp_IsEdited	IsEdited	CDXBoolean
+property	0x1208	kCDXProp_SG_ComponentReferenceID	ComponentReferenceID	INT16
+property	0x1300	kCDXProp_PlasmidMap_NumberBasePairs	NumberBasePairs	INT16
+property	0x1301	kCDXProp_PlasmidMap_MarkerStart	MarkerStart	INT16
+property	0x1302	kCDXProp_PlasmidMap_MarkerOffset	MarkerOffset	CDXCoordinate
+property	0x1303	kCDXProp_PlasmidMap_MarkerAngle	MarkerAngle	CDXCoordinate
+property	0x1304	kCDXProp_PlasmidMap_RegionStart	RegionStart	INT16
+property	0x1305	kCDXProp_PlasmidMap_RegionEnd	RegionEnd	INT16
+property	0x1306	kCDXProp_PlasmidMap_RegionOffset	RegionOffset	CDXCoordinate
+property	0x1307	kCDXProp_PlasmidMap_RingRadius	RingRadius	CDXCoordinate
+property	0x1400	kCDXProp_RLogic_Group	RLogicGroup	string
+property	0x1401	kCDXProp_RLogic_Occurrence	RLogicOccurrence	string
+property	0x1402	kCDXProp_RLogic_RestH	RLogicRestH	bool
+property	0x1403	kCDXProp_RLogic_IfThenGroup	RLogicIfThenGroup	string
+property	0x1500	kCDXProp_Annotation_Keyword	Keyword	CDXString
+property	0x1501	kCDXProp_Annotation_Content	Content	CDXString
+property	0x1600	kCDXProp_Property_Rule	Rule	int
+property	0x1601	kCDXProp_Property_DataType	Type	int
+property	0x1602	kCDXProp_Property_Value		string
+property	0x1FF0	kCDXProp_SplitterPositions	SplitterPositions	CDXObjectIDArray
+property	0x1FF1	kCDXProp_PageDefinition	PageDefinition	INT8	CDXPageDefinition
+enum	0	CDXAbundance	Unspecified
+enum	1	CDXAbundance	Any
+enum	2	CDXAbundance	Natural
+enum	3	CDXAbundance	Enriched
+enum	4	CDXAbundance	Deficient
+enum	5	CDXAbundance	Nonnatural
+enum	1	CDXAminoAcidTermini	HOH
+enum	2	CDXAminoAcidTermini	NH2COOH
+enum	0	CDXArrowHeadPosition	Unspecified
+enum	1	CDXArrowHeadPosition	None
+enum	2	CDXArrowHeadPosition	Full
+enum	3	CDXArrowHeadPosition	HalfLeft
+enum	4	CDXArrowHeadPosition	HalfRight
+enum	0	CDXArrowHeadType	Unspecified
+enum	1	CDXArrowHeadType	Solid
+enum	2	CDXArrowHeadType	Hollow
+enum	3	CDXArrowHeadType	Angle
+enum	0	CDXArrowType	NoHead
+enum	1	CDXArrowType	HalfHead
+enum	2	CDXArrowType	FullHead
+enum	4	CDXArrowType	Resonance
+enum	8	CDXArrowType	Equilibrium
+enum	16	CDXArrowType	Hollow
+enum	32	CDXArrowType	RetroSynthetic
+enum	0	CDXAtomCIPType	U
+enum	1	CDXAtomCIPType	N
+enum	2	CDXAtomCIPType	R
+enum	3	CDXAtomCIPType	S
+enum	4	CDXAtomCIPType	r
+enum	5	CDXAtomCIPType	s
+enum	6	CDXAtomCIPType	u
+enum	7	CDXAtomCIPType	M
+enum	8	CDXAtomCIPType	P
+enum	9	CDXAtomCIPType	a
+enum	10	CDXAtomCIPType	-
+enum	11	CDXAtomCIPType	+
+enum	12	CDXAtomCIPType	?
+enum	0	CDXAtomGeometry	Unknown
+enum	1	CDXAtomGeometry	1
+enum	2	CDXAtomGeometry	Linear
+enum	3	CDXAtomGeometry	Bent
+enum	4	CDXAtomGeometry	TrigonalPlanar
+enum	5	CDXAtomGeometry	TrigonalPyramidal
+enum	6	CDXAtomGeometry	SquarePlanar
+enum	7	CDXAtomGeometry	Tetrahedral
+enum	8	CDXAtomGeometry	TrigonalBipyramidal
+enum	9	CDXAtomGeometry	SquarePyramidal
+enum	10	CDXAtomGeometry	5
+enum	11	CDXAtomGeometry	Octahedral
+enum	12	CDXAtomGeometry	6
+enum	13	CDXAtomGeometry	7
+enum	14	CDXAtomGeometry	8
+enum	15	CDXAtomGeometry	9
+enum	16	CDXAtomGeometry	10
+enum	0	CDXBioShapeType	Undefined
+enum	1	CDXBioShapeType	1SubstrateEnzyme
+enum	2	CDXBioShapeType	2SubstrateEnzyme
+enum	3	CDXBioShapeType	Receptor
+enum	4	CDXBioShapeType	GProteinAlpha
+enum	5	CDXBioShapeType	GProteinBeta
+enum	6	CDXBioShapeType	GProteinGamma
+enum	7	CDXBioShapeType	Immunoglobin
+enum	8	CDXBioShapeType	IonChannel
+enum	9	CDXBioShapeType	EndoplasmicReticulum
+enum	10	CDXBioShapeType	Golgi
+enum	11	CDXBioShapeType	MembraneLine
+enum	12	CDXBioShapeType	MembraneArc
+enum	13	CDXBioShapeType	MembraneEllipse
+enum	14	CDXBioShapeType	MembraneMicelle
+enum	15	CDXBioShapeType	DNA
+enum	16	CDXBioShapeType	HelixProtein
+enum	17	CDXBioShapeType	Mitochondrion
+enum	18	CDXBioShapeType	Cloud
+enum	19	CDXBioShapeType	tRNA
+enum	20	CDXBioShapeType	RibosomeA
+enum	21	CDXBioShapeType	RibosomeB
+enum	0	CDXBondCIPType	U
+enum	1	CDXBondCIPType	N
+enum	2	CDXBondCIPType	E
+enum	3	CDXBondCIPType	Z
+enum	0	CDXBondDisplay	Solid
+enum	1	CDXBondDisplay	Dash
+enum	2	CDXBondDisplay	Hash
+enum	3	CDXBondDisplay	WedgedHashBegin
+enum	4	CDXBondDisplay	WedgedHashEnd
+enum	5	CDXBondDisplay	Bold
+enum	6	CDXBondDisplay	WedgeBegin
+enum	7	CDXBondDisplay	WedgeEnd
+enum	8	CDXBondDisplay	Wavy
+enum	9	CDXBondDisplay	HollowWedgeBegin
+enum	10	CDXBondDisplay	HollowWedgeEnd
+enum	11	CDXBondDisplay	WavyWedgeBegin
+enum	12	CDXBondDisplay	WavyWedgeEnd
+enum	13	CDXBondDisplay	Dot
+enum	14	CDXBondDisplay	DashDot
+enum	19	CDXBondDisplay	DottedHydrogen
+enum	256	CDXBondDoublePosition	Center
+enum	257	CDXBondDoublePosition	Right
+enum	258	CDXBondDoublePosition	Left
+enum	0	CDXBondDoublePosition	Center
+enum	1	CDXBondDoublePosition	Right
+enum	2	CDXBondDoublePosition	Left
+enum	0	CDXBondReactionParticipation	Unspecified
+enum	1	CDXBondReactionParticipation	ReactionCenter
+enum	2	CDXBondReactionParticipation	MakeOrBreak
+enum	3	CDXBondReactionParticipation	ChangeType
+enum	4	CDXBondReactionParticipation	MakeAndChange
+enum	5	CDXBondReactionParticipation	NotReactionCenter
+enum	6	CDXBondReactionParticipation	NoChange
+enum	7	CDXBondReactionParticipation	Unmapped
+enum	0	CDXBondTopology	Unspecified
+enum	1	CDXBondTopology	Ring
+enum	2	CDXBondTopology	Chain
+enum	3	CDXBondTopology	RingOrChain
+enum	0	CDXBracketType	RoundPair
+enum	1	CDXBracketType	SquarePair
+enum	2	CDXBracketType	CurlyPair
+enum	3	CDXBracketType	Square
+enum	4	CDXBracketType	Curly
+enum	5	CDXBracketType	Round
+enum	0	CDXBracketUsage	Unspecified
+enum	18	CDXBracketUsage	Anypolymer
+enum	13	CDXBracketUsage	Component
+enum	6	CDXBracketUsage	Copolymer
+enum	7	CDXBracketUsage	CopolymerAlternating
+enum	9	CDXBracketUsage	CopolymerBlock
+enum	8	CDXBracketUsage	CopolymerRandom
+enum	10	CDXBracketUsage	Crosslink
+enum	17	CDXBracketUsage	Generic
+enum	11	CDXBracketUsage	Graft
+enum	5	CDXBracketUsage	Mer
+enum	15	CDXBracketUsage	MixtureOrdered
+enum	14	CDXBracketUsage	MixtureUnordered
+enum	12	CDXBracketUsage	Modification
+enum	4	CDXBracketUsage	Monomer
+enum	16	CDXBracketUsage	MultipleGroup
+enum	3	CDXBracketUsage	SRU
+enum	0	CDXConnectivity	Unspecified
+enum	1	CDXConnectivity	Linear
+enum	2	CDXConnectivity	Bridged
+enum	3	CDXConnectivity	Staggered
+enum	4	CDXConnectivity	Cyclic
+enum	0	CDXConstraintType	Undefined
+enum	1	CDXConstraintType	Distance
+enum	2	CDXConstraintType	Angle
+enum	3	CDXConstraintType	ExclusionSphere
+enum	0	CDXEnhancedStereoType	Unspecified
+enum	1	CDXEnhancedStereoType	None
+enum	2	CDXEnhancedStereoType	Absolute
+enum	3	CDXEnhancedStereoType	Or
+enum	4	CDXEnhancedStereoType	And
+enum	0	CDXExternalConnectionType	Unspecified
+enum	1	CDXExternalConnectionType	Diamond
+enum	2	CDXExternalConnectionType	Star
+enum	3	CDXExternalConnectionType	PolymerBead
+enum	4	CDXExternalConnectionType	Wavy
+enum	5	CDXExternalConnectionType	Residue
+enum	6	CDXExternalConnectionType	Peptide
+enum	7	CDXExternalConnectionType	DNA
+enum	8	CDXExternalConnectionType	RNA
+enum	9	CDXExternalConnectionType	Terminus
+enum	10	CDXExternalConnectionType	Sulfide
+enum	11	CDXExternalConnectionType	Nucleotide
+enum	12	CDXExternalConnectionType	UnlinkedBranch
+enum	0	CDXFillType	Unspecified
+enum	1	CDXFillType	None
+enum	2	CDXFillType	Solid
+enum	4	CDXFillType	Shaded
+enum	0	CDXFrameType	Unspecified
+enum	1	CDXFrameType	None
+enum	2	CDXFrameType	Plain
+enum	4	CDXFrameType	RoundEdge
+enum	8	CDXFrameType	Shadow
+enum	16	CDXFrameType	Shaded
+enum	32	CDXFrameType	Filled
+enum	64	CDXFrameType	Dashed
+enum	128	CDXFrameType	Bold
+enum	0	CDXGeometricFeature	Undefined
+enum	1	CDXGeometricFeature	PointFromPointPointDistance
+enum	2	CDXGeometricFeature	PointFromPointPointPercentage
+enum	3	CDXGeometricFeature	PointFromPointNormalDistance
+enum	4	CDXGeometricFeature	LineFromPoints
+enum	5	CDXGeometricFeature	PlaneFromPoints
+enum	6	CDXGeometricFeature	PlaneFromPointLine
+enum	7	CDXGeometricFeature	CentroidFromPoints
+enum	8	CDXGeometricFeature	NormalFromPointPlane
+enum	0	CDXGraphicType	Undefined
+enum	1	CDXGraphicType	Line
+enum	2	CDXGraphicType	Arc
+enum	3	CDXGraphicType	Rectangle
+enum	4	CDXGraphicType	Oval
+enum	5	CDXGraphicType	Orbital
+enum	6	CDXGraphicType	Bracket
+enum	7	CDXGraphicType	Symbol
+enum	0	CDXLabelDisplay	Auto
+enum	1	CDXLabelDisplay	Left
+enum	2	CDXLabelDisplay	Center
+enum	3	CDXLabelDisplay	Right
+enum	4	CDXLabelDisplay	Above
+enum	5	CDXLabelDisplay	Below
+enum	6	CDXLabelDisplay	Best
+enum	0	CDXLineType	Solid
+enum	1	CDXLineType	Dashed
+enum	2	CDXLineType	Bold
+enum	4	CDXLineType	Wavy
+enum	0	CDXNoGoType	Unspecified
+enum	1	CDXNoGoType	None
+enum	2	CDXNoGoType	Cross
+enum	3	CDXNoGoType	Hash
+enum	0	CDXNodeType	Unspecified
+enum	1	CDXNodeType	Element
+enum	2	CDXNodeType	ElementList
+enum	3	CDXNodeType	ElementListNickname
+enum	4	CDXNodeType	Nickname
+enum	5	CDXNodeType	Fragment
+enum	6	CDXNodeType	Formula
+enum	7	CDXNodeType	GenericNickname
+enum	8	CDXNodeType	AnonymousAlternativeGroup
+enum	9	CDXNodeType	NamedAlternativeGroup
+enum	10	CDXNodeType	MultiAttachment
+enum	11	CDXNodeType	VariableAttachment
+enum	12	CDXNodeType	ExternalConnectionPoint
+enum	13	CDXNodeType	LinkNode
+enum	14	CDXNodeType	Monomer
+enum	0	CDXObjectTagType	Unknown
+enum	1	CDXObjectTagType	Double
+enum	2	CDXObjectTagType	Long
+enum	3	CDXObjectTagType	String
+enum	0	CDXOrbitalType	s
+enum	1	CDXOrbitalType	oval
+enum	2	CDXOrbitalType	lobe
+enum	3	CDXOrbitalType	p
+enum	4	CDXOrbitalType	hybridPlus
+enum	5	CDXOrbitalType	hybridMinus
+enum	6	CDXOrbitalType	dz2Plus
+enum	7	CDXOrbitalType	dz2Minus
+enum	8	CDXOrbitalType	dxy
+enum	256	CDXOrbitalType	sShaded
+enum	257	CDXOrbitalType	ovalShaded
+enum	258	CDXOrbitalType	lobeShaded
+enum	259	CDXOrbitalType	pShaded
+enum	512	CDXOrbitalType	sFilled
+enum	513	CDXOrbitalType	ovalFilled
+enum	514	CDXOrbitalType	lobeFilled
+enum	515	CDXOrbitalType	pFilled
+enum	516	CDXOrbitalType	hybridPlusFilled
+enum	517	CDXOrbitalType	hybridMinusFilled
+enum	518	CDXOrbitalType	dz2PlusFilled
+enum	519	CDXOrbitalType	dz2MinusFilled
+enum	520	CDXOrbitalType	dxyFilled
+enum	1	CDXOvalType	Circle
+enum	2	CDXOvalType	Shaded
+enum	4	CDXOvalType	Filled
+enum	8	CDXOvalType	Dashed
+enum	16	CDXOvalType	Bold
+enum	32	CDXOvalType	Shadowed
+enum	0	CDXPageDefinition	Undefined
+enum	1	CDXPageDefinition	Center
+enum	2	CDXPageDefinition	TL4
+enum	3	CDXPageDefinition	IDTerm
+enum	4	CDXPageDefinition	FlushLeft
+enum	5	CDXPageDefinition	FlushRight
+enum	6	CDXPageDefinition	Reaction1
+enum	7	CDXPageDefinition	Reaction2
+enum	8	CDXPageDefinition	MulticolumnTL4
+enum	9	CDXPageDefinition	MulticolumnNonTL4
+enum	10	CDXPageDefinition	UserDefined
+enum	0	CDXPolymerFlipType	Unspecified
+enum	1	CDXPolymerFlipType	NoFlip
+enum	2	CDXPolymerFlipType	Flip
+enum	0	CDXPolymerRepeatPattern	HeadToTail
+enum	1	CDXPolymerRepeatPattern	HeadToHead
+enum	2	CDXPolymerRepeatPattern	EitherUnknown
+enum	0	CDXPositioningType	auto
+enum	1	CDXPositioningType	angle
+enum	2	CDXPositioningType	offset
+enum	3	CDXPositioningType	absolute
+enum	0	CDXRadical	None
+enum	1	CDXRadical	Singlet
+enum	2	CDXRadical	Doublet
+enum	3	CDXRadical	Triplet
+enum	0	CDXReactionStereo	Unspecified
+enum	1	CDXReactionStereo	Inversion
+enum	2	CDXReactionStereo	Retention
+enum	0	CDXRectangleType	Plain
+enum	1	CDXRectangleType	RoundEdge
+enum	2	CDXRectangleType	Shadow
+enum	4	CDXRectangleType	Shaded
+enum	8	CDXRectangleType	Filled
+enum	16	CDXRectangleType	Dashed
+enum	32	CDXRectangleType	Bold
+enum	-1	CDXRingBondCount	Unspecified
+enum	0	CDXRingBondCount	NoRingBonds
+enum	1	CDXRingBondCount	AsDrawn
+enum	2	CDXRingBondCount	SimpleRing
+enum	3	CDXRingBondCount	Fusion
+enum	4	CDXRingBondCount	SpiroOrHigher
+enum	2	CDXRxnAutonumberStyle	Alpha
+enum	1	CDXRxnAutonumberStyle	Arabic
+enum	0	CDXRxnAutonumberStyle	Roman
+enum	0	CDXSeqType	Unknown
+enum	1	CDXSeqType	Peptide
+enum	2	CDXSeqType	Peptide1
+enum	3	CDXSeqType	Peptide3
+enum	4	CDXSeqType	DNA
+enum	5	CDXSeqType	RNA
+enum	6	CDXSeqType	Biopolymer
+enum	0	CDXSideType	undefined
+enum	1	CDXSideType	top
+enum	2	CDXSideType	left
+enum	3	CDXSideType	bottom
+enum	4	CDXSideType	right
+enum	0	CDXSpectrumClass	Unknown
+enum	1	CDXSpectrumClass	Chromatogram
+enum	2	CDXSpectrumClass	Infrared
+enum	3	CDXSpectrumClass	UVVis
+enum	4	CDXSpectrumClass	XRayDiffraction
+enum	5	CDXSpectrumClass	MassSpectrum
+enum	6	CDXSpectrumClass	NMR
+enum	7	CDXSpectrumClass	Raman
+enum	8	CDXSpectrumClass	Fluorescence
+enum	9	CDXSpectrumClass	Atomic
+enum	0	CDXSpectrumXType	Unknown
+enum	1	CDXSpectrumXType	Wavenumbers
+enum	2	CDXSpectrumXType	Microns
+enum	3	CDXSpectrumXType	Hertz
+enum	4	CDXSpectrumXType	MassUnits
+enum	5	CDXSpectrumXType	PartsPerMillion
+enum	6	CDXSpectrumXType	Other
+enum	0	CDXSpectrumYType	Unknown
+enum	1	CDXSpectrumYType	Absorbance
+enum	2	CDXSpectrumYType	Transmittance
+enum	3	CDXSpectrumYType	PercentTransmittance
+enum	4	CDXSpectrumYType	Other
+enum	5	CDXSpectrumYType	ArbitraryUnits
+enum	0	CDXSymbolType	LonePair
+enum	1	CDXSymbolType	Electron
+enum	2	CDXSymbolType	RadicalCation
+enum	3	CDXSymbolType	RadicalAnion
+enum	4	CDXSymbolType	CirclePlus
+enum	5	CDXSymbolType	CircleMinus
+enum	6	CDXSymbolType	Dagger
+enum	7	CDXSymbolType	DoubleDagger
+enum	8	CDXSymbolType	Plus
+enum	9	CDXSymbolType	Minus
+enum	10	CDXSymbolType	Racemic
+enum	11	CDXSymbolType	Absolute
+enum	12	CDXSymbolType	Relative
+enum	13	CDXSymbolType	LonePairBar
+enum	0	CDXTextJustification	Left
+enum	1	CDXTextJustification	Center
+enum	-1	CDXTextJustification	Right
+enum	2	CDXTextJustification	Full
+enum	3	CDXTextJustification	Above
+enum	4	CDXTextJustification	Below
+enum	5	CDXTextJustification	Auto
+enum	6	CDXTextJustification	Best
+enum	0	CDXTranslation	Equal
+enum	1	CDXTranslation	Broad
+enum	2	CDXTranslation	Narrow
+enum	3	CDXTranslation	Any
+enum	0	CDXUnsaturation	Unspecified
+enum	1	CDXUnsaturation	MustBeAbsent
+enum	2	CDXUnsaturation	MustBePresent

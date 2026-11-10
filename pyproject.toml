@@ -177,6 +177,7 @@ include = ['chython*']
 'chython.core.test' = ['pach_v2_corpus.bin.gz', 'pach_v0_corpus.bin.gz', 'pach_v0_native_corpus.bin.gz', 'reaction_pach_v2_corpus.bin.gz', 'arena_v4_corpus.bin.gz', 'pach_v3_corpus.bin.gz', 'pach_v4_corpus.bin.gz', 'pach_bond_group_corpus.bin.gz', 'modeling_view_corpus.json.gz']
 'chython.reactions.test' = ['golden_subset.smi']
 'chython.formats.ctfile' = ['CTFILE.md']
+'chython.formats.cdx' = ['vocabulary.tsv']
 
 # THE HARNESS BEHIND THE README'S COVERAGE BADGE.  The `oracles` job in `.github/workflows/test.yml` runs
 # the suite under these settings and uploads the report; the same two commands reproduce the number:

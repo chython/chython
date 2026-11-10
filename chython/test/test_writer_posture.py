@@ -45,7 +45,7 @@ verbatim, which loses nothing but `meta`.
 from io import StringIO
 from pytest import mark, raises
 from chython import (ERDFWrite, ESDFWrite, FIELDDISP_TAIL, RDFWrite, SDFWrite, STEREO_AND,
-                     add_data_sgroup, cml, inchi, mol, mrv, pach, read_reaction_smiles, rxn, smiles)
+                     add_data_sgroup, cdx, cdxml, cml, inchi, mol, mrv, pach, read_reaction_smiles, rxn, smiles)
 # `MalformedCtfile` is the CTfile package's own error and is not a facade name: the class-2 refusals
 # below are the format's, so the test names the format's exception rather than a base class that would
 # also catch a `ValueError` from anywhere else in the call.
@@ -90,6 +90,8 @@ def _stream(writer, record):
     ('ESDFWrite', lambda m: _stream(ESDFWrite, m)[0]),
     ('mrv', lambda m: mrv(m)),
     ('cml', lambda m: cml(m)),
+    ('cdx', lambda m: cdx(m)),
+    ('cdxml', lambda m: cdxml(m)),
     ('pach', lambda m: pach(m)),
     ('pach v2', lambda m: pach(m, version=2)),
     ('pach v4', lambda m: pach(m, version=4)),
@@ -104,6 +106,8 @@ def test_no_writer_refuses_a_record_it_cannot_fully_carry(name, write):
 
 @mark.parametrize('name,write', [
     ('rxn', lambda r: rxn(r)),
+    ('cdx', lambda r: cdx(r)),
+    ('cdxml', lambda r: cdxml(r)),
     ('RDFWrite', lambda r: _stream(RDFWrite, r)[0]),
     ('ERDFWrite', lambda r: _stream(ERDFWrite, r)[0]),
     ('pach', lambda r: pach(r)),

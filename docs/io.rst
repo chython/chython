@@ -23,6 +23,8 @@ InChI              ``inchi``       ``inchi_to_molecule``                  ``mole
 IUPAC name         ``iupac``       --                                     --
 MDL molfile        ``mol``         --                                     --
 MDL RXN            ``rxn``         --                                     --
+ChemDraw CDX       ``cdx``         --                                     --
+ChemDraw CDXML     ``cdxml``       --                                     --
 MRV                ``mrv``         ``read_mrv``                           ``write_mrv``
 CML                ``cml``         ``read_cml``                           ``write_cml``
 pach               ``pach``        ``unpach``/``unpack``, ``pach_load``,  ``pach_dump``,
@@ -484,6 +486,61 @@ answers a list, however many molecules the document holds:
 ``read_xml`` sniffs the dialect instead of being told it.
 
 
+CDX and CDXML
+~~~~~~~~~~~~~
+
+ChemDraw's binary CDX and its XML spelling CDXML are one object tree. ``cdx()`` takes and returns
+``bytes``, ``cdxml()`` text, and **the document decides what a read returns**: one holding a reaction
+step is a ``ReactionContainer``, any other is **one molecule**, every structure on every page as
+components, the way a molfile holds disconnected pieces. Both write a molecule or a reaction:
+
+.. testcode::
+
+    from chython import cdx, cdxml
+
+    text = cdxml(smiles('CCO'))    # no layout: written at the origin, and logged
+    data = cdx(cdxml(text))        # CDXML in, CDX bytes out
+    assert cdx(data) == smiles('CCO')
+
+    reaction = smiles('[CH3:1][C:2](=O)O.C[OH:3]>>[CH3:1][C:2](=O)[O:3]C')
+    back = cdxml(cdxml(reaction))
+    assert str(back) == str(reaction)
+    assert back.products[0].atom(4).map_number == 3
+
+A reaction reads from one step: its reactants and products, the structures above and below the arrow
+as agents, text there as ``meta['above arrow']`` and ``meta['below arrow']``, and the step's atom map as
+map numbers -- pair *k* is map number *k* on both atoms. The steps not read and a structure no side names
+are logged. On write the molecules are laid out left to right around one arrow, a several-component
+participant is a ``group`` so it reads back as one molecule, and the map numbers a reactant and a product
+share become the step's atom map.
+
+``step=`` picks which one, counting the document's steps in order across schemes; a negative index
+counts from the end. The default reads the first step, or a molecule when there is none, and an index
+the document does not hold raises ``IndexError``:
+
+.. testcode::
+
+    scheme = cdxml(reaction)
+    assert str(cdxml(scheme, step=0)) == str(cdxml(scheme)) == str(cdxml(scheme, step=-1))
+
+Coordinates are points over 30 with the y axis flipped -- CDX's points down -- which is the scale of the
+CDX conversions of V3000 files, so such a pair reads to the same coordinates. A wedge, an abbreviation
+with its fragment (expanded, with a SUP S-group keeping the label) and an atom-level enhanced stereo
+group read and write; CDX has no bond-level enhanced stereo, so a group on a double bond is logged LOST
+on write. The query vocabulary is refused where V3000 refuses it:
+
+============================================================  ============================================
+CDX                                                           Read as
+============================================================  ============================================
+``GenericNickname`` R, R<n>, ``*``                            the marker, R index from R<n>
+``GenericNickname`` A, Q, M, X (and their H forms), lists     refused: ``UnsupportedCdx``
+``Order`` with two values, ``any``                            refused: ``UnsupportedCdx``
+``Order`` dative, ionic                                       order 8
+``Order`` hydrogen, quadruple and above, half orders but 1.5  logged LOST
+``ExternalConnectionType="PolymerBead"``                      the marker aliased ``Pol``
+============================================================  ============================================
+
+
 Reading from Archives
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -519,6 +576,7 @@ All readers share the same API (iteration, ``.read()``, context manager).
 - **SDFRead** / **SDFWrite** — MOL/SDF (V2000, V3000)
 - **RDFRead** / **RDFWrite** — RXN/RDF
 - **mrv** (**read_mrv** / **write_mrv**) — ChemAxon MRV (XML strings)
+- **cdx** / **cdxml** — ChemDraw CDX (bytes) and CDXML (text)
 - **cml** (**read_cml** / **write_cml**) — Chemical Markup Language (XML strings)
 - **read_pdb** / **read_mmcif** — legacy PDB and PDBx/mmCIF; return ``PDBRecord`` rather than a molecule
 - **mol2** / **read_mol2** / **mol2_mol** — Tripos MOL2
