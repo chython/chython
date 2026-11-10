@@ -55,7 +55,7 @@ from math import comb
 from ..core import INFO, LOST, AutomorphismBudgetExceeded, LogRecord, MoleculeContainer, recording
 
 
-__all__ = ['standardize_isomers']
+__all__ = ['isomer_forms', 'standardize_isomers']
 
 
 #: Table-qualified, as every rule id must be -- never a bare index.  Three and not one: a consumer
@@ -81,6 +81,10 @@ _DONOR = frozenset((8, 16))
 #: five-site group with two protons and one charge is 30 trials, and reaching the cap is a `LOST`
 #: record rather than a silent truncation.
 _TRIALS_MAX = 512
+
+#: `isomer_forms()`'s cap on the product over a molecule's systems, the drawn form included.  Two
+#: imidazoles and an amidine are 2 x 2 x 2: the cap is what a polyazole is not allowed to multiply into.
+_FORMS_MAX = 16
 
 
 def _sites(molecule: MoleculeContainer) -> list[int]:
@@ -945,3 +949,153 @@ def standardize_isomers(molecule: MoleculeContainer) -> bool:
             log.append(LogRecord(rule, atoms, message,
                                  LOST if rule in (_RULE_BUDGET, _RULE_REFUSED) else INFO))
     return changed
+
+
+# ---------------------------------------------------------------------------------------------------
+# Every placement, not the canonical one: what a reaction template is matched against.
+# ---------------------------------------------------------------------------------------------------
+
+def _ring_placements(target: MoleculeContainer, group: list[int]) -> list[dict[int, tuple[int, int]]]:
+    """Every hydrogen placement of one ring system as aromatic as the best one, charges as drawn.
+
+    `_choose`'s enumeration with its first key only: a placement that costs aromaticity -- the quinoid
+    imine of a fused pyridopyrimidinedione -- is a different reading of the ring and not a second drawing of
+    the one compound.  The charges stay where they are, a `+` placement being `standardize_isomers()`'s
+    question and never a reactive site of its own.
+    """
+    hydrogens, _ = _budget(target, group)
+    carriers = [n for n in group if len(tuple(target.neighbors_of(n))) == 2]
+    if comb(len(carriers), hydrogens) > _TRIALS_MAX:
+        return []
+    best, out = None, []
+    for protonated in combinations(carriers, hydrogens):
+        placement = {n: (1 if n in protonated else 0, target.charge_of(n)) for n in group}
+        aromatic = _admissible(target, group, placement)
+        if aromatic is None:
+            continue
+        if best is None or aromatic > best:
+            best, out = aromatic, [placement]
+        elif aromatic == best:
+            out.append(placement)
+    return out
+
+
+def _amidine_placements(molecule: MoleculeContainer, unit: list[tuple[int, list[int]]]):
+    """Every acceptor assignment of one amidine system as `(states, orders)`, charges as drawn.
+
+    `_choose_amidines`' matching: each carbon takes one of its sites, no site twice, and no nitrogen is
+    asked for a hydrogen it has no room for.
+    """
+    sites = sorted({n for _, s in unit for n in s})
+    charges = {n: molecule.charge_of(n) for n in sites}
+    degrees = {n: len(tuple(molecule.neighbors_of(n))) for n in sites}
+    trials = 1
+    for _, s in unit:
+        trials *= len(s)
+    if trials > _TRIALS_MAX:
+        return []
+    out = []
+    for choice in product(*(s for _, s in unit)):
+        if len(set(choice)) != len(choice):
+            continue
+        accepted = dict(zip((c for c, _ in unit), choice))
+        if any((2 if n in accepted.values() else 3) + charges[n] - degrees[n] < 0 for n in sites):
+            continue
+        out.append(_amidine_edits(molecule, unit, accepted, charges))
+    return out
+
+
+def isomer_forms(molecule: MoleculeContainer) -> list[MoleculeContainer]:
+    """Every placement of the mobile hydrogens `standardize_isomers()` chooses between, as molecules.
+
+    The drawn form first and unmodified, then the others, at most `_FORMS_MAX` in all.  The systems are
+    `standardize_isomers()`'s three: an aromatic ring system, a conjugated ring system stored in its Kekule
+    form, and an amidine or guanidine, each enumerated whole and the molecule's systems combined.  A
+    template binds to the atoms it is handed, so `CC1=NNC=C1` alkylated on the nitrogen drawn without its
+    hydrogen is the same compound's other form alkylated on the one drawn with it; this is what lets one
+    row read both.
+
+    A copy each, keeping the atom numbers and map numbers of `molecule`.  A form that does not kekulise as
+    a whole, though each system did alone, is not offered.  Reads only, and logs nothing.
+    """
+    work, systems = _aromatized(molecule)
+    target = work if work is not None else molecule
+    aromatic = molecule.copy()
+    aromatic.thiele()
+    ringed = {c for c, _ in _amidines(aromatic)}
+    kept = tuple(system for system in systems
+                 if not ringed.intersection(system[0]) or _conjugated_carbon(molecule, system[0]))
+    handed_over = {n for system in systems if system not in kept for n in system[0]}
+    systems = kept
+    conjugated = frozenset(n for atoms, _ in _ring_systems(molecule) if _conjugated_carbon(molecule, atoms)
+                           for n in atoms)
+    units = _amidine_systems(_amidines(molecule, conjugated.union(n for atoms, _ in systems for n in atoms)))
+    sites = [n for n in _sites(target) if n not in handed_over]
+
+    choices: list[list[tuple[str, object]]] = []
+    for group in (_groups(target, sites) if len(sites) > 1 else ()):
+        if len(group) > 1:
+            placements = _ring_placements(target, group)
+            if len(placements) > 1:
+                choices.append([('ring', p) for p in placements])
+    for unit in units:
+        placements = _amidine_placements(molecule, unit)
+        if len(placements) > 1:
+            choices.append([('amidine', p) for p in placements])
+    if not choices:
+        return [molecule.copy()]
+
+    drawn = molecule.canonical_bytes
+    forms, seen = [molecule.copy()], {drawn}
+    for combination in product(*choices):
+        if len(forms) >= _FORMS_MAX:
+            break
+        form = _form(molecule, work, systems, combination)
+        if form is None:
+            continue
+        key = form.canonical_bytes
+        if key not in seen:
+            seen.add(key)
+            forms.append(form)
+    return forms
+
+
+def _form(molecule: MoleculeContainer, work, systems, combination) -> MoleculeContainer | None:
+    """One combination of placements written onto a copy, or `None` when the whole has no Kekule form."""
+    states: dict[int, tuple[int, int]] = {}
+    orders: list[tuple[int, int, int]] = []
+    for kind, placement in combination:
+        if kind == 'ring':
+            states.update(placement)
+        else:
+            unit_states, unit_orders = placement
+            states.update(unit_states)
+            orders.extend(unit_orders)
+    ring = {n for kind, p in combination if kind == 'ring' for n in p}
+    if work is not None and ring:
+        probe = work.copy()
+        with probe.edit():
+            for n in ring:
+                probe.set_charge(n, states[n][1])
+                probe.set_hydrogens(n, states[n][0])
+        if probe.kekule(canonical=True).unresolved:
+            return None
+        if any((probe.implicit_h_of(n), probe.charge_of(n)) != states[n] for n in ring):
+            return None
+        orders.extend((u, v, probe.order_of(u, v)) for atoms, rewrite in systems
+                      if not atoms.isdisjoint(ring) for u, v in rewrite)
+    form = molecule.copy()
+    labile = [u['anchor'] for u in form.stereo_units()
+              if u['kind'] == 1 and u['parity'] and isinstance(u['owners'], tuple)
+              and any(frozenset(u['owners']) == frozenset((a, b)) for a, b, _ in orders)]
+    with form.edit():
+        for anchor in labile:
+            form.set_parity(anchor, 0)
+        for u, v, order in orders:
+            form.set_order(u, v, order)
+        for n, (hydrogens, charge) in states.items():
+            form.set_charge(n, charge)
+            form.set_hydrogens(n, hydrogens)
+    if work is None and form.copy().kekule(canonical=True).unresolved:
+        return None
+    return form

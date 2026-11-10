@@ -119,9 +119,9 @@ def test_a_bond_to_an_unpinned_atom_stays_literal():
 
 
 def test_a_spelled_hydrogen_count_leaves_the_patch_and_is_reported():
-    smirks, hydrogens = _composed('reactions:181')[0]        # carbamoylation: imidazolyl_carbonate + imidazole
+    smirks, hydrogens = _composed('reactions:1527')[0]       # thioamide amination: thiocarbonyl N-H + ammonia
     assert ';h' not in smirks
-    assert hydrogens == ((101, 1), (103, 0))
+    assert hydrogens == ((3, 1), (101, 3))
 
 
 def test_a_group_without_a_spelling_is_refused_naming_it():

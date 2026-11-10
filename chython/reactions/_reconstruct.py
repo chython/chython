@@ -33,7 +33,8 @@ from collections.abc import Callable, Container, Iterator, Mapping, Sequence
 from itertools import chain, product as cartesian
 from typing import NamedTuple
 
-from ._enumerate import (_claims, _deprotect_toward, _needs, _outcomes, _revealed, _sited, _strip_sites, _wl_hash,
+from ._enumerate import (_claims, _deprotect_toward, _forms, _groups_over, _needs, _outcomes, _revealed, _sited,
+                         _strip_sites, _wl_hash,
                          deprotect, EnumeratedDeprotection, EnumeratedReaction, functional_groups, protective_groups)
 from ._numbering import fast_mapping
 from ._tables import functional_rules, protective_rules, reaction_rules
@@ -70,6 +71,7 @@ class _Explanation(NamedTuple):
     write: Callable[[MoleculeContainer], tuple[bool, list[_Link]]]
     rule: str = ''          # the table-qualified row id, when a row produced this; logged, not returned
     excess: bool = False    # an input filled several slots of the row
+    unsourced: bool = False  # the row built heavy atoms no recorded input holds: `_unsourced`
 
 
 def reconstruct_mapping(reaction: ReactionContainer, *, max_size_ratio: float = 5.,
@@ -127,6 +129,10 @@ def reconstruct_mapping(reaction: ReactionContainer, *, max_size_ratio: float = 
             found = list(phase(recorded, inputs, options, memo))
             if not found:
                 continue
+            if found[0].unsourced:
+                # A GROUP WITH NO RECORDED SOURCE IS A PROTECTION.  The row's agent installed it, and which
+                # reagent did is unknown, so the label names the group and not one installation of it.
+                found = [*_protect(recorded, inputs, options, memo), *found]
             complete, links = found[0].write(recorded)
             if not complete:
                 _record(log, 'reconstruct:partial', INFO,
@@ -309,17 +315,49 @@ def _react(recorded, inputs, options, memo) -> Iterator[_Explanation]:
                                          lambda: _ranked(_settled(recorded, _applications(recorded, inputs)))):
         if not _reproduces(recorded, products, pool, options.loose):
             continue
-        sources = [*_translate(outcome.reaction, pool, products), *inputs]
+        built = _translate(outcome.reaction, pool, products)
+        sources = [*built, *inputs]
         yield _Explanation('react:%s' % outcome.name,
                            lambda target, s=sources, o=options: _number_product(target, s, o.loose),
-                           outcome.rule_id, _repeats(pool))
+                           outcome.rule_id, _repeats(pool),
+                           _unsourced(recorded, built, pool, inputs, options.loose))
+
+
+def _unsourced(recorded, built: Sequence[MoleculeContainer], pool, inputs, loose) -> bool:
+    """Did the row build heavy atoms into the recorded product that no input outside `pool` holds as a fragment?
+
+    A one-group row carries its reagent as an agent -- the triflyl of `triflation` -- so it fires whether or
+    not Tf2O was recorded.  Built atoms stay at 0 under `_translate`; each connected piece of them is looked
+    up in the inputs the row did not consume, as `_number_groups` looks up a protecting group's source.  A
+    by-product's built atoms -- the leaving oxygen of an anhydride -- never reach the record and are not read.
+    """
+    others = [part for molecule in inputs if all(molecule is not member for member in pool)
+              for part in molecule.split()]
+    parts = list(recorded.split())
+    for product in (part for molecule in built for part in molecule.split()):
+        if not any(_same(product, part, loose) for part in parts):
+            continue
+        free = {n for n in product.atom_numbers if not product.map_number_of(n) and product.element_of(n) != 1}
+        while free:
+            piece, stack = set(), [free.pop()]
+            while stack:
+                x = stack.pop()
+                piece.add(x)
+                for y in product.neighbors_of(x):
+                    if y in free:
+                        free.discard(y)
+                        stack.append(y)
+            query = product.substructure(sorted(piece)).as_query()
+            if not any(next(query.get_mapping(part), None) is not None for part in others):
+                return True
+    return False
 
 
 def _deprotect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """An input, unmasked.  The recorded product IS the recorded input minus a protecting group.
 
-    AHEAD OF `_react`, as `_protect` is: removing a named group is one family of conditions, so an N-benzoyl
-    cut is `deprotect:amine_benzoate` even though an amide-hydrolysis row builds the same amine.
+    AHEAD OF `_react`: removing a named group is one family of conditions, so an N-benzoyl cut is
+    `deprotect:amine_benzoate` even though an amide-hydrolysis row builds the same amine.
 
     `partial=True` because incomplete cleavage is ordinary and `R-N(Boc)2 -> R-NHBoc` is a record this
     rung must read.  Largest-first, which is the order the explanations come out in.  Only the subsets
@@ -529,10 +567,10 @@ def _single_group_strips(recorded) -> Iterator[EnumeratedDeprotection]:
 def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
     """The recorded product is a recorded input, masked: `protect:<groups>`, the group mapped from its source.
 
-    FIRST AFTER PURIFICATION, because a label names conditions and installing a protecting group is one
-    family of them whatever supplies the group: an acetate from Ac2O, AcCl or AcOH is `protect:hydroxyl_acyl`
-    in each case, and no corpus row mapping the reagent claims it first.  Every named group of
-    `protective.tsv` reads this way -- a methyl ether, a benzylamine and a tosylamide included.
+    AFTER `_react`: a label names conditions, and a group a corpus row installs from a recorded reagent is
+    that row's chemistry -- BnBr on an amine is `react:n_alkylation`, PhCHO on it `react:reductive_amination`,
+    Ac2O on an alcohol `react:anhydride_esterification`.  This rung answers where no row does: a reagent no
+    row reads (Boc2O, TBSCl, DHP) or no reagent recorded at all.
 
     Each group is named for the atom it sits on by the `site` column of `functional.tsv` (`aniline_boc`,
     `carboxyl_methyl` for an ester made on the acid).  The table's own claims and every group read alone
@@ -570,7 +608,7 @@ def _protect(recorded, inputs, options, memo) -> Iterator[_Explanation]:
                            '+'.join(outcome.rule_ids))
 
 
-_PHASES: tuple[Callable[..., Iterator[_Explanation]], ...] = (_purification, _protect, _deprotect, _react,
+_PHASES: tuple[Callable[..., Iterator[_Explanation]], ...] = (_purification, _deprotect, _react, _protect,
                                                               _deprotect_then_react)
 _FILTER_EXEMPT = frozenset((_purification, _protect))
 
@@ -1336,7 +1374,8 @@ def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContaine
     """
     if rules is None:
         rules = reaction_rules()
-    carried = [functional_groups(molecule) for molecule in inputs]
+    forms = [_forms(molecule) for molecule in inputs]
+    carried = [_groups_over(f) for f in forms]
     present = Counter()
     for groups in carried:
         present.update(groups)
@@ -1375,7 +1414,7 @@ def _applications(recorded: MoleculeContainer, inputs: Sequence[MoleculeContaine
             for rule in sorted(fits[subset], key=_specificity, reverse=True):
                 if not _supplies(supply, targets, rule):
                     continue
-                for outcome in _outcomes(rule, run, sizes):
+                for outcome in _outcomes(rule, run, sizes, [forms[i] for i in subset]):
                     yield pool, outcome
         except Exception:
             continue

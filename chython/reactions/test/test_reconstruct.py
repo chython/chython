@@ -304,12 +304,12 @@ def test_a_direct_reaction_outranks_the_composed_rung():
 
 
 def test_phases_ladder_order_is_pinned():
-    # Protection right after purification, deprotection next: a label names conditions, and installing or
-    # removing a named protecting group is one family of them.  Behavioural counterparts:
-    # `test_a_named_group_installed_is_a_protection_and_any_other_acylation_a_reaction` and
+    # Deprotection ahead of the corpus rows, protection after them: removing a named group is one family of
+    # conditions, while a group a row installs from a recorded reagent is that row's chemistry.  Behavioural
+    # counterparts: `test_a_group_a_row_installs_from_a_recorded_reagent_is_the_reaction` and
     # `test_a_named_n_acyl_group_removed_is_a_deprotection_not_an_amide_hydrolysis`.
     from .._reconstruct import _PHASES
-    assert [f.__name__ for f in _PHASES] == ['_purification', '_protect', '_deprotect', '_react',
+    assert [f.__name__ for f in _PHASES] == ['_purification', '_deprotect', '_react', '_protect',
                                              '_deprotect_then_react']
 
 
@@ -401,23 +401,27 @@ def test_a_protection_is_explained():
             assert product.degree_of(n) == molecule.degree_of(m)
 
 
-@pytest.mark.parametrize('source', ['CC(=O)OC(C)=O', 'CC(=O)Cl', 'CC(=O)O'])
-def test_a_named_group_installed_is_a_protection_whatever_supplies_it(source):
-    """An acetate from Ac2O, AcCl or AcOH is one label, and the acetyl is mapped from its source: the product
-    carries every atom it took, the leaving half of the source stays unmapped."""
+@pytest.mark.parametrize('source, label', [('CC(=O)OC(C)=O', 'react:anhydride_esterification'),
+                                           ('CC(=O)Cl', 'react:acylation'), ('CC(=O)O', 'react:esterification')])
+def test_a_group_a_row_installs_from_a_recorded_reagent_is_the_reaction(source, label):
+    """An acetate from Ac2O, AcCl or AcOH is the row that reads each reagent, and the acetyl is mapped from its
+    source: the product carries every atom it took, the leaving half of the source stays unmapped."""
     rxn = smiles(f'OCc1ccccc1.{source}>>CC(=O)OCc1ccccc1')
-    assert rxn.reconstruct_mapping() == ('protect:hydroxyl_acyl',)
+    assert rxn.reconstruct_mapping() == (label,)
     (acyl,) = [m for m in rxn.reactants if len(m) < 8]
     product = rxn.products[0]
     assert all(product.map_number_of(n) for n in product.atom_numbers)
     assert len([n for n in acyl.atom_numbers if acyl.map_number_of(n)]) == 3     # CH3, C and its =O
 
 
-def test_a_named_group_installed_is_a_protection_and_any_other_acylation_a_reaction():
+def test_a_named_group_with_no_recorded_source_is_a_protection():
+    # the same N-benzoyl: an amidation where the acid is recorded, a protection where nothing supplies it
     benzoyl = ReactionContainer([smiles('OC(=O)c1ccccc1'), smiles('CCN')], [smiles('CCNC(=O)c1ccccc1')])
-    assert benzoyl.reconstruct_mapping() == ('protect:amine_benzoate',)
-    other = ReactionContainer([smiles('OC(=O)C1CCCCC1'), smiles('CCN')], [smiles('CCNC(=O)C1CCCCC1')])
-    assert other.reconstruct_mapping() == ('react:amidation',)
+    assert benzoyl.reconstruct_mapping() == ('react:amidation',)
+    bare = ReactionContainer([smiles('CCN')], [smiles('CCNC(=O)c1ccccc1')])
+    assert bare.reconstruct_mapping() == ('protect:amine_benzoate',)
+    acetate = smiles('OCc1ccccc1>>CC(=O)OCc1ccccc1')
+    assert acetate.reconstruct_mapping() == ('protect:hydroxyl_acyl',)
 
 
 def test_canonicalize_does_not_reconstruct():
@@ -990,7 +994,7 @@ def test_a_protected_azole_pairs_with_its_input_tautomer():
     ('CC(C)(C)OC(=O)N1CCC(CC1)C=Cc1ccc(OCc2ccccc2)cc1>>CC(C)(C)OC(=O)N1CCC(CC1)CCc1ccc(O)cc1',
      'deprotect:phenol_benzyl+react:alkene_to_alkane'),
     ('CS(=O)(=O)OCCc1ccccc1.Oc1ccc(NC(=O)OC(C)(C)C)cc1>>Nc1ccc(OCCc2ccccc2)cc1',
-     'deprotect:aniline_boc+react:williamson'),     # the mesylate is the leaving group, not a strip
+     'deprotect:aniline_boc+react:phenol_alkylation'),     # the mesylate is the leaving group, not a strip
 ])
 def test_a_group_the_product_keeps_is_not_stripped(record, label):
     """The composed rung strips the groups the product lost, not every group it could: the ester or the Boc
@@ -999,10 +1003,10 @@ def test_a_group_the_product_keeps_is_not_stripped(record, label):
 
 
 @pytest.mark.parametrize('record, label', [
-    ('OC(=O)c1ccccc1.CO>>COC(=O)c1ccccc1', 'protect:carboxyl_methyl'),
-    ('Oc1ccccc1.CI>>COc1ccccc1', 'protect:phenol_methyl'),
-    ('OC(=O)c1ccccc1.BrCc1ccccc1>>O=C(OCc1ccccc1)c1ccccc1', 'protect:carboxyl_benzyl'),
-    ('OCc1ccccc1.CC(=O)OC(C)=O>>CC(=O)OCc1ccccc1', 'protect:hydroxyl_acyl'),
+    ('OC(=O)c1ccccc1>>COC(=O)c1ccccc1', 'protect:carboxyl_methyl'),
+    ('Oc1ccccc1>>COc1ccccc1', 'protect:phenol_methyl'),
+    ('OC(=O)c1ccccc1>>O=C(OCc1ccccc1)c1ccccc1', 'protect:carboxyl_benzyl'),
+    ('OCc1ccccc1>>CC(=O)OCc1ccccc1', 'protect:hydroxyl_acyl'),
 ])
 def test_an_ester_installed_on_the_acid_is_named_by_the_acid(record, label):
     """One `hydroxyl_*` row reads an ether and an ester alike; the installs run under different conditions,
@@ -1014,32 +1018,40 @@ TF2O, PHNTF2 = 'O=S(=O)(OS(=O)(=O)C(F)(F)F)C(F)(F)F', 'O=S(=O)(N(c1ccccc1)S(=O)(
 
 
 @pytest.mark.parametrize('record, label', [
-    (f'Oc1ccccc1.{TF2O}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:phenol_triflyl'),
-    (f'Oc1ccccc1.{PHNTF2}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:phenol_triflyl'),
-    ('OCCc1ccccc1.CS(=O)(=O)Cl>>CS(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_mesyl'),
-    ('OCCc1ccccc1.CS(=O)(=O)OS(C)(=O)=O>>CS(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_mesyl'),
-    ('OCCc1ccccc1.Cc1ccc(cc1)S(=O)(=O)Cl>>Cc1ccc(cc1)S(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_tosyl'),
-    (f'O=C1CCCCC1.{PHNTF2}>>O=S(=O)(OC1=CCCCC1)C(F)(F)F', 'protect:enol_triflyl'),
+    (f'Oc1ccccc1.{TF2O}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'react:triflation'),
+    (f'Oc1ccccc1.{PHNTF2}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'react:triflation'),
+    ('Oc1ccccc1>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:phenol_triflyl'),     # no triflyl source recorded
+    ('OCCc1ccccc1.CS(=O)(=O)Cl>>CS(=O)(=O)OCCc1ccccc1', 'react:sulfonylation'),
+    ('OCCc1ccccc1.CS(=O)(=O)OS(C)(=O)=O>>CS(=O)(=O)OCCc1ccccc1', 'react:anhydride_sulfonylation'),
+    ('OCCc1ccccc1>>CS(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_mesyl'),
+    ('OCCc1ccccc1.Cc1ccc(cc1)S(=O)(=O)Cl>>Cc1ccc(cc1)S(=O)(=O)OCCc1ccccc1', 'react:sulfonylation'),
+    ('OCCc1ccccc1>>Cc1ccc(cc1)S(=O)(=O)OCCc1ccccc1', 'protect:hydroxyl_tosyl'),
+    (f'O=C1CCCCC1.{PHNTF2}>>O=S(=O)(OC1=CCCCC1)C(F)(F)F', 'react:enol_triflation'),
+    ('O=C1CCCCC1>>O=S(=O)(OC1=CCCCC1)C(F)(F)F', 'protect:enol_triflyl'),
     ('O=S(=O)(Oc1ccccc1)C(F)(F)F.OB(O)c1ccccc1>>c1ccc(-c2ccccc2)cc1', 'react:suzuki'),
     ('CS(=O)(=O)OCCc1ccccc1.N1CCCCC1>>C(CN1CCCCC1)c1ccccc1', 'react:n_alkylation'),
 ])
 def test_an_o_sulfonyl_pseudohalide_is_installed_as_a_group(record, label):
-    """Tf, Ms and Ts on an OH are set by many reagents, so they are groups and the reagent an agent; the
-    enol triflate of a ketone is the same group on the `enol` site, and using the pseudohalide is a reaction."""
+    """Tf, Ms and Ts on an OH are a row's sulfonylation where the reagent is recorded and a group where nothing
+    recorded supplies it, even for a row whose triflyl is an agent; using the pseudohalide is a reaction."""
     assert smiles(record).reconstruct_mapping() == (label,)
 
 
 @pytest.mark.parametrize('record, label', [
-    ('NCCc1ccccc1.CS(=O)(=O)Cl>>CS(=O)(=O)NCCc1ccccc1', 'protect:amine_mesyl'),
-    (f'NCCc1ccccc1.{TF2O}>>O=S(=O)(NCCc1ccccc1)C(F)(F)F', 'protect:amine_triflyl'),
-    ('NCCc1ccccc1.Cc1ccc(cc1)S(=O)(=O)Cl>>Cc1ccc(cc1)S(=O)(=O)NCCc1ccccc1', 'protect:amine_tosyl'),
-    ('OCCc1ccccc1.O=S(=O)(Cl)c1ccccc1>>O=S(=O)(OCCc1ccccc1)c1ccccc1', 'protect:hydroxyl_phenylsulfonyl'),
-    ('OCCc1ccccc1.O=S(=O)(Cl)c1ccccc1[N+](=O)[O-]>>O=S(=O)(OCCc1ccccc1)c1ccccc1[N+](=O)[O-]',
-     'protect:hydroxyl_nosyl'),
+    ('NCCc1ccccc1>>CS(=O)(=O)NCCc1ccccc1', 'protect:amine_mesyl'),
+    ('NCCc1ccccc1>>O=S(=O)(NCCc1ccccc1)C(F)(F)F', 'protect:amine_triflyl'),
+    ('NCCc1ccccc1>>Cc1ccc(cc1)S(=O)(=O)NCCc1ccccc1', 'protect:amine_tosyl'),
+    ('OCCc1ccccc1>>O=S(=O)(OCCc1ccccc1)c1ccccc1', 'protect:hydroxyl_phenylsulfonyl'),
+    ('OCCc1ccccc1>>O=S(=O)(OCCc1ccccc1)c1ccccc1[N+](=O)[O-]', 'protect:hydroxyl_nosyl'),
+    ('NCCc1ccccc1.CS(=O)(=O)Cl>>CS(=O)(=O)NCCc1ccccc1', 'react:sulfonamide_formation'),
+    (f'NCCc1ccccc1.{TF2O}>>O=S(=O)(NCCc1ccccc1)C(F)(F)F', 'react:anhydride_sulfonamide_formation'),
+    ('NCCc1ccccc1.Cc1ccc(cc1)S(=O)(=O)Cl>>Cc1ccc(cc1)S(=O)(=O)NCCc1ccccc1', 'react:sulfonamide_formation'),
+    ('OCCc1ccccc1.O=S(=O)(Cl)c1ccccc1>>O=S(=O)(OCCc1ccccc1)c1ccccc1', 'react:sulfonylation'),
     ('NCCc1ccccc1.O=S(=O)(Cl)c1ccc(F)cc1>>O=S(=O)(NCCc1ccccc1)c1ccc(F)cc1', 'react:sulfonamide_formation'),
 ])
 def test_the_named_sulfonyl_groups_are_the_same_on_oxygen_and_nitrogen(record, label):
-    """Ms, Tf, Ts, Ns and PhSO2 are groups on O and on N alike; a sulfonyl no row names is a reaction."""
+    """Ms, Tf, Ts, Ns and PhSO2 are groups on O and on N alike where nothing recorded supplies them; a sulfonyl
+    chloride or anhydride recorded is the sulfonylation row, named or not."""
     assert smiles(record).reconstruct_mapping() == (label,)
 
 
@@ -1051,9 +1063,8 @@ BOC2O = 'CC(C)(C)OC(=O)OC(=O)OC(C)(C)C'
     (f'Nc1ccccc1.{BOC2O}>>CC(C)(C)OC(=O)Nc1ccccc1', 'protect:aniline_boc'),
     (f'O=C1CCCN1.{BOC2O}>>CC(C)(C)OC(=O)N1CCCC1=O', 'protect:amide_boc'),
     ('c1cn[nH]c1.C[Si](C)(C)CCOCCl>>C[Si](C)(C)CCOCn1cccn1', 'protect:azole_sem'),
-    (f'Oc1ccccc1.{TF2O}>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:phenol_triflyl'),
-    (f'OCCc1ccccc1.{TF2O}>>O=S(=O)(OCCc1ccccc1)C(F)(F)F', 'protect:hydroxyl_triflyl'),
-    ('OC(=O)c1ccccc1.CO>>COC(=O)c1ccccc1', 'protect:carboxyl_methyl'),
+    ('OCCc1ccccc1>>O=S(=O)(OCCc1ccccc1)C(F)(F)F', 'protect:hydroxyl_triflyl'),
+    ('OC(=O)c1ccccc1>>COC(=O)c1ccccc1', 'protect:carboxyl_methyl'),
     ('COc1ccccc1>>Oc1ccccc1', 'deprotect:phenol_methyl'),
     ('CC(C)(C)OC(=O)Nc1ccccc1>>Nc1ccccc1', 'deprotect:aniline_boc'),
     ('CC(C)(C)OC(=O)NCCc1ccccc1>>NCCc1ccccc1', 'deprotect:amine_boc'),
@@ -1146,14 +1157,15 @@ def test_an_oxime_oxygen_is_named_for_the_oxime():
     assert rxn.reconstruct_mapping() == ('protect:oxime_boc',)
 
 
-@pytest.mark.parametrize('text', ['CCN.OC(=O)c1ccccc1>>CCNC(=O)c1ccccc1', 'CCN.CC(=O)Cl>>CCNC(C)=O',
-                                  'CC(C)N.ClC(=O)c1ccccc1>>CC(C)NC(=O)c1ccccc1'])
-def test_a_protecting_acyl_is_mapped_from_its_donor(text):
-    """An N-acetyl or N-benzoyl reads as its protection, and the acid or acid chloride that supplied it is mapped:
-    every product atom carries a number, only the donor's leaving OH or Cl does not."""
+@pytest.mark.parametrize('text, label', [('CCN.OC(=O)c1ccccc1>>CCNC(=O)c1ccccc1', 'react:amidation'),
+                                         ('CCN.CC(=O)Cl>>CCNC(C)=O', 'react:acyl_halide_amidation'),
+                                         ('CC(C)N.ClC(=O)c1ccccc1>>CC(C)NC(=O)c1ccccc1',
+                                          'react:acyl_halide_amidation')])
+def test_a_protecting_acyl_is_mapped_from_its_donor(text, label):
+    """An N-acetyl or N-benzoyl from a recorded acid or acid chloride is the amidation row, and the donor is
+    mapped: every product atom carries a number, only the donor's leaving OH or Cl does not."""
     rxn = smiles(text)
-    (label,) = rxn.reconstruct_mapping()
-    assert label.startswith('protect:amine_')
+    assert rxn.reconstruct_mapping() == (label,)
     product = rxn.products[0]
     assert all(product.map_number_of(n) for n in product.atom_numbers)
     donor = next(m for m in rxn.reactants if any(m.atom(n).atomic_symbol in ('O', 'Cl') for n in m.atom_numbers))

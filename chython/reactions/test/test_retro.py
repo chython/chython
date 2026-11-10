@@ -63,7 +63,7 @@ def test_a_lactam_opens_to_one_precursor():
 
 
 def test_an_inverting_row_hands_back_the_other_configuration():
-    answers = _answers('CC[C@@H](C)Oc1ccccc1', 'williamson')
+    answers = _answers('CC[C@@H](C)Oc1ccccc1', 'phenol_alkylation')
     assert ('reactions:17', 'C(C)[C@@H](Br)C.c1c(O)cccc1>>c1ccccc1O[C@H](C)CC') in answers
 
 

@@ -772,6 +772,28 @@ cdef object _isomers_fn():
     return _isomers_impl
 
 
+cdef object _isomer_forms_impl = None
+
+
+def _set_isomer_forms_fn(fn):
+    """Register the isomer-form enumerator.  `chython.chemistry` calls this at its own init.
+
+    `fn` must have signature `fn(molecule) -> list[MoleculeContainer]` and must not mutate `molecule`.
+    A setter of its own beside `_set_isomers_fn`: one CHOOSES a placement and the other LISTS them, and
+    `chython.reactions` reaches the list through the container without importing its sibling.
+    """
+    global _isomer_forms_impl
+    _isomer_forms_impl = fn
+
+
+cdef object _isomer_forms_fn():
+    global _isomer_forms_impl
+    if _isomer_forms_impl is None:
+        raise ImportError('isomer forms are implemented in `chython.chemistry`, which registers '
+                          'them on import; `import chython.chemistry` (or `import chython`) first.')
+    return _isomer_forms_impl
+
+
 cdef object _kekule_form_impl = None
 
 
@@ -7766,6 +7788,17 @@ cdef class MoleculeContainer:
         valid molecules and neither was a defect to repair.
         """
         return _isomers_fn()(self)
+
+    def isomer_forms(self):
+        """Every placement of the mobile hydrogens `standardize_isomers()` chooses between, as copies.
+
+        The drawn form first, then the others: the annular N-H of an azole, the N-H of a Kekule lactam
+        system, the C=N of an amidine or guanidine, combined over the molecule's systems and capped.  Each is
+        a copy keeping this molecule's atom and map numbers.  A reaction template binds the atoms it is
+        handed, so the corpus is matched against every form and one row reaches either nitrogen of
+        `CC1=NNC=C1`.  Reads only.  The body lives in `chython.chemistry` and arrives by registration.
+        """
+        return _isomer_forms_fn()(self)
 
     def standardize_kekule(self):
         """Store the Kekule form whose double bonds sit inside the small rings.  Did any order move?

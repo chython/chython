@@ -18,9 +18,11 @@
 #
 """`standardize_isomers`: the placement is a choice, and two spellings must make the same one."""
 from itertools import permutations, product
+
+import pytest
 from chython.chemistry._canonicalize import canonicalize
 from chython.chemistry._implicit import check_valence
-from chython.chemistry._isomers import standardize_isomers
+from chython.chemistry._isomers import isomer_forms, standardize_isomers
 from chython.core import INFO, Log, read_smiles
 
 
@@ -716,3 +718,37 @@ def test_two_exocyclic_imines_share_one_ring_hydrogen():
     assert molecule.brutto_formula == formula and not check_valence(molecule), str(molecule)
     assert not any(molecule.charge_of(n) for n in molecule.atom_numbers)
     assert converge('c1ccc2C(NC(c2c1)=N)=N', 'NC1=NC(=N)c2ccccc12')[2]
+
+
+# --- isomer_forms: every placement, the drawn one first --------------------------------------------
+
+@pytest.mark.parametrize('smiles, count', [
+    ('CC1=NNC=C1', 2),                  # 3- and 5-methyl-1H-pyrazole
+    ('Cc1c[nH]cn1', 2),                 # 4- and 5-methyl-1H-imidazole
+    ('c1nc[nH]n1', 2),                  # 1H- and 4H-1,2,4-triazole
+    ('Cc1nn[nH]n1', 2),                 # 1H- and 2H-tetrazole
+    ('c1ccc2[nH]ncc2c1', 2),            # 1H- and 2H-indazole
+    ('CC(=N)NC', 2),                    # the C=N on either nitrogen
+    ('CN=C(N)Nc1ccccc1', 3),            # a guanidine: the C=N on each of three
+    ('c1ccncc1', 1),                    # nothing mobile
+    ('O=c1cc[nH]c(=O)[nH]1', 1),        # uracil: both N-H fixed, and an O-H is not this pass
+])
+def test_isomer_forms_lists_every_placement(smiles, count):
+    molecule = read_smiles(smiles)
+    canonicalize(molecule)
+    forms = isomer_forms(molecule)
+    assert len(forms) == count
+    assert forms[0].canonical_bytes == molecule.canonical_bytes
+    assert len({form.canonical_bytes for form in forms}) == count
+    for form in forms:
+        assert set(form.atom_numbers) == set(molecule.atom_numbers)
+        canonicalize(form)
+        assert form == forms[0]                     # one compound, every way it is drawn
+
+
+def test_isomer_forms_is_a_container_method_and_reads_only():
+    molecule = read_smiles('Cc1c[nH]cn1')
+    canonicalize(molecule)
+    before = molecule.canonical_bytes
+    assert len(molecule.isomer_forms()) == 2
+    assert molecule.canonical_bytes == before

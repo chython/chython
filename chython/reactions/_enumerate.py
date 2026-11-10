@@ -23,6 +23,10 @@ This file decides only WHICH templates to try; applying one is the core's `templ
 input goes to the matcher at once, so argument order cannot matter and a mixture handed in as one
 container works; an outcome is then kept only when it touched every input.  Deprotection is the second
 half, and the primitive it adds is the CLAIM -- see `_claims`.
+
+A TEMPLATE IS MATCHED AGAINST EVERY DRAWING OF A MOBILE HYDROGEN, not the one stored: `_forms`.  The
+annular N-H of an azole and the C=N of an amidine are one compound however drawn, so one row alkylates
+either nitrogen of `CC1=NNC=C1` and no table carries a second spelling for the other one.
 """
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -93,6 +97,64 @@ def functional_groups(molecule: MoleculeContainer) -> dict[str, int]:
     return {hit.name: hit.count for hit in functional_group_hits(molecule)}
 
 
+def _forms(molecule: MoleculeContainer) -> list[MoleculeContainer]:
+    """`molecule` itself, then its other `isomer_forms()`: what a template is matched against.
+
+    The drawn form alone where `chython.chemistry` is not imported: the enumerator is registered by it,
+    as `canonicalize()` is, and this package is usable on the core alone (`test_dependency_direction`).
+    """
+    try:
+        others = molecule.isomer_forms()[1:]
+    except ImportError:
+        return [molecule]
+    return [molecule, *others]
+
+
+def _moved(drawn: MoleculeContainer, form: MoleculeContainer) -> frozenset[int]:
+    """The atoms whose hydrogens, charge or bond orders differ between a form and the drawn molecule."""
+    out = set()
+    for n in drawn.atom_numbers:
+        if drawn.implicit_h_of(n) != form.implicit_h_of(n) or drawn.charge_of(n) != form.charge_of(n):
+            out.add(n)
+        for m in drawn.neighbors_of(n):
+            if drawn.order_of(n, m) != form.order_of(n, m):
+                out.add(n)
+    return frozenset(out)
+
+
+def _union_ids(molecules: Sequence[MoleculeContainer]) -> list[dict[int, int]]:
+    """`[{own id: id in the template's working union}]` per input, as `smk_enumerate` builds that union: the
+    first input keeps its ids, each later one is appended with fresh ascending ids in its own atom order.
+    `accept` sees union ids, so a set of a molecule's own atoms is read through this."""
+    work = molecules[0].copy()
+    out = [{n: n for n in work.atom_numbers}]
+    for molecule in molecules[1:]:
+        before = set(work.atom_numbers)
+        work = work.union(molecule)
+        added = sorted(n for n in work.atom_numbers if n not in before)
+        out.append(dict(zip(molecule.atom_numbers, added)))
+    return out
+
+
+def _touching(moved: frozenset[int], accept):
+    """`accept` for a re-drawn combination: an embedding matching no moved atom matched the drawn form too,
+    and would only rebuild its product, so it is refused before the reactor copies anything."""
+    def gate(mapping):
+        return not moved.isdisjoint(mapping.values()) and (accept is None or accept(mapping))
+    return gate
+
+
+def _groups_over(forms: Sequence[MoleculeContainer]) -> dict[str, int]:
+    """`functional_groups()` over every form, the largest count of each: a group one drawing hides --
+    `primary_amidine_amine` on the N-methyl amidine drawn `CN=C(C)N` and not `CNC(C)=N` -- is still there."""
+    out: dict[str, int] = {}
+    for form in forms:
+        for name, count in functional_groups(form).items():
+            if count > out.get(name, 0):
+                out[name] = count
+    return out
+
+
 def _selected(rules: Mapping[str, tuple[ReactionRule, ...]],
               reaction: str | None) -> Iterator[ReactionRule]:
     """The rows a call may use: the family with the right name, or all of them.
@@ -159,14 +221,52 @@ def _fitting(molecules: Sequence[MoleculeContainer], rules: Mapping[str, tuple[R
         yield rule
 
 
-def _outcomes(rule: ReactionRule, molecules: Sequence[MoleculeContainer], accept_for=None
-              ) -> Iterator[EnumeratedReaction]:
+def _outcomes(rule: ReactionRule, molecules: Sequence[MoleculeContainer], accept_for=None,
+              forms: Sequence[Sequence[MoleculeContainer]] | None = None) -> Iterator[EnumeratedReaction]:
     """Every reaction `rule` produces on `molecules` that touched all of them.  `accept_for(template)`, when
-    given, is the `accept` each template is applied with."""
+    given, is the `accept` each template is applied with.
+
+    `forms` is `[_forms(m) for m in molecules]`, the caller's where it holds one.  The drawn combination
+    runs first and yields as it always did; every other combination yields only a product set no earlier
+    combination built, with its mobile hydrogens put back where `standardize_isomers()` puts them -- the
+    form was the matcher's business, never the product's.  A form keeps its molecule's atom numbers, so the
+    reactor's reactants still read back onto the inputs.
+    """
     inputs = len(molecules)
+    if forms is None:
+        forms = [_forms(molecule) for molecule in molecules]
+    if all(len(f) == 1 for f in forms):
+        # one drawing of everything, which is nearly every pool: nothing can repeat, so nothing is keyed
+        for template in rule.templates:
+            for rxn in template(*molecules, accept=None if accept_for is None else accept_for(template)):
+                if len(rxn.reactants) == inputs:
+                    yield EnumeratedReaction(rule.name, rxn, rule.id)
+        return
+    # the drawn combination is `molecules` itself, which may hold a caller's copy for an excess equivalent
+    choices = list(cartesian(*(range(len(f)) for f in forms)))
+    moved = [[frozenset()] + [_moved(f[0], form) for form in f[1:]] for f in forms]
     for template in rule.templates:
-        for rxn in template(*molecules, accept=None if accept_for is None else accept_for(template)):
-            if len(rxn.reactants) == inputs:
+        accept = None if accept_for is None else accept_for(template)
+        seen = set()
+        for k, choice in enumerate(choices):
+            combination = [molecules[i] if j == 0 else forms[i][j] for i, j in enumerate(choice)]
+            gate = accept
+            if k:
+                # the reactor wants distinct molecules: a form handed in twice goes in as a copy
+                combination = [form.copy() if any(form is other for other in combination[:i]) else form
+                               for i, form in enumerate(combination)]
+                ids = _union_ids(combination)
+                gate = _touching(frozenset(ids[i][n] for i, j in enumerate(choice) for n in moved[i][j]), accept)
+            for rxn in template(*combination, accept=gate):
+                if len(rxn.reactants) != inputs:
+                    continue
+                if k:
+                    for product in rxn.products:
+                        product.standardize_isomers()
+                key = tuple(sorted(product.canonical_bytes for product in rxn.products))
+                if k and key in seen:
+                    continue
+                seen.add(key)
                 yield EnumeratedReaction(rule.name, rxn, rule.id)
 
 
@@ -189,10 +289,13 @@ def _run(molecules: Sequence[MoleculeContainer], rules: Mapping[str, tuple[React
     union test cannot see this -- it asks only whether the groups are there, not whether they are spread
     across every molecule that has to be touched.
 
-    `carried` is `_fitting`'s, and means the same thing here.
+    `carried` is `_fitting`'s, and means the same thing here.  Both are read over every form (`_forms`).
     """
+    forms = [_forms(molecule) for molecule in molecules]
+    if carried is None:
+        carried = [_groups_over(f) for f in forms]
     for rule in _fitting(molecules, rules, reaction, carried):
-        yield from _outcomes(rule, molecules)
+        yield from _outcomes(rule, molecules, forms=forms)
 
 
 def react(molecule: MoleculeContainer, others=(), reaction: str | None = None

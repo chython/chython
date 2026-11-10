@@ -23,6 +23,8 @@ electrophile, SNAr of an activated Cl/Br/I/sulfonate, SNAr of a fluoride, the ca
 amide bond, the hybridization of a Suzuki boron, the boron source of a borylation and the origin of a
 Grignard reagent.
 """
+from collections import Counter
+
 import pytest
 
 from .._tables import reaction_rules
@@ -160,3 +162,167 @@ def test_every_heteroaromatic_ring_class_is_classified(halide, label):
     else:
         product = halide.replace('Cl', 'NCC').replace('Br', 'NCC')
     assert smiles(f'{halide}.CCN>>{product}').reconstruct_mapping() == ('react:' + label,)
+
+
+# A protecting group a corpus row installs from a recorded reagent is that row's reaction: the same
+# conditions as a substituted twin no protective row names.  Only where no row reads the reagent, or no
+# reagent is recorded, is the record a protection.
+INSTALLED = [
+    ('BrCc1ccccc1.C1COCCN1>>C(c1ccccc1)N1CCOCC1', 'react:n_alkylation'),
+    ('ClCc1ccccc1.C1COCCN1>>C(c1ccccc1)N1CCOCC1', 'react:n_alkylation'),
+    ('O=Cc1ccccc1.C1CCNCC1>>C(c1ccccc1)N1CCCCC1', 'react:reductive_amination'),
+    ('BrCc1ccccc1.Nc1ccccc1>>C(Nc1ccccc1)c1ccccc1', 'react:n_alkylation'),
+    ('O=Cc1ccccc1.Nc1ccccc1>>C(Nc1ccccc1)c1ccccc1', 'react:reductive_amination'),
+    ('BrCc1ccccc1.c1cn[nH]c1>>C(n1cccn1)c1ccccc1', 'react:azole_n_alkylation'),
+    ('BrCc1ccccc1.Oc1ccccc1>>C(Oc1ccccc1)c1ccccc1', 'react:phenol_alkylation'),
+    ('ClCc1ccccc1.Oc1ccccc1>>C(Oc1ccccc1)c1ccccc1', 'react:phenol_alkylation'),
+    ('BrCc1ccccc1.OCC1CCCCC1>>C(OCC1CCCCC1)c1ccccc1', 'react:williamson'),
+    ('BrCc1ccccc1.OC(=O)c1ccncc1>>O=C(OCc1ccccc1)c1ccncc1', 'react:acid_alkylation'),
+    ('OC(=O)c1ccccc1.C1COCCN1>>O=C(N1CCOCC1)c1ccccc1', 'react:amidation'),
+    ('ClC(=O)c1ccccc1.C1COCCN1>>O=C(N1CCOCC1)c1ccccc1', 'react:acyl_halide_amidation'),
+    ('OC(=O)c1ccccc1.Nc1ccccc1>>O=C(Nc1ccccc1)c1ccccc1', 'react:amidation'),
+    ('ClC(=O)c1ccccc1.Nc1ccccc1>>O=C(Nc1ccccc1)c1ccccc1', 'react:acyl_halide_amidation'),
+    ('ClC(=O)c1ccccc1.OCC1CCCCC1>>O=C(OCC1CCCCC1)c1ccccc1', 'react:acylation'),
+    ('CI.Oc1ccccc1>>COc1ccccc1', 'react:phenol_alkylation'),
+    ('CI.OCC1CCCCC1>>COCC1CCCCC1', 'react:williamson'),
+    ('CI.OC(=O)c1ccncc1>>COC(=O)c1ccncc1', 'react:acid_alkylation'),
+    ('CO.OC(=O)c1ccncc1>>COC(=O)c1ccncc1', 'react:esterification'),
+    ('CCI.Oc1ccccc1>>CCOc1ccccc1', 'react:phenol_alkylation'),
+    ('CCO.OC(=O)c1ccncc1>>CCOC(=O)c1ccncc1', 'react:esterification'),
+    ('CC(=O)O.C1COCCN1>>CC(=O)N1CCOCC1', 'react:amidation'),
+    ('CC(=O)Cl.C1COCCN1>>CC(=O)N1CCOCC1', 'react:acyl_halide_amidation'),
+    ('CC(=O)OC(C)=O.C1COCCN1>>CC(=O)N1CCOCC1', 'react:anhydride_amidation'),
+    ('CC(=O)O.Nc1ccccc1>>CC(=O)Nc1ccccc1', 'react:amidation'),
+    ('CC(=O)Cl.Nc1ccccc1>>CC(=O)Nc1ccccc1', 'react:acyl_halide_amidation'),
+    ('CS(=O)(=O)Cl.OCC1CCCCC1>>CS(=O)(=O)OCC1CCCCC1', 'react:sulfonylation'),
+    ('CS(=O)(=O)Cl.C1COCCN1>>CS(=O)(=O)N1CCOCC1', 'react:sulfonamide_formation'),
+    ('Cc1ccc(S(=O)(=O)Cl)cc1.C1COCCN1>>Cc1ccc(S(=O)(=O)N2CCOCC2)cc1', 'react:sulfonamide_formation'),
+    ('O=C(Cl)OCc1ccccc1.C1COCCN1>>O=C(OCc1ccccc1)N1CCOCC1', 'react:carbamoylation'),
+    ('COc1ccc(CCl)cc1.OCC1CCCCC1>>COc1ccc(COCC2CCCCC2)cc1', 'react:williamson'),
+    ('O=S(=O)(OS(=O)(=O)C(F)(F)F)C(F)(F)F.Oc1ccccc1>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'react:triflation'),
+    ('O=C1CCCCC1.Clc1ccc(N(S(=O)(=O)C(F)(F)F)S(=O)(=O)C(F)(F)F)nc1>>O=S(=O)(OC1=CCCCC1)C(F)(F)F',
+     'react:enol_triflation'),
+    # an acidic N-H or O-H, a glycosyl donor and a trityl cation are their own conditions
+    ('BrCc1ccccc1.O=C1CCCN1>>O=C1CCCN1Cc1ccccc1', 'react:amide_n_alkylation'),
+    ('CI.CS(=O)(=O)NCc1ccccc1>>CN(Cc1ccccc1)S(C)(=O)=O', 'react:amide_n_alkylation'),
+    ('CCOC(=O)C(F)(F)Br.Oc1ccccc1>>CCOC(=O)C(F)(F)Oc1ccccc1', 'react:difluoroalkylation'),
+    ('FC(F)OS(=O)(=O)C(F)(F)F.Oc1ccccc1>>FC(F)Oc1ccccc1', 'react:difluoromethylation'),
+    ('CS(=O)(=O)F.C1COCCN1>>CS(=O)(=O)N1CCOCC1', 'react:sulfonyl_fluoride_sulfonamide_formation'),
+    ('CS(=O)(=O)OS(C)(=O)=O.OCC1CCCCC1>>CS(=O)(=O)OCC1CCCCC1', 'react:anhydride_sulfonylation'),
+    ('C[C@@H]1CCC[C@H](Br)O1.OCc1ccccc1>>c1cc(ccc1)CO[C@@H]1CCC[C@@H](C)O1', 'react:glycosylation'),
+    ('ClC(c1ccccc1)(c1ccccc1)c1ccccc1.OCC1CCCCC1>>C(OCC1CCCCC1)(c1ccccc1)(c1ccccc1)c1ccccc1', 'react:tritylation'),
+    ('COc1ccc(cc1)C(Cl)(c1ccccc1)c1ccc(OC)cc1.OCC1CCCCC1>>COc1ccc(cc1)C(OCC1CCCCC1)(c1ccccc1)c1ccc(OC)cc1',
+     'react:tritylation'),
+    ('ClC(c1ccccc1)(c1ccccc1)c1ccccc1.c1nc[nH]c1>>c1ncn(c1)C(c1ccccc1)(c1ccccc1)c1ccccc1', 'react:tritylation'),
+    # no row reads the reagent: the protection answers
+    ('CC(C)(C)OC(=O)OC(=O)OC(C)(C)C.C1COCCN1>>CC(C)(C)OC(=O)N1CCOCC1', 'protect:amine_boc'),
+    ('CC(C)(C)[Si](C)(C)Cl.OCC1CCCCC1>>CC(C)(C)[Si](C)(C)OCC1CCCCC1', 'protect:hydroxyl_tbs'),
+    ('C[Si](C)(C)CCOCCl.c1cn[nH]c1>>C[Si](C)(C)CCOCn1cccn1', 'protect:azole_sem'),
+    ('C1=COCCC1.OCC1CCCCC1>>C(OC1CCCCO1)C1CCCCC1', 'protect:hydroxyl_thp'),
+    ('COS(=O)(=O)OC.Oc1ccccc1>>COc1ccccc1', 'protect:phenol_methyl'),
+    # no reagent recorded: the protection answers
+    ('Oc1ccccc1>>O=S(=O)(Oc1ccccc1)C(F)(F)F', 'protect:phenol_triflyl'),          # the row's agent, unrecorded
+    ('O=C1CCCCC1>>O=S(=O)(OC1=CCCCC1)C(F)(F)F', 'protect:enol_triflyl'),
+    ('C1COCCN1>>C(c1ccccc1)N1CCOCC1', 'protect:amine_benzyl'),
+    ('Oc1ccccc1>>COc1ccccc1', 'protect:phenol_methyl'),
+    ('C1COCCN1>>CC(=O)N1CCOCC1', 'protect:amine_acyl'),
+    ('OCC1CCCCC1>>C(OCC1CCCCC1)(c1ccccc1)(c1ccccc1)c1ccccc1', 'protect:hydroxyl_tritil'),
+    # no protecting group: the controls
+    ('CI.C1CCNCC1>>CN1CCCCC1', 'react:n_alkylation'),
+    ('CI.c1cn[nH]c1>>Cn1cccn1', 'react:azole_n_alkylation'),
+    ('C=O.C1CCNCC1>>CN1CCCCC1', 'react:reductive_amination'),
+    ('Brc1ccccc1>>CC1(C)OB(c2ccccc2)OC1(C)C', 'react:miyaura_borylation'),       # an agent no group names
+]
+
+
+@pytest.mark.parametrize('record, label', INSTALLED, ids=[record for record, _ in INSTALLED])
+def test_a_group_installed_from_a_recorded_reagent_is_the_reaction(record, label):
+    assert smiles(record).reconstruct_mapping() == (label,)
+
+
+def _centre(record):
+    """The label, and the reaction centre the mapping implies: the changed bonds, and the before/after state
+    of their atoms and of the first shell around them, read from `transition_view`."""
+    rxn = smiles(record)
+    label = rxn.reconstruct_mapping()
+    view = rxn.transition_view()
+    elements = view.elements.tolist()
+    states = list(zip(elements, view.h_before.tolist(), view.n_before.tolist(), view.h_after.tolist(),
+                      view.n_after.tolist()))
+    changed = [(a, b, x, y) for (a, b), x, y in zip(view.bonds.tolist(), view.bond_before.tolist(),
+                                                    view.bond_after.tolist()) if x != y]
+    core = {i for a, b, _, _ in changed for i in (a, b)}
+    shell = {j for i in core for j in range(len(elements)) if view.distances[i, j] == 1} - core
+    return label, (Counter((tuple(sorted((elements[a], elements[b]))), x, y) for a, b, x, y in changed),
+                   Counter(states[i] for i in core), Counter(states[i] for i in shell))
+
+
+@pytest.mark.parametrize('record, twin', [
+    ('BrCc1ccccc1.C1COCCN1>>C(c1ccccc1)N1CCOCC1', 'BrCc1ccc(F)cc1.C1COCCN1>>Fc1ccc(CN2CCOCC2)cc1'),
+    ('O=Cc1ccccc1.C1CCNCC1>>C(c1ccccc1)N1CCCCC1', 'O=Cc1ccc(F)cc1.C1CCNCC1>>Fc1ccc(CN2CCCCC2)cc1'),
+    ('OC(=O)c1ccccc1.NCc1ccccc1>>O=C(NCc1ccccc1)c1ccccc1',
+     'OC(=O)c1ccc(F)cc1.NCc1ccccc1>>O=C(NCc1ccccc1)c1ccc(F)cc1'),
+    ('ClC(=O)c1ccccc1.NCc1ccccc1>>O=C(NCc1ccccc1)c1ccccc1',
+     'ClC(=O)c1ccc(F)cc1.NCc1ccccc1>>O=C(NCc1ccccc1)c1ccc(F)cc1'),
+    ('BrCc1ccccc1.Oc1ccccc1>>C(Oc1ccccc1)c1ccccc1', 'Oc1ccccc1.BrCc1ccc(F)cc1>>Fc1ccc(COc2ccccc2)cc1'),
+], ids=['benzyl_bromide', 'benzaldehyde', 'benzoic_acid', 'benzoyl_chloride', 'benzyl_ether'])
+def test_a_group_installed_by_a_row_maps_as_its_substituted_twin(record, twin):
+    label, centre = _centre(record)
+    assert label[0].startswith('react:')
+    assert _centre(twin) == (label, centre)
+
+
+# Every electrophile class alkylates either nitrogen of an unsymmetrical azole, under one label: the `pyrrole`
+# row takes the N drawn with the H, the `pyrazole` or `imidazole` row the free N.
+AZOLE_ELECTROPHILES = [
+    ('BrCc2ccccc2', 'Cc2ccccc2', 'azole_n_alkylation'),
+    ('COS(C)(=O)=O', 'C', 'azole_n_alkylation'),
+    ('ClCOC(=O)C(C)(C)C', 'COC(=O)C(C)(C)C', 'azole_n_alkylation'),
+    ('CCOP(=O)(COS(=O)(=O)c2ccc(C)cc2)OCC', 'CP(=O)(OCC)OCC', 'azole_n_alkylation'),
+    ('ClC[Si](C)(C)C', 'C[Si](C)(C)C', 'azole_n_alkylation'),
+    ('ClCSC', 'CSC', 'azole_n_alkylation'),
+    ('ClCOc2ccccc2', 'COc2ccccc2', 'azole_n_alkylation'),
+    ('FC(F)OS(=O)(=O)C(F)(F)F', 'C(F)F', 'difluoromethylation'),
+    ('CCOC(=O)C(F)(F)Br', 'C(F)(F)C(=O)OCC', 'difluoroalkylation'),
+    ('ClC(c2ccccc2)(c2ccccc2)c2ccccc2', 'C(c2ccccc2)(c2ccccc2)c2ccccc2', 'tritylation'),
+]
+
+
+@pytest.mark.parametrize('reagent, group, label', AZOLE_ELECTROPHILES,
+                         ids=[x[2] + ':' + x[1] for x in AZOLE_ELECTROPHILES])
+@pytest.mark.parametrize('azole, products', [
+    ('CC1=NNC=C1', ('Cc1ccn({})n1', 'Cc1ccnn1{}')),           # 3-methylpyrazole: the 1,3- and the 1,5-isomer
+    ('Cc1c[nH]cn1', ('Cc1cn({})cn1', 'Cc1cncn1{}')),         # 4-methylimidazole: the 1,4- and the 1,5-isomer
+], ids=['pyrazole', 'imidazole'])
+def test_either_azole_nitrogen_is_one_label(reagent, group, label, azole, products):
+    # both input orders: a template's working union renumbers every input after the first
+    for product in products:
+        for inputs in (f'{azole}.{reagent}', f'{reagent}.{azole}'):
+            assert smiles(f'{inputs}>>{product.format(group)}').reconstruct_mapping() == ('react:' + label,), inputs
+
+
+def test_react_reaches_either_nitrogen_of_a_mobile_hydrogen():
+    """One row, every form: `react()` builds both N-benzyl regioisomers of 3-methylpyrazole and both
+    N-aryl products of an N-methylguanidine, whichever form the input was stored in."""
+    def built(text, partner, reaction):
+        molecule, other = smiles(text), smiles(partner)
+        molecule.canonicalize()
+        other.canonicalize()
+        out = set()
+        for outcome in molecule.react(other, reaction=reaction):
+            product = outcome.reaction.products[0]
+            product.canonicalize()
+            out.add(product.canonical_bytes)
+        return out
+
+    def canonical(*texts):
+        out = set()
+        for text in texts:
+            molecule = smiles(text)
+            molecule.canonicalize()
+            out.add(molecule.canonical_bytes)
+        return out
+
+    assert built('CC1=NNC=C1', 'BrCc1ccccc1', 'azole_n_alkylation') == canonical(
+        'Cc1ccn(Cc2ccccc2)n1', 'Cc1ccnn1Cc1ccccc1')
+    assert canonical('CNC(=N)Nc1ccccc1', 'CN=C(N)Nc1ccccc1') <= built('NC(=N)NC', 'Brc1ccccc1', 'buchwald_hartwig')

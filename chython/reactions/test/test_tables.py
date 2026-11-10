@@ -55,9 +55,10 @@ def test_ids_are_unique_within_a_table(table):
 
 
 def test_the_merge_left_one_id_space():
-    """One id space, numbered 1..n.  An id is positional, so a gap or a repeat is a dropped line."""
+    """One id space, strictly ascending in table order.  An id is persisted identity: a deleted row leaves a
+    gap and its id is never reused, so a repeat or a step back is a pasted or renumbered line."""
     ids = [int(row['id']) for row in read_table('reactions.tsv')]
-    assert ids == list(range(1, len(ids) + 1)), 'reactions.tsv ids are not 1..n in order'
+    assert all(a < b for a, b in zip(ids, ids[1:])), 'reactions.tsv ids are not strictly ascending'
     assert sum(len(family) for family in reaction_rules().values()) == len(ids)
 
 

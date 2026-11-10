@@ -1138,7 +1138,7 @@ and not one drawn enantiomer:
     0
 
 An inverting row hands back the other configuration, since ``@~`` is its own inverse:
-``CC[C@@H](C)Oc1ccccc1`` comes from ``C(C)[C@@H](Br)C`` and phenol by ``williamson``.  A counter-ion
+``CC[C@@H](C)Oc1ccccc1`` comes from ``C(C)[C@@H](Br)C`` and phenol by ``phenol_alkylation``.  A counter-ion
 the reverse step never touches rides with the first precursor, which the forward run keeps as an
 untouched component.
 
@@ -1253,6 +1253,29 @@ product side silently drops a substituent fails on the substituent's absence.  T
 record, so ``CCBr.Oc1ccccc1`` exercises the intermolecular template and a connected reactant side
 exercises the intramolecular one.
 
+A mobile hydrogen is one row
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A template is matched against every drawing of its inputs' mobile hydrogens -- ``mol.isomer_forms()``, the
+placements ``standardize_isomers()`` chooses between: the N-H of an azole, of a Kekule lactam system, and the
+C=N of an amidine or guanidine.  So the row on an azole N-H alkylates either nitrogen of 3-methylpyrazole,
+and no row exists for "the other nitrogen".  A product built from a re-drawn input gets its mobile hydrogens
+back where ``canonicalize()`` puts them.
+
+.. testcode::
+
+    pyrazole = smiles('CC1=NNC=C1')
+    pyrazole.canonicalize()
+    print(len(pyrazole.isomer_forms()))
+
+    for product in ('Cc1ccn(Cc2ccccc2)n1', 'Cc1ccnn1Cc1ccccc1'):        # the 1,3- and the 1,5-isomer
+        rxn = smiles(f'CC1=NNC=C1.BrCc1ccccc1>>{product}')
+        assert rxn.reconstruct_mapping() == ('react:azole_n_alkylation',)
+
+.. testoutput::
+
+    2
+
 A row is as stereochemically explicit as its ``product`` column
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1269,7 +1292,7 @@ token.
     phenol = smiles('Oc1ccccc1')
     phenol.canonicalize()
 
-    for out in bromide.react(phenol, reaction='williamson'):
+    for out in bromide.react(phenol, reaction='phenol_alkylation'):
         print(out.rule_id, format(out.reaction.products[0]))
 
     ketone = smiles('CCC(C)=O')
@@ -1502,7 +1525,7 @@ there is to carry:
 
 .. testoutput::
 
-    432 89
+    433 89
     functional:22
     [O;D1;z1;x0:3][C;z2;x2;D3:1]=[O:2]
     ['aryl_chloride', 'aryl_bromide', 'aryl_iodide']
@@ -1531,9 +1554,9 @@ at 0.
 label                                the claim it makes about the record
 ===================================  =====================================================================
 ``purification``                     the product went in and came out
-``protect:<names>``                  the product is an input with a protecting group added
 ``deprotect:<labels>``               the product is an input with a protecting group removed
 ``react:<name>``                     a corpus row, applied to the inputs as they arrived, makes this
+``protect:<names>``                  the product is an input with a protecting group added
 ``deprotect:<labels>+react:<name>``  strip what can be stripped, then a corpus row fires on what is left
 ===================================  =====================================================================
 
@@ -1553,29 +1576,37 @@ an alcohol ``deprotect:hydroxyl_acyl``, and a Boc amine methyl ester stripped of
     assert smiles('CC(C)(C)OC(=O)c1ccccc1>>OC(=O)c1ccccc1').reconstruct_mapping() == ('deprotect:carboxyl_tbu',)
     assert smiles('CC(C)OC(=O)c1ccccc1>>OC(=O)c1ccccc1').reconstruct_mapping() == ('react:ester_hydrolysis',)
 
-Methyl benzoate from benzoic acid is ``protect:carboxyl_methyl`` and anisole from phenol
-``protect:phenol_methyl``.  Where two rows claim the two halves of one ester, the smaller half is the
+Methyl benzoate recorded from benzoic acid alone is ``protect:carboxyl_methyl`` and anisole from phenol
+alone ``protect:phenol_methyl``.  Where two rows claim the two halves of one ester, the smaller half is the
 protecting group: methyl benzoate is a methyl ester of benzoic acid, not a benzoate of methanol.
 
-**Protection comes right after purification.** A label names conditions, and installing a protecting
-group is one family of them whatever supplies the group: an acetate from Ac\ :sub:`2`\ O, AcCl or AcOH is
-``protect:hydroxyl_acyl`` each time.  The group's atoms are mapped from the input that holds them, the acid
-of an N-benzoyl, the anhydride of a Boc, so the record balances; its leaving half stays unmapped.  Every named
-group of ``protective.tsv`` reads this way, a methyl ether, a benzylamine and a tosylamide included, and so
-do the triflate, mesylate and tosylate pseudohalides of an OH, which are set by many reagents
-(``protect:hydroxyl_triflyl``), and the enol triflate of a ketone, on its own site
-(``protect:enol_triflyl``); an acylation by an acid no row names is a reaction.  **Deprotection comes
-next**, for the same reason: removing a named group is ``deprotect:`` even where a corpus row -- an amide
-hydrolysis on an N-benzoyl -- would build the same product.  A group cut inside a larger one reads as the
-inner group where no whole group explains the record: hydrogenolysis of a BOM to the N-CH\ :sub:`2`\ OH is
-``deprotect:hydroxyl_benzyl``.
+**Deprotection comes right after purification.** A label names conditions, and removing a named group is one
+family of them: ``deprotect:`` even where a corpus row -- an amide hydrolysis on an N-benzoyl -- would build
+the same product.  **Protection comes after the corpus rows.** A group a row installs from a recorded reagent
+is that row's chemistry, the same conditions as a substituted twin no protective row names: benzyl bromide on
+morpholine is ``react:n_alkylation`` and benzaldehyde on it ``react:reductive_amination``, an acetate from
+Ac\ :sub:`2`\ O, AcCl or AcOH ``react:anhydride_esterification``, ``react:acylation`` and
+``react:esterification``.  ``protect:`` answers where no row reads the recorded reagent -- Boc\ :sub:`2`\ O,
+TBSCl, SEM-Cl, DHP, Me\ :sub:`2`\ SO\ :sub:`4` -- or no source is recorded at all.  The group's atoms are
+mapped from the input that holds them, the anhydride of a Boc, so the record balances; its leaving half stays
+unmapped.  A row that builds the group from its own agent counts as reading a recorded reagent only where an
+input holds that fragment: phenol with Tf\ :sub:`2`\ O is ``react:triflation``, phenol alone
+``protect:phenol_triflyl``.  A group cut inside a larger one reads as the inner group where no whole group
+explains the record: hydrogenolysis of a BOM to the N-CH\ :sub:`2`\ OH is ``deprotect:hydroxyl_benzyl``.
 
 .. testcode::
 
-    for source in ('CC(=O)OC(C)=O', 'CC(=O)Cl', 'CC(=O)O'):
-        assert smiles(f'OCc1ccccc1.{source}>>CC(=O)OCc1ccccc1').reconstruct_mapping() == ('protect:hydroxyl_acyl',)
+    for source, label in (('CC(=O)OC(C)=O', 'react:anhydride_esterification'), ('CC(=O)Cl', 'react:acylation'),
+                          ('CC(=O)O', 'react:esterification')):
+        assert smiles(f'OCc1ccccc1.{source}>>CC(=O)OCc1ccccc1').reconstruct_mapping() == (label,)
 
-    assert smiles('OC(=O)C1CCCCC1.CCN>>CCNC(=O)C1CCCCC1').reconstruct_mapping() == ('react:amidation',)
+    assert smiles('OCc1ccccc1>>CC(=O)OCc1ccccc1').reconstruct_mapping() == ('protect:hydroxyl_acyl',)
+    assert smiles('CC(C)(C)OC(=O)OC(=O)OC(C)(C)C.NCc1ccccc1>>CC(C)(C)OC(=O)NCc1ccccc1').reconstruct_mapping() \
+        == ('protect:amine_boc',)
+
+    tf2o = 'O=S(=O)(OS(=O)(=O)C(F)(F)F)C(F)(F)F'
+    assert smiles(f'Oc1ccccc1.{tf2o}>>O=S(=O)(Oc1ccccc1)C(F)(F)F').reconstruct_mapping() == ('react:triflation',)
+    assert smiles('Oc1ccccc1>>O=S(=O)(Oc1ccccc1)C(F)(F)F').reconstruct_mapping() == ('protect:phenol_triflyl',)
 
 ``purification`` is the first rung: the product went in and came out, so the mapping it implies is the
 identity.  It carries no namespace, because no rule and no table produced it.
@@ -1593,7 +1624,7 @@ The water is on one side only, so it comes back unmapped: the numbering is 1-1 o
 
     O.[CH2:2]([CH3:1])[OH:3]>>[CH2:2]([CH3:1])[OH:3]
 
-``react:<name>`` is the fourth: a row of the reaction corpus, applied to the inputs as they arrived and
+``react:<name>`` is the third: a row of the reaction corpus, applied to the inputs as they arrived and
 found to reproduce the recorded product.  That is the strongest evidence available -- the record says
 these things reacted, and a row says this is what they make.
 
