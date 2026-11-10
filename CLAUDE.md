@@ -56,7 +56,7 @@ Frozen corpora written by chython 2 (pach v0/v2) stay, as wire-format fixtures. 
 ## Architecture
 
 ```
-core  <-  chemistry   reactions        formats   depict   interop
+core  <-  chemistry   reactions   polymers   formats   depict   interop
 ```
 
 - **`core/`** — the one Cython extension: containers, arena storage, SMILES/SMARTS read and write,
@@ -65,13 +65,15 @@ core  <-  chemistry   reactions        formats   depict   interop
   `_tables.py`, and `standardize`, `fix_resonance`, `calc_implicit`, `check_valence`, `saturate` beside
   them. `chython/transformation/` is **gone**; `chython.transformation.X` is now `chython.chemistry.X`.
 - **`reactions/`** — SMIRKS templates, the reaction/functional/protective corpora, mapping reconstruction.
-  A **sibling** of `chemistry`, not a layer below. Then **`formats/`**, **`depict/`**, **`interop/`**.
+  A **sibling** of `chemistry`, not a layer below.
+- **`polymers/`** — HELM and BILN against an attachable Pistoia-JSON monomer library (`chython.monomer_library`);
+  sees `core` only. Then **`formats/`**, **`depict/`**, **`interop/`**.
 
 Two rules, ratcheted by `chython/chemistry/test/test_dependency_direction.py` and
 `chython/formats/test/test_isolation.py`:
 
 1. **Nothing imports the façade.** `chython/__init__.py` must never appear in an import inside `core`,
-   `chemistry`, `reactions` or `formats` — production code or tests. The layers are provable in isolation,
+   `chemistry`, `reactions`, `polymers` or `formats` — production code or tests. The layers are provable in isolation,
    which is what keeps `lazy_object_proxy` out of the façade.
 2. **The direction never reverses.** `chemistry` may see `core`; nothing below sees anything above. Inside
    `chemistry` a third rule holds per module: `_tables.py` and `_smarts.py` read the tables and may not

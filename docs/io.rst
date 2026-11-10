@@ -25,6 +25,8 @@ MDL molfile        ``mol``         --                                     --
 MDL RXN            ``rxn``         --                                     --
 ChemDraw CDX       ``cdx``         --                                     --
 ChemDraw CDXML     ``cdxml``       --                                     --
+HELM               ``helm``        --                                     --
+BILN               ``biln``        --                                     --
 MRV                ``mrv``         ``read_mrv``                           ``write_mrv``
 CML                ``cml``         ``read_cml``                           ``write_cml``
 pach               ``pach``        ``unpach``/``unpack``, ``pach_load``,  ``pach_dump``,

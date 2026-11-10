@@ -178,6 +178,7 @@ include = ['chython*']
 'chython.reactions.test' = ['golden_subset.smi']
 'chython.formats.ctfile' = ['CTFILE.md']
 'chython.formats.cdx' = ['vocabulary.tsv']
+'chython.polymers' = ['data/HELMCoreLibrary.json.gz', 'data/LICENSE-HELMMonomerSets']
 
 # THE HARNESS BEHIND THE README'S COVERAGE BADGE.  The `oracles` job in `.github/workflows/test.yml` runs
 # the suite under these settings and uploads the report; the same two commands reproduce the number:

@@ -77,6 +77,7 @@ Cookbook
    stereo
    substructure
    reactions
+   polymers
    ml
    depiction
    config

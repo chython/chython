@@ -27,6 +27,7 @@ container in writes one.  `pach` is the same door for the wire format, and `unpa
 half under chython 2's two names.
 """
 from importlib.metadata import PackageNotFoundError as _NotInstalled, version as _version
+from os import PathLike as _PathLike
 from sys import modules as _modules
 from types import ModuleType as _ModuleType
 from .core import *
@@ -42,6 +43,7 @@ from .formats.pdb import PDBAtom, PDBBond, PDBRecord, build_molecule, mmcif, pdb
 from .chemistry import *
 # Likewise: `_set_reactions_fns` at import time is what makes `mol.react()` and `mol @ other` exist.
 from .reactions import *
+from .polymers import *
 from .interop import iupac, patch_pandas
 from .interop.config import _facade_alias as _interop_facade_alias
 
@@ -49,7 +51,7 @@ from .interop.config import _facade_alias as _interop_facade_alias
 class _Facade(_ModuleType):
     """Gives `chython` itself properties, so `chython.clean2d_engine`, `chython.js_runtime` and
     `chython.chain_layout` forward both the read and the write to their one home in `depict/_config.py`,
-    validated on the spot.
+    validated on the spot, and `chython.monomer_library` to its home in `polymers/_library.py`.
     """
     @property
     def clean2d_engine(self) -> Clean2DEngine:
@@ -74,6 +76,19 @@ class _Facade(_ModuleType):
     @js_runtime.setter
     def js_runtime(self, runtime: JSRuntime):
         set_js_runtime(runtime)
+
+    @property
+    def monomer_library(self):
+        """The HELM/BILN monomer set in use: the shipped public library plus what was attached."""
+        return get_monomer_library()
+
+    @monomer_library.setter
+    def monomer_library(self, paths):
+        """A path or a sequence of paths of Pistoia JSON libraries, stacked on the shipped one; ``()``
+        restores the default."""
+        if isinstance(paths, (str, _PathLike)):
+            paths = (paths,)
+        set_monomer_library(*paths)
 
 
 _modules[__name__].__class__ = _Facade

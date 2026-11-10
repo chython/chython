@@ -61,6 +61,8 @@ _OWNERS = [('inchi', 'chython.core._core'),
            ('mmcif', 'chython.formats.pdb._mmcif'),
            ('read_mmcif', 'chython.formats.pdb._mmcif'),
            ('PDBRecord', 'chython.formats.pdb._records'),
+           ('helm', 'chython.polymers'),
+           ('biln', 'chython.polymers'),
            ('cdx', 'chython.formats.cdx'),
            ('cdxml', 'chython.formats.cdx'),
            ('mrv', 'chython.formats.xml._facade'),
@@ -204,3 +206,20 @@ def test_the_facade_states_its_version():
     from importlib.metadata import version
     import chython
     assert chython.__version__ == version('chython')
+
+
+def test_the_monomer_library_is_a_facade_setting(tmp_path):
+    """`chython.monomer_library` reads and writes the one setting in `chython.polymers`."""
+    import json
+    import chython
+    from chython.polymers import get_monomer_library
+
+    p = tmp_path / 'mine.json'
+    p.write_text(json.dumps([{'symbol': 'Zz', 'polymerType': 'PEPTIDE', 'smiles': 'C[C@H](N[H:1])C([OH:2])=O'}]))
+    chython.monomer_library = p
+    try:
+        assert get_monomer_library().get('PEPTIDE', 'Zz') is not None
+        assert chython.monomer_library is get_monomer_library()
+    finally:
+        chython.monomer_library = ()
+    assert get_monomer_library().get('PEPTIDE', 'Zz') is None
