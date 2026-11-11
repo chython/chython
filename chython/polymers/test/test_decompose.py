@@ -40,6 +40,16 @@ def labels(graph):
     return sorted(sorted(((graph.nodes[e.a].symbol, e.ra), (graph.nodes[e.b].symbol, e.rb))) for e in graph.edges)
 
 
+def test_explicit_hydrogens_do_not_hide_a_monomer():
+    # the alanine centre drawn with its hydrogen as an atom; the molecule handed in is not changed
+    m = smiles('C[C@H](N)C(=O)NCC(=O)O')
+    m.explicify_hydrogens()
+    count = m.atom_count
+    assert any(m.atom(a).atomic_symbol == 'H' for a in m.atom_numbers)
+    g = run(m)
+    assert sorted(n.symbol for n in g.nodes) == ['A', 'G'] and m.atom_count == count
+
+
 def test_a_peptide_decomposes_to_its_monomers():
     g = run(smiles('C[C@H](N)C(=O)NCC(=O)O'))
     assert sorted(n.symbol for n in g.nodes) == ['A', 'G']

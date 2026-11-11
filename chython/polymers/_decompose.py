@@ -59,6 +59,7 @@ def decompose(mol, library, log):
     all-types scope wins only by covering everything, for the same reason.
     """
     work = mol.copy()
+    work.implicify_hydrogens()      # an explicit hydrogen atom is the same molecule; monomers hold theirs implicit
     if work.has_stereo_groups:
         log.append(LogRecord('polymers:enhanced-stereo-not-written', (),
                              'unsupported: HELM has no enhanced stereo; the stereo groups are not written', LOST))
