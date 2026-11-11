@@ -133,6 +133,56 @@ def test_a_click_macrocycle_round_trips(tmp_path):
         set_monomer_library()
 
 
+STAPLE = [{'symbol': 'Hag', 'polymerType': 'PEPTIDE', 'smiles': '[H:1]N[C@@H](CC[H:3])C([OH:2])=O'},
+          {'symbol': 'cisEth', 'polymerType': 'PEPTIDE', 'smiles': '[H:1]/C=C\\[H:2]'},
+          {'symbol': 'transEth', 'polymerType': 'PEPTIDE', 'smiles': '[H:1]/C=C/[H:2]'}]
+
+
+@mark.parametrize('linker', ['cisEth', 'transEth'])
+def test_an_alkene_linker_keeps_its_configuration(tmp_path, linker):
+    # the configuration exists only once the leaving hydrogens are gone: it is read off the R markers,
+    # and written across the cuts on both ends of the double bond
+    p = tmp_path / 'staple.json'
+    p.write_text(json.dumps(STAPLE))
+    set_monomer_library(p)
+    try:
+        text = 'PEPTIDE1{[Hag].G.G.[Hag]}|PEPTIDE2{[X]}$PEPTIDE1,PEPTIDE2,1:R3-1:R1|PEPTIDE1,PEPTIDE2,4:R3-1:R2$$$'
+        m = assemble_text(text.replace('X', linker))
+        assert m != assemble_text(text.replace('X', 'transEth' if linker == 'cisEth' else 'cisEth'))
+        g = run(m)
+        assert sorted(n.symbol for n in g.nodes) == sorted(['G', 'G', 'Hag', 'Hag', linker])
+    finally:
+        set_monomer_library()
+
+
+PEG = [{'symbol': 'Peg3', 'polymerType': 'PEPTIDE', 'smiles': '[H:1]NCCOCCOCCOCC([OH:2])=O'},
+       {'symbol': 'eo', 'polymerType': 'PEPTIDE', 'smiles': '[H:1]OCC[H:2]'}]
+
+
+def test_a_monomer_cut_into_many_pieces_is_found_whole(tmp_path):
+    # with an ethyleneoxy linker in the library every ether bond of Peg3 is a junction: seven pieces
+    p = tmp_path / 'peg.json'
+    p.write_text(json.dumps(PEG))
+    set_monomer_library(p)
+    try:
+        g = run(assemble_text('PEPTIDE1{A.[Peg3].G}$$$$'))
+        assert sorted(n.symbol for n in g.nodes) == ['A', 'G', 'Peg3']
+    finally:
+        set_monomer_library()
+
+
+def test_a_free_monomer_is_its_own_unit(tmp_path):
+    # no boundary at all: the whole molecule is one unit with no attachment
+    p = tmp_path / 'peg.json'
+    p.write_text(json.dumps(PEG))
+    set_monomer_library(p)
+    try:
+        g = run(assemble_text('PEPTIDE1{[Peg3]}$$$$'))
+        assert [n.symbol for n in g.nodes] == ['Peg3']
+    finally:
+        set_monomer_library()
+
+
 def test_a_small_ring_is_not_cut(tmp_path):
     # with an alkyl R3 in the library, Tic's ring CH2-N bond looks like a junction; a ring of six is not one
     p = tmp_path / 'click.json'

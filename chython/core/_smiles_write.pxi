@@ -1513,10 +1513,10 @@ cdef void smw_ring_tokens(Structure structure, smw_scratch_t *s,
             # does not reach here -- it is about which END of a closure carries the token, and a
             # fragment has only one end of this bond to speak for.
             #
-            # DIRECTION 0: spec §13.4.  A cis/trans configuration across a cut is refused in
-            # `smw_directions` and reported, so there is nothing to write and no chance of writing a
-            # `/` whose partner is in another string.
-            smw_bond(b, &edges[he], smw_both_lowercase(atoms, ptr, edges, u, edges[he].to, o), 0, o)
+            # A direction here is this end's alone (`smw_cut_takes_direction`): the other fragment
+            # writes the same attachment without one, so the joined closure carries one token.
+            smw_bond(b, &edges[he], smw_both_lowercase(atoms, ptr, edges, u, edges[he].to, o),
+                     s.he_dir[he], o)
             smw_closure_number(b, s.he_close[he])
             continue
         if s.he_kind[he] != SMW_HE_CLOSURE:
@@ -1991,6 +1991,36 @@ cdef inline int smw_dir_offer(smw_scratch_t *s, uint32_t frm, uint32_t he, uint8
     return 0
 
 
+cdef inline bint smw_cut_takes_direction(Structure structure, smw_scratch_t *s, uint32_t *ptr,
+                                         halfedge_t *edges, uint32_t t, uint32_t r) noexcept nogil:
+    """Whether the bond from terminal `t` to its dropped reference `r` can carry `t`'s `/` or `\\`.
+
+    Only a named cut is written (`%NN`), and only one end of it may carry a direction: the token at
+    `t` alone fixes the bond, and the other fragment writes the attachment plain.  Refused when `r` is
+    itself a terminal of a configured cis/trans unit referencing `t` -- `F/C=C/C=C/F` cut at its middle
+    bond -- since the other fragment would then write a direction on the same bond too.
+    """
+    cdef halfedge_t *e = csr_find_at(ptr, edges, t, r)
+    cdef stereo_unit_t *units
+    cdef uint32_t k, far, base
+    if e is NULL or s.he_kind[<uint32_t> (e - edges)] != SMW_HE_ATTACH:
+        return False
+    units = structure_stereo_units(structure)
+    for k in range(structure_stereo_unit_count(structure)):
+        if units[k].kind != SU_CIS_TRANS or not structure_parity_at(structure, units[k].anchor):
+            continue
+        far = stereo_unit_partner(structure, &units[k])
+        if units[k].anchor == r:
+            base = 0
+        elif far == r:
+            base = 2
+        else:
+            continue
+        if units[k].refs[base] == t or units[k].refs[base + 1] == t:
+            return False
+    return True
+
+
 cdef void smw_directions(Structure structure, smw_scratch_t *s, smw_opts_t *o) noexcept nogil:
     """Fill `he_dir` with the `/` and `\\` tokens, and `lost` with the units that got none.
 
@@ -2077,12 +2107,10 @@ cdef void smw_directions(Structure structure, smw_scratch_t *s, smw_opts_t *o) n
             continue
         far = stereo_unit_partner(structure, u)
         if far == SU_NO_REF or s.dropped[far]:
-            # A CIS/TRANS UNIT DOES NOT SURVIVE A CUT (spec §13.4), and the dropped partner is one of
-            # the two ways it can be split.  Unlike a tetrahedral sign, which is four positions at ONE
-            # atom and so is entirely inside whichever fragment holds that atom, `/` and `\` are two
-            # tokens on two different bonds whose meaning is their relation -- and after a join the
-            # reader has no way to relate a token in one string to a token in another.  Refused and
-            # REPORTED, because this half is a real loss of this fragment's own coverage.
+            # A CUT THROUGH THE DOUBLE BOND SPLITS THE UNIT (spec §13.4): `/` and `\` are two tokens
+            # whose meaning is their relation, and here they would sit in two strings.  A cut at a
+            # REFERENCE keeps both terminals, and its token goes on the attachment (below).  Refused
+            # and REPORTED, because this half is a real loss of this fragment's own coverage.
             s.lost[i] = 1
             s.nlost += 1
             continue
@@ -2099,12 +2127,13 @@ cdef void smw_directions(Structure structure, smw_scratch_t *s, smw_opts_t *o) n
         for k in range(4):
             if u.refs[k] == SU_NO_REF:
                 continue
-            if s.dropped[u.refs[k]]:
+            if s.dropped[u.refs[k]] and \
+                    not smw_cut_takes_direction(structure, s, ptr, edges, i if k < 2 else far, u.refs[k]):
                 # The second way a cut splits this unit: the terminals are both here but a REFERENCE
-                # atom is not, so one of the two tokens would have to go on a bond this string does not
-                # contain.  Refused for the whole unit even when the other reference at that terminal
-                # is retained: the frame is refs[0] against refs[2] and re-seating it onto a different
-                # pair is a change of frame, not a smaller version of the same claim.
+                # atom is not.  A named cut is written as `%NN`, and the token goes there (spec §13.4);
+                # any other dropped bond is not in the string.  Refused for the whole unit even when the
+                # other reference at that terminal is retained: the frame is refs[0] against refs[2]
+                # and re-seating it onto a different pair is a change of frame.
                 bad = 1
                 break
             e = csr_find_at(ptr, edges, i if k < 2 else far, u.refs[k])

@@ -74,7 +74,7 @@ class Fragment(NamedTuple):
 
 class MonomerLibrary:
     """The monomers of one library set, by ``(polymer type, symbol)``, and the load log."""
-    __slots__ = ('_by_symbol', 'monomers', 'log', '_parts', '_fragments', '_index')
+    __slots__ = ('_by_symbol', 'monomers', 'log', '_parts', '_fragments', '_index', '_screens')
 
     def __init__(self, monomers, log):
         self._by_symbol = {(m.polymer_type, m.symbol): m for m in monomers}
@@ -83,6 +83,27 @@ class MonomerLibrary:
         self._parts = {}
         self._fragments = {}
         self._index = None
+        self._screens = {}
+
+    def atom_screen(self, types):
+        """``{atom entry: (mask, ...)}`` over the cores of `types` (``None``: all): bit ``i`` of the
+        ``k``-th mask is set when core ``i`` holds more than ``k`` atoms of that :mod:`._shape` entry.
+
+        A set of atoms whose entries fit no core is part of no unit, and neither is any superset of it.
+        """
+        screen = self._screens.get(types)
+        if screen is None:
+            cores = {key[0] for key, entries in self._built().shapes.items()
+                     if types is None or any(m.polymer_type in types for m, _ in entries)}
+            masks = {}
+            for bit, atoms in enumerate(sorted(cores)):
+                for entry, count in Counter(atoms).items():
+                    row = masks.setdefault(entry, [])
+                    row.extend([0] * (count - len(row)))
+                    for k in range(count):
+                        row[k] |= 1 << bit
+            screen = self._screens[types] = {entry: tuple(row) for entry, row in masks.items()}
+        return screen
 
     def get(self, polymer_type, symbol):
         """The monomer, or ``None``."""
@@ -175,12 +196,25 @@ class MonomerLibrary:
         if fragment is None:
             mol, sites = self.parts(m)
             labels = sorted(used)
-            detached = mol.detached_smiles({10 + i: sites[label] for i, label in enumerate(labels)})
+            detached = opened(mol, sites, used).detached_smiles({10 + i: sites[label]
+                                                                 for i, label in enumerate(labels)})
             text = detached.text
             for i, label in enumerate(labels):
                 text = text.replace(f'%{10 + i}', f'{{R{label}}}')
             fragment = self._fragments[key] = Fragment(text, detached.closure_ids, detached.atom_count)
         return fragment
+
+
+def opened(mol, sites, used):
+    """`mol` of :meth:`MonomerLibrary.parts` with every leaving hydrogen outside `used` a hydrogen again."""
+    kept = [atom for label, (_, atom) in sites.items() if label not in used and mol.atom(atom).is_r]
+    if not kept:
+        return mol
+    mol = mol.copy()
+    with mol.edit():
+        for atom in kept:
+            mol.set_element(atom, 'H')
+    return mol
 
 
 def _split_monomer(text):
@@ -189,8 +223,11 @@ def _split_monomer(text):
     The leaving atom is the one carrying the R number.  Its attachment is the neighbour across the bond
     that cuts off a side holding no other leaving atom, the smallest such side when there are several --
     a one-atom cap like ``[OH:2]`` has one neighbour, an azide cap's first nitrogen has two.
+
+    A leaving hydrogen is read as a marker, since a configuration it references exists only once it has
+    left: ``[H:1]/C=C\\[H:2]`` is ethylene, and cis as a linker.  :func:`opened` turns back the ones kept.
     """
-    mol = smiles(text)
+    mol = smiles(_LEAVING_H.sub(r'[*:\1]', text))
     leaving = {mol.atom(n).map_number: n for n in mol.atom_numbers if mol.atom(n).map_number}
     sites = {}
     for label, atom in leaving.items():
@@ -283,6 +320,7 @@ def get_monomer_library():
 
 _SCOPE_ORDER = {'PEPTIDE': 0, 'RNA': 1, 'DNA': 2, 'CHEM': 3}
 _CLOSURE = re_compile(r'([-=#:/\\]?)%([0-9]{2})')
+_LEAVING_H = re_compile(r'\[H:([0-9]+)\]')
 
 
 class _Index(NamedTuple):
@@ -390,7 +428,8 @@ def _build_index(library):
         labels = sorted(sites)
         for size in range(len(labels) + 1):
             for used in combinations(labels, size):
-                detached = mol.detached_smiles({10 + i: sites[label] for i, label in enumerate(used)})
+                detached = opened(mol, sites, used).detached_smiles({10 + i: sites[label]
+                                                                     for i, label in enumerate(used)})
                 text, order = markers_for_closures(detached.text)
                 piece = smiles(text)
                 markers = [n for n in piece.atom_numbers if piece.atom(n).is_r]

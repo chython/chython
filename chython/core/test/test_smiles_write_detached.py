@@ -23,7 +23,7 @@ The one idea being tested is that `%12` is not a new syntax.  It is the notation
 being written next to each other, and no reader needs to be told anything.  Everything in this file
 follows from that: the attachment ids come out of the ring-closure pool (so an internal closure may
 never take one), an atom's token is computed over the WHOLE molecule (because the fragment is only ever
-read after a join), and a tetrahedral sign survives while a cis/trans one cannot.
+read after a join), and a stereo sign survives where its tokens all stay in one fragment.
 
 WHY THE SURFACE IS WIDER THAN A TEXT JOIN.  chython 2's `sticky_smiles` is the name a porting reader
 looks for; it joins TEXT, so it needs the two attachment atoms to land at the two ENDS of the string
@@ -39,7 +39,7 @@ from itertools import permutations
 
 from pytest import mark, raises
 
-from chython.core import MoleculeContainer
+from chython.core import MoleculeContainer, smiles
 from chython.core._core import DetachedSmiles, detached_smiles, smw_traversal, write_smiles
 
 
@@ -394,7 +394,7 @@ def test_an_aromatic_atom_can_carry_an_attachment():
 
 
 # ------------------------------------------------------------------------------------------------
-# STEREO.  A tetrahedral sign survives a cut; a cis/trans configuration cannot.
+# STEREO.  A tetrahedral sign survives a cut; a cis/trans one survives a cut at a reference only.
 @mark.parametrize('drop', [0, 2, 3])
 def test_a_tetrahedral_sign_survives_a_cut_and_is_the_written_orders(drop):
     """The anti-drift test, with a cut: the sign in the fragment is `translate_stereo` of the order the
@@ -427,21 +427,35 @@ def test_the_sign_is_not_the_whole_molecules_sign():
     assert sign_in(write_smiles(m)) != sign_in(detached_smiles(m, {10: (sids[1], sids[2])}).text)
 
 
-def test_a_cis_trans_unit_is_refused_when_a_reference_is_dropped():
-    """(Z)-1,2-difluoroethene cut at a C-F: no `/` anywhere, and the anchor is in `lost`.
+@mark.parametrize('parity', [1, 2])
+@mark.parametrize('cut', [(2, 3), (1, 0)])
+def test_a_cis_trans_reference_across_a_cut_is_written_on_the_attachment(parity, cut):
+    """1,2-difluoroethene cut at a C-F: the direction goes on `%10`, and the join reads back the isomer.
 
-    A cis/trans configuration is TWO tokens on TWO bonds and its content is their relation, so one of
-    them landing in another string leaves nothing readable.  Unlike a tetrahedral sign, which is four
-    positions at ONE atom and therefore entirely inside whichever fragment holds that atom, this cannot
-    be rescued by giving the attachment a position -- there is no direction to put on a bond the string
-    does not contain.
+    Both tokens of the unit are in this fragment -- one on an ordinary bond, one on the attachment --
+    so their relation is this string's own.  The other fragment writes `F%10` with no direction, and a
+    ring bond with a direction at one end is unambiguous.
     """
     m, sids = build(*DIFLUOROETHENE)
-    m.set_parity(sids[1], 2)
-    assert '/' in write_smiles(m)
-    f = detached_smiles(m, {10: (sids[2], sids[3])})
-    assert '/' not in f.text and '\\' not in f.text
-    assert f.lost == (sids[1],)
+    m.set_parity(sids[1], parity)
+    keep, drop = sids[cut[0]], sids[cut[1]]
+    f = detached_smiles(m, {10: (keep, drop)})
+    assert f.lost == ()
+    assert '/%10' in f.text or '\\%10' in f.text
+    joined = str(DetachedSmiles.join(f, detached_smiles(m, {10: (drop, keep)})))
+    assert write_smiles(smiles(joined)) == write_smiles(m)
+
+
+def test_a_cut_between_two_cis_trans_units_is_refused():
+    """(E,E)-1,4-difluorobutadiene cut at its middle bond: each fragment would put a direction on the
+    one bond, so neither does, and each reports its unit."""
+    m = smiles('F/C=C/C=C/F')
+    middle = next((b.n, b.m) for b in m.bonds() if b.order == 1 and
+                  m.atom(b.n).atomic_symbol == m.atom(b.m).atomic_symbol == 'C')
+    for keep, drop in (middle, middle[::-1]):
+        f = detached_smiles(m, {10: (keep, drop)})
+        assert '/' not in f.text and '\\' not in f.text
+        assert len(f.lost) == 1
 
 
 def test_a_cis_trans_unit_is_refused_when_the_partner_terminal_is_dropped():
@@ -642,11 +656,11 @@ def test_a_fragments_tail_states_a_bond_group_on_its_anchor_atom():
     m, sids = _bond_group_fixture()
     log = []
     f = detached_smiles(m, {10: (sids[1], sids[0])}, log=log)
-    assert str(f) == 'C%10=CC |&1:0|'
+    assert str(f) == 'C/%10=C\\C |&1:0|'
     assert f.tail == ([], [], {1: [0]}, {}, []), 'AND 1 holds the anchor position'
     assert log == []
     method_log = []
-    assert str(m.detached_smiles({10: (sids[1], sids[0])}, log=method_log)) == 'C%10=CC |&1:0|'
+    assert str(m.detached_smiles({10: (sids[1], sids[0])}, log=method_log)) == 'C/%10=C\\C |&1:0|'
     assert method_log == [], 'the container forwards the list'
 
 
@@ -655,7 +669,7 @@ def test_a_fragments_suppressed_tail_writes_no_bond_group():
     m, sids = _bond_group_fixture()
     log = []
     f = detached_smiles(m, {10: (sids[1], sids[0])}, '!x', log=log)
-    assert str(f) == 'C%10=CC'
+    assert str(f) == 'C/%10=C\\C'
     assert f.tail == ([], [], {}, {}, [])
     assert log == []
 

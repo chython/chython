@@ -56,6 +56,22 @@ def test_atom_order_does_not_change_the_string(text):
         assert to_helm(reordered(m)) == want
 
 
+def test_an_inline_monomer_is_spelt_canonically():
+    # a piece no monomer matches; whatever order its atoms arrive in, its inline SMILES is one text
+    m = smiles('C[C@H](N)C(=O)NCC(=O)OCC1CCC(C(=O)O)CC1')
+    want = to_helm(m)
+    assert '[*:1]' in want
+    for _ in range(20):
+        assert to_helm(reordered(m)) == want
+
+
+def test_a_biaryl_bond_spelt_aromatic_is_a_single_bond():
+    # OpenSMILES leaves the biphenyl bond unmarked, which reads aromatic; it is still the Bip side chain
+    biaryl = smiles('C[C@H](N)C(=O)N[C@@H](Cc1ccc(cc1)c1ccccc1)C(=O)NCC(=O)O')
+    assert any(b.order == 4 and not b.in_ring for b in biaryl.bonds())
+    assert to_helm(biaryl) == to_helm(assemble_text('PEPTIDE1{A.[Bip].G}$$$$')) == 'PEPTIDE1{A.[Bip].G}$$$$'
+
+
 def test_the_string_reads_back_to_the_molecule():
     m = assemble_text(OXYTOCIN_HELM)
     assert same(assemble_text(to_helm(m)), m)

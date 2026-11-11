@@ -20,8 +20,10 @@
 
 1. **Cut** every single bond whose two ends are a pair of library attachment atoms that could join
    (:attr:`MonomerLibrary.cut_scopes`, one pair set per polymer type); the pieces are what is left.
-2. **Units** are connected unions of up to four adjacent pieces; each is written by `detached_smiles`
-   with a marker per boundary bond -- so its configuration is as drawn -- and looked up by key.
+2. **Units** are connected unions of adjacent pieces whose atoms fit inside some library core
+   (:meth:`MonomerLibrary.atom_screen`), of any size: a PEG monomer is as many pieces as it has ether
+   bonds.  Each is screened by shape, and a chosen one written by `detached_smiles` with a marker per
+   boundary bond -- so its configuration is as drawn -- and looked up by key.
 3. **Choose** the covering of all pieces that leaves the fewest atoms unmatched, then uses the fewest
    units: asparagine is one monomer, not an acid and an amide.  Adjacent unmatched pieces are one inline
    SMILES monomer, logged.
@@ -41,11 +43,9 @@ from ._shape import Shape
 from ..core import LogRecord, LOST, smiles
 
 
-__all__ = ['decompose', 'MAX_MERGE']
+__all__ = ['decompose']
 
 
-#: The most pieces one unit is assembled from.
-MAX_MERGE = 4
 _PREFERENCE = {'PEPTIDE': 0, 'RNA': 1, 'DNA': 2, 'CHEM': 3}
 
 
@@ -64,6 +64,11 @@ def decompose(mol, library, log):
         log.append(LogRecord('polymers:enhanced-stereo-not-written', (),
                              'unsupported: HELM has no enhanced stereo; the stereo groups are not written', LOST))
         work.clean_stereo_groups()
+    loose = [(b.n, b.m) for b in work.bonds() if b.order == 4 and not b.in_ring]
+    if loose:                       # a biaryl bond read aromatic is single: only order-1 bonds are cut
+        with work.edit():
+            for n, m in loose:
+                work.set_order(n, m, 1)
     work.thiele()
     rank = work.canonical_order()
     shape = Shape(work)
@@ -124,7 +129,7 @@ def _attempt(work, rank, pairs, library, cap_cuts, types, shape):
             incident[a].append(bond)
             incident[b].append(bond)
     candidates = set()
-    for group in _connected_groups(neighbours):
+    for group in _connected_groups(neighbours, [Counter(p.atoms) for p in parts], library.atom_screen(types)):
         internal, boundary = [], []
         for p in group:
             for n, m in incident[p]:
@@ -264,19 +269,46 @@ def _pieces(work, cuts, rank):
     return out
 
 
-def _connected_groups(neighbours):
-    """Every connected set of up to MAX_MERGE pieces, each once."""
-    out, frontier = set(), [frozenset((i,)) for i in range(len(neighbours))]
-    out.update(frontier)
-    for _ in range(MAX_MERGE - 1):
-        grown = set()
-        for group in frontier:
+def _connected_groups(neighbours, atoms, screen):
+    """Every connected set of pieces whose atom entries fit some core of `screen`, each once.
+
+    `atoms` holds each piece's entry counts.  A set that fits no core has no superset that does, so
+    growth stops there and the size is bounded by the library, not by a constant.
+    """
+    def add(counts, mask, piece):
+        """``(counts, mask)`` with `piece` added, or ``None`` when no core holds the result."""
+        counts = dict(counts)
+        for entry, extra in atoms[piece].items():
+            count = counts[entry] = counts.get(entry, 0) + extra
+            row = screen.get(entry)
+            if row is None or len(row) < count:
+                return None
+            mask &= row[count - 1]
+            if not mask:
+                return None
+        return counts, mask
+
+    frontier = {}
+    for i in range(len(neighbours)):
+        state = add({}, -1, i)
+        if state is not None:
+            frontier[frozenset((i,))] = state
+    out, rejected = set(frontier), set()
+    while frontier:
+        grown = {}
+        for group, (counts, mask) in frontier.items():
             for p in group:
                 for q in neighbours[p]:
-                    if q not in group:
-                        bigger = group | {q}
-                        if bigger not in out:
-                            grown.add(bigger)
+                    if q in group:
+                        continue
+                    bigger = group | {q}
+                    if bigger in out or bigger in grown or bigger in rejected:
+                        continue
+                    state = add(counts, mask, q)
+                    if state is None:
+                        rejected.add(bigger)
+                    else:
+                        grown[bigger] = state
         out.update(grown)
         frontier = grown
     return sorted(out, key=lambda g: (len(g), sorted(g)))
@@ -336,7 +368,8 @@ def _scoped_entries(entries, types):
 
 def _formula(work, atoms, markers):
     counts = Counter(work.atom(a).atomic_symbol for a in atoms)
-    counts['R'] += markers
+    if markers:                     # a unit with no boundary has no R entry, as `formulas_of` counts it
+        counts['R'] += markers
     return tuple(sorted(counts.items()))
 
 
