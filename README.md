@@ -18,7 +18,8 @@ Library for processing molecules and reactions in a Python way.
 
 **File formats**
 
-- Read and write MDL RDF/RXN and SDF/MOL (V2000 and V3000, including atom parity and enhanced stereo), Marvin MRV, CML, SMILES, and InChI with InChIKey (InChI Trust library)
+- Read and write MDL RDF/RXN and SDF/MOL (V2000 and V3000, including atom parity and enhanced stereo), Marvin MRV, CML, ChemDraw CDX and CDXML, SMILES, and InChI with InChIKey (InChI Trust library)
+- Read and write HELM and BILN biopolymer notations, canonical on write, against the Pistoia HELMCoreLibrary or a monomer library you attach
 - Read SMARTS and SMIRKS, Tripos MOL2, PDBx/mmCIF, legacy PDB, XYZ, and IUPAC names through OPSIN
 - Compact binary (de)serialization — `pach` for a wire record, `mol.to_bytes()` for the arena buffer — and full pickle support
 - A coordinate format hands back a record of atoms and coordinates rather than a molecule, because it states no bond order: `build_molecule()` places the atoms, `perceive_bonds()` reads the connectivity out of a geometry, `saturate()` raises the orders, and all three are calls the caller makes

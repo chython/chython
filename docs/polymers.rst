@@ -49,7 +49,11 @@ Nothing is guessed and nothing happens silently:
 Input                                                  Result
 =====================================================  ============================================
 a HELM or BILN string that does not parse              ``HelmError`` / ``BilnError``
+a bond to an R the monomer lacks, or one already used  ``HelmError`` / ``BilnError``
+a HELM position past the end of its chain              ``HelmError``
 a symbol the library does not hold                     a marker atom carrying the symbol, logged
+a piece matching several monomers                      one written, logged: PEPTIDE before RNA,
+                                                       DNA, CHEM, then the latest library's
 a BLOB, a repeat range, ``(A,G)``, ``?``                a marker atom carrying the text, logged
 a hydrogen pair, an annotation, a polymer group        not kept, logged
 a piece of a molecule matching no monomer              an inline SMILES monomer, logged
@@ -77,3 +81,15 @@ library monomers can join by, or whose far side is a terminal cap. The pieces ar
 key, stereo included, and the covering leaving the fewest atoms unmatched and then using the fewest
 monomers wins -- asparagine is one monomer, not an aspartic acid and an amide. Every choice follows the
 canonical atom order, which is what makes the string canonical.
+
+=====================================================  ============================================
+Rule                                                   Instance
+=====================================================  ============================================
+never cut between two saturated carbons                an alkyl R3 does not split a side chain
+never cut inside a ring of eight atoms or fewer        Tic stays Tic
+a monomer is found whole, however many pieces           a PEG monomer cut at every ether bond
+a non-ring aromatic bond is single                     ``c1ccccc1c1ccccc1`` is biphenyl, Bip intact
+=====================================================  ============================================
+
+A leaving hydrogen in a library record is read as the attachment, so a configuration it references
+holds: ``[H:1]/C=C\[H:2]`` is ethylene as a molecule and the cis linker as a monomer.

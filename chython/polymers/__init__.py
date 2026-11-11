@@ -64,7 +64,13 @@ def _convert(data, log, parse, write):
     if not isinstance(data, str):
         raise TypeError(f'expected a notation string or a MoleculeContainer, got {type(data).__name__}')
     start = len(log)
-    mol = assemble(parse(data), library, log)
+    graph = parse(data)
+    try:
+        mol = assemble(graph, library, log)
+    except HelmError as e:
+        if parse is parse_biln:     # the assembler is shared; the caller's notation names the error
+            raise BilnError(str(e)) from e
+        raise
     if len(log) > start:
         mol.log.absorb('read', log[start:])
     return mol

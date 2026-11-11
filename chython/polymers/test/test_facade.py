@@ -56,3 +56,10 @@ def test_neither_takes_anything_else():
         helm(42)
     with raises(TypeError):
         biln(None)
+
+
+def test_a_biln_that_cannot_be_assembled_raises_biln_error():
+    # the assembler is shared; a BILN caller catches the BILN error
+    from .._errors import BilnError
+    with raises(BilnError):
+        biln('A(1,3)-G(1,3)')
