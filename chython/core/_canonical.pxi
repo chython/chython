@@ -164,8 +164,9 @@ cdef canon_prepare_fn _canon_prepare_hook = NULL
 #     CANON_GROUPS_STORED adds a third word per member, its stored byte, so the id orders too.  With
 #     `colour` (n words, zeroed by the caller) it writes at every named atom `2 * byte + single + 1`,
 #     `single` 1 for a member named on one atom, and CANON_GROUP_CLASH where two keys name one atom.
-#   * `_canon_group_span_hook(structure, mode, comp)` is True when one collection has members in two
-#     components; the record is then searched whole, since a per-component key cannot see the link.
+#   * `_canon_group_block_hook(structure, mode, comp, k)` merges in `comp` the components one collection
+#     has members in and returns the block count: a per-component key cannot see that link, so a block
+#     is searched whole and only the blocks are split.
 #   * `_canon_group_phase_hook(structure, mode, pos, digits, flip)` puts each AND collection's
 #     parity digits in one phase, since inverting every member of one is the same statement.  With
 #     `pos` (discrete, 1-based) the collection's first-positioned member with a readable digit is made
@@ -187,13 +188,13 @@ cdef enum:
 
 ctypedef size_t (*canon_group_fn)(Structure structure, uint32_t mode, uint32_t *pos, uint64_t *out,
                                   uint32_t *colour) noexcept nogil
-ctypedef bint (*canon_group_span_fn)(Structure structure, uint32_t mode,
-                                     const uint32_t *comp) noexcept nogil
+ctypedef Py_ssize_t (*canon_group_block_fn)(Structure structure, uint32_t mode, uint32_t *comp,
+                                            uint32_t k) noexcept nogil
 ctypedef void (*canon_group_phase_fn)(Structure structure, uint32_t mode, uint32_t *pos, uint32_t *digits,
                                       uint8_t *flip) noexcept nogil
 
 cdef canon_group_fn _canon_group_hook = NULL
-cdef canon_group_span_fn _canon_group_span_hook = NULL
+cdef canon_group_block_fn _canon_group_block_hook = NULL
 cdef canon_group_phase_fn _canon_group_phase_hook = NULL
 
 
@@ -842,7 +843,13 @@ cdef int mol_automorphisms(Structure structure, uint32_t *seed,
 # discrete, in exchange for the column above; a single-atom component -- the counter-ion, and water once
 # its hydrogens are implicit -- is special-cased below and pays none of it.
 #
-# SOUND BECAUSE AN AUTOMORPHISM CARRIES COMPONENTS ONTO COMPONENTS. No automorphism relates two atoms
+# A COLLECTION LINKING TWO COMPONENTS MAKES THEM ONE BLOCK (`_canon_group_block_hook`): the block is
+# searched whole, since a per-component key cannot see the link, and every other component is still its
+# own block. Two stereocentres in one `&1` across 400 nitroethanes: 17.2 s as one search, per block
+# below.
+#
+# SOUND BECAUSE AN AUTOMORPHISM CARRIES COMPONENTS ONTO COMPONENTS, and one preserving the collections
+# carries blocks onto blocks. No automorphism relates two atoms
 # whose components have different certificates, so the pairs a whole-record search spends its budget
 # refuting are exactly the ones this never asks about. The block order is a function of the multiset of
 # component certificates, hence of the record; ties are isomorphic components, which is a freedom the
@@ -1529,7 +1536,12 @@ cdef int _canon_order(Structure structure, uint32_t *seed, uint32_t *order_out,
                 k = label_components(structure, comp)
             if k < 0:
                 raise MemoryError('component labelling failed to allocate')
-            if k > 1 and not (ctx.group_len and _canon_group_span_hook(structure, ctx.groups, comp)):
+            if k > 1 and ctx.group_len:
+                with nogil:
+                    k = _canon_group_block_hook(structure, ctx.groups, comp, <uint32_t> k)
+                if k < 0:
+                    raise MemoryError('canonical order block labelling failed to allocate')
+            if k > 1:
                 return _canon_order_split(structure, seed, order_out, flags_out, budget, stereo,
                                           ctx.groups if ctx.group_len else CANON_GROUPS_NONE,
                                           comp, <uint32_t> k)
@@ -1658,9 +1670,11 @@ cdef void _canon_key_sort(uint32_t k, const uint64_t *keys, const uint32_t *koff
 cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order_out,
                             uint32_t *flags_out, uint32_t budget, bint stereo, uint32_t groups,
                             const uint32_t *comp, uint32_t k) except -1:
-    """`_canon_order` for a record of `k` > 1 connected components: each component's own order, blocked.
+    """`_canon_order` for a record of `k` > 1 blocks: each block's own order, laid end to end.
 
-    `comp` is `label_components`' output. Contract identical to `_canon_order`'s -- `order_out` receives
+    `comp` is `label_components`' output, merged by `_canon_group_block_hook` under a `groups` mode, so a
+    block is one component or the components one collection links -- below, "component" means a block.
+    Contract identical to `_canon_order`'s -- `order_out` receives
     a permutation of 0 .. atom_count - 1, `flags_out[0]` gets CANON_ASYMMETRIC only when the whole
     record's group is trivial, and a truncated search writes nothing and raises. The fragment comment
     above holds the soundness argument and the one thing this moves.
@@ -1675,8 +1689,8 @@ cdef int _canon_order_split(Structure structure, uint32_t *seed, uint32_t *order
 
     UNDER A `groups` MODE each component is searched with its own collections, which
     `structure_component_graph` carries, and its group tail is a SECONDARY key (`_canon_key_pair_cmp`).
-    The caller has already routed a record whose collection spans two components to the whole-record
-    search, so every collection here is local to one component.
+    A collection spanning two components has merged them into one block, so every collection here is
+    local to one block, and that block's own `_canon_order` searches it whole.
 
     EACH COMPONENT GETS THE FULL NODE BUDGET. A budget bounds ONE extremal search and each component is
     its own search; sharing one across components would make a component's labelling depend on how many

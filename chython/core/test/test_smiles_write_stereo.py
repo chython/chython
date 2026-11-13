@@ -785,3 +785,17 @@ def test_a_molecule_past_the_zero_page_writes_only_its_stored_groups():
     assert out.endswith(' |&1:2489,4998|'), out[-40:]
     assert out.count('|') == 2, out[-40:]
 
+
+def test_a_collection_linking_two_components_is_one_block_among_the_rest():
+    """The two alcohols one `&1` links are searched as one block and the 400 nitroethanes each on its
+    own; as one whole-record search this write takes 17 s.  Every spelling reaches one string."""
+    from time import perf_counter
+    mol = read_smiles('C[C@H](O)CC.' + '.'.join(['CC[N+]([O-])=O'] * 400) + '.C[C@H](O)CC |&1:1,2006|')
+    start = perf_counter()
+    out = write_smiles(mol)
+    assert perf_counter() - start < 2, 'the record was searched whole'
+    assert out.startswith('[C@H](CC)(O)C.C([C@@H](O)C)C.'), out[:40]
+    assert out.endswith(' |&1:0,6|'), out[-20:]
+    small = read_smiles('C[C@H](O)CC.C[C@@H](O)CC.C[C@H](O)CC.C[C@H](O)CC.CC |&1:1,11,&2:6,16|')
+    ref = write_smiles(small)
+    assert {write_smiles(read_smiles(write_smiles(small, 'r'))) for _ in range(40)} == {ref}

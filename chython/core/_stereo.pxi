@@ -7141,34 +7141,66 @@ cdef size_t _canon_group_tail(Structure structure, uint32_t mode, uint32_t *pos,
     return stride * count
 
 
-cdef bint _canon_group_spans(Structure structure, uint32_t mode, const uint32_t *comp) noexcept nogil:
-    """`_canon_group_span_hook`: does one collection the mode counts have members in two components?
-    ABS never does: it states each member on its own."""
+cdef Py_ssize_t _canon_group_blocks(Structure structure, uint32_t mode, uint32_t *comp,
+                                    uint32_t k) noexcept nogil:
+    """`_canon_group_block_hook`: merge in place every set of components one collection the mode counts
+    has members in, and return the block count; -1 when the scratch cannot be allocated.
+
+    A block is numbered by its lowest slot, as `label_components` numbers a component, so `comp` is
+    untouched and `k` returned when no collection spans two components.  ABS never spans: it states
+    each member on its own.  On `C[C@H](O)CC.CC.C[C@H](O)CC |&1:1,7|` the two alcohols are block 0
+    and ethane block 1."""
     cdef uint32_t n = structure.header.atom_count
     cdef uint8_t *sg
     cdef atom_t *atoms
     cdef uint32_t *ptr
     cdef halfedge_t *edges
-    cdef uint32_t i, oa = 0, ob = 0
+    cdef uint32_t *parent
+    cdef uint32_t i, a, b, oa = 0, ob = 0, blocks = 0
+    cdef uint32_t NONE = 0xFFFFFFFF
     cdef uint32_t where[256]
+    cdef bint merged = False
     if mode == CANON_GROUPS_NONE or n == 0 or not structure_has(structure, SEG_STEREO_GROUPS):
-        return False
+        return k
     sg = structure_stereo_groups(structure)
     atoms = structure.atoms()
     ptr = csr_ptr(structure)
     edges = csr_edges(structure)
+    parent = <uint32_t *> malloc(<size_t> 2 * k * sizeof(uint32_t))
+    if parent is NULL:
+        return -1
+    for i in range(k):
+        parent[i] = i
     for i in range(256):
-        where[i] = <uint32_t> 0xFFFFFFFF
+        where[i] = NONE
     for i in range(n):
         if not sg[i] or sg_kind(sg[i]) == SG_KIND_ABS:
             continue
         if not _canon_group_member(structure, atoms, ptr, edges, sg, mode, i, &oa, &ob):
             continue
-        if where[sg[i]] == <uint32_t> 0xFFFFFFFF:
+        if where[sg[i]] == NONE:
             where[sg[i]] = comp[oa]
-        elif where[sg[i]] != comp[oa]:
-            return True
-    return False
+            continue
+        a = _uf_find(parent, where[sg[i]])
+        b = _uf_find(parent, comp[oa])
+        if a != b:
+            parent[a if a > b else b] = a if a < b else b
+            merged = True
+    if not merged:
+        free(parent)
+        return k
+    # dense ids in order of each block's lowest component, hence of its lowest slot
+    for i in range(k):
+        parent[k + i] = NONE
+    for i in range(k):
+        a = _uf_find(parent, i)
+        if parent[k + a] == NONE:
+            parent[k + a] = blocks
+            blocks += 1
+    for i in range(n):
+        comp[i] = parent[k + _uf_find(parent, comp[i])]
+    free(parent)
+    return blocks
 
 
 cdef void _canon_group_phase(Structure structure, uint32_t mode, uint32_t *pos, uint32_t *digits,
@@ -7291,7 +7323,7 @@ cdef void _canon_group_phase(Structure structure, uint32_t mode, uint32_t *pos, 
 _canon_stereo_hook = _canon_stereo_digits
 _canon_prepare_hook = _canon_stereo_prepare
 _canon_group_hook = _canon_group_tail
-_canon_group_span_hook = _canon_group_spans
+_canon_group_block_hook = _canon_group_blocks
 _canon_group_phase_hook = _canon_group_phase
 
 
