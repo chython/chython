@@ -769,3 +769,19 @@ def test_a_parity_on_a_symmetric_spiro_end_is_not_written():
     out = write_smiles(m)
     assert out.count('@') == 1, out
     assert read_smiles(out) == m
+
+
+def test_a_molecule_past_the_zero_page_writes_only_its_stored_groups():
+    """An absent collection segment resolves to the 4096-byte zero page, so a 5000-atom molecule with no
+    collection writes no tail, and one with a collection writes that collection and nothing else.
+
+    Not deterministic against an unguarded read: what lies past the zero page is whatever the build
+    put there, which is zero on some builds and the phantom `|a:4515|` on others."""
+    bare = read_smiles('.'.join(['CC[N+]([O-])=O'] * 1000))
+    assert '|' not in write_smiles(bare)
+    assert '|' not in write_smiles(bare, 'i')
+    grouped = read_smiles('C[C@H](O)' + 'C' * 4995 + '[C@H](O)C |&1:1,4998|')
+    out = write_smiles(grouped)
+    assert out.endswith(' |&1:2489,4998|'), out[-40:]
+    assert out.count('|') == 2, out[-40:]
+

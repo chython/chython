@@ -2484,7 +2484,10 @@ cdef tuple smw_tail_parts(Structure structure, smw_scratch_t *s, dict groups, di
     `MoleculeContainer.aliases`, keyed by stable id.
     """
     cdef atom_t *atoms = structure.atoms()
-    cdef uint8_t *sg = structure_stereo_groups(structure)
+    # NULL for an absent segment: the zero page it would resolve to is ZERO_PAGE_SIZE bytes, shorter
+    # than a 4097-atom molecule's row, and reading past it writes another object's bytes as groups.
+    cdef uint8_t *sg = (structure_stereo_groups(structure) if structure_has(structure, SEG_STEREO_GROUPS)
+                        else NULL)
     cdef uint32_t idx, u
     cdef list radicals = []
     cdef list abs_atoms = []
@@ -2501,6 +2504,8 @@ cdef tuple smw_tail_parts(Structure structure, smw_scratch_t *s, dict groups, di
         if aliases:
             labels[idx] = aliases.get(atoms[u].n)
         if groups is None:
+            if sg is NULL:
+                continue
             kind = sg_kind(sg[smw_group_source(structure, s, u)])
             number = sg_group(sg[smw_group_source(structure, s, u)])
         else:
