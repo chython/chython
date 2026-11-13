@@ -226,10 +226,11 @@ def _embeds(smiles, seeds=(7,), iterations=100):
 @mark.parametrize('name, cid, smiles, pair', CONSTRAINED, ids=[c[0] for c in CONSTRAINED])
 def test_the_relation_agrees_with_a_3d_embedding(name, cid, smiles, pair):
     """The harness behind OUT_OUT_XOR, independent of the PubChem signs: the out,out drawing embeds and
-    the pair with one sign inverted does not.  Asymmetric, measured on RDKit 2026.03.4 and 2026.09.1: on
-    2026.09.1 a strained bicyclobutane embeds only past one seed, and with eight seeds of 500 iterations two
-    inversions embed as well, a trans-fused bicyclo[2.2.0] among them."""
-    assert _embeds(smiles, seeds=range(1, 9), iterations=500)
+    the pair with one sign inverted does not.  Asymmetric, measured on RDKit 2026.03.4, 2026.09.1 and
+    2026.09.2: the out,out drawing gets eight seeds of 2000 iterations, since on 2026.09.2 the strained
+    bicyclobutane embeds at seeds 3 and 6 only past 500, and the inversion one seed of 100, since with eight
+    seeds of 500 two inversions embed as well, a trans-fused bicyclo[2.2.0] among them."""
+    assert _embeds(smiles, seeds=range(1, 9), iterations=2000)
     assert not _embeds(invert_sign(smiles, pair[1]))
 
 
